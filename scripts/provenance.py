@@ -131,6 +131,57 @@ def named(body):
     return next((str(body[f]).strip() for f in NAMES if body.get(f)), "")
 
 
+CMP = re.compile(r"^\s*([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z0-9_]+)+)\s*(<=|>=|==|!=|<|>)\s*(.+?)\s*$")
+
+
+def bodies(doc):
+    out = {}
+    for v in doc.values():
+        if isinstance(v, dict):
+            for nid, b in v.items():
+                out[nid] = b
+    return out
+
+
+def value_of(raw, ids, k):
+    """The comparable value an entry holds right now - v, else the quoted text, else
+    nothing: a rule has no value of its own."""
+    b = raw.get(k)
+    if not isinstance(b, dict):
+        return b if k in ids else None
+    v = b.get("v", b.get("quoted"))
+    if isinstance(v, str) and EXPR.search(v) and any(t in ids for t in ID.findall(v)):
+        return None
+    return v
+
+
+def evaluate(pred, raw, ids):
+    """-> True when the falsifier holds, False when it does not, None when it is not a
+    single comparison this reader can decide. Richer predicates are surfaced, never
+    guessed at."""
+    m = CMP.match(str(pred or ""))
+    if not m:
+        return None
+    a = value_of(raw, ids, m.group(1))
+    if a is None:
+        return None
+    rhs = m.group(3).strip()
+    b = value_of(raw, ids, rhs) if ID.fullmatch(rhs) else rhs.strip("\"'")
+    if b is None:
+        return None
+
+    def num(x):
+        try:
+            return float(str(x).replace(",", ""))
+        except ValueError:
+            return None
+    na, nb = num(a), num(b)
+    a, b = (na, nb) if na is not None and nb is not None else (str(a), str(b))
+    op = m.group(2)
+    return {"<": a < b, ">": a > b, "<=": a <= b, ">=": a >= b,
+            "==": a == b, "!=": a != b}[op]
+
+
 def _blocked_text(body):
     """The declared reason, whether the declaration is prose or a {missing, why} mapping."""
     for k in BLOCKED:
@@ -149,6 +200,7 @@ def _blocked_text(body):
 def check(paths):
     doc = load(paths)
     ids, jud, fields = infer(doc)
+    raw = bodies(doc)
     open_ids = {k for g in OPEN for k in (doc.get(g) or {})}
     fail, note = [], []
     if not fields["snapshot"]:
@@ -177,6 +229,8 @@ def check(paths):
             (note if blocked else fail).append(
                 f"{name}: {what}" + (f" (declared: {blocked[:90]})" if blocked
                 else " - and nothing says why not, so it can never be re-checked"))
+        elif evaluate(j["pred"], raw, ids) is True:
+            fail.append(f"{name}: wrong_if holds ({j['pred']}) - broken by its own condition")
     for n in note:
         print("NOTE", n)
     for f in fail:
@@ -207,6 +261,7 @@ def opening(paths, budget=25, chars=None):
     """
     doc = load(paths)
     ids, jud, fields = infer(doc)
+    raw = bodies(doc)
     open_ids = {k for g in OPEN for k in (doc.get(g) or {})}
     items = []
     for name, j in sorted(jud.items()):
@@ -223,8 +278,12 @@ def opening(paths, budget=25, chars=None):
             if tok in ids and tok not in j["deps"]:
                 items.append((100, name, f"predicate reads {tok}, which it does not declare - "
                                          f"a change to it never reaches this"))
-        if not [t for t in ID.findall(j["pred"]) if t in ids] and not blocked:
+        evaluable = bool([t for t in ID.findall(j["pred"]) if t in ids])
+        if not evaluable and not blocked:
             items.append((40, name, "nothing evaluable would falsify it"))
+        elif evaluable and evaluate(j["pred"], raw, ids) is True:
+            items.append((95, name, f"wrong_if holds ({j['pred'][:60]}) - broken by its own "
+                                    f"condition"))
     items.sort(key=lambda x: (-x[0], x[1]))
     kept, dropped = items[:budget], max(0, len(items) - budget)
 
@@ -345,6 +404,22 @@ def opening(paths, budget=25, chars=None):
 def affects(paths, changed):
     doc = load(paths)
     ids, jud, _ = infer(doc)
+    raw = bodies(doc)
+    # A worked-out value carries a change the same way a judgment does: anything its
+    # rule reads flows on to anything that reads it.
+    feeds = {}
+    for k in ids:
+        if k in jud:
+            continue
+        b = raw.get(k)
+        if not isinstance(b, dict):
+            continue
+        for fld in ("rule", "v"):
+            s = b.get(fld)
+            if isinstance(s, str) and EXPR.search(s):
+                for t in set(ID.findall(s)):
+                    if t in ids and t != k:
+                        feeds.setdefault(t, []).append(k)
     # A seed may be an exact entry or a prefix. A question names a subject, not a key.
     expanded = []
     for c in changed:
@@ -358,9 +433,13 @@ def affects(paths, changed):
               + (" ..." if len(hits) > 8 else ""))
         expanded += hits
     changed = expanded
-    hit, frontier = {}, list(changed)
+    hit, seen_e, frontier = {}, set(changed), list(changed)
     while frontier:
         m = frontier.pop()
+        for e in sorted(feeds.get(m, [])):
+            if e not in seen_e:
+                seen_e.add(e)
+                frontier.append(e)
         for name, j in sorted(jud.items()):
             if m in j["deps"] and name not in hit:
                 hit[name] = m
@@ -368,7 +447,7 @@ def affects(paths, changed):
     if not hit:
         print("nothing rests on that")
         return 0
-    moved = set(changed) | set(hit)
+    moved = seen_e | set(hit)
     for name, via in hit.items():
         j = jud[name]
         named = [d for d in j["deps"] if d in moved and re.search(rf"\b{re.escape(d)}\b", j["pred"])]
@@ -479,6 +558,8 @@ def pull(paths, seeds, budget=40):
         if missing:
             state = (f"blocked: {blocked}" if blocked else
                      f"broken: rests on {', '.join(missing)}, which is not an entry")
+        elif evaluate(j["pred"], raw, ids) is True:
+            state = f"broken: wrong_if holds ({j['pred']})"
         elif fields["snapshot"] and any(d not in j["seen"] for d in j["deps"]):
             stale = [d for d in j["deps"] if d not in j["seen"]]
             state = f"unchecked: never checked against {', '.join(stale)}"

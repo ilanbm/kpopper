@@ -14,18 +14,29 @@ checked, and what falls when it moves.
 
 Two mechanics carry the whole method:
 
-- **Every judgment states, in advance, what would make it wrong.** `wrong_if` is a predicate
-  over the things the judgment declares it rests on, and the reader re-checks it —
-  mechanically, not by remembering to.
+- **Every judgment states, in advance, what would make it wrong — or declares out loud why
+  it cannot yet.** `wrong_if` is a predicate over the things the judgment declares it rests
+  on. The reader refuses prose in its place, rejects a predicate that reads anything
+  undeclared — and when the predicate is a plain comparison, evaluates it: a judgment whose
+  own falsifier holds **fails the build**. Anything richer is surfaced beside exactly what
+  moved, never guessed at.
 - **Staleness fires on reality, not on the calendar.** Every judgment carries `seen`, a
   snapshot of what its dependencies held when it was last reviewed. Nothing stores a stale
   flag; drift is *derived* by comparison, so it cannot be forgotten, cleared by accident, or
-  survive a revert. A date passing tells you nothing; the thing you relied on changing tells
-  you everything.
+  survive a revert. What it compares is the value the judgment used — re-reading a source is
+  still a human act, and a value the record never re-read cannot drift.
 
-And one boundary: **invalidation spreads automatically, but a re-derivation never applies
-itself.** A change marks everything downstream of it; deciding what to do about that waits
-for a person. A stale recommendation someone read beats a current one nobody did.
+And one boundary: **invalidation spreads — along what each judgment declared it rests on,
+and through the rules of worked-out values — but a re-derivation never applies itself.** A
+change marks everything downstream of it; deciding what to do about that waits for a person.
+A stale recommendation someone read beats a current one nobody did.
+
+A content hash over a source answers a different question than the one a conclusion needs:
+it fires when a file is reformatted and stays silent when the number you relied on moves
+somewhere the hash never covered. Matching bytes prove a file is unchanged — never that what
+you concluded from it still holds. So kpopper snapshots the *value the judgment used*, not
+the bytes it came from, and states the breaking condition in advance instead of waiting for
+a checksum to notice.
 
 ## What it installs
 
@@ -48,11 +59,13 @@ rule, never the result), and what was concluded (with what would make it wrong).
 
 ```yaml
 sources:
-  msa:      {file: "contracts/acme-msa-2026.pdf", of: "2026-04-02"}
+  msa: {file: "contracts/acme-msa-2026.pdf", of: "2026-04-02"}
 
 known:
   acme.seat_price: {v: 42, from: msa, at: "Enterprise tier", name: "Acme seat price"}
-  acme.annual:     {rule: "acme.seat_price * acme.seats * 12"}
+  acme.seats:      {v: 180, from: msa, name: "Committed seats"}
+  acme.annual:     {rule: "acme.seat_price * acme.seats * 12", name: "Annual Acme cost"}
+  beta.annual:     {v: 84000, from: msa, name: "Annual Beta cost"}
 
 judgments:
   why_acme:
@@ -60,7 +73,16 @@ judgments:
     verdict:  "prefer Acme above ~150 seats"
     wrong_if: "acme.seats < 150"
     seen:     {acme.annual: 90720, beta.annual: 84000, acme.seats: 180}
+  seats_fit:
+    rests_on: [acme.seats]
+    verdict:  "the committed seats fit one contract tier"
+    wrong_if: "acme.seats > 500"
+    seen:     {acme.seats: 180}
 ```
+
+Drop the seat count to 120 and `check` fails with `why_acme: wrong_if holds (acme.seats <
+150) - broken by its own condition`; `affects acme.seat_price` reaches `why_acme` through
+the rule that computes the annual figure. The record does not wait to be asked.
 
 Nothing is created on the first turn. The file appears when there is a first thing to put in
 it, and structure is added only when something observable forces it. A project that never
@@ -87,7 +109,8 @@ K=$(find ~/.claude -path '*kpopper/scripts/kpopper' | head -1)
 
 `check` exits non-zero on an undeclared gap: a dependency that is not an entry (unless the
 judgment declares it missing with `blocked_on`), a dependency with no snapshot, a predicate
-naming something undeclared, or prose sitting in a predicate field. A declared hole is a
+naming something undeclared, prose sitting in a predicate field, or a plain-comparison
+predicate that currently holds — a judgment broken by its own condition. A declared hole is a
 note, not a failure — a build that stays red over an honest declaration teaches records to
 stop declaring.
 
