@@ -23,7 +23,7 @@ remembered.
 | `scripts/provenance.py` | A reader that checks the record and walks it. Python 3 + PyYAML. |
 | `scripts/render_page.py` | The record as one self-contained HTML page, in two tabs. |
 | `scripts/verify_page.js` | Browser checks for that page, in both themes. Playwright. |
-| `hooks/` | A session opener. Runs `provenance.py open` when the project keeps a record; silent everywhere else. |
+| `hooks/` | A session opener and a stop gate. The opener runs `provenance.py open` when the project keeps a record, silent everywhere else; the gate bounces a session once, with the failures, if it tries to finish having left `check` worse than it found it. |
 
 ## The record
 
