@@ -38,6 +38,12 @@ known:
     name: "The opener on the same record when clean, characters"
     from: "measured on a live record of 107 entries"
     of: "2026-09-01"
+  lit.name_risk:
+    v: "bare-term search is owned by a fandom; the org and handle are taken; every package
+        registry is free; qualified search works"
+    name: "What the name costs"
+    from: "landscape survey"
+    of: "2026-09-01"
   m.record_scale:
     v: 107
     name: "Largest live record, entries"
@@ -158,6 +164,16 @@ judgments:
     blocked_on: "observational: falsified if users close or ignore the unrequested page more
                  often than they touch it"
     seen: {doc.agent_graph: "read 2026-09-01"}
+  d.named_for_popper:
+    rests_on: [lit.name_risk]
+    verdict: "the project keeps the name kpopper; discovery runs on direct links and qualified
+              search, never on the bare term"
+    because: "The name carries the founding idea and the registries are free. What it costs is
+              known and priced: no bare-term search, an org spelled differently, and a fandom
+              that owns the word. The falsifiability claim is what earns the reference."
+    blocked_on: "observational: re-opened only if launch shows the name costing real adoption -
+                 installs that stall at discovery, not at value"
+    seen: {lit.name_risk: "surveyed 2026-09-01"}
   d.gate_reminds:
     rests_on: [p.gate_bounces]
     verdict: "the stop gate compares against the session-start count and yields after one
