@@ -26,17 +26,19 @@ And the arrangement itself can go stale: the brief records the record's *shape* 
 was written, and a shape that moved raises a banner. Shape, not values - a date changing
 does not make a layout wrong; a fourth blocked judgment might.
 """
-import io, os, re, sys, json, html, pathlib, datetime, yaml
+import io, os, re, sys, json, html, hashlib, pathlib, datetime, yaml
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 import provenance as P
 
 CSS = """
 *{box-sizing:border-box}
 :root{color-scheme:light;--pg:#f7f7f5;--sf:#fff;--ink:#111;--ink2:#555;--mut:#8a8a85;
- --ln:#e3e3dd;--acc:#2a6fd6;--warn:#9a6410;--stop:#b4342f;--ok:#0a7d38;--wash:rgba(0,0,0,.04)}
+ --ln:#e3e3dd;--acc:#2a6fd6;--warn:#9a6410;--stop:#b4342f;--ok:#0a7d38;--wash:rgba(0,0,0,.04);
+ --read:#0f6b70;--pure:#4a4fa8;--mind:#8f4068}
 @media(prefers-color-scheme:dark){:root:not([data-theme=light]){color-scheme:dark;
  --pg:#0d0e0e;--sf:#181a19;--ink:#f2f2ef;--ink2:#bdbdb5;--mut:#85857e;--ln:#2a2c2b;
- --acc:#5b9bf0;--warn:#d9a445;--stop:#f0736b;--ok:#3fbf6c;--wash:rgba(255,255,255,.05)}}
+ --acc:#5b9bf0;--warn:#d9a445;--stop:#f0736b;--ok:#3fbf6c;--wash:rgba(255,255,255,.05);
+ --read:#4fc0c4;--pure:#9096ee;--mind:#dd88b2}}
 body{margin:0;background:var(--pg);color:var(--ink);font:15px/1.55 system-ui,-apple-system,sans-serif}
 .wrap{max-width:980px;margin:0 auto;padding:26px 18px 80px}
 h1{font-size:22px;margin:0 0 4px;letter-spacing:-.01em}
@@ -53,9 +55,9 @@ h1{font-size:22px;margin:0 0 4px;letter-spacing:-.01em}
 .tabs button[aria-selected=true]{color:var(--ink);border-bottom-color:var(--acc);font-weight:600}
 .tabs .n{font-size:11px;color:var(--mut);font-weight:400}
 .lede{margin:22px 0 3px;font-size:13px;color:var(--mut)}
-h1.intent{font-size:21px;font-weight:600;line-height:1.35;max-width:34ch;margin:0 0 5px}
+.purpose{margin:18px 0 4px;font-size:15px;color:var(--mut);max-width:none}
+.purpose b{color:var(--ink);font-weight:600;font-size:16.5px}
 .sub{margin:0 0 6px;font-size:12.5px;color:var(--mut)}
-.intent b{color:var(--ink);font-weight:600}
 .banner{margin:12px 0 0;background:var(--sf);border:1px solid var(--warn);border-left-width:3px;
  border-radius:9px;padding:9px 12px;font-size:12.5px;color:var(--warn)}
 h2{font-size:11.5px;letter-spacing:.09em;text-transform:uppercase;color:var(--mut);
@@ -143,17 +145,26 @@ td.kl{width:1%;white-space:nowrap;color:var(--ink2)}
 .fx.in{border-bottom:1px dotted var(--acc)}
 .rel-down{outline:1.5px solid var(--acc);outline-offset:3px;border-radius:3px}
 .rel-up{outline:1.5px dashed var(--mut);outline-offset:3px;border-radius:3px}
-.try{font:10px ui-monospace,Menlo,monospace;border:1px solid var(--ln);border-radius:4px;
- background:none;color:var(--mut);cursor:pointer;padding:0 5px;margin-inline-start:6px;vertical-align:1px}
-.try:hover{color:var(--warn);border-color:var(--warn)}
-.tryin{font:inherit;font-size:12.5px;width:12ch;background:var(--wash);border:1px solid var(--warn);
- border-radius:4px;color:var(--ink);padding:1px 5px;direction:ltr;unicode-bidi:isolate}
-.wh-break{outline:2px solid var(--stop)!important;outline-offset:3px;border-radius:3px}
-.wh-review{outline:1.5px dashed var(--warn)!important;outline-offset:3px;border-radius:3px}
-.whatbar{position:fixed;inset-inline:0;bottom:0;z-index:95;background:var(--sf);
- border-top:2px solid var(--warn);color:var(--ink2);font-size:12.5px;padding:8px 16px;
- text-align:center;direction:ltr}
 .kref{font:11.5px ui-monospace,Menlo,monospace;color:var(--acc);border-bottom:1px dashed var(--acc);cursor:pointer}
+.treewrap{background:var(--sf);border:1px solid var(--ln);border-radius:12px;padding:10px 6px 2px;overflow-x:auto}
+.treewrap svg{display:block;margin:0 auto;min-width:640px}
+.tn{cursor:pointer}
+.tn text{font:10.5px system-ui,-apple-system,sans-serif;fill:var(--ink2);pointer-events:none}
+.tn.root text{fill:var(--mut);font-size:9.5px}
+.tn.root circle{fill:var(--read);stroke:none}
+.tn.bough circle{fill:var(--pure);stroke:none}
+.tn.crown circle{fill:var(--mind);stroke:none}
+.tn.crown.stopf circle,.tn.crown.warnf circle{stroke-width:2.5}
+.tn.warnf circle{stroke:var(--warn);stroke-dasharray:3 2}
+.tn.stopf circle{stroke:var(--stop)}
+.tn.crown .halo{fill:var(--mind);opacity:.16;stroke:none}
+.ttrunk{fill:var(--mut);opacity:.3}
+.tlimb{fill:none;stroke:var(--mut);opacity:.5;stroke-linecap:round}
+.troot{fill:none;stroke:var(--read);opacity:.65;stroke-linecap:round}
+.tground{stroke:var(--ln);stroke-width:1.5;fill:none}
+.tsoil{fill:var(--wash)}
+svg .rel-down circle{stroke:var(--acc)!important;stroke-width:3px!important}
+svg .rel-up circle{stroke:var(--mut)!important;stroke-dasharray:4 3;stroke-width:2.5px!important}
 footer{margin-top:40px;padding-top:14px;border-top:1px solid var(--ln);color:var(--mut);font-size:12.5px}
 """
 
@@ -161,48 +172,8 @@ JS = r"""
 (function(){
  var E=window.__E||{},J=window.__J||{},pop=null,cur=null,hist=[],now=null,tmr=null,pin=false;
  function esc(s){var d=document.createElement('div');d.textContent=s==null?'':String(s);return d.innerHTML}
- function close(){clearTimeout(tmr);unrelate();W=null;unheat();if(pop){pop.remove();pop=null}
+ function close(){clearTimeout(tmr);unrelate();if(pop){pop.remove();pop=null}
   if(cur){cur.classList.remove('on');cur=null}hist=[];now=null;pin=false}
-
- // The what-if: try a value in the card and watch the graph react, in place. The
- // input lives in the card and never on the page - an editable number on the page
- // would look exactly like a recorded one, and this whole layer exists so the two
- // cannot be confused. Nothing is ever written; Esc restores.
- var W=null;
- function reach(key){var out={},q=[key];
-  while(q.length){var k=q.pop(),us=((E[k]||J[k]||{}).used)||[];
-   for(var i=0;i<us.length;i++)if(!out[us[i]]){out[us[i]]=1;q.push(us[i])}}
-  return Object.keys(out).filter(function(k){return !!J[k]})}
- var CMP=/^\s*([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z0-9_]+)+)\s*(<=|>=|==|!=|<|>)\s*(.+?)\s*$/;
- function num(x){var n=Number(String(x).replace(/,/g,''));return isNaN(n)?null:n}
- function val_of(id){if(W&&id===W.key)return W.raw;
-  var e=E[id];return (e&&e.v!=null)?e.v:null}
- function evalpred(p){
-  // only a simple comparison is decidable here; anything else can only be marked
-  // as needing a re-read.
-  var m=String(p||'').match(CMP);if(!m)return null;
-  var a=val_of(m[1]);if(a==null)return null;
-  var b=/^[A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z0-9_]+)+$/.test(m[3])?val_of(m[3])
-        :String(m[3]).replace(/^["']|["']$/g,'');
-  if(b==null)return null;
-  var na=num(a),nb=num(b);
-  if(na!=null&&nb!=null){a=na;b=nb}else{a=String(a);b=String(b)}
-  switch(m[2]){case'<':return a<b;case'>':return a>b;case'<=':return a<=b;
-   case'>=':return a>=b;case'==':return a==b;case'!=':return a!=b}return null}
- function unheat(){var q=document.querySelectorAll('.wh-break,.wh-review');
-  for(var i=0;i<q.length;i++)q[i].classList.remove('wh-break','wh-review');
-  var b=document.getElementById('whatbar');if(b)b.remove()}
- function heat(){unheat();if(!W)return;
-  var R=reach(W.key),brk=0,rev=0;
-  for(var i=0;i<R.length;i++){var r=evalpred(J[R[i]].pred);
-   if(r===true)brk++;else if(r===null)rev++;
-   var cls=r===true?'wh-break':(r===null?'wh-review':'');
-   if(cls){var els=document.querySelectorAll('[data-id="'+R[i]+'"]');
-    for(var k=0;k<els.length;k++)els[k].classList.add(cls)}}
-  var bar=document.createElement('div');bar.id='whatbar';bar.className='whatbar';
-  bar.textContent='trying: '+W.key+' = '+W.raw+' · '+brk+' would break · '+rev
-   +' need re-reading · '+(R.length-brk-rev)+' hold · Esc restores · nothing is written';
-  document.body.appendChild(bar)}
  var IDRE=/[A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z0-9_]+)+/g;
  function link(s){return esc(s).replace(IDRE,function(m){
   return (E[m]||J[m])?'<span class="kref" data-go="'+m+'">'+m+'</span>':m})}
@@ -219,10 +190,7 @@ JS = r"""
     (j.because?row('because',esc(j.because)):'')}
   var e=E[id]||{};
   return h+(e.name?'<div class="nm">'+esc(e.name)+'</div>':'')+
-   (e.v!=null?row('value',(W&&W.key===id)
-     ?'<input class="tryin" value="'+esc(W.raw)+'">'
-     :'<b>'+esc(e.v)+'</b>'+((e.used&&e.used.length)
-       ?' <button class="try" type="button" title="try another value - nothing is written">try</button>':'')):'')+
+   (e.v!=null?row('value','<b>'+esc(e.v)+'</b>'):'')+
    (e.rule?row('rule',link(e.rule)):'')+
    (e.from?row('from',esc(e.from)):'')+(e.at?row('at',esc(e.at)):'')+
    (e.file?row('file',esc(e.file)):'')+(e.url?row('url',esc(e.url)):'')+
@@ -246,13 +214,9 @@ JS = r"""
   cur=el;hist=[];if(p){el.classList.add('on');pin=true}
   pop=document.createElement('div');pop.className='pop';document.body.appendChild(pop);
   paint(id);
-  pop.addEventListener('input',function(ev){var t=ev.target;
-   if(t&&t.classList&&t.classList.contains('tryin')&&W){W.raw=t.value;heat()}});
   pop.addEventListener('mouseenter',function(){clearTimeout(tmr)});
   pop.addEventListener('mouseleave',function(){if(!pin){clearTimeout(tmr);tmr=setTimeout(close,220)}});
   pop.addEventListener('click',function(ev){ev.stopPropagation();
-   if(ev.target.closest('.try')){W={key:now,raw:String((E[now]||{}).v)};paint(now);place(cur);
-    var inp=pop.querySelector('.tryin');if(inp){inp.focus();inp.select()}heat();return}
    if(ev.target.closest('.back')){if(hist.length){paint(hist.pop());place(cur)}return}
    var g=ev.target.closest('[data-go]');if(!g)return;
    var t=g.getAttribute('data-go');if(t===now||(!E[t]&&!J[t]))return;
@@ -268,7 +232,6 @@ JS = r"""
    if(pin&&cur===el&&!hist.length)close();else{close();open(el,el.getAttribute('data-id'),true)}}
   else close()});
  document.addEventListener('keydown',function(e){if(e.key!=='Escape')return;
-  if(W){W=null;unheat();if(pop&&now){paint(now);place(cur)}return}
   if(hist.length){paint(hist.pop());place(cur)}else close()});
  addEventListener('resize',close);
  addEventListener('scroll',function(){if(!pin)close();else place(cur)},{passive:true});
@@ -526,6 +489,169 @@ def _plain(o):
     return o
 
 
+def tree_svg(ids, jud, E, J, flags):
+    """The record as one growing thing. What was read from the world is the root
+    system, below the ground line; what was worked out and concluded branches up
+    from it, judgments in the canopy. Same record, same tree - the layout reads
+    only the graph, so nothing here moves unless the record does."""
+    def jig(k, m, salt=""):
+        return int(hashlib.md5((salt + k).encode()).hexdigest(), 16) % m
+
+    parents = {}
+    for k in ids:
+        if k in jud:
+            parents[k] = [d for d in jud[k]["deps"] if d in ids]
+        else:
+            e = E.get(k) or {}
+            ps = [t for t in P.ID.findall(str(e.get("rule") or "")) if t in ids]
+            frm = e.get("from")
+            if isinstance(frm, str) and frm in ids and frm != k:
+                ps.append(frm)
+            parents[k] = ps
+    depth = {}
+
+    def dep(k, seen=()):
+        if k in depth:
+            return depth[k]
+        if k in seen:
+            return 0
+        ps = parents.get(k) or []
+        depth[k] = 0 if not ps else 1 + max(dep(p, seen + (k,)) for p in ps)
+        return depth[k]
+    for k in ids:
+        dep(k)
+
+    # facts sit below conclusions whatever the raw path lengths: entries keep their
+    # depth, judgments stack above the tallest entry, judgment-on-judgment higher.
+    de = max([depth[k] for k in ids if k not in jud], default=0)
+    jd = {}
+
+    def jdep(k, seen=()):
+        if k in jd:
+            return jd[k]
+        if k in seen:
+            return 0
+        ps = [p for p in parents.get(k) or [] if p in jud]
+        jd[k] = 0 if not ps else 1 + max(jdep(p, seen + (k,)) for p in ps)
+        return jd[k]
+    for k in jud:
+        jdep(k)
+    for k in ids:
+        if k in jud:
+            depth[k] = de + 1 + jd[k]
+
+    roots = sorted((k for k in ids if depth[k] == 0), key=lambda k: (k.split(".")[0], k))
+    upper = sorted((k for k in ids if depth[k] > 0), key=lambda k: (depth[k], k))
+    # past a certain size the grove is a thicket; keep the canopy and what feeds it.
+    dropped = 0
+    if len(roots) + len(upper) > 110:
+        feed = set()
+        for k in upper:
+            feed |= set(parents[k])
+        kept = [k for k in roots if k in feed]
+        dropped = len(roots) - len(kept)
+        roots = kept
+
+    W, M = 940, 48
+    maxd = max([depth[k] for k in upper], default=1)
+    LH = 150 if maxd <= 2 else (112 if maxd == 3 else 92)
+    G = 72 + maxd * LH + 26
+    H = G + 118
+    tx = W / 2 + jig("".join(sorted(ids))[:64], 30) - 15      # the trunk leans, per record
+    x, y = {}, {}
+    for i, k in enumerate(roots):
+        x[k] = M + (i + 0.5) * (W - 2 * M) / max(1, len(roots)) + jig(k, 9) - 4
+        y[k] = G + 30 + jig(k, 40, "d")
+    for d in range(1, maxd + 1):
+        layer = [k for k in upper if depth[k] == d]
+        gap = 92 if any(k in jud for k in layer) else 48
+        for k in layer:
+            ps = [p for p in parents[k] if p in x]
+            x[k] = (sum(x[p] for p in ps) / len(ps) if ps
+                    else M + jig(k, W - 2 * M)) + jig(k, 21, "x") - 10
+        layer.sort(key=lambda k: x[k])
+        for i in range(1, len(layer)):          # min gap, one deterministic sweep
+            x[layer[i]] = max(x[layer[i]], x[layer[i - 1]] + gap)
+        off = max(0, (x[layer[-1]] - (W - M)) / 2) if layer else 0
+        for k in layer:
+            x[k] = min(W - M, max(M, x[k] - off))
+            # the canopy is a dome: the further a node sits from the trunk, the
+            # lower it hangs.
+            y[k] = G - d * LH - jig(k, 16, "y") + ((x[k] - tx) ** 2) * 30 / (W / 2) ** 2
+
+    def lbl(k, n):
+        b = jud.get(k)
+        t = (b["body"].get("verdict") or b["body"].get("title") or k.split(".")[-1]) if b \
+            else (E.get(k, {}).get("name") or k.split(".")[-1])
+        t = str(t)
+        return t if len(t) <= n else t[:n] + "…"
+
+    o = [f'<svg viewBox="0 0 {W} {H}" role="img" aria-label="the record as a tree">']
+    o.append(f'<rect class="tsoil" x="0" y="{G:.0f}" width="{W}" height="{H - G:.0f}"/>')
+    o.append(f'<path class="tground" d="M0 {G:.0f} '
+             + " ".join(f"Q {gx + 30} {G + (3 if (gx // 60) % 2 else -3):.0f} {gx + 60} {G:.0f}"
+                        for gx in range(0, W, 60)) + '"/>')
+    top = G - LH * 0.82
+    o.append(f'<path class="ttrunk" d="M{tx - 22:.0f} {G:.0f} '
+             f'C{tx - 17:.0f} {G - LH * .32:.0f} {tx - 7:.0f} {G - LH * .5:.0f} '
+             f'{tx - 4:.0f} {top:.0f} L{tx + 4:.0f} {top:.0f} '
+             f'C{tx + 7:.0f} {G - LH * .5:.0f} {tx + 17:.0f} {G - LH * .32:.0f} '
+             f'{tx + 22:.0f} {G:.0f} Z"/>')
+    for k in upper:
+        for p in parents[k]:
+            if p not in x:
+                continue
+            # a fact reaches its consumers through the trunk: the root curve already
+            # carried it to the base, so its limb emerges from the wood - only an
+            # above-ground parent branches from where it actually stands.
+            if depth[p] == 0:
+                px, py = tx + jig(p, 13) - 6, G - LH * 0.45
+            else:
+                px, py = x[p], y[p]
+            cx, cy = x[k], y[k]
+            w = 1.5 + min(2.6, 0.4 * len((E.get(p, {}) or {}).get("used", [])))
+            m2x = cx * 0.55 + tx * 0.45
+            o.append(f'<path class="tlimb" stroke-width="{w:.1f}" d="M{px:.0f} {py:.0f} '
+                     f'C{px:.0f} {py - LH * .35:.0f} {m2x:.0f} {cy + LH * .5:.0f} '
+                     f'{cx:.0f} {cy:.0f}"/>')
+    for k in roots:                              # the root fan spreads from the trunk base
+        s = -6 if x[k] < tx else 6
+        o.append(f'<path class="troot" stroke-width="2.2" d="M{tx + s:.0f} {G + 2:.0f} '
+                 f'C{tx + s * 5:.0f} {G + 26:.0f} {(x[k] + tx) / 2:.0f} {y[k] - 4:.0f} '
+                 f'{x[k]:.0f} {y[k]:.0f}"/>')
+    show_root_lbl = len(roots) <= 16
+    boughs = [k for k in upper if k not in jud]
+    show_bough_lbl = len(boughs) <= 10
+    ci = ri = 0
+    for k in roots + upper:
+        f = flags.get(k, set())
+        sev = " stopf" if f - {"blocked"} else (" warnf" if f else "")
+        kind = "crown" if k in jud else ("root" if depth[k] == 0 else "bough")
+        r = 9 if kind == "crown" else (5 if kind == "root" else 4)
+        o.append(f'<g class="tn {kind}{sev}" data-id="{html.escape(k)}">')
+        if kind == "crown":
+            o.append(f'<circle class="halo" cx="{x[k]:.0f}" cy="{y[k]:.0f}" r="18"/>')
+        o.append(f'<circle cx="{x[k]:.0f}" cy="{y[k]:.0f}" r="{r}"/>')
+        if kind == "crown":
+            ty = y[k] - 22 - 13 * (ci % 2); ci += 1
+            o.append(f'<text x="{x[k]:.0f}" y="{ty:.0f}" text-anchor="middle" dir="auto">'
+                     f'{html.escape(lbl(k, 20))}</text>')
+        elif kind == "root" and show_root_lbl:
+            ty = y[k] + 16 + 11 * (ri % 3); ri += 1
+            o.append(f'<text x="{x[k]:.0f}" y="{ty:.0f}" text-anchor="middle" dir="auto">'
+                     f'{html.escape(lbl(k, 12))}</text>')
+        elif kind == "bough" and show_bough_lbl:
+            ty = y[k] + 15 + 12 * (ci % 2); ci += 1
+            o.append(f'<text x="{x[k]:.0f}" y="{ty:.0f}" text-anchor="middle" dir="auto">'
+                     f'{html.escape(lbl(k, 16))}</text>')
+        o.append("</g>")
+    if dropped:
+        o.append(f'<text x="{M}" y="{H - 8:.0f}" class="tn root"><tspan>'
+                 f'... and {dropped} more roots below the grass</tspan></text>')
+    o.append("</svg>")
+    return "".join(o)
+
+
 def build(paths, brief_path=None):
     doc = P.load(paths)
     ids, jud, fields = P.infer(doc)
@@ -758,12 +884,16 @@ def build(paths, brief_path=None):
 
     # ── the session's tab ───────────────────────────────────────
     now_html, covered, empty_sections, misfit = [], set(), [], []
+    rec_name = named(meta)
+    h1 = (f'<h1 dir="auto">{html.escape(rec_name)}</h1>' if rec_name
+          else '<h1 dir="ltr">What is known here</h1>')
     if brief:
+        now_html.append(h1)
         if brief.get("intent"):
-            now_html.append('<p class="lede" dir="ltr">Everything on this tab was picked '
-                            'for one purpose:</p>'
-                            f'<h1 class="intent" dir="auto">'
-                            f'{html.escape(str(brief["intent"]))}</h1>'
+            # the page is named for the record; the intent is the arrangement's aim,
+            # not a title - it is another task on the way, and it reads like one.
+            now_html.append('<p class="purpose" dir="auto">Everything on this tab was picked '
+                            f'for one purpose — <b dir="auto">{html.escape(str(brief["intent"]))}</b></p>'
                             + '<p class="sub" dir="ltr">'
                             + f'The Record tab has all {len(ids)} entries and judgments, '
                             f'arranged by nothing.</p>')
@@ -832,7 +962,7 @@ def build(paths, brief_path=None):
     ns = '<nav class="ns" dir="ltr">' + "".join(
         f'<a href="#g-{html.escape(g)}">{html.escape(g)} ({len(v)})</a>'
         for g, v in sorted(groups.items(), key=lambda kv: (-len(kv[1]), kv[0]))) + "</nav>"
-    head = ['<h1 dir="ltr">What is known here</h1>']
+    head = [h1]
     if meta.get("scope"):
         head.append(f'<p class="scope" dir="auto">{html.escape(str(meta["scope"]).strip())}</p>')
     head.append(f'<p class="meta" dir="ltr">{shape["entries"]} entries and {shape["judgments"]} '
@@ -843,19 +973,29 @@ def build(paths, brief_path=None):
 
     out = ['<!doctype html><html><head><meta charset="utf-8">',
            '<meta name="viewport" content="width=device-width,initial-scale=1">',
-           f'<title>{html.escape(str(meta.get("scope") or "record")[:60])}</title>',
+           f'<title>{html.escape(str(rec_name or meta.get("scope") or "record")[:60])}</title>',
            f'<style>{CSS}</style></head><body><div class="wrap" dir="{direction(doc)}">']
 
+    tree = (h1 + '<p class="purpose" dir="ltr">The whole record as one growing thing — '
+            'roots are what was read from the world, the canopy is what was concluded '
+            'from it. Hover anything.</p>'
+            '<div class="treewrap">' + tree_svg(ids, jud, E, J, flags) + '</div>'
+            '<p class="sub" dir="ltr" style="margin-top:8px">roots — read from the world '
+            '&middot; branches — worked out &middot; blossoms — concluded &middot; '
+            'the trunk is where they meet</p>')
+    tabs = ['<div class="tabs" role="tablist">']
     if brief:
-        out.append('<div class="tabs" role="tablist">'
-                   '<button type="button" data-tab="now" aria-selected="true">Now'
-                   + (f' <span class="n">{len(covered)}</span>' if covered else "") + "</button>"
-                   '<button type="button" data-tab="record" aria-selected="false">Record '
-                   f'<span class="n">{len(ids)}</span></button></div>')
+        tabs.append('<button type="button" data-tab="now" aria-selected="true">Now'
+                    + (f' <span class="n">{len(covered)}</span>' if covered else "") + "</button>")
+    tabs.append(f'<button type="button" data-tab="record" aria-selected='
+                f'"{"false" if brief else "true"}">Record <span class="n">{len(ids)}</span></button>')
+    tabs.append('<button type="button" data-tab="tree" aria-selected="false">Tree</button></div>')
+    out.append("".join(tabs))
+    if brief:
         out.append('<section id="panel-now">' + "".join(now_html) + "</section>")
-        out.append('<section id="panel-record" hidden>' + "".join(head + rec_html) + "</section>")
-    else:
-        out.append('<section id="panel-record">' + "".join(head + rec_html) + "</section>")
+    out.append(f'<section id="panel-record"{" hidden" if brief else ""}>'
+               + "".join(head + rec_html) + "</section>")
+    out.append('<section id="panel-tree" hidden>' + tree + "</section>")
 
     out.append('<footer dir="ltr">Hover any key for where it came from. Click to pin, click a dependency '
                'to walk to it, Esc to step back. While a card is open, a solid outline marks '

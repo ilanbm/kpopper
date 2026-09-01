@@ -1,5 +1,6 @@
 meta:
   updated: 2026-09-01
+  name: kpopper
   scope: "What this plugin is for and the decisions that shaped it, kept in its own format -
           the tools eat their own cooking, and every session here opens grounded."
 
@@ -54,8 +55,6 @@ known:
 open:
   q.pull_defaults: "does a session that ran pull still open the record file for values - and if
                     so, what was missing from the line it got?"
-  q.whatif_evaluator: "does the live what-if need a tiny expression evaluator on day one, or do
-                       simple-comparison predicates carry it?"
   q.account_copy: "does the hosted copy of this plugin get refreshed from here, or retired?"
   q.first_artifact: "what is the first artifact that must never change silently?"
 
@@ -106,6 +105,27 @@ judgments:
     blocked_on: "observational: falsified by an edit that lands in a distributed copy and has
                  to be merged back; the distributions carry no marker that would record one"
     seen: {skill.two_shapes: "Two parallel records is the most expensive mistake available here"}
+  d.page_reads_only:
+    rests_on: [doc.fact_moves]
+    verdict: "the page is a reading surface - no trial inputs, no write path; what a change
+              reaches is answered by affects and pull"
+    because: "A live trial input was built and rejected on contact: it adds a mode to a surface
+              whose whole job is to be read, and the reach question already has two dedicated
+              answers outside the page."
+    blocked_on: "observational: falsified by a reading task that genuinely cannot be served
+                 without editing a value in place; none has appeared"
+    seen: {doc.fact_moves: "read 2026-09-01"}
+  d.whole_shape_surface:
+    rests_on: [doc.fact_moves]
+    verdict: "the shape of the whole gets one surface of its own - the tree - and the reading
+              surfaces stay flat"
+    because: "For work in progress the in-place outline answers the question people have. The
+              shape-of-the-whole question is still real once per reader - at first meeting -
+              so it gets its own tab instead of leaking into the reading surfaces."
+    blocked_on: "observational: falsified if readers keep working from the tree instead of
+                 meeting it once - that would mean the reading surfaces failed, not that the
+                 tree succeeded"
+    seen: {doc.fact_moves: "read 2026-09-01"}
   d.gate_reminds:
     rests_on: [p.gate_bounces]
     verdict: "the stop gate compares against the session-start count and yields after one

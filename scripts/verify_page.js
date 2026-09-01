@@ -72,7 +72,8 @@ if (!CHROME) { console.log('no Chrome/Chromium found - set CHROME to a browser b
           chk(`${T} back returns to the judgment`, /rests on/i.test(await txt(p)));
         }
       }
-      if (await p.locator('.tabs').count()) {
+      const hasNow = await p.locator('.tabs button[data-tab=now]').count() > 0;
+      if (hasNow) {
         chk(`${T} the arrangement is the tab you land on`,
             await p.locator('.tabs button[data-tab=now][aria-selected=true]').count() === 1
             && await p.locator('#panel-record').isHidden());
@@ -91,29 +92,14 @@ if (!CHROME) { console.log('no Chrome/Chromium found - set CHROME to a browser b
                    .waitFor({ timeout: 4000 }).then(() => true, () => false)
             && await p.locator('#panel-now').isHidden());
       }
-
-      // The what-if: a trial value typed in the card, the graph reacting in place,
-      // Esc restoring. Generic: find a cell whose card offers try; a record with no
-      // such value skips this block rather than failing it.
-      let tryCell = null;
-      const cells = p.locator('section:not([hidden]) td [data-id]');
-      const nc = Math.min(await cells.count(), 6);
-      for (let i = 0; i < nc && !tryCell; i++) {
-        const c = cells.nth(i);
-        await c.scrollIntoViewIfNeeded(); await p.mouse.move(2, 2); await c.click();
-        if (await p.locator('.pop .try').count()) tryCell = c;
-        else await p.keyboard.press('Escape');
-      }
-      if (tryCell) {
-        await p.locator('.pop .try').click();
-        chk(`${T} try turns the value into an input, in the card`, await seen(p, '.pop .tryin'));
-        await p.locator('.pop .tryin').fill('999999999');
-        chk(`${T} a trial value raises the status line`, await seen(p, '#whatbar')
-            && /trying/.test(await txt(p, '#whatbar')));
-        chk(`${T} and the input lives only in the card`, await p.locator('.tryin').count() === 1);
-        await p.keyboard.press('Escape');
-        chk(`${T} Esc restores the record`, await gone(p, '#whatbar')
-            && /value/i.test(await txt(p)));
+      if (await p.locator('.tabs button[data-tab=tree]').count()) {
+        await p.locator('.tabs button[data-tab=tree]').click();
+        chk(`${T} the tree shows the whole record as one shape`,
+            await p.locator('#panel-tree svg').isVisible()
+            && await p.locator('#panel-tree g[data-id]').count() > 0);
+        const tn = p.locator('#panel-tree g[data-id]').last();
+        await tn.scrollIntoViewIfNeeded(); await p.mouse.move(2, 2); await tn.click();
+        chk(`${T} a tree node opens the same card`, await seen(p, '.pop'));
         await p.keyboard.press('Escape');
       }
 

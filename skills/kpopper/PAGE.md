@@ -113,13 +113,6 @@ namespace line beats a table of contents — it answers *what does this reach*, 
 question people actually have, instead of *what is the shape of the whole thing*, which is the
 question nobody asks.
 
-An entry that something rests on offers **try** in its card: the value becomes an input — in
-the card, never on the page, where an editable number would look exactly like a recorded one —
-and every judgment the trial reaches reacts in place: a solid outline where a simple-comparison
-predicate now holds, a dashed one where it can only be re-read. A status line counts what would
-break, what needs re-reading, and what holds; Esc restores. Nothing is ever written — the page
-has no write path, and trying a value does not change that.
-
 Two things stay visible as keys, because both are about something the reader has to go and get:
 a dependency that is **missing**, and the key a blocked line is **waiting on**. Everything
 present is reached by hovering the words that mention it, and whatever the prose did not name is
