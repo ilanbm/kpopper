@@ -143,6 +143,16 @@ td.kl{width:1%;white-space:nowrap;color:var(--ink2)}
 .fx.in{border-bottom:1px dotted var(--acc)}
 .rel-down{outline:1.5px solid var(--acc);outline-offset:3px;border-radius:3px}
 .rel-up{outline:1.5px dashed var(--mut);outline-offset:3px;border-radius:3px}
+.try{font:10px ui-monospace,Menlo,monospace;border:1px solid var(--ln);border-radius:4px;
+ background:none;color:var(--mut);cursor:pointer;padding:0 5px;margin-inline-start:6px;vertical-align:1px}
+.try:hover{color:var(--warn);border-color:var(--warn)}
+.tryin{font:inherit;font-size:12.5px;width:12ch;background:var(--wash);border:1px solid var(--warn);
+ border-radius:4px;color:var(--ink);padding:1px 5px;direction:ltr;unicode-bidi:isolate}
+.wh-break{outline:2px solid var(--stop)!important;outline-offset:3px;border-radius:3px}
+.wh-review{outline:1.5px dashed var(--warn)!important;outline-offset:3px;border-radius:3px}
+.whatbar{position:fixed;inset-inline:0;bottom:0;z-index:95;background:var(--sf);
+ border-top:2px solid var(--warn);color:var(--ink2);font-size:12.5px;padding:8px 16px;
+ text-align:center;direction:ltr}
 .kref{font:11.5px ui-monospace,Menlo,monospace;color:var(--acc);border-bottom:1px dashed var(--acc);cursor:pointer}
 footer{margin-top:40px;padding-top:14px;border-top:1px solid var(--ln);color:var(--mut);font-size:12.5px}
 """
@@ -151,8 +161,48 @@ JS = r"""
 (function(){
  var E=window.__E||{},J=window.__J||{},pop=null,cur=null,hist=[],now=null,tmr=null,pin=false;
  function esc(s){var d=document.createElement('div');d.textContent=s==null?'':String(s);return d.innerHTML}
- function close(){clearTimeout(tmr);unrelate();if(pop){pop.remove();pop=null}
+ function close(){clearTimeout(tmr);unrelate();W=null;unheat();if(pop){pop.remove();pop=null}
   if(cur){cur.classList.remove('on');cur=null}hist=[];now=null;pin=false}
+
+ // The what-if: try a value in the card and watch the graph react, in place. The
+ // input lives in the card and never on the page - an editable number on the page
+ // would look exactly like a recorded one, and this whole layer exists so the two
+ // cannot be confused. Nothing is ever written; Esc restores.
+ var W=null;
+ function reach(key){var out={},q=[key];
+  while(q.length){var k=q.pop(),us=((E[k]||J[k]||{}).used)||[];
+   for(var i=0;i<us.length;i++)if(!out[us[i]]){out[us[i]]=1;q.push(us[i])}}
+  return Object.keys(out).filter(function(k){return !!J[k]})}
+ var CMP=/^\s*([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z0-9_]+)+)\s*(<=|>=|==|!=|<|>)\s*(.+?)\s*$/;
+ function num(x){var n=Number(String(x).replace(/,/g,''));return isNaN(n)?null:n}
+ function val_of(id){if(W&&id===W.key)return W.raw;
+  var e=E[id];return (e&&e.v!=null)?e.v:null}
+ function evalpred(p){
+  // only a simple comparison is decidable here; anything else can only be marked
+  // as needing a re-read.
+  var m=String(p||'').match(CMP);if(!m)return null;
+  var a=val_of(m[1]);if(a==null)return null;
+  var b=/^[A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z0-9_]+)+$/.test(m[3])?val_of(m[3])
+        :String(m[3]).replace(/^["']|["']$/g,'');
+  if(b==null)return null;
+  var na=num(a),nb=num(b);
+  if(na!=null&&nb!=null){a=na;b=nb}else{a=String(a);b=String(b)}
+  switch(m[2]){case'<':return a<b;case'>':return a>b;case'<=':return a<=b;
+   case'>=':return a>=b;case'==':return a==b;case'!=':return a!=b}return null}
+ function unheat(){var q=document.querySelectorAll('.wh-break,.wh-review');
+  for(var i=0;i<q.length;i++)q[i].classList.remove('wh-break','wh-review');
+  var b=document.getElementById('whatbar');if(b)b.remove()}
+ function heat(){unheat();if(!W)return;
+  var R=reach(W.key),brk=0,rev=0;
+  for(var i=0;i<R.length;i++){var r=evalpred(J[R[i]].pred);
+   if(r===true)brk++;else if(r===null)rev++;
+   var cls=r===true?'wh-break':(r===null?'wh-review':'');
+   if(cls){var els=document.querySelectorAll('[data-id="'+R[i]+'"]');
+    for(var k=0;k<els.length;k++)els[k].classList.add(cls)}}
+  var bar=document.createElement('div');bar.id='whatbar';bar.className='whatbar';
+  bar.textContent='trying: '+W.key+' = '+W.raw+' · '+brk+' would break · '+rev
+   +' need re-reading · '+(R.length-brk-rev)+' hold · Esc restores · nothing is written';
+  document.body.appendChild(bar)}
  var IDRE=/[A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z0-9_]+)+/g;
  function link(s){return esc(s).replace(IDRE,function(m){
   return (E[m]||J[m])?'<span class="kref" data-go="'+m+'">'+m+'</span>':m})}
@@ -169,7 +219,10 @@ JS = r"""
     (j.because?row('because',esc(j.because)):'')}
   var e=E[id]||{};
   return h+(e.name?'<div class="nm">'+esc(e.name)+'</div>':'')+
-   (e.v!=null?row('value','<b>'+esc(e.v)+'</b>'):'')+
+   (e.v!=null?row('value',(W&&W.key===id)
+     ?'<input class="tryin" value="'+esc(W.raw)+'">'
+     :'<b>'+esc(e.v)+'</b>'+((e.used&&e.used.length)
+       ?' <button class="try" type="button" title="try another value - nothing is written">try</button>':'')):'')+
    (e.rule?row('rule',link(e.rule)):'')+
    (e.from?row('from',esc(e.from)):'')+(e.at?row('at',esc(e.at)):'')+
    (e.file?row('file',esc(e.file)):'')+(e.url?row('url',esc(e.url)):'')+
@@ -193,9 +246,13 @@ JS = r"""
   cur=el;hist=[];if(p){el.classList.add('on');pin=true}
   pop=document.createElement('div');pop.className='pop';document.body.appendChild(pop);
   paint(id);
+  pop.addEventListener('input',function(ev){var t=ev.target;
+   if(t&&t.classList&&t.classList.contains('tryin')&&W){W.raw=t.value;heat()}});
   pop.addEventListener('mouseenter',function(){clearTimeout(tmr)});
   pop.addEventListener('mouseleave',function(){if(!pin){clearTimeout(tmr);tmr=setTimeout(close,220)}});
   pop.addEventListener('click',function(ev){ev.stopPropagation();
+   if(ev.target.closest('.try')){W={key:now,raw:String((E[now]||{}).v)};paint(now);place(cur);
+    var inp=pop.querySelector('.tryin');if(inp){inp.focus();inp.select()}heat();return}
    if(ev.target.closest('.back')){if(hist.length){paint(hist.pop());place(cur)}return}
    var g=ev.target.closest('[data-go]');if(!g)return;
    var t=g.getAttribute('data-go');if(t===now||(!E[t]&&!J[t]))return;
@@ -211,6 +268,7 @@ JS = r"""
    if(pin&&cur===el&&!hist.length)close();else{close();open(el,el.getAttribute('data-id'),true)}}
   else close()});
  document.addEventListener('keydown',function(e){if(e.key!=='Escape')return;
+  if(W){W=null;unheat();if(pop&&now){paint(now);place(cur)}return}
   if(hist.length){paint(hist.pop());place(cur)}else close()});
  addEventListener('resize',close);
  addEventListener('scroll',function(){if(!pin)close();else place(cur)},{passive:true});

@@ -92,6 +92,31 @@ if (!CHROME) { console.log('no Chrome/Chromium found - set CHROME to a browser b
             && await p.locator('#panel-now').isHidden());
       }
 
+      // The what-if: a trial value typed in the card, the graph reacting in place,
+      // Esc restoring. Generic: find a cell whose card offers try; a record with no
+      // such value skips this block rather than failing it.
+      let tryCell = null;
+      const cells = p.locator('section:not([hidden]) td [data-id]');
+      const nc = Math.min(await cells.count(), 6);
+      for (let i = 0; i < nc && !tryCell; i++) {
+        const c = cells.nth(i);
+        await c.scrollIntoViewIfNeeded(); await p.mouse.move(2, 2); await c.click();
+        if (await p.locator('.pop .try').count()) tryCell = c;
+        else await p.keyboard.press('Escape');
+      }
+      if (tryCell) {
+        await p.locator('.pop .try').click();
+        chk(`${T} try turns the value into an input, in the card`, await seen(p, '.pop .tryin'));
+        await p.locator('.pop .tryin').fill('999999999');
+        chk(`${T} a trial value raises the status line`, await seen(p, '#whatbar')
+            && /trying/.test(await txt(p, '#whatbar')));
+        chk(`${T} and the input lives only in the card`, await p.locator('.tryin').count() === 1);
+        await p.keyboard.press('Escape');
+        chk(`${T} Esc restores the record`, await gone(p, '#whatbar')
+            && /value/i.test(await txt(p)));
+        await p.keyboard.press('Escape');
+      }
+
       if (errs.length) console.log('      ' + errs.join(' | '));
     } catch (e) {
       chk(`${T} harness error: ${e.message}`, false);
