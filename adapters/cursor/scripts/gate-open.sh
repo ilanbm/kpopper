@@ -7,7 +7,15 @@
 # found problems is the normal case this script exists to handle, not a crash to abort on.
 
 IN=$(cat)
-[ -f PROVENANCE.yaml ] || exit 0
+# the record is at the root, or where the checkout registered it - same as session_open.sh
+REC=PROVENANCE.yaml
+if [ ! -f "$REC" ]; then
+  G=$(git rev-parse --git-common-dir 2>/dev/null) || exit 0
+  [ -f "$G/kpopper-record" ] || exit 0
+  REC=$(head -n 1 "$G/kpopper-record")
+  case "$REC" in "~/"*) REC="$HOME/${REC#"~/"}" ;; esac
+  [ -n "$REC" ] && [ -f "$REC" ] || exit 0
+fi
 
 # resolve the kpopper checkout: KPOPPER_ROOT wins if set (required when this script was
 # copied rather than symlinked - a copy has no path back to where it came from). absent
@@ -40,8 +48,8 @@ fi
 
 CID=$(printf '%s' "$IN" | python3 -c 'import json,sys; print(json.load(sys.stdin).get("conversation_id",""))' 2>/dev/null || true)
 
-OUT=$(python3 "$PROVENANCE_PY" open --chars 2000 2>/dev/null) || \
-  OUT="PROVENANCE.yaml is here but the reader could not run (python3 + PyYAML): read the record before relying on it."
+OUT=$(python3 "$PROVENANCE_PY" open --chars 2000 "$REC" 2>/dev/null) || \
+  OUT="$REC is here but the reader could not run (python3 + PyYAML): read the record before relying on it."
 
 # cursor's sessionStart response is JSON, not bare stdout (unlike claude/codex) - wrap it.
 printf '%s' "$OUT" | python3 -c 'import json,sys; print(json.dumps({"additional_context": sys.stdin.read()}))'
@@ -49,7 +57,7 @@ printf '%s' "$OUT" | python3 -c 'import json,sys; print(json.dumps({"additional_
 # same reasoning as session_open.sh: what already failed when the session began is not
 # this conversation's doing, and must not block gate-stop.sh at the end.
 if [ -n "$CID" ]; then
-  python3 "$PROVENANCE_PY" check 2>/dev/null | grep -c '^FAIL' \
+  python3 "$PROVENANCE_PY" check "$REC" 2>/dev/null | grep -c '^FAIL' \
     > "${TMPDIR:-/tmp}/kpopper-base-cursor-$CID" 2>/dev/null || true
 fi
 exit 0

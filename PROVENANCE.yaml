@@ -13,8 +13,29 @@ sources:
     url: "https://claude.ai/code/artifact/cbd80bb7-da50-4486-a74f-1927e51aaa34"
     name: "איך סוכן מתחיל גרף - the practical appendix"
     read: "2026-09-01"
+  run.first_external:
+    name: "The first run on a project this plugin did not build - the g2next keyboard pilot"
+    of: "session 'Keyboard size feedback', 2026-09-01, plugin 0.14.0"
+    read: "2026-09-01"
 
 known:
+  m.first_run.repair:
+    v: 217
+    unit: seconds
+    name: "Repairing the project inside the recording turn, on the first external run"
+    from: run.first_external
+    at: "base-branch merge, tests and push, 17:25:13-17:28:50 UTC"
+  m.first_run.record:
+    v: 62
+    unit: seconds
+    name: "Writing the record itself, on the same run"
+    from: run.first_external
+    at: "17:28:50-17:29:52 UTC"
+  p.pointer_home:
+    v: "<git common dir>/kpopper-record"
+    name: "Where a record the tree cannot hold registers its path"
+    from: "scripts/provenance.py"
+    at: "registered_record"
   goal.portable:
     v: "usable by any session, in any project, with no author present"
     name: "The generality bar"
@@ -189,7 +210,8 @@ judgments:
               that owns the word. The falsifiability claim is what earns the reference."
     blocked_on: "observational: re-opened only if launch shows the name costing real adoption -
                  installs that stall at discovery, not at value"
-    seen: {lit.name_risk: "surveyed 2026-09-01"}
+    seen: {lit.name_risk: "bare-term search is owned by a fandom; the org and handle are taken;
+                           every package registry is free; qualified search works"}
   d.gate_reminds:
     rests_on: [p.gate_bounces]
     verdict: "the stop gate compares against the session-start count and yields after one
@@ -218,7 +240,9 @@ judgments:
               written against. The tree is a surface of this record, not a separate install."
     blocked_on: "observational: falsified the day the name is taken by someone else before the
                  tree ships as its own artifact - the only cost here that was avoidable"
-    seen: {lit.registry_names: "looked up 2026-09-01", lit.name_risk: "surveyed 2026-09-01"}
+    seen: {lit.registry_names: "kpopper and ground-tree are both unregistered on PyPI and on npm",
+           lit.name_risk: "bare-term search is owned by a fandom; the org and handle are taken;
+                           every package registry is free; qualified search works"}
   d.tree_springs_back:
     rests_on: [d.page_reads_only, p.tree_positions_kept]
     verdict: "the tree can be handled - pulled about, and grown into place once - and nothing a
@@ -231,3 +255,36 @@ judgments:
     wrong_if: "p.tree_positions_kept > 0"
     seen: {d.page_reads_only: "the page is a reading surface - no trial inputs, no write path",
            p.tree_positions_kept: 0}
+  d.record_before_repair:
+    rests_on: [m.first_run.repair, m.first_run.record]
+    verdict: "the record is written before the project is repaired; a repair the opener
+              surfaces is said first and done as its own visible work"
+    because: "On the first external run a repair three times the record's own cost ran
+              inside the recording turn, unannounced: the person could not tell bookkeeping
+              from a change to their project, and the repair's minutes read as the method's."
+    blocked_on: "observational: falsified if recording first leaves repairs the person wanted
+                 done, or if announcing them first costs more than it explains"
+    seen: {m.first_run.repair: 217, m.first_run.record: 62}
+  d.moved_is_a_flag:
+    rests_on: [doc.fact_moves]
+    verdict: "a dependency that moved since the snapshot flags the judgment for a person;
+              only a predicate that holds fails the build"
+    because: "Flag, never rewrite: movement is a question and a crossed line is the answer.
+              Failing the build on every move would teach records to stop snapshotting, and
+              muting only what the predicate names keeps a sloppy predicate from silencing
+              what it never covered."
+    blocked_on: "observational: falsified if moved flags pile up unread while a crossed line
+                 hides among them"
+    seen: {doc.fact_moves: "read 2026-09-01"}
+  d.register_out_of_tree:
+    rests_on: [p.pointer_home, skill.two_shapes]
+    verdict: "a record the tree cannot hold registers its path in the git common dir, so
+              every worktree finds it and nothing enters the tree"
+    because: "The pointer file the method already has assumes the root can hold it; a
+              disposable worktree cannot, and a registry outside the repository would be a
+              second place every reader must know. The common dir is shared by all worktrees,
+              never tracked, and already belongs to the checkout."
+    blocked_on: "observational: falsified by a project with no git that cannot keep the file
+                 at its root either, or by re-clones losing the pointer often enough to matter"
+    seen: {p.pointer_home: "<git common dir>/kpopper-record",
+           skill.two_shapes: "Two parallel records is the most expensive mistake available here"}

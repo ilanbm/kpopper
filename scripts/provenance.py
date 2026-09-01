@@ -5,6 +5,10 @@
   python3 provenance.py check   [file ...]
   python3 provenance.py affects <entry> [entry ...]
   python3 provenance.py pull    <entry> [entry ...]   values and sources for a subject
+  python3 provenance.py where                     the record this directory answers for
+
+Without a file argument the record is PROVENANCE.yaml here, else the path this checkout
+registered in `<git common dir>/kpopper-record` - for a project whose tree cannot hold it.
 
 It does not know your field names. Each role has a distinctive *shape*, and the
 shape is enough:
@@ -18,11 +22,40 @@ Where two fields genuinely fit the same role it refuses to guess and asks for a
 one-line `schema:` block. A checker that quietly passes over what it cannot read
 is worse than no checker, so every ambiguity is an error, never a skip.
 """
-import io, os, re, sys, glob, yaml
+import io, os, re, sys, glob, subprocess, yaml
+from decimal import Decimal, InvalidOperation
 
 ID = re.compile(r"[A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z0-9_]+)+")
 EXPR = re.compile(r"[<>=!+\-*/()]|\bor\b|\band\b|\bnot\b")
 DEFAULT = ["PROVENANCE.yaml"]
+POINTER = "kpopper-record"   # in the git common dir: shared by every worktree, never tracked
+
+
+def registered_record():
+    """The path a project registered when its tree cannot hold the record: one line in
+    `<git common dir>/kpopper-record`. Nothing when there is no git, no pointer, or the
+    file it points at is gone - the hooks read the same line in shell."""
+    try:
+        g = subprocess.run(["git", "rev-parse", "--git-common-dir"], capture_output=True,
+                           text=True, timeout=5)
+    except (OSError, subprocess.SubprocessError):
+        return None
+    if g.returncode:
+        return None
+    p = os.path.join(g.stdout.strip(), POINTER)
+    if not os.path.isfile(p):
+        return None
+    with io.open(p, encoding="utf-8") as f:
+        rec = os.path.expanduser(f.readline().strip())
+    return rec if rec and os.path.isfile(rec) else None
+
+
+def default_paths():
+    """The record at the project root - else the one the checkout registered."""
+    if os.path.exists(DEFAULT[0]):
+        return DEFAULT
+    rec = registered_record()
+    return [rec] if rec else DEFAULT
 
 
 def load(paths):
@@ -108,10 +141,12 @@ def infer(doc):
     for members in groups.values():
         for nid, body in members.items():
             if isinstance(body, dict) and fields["deps"] in body:
+                snap = body.get(fields["snapshot"]) if fields["snapshot"] else None
+                snap = dict(snap) if isinstance(snap, dict) else {}
                 jud[nid] = {
                     "deps": list(body.get(fields["deps"]) or []),
-                    "seen": set((body.get(fields["snapshot"]) or {}).keys())
-                            if fields["snapshot"] else set(),
+                    "seen": set(snap),
+                    "snap": snap,      # the values too: what each dependency held at review
                     "pred": str(body.get(fields["predicate"]) or "") if fields["predicate"] else "",
                     "body": body,
                 }
@@ -152,7 +187,9 @@ def value_of(raw, ids, k):
     b = raw.get(k)
     if not isinstance(b, dict):
         return b if k in ids else None
-    v = b.get("v", b.get("quoted"))
+    v = b.get("v")
+    if v is None:                      # absent or null: the quoted text is the value
+        v = b.get("quoted")
     if isinstance(v, str) and EXPR.search(v) and any(t in ids for t in ID.findall(v)):
         return None
     return v
@@ -185,6 +222,45 @@ def evaluate(pred, raw, ids):
             "==": a == b, "!=": a != b}[op]
 
 
+def short(v, n=40):
+    s = " ".join(str(v).split())
+    return s if len(s) <= n else s[:n - 1] + "…"
+
+
+def moved_deps(j, raw, ids):
+    """Dependencies whose value differs from the snapshot taken when the judgment was
+    written -> [(dep, seen, now, state)]. `state` is what the predicate makes of the move:
+    "muted" when it names the dependency and still evaluates false - it moved, not across
+    the line the judgment drew; "crossed" when it evaluates true - the judgment is broken
+    and that is reported on its own; "moved" otherwise - nothing decides this one, so a
+    person must. A dependency with no comparable value now (a rule, a source, a judgment)
+    is skipped: there is nothing to compare."""
+    def num(x):
+        # exact, so a change beyond float precision is still a change
+        try:
+            return Decimal(str(x).replace(",", ""))
+        except InvalidOperation:
+            return None
+    out = []
+    refs = {t for t in ID.findall(j["pred"]) if t in ids}
+    verdict = evaluate(j["pred"], raw, ids) if refs else None
+    for dep, old in j["snap"].items():
+        if dep not in ids or isinstance(old, (list, dict)):
+            continue
+        now = value_of(raw, ids, dep)
+        if now is None or isinstance(now, (list, dict)):
+            continue
+        if " ".join(str(old).split()) == " ".join(str(now).split()):
+            continue
+        if num(old) is not None and num(old) == num(now):
+            continue
+        state = "moved"
+        if dep in refs and verdict is not None:
+            state = "crossed" if verdict else "muted"
+        out.append((dep, old, now, state))
+    return out
+
+
 def _blocked_text(body):
     """The declared reason, whether the declaration is prose or a {missing, why} mapping."""
     for k in BLOCKED:
@@ -205,7 +281,7 @@ def check(paths):
     ids, jud, fields = infer(doc)
     raw = bodies(doc)
     open_ids = {k for g in OPEN for k in (doc.get(g) or {})}
-    fail, note = [], []
+    fail, note, moved = [], [], []
     if not fields["snapshot"]:
         note.append("no snapshot field anywhere: dependencies are declared but never "
                     "captured, so drift can never be detected")
@@ -234,11 +310,21 @@ def check(paths):
                 else " - and nothing says why not, so it can never be re-checked"))
         elif evaluate(j["pred"], raw, ids) is True:
             fail.append(f"{name}: wrong_if holds ({j['pred']}) - broken by its own condition")
+        # A dependency that moved since the snapshot puts the judgment in front of a
+        # person; it does not fail the build. Movement is a question and a crossed line
+        # is the answer, and only the predicate can say which line matters.
+        for dep, old, now, state in moved_deps(j, raw, ids):
+            if state == "moved":
+                moved.append(f"{name}: {dep} differs from its snapshot "
+                             f"({short(old)} -> {short(now)}) - re-review, or refresh seen")
     for n in note:
         print("NOTE", n)
+    for m in moved:
+        print("MOVED", m)
     for f in fail:
         print("FAIL", f)
     print(f"\n{len(jud)} judgments, {len(ids)} entries, {len(fail)} problems"
+          + (f", {len(moved)} moved" if moved else "")
           + (f", {len(note)} declared" if note else ""))
     return 1 if fail else 0
 
@@ -287,6 +373,10 @@ def opening(paths, budget=25, chars=None):
         elif evaluable and evaluate(j["pred"], raw, ids) is True:
             items.append((95, name, f"wrong_if holds ({j['pred'][:60]}) - broken by its own "
                                     f"condition"))
+        for dep, old, now, state in moved_deps(j, raw, ids):
+            if state == "moved":
+                items.append((70, name, f"{dep} differs from what it last saw: "
+                                        f"{short(old, 28)} -> {short(now, 28)}"))
     items.sort(key=lambda x: (-x[0], x[1]))
     kept, dropped = items[:budget], max(0, len(items) - budget)
 
@@ -367,15 +457,17 @@ def opening(paths, budget=25, chars=None):
         print(footer)
         return 0
 
-    # standing: every judgment's own verdict, no ranking - the ranking above is about
-    # what needs a person, this is just what the record currently concludes. Only
+    # standing: the verdict of every judgment that is not above - what the record
+    # currently concludes and nothing contests. A judgment listed as needing a person
+    # is not standing, so it is not repeated here with a sign that says it is. Only
     # built when there is a character budget to spend on it; it is the last thing
     # cut and the first thing skipped.
     flagged = {name for _, name, _ in items}
     standing = []
-    if jud:
-        standing.append("standing:")
-        for name in sorted(jud, key=lambda n: (n not in flagged, n)):
+    live = [n for n in sorted(jud) if n not in flagged]
+    if live:
+        standing.append("standing:" + (f"  ({len(flagged)} above are contested)" if flagged else ""))
+        for name in live:
             b = jud[name]["body"]
             v = str(b.get("verdict") or b.get("title") or name)
             line = f"  = {name}: {v}"
@@ -515,16 +607,6 @@ def pull(paths, seeds, budget=40):
             v, rule = None, rule or v
         return v, rule
 
-    def current(body):
-        """The comparable value this entry holds right now - v, else the quoted
-        text, else nothing: a rule has no value of its own to compare."""
-        v, _ = resolved(body)
-        if v is not None:
-            return v
-        if body.get("quoted") is not None:
-            return body["quoted"]
-        return None
-
     lines = []
     for k in sorted(entries):
         b = raw.get(k) or {}
@@ -573,18 +655,11 @@ def pull(paths, seeds, budget=40):
         if j["pred"]:
             lines.append(cut(f"    wrong_if: {j['pred']}", 110))
 
-        if fields["snapshot"]:
-            snap = body.get(fields["snapshot"])
-            if isinstance(snap, dict):
-                for dep in sorted(snap):
-                    old = snap[dep]
-                    if dep not in ids or dep in jud or isinstance(old, (list, dict)):
-                        continue                       # missing, a judgment, or not scalar
-                    now = current(raw.get(dep) or {})
-                    if now is None or isinstance(now, (list, dict)):
-                        continue                       # a rule, or nothing recorded now
-                    if str(old) != str(now):
-                        lines.append(cut(f"    moved since review: {dep} {old} -> {now}", 110))
+        # Every move since the snapshot, with what the predicate made of it - pull is
+        # the grounding surface, so here even a muted move is worth a line.
+        for dep, old, now, state in sorted(moved_deps(j, raw, ids)):
+            tag = {"muted": " - within wrong_if", "crossed": " - across wrong_if"}.get(state, "")
+            lines.append(cut(f"    moved since review: {dep} {old} -> {now}{tag}", 110))
 
     kept, remain = lines[:budget], max(0, len(lines) - budget)
     for l in kept:
@@ -598,8 +673,16 @@ def pull(paths, seeds, budget=40):
 if __name__ == "__main__":
     a = sys.argv[1:] or ["check"]
     cmd, rest = a[0], a[1:]
+    if cmd == "where":
+        # the record this directory answers for: at the root, or registered with the
+        # checkout. Silent and non-zero when there is none - a hook's guard, not an error.
+        p = default_paths()[0]
+        if os.path.exists(p):
+            print(os.path.abspath(p))
+            sys.exit(0)
+        sys.exit(1)
     if cmd == "affects":
-        files = [x for x in rest if x.endswith((".yaml", ".yml"))] or DEFAULT
+        files = [x for x in rest if x.endswith((".yaml", ".yml"))] or default_paths()
         sys.exit(affects(files, [x for x in rest if not x.endswith((".yaml", ".yml"))]))
     if cmd == "pull":
         b, seeds, files = 40, [], []
@@ -609,8 +692,8 @@ if __name__ == "__main__":
                 b = int(rest[i + 1]); i += 2; continue
             (files if rest[i].endswith((".yaml", ".yml")) else seeds).append(rest[i])
             i += 1
-        sys.exit(pull(files or DEFAULT, seeds, b))
-    files = [x for x in rest if x.endswith((".yaml", ".yml"))] or DEFAULT
+        sys.exit(pull(files or default_paths(), seeds, b))
+    files = [x for x in rest if x.endswith((".yaml", ".yml"))] or default_paths()
     if cmd == "open":
         b = int(rest[rest.index("--budget") + 1]) if "--budget" in rest else 25
         c = int(rest[rest.index("--chars") + 1]) if "--chars" in rest else None

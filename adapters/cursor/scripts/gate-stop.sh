@@ -10,7 +10,15 @@
 # found problems is the normal case this script exists to handle, not a crash to abort on.
 
 IN=$(cat)
-[ -f PROVENANCE.yaml ] || exit 0
+# the record is at the root, or where the checkout registered it - same as session_gate.sh
+REC=PROVENANCE.yaml
+if [ ! -f "$REC" ]; then
+  G=$(git rev-parse --git-common-dir 2>/dev/null) || exit 0
+  [ -f "$G/kpopper-record" ] || exit 0
+  REC=$(head -n 1 "$G/kpopper-record")
+  case "$REC" in "~/"*) REC="$HOME/${REC#"~/"}" ;; esac
+  [ -n "$REC" ] && [ -f "$REC" ] || exit 0
+fi
 
 resolve_self() {
   p=$0
@@ -42,13 +50,13 @@ BASE_FILE="${TMPDIR:-/tmp}/kpopper-base-cursor-$CID"
 
 LOOP=$(printf '%s' "$IN" | python3 -c 'import json,sys; print(json.load(sys.stdin).get("loop_count",0))' 2>/dev/null || echo 0)
 
-OUT=$(python3 "$PROVENANCE_PY" check 2>/dev/null)
+OUT=$(python3 "$PROVENANCE_PY" check "$REC" 2>/dev/null)
 NOW=$(printf '%s\n' "$OUT" | grep -c '^FAIL')
 BASE=$(cat "$BASE_FILE" 2>/dev/null || echo 0)
 [ "$NOW" -gt "$BASE" ] 2>/dev/null || exit 0
 
 MSG=$(printf '%s\n%s\n%s\n' \
-  "PROVENANCE.yaml fails check with $NOW problems ($BASE at session start)." \
+  "$REC fails check with $NOW problems ($BASE at session start)." \
   "Fix the record - or declare the hole with blocked_on - before finishing:" \
   "$(printf '%s\n' "$OUT" | grep '^FAIL' | head -12)")
 

@@ -51,14 +51,17 @@ plugin is all of that plus the method and the session hooks:
 | `scripts/provenance.py` | The reader underneath. Field names are inferred by shape, so it reads records written in any vocabulary. |
 | `scripts/render_page.py` | The record as one self-contained page, three tabs, no dependencies beyond the reader. |
 | `scripts/verify_page.js` | Browser checks for that page, in both themes. Playwright. Plugin only. |
-| `hooks/` | A session opener and a stop gate. The opener runs `provenance.py open` when the project keeps a record, silent everywhere else; the gate bounces a session once, with the failures, if it tries to finish having left `check` worse than it found it. |
+| `hooks/` | A session opener and a stop gate. The opener runs `provenance.py open` when the project keeps a record — at its root, or registered with the checkout — and is silent everywhere else; the gate bounces a session once, with the failures, if it tries to finish having left `check` worse than it found it. |
 
 ## The record
 
 One file, one place: `PROVENANCE.yaml` at the project root — or a pointer to wherever the
-content actually sits, including a mapping of several files; the reader follows it. It holds
-three things: what was taken from a source (and where within it), what was worked out (the
-rule, never the result), and what was concluded (with what would make it wrong).
+content actually sits, including a mapping of several files; the reader follows it. A project
+whose tree cannot hold the file keeps it elsewhere and registers the path with the checkout
+(one line in the git common dir; `kpopper where` prints it), and the opener and every command
+find it from any worktree. It holds three things: what was taken from a source (and where
+within it), what was worked out (the rule, never the result), and what was concluded (with
+what would make it wrong).
 
 ```yaml
 sources:
@@ -107,6 +110,7 @@ kpopper check                    # does the record still hold together
 kpopper affects <entry>          # what a change reaches, through intermediate judgments
 kpopper pull <entry|prefix>      # a subject's values with their sources - and what moved
                                  # since each judgment last looked
+kpopper where                    # the record this directory answers for
 ```
 
 Each command reads the record in the current directory, or the files you name. Without the
@@ -118,7 +122,9 @@ judgment declares it missing with `blocked_on`), a dependency with no snapshot, 
 naming something undeclared, prose sitting in a predicate field, or a plain-comparison
 predicate that currently holds — a judgment broken by its own condition. A declared hole is a
 note, not a failure — a build that stays red over an honest declaration teaches records to
-stop declaring.
+stop declaring. A dependency that moved since a judgment's snapshot is reported as `MOVED`
+and does not fail the build either: it puts the judgment in front of a person, and it is
+muted when the predicate names it and still evaluates false — moved, not across the line.
 
 ## The page — and the tree
 
@@ -184,9 +190,11 @@ only place any of it is edited; every installed copy is a read-only distribution
 ## Requirements
 
 Python 3.9+ and PyYAML — `pipx` brings it along; a plugin-only install wants
-`pip3 install pyyaml`. The plugin's browser checks additionally want Node with `playwright-core` and a
-Chrome/Chromium binary (`CHROME=/path/to/chrome` when it is not on a known path). Nothing
-else.
+`pip3 install pyyaml`. The plugin's browser checks additionally want Node, a Chrome/Chromium
+binary (`CHROME=/path/to/chrome` when it is not on a known path), and `playwright-core` — the
+driver, which the plugin does not ship: it is found beside the page when the project already
+uses Playwright, and otherwise `npm i --no-save playwright-core` next to the page is enough.
+Nothing else.
 
 ## What would show this was not worth it
 

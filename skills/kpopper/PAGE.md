@@ -33,6 +33,7 @@ lives in the conversation and dies with it, so it cannot ship and cannot be deri
 brief beside the record (`<record>.view.yaml`, picked up automatically):
 
 ```yaml
+title: "The loan, this week"
 intent: "Close the loan documents before the rate lock expires on the 18th"
 sections:
   - title: What is blocking now
@@ -46,10 +47,14 @@ sections:
 shape: {entries: 89, judgments: 12, flagged: 9, blocked: 4}
 ```
 
-`pick` takes a state (`blocked`, `unchecked`, `broken`, `no_predicate`, `flagged`, `judgments`,
-`all`), a prefix (`d.`), or an exact id — evaluated at render time, never a frozen list. That is
-what keeps a section current: a judgment that becomes blocked tomorrow appears under *What is
-blocking now* with no edit to the brief.
+`pick` takes a state (`blocked`, `unchecked`, `broken`, `falsified`, `moved`, `no_predicate`,
+`flagged`, `judgments`, `all`), a prefix (`d.`), or an exact id — evaluated at render time,
+never a frozen list. That is what keeps a section current: a judgment that becomes blocked
+tomorrow appears under *What is blocking now* with no edit to the brief.
+
+`title:` names the page — the browser tab, and the heading when the record carries no name of
+its own. It is presentation, which is why it lives in the brief; without it the page is named
+after the record, and a record without a name is called `record`.
 
 `as` picks the shape. This is where intent actually shows, so the set is deliberate and closed —
 each renderer states what data it can carry, and asking one to hold data it cannot express is a

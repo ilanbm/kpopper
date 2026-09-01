@@ -2,8 +2,25 @@
    provenance layer actually behaves. Both themes, because dark breaks in the one
    combination nobody exercises. Waits on elements, never on a fixed sleep - a flaky
    assertion is worse than none. */
-const { chromium } = require('playwright-core');
 const fs = require('fs');
+const path = require('path');
+// The driver is not shipped with the plugin. Look for it beside the page first - the
+// project's own node_modules, including where pnpm keeps transitive packages - and when
+// it is nowhere, say exactly what to do instead of dying on a require.
+const chromium = (() => {
+  const roots = [path.join(process.cwd(), 'node_modules')];
+  const store = path.join(roots[0], '.pnpm');
+  if (fs.existsSync(store))
+    for (const d of fs.readdirSync(store))
+      if (d.startsWith('playwright-core@')) roots.push(path.join(store, d, 'node_modules'));
+  for (const spec of ['playwright-core', ...roots.map(r => path.join(r, 'playwright-core'))]) {
+    try { return require(spec).chromium; } catch (e) { if (e.code !== 'MODULE_NOT_FOUND') throw e; }
+  }
+  console.log('verify_page.js needs playwright-core, the driver that opens the page in Chrome; the plugin does not ship it.');
+  console.log("Point NODE_PATH at a node_modules that has it - the project's own, if it uses Playwright - or install one beside the page:");
+  console.log('  npm i --no-save playwright-core && NODE_PATH="$PWD/node_modules" node verify_page.js record.html');
+  process.exit(1);
+})();
 const FILE = process.argv[2] || 'record.html';
 const CHROME = process.env.CHROME || ['/opt/pw-browsers/chromium-1194/chrome-linux/chrome',
   '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome'].find(fs.existsSync);

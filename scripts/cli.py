@@ -6,15 +6,17 @@ to provenance.py; page renders the record and can open what it writes.
   kpopper check   [file ...]              does the record still hold together
   kpopper affects <entry> [entry ...]     what a change reaches
   kpopper pull    <entry|prefix> [...]    values and sources for a subject
+  kpopper where                           the record this directory answers for
   kpopper page    [--out PATH] [--open] [--tree] [args...]   the record as one page
                   add --verify to check the page instead of writing one
 
-Run from the directory the record sits in, same as the two scripts underneath.
+Run from the directory the record sits in, same as the two scripts underneath - or from
+any checkout of a project that registered its record (see `where`).
 """
 import os, sys, pathlib, subprocess, webbrowser
 
 HERE = pathlib.Path(__file__).resolve().parent
-READ = ("open", "check", "affects", "pull")
+READ = ("open", "check", "affects", "pull", "where")
 
 
 def do_page(args):

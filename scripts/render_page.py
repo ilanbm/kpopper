@@ -466,11 +466,12 @@ JS = r"""
 # ── what the record says about itself ────────────────────────────────────────
 # One reading of state, used by every section selector. The same four conditions
 # `provenance.py open` ranks by; named here so a brief can select on them.
-STATES = ("broken", "unchecked", "blocked", "no_predicate")
+STATES = ("broken", "falsified", "unchecked", "moved", "blocked", "no_predicate")
 
 
-def flags_of(ids, jud, fields):
-    """Per judgment: the set of conditions that put it in front of a person."""
+def flags_of(ids, jud, fields, raw):
+    """Per judgment: the set of conditions that put it in front of a person - derived the
+    way `check` and `open` derive them, so the page never disagrees with the reader."""
     out = {}
     for name, j in jud.items():
         f, blocked = set(), next((str(j["body"][k]) for k in P.BLOCKED if j["body"].get(k)), "")
@@ -481,6 +482,10 @@ def flags_of(ids, jud, fields):
                 f.add("unchecked")
         if not [t for t in P.ID.findall(j["pred"]) if t in ids] and not blocked:
             f.add("no_predicate")
+        elif P.evaluate(j["pred"], raw, ids) is True:
+            f.add("falsified")
+        if any(s == "moved" for _, _, _, s in P.moved_deps(j, raw, ids)):
+            f.add("moved")
         out[name] = f
     return out
 
@@ -645,13 +650,15 @@ def fits(kind, keys, jud, E):
     return f"unknown renderer '{kind}'"
 
 
-URGENCY = {"broken": (100, "stop"), "unchecked": (80, "stop"),
-           "blocked": (60, "warn"), "no_predicate": (40, "mut")}
+URGENCY = {"broken": (100, "stop"), "falsified": (95, "stop"), "unchecked": (80, "stop"),
+           "moved": (70, "warn"), "blocked": (60, "warn"), "no_predicate": (40, "mut")}
 
 # What each state means, said the way a person would say it. The machine name stays -
 # in the hover, where the keys and the rules live. Nothing on the reading surface is
 # named after how the thing is built.
 SAYS = {"broken": "rests on something that is not in this record",
+        "falsified": "its own condition for being wrong now holds",
+        "moved": "something it rests on no longer matches what it last saw",
         "unchecked": "has never been checked against one of the things it rests on",
         "blocked": "waiting on something nobody has recorded yet",
         "no_predicate": "nothing here would show it to be wrong"}
@@ -833,7 +840,7 @@ def tree_svg(ids, jud, E, J, flags):
     ci = ri = 0
     for k in roots + upper:
         f = flags.get(k, set())
-        sev = " stopf" if f - {"blocked"} else (" warnf" if f else "")
+        sev = " stopf" if f - {"blocked", "moved"} else (" warnf" if f else "")
         kind = "crown" if k in jud else ("root" if depth[k] == 0 else "bough")
         r = 9 if kind == "crown" else (5 if kind == "root" else 4)
         o.append(f'<g class="tn {kind}{sev}" data-id="{html.escape(k)}">')
@@ -864,7 +871,7 @@ def build(paths, brief_path=None):
     doc = P.load(paths)
     ids, jud, fields = P.infer(doc)
     meta = doc.get("meta") or {}
-    flags = flags_of(ids, jud, fields)
+    flags = flags_of(ids, jud, fields, P.bodies(doc))
     shape = shape_of(ids, jud, flags)
     brief = {}
     if brief_path and os.path.exists(brief_path):
@@ -1018,7 +1025,10 @@ def build(paths, brief_path=None):
         o = ['<div class="alerts">']
         for name in sorted(names, key=lambda n: (rank(n), n)):
             fs = sorted(flags.get(name, ()), key=lambda f: -URGENCY.get(f, (0, ""))[0])
-            tone = URGENCY.get(fs[0], (0, "ok"))[1] if fs else "ok"
+            # the dot shows the worst state the judgment is in, whatever order the
+            # reasons are listed in
+            tones = {URGENCY.get(f, (0, "ok"))[1] for f in fs}
+            tone = next((t for t in ("stop", "warn", "mut") if t in tones), "ok")
             v, _ = anchor(J[name]["verdict"], jud[name]["deps"], E)
             # the key it is waiting on is the whole content of a blocked line - it is
             # what someone has to go and get, so it stays visible here
@@ -1098,7 +1108,9 @@ def build(paths, brief_path=None):
 
     # ── the session's tab ───────────────────────────────────────
     now_html, covered, empty_sections, misfit = [], set(), [], []
-    rec_name = named(meta)
+    # the record's own name heads the page; a record without one borrows the brief's
+    # title, which is presentation and so lives in the brief
+    rec_name = named(meta) or str(brief.get("title") or "").strip()
     h1 = (f'<h1 dir="auto">{html.escape(rec_name)}</h1>' if rec_name
           else '<h1 dir="ltr">What is known here</h1>')
     if brief:
@@ -1187,7 +1199,7 @@ def build(paths, brief_path=None):
 
     out = ['<!doctype html><html><head><meta charset="utf-8">',
            '<meta name="viewport" content="width=device-width,initial-scale=1">',
-           f'<title>{html.escape(str(rec_name or meta.get("scope") or "record")[:60])}</title>',
+           f'<title>{html.escape(str(brief.get("title") or rec_name or meta.get("scope") or "record")[:60])}</title>',
            f'<style>{CSS}</style></head><body><div class="wrap" dir="{direction(doc)}">']
 
     tree = (h1 + '<p class="purpose" dir="ltr">The whole record as one growing thing — '
@@ -1284,7 +1296,7 @@ def verify(paths, brief_path=None):
 if __name__ == "__main__":
     a = sys.argv[1:]
     brief = a[a.index("--brief") + 1] if "--brief" in a else None
-    files = [x for x in a if x.endswith((".yaml", ".yml")) and x != brief] or P.DEFAULT
+    files = [x for x in a if x.endswith((".yaml", ".yml")) and x != brief] or P.default_paths()
     brief = find_brief(files, brief)
     if "--verify" in a:
         sys.exit(verify(files, brief))

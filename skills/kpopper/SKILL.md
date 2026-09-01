@@ -40,6 +40,13 @@ only what needs a person: ranked, cut to a budget, and honest about how many it 
 On a clean record that is a few lines. The plugin runs this by itself at session start; if
 a project with a record shows no such report, run it by hand.
 
+**What opening shows about the project is not the record's work.** Opening can surface a
+branch behind its base, a red build, a stale environment. Say so in one line and write the
+record with the world as it is — then offer the repair as its own piece of work, in the open.
+Folding a repair into the turn that records it hides both from the person watching: they
+cannot tell bookkeeping from a change to their project, and the repair's minutes read as
+the method's cost.
+
 `open` also prints **what the record holds** — the namespace, not the values: `mtg (11) ·
 pay (4) · c50 (9) · …`. That one line is the whole link between a question in plain language
 and the graph. "What is happening with the mortgage" has no meaning to a file; `mtg` does.
@@ -70,6 +77,19 @@ also:   analysis/claims.yaml
 
 One known location, wherever the content actually sits. **Two parallel records is the most expensive mistake available here** — from then on every reader must know both, and it never resolves on its own.
 
+**If the root cannot hold it** — the repository's own rules keep such files out of the tree, or
+the checkout is disposable and untracked files die with it — keep the record wherever the
+project keeps its untracked material, and register the path with the checkout:
+
+```bash
+echo "/abs/path/to/PROVENANCE.yaml" > "$(git rev-parse --git-common-dir)/kpopper-record"
+```
+
+The opener and every command below then find it from any checkout or worktree of that
+repository (`provenance.py where` prints what they found), and nothing enters the tree. Say
+where it went in your reply and in whatever memory the project keeps — a record nobody can
+find is a record nobody updates.
+
 ### The shape
 
 Three sections, mirroring the three things worth keeping. Grow it freely; do not rename it.
@@ -79,8 +99,8 @@ meta:
   updated: 2026-08-31
 
 sources:      # documents, pages, people, messages — things nothing else produced
-  msa:      {file: "contracts/acme-msa-2026.pdf", of: "2026-04-02"}
-  pricing:  {url: "https://…/pricing", read: "2026-08-30"}
+  msa:      {name: "the master agreement", file: "contracts/acme-msa-2026.pdf", of: "2026-04-02"}
+  pricing:  {name: "Acme's pricing page", url: "https://…/pricing", read: "2026-08-30"}
 
 known:        # taken from a source, or worked out from other entries
   acme.seat_price: {v: 42, unit: USD/mo, from: pricing, at: "Enterprise tier"}
@@ -152,6 +172,12 @@ Record where it came from, precisely enough to go back: the source *and the loca
 Record negative findings the same way. "Absent from all three registry files" is a result with a
 source, and the next session should not have to look again.
 
+**A session is a source when the evidence was made in it** — a measurement, a probe, a run
+that produced the number. Record it as one: what was done, when, and in which session,
+precisely enough to go back to the transcript. The judgments a session writes need no
+session field; if two sessions ever disagree about one, that is the question that earns it,
+and not before.
+
 **And record how faithful it is.** This matters far more for text than for numbers, because a number is either read correctly or not, while text degrades in stages:
 
 | | what it is | how to treat it |
@@ -173,7 +199,9 @@ source, and the next session should not have to look again.
 than inferring by shape — a sentence has no distinctive shape. It costs one line at the
 moment you already know what you are writing down, and without it every surface that is not
 about keys has to fall back to `rate lock`, which is the system's name for the thing and not
-the reader's. `render_page.py --verify` reports how many entries are missing one.
+the reader's. `render_page.py --verify` reports how many entries are missing one. Sources
+need one as much as entries do: `pr352: {url: …}` is a key, and `name: "the pull request"`
+is what a reader sees in every hover that cites it.
 
 That is the general rule for the whole page: **name things the way the reader would, never
 the way the record is built.** A blocked line says *"the bank's position was never put in
@@ -374,10 +402,20 @@ plain-comparison predicate that currently holds — a judgment broken by its own
 prose case matters most — prose in a predicate field is worse than an empty field, because it
 reads like a predicate while nothing evaluates it and nobody notices. Say `blocked_on` instead.
 
+It also reports, as `MOVED` lines that do not fail the build, every dependency whose value
+differs from the judgment's snapshot — except one the predicate names and still evaluates
+false, which moved without crossing the line the judgment drew. Movement is a question; a
+crossed line is the answer. That comparison is only as good as the snapshot: `seen` must
+hold the dependency's value as recorded, never a paraphrase of it — the reader cannot tell
+a paraphrase from a move, so it reports both, and a person has to look.
+
 `open` is the session opener: how large the record is, and then only what needs a person —
-a dependency that is not an entry, a judgment nothing was ever checked against, a declared
+a dependency that is not an entry, a judgment broken by its own condition, a dependency that
+moved since the judgment last looked, a judgment nothing was ever checked against, a declared
 hole still waiting, a judgment nothing evaluable would falsify. Ranked, budgeted, and it
-says how many it left out. On a clean record it prints one line, which is the point.
+says how many it left out. What still stands is listed after that, and a judgment listed as
+needing a person is not repeated there. On a clean record it prints one line, which is the
+point.
 
 `affects <entry>` answers the question the whole method exists for: something moved, what does it
 reach — including through intermediate judgments — and for each one, whether its predicate can now
@@ -405,6 +443,11 @@ node    "$(dirname "$R")/verify_page.js" record.html        # what only looking 
 format, the closed set of renderers and what each one requires, and the rules that keep an
 opinionated arrangement honest all live there. It is a reference, not part of the opening
 cost: skip it entirely on a session that never builds a page.
+
+**A record born in this session is met as a page.** When the record did not exist when the
+session began and the surface can publish a page, render it and show it without being asked -
+the first meeting with the record should be the page, alive, not a yaml file. On every later
+session the page is on demand.
 
 ```bash
 sed -n '1,400p' "$(dirname "$R")/../skills/kpopper/PAGE.md"
@@ -440,6 +483,7 @@ Each is recognizable while you are doing it. If you catch yourself, stop.
 - Recording anything a person would have to maintain by hand afterwards. That is the definition of bureaucracy, and it is how this fails.
 - **Asking the user how to structure their data.** That is your job, not theirs, and asking makes the method cost them something on the very first turn.
 - Spending a whole turn on the record when nobody asked for it. It is a byproduct of the work; if it becomes the work, something has gone wrong.
+- Repairing the project inside the turn that records it, without saying so first. Record, say what you found, then fix — as work the person can see.
 - Presenting your reading of a source as the source's own words.
 - Inventing a number, a date or a threshold so that something becomes computable.
 - **Filing something as a judgment because that is the only slot available.** A live question goes
