@@ -102,17 +102,61 @@ def groups_of(doc):
     return out
 
 
+def _no_deps(unresolved):
+    """What to say when no field reads as a dependency list.
+
+    A record whose references are broken has the same symptom as one that declares
+    nothing at all: no field is a list of names that are *all* entries, so none of them
+    votes for the role. Telling a reader that nothing declares what it rests on, when
+    every judgment carries a `rests_on:`, sends them looking for the wrong thing - so
+    name the fields that did list names, and the names that were not found.
+
+    Which of them is the dependency field is not something a shape can settle: a list of
+    filenames and a list of mistyped references look exactly alike. So this names the
+    candidates and leaves the choice to a person, the same way an ambiguous role does.
+    """
+    if not unresolved:
+        return ("no dependency field found: nothing declares what it rests on, "
+                "so there is no graph to walk")
+    ranked = sorted(unresolved.items(), key=lambda kv: (-len(kv[1]), str(kv[0])))
+    lines = []
+    for f, where in ranked[:3]:
+        nid, miss = where[0]
+        names = ", ".join(miss[:3]) + (" ..." if len(miss) > 3 else "")
+        lines.append(f"  {f}: {names if len(names) < 90 else names[:90] + ' ...'} (in {nid}"
+                     + (f", and {len(where) - 1} more" if len(where) > 1 else "") + ")")
+    if len(ranked) > 3:
+        rest = ", ".join(str(f) for f, _ in ranked[3:])
+        lines.append(f"  ... and {len(ranked) - 3} more: "
+                     + (rest if len(rest) < 90 else rest[:90] + " ..."))
+    return ("no dependency field found: no field lists names that are all entries in this "
+            "record, so there is no graph to walk.\nThese list names that are not entries:\n"
+            + "\n".join(lines)
+            + "\n\nEither those names are wrong, or one of these is a dependency field this "
+              "reader cannot see by shape - and it does not guess between them. Fix the "
+              "names, or say which:\n\nschema:\n  deps: <field name>")
+
+
 def infer(doc):
     groups = groups_of(doc)
     ids = {k for m in groups.values() for k in m}
     cand = {"deps": {}, "snapshot": {}, "predicate": {}}
+    # A field with the shape of a dependency list whose names resolve to nothing votes
+    # for no role at all. When that is why the record ends up with no dependency field,
+    # it is the whole story - so keep what each one listed and what was missing from it.
+    unresolved, present = {}, set()
     for members in groups.values():
-        for body in members.values():
+        for nid, body in members.items():
             if not isinstance(body, dict):
                 continue
             for f, val in body.items():
-                if isinstance(val, list) and val and all(isinstance(x, str) and x in ids for x in val):
-                    cand["deps"][f] = cand["deps"].get(f, 0) + 1
+                present.add(f)
+                if isinstance(val, list) and val and all(isinstance(x, str) for x in val):
+                    if all(x in ids for x in val):
+                        cand["deps"][f] = cand["deps"].get(f, 0) + 1
+                    else:
+                        unresolved.setdefault(f, []).append(
+                            (nid, [x for x in val if x not in ids]))
                 elif isinstance(val, dict) and val and all(k in ids for k in val):
                     cand["snapshot"][f] = cand["snapshot"].get(f, 0) + 1
                 elif isinstance(val, str) and val:
@@ -123,6 +167,18 @@ def infer(doc):
 
     def pick(role):
         if sch.get(role):
+            # Only the dependency field empties a record when it is named wrongly: every
+            # judgment is found through that one name, so a name nothing carries leaves
+            # nothing to check and the record passes by default - the quiet pass this
+            # method refuses. A snapshot or predicate named the same way costs one check.
+            if role == "deps" and sch[role] not in present:
+                seen = ", ".join(sorted(str(x) for x in present))
+                raise SystemExit(
+                    f"schema names '{sch[role]}' for 'deps', and nothing this reader can "
+                    f"see carries it: no judgment would be found, and the record would "
+                    f"pass by having nothing left to check."
+                    + (f"\nFields it can see: {seen if len(seen) < 300 else seen[:300] + ' ...'}"
+                       if seen else ""))
             return sch[role]
         top = sorted(cand[role].items(), key=lambda kv: -kv[1])
         if not top:
@@ -135,8 +191,7 @@ def infer(doc):
 
     fields = {r: pick(r) for r in cand}
     if not fields["deps"]:
-        raise SystemExit("no dependency field found: nothing declares what it rests on, "
-                         "so there is no graph to walk")
+        raise SystemExit(_no_deps(unresolved))
     jud = {}
     for members in groups.values():
         for nid, body in members.items():
