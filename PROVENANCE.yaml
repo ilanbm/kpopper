@@ -1,0 +1,117 @@
+meta:
+  updated: 2026-09-01
+  scope: "What this plugin is for and the decisions that shaped it, kept in its own format -
+          the tools eat their own cooking, and every session here opens grounded."
+
+sources:
+  doc.fact_moves:
+    url: "https://claude.ai/code/artifact/ca99e558-60ae-4b22-9221-e3b29d7d7e2b"
+    name: "מה קורה כשעובדה זזה - the unified node model"
+    read: "2026-09-01"
+  doc.agent_graph:
+    url: "https://claude.ai/code/artifact/cbd80bb7-da50-4486-a74f-1927e51aaa34"
+    name: "איך סוכן מתחיל גרף - the practical appendix"
+    read: "2026-09-01"
+
+known:
+  goal.portable:
+    v: "usable by any session, in any project, with no author present"
+    name: "The generality bar"
+    from: doc.agent_graph
+  goal.measure:
+    quoted: "עלות הפתיחה של סשן מספר N"
+    from: doc.fact_moves
+    name: "The one measurement the method promises"
+  skill.two_shapes:
+    quoted: "Two parallel records is the most expensive mistake available here"
+    from: "skills/kpopper/SKILL.md"
+    at: "Step 1"
+    name: "The cost of a second copy"
+  m.open_whole:
+    v: 39777
+    name: "Reading a live record whole, characters"
+    from: "measured on a live record of 107 entries"
+    of: "2026-09-01"
+  m.open_clean:
+    v: 948
+    name: "The opener on the same record when clean, characters"
+    from: "measured on a live record of 107 entries"
+    of: "2026-09-01"
+  m.record_scale:
+    v: 107
+    name: "Largest live record, entries"
+    from: "measured across the records this plugin serves"
+    of: "2026-09-01"
+  p.hook_slot:
+    v: 2000
+    name: "The opener's character budget"
+    from: "scripts/session_open.sh"
+  p.gate_bounces:
+    v: 1
+    name: "How many times the stop gate blocks before yielding"
+    from: "scripts/session_gate.sh"
+
+open:
+  q.pull_defaults: "does a session that ran pull still open the record file for values - and if
+                    so, what was missing from the line it got?"
+  q.whatif_evaluator: "does the live what-if need a tiny expression evaluator on day one, or do
+                       simple-comparison predicates carry it?"
+  q.account_copy: "does the hosted copy of this plugin get refreshed from here, or retired?"
+  q.first_artifact: "what is the first artifact that must never change silently?"
+
+judgments:
+  d.open_is_a_slot:
+    rests_on: [goal.measure, m.open_whole, m.open_clean, p.hook_slot]
+    verdict: "the session opener fills a fixed character slot, highest value per character
+              first; values never preload"
+    because: "The promised measurement is the opening cost of session N. Reading whole costs the
+              record's full size and grows with it; the opener costs at most the slot and grows
+              only with what moved. Values are pulled by subject when the work asks."
+    wrong_if: "m.open_clean > p.hook_slot"
+    seen: {goal.measure: "עלות הפתיחה של סשן מספר N", m.open_whole: 39777,
+           m.open_clean: 948, p.hook_slot: 2000}
+  d.declared_hole_is_a_note:
+    rests_on: [doc.fact_moves]
+    verdict: "check fails only an undeclared gap; a hole declared with blocked_on is a note"
+    because: "Declaring a hole is the honest state the method asks for. A build that stays red
+              over an honest declaration teaches records to stop declaring."
+    blocked_on: "observational: falsified the day an honestly-declared record cannot reach
+                 green, or a silent gap slips through as declared; no recorded metric captures
+                 either yet"
+    seen: {doc.fact_moves: "read 2026-09-01"}
+  d.judgments_write_inline:
+    rests_on: [doc.agent_graph]
+    verdict: "the session doing the work writes its own judgments; any watcher only harvests
+              sources and proposes, behind the gate"
+    because: "The three things worth keeping are in the writer's hands at the moment of work,
+              at near-zero marginal cost. Reconstructing them from a transcript afterwards is
+              inference about someone else's reasoning, which manufactures grounding."
+    blocked_on: "observational: falsified by a watcher whose reconstructed dependencies beat
+                 the writer's own declarations on a real record; none has been tried"
+    seen: {doc.agent_graph: "read 2026-09-01"}
+  d.relevance_stays_declared:
+    rests_on: [doc.fact_moves, m.record_scale]
+    verdict: "retrieval follows declared edges and names; no learned relevance at record scale"
+    because: "At hundreds of nodes exact traversal is free, auditable, and cannot invent a
+              link. Learned attention with no training signal is noise - and the session
+              itself already attends over the namespace line with the best model in the room."
+    wrong_if: "m.record_scale > 100000"
+    seen: {doc.fact_moves: "read 2026-09-01", m.record_scale: 107}
+  d.one_source:
+    rests_on: [skill.two_shapes]
+    verdict: "this repository is the only place the plugin is edited; every installed or
+              hosted copy is a read-only distribution"
+    because: "The method's own law applied to the method: a second editable copy never
+              resolves on its own, and every reader thereafter must know both."
+    blocked_on: "observational: falsified by an edit that lands in a distributed copy and has
+                 to be merged back; the distributions carry no marker that would record one"
+    seen: {skill.two_shapes: "Two parallel records is the most expensive mistake available here"}
+  d.gate_reminds:
+    rests_on: [p.gate_bounces]
+    verdict: "the stop gate compares against the session-start count and yields after one
+              bounce - it reminds, it does not imprison"
+    because: "A record that was already red must never block a session that did not touch it,
+              and a gate that cannot be escaped teaches sessions to fight the gate instead of
+              fixing the record."
+    wrong_if: "p.gate_bounces > 1"
+    seen: {p.gate_bounces: 1}
