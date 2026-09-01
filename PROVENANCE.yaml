@@ -113,6 +113,11 @@ open:
   q.locator_authority: "the locator takes the highest cached version, while the harness records
                         one enabled install path - they agree today, but should the locator read
                         that record instead of ranking what it finds?"
+  q.mergeable_record: "four sessions appended to the tail of this file in one day and every pair
+                       conflicted there and on the brief's stored shape line, while the code merged
+                       clean - insert in id order, drop the stored shape, or shard?"
+  q.merge_recheck: "consolidation happens at merge, so should the merge be the moment the record
+                    re-checks itself and reports what arrived and what it moved?"
 
 judgments:
   d.open_is_a_slot:
