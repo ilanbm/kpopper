@@ -37,7 +37,8 @@ every session, and almost none of it moved since the last one.
 **One command opens the session:** `provenance.py open`. It prints the record's own head —
 what this project is, where the record actually lives if this file is a pointer — and then
 only what needs a person: ranked, cut to a budget, and honest about how many it left out.
-On a clean record that is a few lines.
+On a clean record that is a few lines. The plugin runs this by itself at session start; if
+a project with a record shows no such report, run it by hand.
 
 `open` also prints **what the record holds** — the namespace, not the values: `mtg (11) ·
 pay (4) · c50 (9) · …`. That one line is the whole link between a question in plain language

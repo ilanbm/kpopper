@@ -17,7 +17,7 @@ Where two fields genuinely fit the same role it refuses to guess and asks for a
 one-line `schema:` block. A checker that quietly passes over what it cannot read
 is worse than no checker, so every ambiguity is an error, never a skip.
 """
-import io, re, sys, glob, yaml
+import io, os, re, sys, glob, yaml
 
 ID = re.compile(r"[A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z0-9_]+)+")
 EXPR = re.compile(r"[<>=!+\-*/()]|\bor\b|\band\b|\bnot\b")
@@ -25,15 +25,32 @@ DEFAULT = ["PROVENANCE.yaml"]
 
 
 def load(paths):
-    doc = {}
+    doc, seen = {}, set()
+
+    def merge(f, d):
+        seen.add(os.path.abspath(f))
+        for k, v in d.items():
+            if isinstance(v, dict) and isinstance(doc.get(k), dict):
+                doc[k].update(v)
+            else:
+                doc[k] = v
+        # a pointer is followed so the record can be asked from the project root;
+        # non-yaml values are somebody's notes, not records.
+        for key in ("record", "also"):
+            v = d.get(key)
+            v = [v] if isinstance(v, str) else v if isinstance(v, list) else \
+                list(v.values()) if isinstance(v, dict) else []
+            for c in v:
+                if not (isinstance(c, str) and c.endswith((".yaml", ".yml"))):
+                    continue
+                cf = os.path.join(os.path.dirname(f), c)
+                if os.path.abspath(cf) in seen or not os.path.exists(cf):
+                    continue
+                merge(cf, yaml.safe_load(io.open(cf, encoding="utf-8").read()) or {})
+
     for p in paths:
         for f in sorted(glob.glob(p)) or [p]:
-            d = yaml.safe_load(io.open(f, encoding="utf-8").read()) or {}
-            for k, v in d.items():
-                if isinstance(v, dict) and isinstance(doc.get(k), dict):
-                    doc[k].update(v)
-                else:
-                    doc[k] = v
+            merge(f, yaml.safe_load(io.open(f, encoding="utf-8").read()) or {})
     return doc
 
 
@@ -41,7 +58,7 @@ def groups_of(doc):
     """Any mapping-of-mappings is a candidate collection of entries."""
     out = {}
     for k, v in (doc or {}).items():
-        if k == "schema" or not isinstance(v, dict) or not v:
+        if k in ("schema", "record", "also") or not isinstance(v, dict) or not v:
             continue
         if all(isinstance(x, (dict, str, int, float, bool, type(None))) for x in v.values()):
             out[k] = v
@@ -198,8 +215,18 @@ def opening(paths, budget=25):
     scope = str(meta.get("scope") or meta.get("about") or "").strip()
     if scope:
         print(scope if len(scope) < 300 else scope[:300] + " ...")
-    where = [f"{k}: {v}" for k, v in doc.items()
-             if k in ("record", "also", "skill", "entry") and isinstance(v, str)]
+
+    def wv(v):
+        vals = v if isinstance(v, list) else list(v.values()) if isinstance(v, dict) else []
+        return ", ".join(x for x in vals if isinstance(x, str) and x.endswith((".yaml", ".yml")))
+
+    where = []
+    for k, v in doc.items():
+        if k not in ("record", "also", "skill", "entry"):
+            continue
+        s = v if isinstance(v, str) else wv(v)
+        if s:
+            where.append(f"{k}: {s if len(s) < 90 else s[:90] + ' ...'}")
     if where:
         print("  " + " | ".join(where))
     # The namespace, not the values. Without this a session cannot turn a question

@@ -23,6 +23,7 @@ remembered.
 | `scripts/provenance.py` | A reader that checks the record and walks it. Python 3 + PyYAML. |
 | `scripts/render_page.py` | The record as one self-contained HTML page, in two tabs. |
 | `scripts/verify_page.js` | Browser checks for that page, in both themes. Playwright. |
+| `hooks/` | A session opener. Runs `provenance.py open` when the project keeps a record; silent everywhere else. |
 
 ## The record
 
@@ -46,6 +47,8 @@ python3 "$R" affects <entry>
 `open` is what a new session runs first: how big the record is, then only what needs a
 person — ranked, cut to a budget, and honest about what it left out. On a clean record it
 prints one line. That, and not the file, is the opening cost the method is trying to lower.
+Once the plugin is installed this runs by itself at session start, following a root file
+that is a pointer to wherever the record actually lives.
 
 `check` fails the build on a dependency that is not an entry (unless the judgment declares it
 missing), a dependency with no snapshot, a predicate naming something undeclared, or prose
