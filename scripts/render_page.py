@@ -876,7 +876,10 @@ def verify(paths, brief_path=None):
     """Deterministic, no browser. What only looking can catch is a separate job."""
     page, E, J, ids, info = build(paths, brief_path)
     fail = []
-    shown = set(re.findall(r'data-id="([^"]+)"', page))
+    # what the page SHOWS is markup, not script - the provenance layer's own source
+    # mentions the attribute it binds to, and that is not an element.
+    dom = re.sub(r"<script>.*?</script>", "", page, flags=re.S)
+    shown = set(re.findall(r'data-id="([^"]+)"', dom))
     for k in shown:
         if k not in E and k not in J:
             fail.append(f"page shows {k}, which is not in the record")
@@ -912,7 +915,7 @@ def verify(paths, brief_path=None):
             fail.append(f"section '{t}' picks nothing - it is about something the record "
                         f"no longer holds")
         missed = [k for k, f in info["flags"].items() if f and
-                  f'data-id="{k}"' not in page]
+                  f'data-id="{k}"' not in dom]
         for k in missed:
             fail.append(f"{k} is flagged but does not appear on the Now tab at all")
     for n in note:
