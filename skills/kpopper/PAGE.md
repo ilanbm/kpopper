@@ -4,12 +4,20 @@
 are about to build or change a page; it is not part of what a session reads to start.*
 
 `render_page.py` turns any record into one self-contained HTML file — no domain knowledge,
-nothing typed twice:
+nothing typed twice. The first two are what `kpopper page` runs for you:
 
 ```bash
-python3 "$(dirname "$R")/render_page.py" > record.html      # the page
-python3 "$(dirname "$R")/render_page.py" --verify           # deterministic, no browser
-node    "$(dirname "$R")/verify_page.js" record.html        # what only looking catches
+kpopper page --out record.html                              # the page
+kpopper page --verify                                       # deterministic, no browser
+```
+
+The third has no wrapper, so it needs the directory the scripts sit in. Locate that the same way
+the skill locates the reader — skipping a checkout's own worktrees, highest version wins — rather
+than assuming where an installed plugin unpacks:
+
+```bash
+S=$(dirname "$(find ~/.claude -name worktrees -prune -o -path '*kpopper*/scripts/render_page.py' -print 2>/dev/null | sort -V | tail -1)")
+node "$S/verify_page.js" record.html                        # what only looking catches
 ```
 
 What makes it worth opening is not the layout — it is the provenance layer. Hover any key to

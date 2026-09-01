@@ -94,12 +94,25 @@ known:
     from: "scripts/render_page.py"
     at: "the tree's pointer handlers"
     of: "2026-09-01"
+  p.install_segments:
+    v: 1
+    name: "Path segments an install inserts between the plugin directory and scripts/"
+    from: "plugins/cache/<marketplace>/kpopper/<version>/scripts - the version is the segment"
+    of: "2026-09-01"
+  m.locator_agrees:
+    v: 1
+    name: "Locator resolves to the install the harness records as enabled, 1 yes 0 no"
+    from: "ran the documented find against the recorded installPath"
+    of: "2026-09-01"
 
 open:
   q.pull_defaults: "does a session that ran pull still open the record file for values - and if
                     so, what was missing from the line it got?"
   q.account_copy: "does the hosted copy of this plugin get refreshed from here, or retired?"
   q.first_artifact: "what is the first artifact that must never change silently?"
+  q.locator_authority: "the locator takes the highest cached version, while the harness records
+                        one enabled install path - they agree today, but should the locator read
+                        that record instead of ranking what it finds?"
 
 judgments:
   d.open_is_a_slot:
@@ -288,3 +301,15 @@ judgments:
                  at its root either, or by re-clones losing the pointer often enough to matter"
     seen: {p.pointer_home: "<git common dir>/kpopper-record",
            skill.two_shapes: "Two parallel records is the most expensive mistake available here"}
+  d.locate_by_shape:
+    rests_on: [p.install_segments, m.locator_agrees]
+    verdict: "the docs locate a shipped script by matching its name and taking the highest
+              version, never by a path written against today's layout"
+    because: "A pattern anchored on the layout that existed the day it was written matched
+              nothing the moment the installer put a version segment in the path - and it failed
+              silently, because the very next line reads an empty result as proof the plugin is
+              not installed. Matching the shape instead survives the layout; pruning a checkout's
+              own worktrees and sorting by version are what make the newest real install fall out
+              of a loose match rather than an arbitrary first hit."
+    wrong_if: "m.locator_agrees < 1"
+    seen: {p.install_segments: 1, m.locator_agrees: 1}

@@ -369,21 +369,36 @@ prevent change; it prevents *half* a change, which is what actually kills record
 
 ## The reader
 
-A reader ships with this plugin at `scripts/provenance.py`. Run it against the record from the
-directory the record sits in — it needs only Python and PyYAML:
+A reader ships with this plugin at `scripts/provenance.py`, and the `kpopper` command line is the
+same code with a shorter name. Run it from the directory the record sits in — it needs only
+Python and PyYAML:
 
 ```bash
-R=$(find ~/.claude -path '*kpopper/scripts/provenance.py' 2>/dev/null | head -1)
-python3 "$R" open                        # what to read instead of the whole record
-python3 "$R" check
-python3 "$R" affects <entry> [entry ...]
-python3 "$R" pull <entry> [entry ...]
+kpopper open                             # what to read instead of the whole record
+kpopper check
+kpopper affects <entry> [entry ...]
+kpopper pull <entry> [entry ...]
 ```
+
+Where that command is not on the path, the reader still ships inside the plugin — but **do not
+guess its path.** An installed plugin sits under a *version* directory, and a plugin checkout can
+hold worktrees of its own that carry a second copy of every script. So match the name loosely,
+skip the nested checkouts, and take the highest version:
+
+```bash
+R=$(find ~/.claude -name worktrees -prune -o -path '*kpopper*/scripts/provenance.py' -print 2>/dev/null | sort -V | tail -1)
+python3 "$R" open
+```
+
+Each piece earns its place: `-name worktrees -prune` drops the copies inside a checkout's own
+worktrees, `sort -V` orders `0.9.0` *below* `0.16.0` where a plain `sort` puts it on top, and the
+loose `*kpopper*` survives the version segment that a fixed `*kpopper/scripts/…` pattern cannot
+match. Anchoring on the exact installed layout is what breaks; this matches the shape instead.
 
 Locate it that way rather than relying on `$CLAUDE_PLUGIN_ROOT`: that variable is documented for
 hook and MCP configuration, and is **not** set in the shell a skill's commands run in — a command
-written against it silently becomes `/scripts/provenance.py` and fails. If the find returns
-nothing the plugin is not installed; say so rather than writing your own copy.
+written against it silently becomes `/scripts/provenance.py` and fails. If neither the command nor
+the find turns up anything the plugin is not installed; say so rather than writing your own copy.
 
 Do not rewrite it, and do not write a second one beside a project that already has its own build
 doing this work.
