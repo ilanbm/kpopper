@@ -108,6 +108,18 @@ chain of limbs and roots that feeds it in one color, everything it feeds in anot
 direct neighbours stir like branches in wind. A record too large to draw keeps its canopy and
 says how many roots stayed below the grass.
 
+The first time the tab is opened the tree grows into place — roots, then trunk, then limbs,
+then blossoms, over about a second. Once per page load, because the question it answers is
+asked once; a reader who has asked for less motion gets the finished tree and no wait at all.
+
+A node can also be pulled, and it answers the way a branch does. Against a pull of `d` the
+applied displacement is `R * tanh(d/R)`, with `R` an eighth of the drawing's width: it follows
+at first, gives less the further you go, and past `R` it visibly stops following the hand. Its
+limbs stretch with it and the neighbours it crowds are elbowed aside; let go and everything
+springs back to where the record put it. Nothing is kept — the position is written nowhere,
+and it could not be, because the page has no write path at all. Pulling is for feeling out how
+a part of the tree is attached, not for arranging it.
+
 ## References belong in the sentence
 
 A row of monospace ids under a card is the graph leaking onto the reading surface. So the page

@@ -136,7 +136,9 @@ the three node kinds in their three colors. Everything on every tab is the same 
 hover or tap for where a value came from, click a dependency to walk to it, and on the tree,
 opening a node lights the sap — the full chain of evidence feeding it — while its neighbours
 stir like branches in wind. A card's `tree` button prunes the tree to that node's world; one
-chip brings the whole tree back.
+chip brings the whole tree back. The tab grows in the first time it is opened, and any node can
+be pulled — it resists like a branch, stretches its limbs, and springs back when you let go,
+because the page keeps nothing.
 
 ## The part that does not change
 

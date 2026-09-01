@@ -67,6 +67,12 @@ known:
     name: "Editable copies of the reader and the renderer"
     from: "pyproject.toml"
     of: "2026-09-01"
+  p.tree_positions_kept:
+    v: 0
+    name: "Places a dragged position is written down"
+    from: "scripts/render_page.py"
+    at: "the tree's pointer handlers"
+    of: "2026-09-01"
 
 open:
   q.pull_defaults: "does a session that ran pull still open the record file for values - and if
@@ -213,3 +219,15 @@ judgments:
     blocked_on: "observational: falsified the day the name is taken by someone else before the
                  tree ships as its own artifact - the only cost here that was avoidable"
     seen: {lit.registry_names: "looked up 2026-09-01", lit.name_risk: "surveyed 2026-09-01"}
+  d.tree_springs_back:
+    rests_on: [d.page_reads_only, p.tree_positions_kept]
+    verdict: "the tree can be handled - pulled about, and grown into place once - and nothing a
+              hand does to it is kept"
+    because: "Tugging on a thing to see how it is attached is a way of reading it, so the tree
+              answers a pull. Keeping where a node landed would be different in kind: it would
+              make the page somewhere an arrangement lives, which is the write path already
+              refused. So the pull resists, the tree springs back, and the position goes
+              nowhere."
+    wrong_if: "p.tree_positions_kept > 0"
+    seen: {d.page_reads_only: "the page is a reading surface - no trial inputs, no write path",
+           p.tree_positions_kept: 0}
