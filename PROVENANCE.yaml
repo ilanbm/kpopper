@@ -126,6 +126,38 @@ judgments:
                  meeting it once - that would mean the reading surfaces failed, not that the
                  tree succeeded"
     seen: {doc.fact_moves: "read 2026-09-01"}
+  d.trust_layer:
+    rests_on: [doc.fact_moves]
+    verdict: "kpopper is the epistemic layer over knowledge stores - how something is known,
+              never what exists; classic knowledge-graph edge semantics are a non-goal"
+    because: "World-knowledge already enters as entries with sources, and the layer every
+              store lacks is exactly this one: who vouches for a fact, when it was last
+              checked, and what falls when it moves. Competing on world-ontology joins a
+              crowded field with nothing new to say."
+    blocked_on: "observational: falsified if real corpora keep raising cross-object questions
+                 that entries, pull and affects cannot answer without new edge semantics"
+    seen: {doc.fact_moves: "read 2026-09-01"}
+  d.scale_by_federation:
+    rests_on: [skill.two_shapes]
+    verdict: "a record scales by sharding into domain records under a pointer index, never by
+              growing one file"
+    because: "The single file dies on human bandwidth - merge conflicts, an exploding
+              namespace line, review fatigue - long before parsing does. The pointer form
+              already merges shards on read, so federation is the same mechanism at a
+              larger radius."
+    blocked_on: "observational: falsified by a sharded corpus whose cross-shard sessions open
+                 slower or ground worse than the single file they replaced"
+    seen: {skill.two_shapes: "Two parallel records is the most expensive mistake available here"}
+  d.first_meeting_artifact:
+    rests_on: [doc.agent_graph]
+    verdict: "a record born in this session, on a surface that can publish, is rendered and
+              shown as a live artifact without asking"
+    because: "The first turn must feel like a normal session, and the first meeting with the
+              record should be the page, alive - not a yaml file. Surfaces that strip script
+              from previews get the browser instead."
+    blocked_on: "observational: falsified if users close or ignore the unrequested page more
+                 often than they touch it"
+    seen: {doc.agent_graph: "read 2026-09-01"}
   d.gate_reminds:
     rests_on: [p.gate_bounces]
     verdict: "the stop gate compares against the session-start count and yields after one

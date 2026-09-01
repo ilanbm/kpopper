@@ -165,6 +165,14 @@ td.kl{width:1%;white-space:nowrap;color:var(--ink2)}
 .tsoil{fill:var(--wash)}
 svg .rel-down circle{stroke:var(--acc)!important;stroke-width:3px!important}
 svg .rel-up circle{stroke:var(--mut)!important;stroke-dasharray:4 3;stroke-width:2.5px!important}
+svg g.rel-chain circle{stroke:var(--read);stroke-width:2.5}
+.tlimb.sapu{stroke:var(--read);opacity:.95}
+.tlimb.sapd{stroke:var(--acc);opacity:.9}
+.troot.sapu{opacity:1;stroke-width:3.2px!important}
+@keyframes sway{0%{transform:translate(0,0)}30%{transform:translate(1px,-1.6px) rotate(.4deg)}
+ 65%{transform:translate(-.8px,1px)}100%{transform:translate(0,0)}}
+svg g.sway{animation:sway .7s ease-out 1;transform-box:fill-box;transform-origin:center}
+@media(prefers-reduced-motion:reduce){svg g.sway{animation:none}}
 footer{margin-top:40px;padding-top:14px;border-top:1px solid var(--ln);color:var(--mut);font-size:12.5px}
 """
 
@@ -200,15 +208,30 @@ JS = r"""
  function place(el){if(!el||!pop)return;var r=el.getBoundingClientRect();
   pop.style.left=Math.min(Math.max(8,r.left+scrollX),scrollX+innerWidth-pop.offsetWidth-8)+'px';
   pop.style.top=(r.bottom+pop.offsetHeight+12>innerHeight?r.top+scrollY-pop.offsetHeight-6:r.bottom+scrollY+6)+'px'}
+ function walk(id,next){var out={},q=[id];
+  while(q.length){var k=q.pop(),ns=next(k)||[];
+   for(var i=0;i<ns.length;i++)if(!out[ns[i]]){out[ns[i]]=1;q.push(ns[i])}}
+  return out}
  function relate(id){
+  // direct neighbours get the outline and a breath of wind; the full chains light
+  // the sap - up toward the roots that feed this, down through what it feeds.
   var d={},u={},x=E[id]||J[id]||{};
   ((x.used)||[]).forEach(function(k){d[k]=1});
-  ((J[id]||{}).deps||[]).forEach(function(k){u[k]=1});
+  (((J[id]||{}).deps)||((E[id]||{}).par)||[]).forEach(function(k){u[k]=1});
+  var TA=walk(id,function(k){return (J[k]||{}).deps||(E[k]||{}).par}),
+      TD=walk(id,function(k){return (E[k]||J[k]||{}).used});
   var all=document.querySelectorAll('[data-id]');
   for(var i=0;i<all.length;i++){var k=all[i].getAttribute('data-id');
-   all[i].classList.toggle('rel-down',!!d[k]);all[i].classList.toggle('rel-up',!!u[k])}}
- function unrelate(){var q=document.querySelectorAll('.rel-down,.rel-up');
-  for(var i=0;i<q.length;i++)q[i].classList.remove('rel-down','rel-up')}
+   all[i].classList.toggle('rel-down',!!d[k]);all[i].classList.toggle('rel-up',!!u[k]);
+   if(all[i].classList.contains('tn')){
+    all[i].classList.toggle('rel-chain',(!!TA[k]||!!TD[k])&&!d[k]&&!u[k]);
+    all[i].classList.toggle('sway',!!d[k]||!!u[k])}}
+  var ls=document.querySelectorAll('path[data-lt]');
+  for(var i=0;i<ls.length;i++){var f=ls[i].getAttribute('data-lf'),t=ls[i].getAttribute('data-lt');
+   ls[i].classList.toggle('sapu',t===id||!!TA[t]);
+   ls[i].classList.toggle('sapd',f===id||!!TD[f])}}
+ function unrelate(){var q=document.querySelectorAll('.rel-down,.rel-up,.rel-chain,.sway,.sapu,.sapd');
+  for(var i=0;i<q.length;i++)q[i].classList.remove('rel-down','rel-up','rel-chain','sway','sapu','sapd')}
  function paint(id){now=id;pop.innerHTML=body(id);relate(id)}
  function open(el,id,p){if(pop)close();if(!E[id]&&!J[id])return;
   cur=el;hist=[];if(p){el.classList.add('on');pin=true}
@@ -611,12 +634,14 @@ def tree_svg(ids, jud, E, J, flags):
             cx, cy = x[k], y[k]
             w = 1.5 + min(2.6, 0.4 * len((E.get(p, {}) or {}).get("used", [])))
             m2x = cx * 0.55 + tx * 0.45
-            o.append(f'<path class="tlimb" stroke-width="{w:.1f}" d="M{px:.0f} {py:.0f} '
+            o.append(f'<path class="tlimb" data-lf="{html.escape(p)}" data-lt="{html.escape(k)}" '
+                     f'stroke-width="{w:.1f}" d="M{px:.0f} {py:.0f} '
                      f'C{px:.0f} {py - LH * .35:.0f} {m2x:.0f} {cy + LH * .5:.0f} '
                      f'{cx:.0f} {cy:.0f}"/>')
     for k in roots:                              # the root fan spreads from the trunk base
         s = -6 if x[k] < tx else 6
-        o.append(f'<path class="troot" stroke-width="2.2" d="M{tx + s:.0f} {G + 2:.0f} '
+        o.append(f'<path class="troot" data-lt="{html.escape(k)}" '
+                 f'stroke-width="2.2" d="M{tx + s:.0f} {G + 2:.0f} '
                  f'C{tx + s * 5:.0f} {G + 26:.0f} {(x[k] + tx) / 2:.0f} {y[k] - 4:.0f} '
                  f'{x[k]:.0f} {y[k]:.0f}"/>')
     show_root_lbl = len(roots) <= 16
@@ -696,6 +721,12 @@ def build(paths, brief_path=None):
             E[k].setdefault("rule", v)
             del E[k]["v"]
         E[k]["used"] = sorted(used.get(k, []))
+        ps = [t for t in P.ID.findall(str(E[k].get("rule") or "")) if t in ids and t != k]
+        frm = b.get("from")
+        if isinstance(frm, str) and frm in ids and frm != k:
+            ps.append(frm)
+        if ps:
+            E[k]["par"] = sorted(set(ps))
         if named(b):
             E[k]["name"] = named(b)
         n = next((str(b[f]) for f in ("via", "note", "why") if b.get(f)), "")

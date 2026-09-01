@@ -97,6 +97,17 @@ The page's own direction follows the record's: a record written in Hebrew or Ara
 right to left. Like every other layout decision here, it reads the record's shape and never its
 values, so it cannot flip when a number changes.
 
+## The tree
+
+A third tab draws the whole record as one growing thing: what was read from the world is the
+root fan below the ground line, worked-out values branch above it, and judgments blossom in a
+canopy dome — the three node kinds in their three colors. It answers the question a reader has
+once, at first meeting — what is the shape of the whole — so the reading surfaces stay flat.
+Every node is the same live card as everywhere else; clicking one lights the sap: the full
+chain of limbs and roots that feeds it in one color, everything it feeds in another, and its
+direct neighbours stir like branches in wind. A record too large to draw keeps its canopy and
+says how many roots stayed below the grass.
+
 ## References belong in the sentence
 
 A row of monospace ids under a card is the graph leaking onto the reading surface. So the page
