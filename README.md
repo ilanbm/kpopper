@@ -38,11 +38,11 @@ a single file is a correct outcome.
 ## The reader
 
 ```bash
-R=$(find ~/.claude -path '*kpopper/scripts/provenance.py' | head -1)
-python3 "$R" open                # what a session reads instead of the whole record
-python3 "$R" check
-python3 "$R" affects <entry>
-python3 "$R" pull <entry|prefix>
+K=$(find ~/.claude -path '*kpopper/scripts/kpopper' | head -1)
+"$K" open                        # what a session reads instead of the whole record
+"$K" check
+"$K" affects <entry>
+"$K" pull <entry|prefix>
 ```
 
 `open` is what a new session runs first: how big the record is, then only what needs a
@@ -65,8 +65,8 @@ block rather than silently picking one.
 ## The page
 
 ```bash
-python3 "$(dirname "$R")/render_page.py" > record.html
-python3 "$(dirname "$R")/render_page.py" --verify
+"$K" page
+"$K" page --verify
 ```
 
 Hover any key for where the value came from, click to pin, click a dependency to walk to it,
