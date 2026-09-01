@@ -1,0 +1,14 @@
+{
+  "name": "kpopper",
+  "owner": {
+    "name": "Ilan Bar Magen"
+  },
+  "plugins": [
+    {
+      "name": "kpopper",
+      "source": "./",
+      "description": "Keep a traceable record of what is known, where each piece came from, and what each judgment rests on. Every judgment states what would make it wrong.",
+      "version": "0.4.0"
+    }
+  ]
+}
