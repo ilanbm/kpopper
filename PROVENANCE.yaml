@@ -44,6 +44,11 @@ known:
     name: "What the name costs"
     from: "landscape survey"
     of: "2026-09-01"
+  lit.registry_names:
+    v: "kpopper and ground-tree are both unregistered on PyPI and on npm"
+    name: "What the registries hold"
+    from: "registry lookup"
+    of: "2026-09-01"
   m.record_scale:
     v: 107
     name: "Largest live record, entries"
@@ -57,6 +62,11 @@ known:
     v: 1
     name: "How many times the stop gate blocks before yielding"
     from: "scripts/session_gate.sh"
+  p.script_copies:
+    v: 1
+    name: "Editable copies of the reader and the renderer"
+    from: "pyproject.toml"
+    of: "2026-09-01"
 
 open:
   q.pull_defaults: "does a session that ran pull still open the record file for values - and if
@@ -183,3 +193,23 @@ judgments:
               fixing the record."
     wrong_if: "p.gate_bounces > 1"
     seen: {p.gate_bounces: 1}
+  d.one_tree_two_channels:
+    rests_on: [skill.two_shapes, p.script_copies]
+    verdict: "the command line and the plugin ship the same files - packaging maps the script
+              directory rather than copying it"
+    because: "Two installable copies of the same reader is this method's own worst mistake,
+              shipped: they drift in silence, and every reader afterwards has to know which of
+              them answered. Mapping the directory costs one line and cannot drift."
+    wrong_if: "p.script_copies > 1"
+    seen: {skill.two_shapes: "Two parallel records is the most expensive mistake available here",
+           p.script_copies: 1}
+  d.name_registered_when_earned:
+    rests_on: [lit.registry_names, lit.name_risk]
+    verdict: "only kpopper is published; ground-tree stays unregistered until the tree has
+              something of its own to install"
+    because: "A package with nothing behind it is a promise the project cannot keep, and a
+              content-free placeholder is the one thing every registry's naming policy is
+              written against. The tree is a surface of this record, not a separate install."
+    blocked_on: "observational: falsified the day the name is taken by someone else before the
+                 tree ships as its own artifact - the only cost here that was avoidable"
+    seen: {lit.registry_names: "looked up 2026-09-01", lit.name_risk: "surveyed 2026-09-01"}

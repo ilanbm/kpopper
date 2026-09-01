@@ -51,6 +51,9 @@ def load(paths):
 
     for p in paths:
         for f in sorted(glob.glob(p)) or [p]:
+            if not os.path.exists(f):
+                sys.exit(f"{f}: no record here. Run this from the directory the record sits "
+                         "in, or name the record file as an argument.")
             merge(f, yaml.safe_load(io.open(f, encoding="utf-8").read()) or {})
     return doc
 

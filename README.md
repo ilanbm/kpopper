@@ -40,14 +40,17 @@ a checksum to notice.
 
 ## What it installs
 
+The package is the command line: `kpopper`, with the reader and the renderer behind it. The
+plugin is all of that plus the method and the session hooks:
+
 | | |
 |---|---|
 | `skills/kpopper` | The method. Loads when work will be revisited, or when resuming such work. |
 | `skills/kpopper/PAGE.md` | The page reference — briefs, renderers, the tree. Read only when building a page. |
-| `scripts/kpopper` | One entry point: `open · check · affects · pull · page`. |
+| `scripts/kpopper` | One entry point: `open · check · affects · pull · page`. The dispatcher itself is `scripts/cli.py` — the same code the installed `kpopper` command runs. |
 | `scripts/provenance.py` | The reader underneath. Field names are inferred by shape, so it reads records written in any vocabulary. |
 | `scripts/render_page.py` | The record as one self-contained page, three tabs, no dependencies beyond the reader. |
-| `scripts/verify_page.js` | Browser checks for that page, in both themes. Playwright. |
+| `scripts/verify_page.js` | Browser checks for that page, in both themes. Playwright. Plugin only. |
 | `hooks/` | A session opener and a stop gate. The opener runs `provenance.py open` when the project keeps a record, silent everywhere else; the gate bounces a session once, with the failures, if it tries to finish having left `check` worse than it found it. |
 
 ## The record
@@ -99,13 +102,16 @@ context compaction, which is exactly when a session most needs to be re-grounded
 The rest is pulled, never preloaded:
 
 ```bash
-K=$(find ~/.claude -path '*kpopper/scripts/kpopper' | head -1)
-"$K" open                        # what a session reads instead of the whole record
-"$K" check                       # does the record still hold together
-"$K" affects <entry>             # what a change reaches, through intermediate judgments
-"$K" pull <entry|prefix>         # a subject's values with their sources - and what moved
+kpopper open                     # what a session reads instead of the whole record
+kpopper check                    # does the record still hold together
+kpopper affects <entry>          # what a change reaches, through intermediate judgments
+kpopper pull <entry|prefix>      # a subject's values with their sources - and what moved
                                  # since each judgment last looked
 ```
+
+Each command reads the record in the current directory, or the files you name. Without the
+command line on your path, the same dispatcher ships inside the plugin — find it once with
+`K=$(find ~/.claude -path '*kpopper/scripts/kpopper' | head -1)` and run `"$K" open`.
 
 `check` exits non-zero on an undeclared gap: a dependency that is not an entry (unless the
 judgment declares it missing with `blocked_on`), a dependency with no snapshot, a predicate
@@ -117,9 +123,9 @@ stop declaring.
 ## The page — and the tree
 
 ```bash
-"$K" page --open                 # the record as one page, in the browser
-"$K" page --open --tree          # landing on the tree
-"$K" page --verify               # deterministic checks, no browser
+kpopper page --open              # the record as one page, in the browser
+kpopper page --open --tree       # landing on the tree
+kpopper page --verify            # deterministic checks, no browser
 ```
 
 Three tabs. **Now** is the arrangement this session chose, written in a brief the page keeps
@@ -143,7 +149,16 @@ Everything else — field names, sections, renderers — is open to revision. A 
 rewrite its own rules will drift unless something in it is not up for revision. These four
 are that floor.
 
-## Installing into Claude Code
+## Installing
+
+The command line on its own, for any project and any editor:
+
+```bash
+pipx install kpopper             # or: pip install kpopper
+```
+
+The Claude Code plugin — the method as a skill, the session opener, the stop gate, and the
+same commands:
 
 ```bash
 /plugin marketplace add /path/to/kpopper
@@ -157,14 +172,19 @@ claude plugin install kpopper@kpopper --scope user
 ```
 
 `--scope user` makes it available in every project on the machine; `--scope project` commits
-it to the repo you are in. This repository is the only place the plugin is edited; every
-installed copy is a read-only distribution.
+it to the repo you are in. Other editors are wired up from `adapters/`.
+
+Where the two overlap they are the same files rather than two copies of them: the package is
+mapped onto the plugin's `scripts/`, so the reader, the renderer and the dispatcher have
+nothing to keep in step. This repository is the
+only place any of it is edited; every installed copy is a read-only distribution.
 
 ## Requirements
 
-Python 3 and PyYAML (`pip3 install pyyaml`). The browser checks additionally want Node with
-`playwright-core` and a Chrome/Chromium binary (`CHROME=/path/to/chrome` when it is not on a
-known path). Nothing else.
+Python 3.9+ and PyYAML — `pipx` brings it along; a plugin-only install wants
+`pip3 install pyyaml`. The plugin's browser checks additionally want Node with `playwright-core` and a
+Chrome/Chromium binary (`CHROME=/path/to/chrome` when it is not on a known path). Nothing
+else.
 
 ## What would show this was not worth it
 
