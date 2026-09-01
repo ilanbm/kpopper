@@ -172,6 +172,7 @@ JS = r"""
    (e.v!=null?row('value','<b>'+esc(e.v)+'</b>'):'')+
    (e.rule?row('rule',link(e.rule)):'')+
    (e.from?row('from',esc(e.from)):'')+(e.at?row('at',esc(e.at)):'')+
+   (e.file?row('file',esc(e.file)):'')+(e.url?row('url',esc(e.url)):'')+
    (e.of||e.read?row('as of',esc(e.of||e.read)):'')+
    (e.used&&e.used.length?row('used by','<span class="deps">'+e.used.map(function(d){
      return '<span class="dep" data-go="'+esc(d)+'">'+esc(d)+'</span>'}).join('')+'</span>'):'')}

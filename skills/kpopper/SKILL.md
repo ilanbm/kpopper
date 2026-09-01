@@ -365,10 +365,10 @@ So it reads a record that says `known:`/`judgments:`/`from:` exactly as well as 
 `facts:`/`claims:`/`src:`.
 
 `check` enforces every invariant above and **exits non-zero** when one fails: a dependency that is
-not an entry, a dependency with no snapshot, a predicate naming something the judgment does not
-declare, and a predicate field holding prose. That last one matters most — prose in a predicate
-field is worse than an empty field, because it reads like a predicate while nothing evaluates it
-and nobody notices. Say `blocked_on` instead.
+not an entry (unless the judgment declares it missing), a dependency with no snapshot, a predicate
+naming something the judgment does not declare, and a predicate field holding prose. That last one
+matters most — prose in a predicate field is worse than an empty field, because it reads like a
+predicate while nothing evaluates it and nobody notices. Say `blocked_on` instead.
 
 `open` is the session opener: how large the record is, and then only what needs a person —
 a dependency that is not an entry, a judgment nothing was ever checked against, a declared

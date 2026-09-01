@@ -102,8 +102,19 @@ BLOCKED = ("blocked_on", "unverified", "status")
 OPEN = ("open", "questions")
 
 
-def _says(body, keys):
-    return next((str(body[k]) for k in keys if body.get(k)), "")
+def _blocked_text(body):
+    """The declared reason, whether the declaration is prose or a {missing, why} mapping."""
+    for k in BLOCKED:
+        v = body.get(k)
+        if not v:
+            continue
+        if isinstance(v, dict):
+            m = v.get("missing") or []
+            m = [m] if isinstance(m, str) else list(m)
+            why = " ".join(str(x) for f, x in v.items() if f != "missing" and isinstance(x, str))
+            return (why or "waiting on " + ", ".join(m)).strip()
+        return str(v)
+    return ""
 
 
 def check(paths):
@@ -117,10 +128,12 @@ def check(paths):
     for name, j in sorted(jud.items()):
         if name in open_ids:
             continue
-        blocked = _says(j["body"], BLOCKED)
+        blocked = _blocked_text(j["body"])
         for d in j["deps"]:
             if d not in ids:
-                fail.append(f"{name}: rests on {d}, which is not an entry")
+                (note if blocked else fail).append(
+                    f"{name}: rests on {d}, which is not an entry"
+                    + (f" - declared: {blocked[:90]}" if blocked else ""))
             elif fields["snapshot"] and d not in j["seen"]:
                 fail.append(f"{name}: no snapshot for {d} - never checked against it")
         for tok in sorted(set(ID.findall(j["pred"]))):
@@ -163,13 +176,17 @@ def opening(paths, budget=25):
     for name, j in sorted(jud.items()):
         if name in open_ids:
             continue
-        blocked = next((str(j["body"][k]) for k in BLOCKED if j["body"].get(k)), "")
+        blocked = _blocked_text(j["body"])
         for d in j["deps"]:
             if d not in ids:
                 items.append((60, name, f"waiting on {d} - {blocked[:70]}") if blocked
                              else (100, name, f"rests on {d}, which is not an entry"))
             elif fields["snapshot"] and d not in j["seen"]:
                 items.append((80, name, f"never checked against {d}"))
+        for tok in sorted(set(ID.findall(j["pred"]))):
+            if tok in ids and tok not in j["deps"]:
+                items.append((100, name, f"predicate reads {tok}, which it does not declare - "
+                                         f"a change to it never reaches this"))
         if not [t for t in ID.findall(j["pred"]) if t in ids] and not blocked:
             items.append((40, name, "nothing evaluable would falsify it"))
     items.sort(key=lambda x: (-x[0], x[1]))

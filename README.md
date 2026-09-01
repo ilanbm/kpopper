@@ -47,8 +47,9 @@ python3 "$R" affects <entry>
 person — ranked, cut to a budget, and honest about what it left out. On a clean record it
 prints one line. That, and not the file, is the opening cost the method is trying to lower.
 
-`check` fails the build on a dependency that is not an entry, a dependency with no snapshot, a
-predicate naming something undeclared, or prose sitting in a predicate field. `affects` reports
+`check` fails the build on a dependency that is not an entry (unless the judgment declares it
+missing), a dependency with no snapshot, a predicate naming something undeclared, or prose
+sitting in a predicate field. `affects` reports
 what a change reaches, including through intermediate judgments, and whether each one can now be
 re-evaluated or is only flagged.
 
