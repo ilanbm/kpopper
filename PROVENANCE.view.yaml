@@ -1,0 +1,15 @@
+intent: "A method any session can run - and what is still open on the way there"
+sections:
+  - title: The questions that pick the next piece of work
+    why: each is open on purpose - answering one is how the next thing gets chosen
+    pick: q.
+    as: table
+  - title: What the method promises, in numbers
+    why: the one measurement is the opening cost of session N - these are its bounds today
+    pick: [m.open_whole, m.open_clean, p.hook_slot]
+    as: headline
+  - title: The decisions that hold
+    why: every one says what would make it wrong - that is what separates a decision from an opinion
+    pick: judgments
+    as: cards
+shape: {entries: 14, judgments: 6, flagged: 0, blocked: 0}
