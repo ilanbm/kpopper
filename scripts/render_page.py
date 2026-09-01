@@ -157,6 +157,14 @@ td.kl{width:1%;white-space:nowrap;color:var(--ink2)}
 .tn.crown.stopf circle,.tn.crown.warnf circle{stroke-width:2.5}
 .tn.warnf circle{stroke:var(--warn);stroke-dasharray:3 2}
 .tn.stopf circle{stroke:var(--stop)}
+#panel-tree .hid{display:none}
+.tfoc{background:none;border:1px solid var(--ln);border-radius:5px;color:var(--mut);
+ font:inherit;font-size:11px;padding:1px 6px;cursor:pointer;margin-inline-start:auto}
+.tfoc:hover{color:var(--acc);border-color:var(--acc)}
+.focchip{display:block;margin:10px auto 2px;font:12px system-ui,-apple-system,sans-serif;
+ background:var(--sf);border:1px solid var(--acc);color:var(--acc);border-radius:20px;
+ padding:4px 14px;cursor:pointer}
+.focchip:hover{background:var(--wash)}
 .tn.crown .halo{fill:var(--mind);opacity:.16;stroke:none}
 .ttrunk{fill:var(--mut);opacity:.3}
 .tlimb{fill:none;stroke:var(--mut);opacity:.5;stroke-linecap:round}
@@ -188,7 +196,10 @@ JS = r"""
  function row(l,v){return '<div class="r"><span>'+esc(l)+'</span><span>'+v+'</span></div>'}
  function body(id){
   var h='<div class="hd">'+(hist.length?'<button class="back" type="button">&larr;</button>':'')+
-        '<span class="kref">'+esc(id)+'</span></div>';
+        '<span class="kref">'+esc(id)+'</span>'+
+        (document.getElementById('panel-tree')
+          ?'<button class="tfoc" type="button" title="prune the tree to what this touches">tree</button>':'')+
+        '</div>';
   if(J[id]){var j=J[id];
    return h+(j.verdict?row('concludes','<b>'+esc(j.verdict)+'</b>'):'')+
     row('rests on','<span class="deps">'+(j.deps||[]).map(function(d){
@@ -232,6 +243,36 @@ JS = r"""
    ls[i].classList.toggle('sapd',f===id||!!TD[f])}}
  function unrelate(){var q=document.querySelectorAll('.rel-down,.rel-up,.rel-chain,.sway,.sapu,.sapd');
   for(var i=0;i<q.length;i++)q[i].classList.remove('rel-down','rel-up','rel-chain','sway','sapu','sapd')}
+
+ // Focus: the tree pruned to one node's world - everything that feeds it and
+ // everything it feeds. The rest of the record is one chip away, not gone.
+ var F=null,showTab=null;
+ function focus(id){
+  F=id;
+  var TA=walk(id,function(k){return (J[k]||{}).deps||(E[k]||{}).par}),
+      TD=walk(id,function(k){return (E[k]||J[k]||{}).used});
+  var keep={},k;keep[id]=1;
+  for(k in TA)keep[k]=1;
+  for(k in TD)keep[k]=1;
+  var tn=document.querySelectorAll('#panel-tree .tn');
+  for(var i=0;i<tn.length;i++)
+   tn[i].classList.toggle('hid',!keep[tn[i].getAttribute('data-id')]);
+  var ls=document.querySelectorAll('#panel-tree path[data-lt]');
+  for(var i=0;i<ls.length;i++){var f=ls[i].getAttribute('data-lf'),t=ls[i].getAttribute('data-lt');
+   ls[i].classList.toggle('hid',!(keep[t]&&(!f||keep[f])))}
+  var chip=document.getElementById('focchip');
+  if(!chip){chip=document.createElement('button');chip.id='focchip';chip.className='focchip';
+   chip.type='button';chip.addEventListener('click',unfocus);
+   var tw=document.querySelector('#panel-tree .treewrap');
+   if(tw)tw.parentNode.insertBefore(chip,tw)}
+  chip.textContent='⟵ the whole tree';
+  relate(id)}
+ function unfocus(){F=null;
+  var q=document.querySelectorAll('#panel-tree .hid');
+  for(var i=0;i<q.length;i++)q[i].classList.remove('hid');
+  var chip=document.getElementById('focchip');
+  if(chip)chip.remove();
+  unrelate()}
  function paint(id){now=id;pop.innerHTML=body(id);relate(id)}
  function open(el,id,p){if(pop)close();if(!E[id]&&!J[id])return;
   cur=el;hist=[];if(p){el.classList.add('on');pin=true}
@@ -240,6 +281,7 @@ JS = r"""
   pop.addEventListener('mouseenter',function(){clearTimeout(tmr)});
   pop.addEventListener('mouseleave',function(){if(!pin){clearTimeout(tmr);tmr=setTimeout(close,220)}});
   pop.addEventListener('click',function(ev){ev.stopPropagation();
+   if(ev.target.closest('.tfoc')){var t=now;if(showTab)showTab('tree',true);focus(t);return}
    if(ev.target.closest('.back')){if(hist.length){paint(hist.pop());place(cur)}return}
    var g=ev.target.closest('[data-go]');if(!g)return;
    var t=g.getAttribute('data-go');if(t===now||(!E[t]&&!J[t]))return;
@@ -255,7 +297,9 @@ JS = r"""
    if(pin&&cur===el&&!hist.length)close();else{close();open(el,el.getAttribute('data-id'),true)}}
   else close()});
  document.addEventListener('keydown',function(e){if(e.key!=='Escape')return;
-  if(hist.length){paint(hist.pop());place(cur)}else close()});
+  if(hist.length){paint(hist.pop());place(cur);return}
+  if(pop){close();return}
+  if(F)unfocus()});
  addEventListener('resize',close);
  addEventListener('scroll',function(){if(!pin)close();else place(cur)},{passive:true});
 

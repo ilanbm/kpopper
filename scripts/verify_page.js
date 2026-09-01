@@ -100,7 +100,18 @@ if (!CHROME) { console.log('no Chrome/Chromium found - set CHROME to a browser b
         const tn = p.locator('#panel-tree g[data-id]').last();
         await tn.scrollIntoViewIfNeeded(); await p.mouse.move(2, 2); await tn.click();
         chk(`${T} a tree node opens the same card`, await seen(p, '.pop'));
-        await p.keyboard.press('Escape');
+        if (await p.locator('.pop .tfoc').count()) {
+          await p.locator('.pop .tfoc').click();
+          chk(`${T} focus prunes the tree to one node's world`,
+              await p.locator('#panel-tree .tn.hid').count() > 0
+              && await p.locator('#focchip').isVisible());
+          await p.locator('#focchip').click();
+          chk(`${T} and the chip brings the whole tree back`,
+              await p.locator('#panel-tree .tn.hid').count() === 0
+              && await p.locator('#focchip').count() === 0);
+        } else {
+          await p.keyboard.press('Escape');
+        }
       }
 
       if (errs.length) console.log('      ' + errs.join(' | '));
