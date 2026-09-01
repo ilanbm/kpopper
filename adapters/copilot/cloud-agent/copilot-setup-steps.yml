@@ -1,0 +1,41 @@
+name: "Copilot Setup Steps"
+
+# copilot only picks this up from the default branch, and only runs the job named
+# copilot-setup-steps - everything else in this file besides steps/permissions/
+# runs-on/services/snapshot/timeout-minutes is ignored by the coding agent (it still
+# runs as an ordinary workflow on push, which is what lets you validate it in the
+# Actions tab before trusting it to prep the agent's container).
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - .github/workflows/copilot-setup-steps.yml
+
+jobs:
+  copilot-setup-steps:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.x"
+
+      - name: install PyYAML
+        run: pip install pyyaml
+
+      - name: open PROVENANCE.yaml
+        # KPOPPER_ROOT: where this repo's kpopper checkout lives (a vendored copy, a
+        # submodule, whatever the project's own convention is) - set as a repository
+        # variable (Settings > Secrets and variables > Actions > Variables) or hardcode
+        # the path below. silent no-op without it, same as the local session opener.
+        env:
+          KPOPPER_ROOT: ${{ vars.KPOPPER_ROOT }}
+        run: |
+          if [ -f PROVENANCE.yaml ] && [ -n "$KPOPPER_ROOT" ]; then
+            python3 "$KPOPPER_ROOT/scripts/provenance.py" open --chars 2000
+          else
+            echo "no PROVENANCE.yaml, or KPOPPER_ROOT unset - nothing to open"
+          fi

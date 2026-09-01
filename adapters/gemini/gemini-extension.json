@@ -1,0 +1,6 @@
+{
+  "name": "kpopper",
+  "version": "0.14.0",
+  "description": "Keep a traceable record of what is known, where each piece came from, and what each judgment rests on: PROVENANCE.yaml, opened at session start and checked at session end.",
+  "contextFileName": "GEMINI.md"
+}

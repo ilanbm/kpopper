@@ -1,0 +1,18 @@
+{
+  "hooks": {
+    "SessionStart": [
+      {
+        "type": "command",
+        "command": "../../../scripts/session_open.sh",
+        "timeout": 15
+      }
+    ],
+    "Stop": [
+      {
+        "type": "command",
+        "command": "../../../scripts/session_gate.sh",
+        "timeout": 15
+      }
+    ]
+  }
+}

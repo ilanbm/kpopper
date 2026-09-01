@@ -1,0 +1,15 @@
+{
+  "version": 1,
+  "hooks": {
+    "sessionStart": [
+      {
+        "command": ".cursor/scripts/gate-open.sh"
+      }
+    ],
+    "stop": [
+      {
+        "command": ".cursor/scripts/gate-stop.sh"
+      }
+    ]
+  }
+}

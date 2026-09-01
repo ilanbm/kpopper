@@ -1,0 +1,36 @@
+name: "provenance check"
+
+# the stop gate, as a PR status: a pull request that leaves PROVENANCE.yaml failing
+# check does not go green. no session_id, no baseline, no one-bounce-then-yield - a
+# CI check either passes or it doesn't, so this simply runs check cold every time.
+on:
+  pull_request:
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.x"
+
+      - name: install PyYAML
+        run: pip install pyyaml
+
+      - name: check PROVENANCE.yaml
+        env:
+          KPOPPER_ROOT: ${{ vars.KPOPPER_ROOT }}
+        run: |
+          if [ ! -f PROVENANCE.yaml ]; then
+            echo "no PROVENANCE.yaml - nothing to check"
+            exit 0
+          fi
+          if [ -z "$KPOPPER_ROOT" ]; then
+            echo "KPOPPER_ROOT is not set (repository variable) - can't locate provenance.py" >&2
+            exit 1
+          fi
+          python3 "$KPOPPER_ROOT/scripts/provenance.py" check
