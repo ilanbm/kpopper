@@ -44,7 +44,8 @@ a project with a record shows no such report, run it by hand.
 pay (4) · c50 (9) · …`. That one line is the whole link between a question in plain language
 and the graph. "What is happening with the mortgage" has no meaning to a file; `mtg` does.
 
-**A second command runs when the work starts, not before:** `provenance.py affects <seed>`,
+**A second command runs when the work starts, not before:** `provenance.py affects <seed>` for
+what a change reaches, or `provenance.py pull <seed>` to ground yourself on the subject itself —
 where the seed is the prefix or entry the question maps to. Their first message is the seed,
 which is why this cannot be folded into the first command — it does not exist yet when the
 session opens. If they only said hello, it never runs at all.
@@ -348,6 +349,7 @@ R=$(find ~/.claude -path '*kpopper/scripts/provenance.py' 2>/dev/null | head -1)
 python3 "$R" open                        # what to read instead of the whole record
 python3 "$R" check
 python3 "$R" affects <entry> [entry ...]
+python3 "$R" pull <entry> [entry ...]
 ```
 
 Locate it that way rather than relying on `$CLAUDE_PLUGIN_ROOT`: that variable is documented for
@@ -380,6 +382,10 @@ says how many it left out. On a clean record it prints one line, which is the po
 reach — including through intermediate judgments — and for each one, whether its predicate can now
 be evaluated or whether it is only flagged. That traversal is the part a session cannot do
 reliably in its head, and the part the next session cannot do at all.
+
+`pull <entry>` answers the other question — not what a change reaches but what is known here now:
+that subject's own values with their sources, and the judgments resting on them, cut to a budget.
+A judgment seed pulls in what it rests on, so pulling a conclusion also grounds it.
 
 ### The page
 

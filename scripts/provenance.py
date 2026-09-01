@@ -4,6 +4,7 @@
   python3 provenance.py open    [file ...]        the whole opening: head + what moved
   python3 provenance.py check   [file ...]
   python3 provenance.py affects <entry> [entry ...]
+  python3 provenance.py pull    <entry> [entry ...]   values and sources for a subject
 
 It does not know your field names. Each role has a distinctive *shape*, and the
 shape is enough:
@@ -118,6 +119,17 @@ def infer(doc):
 BLOCKED = ("blocked_on", "unverified", "status")
 OPEN = ("open", "questions")
 
+# The one field this method asks for by name rather than inferring by shape - a sentence
+# has no distinctive shape. render_page.py owns the real version of this; this is the
+# same idea kept minimal for a reader that only prints text.
+NAMES = ("name", "title", "label", "what", "desc")
+
+
+def named(body):
+    if not isinstance(body, dict):
+        return ""
+    return next((str(body[f]).strip() for f in NAMES if body.get(f)), "")
+
 
 def _blocked_text(body):
     """The declared reason, whether the declaration is prose or a {missing, why} mapping."""
@@ -174,17 +186,24 @@ def check(paths):
     return 1 if fail else 0
 
 
-def opening(paths, budget=25):
+def opening(paths, budget=25, chars=None):
     """
     What a session should read instead of the whole record.
 
     Reading a record whole costs its full size every session, and most of it has not
     moved. This returns orientation plus only what needs a person: ranked, cut to a
-    budget, and saying how many it dropped. Pull the rest on demand with `affects`,
-    seeded by whatever the work is actually about.
+    budget, and saying how many it dropped. Ground the subject with `pull`, or trace
+    what a change reaches with `affects` - both seeded by whatever the work is about.
 
     Ranked highest first: a broken reference is worse than a dependency nothing was
     ever checked against, which is worse than a hole someone already declared.
+
+    `chars` is a second, harder budget: a character ceiling on the whole printed
+    output, for a caller that cannot afford to page through a large record even at
+    the default item budget. Without it every section below the head prints in full
+    except `standing`, which only exists to fill room a character budget makes room
+    for. With it, sections are cut at line granularity in order, the head always
+    survives whole, and one line says how much was left out.
     """
     doc = load(paths)
     ids, jud, fields = infer(doc)
@@ -209,12 +228,14 @@ def opening(paths, budget=25):
     items.sort(key=lambda x: (-x[0], x[1]))
     kept, dropped = items[:budget], max(0, len(items) - budget)
 
-    # The record's own head, printed here because this command already has the file
-    # open. Orientation and what-moved are one read, not two.
+    # The record's own head. Orientation and what-moved are one read, not two, and
+    # this section is never cut - a caller tight enough on chars to lose it would
+    # have nothing left to orient by.
+    head = []
     meta = doc.get("meta") or {}
     scope = str(meta.get("scope") or meta.get("about") or "").strip()
     if scope:
-        print(scope if len(scope) < 300 else scope[:300] + " ...")
+        head.append(scope if len(scope) < 300 else scope[:300] + " ...")
 
     def wv(v):
         vals = v if isinstance(v, list) else list(v.values()) if isinstance(v, dict) else []
@@ -228,7 +249,7 @@ def opening(paths, budget=25):
         if s:
             where.append(f"{k}: {s if len(s) < 90 else s[:90] + ' ...'}")
     if where:
-        print("  " + " | ".join(where))
+        head.append("  " + " | ".join(where))
     # The namespace, not the values. Without this a session cannot turn a question
     # into a seed: it has no idea what this record even holds. One line, and
     # "what about the mortgage" becomes mtg.
@@ -238,26 +259,86 @@ def opening(paths, budget=25):
             continue
         g = k.split(".")[0] if "." in k else k
         groups[g] = groups.get(g, 0) + 1
-    named = [(g, n) for g, n in groups.items() if n > 1]
+    heavy = [(g, n) for g, n in groups.items() if n > 1]
     loose = sum(n for g, n in groups.items() if n == 1)
-    if named:
-        print("holds: " + " · ".join(f"{g} ({n})" for g, n in
-                                     sorted(named, key=lambda kv: (-kv[1], kv[0])))
-              + (f" · and {loose} standalone" if loose else ""))
-    print(f"{len(ids)} entries, {len(jud)} judgments"
-          + (f", {len(open_ids)} open questions" if open_ids else "")
-          + (f", updated {meta['updated']}" if meta.get("updated") else ""))
+    if heavy:
+        head.append("holds: " + " · ".join(f"{g} ({n})" for g, n in
+                                            sorted(heavy, key=lambda kv: (-kv[1], kv[0])))
+                    + (f" · and {loose} standalone" if loose else ""))
+    head.append(f"{len(ids)} entries, {len(jud)} judgments"
+               + (f", {len(open_ids)} open questions" if open_ids else "")
+               + (f", updated {meta['updated']}" if meta.get("updated") else ""))
     if not fields["snapshot"]:
-        print("no snapshot field: drift cannot be detected in this record")
-    if not items:
-        print("\nnothing needs a person right now.")
-    else:
-        print(f"\nneeds a person ({len(items)}):")
-        for _, name, why in kept:
-            print(f"  {name}: {why}")
-        if dropped:
-            print(f"  ... {dropped} more - raise the budget to see them")
-    print("\nPull what the work is about:  provenance.py affects <entry>")
+        head.append("no snapshot field: drift cannot be detected in this record")
+
+    needs = ["nothing needs a person right now."] if not items else (
+        [f"needs a person ({len(items)}):"] + [f"  {name}: {why}" for _, name, why in kept]
+        + ([f"  ... {dropped} more - raise the budget to see them"] if dropped else []))
+
+    # Open questions: what a person left open on purpose. One line each - they are
+    # already as short as this method gets, so there is nothing to rank or cut here
+    # short of the overall budget.
+    qmap = {}
+    for g in OPEN:
+        qmap.update(doc.get(g) or {})
+    quests = []
+    for qid in sorted(qmap):
+        text = qmap[qid] if isinstance(qmap[qid], str) else str(qmap[qid])
+        line = f"  ? {qid}: {text}"
+        quests.append(line if len(line) < 100 else line[:100] + " ...")
+
+    footer = ("next: pull <entry|prefix> (values with sources) · affects <entry> "
+             "(what a change reaches) · check")
+
+    for l in head:
+        print(l)
+
+    if chars is None:
+        print()
+        for l in needs:
+            print(l)
+        if quests:
+            print()
+            for l in quests:
+                print(l)
+        print()
+        print(footer)
+        return 0
+
+    # standing: every judgment's own verdict, no ranking - the ranking above is about
+    # what needs a person, this is just what the record currently concludes. Only
+    # built when there is a character budget to spend on it; it is the last thing
+    # cut and the first thing skipped.
+    flagged = {name for _, name, _ in items}
+    standing = []
+    if jud:
+        standing.append("standing:")
+        for name in sorted(jud, key=lambda n: (n not in flagged, n)):
+            b = jud[name]["body"]
+            v = str(b.get("verdict") or b.get("title") or name)
+            line = f"  = {name}: {v}"
+            standing.append(line if len(line) < 80 else line[:80] + " ...")
+
+    body = [""] + needs
+    if quests:
+        body += [""] + quests
+    if standing:
+        body += [""] + standing
+
+    used = sum(len(l) + 1 for l in head)
+    shown = len(body)
+    for i, l in enumerate(body):
+        if used + len(l) + 1 > chars:
+            shown = i
+            break
+        used += len(l) + 1
+    for l in body[:shown]:
+        print(l)
+    cut = len(body) - shown
+    if cut:
+        print(f"  ... {cut} more - raise --chars")
+    print()
+    print(footer)
     return 0
 
 
@@ -298,14 +379,156 @@ def affects(paths, changed):
     return 0
 
 
+def pull(paths, seeds, budget=40):
+    """
+    The seeded projection, with values and sources - ground a session on a subject
+    instead of reading the whole record for it. Where `affects` walks forward from a
+    seed to what depends on it, this reads the seed itself: its entries, as recorded,
+    and the judgments that rest on them.
+    """
+    doc = load(paths)
+    ids, jud, fields = infer(doc)
+    raw = {}
+    for v in doc.values():
+        if isinstance(v, dict):
+            for nid, b in v.items():
+                if isinstance(b, dict):
+                    raw[nid] = b
+                elif nid in ids:
+                    raw[nid] = {"v": b}
+
+    # Seed resolution matches `affects`: an exact id, or a prefix expanded over the
+    # namespace. A judgment seed pulls in what it rests on - the point of `pull` is
+    # to ground, and a judgment without its own entries is not grounded in anything.
+    expanded = []
+    for c in seeds:
+        if c in ids:
+            expanded.append(c)
+            continue
+        hits = sorted(k for k in ids if k.split(".")[0] == c or k.startswith(c + "."))
+        if not hits:
+            raise SystemExit(f"{c} is not an entry or a prefix in this record. "
+                             f"Run `open` to see what it holds.")
+        expanded += hits
+
+    entries, judgments = set(), set()
+    for k in expanded:
+        if k in jud:
+            judgments.add(k)
+            entries |= {d for d in jud[k]["deps"] if d in ids and d not in jud}
+        else:
+            entries.add(k)
+    judgments |= {name for name, j in jud.items() if set(j["deps"]) & entries}
+
+    def cut(line, n):
+        return line if len(line) < n else line[:n] + " ..."
+
+    def resolved(body):
+        """-> (v, rule). A value that is itself a formula is a rule wearing a `v:` field -
+        same shape render_page.py already treats that way - so it is never compared as a
+        literal here either."""
+        v, rule = body.get("v"), body.get("rule")
+        if v is not None and isinstance(v, str) and EXPR.search(v) and \
+                any(t in ids for t in ID.findall(v)):
+            v, rule = None, rule or v
+        return v, rule
+
+    def current(body):
+        """The comparable value this entry holds right now - v, else the quoted
+        text, else nothing: a rule has no value of its own to compare."""
+        v, _ = resolved(body)
+        if v is not None:
+            return v
+        if body.get("quoted") is not None:
+            return body["quoted"]
+        return None
+
+    lines = []
+    for k in sorted(entries):
+        b = raw.get(k) or {}
+        v, rule = resolved(b)
+        if v is not None:
+            shown = str(v)
+        elif rule:
+            shown = "= " + str(rule)
+        elif b.get("quoted"):
+            shown = '"' + str(b["quoted"]) + '"'
+        else:
+            shown = ""
+        nm = named(b)
+        line = f"{k}: {shown}" + (f" ({nm})" if nm else "")
+        if b.get("from"):
+            line += f" <- {b['from']}" + (f", at {b['at']}" if b.get("at") else "")
+        of = b.get("of") or b.get("read")
+        if of:
+            line += f" as of {of}"
+        lines.append(cut(line, 110))
+
+    for name in sorted(judgments):
+        j = jud[name]
+        body = j["body"]
+        verdict = str(body.get("verdict") or body.get("title") or name)
+        lines.append(cut(f"+ {name}: {verdict}", 110))
+
+        # State, derived the same way `check` derives a problem: a dependency that
+        # is not an entry is broken, unless the judgment declares it missing, in
+        # which case it is blocked; short of that, a dependency present but never
+        # snapshotted is unchecked; short of that, the judgment holds.
+        blocked = _blocked_text(body)
+        missing = [d for d in j["deps"] if d not in ids]
+        if missing:
+            state = (f"blocked: {blocked}" if blocked else
+                     f"broken: rests on {', '.join(missing)}, which is not an entry")
+        elif fields["snapshot"] and any(d not in j["seen"] for d in j["deps"]):
+            stale = [d for d in j["deps"] if d not in j["seen"]]
+            state = f"unchecked: never checked against {', '.join(stale)}"
+        else:
+            state = "holds"
+        lines.append(cut("    " + state, 110))
+
+        if j["pred"]:
+            lines.append(cut(f"    wrong_if: {j['pred']}", 110))
+
+        if fields["snapshot"]:
+            snap = body.get(fields["snapshot"])
+            if isinstance(snap, dict):
+                for dep in sorted(snap):
+                    old = snap[dep]
+                    if dep not in ids or dep in jud or isinstance(old, (list, dict)):
+                        continue                       # missing, a judgment, or not scalar
+                    now = current(raw.get(dep) or {})
+                    if now is None or isinstance(now, (list, dict)):
+                        continue                       # a rule, or nothing recorded now
+                    if str(old) != str(now):
+                        lines.append(cut(f"    moved since review: {dep} {old} -> {now}", 110))
+
+    kept, remain = lines[:budget], max(0, len(lines) - budget)
+    for l in kept:
+        print(l)
+    if remain:
+        print(f"... {remain} more lines - raise the budget")
+    print("\naffects <entry> shows what a change reaches")
+    return 0
+
+
 if __name__ == "__main__":
     a = sys.argv[1:] or ["check"]
     cmd, rest = a[0], a[1:]
     if cmd == "affects":
         files = [x for x in rest if x.endswith((".yaml", ".yml"))] or DEFAULT
         sys.exit(affects(files, [x for x in rest if not x.endswith((".yaml", ".yml"))]))
+    if cmd == "pull":
+        b, seeds, files = 40, [], []
+        i = 0
+        while i < len(rest):
+            if rest[i] == "--budget":
+                b = int(rest[i + 1]); i += 2; continue
+            (files if rest[i].endswith((".yaml", ".yml")) else seeds).append(rest[i])
+            i += 1
+        sys.exit(pull(files or DEFAULT, seeds, b))
     files = [x for x in rest if x.endswith((".yaml", ".yml"))] or DEFAULT
     if cmd == "open":
         b = int(rest[rest.index("--budget") + 1]) if "--budget" in rest else 25
-        sys.exit(opening(files, b))
+        c = int(rest[rest.index("--chars") + 1]) if "--chars" in rest else None
+        sys.exit(opening(files, b, c))
     sys.exit(check(files))

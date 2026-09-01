@@ -42,6 +42,7 @@ R=$(find ~/.claude -path '*kpopper/scripts/provenance.py' | head -1)
 python3 "$R" open                # what a session reads instead of the whole record
 python3 "$R" check
 python3 "$R" affects <entry>
+python3 "$R" pull <entry|prefix>
 ```
 
 `open` is what a new session runs first: how big the record is, then only what needs a
@@ -54,7 +55,8 @@ that is a pointer to wherever the record actually lives.
 missing), a dependency with no snapshot, a predicate naming something undeclared, or prose
 sitting in a predicate field. `affects` reports
 what a change reaches, including through intermediate judgments, and whether each one can now be
-re-evaluated or is only flagged.
+re-evaluated or is only flagged. `pull <entry|prefix>` returns a subject's own values with their
+sources, plus the judgments resting on them, cut to a budget.
 
 It infers roles from **shape**, not field names, so it reads records written in any vocabulary.
 Where two fields genuinely fit one role it refuses to guess and asks for a three-line `schema:`
