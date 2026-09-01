@@ -110,8 +110,13 @@ kpopper pull <entry|prefix>      # a subject's values with their sources - and w
 ```
 
 Each command reads the record in the current directory, or the files you name. Without the
-command line on your path, the same dispatcher ships inside the plugin — find it once with
-`K=$(find ~/.claude -path '*kpopper/scripts/kpopper' | head -1)` and run `"$K" open`.
+command line on your path, the same dispatcher ships inside the plugin — find it once, then run
+`"$K" open`. An installed plugin sits under a version directory and may hold worktrees of its
+own, so the search skips those and takes the highest version rather than the first hit:
+
+```bash
+K=$(find ~/.claude -name worktrees -prune -o -path '*kpopper*/scripts/kpopper' -print 2>/dev/null | sort -V | tail -1)
+```
 
 `check` exits non-zero on an undeclared gap: a dependency that is not an entry (unless the
 judgment declares it missing with `blocked_on`), a dependency with no snapshot, a predicate
