@@ -1,5 +1,5 @@
 meta:
-  updated: 2026-09-01
+  updated: 2026-09-02
   name: kpopper
   scope: "What this plugin is for and the decisions that shaped it, kept in its own format -
           the tools eat their own cooking, and every session here opens grounded."
@@ -17,6 +17,29 @@ sources:
     name: "The first run on a project this plugin did not build - the g2next keyboard pilot"
     of: "session 'Keyboard size feedback', 2026-09-01, plugin 0.14.0"
     read: "2026-09-01"
+  run.hub_vs_now:
+    name: "A hand-written page and this plugin's Now tab, rendered from the same record and
+           read side by side"
+    of: "headless Chrome, both pages, 2026-09-02; the hand-written template carries 147 live
+         references and wraps 4 passages as judgments"
+    read: "2026-09-02"
+  doc.hub_seam:
+    name: "The lab's own decision on why its page stays hand-written - the argument is manual,
+           the agenda is derived, and a block becomes a query once its content is anchored"
+    of: "the finance lab's claims file, decision v.hub_is_handwritten"
+    read: "2026-09-02"
+  doc.three_briefs:
+    name: "The three briefs that exist - a finance hub, a keyboard pilot, an academic review -
+           and what they contain"
+    of: "each project's PROVENANCE.view.yaml, read 2026-09-02"
+    read: "2026-09-02"
+  run.design_talk:
+    name: "A session that shaped seven page decisions in conversation and wrote none of them to
+           this record until the person asked how to document them"
+    of: "this record's own design session, 2026-09-02; the opener had shown the standing
+         decisions at start, and the stop gate compares failure counts only, so a record nobody
+         touched never bounces"
+    read: "2026-09-02"
 
 known:
   m.first_run.repair:
@@ -104,6 +127,19 @@ known:
     name: "Locator resolves to the install the harness records as enabled, 1 yes 0 no"
     from: "ran the documented find against the recorded installPath"
     of: "2026-09-01"
+  m.hub_wrapped_share:
+    v: 4
+    name: "Passages the hand-written page wraps as judgments, out of its 147 live references"
+    from: run.hub_vs_now
+  m.briefs_written:
+    v: 0
+    name: "Written sentences across the three existing briefs - every section only picks"
+    from: doc.three_briefs
+  p.grouping_mentions:
+    v: 23
+    name: "Places the renderer names its one built-in grouping, fronts"
+    from: "scripts/render_page.py"
+    of: "2026-09-02"
 
 open:
   q.pull_defaults: "does a session that ran pull still open the record file for values - and if
@@ -118,6 +154,15 @@ open:
                        clean - insert in id order, drop the stored shape, or shard?"
   q.merge_recheck: "consolidation happens at merge, so should the merge be the moment the record
                     re-checks itself and reports what arrived and what it moved?"
+  q.arrangement_falsifiers: "will sessions write arrangement falsifiers a build can evaluate and
+                             that say something - to be read as a foreign agent would, after
+                             fifteen real arrangements?"
+  q.intent_attribution: "how does an entry bind to the session that wrote it - a from: on the
+                         session's source, or the version history at build time?"
+  q.unprompted_recording: "what makes a session record what it decided in conversation,
+                           unasked? seven decisions lived only in chat until a person asked;
+                           the opener had shown the rule, and the gate cannot see a record
+                           nobody touched"
 
 judgments:
   d.open_is_a_slot:
@@ -168,13 +213,15 @@ judgments:
     seen: {skill.two_shapes: "Two parallel records is the most expensive mistake available here"}
   d.page_reads_only:
     rests_on: [doc.fact_moves]
-    verdict: "the page is a reading surface - no trial inputs, no write path; what a change
-              reaches is answered by affects and pull"
-    because: "A live trial input was built and rejected on contact: it adds a mode to a surface
-              whose whole job is to be read, and the reach question already has two dedicated
-              answers outside the page."
-    blocked_on: "observational: falsified by a reading task that genuinely cannot be served
-                 without editing a value in place; none has appeared"
+    verdict: "the page is a reading surface - no write path, nothing a hand does to it is kept;
+              a trial value that persists nothing is a way of reading the reach"
+    because: "A live trial input was built and rejected on contact: it added a mode to a surface
+              whose whole job is to be read, and the reach question already had two dedicated
+              answers outside the page. Narrowed 2026-09-02 at the person's word: the reach
+              question asked in place - what falls if this moves - is reading, provided the
+              page writes nothing and keeps nothing. What stays refused is a write path."
+    blocked_on: "observational: falsified by a reading task that genuinely needs the record
+                 changed from the page; none has appeared"
     seen: {doc.fact_moves: "read 2026-09-01"}
   d.whole_shape_surface:
     rests_on: [doc.fact_moves]
@@ -271,7 +318,8 @@ judgments:
               refused. So the pull resists, the tree springs back, and the position goes
               nowhere."
     wrong_if: "p.tree_positions_kept > 0"
-    seen: {d.page_reads_only: "the page is a reading surface - no trial inputs, no write path",
+    seen: {d.page_reads_only: "the page is a reading surface - no write path, nothing a hand
+                               does to it is kept",
            p.tree_positions_kept: 0}
   d.record_before_repair:
     rests_on: [m.first_run.repair, m.first_run.record]
@@ -318,3 +366,204 @@ judgments:
               of a loose match rather than an arbitrary first hit."
     wrong_if: "m.locator_agrees < 1"
     seen: {p.install_segments: 1, m.locator_agrees: 1}
+  d.page_is_graph:
+    rests_on: [run.hub_vs_now, doc.hub_seam, m.hub_wrapped_share]
+    verdict: "the page is more graph - intents are entries, arrangements and passages are
+              judgments, every value on the surface is a reference"
+    because: "Read side by side on the same record, the hand-written page beat the generated one
+              on authorship alone; the mechanism underneath was identical. The one thing the
+              generated page could not do was write, and the one thing the hand-written page
+              could not do was notice its own prose going stale: it links every number and wraps
+              four passages. A passage that is a judgment gets seen and a falsifier, is flagged
+              like anything else, and is never rewritten in silence."
+    blocked_on: "observational: falsified if passages recorded as judgments end up reviewed less,
+                 not more, than prose left outside the graph - the cost of declaring would then
+                 exceed what the flag returns"
+    seen: {run.hub_vs_now: "read 2026-09-02", doc.hub_seam: "read 2026-09-02",
+           m.hub_wrapped_share: 4}
+  d.author_free_build_guarantees:
+    rests_on: [d.page_is_graph, doc.three_briefs, m.briefs_written]
+    verdict: "the session composes freely and the build enforces the element rules on the output"
+    because: "Every existing brief is pick-only because picking was all the format allowed.
+              Richness needs freedom - tabs, sections, prose, components, the session's own
+              markup - and freedom is safe only if the guarantees live where a session cannot
+              forget them: no key on the surface, one reference per value, values inside
+              sentences, judgments marked, the record's language. A lint on the output does not
+              care how the page was written."
+    blocked_on: "observational: falsified by a page that passes every element rule and still
+                 reads as a dump, or by sessions that route around the rules with markup the
+                 lint cannot see"
+    seen: {d.page_is_graph: "the page is more graph - intents are entries, arrangements and
+                             passages are judgments, every value on the surface is a reference",
+           doc.three_briefs: "read 2026-09-02", m.briefs_written: 0}
+  d.intent_is_a_source:
+    rests_on: [d.page_is_graph, doc.agent_graph]
+    verdict: "a session records what it was for as a source; a tab is a reading occasion that
+              serves intents, and serving is earned by picks"
+    because: "Whether the page still answers what the project is for cannot be checked until
+              intents are things. One line in the requester's words, at the moment the session
+              knows it, makes coverage mechanical: an intent no tab serves, entries no section
+              picks, a tab claiming to serve what it never shows. What the mechanism never does
+              is decide whether two intents are one world - that is the session's judgment,
+              recorded as an arrangement decision with its own falsifier."
+    blocked_on: "observational: falsified if recording the intent costs the first turn its
+                 normal feel, or if declared intents drift from what sessions actually did"
+    seen: {d.page_is_graph: "the page is more graph - intents are entries, arrangements and
+                             passages are judgments, every value on the surface is a reference",
+           doc.agent_graph: "read 2026-09-01"}
+  d.arrangement_replaced_by_trigger:
+    rests_on: [d.page_is_graph, d.moved_is_a_flag]
+    verdict: "an arrangement is replaced only when its falsifier fires, a coverage gap exists,
+              or a person asks"
+    because: "A self-correcting surface fails two ways: every session redesigns, or nobody
+              notices the project moved. Buying every structural change with an observed
+              trigger stops the first - tidier is not a trigger. Guarantees that cannot be
+              switched off stop the second: the spill section stays, the unserved intent prints
+              at every open, drift and recency are computed as facts. A falsifier the build
+              cannot evaluate is decoration, and decoration is the second failure in disguise -
+              so an arrangement's falsifier is a predicate over what the build computes, with
+              the human sign beside it in prose. A person's direct request is the same graph
+              with a different root: a source with no dependencies, stronger than any
+              seniority, acted on in the session that received it."
+    blocked_on: "observational: falsified if arrangements go stale under falsifiers that never
+                 fire while readers keep reworking pages by hand"
+    seen: {d.page_is_graph: "the page is more graph - intents are entries, arrangements and
+                             passages are judgments, every value on the surface is a reference",
+           d.moved_is_a_flag: "a dependency that moved since the snapshot flags the judgment for
+                               a person; only a predicate that holds fails the build"}
+  d.minimal_repair:
+    rests_on: [d.arrangement_replaced_by_trigger]
+    verdict: "seniority is evidence, never a threshold; a trigger is cleared by the smallest
+              structural change that suffices"
+    because: "The second session and the twentieth should not weigh the same, but a declared
+              threshold becomes a number someone wants to raise. Showing how long an arrangement
+              stood, and asking for the least change that clears the trigger - add before move,
+              move before remove, remove before rebuild, a new tab entering last until it earns
+              its place, a bigger change recording why the smaller one was not enough - gets the
+              weight without the number. Late arrangements change rarely because everything
+              before them already serves and stands."
+    blocked_on: "observational: falsified if pages accrete small patches until no reader can say
+                 what they are for - the sign that repair stayed minimal past the point where a
+                 rebuild was due"
+    seen: {d.arrangement_replaced_by_trigger: "an arrangement is replaced only when its
+                                                falsifier fires, a coverage gap exists, or a
+                                                person asks"}
+  d.reversal_is_a_question:
+    rests_on: [d.arrangement_replaced_by_trigger, d.judgments_write_inline]
+    verdict: "undoing an arrangement whose falsifier did not fire is a question for the person,
+              never a change"
+    because: "Two sessions can otherwise flip a layout back and forth forever, each convinced.
+              Requiring the second to show the first's falsifier fired turns taste into
+              evidence, and what remains is exactly what a person should decide. With it: at
+              most one radical change per session, and only at its end, when the session knows
+              what it did."
+    blocked_on: "observational: falsified if the questions this raises go unanswered so long
+                 that the page freezes behind them"
+    seen: {d.arrangement_replaced_by_trigger: "an arrangement is replaced only when its
+                                                falsifier fires, a coverage gap exists, or a
+                                                person asks",
+           d.judgments_write_inline: "the session doing the work writes its own judgments; any
+                                      watcher only harvests sources and proposes, behind the
+                                      gate"}
+  d.groupings_declared:
+    rests_on: [p.grouping_mentions, goal.portable]
+    verdict: "groupings are declared by the session, any number, under its own names; the
+              renderer owns none"
+    because: "The grouping came from one finance record and hardened into the renderer under
+              that record's name for it. A thread that reads on its own is general - fields,
+              subsystems, environments - but naming it once in code is how one project's shape
+              becomes every project's layout."
+    blocked_on: "implementation: the renderer still names the one grouping in 23 places, and the
+                 decision is in force when that count is zero; falsified only if a second real
+                 project needs a grouping the declared form cannot express"
+    seen: {p.grouping_mentions: 23,
+           goal.portable: "usable by any session, in any project, with no author present"}
+  d.reasoning_in_record:
+    rests_on: [d.page_is_graph, doc.hub_seam, doc.agent_graph]
+    verdict: "reasoning is the because of the judgment it belongs to, in the record; the page's
+              connective text lives in the brief; both resolve references at build and both
+              carry seen"
+    because: "The test is whether an agent that never opens the page needs the text. A
+              judgment's reasoning: yes, so it lives where pull and open can serve it with its
+              own flag, which today they cannot, because the reasoning lives only in a
+              template. Connective text: no, so it stays in the cheapest file. The lab already
+              wraps a domain claim and never a page judgment; a second kind of judgment beside
+              the brief would split one conclusion across two files with two reviews. Giving
+              connective text a snapshot of what it references earns it the same
+              moved-since-reviewed tint without pretending it argues - it states, and a
+              sentence that would deserve a falsifier is a judgment that belongs in the record."
+    blocked_on: "observational: falsified if connective text keeps smuggling claims the lint
+                 cannot see, or if because fields swell past what a card can carry"
+    seen: {d.page_is_graph: "the page is more graph - intents are entries, arrangements and
+                             passages are judgments, every value on the surface is a reference",
+           doc.hub_seam: "read 2026-09-02", doc.agent_graph: "read 2026-09-01"}
+  d.metrics_derived_builtin:
+    rests_on: [d.arrangement_replaced_by_trigger, run.design_talk]
+    verdict: "graph.* and page.* are derived entries the reader computes itself - counts and
+              shares, never stored, thresholds only inside falsifiers"
+    because: "A falsifier over an arrangement has to name what a build can count: what fell to
+              spill, which intents no tab serves, what share of what was added since the
+              arrangement was born nothing picks, how many recent sessions in a row went
+              unrepresented. Storing those would change the record on every build; leaving
+              them unnamed leaves every arrangement decision failing check, which is where the
+              lab's page stands today. So the reader owns the names, computes them
+              deterministically from the record and the brief, and a falsifier carries its own
+              line - a claim by its author, visible and reviewed, never a constant in code."
+    blocked_on: "implementation: the reader does not yet know the names; falsified if sessions
+                 cannot write a falsifier over them that ever fires, or if a metric needs a
+                 tuned constant to be useful"
+    seen: {d.arrangement_replaced_by_trigger: "an arrangement is replaced only when its
+                                                falsifier fires, a coverage gap exists, or a
+                                                person asks",
+           run.design_talk: "read 2026-09-02"}
+  d.proposer_behind_gate:
+    rests_on: [d.judgments_write_inline, d.moved_is_a_flag, run.design_talk]
+    verdict: "a proposer may re-derive what is flagged and draft what a session or a person
+              accepts in one line; it applies nothing, and no session opens by digesting a
+              backlog"
+    because: "Re-derivation on demand leaves a flagged text waiting and puts its cost on the
+              critical path of whoever needs it next. A watcher that proposes behind the gate
+              is the one shape the constitution allows, and limited to what is flagged it
+              sharpens nothing that was not asked. The best moment is the writer's stop, when
+              the cause of the move is still in hand; a scheduled sweep is the fallback."
+    blocked_on: "observational: falsified if proposals are rejected or ignored more often than
+                 they are accepted, or if sessions start reading proposals instead of the
+                 dependencies they stand on"
+    seen: {d.judgments_write_inline: "the session doing the work writes its own judgments; any
+                                      watcher only harvests sources and proposes, behind the
+                                      gate",
+           d.moved_is_a_flag: "a dependency that moved since the snapshot flags the judgment for
+                               a person; only a predicate that holds fails the build",
+           run.design_talk: "read 2026-09-02"}
+  d.what_if_is_reading:
+    rests_on: [d.page_reads_only, d.tree_springs_back, run.design_talk]
+    verdict: "what-if is one evaluator on two surfaces: a command that answers what a change
+              would reach without writing, and a trial value in the page that lights what rests
+              on it and keeps nothing"
+    because: "The question is what falls when this moves, and a person asks it by touching the
+              value where they read it. Nothing is written, nothing persists, the page springs
+              back - it is a way of reading the reach, as pulling the tree is a way of reading
+              how a node is attached. The command form serves the session that must see the
+              reach before it writes. One evaluator, so the two surfaces never disagree."
+    blocked_on: "observational: falsified if the trial input draws edits people expect to be
+                 kept, or if the two surfaces are ever seen to answer differently"
+    seen: {d.page_reads_only: "the page is a reading surface - no write path, nothing a hand
+                               does to it is kept",
+           d.tree_springs_back: "the tree can be handled - pulled about, and grown into place
+                                 once - and nothing a hand does to it is kept",
+           run.design_talk: "read 2026-09-02"}
+  d.computed_names_when_named:
+    rests_on: [d.metrics_derived_builtin]
+    verdict: "a computed name becomes an entry only when something in the record mentions it;
+              a count nobody rests on does not exist"
+    because: "Every record would otherwise carry fifteen entries it never asked for - in its
+              opener's namespace line, its shape, its page - and every brief's stored shape
+              would move on the day the names were added. Mentioned, a count is an entry like
+              any other, with a value, a hover, a place in pull and affects. Unmentioned, it
+              is not there to explain."
+    blocked_on: "observational: falsified if sessions keep asking the opener for a count no
+                 judgment rests on, or if the shape of a record that names none of them ever
+                 moves because of them"
+    seen: {d.metrics_derived_builtin: "graph.* and page.* are derived entries the reader
+                                       computes itself - counts and shares, never stored,
+                                       thresholds only inside falsifiers"}
