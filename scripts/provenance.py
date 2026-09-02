@@ -27,7 +27,69 @@ from decimal import Decimal, InvalidOperation
 
 ID = re.compile(r"[A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z0-9_]+)+")
 EXPR = re.compile(r"[<>=!+\-*/()]|\bor\b|\band\b|\bnot\b")
+# A reference: an entry named inside prose, `{{heat.loss_kw}}`, resolved wherever the text is
+# shown and never retyped. A judgment id placed this way, `{{c.boiler_short}}`, asks for that
+# judgment's reasoning at that spot.
+REF = re.compile(r"\{\{\s*([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z0-9_]+)+)\s*\}\}")
 DEFAULT = ["PROVENANCE.yaml"]
+
+# Names the reader computes rather than reads: counted from the record alone (graph.*), or
+# where the page is built (page.*). Never written, never stored. A judgment may rest on one
+# and a falsifier may draw its line against one - and only a name something in the record
+# mentions becomes an entry; the rest do not exist until asked for.
+GRAPH = {
+    "graph.entries":      "entries the record holds",
+    "graph.judgments":    "judgments the record holds",
+    "graph.open":         "questions left open",
+    "graph.flagged":      "judgments that need a person",
+    "graph.blocked":      "judgments waiting on something declared missing",
+    "graph.broken":       "judgments resting on something that is not an entry",
+    "graph.unchecked":    "judgments never checked against one of their dependencies",
+    "graph.moved":        "judgments a dependency moved under since they were reviewed",
+    "graph.falsified":    "judgments broken by their own condition",
+    "graph.no_predicate": "judgments nothing evaluable would falsify",
+}
+PAGE = {
+    "page.spill":           "flagged judgments no section of the page picked up",
+    "page.unserved":        "intents no tab of the page serves",
+    "page.drift":           "share of what was added since the arrangement was born that nothing picks",
+    "page.recent_unserved": "recent sessions in a row whose intent no tab serves",
+    "page.covered":         "entries and judgments some section of the page picks",
+}
+COMPUTED = dict(GRAPH, **PAGE)
+
+
+def is_builtin(k):
+    return k in COMPUTED
+
+
+def refs_in(text):
+    """Entry ids a text names as references, in order, once each."""
+    out = []
+    for m in REF.finditer(str(text or "")):
+        if m.group(1) not in out:
+            out.append(m.group(1))
+    return out
+
+
+def _mentioned(body):
+    """Every id-shaped token a body carries - in its strings, its lists, its mapping keys."""
+    if not isinstance(body, dict):
+        return
+    for val in body.values():
+        if isinstance(val, str):
+            for t in ID.findall(val):
+                yield t
+        elif isinstance(val, list):
+            for x in val:
+                if isinstance(x, str):
+                    for t in ID.findall(x):
+                        yield t
+        elif isinstance(val, dict):
+            for k in val:
+                if isinstance(k, str):
+                    for t in ID.findall(k):
+                        yield t
 POINTER = "kpopper-record"   # in the git common dir: shared by every worktree, never tracked
 
 
@@ -140,6 +202,12 @@ def _no_deps(unresolved):
 def infer(doc):
     groups = groups_of(doc)
     ids = {k for m in groups.values() for k in m}
+    # A computed name is an entry the moment something in the record mentions it.
+    for members in groups.values():
+        for body in members.values():
+            for t in _mentioned(body):
+                if is_builtin(t):
+                    ids.add(t)
     cand = {"deps": {}, "snapshot": {}, "predicate": {}}
     # A field with the shape of a dependency list whose names resolve to nothing votes
     # for no role at all. When that is why the record ends up with no dependency field,
@@ -157,12 +225,6 @@ def infer(doc):
                     else:
                         unresolved.setdefault(f, []).append(
                             (nid, [x for x in val if x not in ids]))
-                elif isinstance(val, dict) and val and all(k in ids for k in val):
-                    cand["snapshot"][f] = cand["snapshot"].get(f, 0) + 1
-                elif isinstance(val, str) and val:
-                    named = [t for t in ID.findall(val) if t in ids]
-                    if named and val.strip() not in named and EXPR.search(val):
-                        cand["predicate"][f] = cand["predicate"].get(f, 0) + 1
     sch = doc.get("schema") or {}
 
     def pick(role):
@@ -189,9 +251,26 @@ def infer(doc):
                 f"guess.\nAdd to the record:\n\nschema:\n  {role}: <field name>")
         return top[0][0]
 
-    fields = {r: pick(r) for r in cand}
+    fields = {"deps": pick("deps")}
     if not fields["deps"]:
         raise SystemExit(_no_deps(unresolved))
+    # The snapshot and the predicate are judgment fields, so they are voted on among the
+    # bodies that carry the dependency field: a derived entry's rule has a predicate's
+    # shape and would otherwise outvote them in any record with more rules than
+    # judgments. Prose that names entries as references is prose, never a predicate.
+    for members in groups.values():
+        for nid, body in members.items():
+            if not isinstance(body, dict) or fields["deps"] not in body:
+                continue
+            for f, val in body.items():
+                if isinstance(val, dict) and val and all(k in ids for k in val):
+                    cand["snapshot"][f] = cand["snapshot"].get(f, 0) + 1
+                elif isinstance(val, str) and val and "{{" not in val:
+                    named = [t for t in ID.findall(val) if t in ids]
+                    if named and val.strip() not in named and EXPR.search(val):
+                        cand["predicate"][f] = cand["predicate"].get(f, 0) + 1
+    fields["snapshot"] = pick("snapshot")
+    fields["predicate"] = pick("predicate")
     jud = {}
     for members in groups.values():
         for nid, body in members.items():
@@ -331,12 +410,96 @@ def _blocked_text(body):
     return ""
 
 
+def flags(ids, jud, fields, raw, decide=True):
+    """Per judgment: the conditions that put it in front of a person, derived the one way
+    every surface derives them. With `decide` off a predicate is read for what it names and
+    never evaluated - the pass that counts the graph before any count exists to compare."""
+    out = {}
+    for name, j in jud.items():
+        f, blocked = set(), _blocked_text(j["body"])
+        for d in j["deps"]:
+            if d not in ids:
+                f.add("blocked" if blocked else "broken")
+            elif fields["snapshot"] and d not in j["seen"]:
+                f.add("unchecked")
+        named = [t for t in ID.findall(j["pred"]) if t in ids]
+        if not named and not blocked:
+            f.add("no_predicate")
+        elif named and decide and evaluate(j["pred"], raw, ids) is True:
+            f.add("falsified")
+        if any(s == "moved" for _, _, _, s in moved_deps(j, raw, ids)):
+            f.add("moved")
+        out[name] = f
+    return out
+
+
+def counts(doc, ids, jud, fields, raw):
+    """Every graph.* value, counted from the record alone - the pass that reads predicates
+    for what they name and evaluates none of them, so a count never depends on itself."""
+    fl = flags(ids, jud, fields, raw, decide=False)
+    open_ids = {k for g in OPEN for k in (doc.get(g) or {})}
+    held = [k for k in ids if k not in jud and not is_builtin(k)]
+
+    def count(flag):
+        return sum(1 for f in fl.values() if flag in f)
+    return {
+        "graph.entries": len(held), "graph.judgments": len(jud), "graph.open": len(open_ids),
+        "graph.flagged": sum(1 for f in fl.values() if f),
+        "graph.blocked": count("blocked"), "graph.broken": count("broken"),
+        "graph.unchecked": count("unchecked"), "graph.moved": count("moved"),
+        "graph.falsified": count("falsified"), "graph.no_predicate": count("no_predicate"),
+    }
+
+
+def builtins(doc, ids, jud, fields, raw):
+    """Bodies for the computed names the record mentions. graph.* is counted here from the
+    record alone; page.* needs the brief and is counted where the page is built, so here it
+    carries its name and no value, and a predicate over it stays undecided."""
+    wanted = sorted(k for k in ids if is_builtin(k))
+    if not wanted:
+        return {}
+    values = counts(doc, ids, jud, fields, raw)
+    out = {}
+    for k in wanted:
+        body = {"name": COMPUTED[k]}
+        if k in values:
+            body["v"] = values[k]
+            body["from"] = "counted from the record each time it is read"
+        else:
+            body["from"] = "counted when the page is built"
+        out[k] = body
+    return out
+
+
+def with_builtins(doc, ids, jud, fields):
+    """The record's bodies plus the computed ones it mentions: what every reader compares
+    values against."""
+    raw = bodies(doc)
+    raw.update(builtins(doc, ids, jud, fields, raw))
+    return raw
+
+
 def check(paths):
     doc = load(paths)
     ids, jud, fields = infer(doc)
-    raw = bodies(doc)
+    raw = with_builtins(doc, ids, jud, fields)
     open_ids = {k for g in OPEN for k in (doc.get(g) or {})}
     fail, note, moved = [], [], []
+    # A reference in prose is a dependency the sentence declares by naming it: it must be
+    # an entry, and inside a judgment it must be one the judgment rests on - or a move in
+    # it would never reach the sentence that quotes it.
+    for nid, body in sorted(raw.items()):
+        if not isinstance(body, dict) or is_builtin(nid):
+            continue
+        for f, val in body.items():
+            if not isinstance(val, str):
+                continue
+            for r in refs_in(val):
+                if r not in ids:
+                    fail.append(f"{nid}: {f} references {r}, which is not an entry")
+                elif nid in jud and r != nid and r not in jud[nid]["deps"]:
+                    fail.append(f"{nid}: {f} references {r}, which it does not declare as a "
+                                f"dependency - a change to it would never reach this")
     if not fields["snapshot"]:
         note.append("no snapshot field anywhere: dependencies are declared but never "
                     "captured, so drift can never be detected")
@@ -365,6 +528,10 @@ def check(paths):
                 else " - and nothing says why not, so it can never be re-checked"))
         elif evaluate(j["pred"], raw, ids) is True:
             fail.append(f"{name}: wrong_if holds ({j['pred']}) - broken by its own condition")
+        elif [t for t in ID.findall(j["pred"]) if t in PAGE]:
+            named_page = sorted({t for t in ID.findall(j["pred"]) if t in PAGE})
+            note.append(f"{name}: wrong_if reads {', '.join(named_page)}, which is counted "
+                        f"when the page is built - `page --verify` decides it")
         # A dependency that moved since the snapshot puts the judgment in front of a
         # person; it does not fail the build. Movement is a question and a crossed line
         # is the answer, and only the predicate can say which line matters.
@@ -378,7 +545,8 @@ def check(paths):
         print("MOVED", m)
     for f in fail:
         print("FAIL", f)
-    print(f"\n{len(jud)} judgments, {len(ids)} entries, {len(fail)} problems"
+    held = sum(1 for k in ids if not is_builtin(k))
+    print(f"\n{len(jud)} judgments, {held} entries, {len(fail)} problems"
           + (f", {len(moved)} moved" if moved else "")
           + (f", {len(note)} declared" if note else ""))
     return 1 if fail else 0
@@ -405,7 +573,7 @@ def opening(paths, budget=25, chars=None):
     """
     doc = load(paths)
     ids, jud, fields = infer(doc)
-    raw = bodies(doc)
+    raw = with_builtins(doc, ids, jud, fields)
     open_ids = {k for g in OPEN for k in (doc.get(g) or {})}
     items = []
     for name, j in sorted(jud.items()):
@@ -462,7 +630,7 @@ def opening(paths, budget=25, chars=None):
     # "what about the mortgage" becomes mtg.
     groups = {}
     for k in ids:
-        if k in jud:                       # judgments are reported separately
+        if k in jud or is_builtin(k):      # judgments are reported separately; counts are not held
             continue
         g = k.split(".")[0] if "." in k else k
         groups[g] = groups.get(g, 0) + 1
@@ -472,7 +640,8 @@ def opening(paths, budget=25, chars=None):
         head.append("holds: " + " · ".join(f"{g} ({n})" for g, n in
                                             sorted(heavy, key=lambda kv: (-kv[1], kv[0])))
                     + (f" · and {loose} standalone" if loose else ""))
-    head.append(f"{len(ids)} entries, {len(jud)} judgments"
+    held = sum(1 for k in ids if not is_builtin(k))
+    head.append(f"{held} entries, {len(jud)} judgments"
                + (f", {len(open_ids)} open questions" if open_ids else "")
                + (f", updated {meta['updated']}" if meta.get("updated") else ""))
     if not fields["snapshot"]:
@@ -625,6 +794,7 @@ def pull(paths, seeds, budget=40):
                     raw[nid] = b
                 elif nid in ids:
                     raw[nid] = {"v": b}
+    raw.update(builtins(doc, ids, jud, fields, raw))
 
     # Seed resolution matches `affects`: an exact id, or a prefix expanded over the
     # namespace. A judgment seed pulls in what it rests on - the point of `pull` is

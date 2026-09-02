@@ -195,3 +195,47 @@ schema:
 A checker that quietly passes over what it cannot read is worse than no checker, so every
 ambiguity is an error and never a skip.
 
+## Fields the reader accepts today
+
+Everything below is read, checked and reported now; where the page does not yet draw a field,
+`--verify` says so in a note rather than staying silent. A new field goes into the fixture
+record in `tests/fixtures/page` first, so the reader, the page and the tests agree on its shape.
+
+**In the brief**
+
+| field | where | what it is |
+|---|---|---|
+| `tabs:` | top level | a list of tabs, each with `title`, `occasion` (when the reader opens it and for what), `serves` (the session sources it answers), `sections`, and its own `shape`. The page draws the first tab today and counts the rest. |
+| `groups:` | top level | named groupings of ids, any number, under the session's own names — what `fronts:` was; `fronts:` still reads as one grouping. |
+| `text:` | on a section | connective prose with `{{id}}` references, resolved where the page draws it; `{{c.id}}` asks for that judgment's reasoning at that spot. Checked now, drawn soon. |
+| `reviewed:`, `seen:` | on a section with `text` | when the text was last read against what it references, and the values it saw — the text is tinted once one of them has moved. |
+
+**In the record**
+
+| field | where | what it is |
+|---|---|---|
+| `asked:` | on a session source (`s.*`) | the request verbatim, frozen; `name:` beside it is the session's own reading, which that session may revise until it stops. Entries the session writes carry `from:` it. |
+| `{{id}}` | in any text field — `because`, `via`, `note` | a reference, never a retyped value. `check` fails one that names nothing, and one inside a judgment that names something the judgment does not rest on. |
+| `born:`, `stood:` | on an arrangement judgment (`v.*`) | when the arrangement was decided, and how many builds it has stood. |
+| `graph.*`, `page.*` | as a dependency, or inside a falsifier | names the reader computes; see below. |
+
+**Computed names**
+
+A judgment may rest on a count, and a falsifier may draw its line against one:
+`wrong_if: "page.spill > 0"`. These names are never written and never stored. One becomes an
+entry the moment something in the record mentions it, with its value counted each time the
+record is read (`graph.*`) or each time the page is built (`page.*` — a predicate over it is
+decided by `page --verify`, and `check` says so). Of the page names, `page.spill` is counted
+today; the others are reserved and hold no value yet, so a falsifier over one stays undecided
+until they do.
+
+| name | counts |
+|---|---|
+| `graph.entries`, `graph.judgments`, `graph.open` | what the record holds |
+| `graph.flagged` | judgments that need a person, for any reason |
+| `graph.blocked`, `graph.broken`, `graph.unchecked`, `graph.moved`, `graph.falsified`, `graph.no_predicate` | the reasons, one each |
+| `page.spill` | flagged judgments no section of the page picked up |
+| `page.unserved`, `page.recent_unserved` | intents no tab serves; recent sessions in a row left unserved |
+| `page.drift` | the share of what was added since the arrangement was born that nothing picks |
+| `page.covered` | entries and judgments some section picks |
+

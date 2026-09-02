@@ -512,7 +512,8 @@ def fmt(v):
 
 
 def shape_of(ids, jud, flags):
-    return {"entries": len(ids) - len(jud), "judgments": len(jud),
+    held = [k for k in ids if k not in jud and not P.is_builtin(k)]
+    return {"entries": len(held), "judgments": len(jud),
             "flagged": sum(1 for f in flags.values() if f),
             "blocked": sum(1 for f in flags.values() if "blocked" in f)}
 
@@ -526,6 +527,30 @@ def find_brief(paths, explicit=None):
         if os.path.exists(c):
             return c
     return None
+
+
+def effective(brief):
+    """The brief as the page reads it today. A brief written as `tabs:` draws its first tab;
+    the others are declared and counted, and `--verify` says how many wait. What a tab
+    carries that the page does not yet draw - `occasion`, `serves`, a section's `text` with
+    its `reviewed`/`seen` - is kept and checked all the same."""
+    if not isinstance(brief, dict):
+        return {}
+    if not brief.get("tabs") or brief.get("sections"):
+        return brief
+    tabs = [t for t in brief["tabs"] if isinstance(t, dict)]
+    if not tabs:
+        return brief
+    out, first = dict(brief), tabs[0]
+    out["sections"] = list(first.get("sections") or [])
+    if not out.get("intent") and (first.get("occasion") or first.get("title")):
+        out["intent"] = first.get("occasion") or first.get("title")
+    if out.get("shape") is None and first.get("shape") is not None:
+        out["shape"] = first["shape"]
+    out["_first_tab_drawn"] = True
+    if first.get("title"):
+        out["_tab_title"] = str(first["title"])
+    return out
 
 
 def resolve(sel, ids, jud, flags):
@@ -871,11 +896,14 @@ def build(paths, brief_path=None):
     doc = P.load(paths)
     ids, jud, fields = P.infer(doc)
     meta = doc.get("meta") or {}
-    flags = flags_of(ids, jud, fields, P.bodies(doc))
+    built = P.builtins(doc, ids, jud, fields, P.bodies(doc))
+    raw0 = P.bodies(doc)
+    raw0.update(built)
+    flags = flags_of(ids, jud, fields, raw0)
     shape = shape_of(ids, jud, flags)
     brief = {}
     if brief_path and os.path.exists(brief_path):
-        brief = yaml.safe_load(io.open(brief_path, encoding="utf-8").read()) or {}
+        brief = effective(yaml.safe_load(io.open(brief_path, encoding="utf-8").read()) or {})
 
     groups = {}
     for k in sorted(ids):
@@ -893,12 +921,13 @@ def build(paths, brief_path=None):
                     raw[nid] = b
                 elif nid in ids:
                     raw[nid] = {"v": b}
+    raw.update(built)
     used = {}
-    for name, j in jud.items():
+    for name, j in sorted(jud.items()):
         for d in j["deps"]:
             used.setdefault(d, []).append(name)
     E, J = {}, {}
-    for k in ids:
+    for k in sorted(ids):
         if k in jud:
             continue
         b = raw.get(k, {})
@@ -922,7 +951,7 @@ def build(paths, brief_path=None):
         n = next((str(b[f]) for f in ("via", "note", "why") if b.get(f)), "")
         if 0 < len(n) <= 150:
             E[k]["note"] = n
-    for name, j in jud.items():
+    for name, j in sorted(jud.items()):
         b = j["body"]
         why, keys = blocked_of(b)
         J[name] = {"deps": j["deps"], "used": sorted(used.get(name, [])), "pred": j["pred"],
@@ -931,7 +960,9 @@ def build(paths, brief_path=None):
                    "blocked": why, "waiting": keys}
 
     labels = (brief.get("labels") or {}) if brief else {}
-    fronts_decl = (brief.get("fronts") or {}) if brief else {}
+    # a grouping is declared under whatever name the session gives it; `fronts` is one
+    # record's name for its grouping, and still reads as one
+    fronts_decl = (brief.get("groups") or brief.get("fronts") or {}) if brief else {}
     front_map = {}
     for fname, sels in fronts_decl.items():
         for sel in ([sels] if isinstance(sels, str) else sels):
@@ -1175,6 +1206,35 @@ def build(paths, brief_path=None):
                             '<div class="why">Flagged, and no section above picked it up. '
                             'This section is written by the page, not by the brief.</div>')
             now_html.append(r_alerts(spill))
+        # the one page count the page can already give: what fell through the arrangement
+        if "page.spill" in E:
+            E["page.spill"]["v"] = len(spill)
+
+    # what the brief declares beyond what this page draws - checked now, drawn later
+    contract = {"tabs": 0, "texts": 0, "bad": []}
+    if brief:
+        tabs = [t for t in (brief.get("tabs") or []) if isinstance(t, dict)]
+        contract["tabs"] = len(tabs)
+        for t in tabs:
+            for s in (t.get("serves") or []):
+                if s not in E and s not in J:
+                    contract["bad"].append(f"tab '{t.get('title') or '?'}' serves {s}, which is "
+                                           f"not an entry")
+        secs = [s for s in (brief.get("sections") or []) if isinstance(s, dict)]
+        for t in (tabs[1:] if brief.get("_first_tab_drawn") else tabs):
+            secs += [s for s in (t.get("sections") or []) if isinstance(s, dict)]
+        for sec in secs:
+            title = str(sec.get("title") or "?")
+            if sec.get("text"):
+                contract["texts"] += 1
+                for r in P.refs_in(sec["text"]):
+                    if r not in E and r not in J:
+                        contract["bad"].append(f"section '{title}': text references {r}, which "
+                                               f"is not an entry")
+            for k in (sec.get("seen") or {}):
+                if k not in E and k not in J:
+                    contract["bad"].append(f"section '{title}': seen names {k}, which is not "
+                                           f"an entry")
 
     # ── the record's own tab ─────────────────────────────────────────────────
     rec_html = []
@@ -1211,7 +1271,9 @@ def build(paths, brief_path=None):
             'the trunk is where they meet</p>')
     tabs = ['<div class="tabs" role="tablist">']
     if brief:
-        tabs.append('<button type="button" data-tab="now" aria-selected="true">Now'
+        # a tab written as a tab carries its own name; a bare brief is "Now"
+        tabs.append('<button type="button" data-tab="now" aria-selected="true">'
+                    + html.escape(str(brief.get("_tab_title") or "Now"))
                     + (f' <span class="n">{len(covered)}</span>' if covered else "") + "</button>")
     tabs.append(f'<button type="button" data-tab="record" aria-selected='
                 f'"{"false" if brief else "true"}">Record <span class="n">{len(ids)}</span></button>')
@@ -1228,14 +1290,16 @@ def build(paths, brief_path=None):
                'everything that rests on it and a dashed one what it rests on. Generated from '
                'the record - nothing here was typed twice.' + (' The <b>Now</b> tab is an arrangement someone chose; '
                '<b>Record</b> is everything, arranged by nothing.' if brief else '') + "</footer>")
-    out.append("</div><script>window.__E=" + json.dumps(_plain(E), ensure_ascii=False)
-               + ";window.__J=" + json.dumps(_plain(J), ensure_ascii=False) + ";</script>")
+    # sorted keys, so two builds of an unchanged record are the same bytes - the one thing
+    # a generated page is for is being diffed against the last one
+    out.append("</div><script>window.__E=" + json.dumps(_plain(E), ensure_ascii=False, sort_keys=True)
+               + ";window.__J=" + json.dumps(_plain(J), ensure_ascii=False, sort_keys=True) + ";</script>")
     out.append(f"<script>{JS}</script></body></html>")
     return "\n".join(out), E, J, ids, {"shape": shape, "empty": empty_sections,
                                        "misfit": misfit, "brief": bool(brief), "anchored": tuple(anchored),
                                        "unnamed": sorted(k for k in E if not E[k].get("name")
                                                          and k not in labels),
-                                       "covered": covered, "flags": flags}
+                                       "covered": covered, "flags": flags, "contract": contract}
 
 
 def verify(paths, brief_path=None):
@@ -1273,6 +1337,13 @@ def verify(paths, brief_path=None):
                         f"the rest are reachable only by hovering the judgment")
         if 'data-tab="now" aria-selected="true"' not in page:
             fail.append("a brief exists but the session tab is not the default")
+        c = info["contract"]
+        fail += c["bad"]
+        if c["tabs"] > 1:
+            note.append(f"{c['tabs']} tabs declared; the page draws the first and keeps the rest")
+        if c["texts"]:
+            note.append(f"text on {c['texts']} section{'s' if c['texts'] != 1 else ''} is "
+                        f"checked and not yet drawn")
         # An authored section that picks nothing is the alert row about something already
         # closed: it costs trust on everything else on the page.
         for t, why in info["misfit"]:
@@ -1301,7 +1372,7 @@ if __name__ == "__main__":
     if "--verify" in a:
         sys.exit(verify(files, brief))
     page, _, _, _, info = build(files, brief)
-    if info["brief"] and not (yaml.safe_load(io.open(brief, encoding="utf-8").read()) or {}).get("shape"):
+    if info["brief"] and not effective(yaml.safe_load(io.open(brief, encoding="utf-8").read()) or {}).get("shape"):
         sys.stderr.write("# no shape recorded in the brief. paste this into it, so a later\n"
                          "# render can tell you the arrangement went stale:\nshape:\n"
                          + "".join(f"  {k}: {v}\n" for k, v in info["shape"].items()))

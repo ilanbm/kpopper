@@ -1,0 +1,28 @@
+title: "Greenhouse, this winter"
+tabs:
+  - title: "The February night"
+    occasion: "opened when deciding whether to fire the old boiler or fix the glazing"
+    serves: [s.2026_09_02_heating]
+    sections:
+      - title: "What the numbers say"
+        why: "the shortfall is the only number the decision turns on"
+        text: "The boiler gives {{heat.boiler_kw}} kW and the coldest night takes
+               {{heat.loss_kw}}. {{c.boiler_short}}"
+        reviewed: "2026-09-02"
+        seen: {heat.boiler_kw: 24, heat.loss_kw: 31}
+        pick: [heat.boiler_kw, heat.loss_kw]
+        as: headline
+      - title: "By thread"
+        why: "the heating numbers and the calendar, side by side"
+        pick: [heat., when.first_cold_night]
+        as: fronts
+      - title: "What stands"
+        why: "every verdict here says what would make it wrong"
+        pick: judgments
+        as: cards
+    shape: {entries: 7, judgments: 2, flagged: 0, blocked: 0}
+groups:
+  Heating: [heat., c.boiler_short]
+  Calendar: [when.first_cold_night]
+labels:
+  when.first_cold_night: first cold night

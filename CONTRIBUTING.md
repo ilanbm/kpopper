@@ -7,13 +7,16 @@
 ```
 git switch -c my-change
 # work
+python3 -m unittest discover -s tests
 git push -u origin HEAD
 gh pr create
 ```
 
-Every pull request runs `kpopper check` and `kpopper page --verify` on the two Python
-versions the package claims to support, and fails if `PROVENANCE.view.yaml` no longer
-matches the record it renders from — the record moved, the view did not.
+Every pull request runs the tests, then `kpopper check` and `kpopper page --verify` on the
+two Python versions the package claims to support, and fails if `PROVENANCE.view.yaml` no
+longer matches the record it renders from — the record moved, the view did not. The tests
+run against the fixture record in `tests/fixtures/page`, which exercises every field the
+reader and the page accept; a new field goes there first.
 
 Merges are squashed: one commit on `main` per pull request, subject taken from the
 pull request title. The branch is deleted once it lands.
