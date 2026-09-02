@@ -156,14 +156,91 @@ class ThePageAcceptsTheContract(unittest.TestCase):
             self.assertEqual(code, 1, out)
             self.assertIn("text references heat.gone, which is not an entry", out)
 
-    def test_a_tab_serving_no_source_fails_verify(self):
+    def test_a_tab_serving_no_session_source_fails_verify(self):
+        for bad in ("s.nobody", "heat.boiler_kw", "doc.boiler_sheet"):
+            with tempfile.TemporaryDirectory() as d:
+                rec = copy_fixture(pathlib.Path(d))
+                edit(pathlib.Path(d) / "PROVENANCE.view.yaml",
+                     "serves: [s.2026_09_02_heating]", f"serves: [{bad}]")
+                code, out, _ = run(SCRIPTS / "render_page.py", "--verify", rec)
+                self.assertEqual(code, 1, out)
+                self.assertIn(f"serves {bad}, which is not a session source", out)
+
+    def test_reasoning_references_are_drawn(self):
+        _, page, _ = run(SCRIPTS / "render_page.py", RECORD)
+        dom = re.sub(r"<script>.*?</script>", "", page, flags=re.S)
+        self.assertIn('It gives <span class="fx in" data-id="heat.boiler_kw">24</span> kW', dom)
+        self.assertIn('<span class="fx in" data-id="heat.deficit_kw">shortfall on the coldest night</span>', dom)
+        self.assertNotIn("{{", dom)
+
+    def test_a_page_decided_falsifier_fails_verify(self):
         with tempfile.TemporaryDirectory() as d:
             rec = copy_fixture(pathlib.Path(d))
-            edit(pathlib.Path(d) / "PROVENANCE.view.yaml",
-                 "serves: [s.2026_09_02_heating]", "serves: [s.nobody]")
+            # one judgment nothing picks up, resting on nothing: it falls through, the page
+            # counts it, and the arrangement's own line - page.spill > 0 - is crossed
+            edit(pathlib.Path(d) / "PROVENANCE.view.yaml", "pick: judgments",
+                 "pick: [c.boiler_short, v.heating_tab]")
+            rec.write_text(rec.read_text(encoding="utf-8") + (
+                "  c.stray:\n    rests_on: [heat.gone]\n    verdict: \"a judgment on nothing\"\n"
+                "    wrong_if: \"\"\n    seen: {}\n"), encoding="utf-8")
             code, out, _ = run(SCRIPTS / "render_page.py", "--verify", rec)
             self.assertEqual(code, 1, out)
-            self.assertIn("serves s.nobody, which is not an entry", out)
+            self.assertIn("v.heating_tab: wrong_if holds (page.spill > 0) - decided by the page", out)
+
+    def test_a_moved_value_under_a_text_is_reported(self):
+        with tempfile.TemporaryDirectory() as d:
+            rec = copy_fixture(pathlib.Path(d))
+            edit(rec, "    v: 31\n", "    v: 35\n")
+            code, out, _ = run(SCRIPTS / "render_page.py", "--verify", rec)
+            self.assertEqual(code, 0, out)
+            self.assertIn("its text saw heat.loss_kw = 31, now 35 - read it again", out)
+
+    def test_a_waiting_tab_is_checked_as_if_drawn(self):
+        with tempfile.TemporaryDirectory() as d:
+            rec = copy_fixture(pathlib.Path(d))
+            brief = pathlib.Path(d) / "PROVENANCE.view.yaml"
+            brief.write_text(brief.read_text(encoding="utf-8").replace(
+                "groups:\n",
+                "  - title: \"Later\"\n    occasion: \"opened after the first frost\"\n"
+                "    serves: [s.2026_09_02_heating]\n"
+                "    sections:\n      - title: \"Gone\"\n        pick: heat.typo\n"
+                "    shape: {entries: 99, judgments: 2, flagged: 0, blocked: 0}\n"
+                "groups:\n"), encoding="utf-8")
+            code, out, _ = run(SCRIPTS / "render_page.py", "--verify", rec)
+            self.assertEqual(code, 1, out)
+            self.assertIn("section 'Gone' (tab 'Later') picks nothing", out)
+            self.assertIn("tab 'Later' recorded a different shape: entries: 99 -> 7", out)
+            self.assertIn("2 tabs declared; the page draws the first and keeps the rest", out)
+
+
+class TheCountsHoldTogether(unittest.TestCase):
+    def test_a_falsified_judgment_is_counted(self):
+        with tempfile.TemporaryDirectory() as d:
+            rec = copy_fixture(pathlib.Path(d))
+            edit(rec, 'wrong_if: "heat.loss_kw <= heat.boiler_kw"',
+                 'wrong_if: "heat.loss_kw >= heat.boiler_kw"')
+            doc = P.load([str(rec)])
+            ids, jud, fields = P.infer(doc)
+            values = P.counts(doc, ids, jud, fields, P.bodies(doc))
+            self.assertEqual(values["graph.falsified"], 1)
+            self.assertEqual(values["graph.flagged"], 1)
+
+    def test_a_count_is_taken_before_any_line_over_it_is_decided(self):
+        with tempfile.TemporaryDirectory() as d:
+            rec = copy_fixture(pathlib.Path(d))
+            edit(rec, 'wrong_if: "page.spill > 0"', 'wrong_if: "graph.flagged < 1"')
+            doc = P.load([str(rec)])
+            ids, jud, fields = P.infer(doc)
+            values = P.counts(doc, ids, jud, fields, P.bodies(doc))
+            # "fewer than one flagged" holds while nothing is flagged, which would flag the
+            # arrangement, which would unhold it. So the count is taken first and never
+            # includes what reading it decided: here it stays at zero, and check - which
+            # decides the line against that zero - is the one to fail the arrangement.
+            self.assertEqual(values["graph.flagged"], 0)
+            self.assertEqual(values["graph.falsified"], 0)
+            code, out, _ = run(SCRIPTS / "provenance.py", "check", rec)
+            self.assertEqual(code, 1, out)
+            self.assertIn("v.heating_tab: wrong_if holds (graph.flagged < 1)", out)
 
     def test_page_spill_is_counted_on_the_page(self):
         _, page, _ = run(SCRIPTS / "render_page.py", RECORD)

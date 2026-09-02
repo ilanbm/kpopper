@@ -207,15 +207,19 @@ record in `tests/fixtures/page` first, so the reader, the page and the tests agr
 |---|---|---|
 | `tabs:` | top level | a list of tabs, each with `title`, `occasion` (when the reader opens it and for what), `serves` (the session sources it answers), `sections`, and its own `shape`. The page draws the first tab today and counts the rest. |
 | `groups:` | top level | named groupings of ids, any number, under the session's own names — what `fronts:` was; `fronts:` still reads as one grouping. |
-| `text:` | on a section | connective prose with `{{id}}` references, resolved where the page draws it; `{{c.id}}` asks for that judgment's reasoning at that spot. Checked now, drawn soon. |
-| `reviewed:`, `seen:` | on a section with `text` | when the text was last read against what it references, and the values it saw — the text is tinted once one of them has moved. |
+| `text:` | on a section | connective prose with `{{id}}` references, resolved where the page draws it; `{{c.id}}` asks for that judgment's reasoning at that spot. Checked now — every reference must be an entry — and drawn soon. |
+| `reviewed:`, `seen:` | on a section with `text` | when the text was last read against what it references, and the values it saw. `--verify` compares them with the record the way `check` compares a judgment's snapshot and says which moved; the tint follows when the text is drawn. |
+
+A tab the page does not draw yet is checked as if it did: its picks must pick something, its
+shapes must fit what they pick, its `serves` must name session sources, and its own `shape`
+is compared with the record's.
 
 **In the record**
 
 | field | where | what it is |
 |---|---|---|
 | `asked:` | on a session source (`s.*`) | the request verbatim, frozen; `name:` beside it is the session's own reading, which that session may revise until it stops. Entries the session writes carry `from:` it. |
-| `{{id}}` | in any text field — `because`, `via`, `note` | a reference, never a retyped value. `check` fails one that names nothing, and one inside a judgment that names something the judgment does not rest on. |
+| `{{id}}` | in any text field — `because`, `via`, `note` | a reference, never a retyped value. `check` fails one that names nothing, and one inside a judgment that names something the judgment does not rest on. A card draws it: the value where there is one, the name where there is only a rule, the verdict for a judgment — each hoverable. |
 | `born:`, `stood:` | on an arrangement judgment (`v.*`) | when the arrangement was decided, and how many builds it has stood. |
 | `graph.*`, `page.*` | as a dependency, or inside a falsifier | names the reader computes; see below. |
 
@@ -226,8 +230,13 @@ A judgment may rest on a count, and a falsifier may draw its line against one:
 entry the moment something in the record mentions it, with its value counted each time the
 record is read (`graph.*`) or each time the page is built (`page.*` — a predicate over it is
 decided by `page --verify`, and `check` says so). Of the page names, `page.spill` is counted
-today; the others are reserved and hold no value yet, so a falsifier over one stays undecided
-until they do.
+today — what fell through the arrangement before the arrangement's own falsifiers were
+decided — and a falsifier over it that holds fails `page --verify`; the other page names are
+reserved and hold no value yet, so a falsifier over one stays undecided until they do.
+
+A count is taken before any judgment that reads a count is decided, so it never includes what
+reading it decided: a line drawn against "how many are flagged" cannot be crossed by the
+drawing of it. Every surface then decides such a judgment against the same numbers.
 
 | name | counts |
 |---|---|

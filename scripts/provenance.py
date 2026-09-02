@@ -410,10 +410,10 @@ def _blocked_text(body):
     return ""
 
 
-def flags(ids, jud, fields, raw, decide=True):
+def flags(ids, jud, fields, raw):
     """Per judgment: the conditions that put it in front of a person, derived the one way
-    every surface derives them. With `decide` off a predicate is read for what it names and
-    never evaluated - the pass that counts the graph before any count exists to compare."""
+    every surface derives them. A predicate over a value `raw` does not carry - a count
+    not yet taken - is left undecided, never guessed."""
     out = {}
     for name, j in jud.items():
         f, blocked = set(), _blocked_text(j["body"])
@@ -425,7 +425,7 @@ def flags(ids, jud, fields, raw, decide=True):
         named = [t for t in ID.findall(j["pred"]) if t in ids]
         if not named and not blocked:
             f.add("no_predicate")
-        elif named and decide and evaluate(j["pred"], raw, ids) is True:
+        elif named and evaluate(j["pred"], raw, ids) is True:
             f.add("falsified")
         if any(s == "moved" for _, _, _, s in moved_deps(j, raw, ids)):
             f.add("moved")
@@ -434,11 +434,15 @@ def flags(ids, jud, fields, raw, decide=True):
 
 
 def counts(doc, ids, jud, fields, raw):
-    """Every graph.* value, counted from the record alone - the pass that reads predicates
-    for what they name and evaluates none of them, so a count never depends on itself."""
-    fl = flags(ids, jud, fields, raw, decide=False)
+    """Every graph.* value, counted from the record alone - and taken before any judgment
+    that reads a count is decided. A line drawn against "how many are flagged" could
+    otherwise be crossed by the drawing of it and uncrossed by the crossing, forever; so a
+    count never includes what reading it decided, and every surface that then decides
+    those judgments - check, the opener, the page - decides them against the same numbers.
+    `raw` here is the record's own bodies, without the counts."""
     open_ids = {k for g in OPEN for k in (doc.get(g) or {})}
     held = [k for k in ids if k not in jud and not is_builtin(k)]
+    fl = flags(ids, jud, fields, {k: v for k, v in raw.items() if not is_builtin(k)})
 
     def count(flag):
         return sum(1 for f in fl.values() if flag in f)

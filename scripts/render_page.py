@@ -529,6 +529,18 @@ def find_brief(paths, explicit=None):
     return None
 
 
+def same_value(old, now):
+    """The comparison `check` makes between a snapshot and a value: text after whitespace,
+    then number - so 1,702,093 and 1702093 are the same value and 31 and 35 are not."""
+    if " ".join(str(old).split()) == " ".join(str(now).split()):
+        return True
+    try:
+        from decimal import Decimal
+        return Decimal(str(old).replace(",", "")) == Decimal(str(now).replace(",", ""))
+    except Exception:
+        return False
+
+
 def effective(brief):
     """The brief as the page reads it today. A brief written as `tabs:` draws its first tab;
     the others are declared and counted, and `--verify` says how many wait. What a tab
@@ -1025,12 +1037,42 @@ def build(paths, brief_path=None):
     # ── renderers ────────────────────────────────────────────────────────────
     anchored = [0, 0]
 
+    def prose(text, deps):
+        """Escaped prose with its references drawn and its dependencies anchored. A reference
+        shows the value where there is one, the name where there is only a rule, and the
+        verdict for a judgment - each hoverable, so the sentence stays the interface."""
+        parts, pos, found = [], 0, set()
+        text = text or ""
+        for m in P.REF.finditer(text):
+            a, h = anchor(text[pos:m.start()], deps, E)
+            parts.append(a)
+            found |= h
+            k = m.group(1)
+            if k in E:
+                e = E[k]
+                shown = fmt(e["v"]) if e.get("v") is not None else lbl(k)
+            elif k in J:
+                shown = J[k]["verdict"]
+            else:
+                shown = None
+            if shown is None:
+                parts.append(html.escape(m.group(0)))
+            else:
+                found.add(k)
+                parts.append(f'<span class="fx in" data-id="{html.escape(k)}">'
+                             f'{html.escape(str(shown))}</span>')
+            pos = m.end()
+        a, h = anchor(text[pos:], deps, E)
+        parts.append(a)
+        found |= h
+        return "".join(parts), found
+
     def r_cards(names):
         o = []
         for name in names:
             j, b = jud[name], J[name]
-            verdict, h1 = anchor(b["verdict"], j["deps"], E)
-            because, h2 = anchor(b["because"], j["deps"], E)
+            verdict, h1 = prose(b["verdict"], j["deps"])
+            because, h2 = prose(b["because"], j["deps"])
             miss = [d for d in j["deps"] if d not in E and d not in J]
             rest = [d for d in j["deps"] if d not in (h1 | h2) and d not in miss]
             anchored[0] += len(h1 | h2)
@@ -1145,6 +1187,22 @@ def build(paths, brief_path=None):
     h1 = (f'<h1 dir="auto">{html.escape(rec_name)}</h1>' if rec_name
           else '<h1 dir="ltr">What is known here</h1>')
     if brief:
+        # What the arrangement covers, before anything is drawn: the page's own count has to
+        # exist before what rests on it is decided. So the picks are resolved once here, the
+        # count set, the flags and the shape decided again - and only then is anything drawn.
+        # The count is what fell through before the arrangement's own falsifiers were decided.
+        pre = set()
+        for sec in brief.get("sections") or []:
+            if isinstance(sec, dict):
+                p = sec.get("pick")
+                for x in ([p] if isinstance(p, str) else list(p or [])):
+                    pre |= resolve(x, ids, jud, flags)
+        if "page.spill" in E:
+            n = sum(1 for k, f in flags.items() if f and k not in pre)
+            E["page.spill"]["v"] = n
+            raw0["page.spill"]["v"] = n
+            flags = flags_of(ids, jud, fields, raw0)
+            shape = shape_of(ids, jud, flags)
         now_html.append(h1)
         if brief.get("intent"):
             # the page is named for the record; the intent is the arrangement's aim,
@@ -1206,23 +1264,45 @@ def build(paths, brief_path=None):
                             '<div class="why">Flagged, and no section above picked it up. '
                             'This section is written by the page, not by the brief.</div>')
             now_html.append(r_alerts(spill))
-        # the one page count the page can already give: what fell through the arrangement
-        if "page.spill" in E:
-            E["page.spill"]["v"] = len(spill)
 
     # what the brief declares beyond what this page draws - checked now, drawn later
-    contract = {"tabs": 0, "texts": 0, "bad": []}
+    contract = {"tabs": 0, "texts": 0, "bad": [], "moved": [], "stale": []}
     if brief:
         tabs = [t for t in (brief.get("tabs") or []) if isinstance(t, dict)]
         contract["tabs"] = len(tabs)
         for t in tabs:
+            tname = str(t.get("title") or "?")
+            # a tab serves intents, and an intent is a session source: the one entry shape
+            # that carries what was asked
             for s in (t.get("serves") or []):
-                if s not in E and s not in J:
-                    contract["bad"].append(f"tab '{t.get('title') or '?'}' serves {s}, which is "
-                                           f"not an entry")
-        secs = [s for s in (brief.get("sections") or []) if isinstance(s, dict)]
-        for t in (tabs[1:] if brief.get("_first_tab_drawn") else tabs):
-            secs += [s for s in (t.get("sections") or []) if isinstance(s, dict)]
+                if s not in E or not (raw.get(s) or {}).get("asked"):
+                    contract["bad"].append(f"tab '{tname}' serves {s}, which is not a session "
+                                           f"source - one carries what was asked")
+        waiting = tabs[1:] if brief.get("_first_tab_drawn") else tabs
+        later = [(t, s) for t in waiting for s in (t.get("sections") or []) if isinstance(s, dict)]
+        # a tab the page does not draw yet is checked as if it did: its picks must pick,
+        # its shapes must fit, and its own shape must still be the record's
+        for t, sec in later:
+            where = f"'{sec.get('title') or '?'}' (tab '{t.get('title') or '?'}')"
+            p = sec.get("pick")
+            picks = [p] if isinstance(p, str) else list(p or [])
+            got = set()
+            for x in picks:
+                got |= resolve(x, ids, jud, flags)
+            if picks and not got:
+                contract["bad"].append(f"section {where} picks nothing - it is about something "
+                                       f"the record no longer holds")
+            kind = str(sec.get("as") or "").strip()
+            wrong = fits(kind, sorted(got), jud, E) if kind and got else None
+            if wrong:
+                contract["bad"].append(f"section {where}: {wrong}")
+        for t in waiting:
+            was = t.get("shape") or {}
+            mv = [f"{k}: {was[k]} -> {shape[k]}" for k in shape if k in was and was[k] != shape[k]]
+            if mv:
+                contract["stale"].append(f"tab '{t.get('title') or '?'}' recorded a different "
+                                         f"shape: " + "; ".join(mv))
+        secs = [s for s in (brief.get("sections") or []) if isinstance(s, dict)] + [s for _, s in later]
         for sec in secs:
             title = str(sec.get("title") or "?")
             if sec.get("text"):
@@ -1231,10 +1311,19 @@ def build(paths, brief_path=None):
                     if r not in E and r not in J:
                         contract["bad"].append(f"section '{title}': text references {r}, which "
                                                f"is not an entry")
-            for k in (sec.get("seen") or {}):
+            # the snapshot under a text is compared the way check compares a judgment's:
+            # a referenced value that moved since the text was read is said, never failed
+            for k, old in (sec.get("seen") or {}).items():
                 if k not in E and k not in J:
                     contract["bad"].append(f"section '{title}': seen names {k}, which is not "
                                            f"an entry")
+                    continue
+                now = P.value_of(raw0, ids, k)
+                if now is None or isinstance(now, (list, dict)) or isinstance(old, (list, dict)):
+                    continue
+                if not same_value(old, now):
+                    contract["moved"].append(f"section '{title}': its text saw {k} = {old}, "
+                                             f"now {now} - read it again")
 
     # ── the record's own tab ─────────────────────────────────────────────────
     rec_html = []
@@ -1339,11 +1428,18 @@ def verify(paths, brief_path=None):
             fail.append("a brief exists but the session tab is not the default")
         c = info["contract"]
         fail += c["bad"]
+        note += c["moved"] + c["stale"]
         if c["tabs"] > 1:
             note.append(f"{c['tabs']} tabs declared; the page draws the first and keeps the rest")
         if c["texts"]:
             note.append(f"text on {c['texts']} section{'s' if c['texts'] != 1 else ''} is "
                         f"checked and not yet drawn")
+        # a falsifier over a page count is decided here and nowhere else, so here is where
+        # it fails
+        for name, j in sorted(J.items()):
+            if "falsified" in info["flags"].get(name, ()) and \
+                    any(t in P.PAGE for t in P.ID.findall(j["pred"])):
+                fail.append(f"{name}: wrong_if holds ({j['pred']}) - decided by the page")
         # An authored section that picks nothing is the alert row about something already
         # closed: it costs trust on everything else on the page.
         for t, why in info["misfit"]:
