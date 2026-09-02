@@ -1,0 +1,27 @@
+#!/bin/sh
+# main is what ships, and it gets there through a pull request. A push aimed straight
+# at it is almost always a branch that was never made - so say which two commands make
+# one, rather than just refusing.
+
+while read -r _local_ref _local_sha remote_ref _remote_sha; do
+	case "$remote_ref" in
+	refs/heads/main)
+		cat >&2 <<'EOF'
+
+  blocked: main is pull-request-only in this repository.
+
+    git switch -c my-change
+    git push -u origin HEAD
+    gh pr create
+
+  When a direct push really is the right move - undoing a bad merge, say:
+
+    git push --no-verify
+
+EOF
+		exit 1
+		;;
+	esac
+done
+
+exit 0
