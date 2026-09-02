@@ -1,0 +1,44 @@
+name: check
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+# A newer push to the same branch makes the older run irrelevant.
+concurrency:
+  group: check-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # The floor the package declares, and the version most people run it on.
+        python: ["3.9", "3.13"]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+
+      - name: Install the package the way a user gets it
+        run: pip install .
+
+      - name: The record holds together
+        run: kpopper check
+
+      - name: The page renders, and says what it rendered
+        run: kpopper page --verify
+
+      - name: The committed view still matches the record it comes from
+        # Rendering rewrites PROVENANCE.view.yaml. If that leaves a diff, the record
+        # moved and the view it renders to was never regenerated alongside it.
+        run: git diff --exit-code
