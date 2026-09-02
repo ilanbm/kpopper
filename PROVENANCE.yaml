@@ -1,10 +1,16 @@
 meta:
-  updated: 2026-09-01
+  updated: 2026-09-03
   name: kpopper
   scope: "What this plugin is for and the decisions that shaped it, kept in its own format -
           the tools eat their own cooking, and every session here opens grounded."
 
 sources:
+  agent.language_session:
+    name: "The session that weighed the renderer's language - what it was given, and what it brought"
+    of: "claude-fable-5-1, 2026-09-03, given scripts/render_page.py at b47f7a0, the plugin layout,
+         pyproject.toml, and how the page's verifier and the checker each read the record"
+    ground: prior
+    read: "2026-09-03"
   doc.fact_moves:
     url: "https://claude.ai/code/artifact/ca99e558-60ae-4b22-9221-e3b29d7d7e2b"
     name: "מה קורה כשעובדה זזה - the unified node model"
@@ -13,6 +19,11 @@ sources:
     url: "https://claude.ai/code/artifact/cbd80bb7-da50-4486-a74f-1927e51aaa34"
     name: "איך סוכן מתחיל גרף - the practical appendix"
     read: "2026-09-01"
+  run.constants_measured:
+    name: "Lines of render_page.py spanned by its CSS and JS string constants, counted from the syntax tree"
+    of: "python3 ast over scripts/render_page.py - top-level string constants of three lines or more,
+         at b47f7a0 and again after the move"
+    read: "2026-09-03"
   run.first_external:
     name: "The first run on a project this plugin did not build - the g2next keyboard pilot"
     of: "session 'Keyboard size feedback', 2026-09-01, plugin 0.14.0"
@@ -75,6 +86,12 @@ known:
     name: "Largest live record, entries"
     from: "measured across the records this plugin serves"
     of: "2026-09-01"
+  m.page_string_lines:
+    v: 0
+    unit: lines
+    name: "Browser code held as Python strings - what the renderer carried inline"
+    from: run.constants_measured
+    at: "CSS 0 + JS 0 - they are scripts/page/page.css and page.js now; 154 + 277 before the move"
   p.hook_slot:
     v: 2000
     name: "The opener's character budget"
@@ -88,6 +105,25 @@ known:
     name: "Editable copies of the reader and the renderer"
     from: "pyproject.toml"
     of: "2026-09-01"
+  prior.strings_lose_tooling:
+    v: 0.95
+    unit: confidence
+    name: "Browser code kept inside a host language's strings loses highlighting, linting, types and bundling"
+    from: agent.language_session
+    reach: general
+  prior.ts_direction:
+    v: 0.7
+    unit: confidence
+    name: "The tool's direction is TypeScript for all of it - page, renderer, command line, checker - or none of it"
+    from: agent.language_session
+    reach: general
+  prior.rust_unwarranted:
+    v: 0.9
+    unit: confidence
+    name: "A compiled binary buys an install with no runtime, not speed - the work is too small for speed
+           to matter, and the page stays JS either way"
+    from: agent.language_session
+    reach: general
   p.tree_positions_kept:
     v: 0
     name: "Places a dragged position is written down"
@@ -106,10 +142,18 @@ known:
     of: "2026-09-01"
 
 open:
+  q.agent_as_source: "an agent's prior is a source here for the first time - agent.language_session, its
+                      claims as prior.* entries whose value is the confidence - so what must the record hold
+                      before a judgment may rest on one: a measured local fact beside it, a gate on what
+                      being wrong costs, and a reversal count that can demote the kind?"
   q.pull_defaults: "does a session that ran pull still open the record file for values - and if
                     so, what was missing from the line it got?"
   q.account_copy: "does the hosted copy of this plugin get refreshed from here, or retired?"
   q.first_artifact: "what is the first artifact that must never change silently?"
+  q.language_direction: "prior.ts_direction puts the renderer, command line and checker in TypeScript at
+                         0.7 and prior.rust_unwarranted keeps a compiled binary off the table at 0.9 - a
+                         costly, reversible move, so it waits for a person rather than an event: yes, no,
+                         or coupled to the next rewrite of the page?"
   q.locator_authority: "the locator takes the highest cached version, while the harness records
                         one enabled install path - they agree today, but should the locator read
                         that record instead of ranking what it finds?"
@@ -120,6 +164,17 @@ open:
                     re-checks itself and reports what arrived and what it moved?"
 
 judgments:
+  d.browser_code_in_browser_files:
+    rests_on: [m.page_string_lines, prior.strings_lose_tooling]
+    verdict: "the page's CSS and JS live in their own files under scripts/page/, read whole at
+              import and inlined at render - a page is still one file"
+    because: "The renderer carried its page as Python strings - run.constants_measured counted them
+              before the move - with no highlighting, no linter, no types, and every edit to the
+              page an edit to a .py file. Reading the files at render time keeps the output
+              byte-identical and puts the code where its tools are; m.page_string_lines at zero is
+              the move having happened. Cheap to reverse, so decided on the prior alone."
+    wrong_if: "prior.strings_lose_tooling < 0.6"
+    seen: {m.page_string_lines: 0, prior.strings_lose_tooling: 0.95}
   d.open_is_a_slot:
     rests_on: [goal.measure, m.open_whole, m.open_clean, p.hook_slot]
     verdict: "the session opener fills a fixed character slot, highest value per character
