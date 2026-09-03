@@ -79,6 +79,20 @@ sources:
     of: "2026-09-03, given the page design's written-layer section, the page contract at 84af70a, the
          fixture record under tests/, and the finance lab's write tool"
     read: "2026-09-03"
+  s.2026_09_04_consolidate:
+    asked: "Make consolidation a test: a dry run that unions the base with its hypotheses and
+            re-checks every judgment, a fold that writes a proven hypothesis into the base, a
+            refutation that leaves a negative finding, and another branch's record read as one more
+            hypothesis."
+    name: "The session that made consolidation a test - what it was asked, and what it was given.
+           Its reading: the dry run is the reader's own check on the union, said as what the fold
+           would change; the fold passes the one door every write passes, so a reading the door
+           refuses is contested and never overwritten; a refuted hypothesis leaves one finding and
+           nothing else of itself; another branch's record is read as hypotheses by a pull, never
+           written"
+    of: "2026-09-04, given the hypotheses beside the record at db31e1c - the layer, the door and the
+         cone - the fixture record under tests/, and the three live records this reader serves"
+    read: "2026-09-04"
   s.2026_09_04_priors_count:
     asked: "Count what rests on priors: check notes how many judgments rest on prior claims and how
             many at high confidence, and open carries the line when there are any."
@@ -442,6 +456,14 @@ known:
            alias for briefs not yet renamed"
     from: "scripts/render_page.py"
     of: "2026-09-03"
+  p.union_tests:
+    v: 1
+    name: "Places the record is tested with its hypotheses laid over it - the dry run, and nowhere
+           else; check evaluates the base alone"
+    from: "scripts/consolidate.py"
+    at: "union_of, which lays the hypotheses over the base by id and runs the reader's own check on
+         the result"
+    of: "2026-09-04"
   m.multi.sessions:
     v: 7
     name: "Sessions that worked on this repository in one day, every one opened by the hook"
@@ -526,6 +548,32 @@ judgments:
                                              contradicts the record opens a named hypothesis, and
                                              whatever later rests on the contradiction goes there - a
                                              session is never the unit"
+  d.another_branch_reads_as_hypotheses:
+    rests_on: [s.2026_09_04_consolidate, d.no_feed_of_other_branches, d.record_is_code]
+    verdict: "another branch's committed record is read as hypotheses and never written: its base as
+              one named after the ref, holding only what differs from this base or is new to it, and
+              each hypothesis file it carries as one more - so a branch's facts cross by a pull, and
+              a dead branch is harvested without its code"
+    because: "{{d.record_is_code}} puts a branch's knowledge in its commits, and
+              {{d.no_feed_of_other_branches}} keeps it out of every session's opener - so the one
+              honest way across is a command a person runs, reading what git already holds. Read
+              whole, the other record would overwrite this one's reviews and rewordings on every id
+              they share; pruned to what differs in its claim or is newer by its day, it proposes
+              exactly what the same writes would have proposed from here. The reader's own pull then
+              shows the proposals beside the values, and the same dry run tests them."
+    blocked_on: "observational: falsified if a harvested branch's facts arrive wrong for being read
+                 without their reviews, or if sessions push records across worktrees by hand instead"
+    seen:
+      s.2026_09_04_consolidate: "read 2026-09-04"
+      d.no_feed_of_other_branches: "the opener adds one line - how many hypotheses wait, and for how
+                                    long; nothing another branch claims is pushed into a session, it
+                                    is pulled by seed or surfaces as a collision on the same id"
+      d.record_is_code: "the record of what is known about the code lives in the tree - committed
+                         with the work it describes, reviewed in the same pull request, checked by
+                         the same CI - and a hypothesis travels with its branch; an out-of-tree
+                         record holds only what the tree cannot hold, the world outside the code; a
+                         user-level directory is at most an index of records, never content; a
+                         session named as a source is provenance, not process"
   d.arrangement_link_is_earned:
     rests_on: [s.2026_09_03_arrangements, d.review_names_what_it_reads, d.serving_earned_by_picks]
     verdict: "an arrangement's tabs are the ones whose picks earn a session source it rests on, and
@@ -651,6 +699,57 @@ judgments:
       d.metrics_derived_builtin: "graph.* and page.* are derived entries the reader computes itself
                                   - counts and shares, never stored, thresholds only inside
                                   falsifiers"
+  d.dry_run_is_check_on_the_union:
+    rests_on: [s.2026_09_04_consolidate, d.consolidation_is_a_test, d.hypotheses_read_beside_the_base, p.union_tests]
+    verdict: "the dry run is the reader's own check, run on the base with the hypotheses laid over
+              it by id, said as what the fold would change: what arrives, what it replaces and what
+              rests on that, what the union moves or breaks, what is contested"
+    because: "A second evaluator for hypotheses would drift from the first; what a hypothesis's
+              judgment needs is exactly what check asks of any judgment, asked of the record as it
+              would stand after the fold. So the union is checked as a base is, and only what check
+              did not already say about the base alone is the union's doing - a record already red
+              stays red on its own account. A premise that moved under a judgment blocks the fold and
+              leaves the run green, since a move flags a judgment for a person and fails no build; a
+              contested id, a falsifier that holds and a hole make it red. {{p.union_tests}} is the
+              count of places the union is tested."
+    wrong_if: "p.union_tests > 1"
+    seen:
+      s.2026_09_04_consolidate: "read 2026-09-04"
+      d.consolidation_is_a_test: "consolidating hypotheses into the base tests whether the writers
+                                  worked on the same world: premises re-checked, falsifiers
+                                  evaluated, contradictions stopped - as a dry run at any moment, and
+                                  as a step on every pull request"
+      d.hypotheses_read_beside_the_base: "every command reads the hypotheses beside the record over
+                                          the base - pull shows what each proposes, check and open
+                                          say where two disagree, the opener counts what waits with
+                                          each one's age and reach - and evaluates the base alone;
+                                          the union is tested by consolidation, and the page draws
+                                          the base"
+      p.union_tests: 1
+  d.fold_passes_the_one_door:
+    rests_on: [s.2026_09_04_consolidate, d.contradiction_by_id_and_day, p.supersede_doors]
+    verdict: "a folded reading passes the same door a written one does: an entry replaces what the
+              base holds when its reading is newer, a judgment when the standing one is broken or
+              names the request - and a reading the door refuses is contested, never overwritten"
+    because: "The fold is a write under ids the base holds, and the record already has one function
+              that says whether such a write may replace what stands -
+              {{d.contradiction_by_id_and_day}} put the rule there so that nothing else decides it. A
+              fold that took sides on a same-day disagreement would be a second door, opened by
+              whoever ran the command; through the one door, a hypothesis born of a same-day
+              contradiction stays beside the record until someone reads again on a later day, which
+              is the act the day rule can tell apart from two writers. {{p.supersede_doors}} is the
+              count that would show a second door."
+    wrong_if: "p.supersede_doors > 1"
+    seen:
+      s.2026_09_04_consolidate: "read 2026-09-04"
+      d.contradiction_by_id_and_day: "a contradiction is told by the id and the day: the same id
+                                      with a value read no later than the base's own reading, or with
+                                      a different verdict, is refused into the base and named a
+                                      hypothesis; a newer reading supersedes, a standing judgment is
+                                      superseded only when its wrong_if holds or the request that
+                                      asked for the change is named; the same premises under
+                                      different ids are different subjects"
+      p.supersede_doors: 1
   d.gate_and_opener_against_the_mark:
     rests_on: [s.2026_09_03_coverage, d.gate_reminds, d.open_is_a_slot, p.gate_bounces]
     verdict: "the opener marks where a session began - problems, unserved intents, the ids held -
@@ -866,6 +965,26 @@ judgments:
                                              whatever later rests on the contradiction goes there - a
                                              session is never the unit"
       p.hypothesis_homes: 1
+  d.refuted_hypothesis_leaves_one_finding:
+    rests_on: [s.2026_09_04_consolidate, d.hypothesis_is_a_judgment]
+    verdict: "a refuted hypothesis leaves one entry in the base - hyp.<name> with v: refuted, its
+              claim as the name, the why as at, from the session that refuted it, dated - and nothing
+              else of it enters"
+    because: "A branch that failed its test should not vanish: the claim and why it fell are the
+              finding, the same shape as an alternative weighed and set aside, so the record can cite
+              it and a later count of reversals can find it by its value. What the hypothesis held
+              besides - its entries, its judgments, its sources - was refuted with it, and carrying
+              any of it over would be the fold the test refused. A session is the source because
+              refuting is an act someone performs in one: the newest session source in the record is
+              taken unless the command names another."
+    blocked_on: "observational: falsified if the count of negative findings needs a field this shape
+                 lacks, or if sessions refute by deleting the file instead of leaving the finding"
+    seen:
+      s.2026_09_04_consolidate: "read 2026-09-04"
+      d.hypothesis_is_a_judgment: "a task, a branch and a what-if are one thing: a judgment whose
+                                   truth is pending - its premises in rests_on, its claim in verdict,
+                                   what would refute its success in wrong_if - and the merge is its
+                                   test"
   d.relevance_stays_declared:
     rests_on: [doc.fact_moves, m.record_scale]
     verdict: "retrieval follows declared edges and names; no learned relevance at record scale"
