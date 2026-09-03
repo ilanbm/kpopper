@@ -198,10 +198,24 @@ class TheReaderCountsWhatRestsOnPriors(unittest.TestCase):
                       out)
 
     def test_a_record_with_no_priors_is_told_nothing_about_them(self):
+        _, ids, jud, _, raw = read(NO_PRIORS)
+        self.assertEqual(P.priors_line(ids, jud, raw), "")
         for cmd in ("check", "open"):
             code, out, err = run(SCRIPTS / "provenance.py", cmd, NO_PRIORS)
             self.assertEqual(code, 0, out + err)
-            self.assertNotIn("prior", out, cmd)
+            self.assertNotIn("rest on prior.* claims", out, cmd)
+            self.assertNotIn("or above", out, cmd)
+
+    def test_a_confidence_no_float_can_hold_does_not_stop_the_count(self):
+        # a number the record can carry but a float cannot: the count reads it the way a
+        # falsifier over it would, and says its line rather than raising
+        with tempfile.TemporaryDirectory() as d:
+            rec = copy_fixture(pathlib.Path(d))
+            edit(rec, "    v: 0.9\n", "    v: " + "9" * 4000 + "\n")
+            code, out, err = run(SCRIPTS / "provenance.py", "check", rec)
+            self.assertEqual(code, 0, out + err)
+            self.assertNotIn("Traceback", out + err)
+            self.assertIn("NOTE " + COUNT.format(2, 1), out)
 
     def test_the_count_reads_the_value_the_record_holds_now(self):
         # a confidence restated below the line moves the judgment out of the high count at

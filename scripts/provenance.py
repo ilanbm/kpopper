@@ -729,10 +729,13 @@ def priors_line(ids, jud, raw):
         n += 1
         for d in priors:
             try:
-                if float(value_of(raw, ids, d)) >= HIGH_CONFIDENCE:
+                # read through str(), the way every other comparison in this reader reads a
+                # number: a value too large for a float then lands where a falsifier over it
+                # would put it, instead of stopping the count with an error
+                if float(str(value_of(raw, ids, d))) >= HIGH_CONFIDENCE:
                     k += 1
                     break
-            except (TypeError, ValueError):
+            except (TypeError, ValueError, OverflowError):
                 continue           # a prior the record does not hold as a number says nothing
     if not n:
         return ""
