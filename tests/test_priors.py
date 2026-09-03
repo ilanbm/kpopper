@@ -361,6 +361,17 @@ class TheReaderCountsReversalShare(unittest.TestCase):
             self.assertEqual(P.counts(doc, ids, jud, fields, raw)[RATE], 1.0)
         line.assert_called_once_with(ids, jud, raw, with_high=True)
 
+    def test_nonstring_keys_do_not_turn_the_finding_scan_into_a_crash(self):
+        doc = P.load([str(REVERSALS / "PROVENANCE.yaml")])
+        # The reader also sees ordinary metadata and mapping keys, not only ids written
+        # by add. None can name a hyp.* finding, but they still belong in existing counts.
+        doc["known"][17] = {"v": 1}
+        doc["known"][None] = {"v": "refuted", "name": "c.dates_are_values"}
+        ids, jud, fields = P.infer(doc)
+        values = P.counts(doc, ids, jud, fields, P.bodies(doc))
+        self.assertEqual(values[RATE], 0.4)
+        self.assertEqual(values["graph.entries"], len(ids) - len(jud))
+
     def test_refutations_are_linked_explicitly_and_count_each_judgment_once(self):
         with tempfile.TemporaryDirectory() as d:
             rec = self.copy_reversals(pathlib.Path(d), findings=False)

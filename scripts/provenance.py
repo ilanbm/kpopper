@@ -855,7 +855,8 @@ def counts(doc, ids, jud, fields, raw):
     refuted = set()
     for k in held:
         body = raw.get(k)
-        if not k.startswith("hyp.") or not isinstance(body, dict) or body.get("v") != "refuted":
+        if not isinstance(k, str) or not k.startswith("hyp.") \
+                or not isinstance(body, dict) or body.get("v") != "refuted":
             continue
         # Consolidation preserves the hypothesis's claim as name, then deletes its file.
         # A bare judgment id or an explicit {{id}} reference links that claim to what it
