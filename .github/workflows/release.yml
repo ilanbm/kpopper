@@ -1,0 +1,37 @@
+name: release
+
+# Every push to main refreshes one pull request, "Release x.y.z", holding the three version
+# files and the changelog entry for everything merged since the last release. The bump is
+# the largest one the merged pull requests declared. A person merges it; nothing else does.
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+  pull-requests: write
+
+concurrency:
+  group: release
+  cancel-in-progress: true
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Install the package the way a user gets it
+        run: pip install .
+
+      - name: Keep the release pull request current
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python3 .github/scripts/release.py

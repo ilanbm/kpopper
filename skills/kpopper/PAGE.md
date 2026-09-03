@@ -71,7 +71,7 @@ build failure rather than a page that looks arranged and is not:
 | `as` | for | requires |
 |---|---|---|
 | `timeline` | anything that happens on a date — deadlines, validity windows | every pick has a date value; today is marked in place |
-| `fronts` | separate fronts read side by side (a grid on a wide screen) | two or more fronts among the picks |
+| `grouped` | separate groups read side by side (a grid on a wide screen); `fronts` still reads as this shape | two or more groups among the picks, in the scheme the section reads by |
 | `headline` | the one to four numbers everything else turns on | one to four picks, each with a literal value |
 | `alerts` | what needs a person, worst first | picks are judgments |
 | `cards` | judgments read for their reasoning | — (default for judgments) |
@@ -82,20 +82,51 @@ A run of key/value rows is not an arrangement, it is a dump with a heading. If t
 that fits a section is `table`, that is a signal the section is not about anything in
 particular.
 
-**Fronts are declared, not inferred.** The record's prefixes say what *kind* a thing is —
-`d.` is a date — and that is a different question from which front it belongs to. `d.prg_out`
-is a date and it is Prague; nothing in the record says so. So the brief declares the fronts
-once, and every renderer can then say what a row is under:
+**Groupings are declared, not inferred.** The record's prefixes say what *kind* a thing is —
+`d.` is a date — and that is a different question from which thread it belongs to. `d.prg_out`
+is a date and it is Prague; nothing in the record says so. So the brief declares its groupings
+once, under whatever names the project reads by — fronts, fields, subsystems, environments —
+and every renderer can then say what a row is under:
 
 ```yaml
-fronts:
+groups:
   The mortgage: [mtg., equity., d.rate_lock, c.equity_10pct]
   Prague:       [prg., d.prg_out, d.prg_deadline]
 ```
 
-A front then appears as a small tag beside each item wherever a section mixes more than one —
+A group then appears as a small tag beside each item wherever a section mixes more than one —
 on a timeline row, an alert, a headline caption. Without it a reader looking at a list of
 eleven dates has no way to tell which of them are even about the same thing.
+
+A grouping is a scheme, and a project rarely reads by one. The same entries group by thread
+on one section and by counterpart on another, and a tag is nothing but a scheme whose groups
+overlap. So `groups:` may declare several schemes, each under its own name, and a section says
+which one it reads by:
+
+```yaml
+groups:
+  threads:
+    The mortgage: [mtg., equity., d.rate_lock, c.equity_10pct]
+    Prague:       [prg., d.prg_out, d.prg_deadline]
+  counterparts:
+    Adi:   [mtg.adi_fee, q.adi_gift, q.cond7]
+    Dolev: [crypto., q.dolev_filed]
+sections:
+  - title: Who is holding what
+    pick: [mtg., crypto., q.]
+    as: grouped
+    by: counterparts
+```
+
+A flat `groups:` is one scheme. What the record already carries needs no declaration: `by:
+prefix` reads the id's namespace, and `by: from`, `by: unit`, `by: kind` — any field the entries
+carry — read that field, naming the group by the value's own name when the value is an entry.
+Declare a scheme only for a reading the record does not know; where membership is a fact about
+the world, record it on the entry and read by the field. A section draws by the scheme it reads by, and an id
+under two groups of that scheme is drawn under both — which is all a tag is: a scheme whose
+groups overlap. A section that reads by a scheme nobody declared fails `--verify`; a group that
+picks nothing is said. `fronts:` and `as: fronts` are the older names for one scheme and this
+shape; they still read, until the briefs that use them are renamed.
 
 Give sections a `why:` as well as a `title:`. A title names a section; the `why` says what the
 reader is supposed to do with it, and it is the difference between a heading and a hand-off.
@@ -194,4 +225,58 @@ schema:
 
 A checker that quietly passes over what it cannot read is worse than no checker, so every
 ambiguity is an error and never a skip.
+
+## Fields the reader accepts today
+
+Everything below is read, checked and reported now; where the page does not yet draw a field,
+`--verify` says so in a note rather than staying silent. A new field goes into the fixture
+record in `tests/fixtures/page` first, so the reader, the page and the tests agree on its shape.
+
+**In the brief**
+
+| field | where | what it is |
+|---|---|---|
+| `tabs:` | top level | a list of tabs, each with `title`, `occasion` (when the reader opens it and for what), `serves` (the session sources it answers), `sections`, and its own `shape`. The page draws the first tab today and counts the rest. |
+| `groups:` | top level | grouping schemes, any number, each a mapping of group name → selectors under the session's own names; a flat mapping is one scheme. `fronts:` still reads as one scheme. |
+| `by:` | on a section | the scheme this section reads by — one the brief declares, or one the record carries by its own shape: `prefix`, or any field the entries carry (`from`, `unit`, `kind`), whose value names the group. |
+| `text:` | on a section | connective prose with `{{id}}` references, resolved where the page draws it; `{{c.id}}` asks for that judgment's reasoning at that spot. Checked now — every reference must be an entry — and drawn soon. |
+| `reviewed:`, `seen:` | on a section with `text` | when the text was last read against what it references, and the values it saw. `--verify` compares them with the record the way `check` compares a judgment's snapshot and says which moved; the tint follows when the text is drawn. |
+
+A tab the page does not draw yet is checked as if it did: its picks must pick something, its
+shapes must fit what they pick, its `serves` must name session sources, and its own `shape`
+is compared with the record's.
+
+**In the record**
+
+| field | where | what it is |
+|---|---|---|
+| `asked:` | on a session source (`s.*`) | the request verbatim, frozen; `name:` beside it is the session's own reading, which that session may revise until it stops. Entries the session writes carry `from:` it. |
+| `{{id}}` | in any text field — `because`, `via`, `note` | a reference, never a retyped value. `check` fails one that names nothing, and one inside a judgment that names something the judgment does not rest on. A card draws it: the value where there is one, the name where there is only a rule, the verdict for a judgment — each hoverable. |
+| `born:`, `stood:` | on an arrangement judgment (`v.*`) | when the arrangement was decided, and how many builds it has stood. |
+| `graph.*`, `page.*` | as a dependency, or inside a falsifier | names the reader computes; see below. |
+
+**Computed names**
+
+A judgment may rest on a count, and a falsifier may draw its line against one:
+`wrong_if: "page.spill > 0"`. These names are never written and never stored. One becomes an
+entry the moment something in the record mentions it, with its value counted each time the
+record is read (`graph.*`) or each time the page is built (`page.*` — a predicate over it is
+decided by `page --verify`, and `check` says so). Of the page names, `page.spill` is counted
+today — what fell through the arrangement before the arrangement's own falsifiers were
+decided — and a falsifier over it that holds fails `page --verify`; the other page names are
+reserved and hold no value yet, so a falsifier over one stays undecided until they do.
+
+A count is taken before any judgment that reads a count is decided, so it never includes what
+reading it decided: a line drawn against "how many are flagged" cannot be crossed by the
+drawing of it. Every surface then decides such a judgment against the same numbers.
+
+| name | counts |
+|---|---|
+| `graph.entries`, `graph.judgments`, `graph.open` | what the record holds |
+| `graph.flagged` | judgments that need a person, for any reason |
+| `graph.blocked`, `graph.broken`, `graph.unchecked`, `graph.moved`, `graph.falsified`, `graph.no_predicate` | the reasons, one each |
+| `page.spill` | flagged judgments no section of the page picked up |
+| `page.unserved`, `page.recent_unserved` | intents no tab serves; recent sessions in a row left unserved |
+| `page.drift` | the share of what was added since the arrangement was born that nothing picks |
+| `page.covered` | entries and judgments some section picks |
 

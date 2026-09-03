@@ -85,7 +85,8 @@ def fmt(v):
 
 
 def shape_of(ids, jud, flags):
-    return {"entries": len(ids) - len(jud), "judgments": len(jud),
+    held = [k for k in ids if k not in jud and not P.is_builtin(k)]
+    return {"entries": len(held), "judgments": len(jud),
             "flagged": sum(1 for f in flags.values() if f),
             "blocked": sum(1 for f in flags.values() if "blocked" in f)}
 
@@ -99,6 +100,42 @@ def find_brief(paths, explicit=None):
         if os.path.exists(c):
             return c
     return None
+
+
+def same_value(old, now):
+    """The comparison `check` makes between a snapshot and a value: text after whitespace,
+    then number - so 1,702,093 and 1702093 are the same value and 31 and 35 are not."""
+    if " ".join(str(old).split()) == " ".join(str(now).split()):
+        return True
+    try:
+        from decimal import Decimal
+        return Decimal(str(old).replace(",", "")) == Decimal(str(now).replace(",", ""))
+    except Exception:
+        return False
+
+
+def effective(brief):
+    """The brief as the page reads it today. A brief written as `tabs:` draws its first tab;
+    the others are declared and counted, and `--verify` says how many wait. What a tab
+    carries that the page does not yet draw - `occasion`, `serves`, a section's `text` with
+    its `reviewed`/`seen` - is kept and checked all the same."""
+    if not isinstance(brief, dict):
+        return {}
+    if not brief.get("tabs") or brief.get("sections"):
+        return brief
+    tabs = [t for t in brief["tabs"] if isinstance(t, dict)]
+    if not tabs:
+        return brief
+    out, first = dict(brief), tabs[0]
+    out["sections"] = list(first.get("sections") or [])
+    if not out.get("intent") and (first.get("occasion") or first.get("title")):
+        out["intent"] = first.get("occasion") or first.get("title")
+    if out.get("shape") is None and first.get("shape") is not None:
+        out["shape"] = first["shape"]
+    out["_first_tab_drawn"] = True
+    if first.get("title"):
+        out["_tab_title"] = str(first["title"])
+    return out
 
 
 def resolve(sel, ids, jud, flags):
@@ -199,7 +236,7 @@ def human(k):
 # Layout is where intent shows. But a renderer that silently accepts data it cannot
 # express produces a page that looks arranged and is not, so each one says what it
 # needs and a mismatch is a failure, not a shrug.
-def fits(kind, keys, jud, E):
+def fits(kind, keys, jud, E, groups_of=None):
     if kind in ("table", "lines", "cards"):
         return None
     if kind == "timeline":
@@ -214,9 +251,16 @@ def fits(kind, keys, jud, E):
         return (f"headline needs values; {', '.join(blank)} "
                 f"{'is derived and this reader does not evaluate rules' if len(blank) == 1 else 'are derived'}"
                 ) if blank else None
-    if kind == "fronts":
-        g = {k.split(".")[0] for k in keys if k not in jud}
-        return f"fronts lays groups side by side; these are all one group ({g})" if len(g) < 2 else None
+    if kind in ("grouped", "fronts"):
+        g = set()
+        for k in keys:
+            if k not in jud:
+                # an entry under no group of the scheme is drawn under its prefix, so it
+                # counts as that group here too
+                gs = groups_of(k) if groups_of else []
+                g |= set(gs) if gs else {k.split(".")[0]}
+        return (f"grouped lays groups side by side; these are all one group "
+                f"({', '.join(sorted(g)) or '-'})") if len(g) < 2 else None
     if kind == "alerts":
         e = [k for k in keys if k not in jud]
         return f"alerts ranks judgments; {len(e)} of these are entries" if e else None
@@ -444,17 +488,20 @@ def build(paths, brief_path=None):
     doc = P.load(paths)
     ids, jud, fields = P.infer(doc)
     meta = doc.get("meta") or {}
-    flags = flags_of(ids, jud, fields, P.bodies(doc))
+    built = P.builtins(doc, ids, jud, fields, P.bodies(doc))
+    raw0 = P.bodies(doc)
+    raw0.update(built)
+    flags = flags_of(ids, jud, fields, raw0)
     shape = shape_of(ids, jud, flags)
     brief = {}
     if brief_path and os.path.exists(brief_path):
-        brief = yaml.safe_load(io.open(brief_path, encoding="utf-8").read()) or {}
+        brief = effective(yaml.safe_load(io.open(brief_path, encoding="utf-8").read()) or {})
 
-    groups = {}
+    prefixes = {}
     for k in sorted(ids):
         if k in jud:
             continue
-        groups.setdefault(k.split(".")[0] if "." in k else "-", []).append(k)
+        prefixes.setdefault(k.split(".")[0] if "." in k else "-", []).append(k)
 
     # the payload: entries and judgments, keyed by id. one copy, shared by every element
     # on every tab.
@@ -466,12 +513,13 @@ def build(paths, brief_path=None):
                     raw[nid] = b
                 elif nid in ids:
                     raw[nid] = {"v": b}
+    raw.update(built)
     used = {}
-    for name, j in jud.items():
+    for name, j in sorted(jud.items()):
         for d in j["deps"]:
             used.setdefault(d, []).append(name)
     E, J = {}, {}
-    for k in ids:
+    for k in sorted(ids):
         if k in jud:
             continue
         b = raw.get(k, {})
@@ -495,7 +543,7 @@ def build(paths, brief_path=None):
         n = next((str(b[f]) for f in ("via", "note", "why") if b.get(f)), "")
         if 0 < len(n) <= 150:
             E[k]["note"] = n
-    for name, j in jud.items():
+    for name, j in sorted(jud.items()):
         b = j["body"]
         why, keys = blocked_of(b)
         J[name] = {"deps": j["deps"], "used": sorted(used.get(name, [])), "pred": j["pred"],
@@ -504,12 +552,27 @@ def build(paths, brief_path=None):
                    "blocked": why, "waiting": keys}
 
     labels = (brief.get("labels") or {}) if brief else {}
-    fronts_decl = (brief.get("fronts") or {}) if brief else {}
-    front_map = {}
-    for fname, sels in fronts_decl.items():
-        for sel in ([sels] if isinstance(sels, str) else sels):
-            for k in resolve(sel, ids, jud, flags):
-                front_map.setdefault(k, str(fname))
+    # A grouping is a scheme, and a brief may declare several: `groups:` is either one
+    # scheme - group name -> selectors - or several, scheme name -> group name -> selectors.
+    # A section says which scheme it reads by, and an id under two groups of one scheme is
+    # under both. The older field name still reads as one scheme.
+    gdecl = (brief.get("groups") or brief.get("fronts") or {}) if brief else {}
+    schemes, index = {}, {}
+    if isinstance(gdecl, dict) and gdecl:
+        nested = all(isinstance(v, dict) for v in gdecl.values())
+        for sname, gs in (gdecl.items() if nested else [("groups", gdecl)]):
+            schemes[str(sname)], index[str(sname)] = {}, {}
+            if not isinstance(gs, dict):
+                continue
+            for gname, sels in gs.items():
+                members = set()
+                for sel in ([sels] if isinstance(sels, str) else list(sels or [])):
+                    members |= resolve(sel, ids, jud, flags)
+                schemes[str(sname)][str(gname)] = members
+                for k in members:
+                    index[str(sname)].setdefault(k, []).append(str(gname))
+    default_scheme = next(iter(schemes), None)
+    reading_by = [default_scheme]        # the scheme the section being drawn reads by
 
     def fx(k, text=None, cls="fx"):
         return (f'<span class="{cls}" data-id="{html.escape(k)}">'
@@ -543,13 +606,35 @@ def build(paths, brief_path=None):
             return html.escape(fmt(e["v"]) if pretty else str(e["v"]))[:400]
         return ("= " + refs(str(e["rule"]))) if e.get("rule") else ""
 
-    def front(k):
-        return front_map.get(k, "")
+    def groups_of(k, scheme=None):
+        """The groups this id is under in the scheme being read by - every one of them,
+        since a scheme may overlap. A scheme nobody declared is read off the record itself:
+        the id's prefix, or any field the entries carry - `from`, `unit`, `kind` - whose
+        value names the group, by its own name when the value is an entry."""
+        s = scheme or reading_by[0]
+        if s in schemes:
+            return list(index.get(s, {}).get(k, []))
+        if s == "prefix":
+            return [labels.get(k.split(".")[0]) or k.split(".")[0]] if "." in k else []
+        v = (raw.get(k) or {}).get(s) if isinstance(raw.get(k), dict) else None
+        if v is None or isinstance(v, (dict, list)):
+            return []
+        v = str(v)
+        return [lbl(v) if v in E or v in J else v]
 
-    def kicker(k, seen_fronts):
-        """Which front this row is under - shown only where it is not already obvious."""
-        f = front(k)
-        return f'<span class="grp">{html.escape(f)}</span>' if f and len(seen_fronts) > 1 else ""
+    def carried(field):
+        """Whether any entry carries this field - what makes `by: <field>` a scheme."""
+        return any(isinstance(b, dict) and field in b for b in raw.values())
+
+    def group_of(k):
+        gs = groups_of(k)
+        return gs[0] if gs else ""
+
+    def kicker(k, seen_groups):
+        """Which groups this row is under - shown only where it is not already obvious."""
+        gs = groups_of(k)
+        return (f'<span class="grp">{html.escape(" · ".join(gs))}</span>'
+                if gs and len(seen_groups) > 1 else "")
 
     def note(k):
         n = (E.get(k) or {}).get("note")
@@ -567,12 +652,42 @@ def build(paths, brief_path=None):
     # ── renderers ────────────────────────────────────────────────────────────
     anchored = [0, 0]
 
+    def prose(text, deps):
+        """Escaped prose with its references drawn and its dependencies anchored. A reference
+        shows the value where there is one, the name where there is only a rule, and the
+        verdict for a judgment - each hoverable, so the sentence stays the interface."""
+        parts, pos, found = [], 0, set()
+        text = text or ""
+        for m in P.REF.finditer(text):
+            a, h = anchor(text[pos:m.start()], deps, E)
+            parts.append(a)
+            found |= h
+            k = m.group(1)
+            if k in E:
+                e = E[k]
+                shown = fmt(e["v"]) if e.get("v") is not None else lbl(k)
+            elif k in J:
+                shown = J[k]["verdict"]
+            else:
+                shown = None
+            if shown is None:
+                parts.append(html.escape(m.group(0)))
+            else:
+                found.add(k)
+                parts.append(f'<span class="fx in" data-id="{html.escape(k)}">'
+                             f'{html.escape(str(shown))}</span>')
+            pos = m.end()
+        a, h = anchor(text[pos:], deps, E)
+        parts.append(a)
+        found |= h
+        return "".join(parts), found
+
     def r_cards(names):
         o = []
         for name in names:
             j, b = jud[name], J[name]
-            verdict, h1 = anchor(b["verdict"], j["deps"], E)
-            because, h2 = anchor(b["because"], j["deps"], E)
+            verdict, h1 = prose(b["verdict"], j["deps"])
+            because, h2 = prose(b["because"], j["deps"])
             miss = [d for d in j["deps"] if d not in E and d not in J]
             rest = [d for d in j["deps"] if d not in (h1 | h2) and d not in miss]
             anchored[0] += len(h1 | h2)
@@ -609,7 +724,7 @@ def build(paths, brief_path=None):
             why = J[name]["blocked"] or "; ".join(SAYS.get(f, f) for f in fs) or "holds"
             if miss and not J[name]["blocked"]:
                 why += " \u2014 " + ", ".join(lbl(d) for d in miss)
-            fr = front(name) or next((front(d) for d in jud[name]["deps"] if front(d)), "")
+            fr = group_of(name) or next((group_of(d) for d in jud[name]["deps"] if group_of(d)), "")
             o.append(f'<div class="al"><span class="dot" style="background:var(--{tone})"></span>'
                      f'<span class="at">'
                      + (f'<span class="grp">{html.escape(fr)}</span>' if fr else "")
@@ -638,7 +753,7 @@ def build(paths, brief_path=None):
     def r_timeline(keys):
         today = datetime.date.today()
         seq = sorted(((as_date(val(k)), k) for k in keys), key=lambda t: t[0])
-        fs = {front(k) for k in keys if front(k)}
+        fs = {g for k in keys for g in groups_of(k)}
         o, marked = ['<div class="tl">'], False
         for d, k in seq:
             if not marked and d >= today:
@@ -652,14 +767,16 @@ def build(paths, brief_path=None):
             o.append(f'<div class="tlr mark">today &middot; {today.strftime("%d/%m/%Y")}</div>')
         return "".join(o) + "</div>"
 
-    def r_fronts(keys):
+    def r_grouped(keys):
         g = {}
         for k in keys:
-            g.setdefault(front(k) or labels.get(k.split(".")[0])
-                         or (k.split(".")[0] if "." in k else "-"), []).append(k)
+            names = groups_of(k) or [labels.get(k.split(".")[0])
+                                     or (k.split(".")[0] if "." in k else "-")]
+            for name in names:               # an id under two groups is drawn under both
+                g.setdefault(name, []).append(k)
         o = ['<div class="grid">']
         for name, ks in sorted(g.items(), key=lambda kv: (-len(kv[1]), kv[0])):
-            o.append(f'<div class="front"><h3 dir="auto">{html.escape(name)}</h3>' + "".join(
+            o.append(f'<div class="group"><h3 dir="auto">{html.escape(name)}</h3>' + "".join(
                 (f'<div class="kv"><span class="kl">{fx(k, lbl(k))}</span>'
                  f'<span class="kvv">{shown(k, True)}</span></div>'
                  if has_value(k) else
@@ -671,11 +788,11 @@ def build(paths, brief_path=None):
     def r_headline(keys):
         return '<div class="heads">' + "".join(
             f'<div class="head"><div class="big">{fx(k, fmt((E.get(k) or {}).get("v")))}</div>'
-            f'<div class="cap" dir="auto">{kicker(k, {front(x) for x in keys if front(x)})}'
+            f'<div class="cap" dir="auto">{kicker(k, {g for x in keys for g in groups_of(x)})}'
             f'{html.escape(lbl(k))}</div>{note(k)}</div>' for k in keys) + "</div>"
 
     ENTRY_R = {"table": r_table, "lines": r_lines, "timeline": r_timeline,
-               "fronts": r_fronts, "headline": r_headline}
+               "grouped": r_grouped, "fronts": r_grouped, "headline": r_headline}
     JUD_R = {"cards": r_cards, "alerts": r_alerts}
     cards = r_cards
 
@@ -687,6 +804,22 @@ def build(paths, brief_path=None):
     h1 = (f'<h1 dir="auto">{html.escape(rec_name)}</h1>' if rec_name
           else '<h1 dir="ltr">What is known here</h1>')
     if brief:
+        # What the arrangement covers, before anything is drawn: the page's own count has to
+        # exist before what rests on it is decided. So the picks are resolved once here, the
+        # count set, the flags and the shape decided again - and only then is anything drawn.
+        # The count is what fell through before the arrangement's own falsifiers were decided.
+        pre = set()
+        for sec in brief.get("sections") or []:
+            if isinstance(sec, dict):
+                p = sec.get("pick")
+                for x in ([p] if isinstance(p, str) else list(p or [])):
+                    pre |= resolve(x, ids, jud, flags)
+        if "page.spill" in E:
+            n = sum(1 for k, f in flags.items() if f and k not in pre)
+            E["page.spill"]["v"] = n
+            raw0["page.spill"]["v"] = n
+            flags = flags_of(ids, jud, fields, raw0)
+            shape = shape_of(ids, jud, flags)
         now_html.append(h1)
         if brief.get("intent"):
             # the page is named for the record; the intent is the arrangement's aim,
@@ -719,7 +852,9 @@ def build(paths, brief_path=None):
             en = sorted(x for x in got if x not in jud)
             title = str(sec.get("title") or ",".join(picks))
             kind = str(sec.get("as") or "").strip()
-            wrong = fits(kind, sorted(got), jud, E) if kind else None
+            by = str(sec.get("by") or "")
+            reading_by[0] = by if (by in schemes or by == "prefix" or carried(by)) else default_scheme
+            wrong = fits(kind, sorted(got), jud, E, groups_of) if kind else None
             if wrong:
                 misfit.append((title, wrong))
                 kind = ""
@@ -741,6 +876,7 @@ def build(paths, brief_path=None):
         # It may order. It may not drop. This section is not optional and the brief
         # cannot switch it off: an arrangement that hides what it did not anticipate
         # is worth less than no arrangement.
+        reading_by[0] = default_scheme
         spill = sorted(k for k, f in flags.items() if f and k not in covered)
         if spill:
             now_html.append(f'<h2 class="spill" dir="ltr">Not covered by this arrangement '
@@ -749,18 +885,100 @@ def build(paths, brief_path=None):
                             'This section is written by the page, not by the brief.</div>')
             now_html.append(r_alerts(spill))
 
+    # what the brief declares beyond what this page draws - checked now, drawn later
+    contract = {"tabs": 0, "texts": 0, "bad": [], "moved": [], "stale": []}
+    if brief:
+        # every grouping scheme must group something, and a section that reads by a scheme
+        # must name one the brief declares - or one the record carries by its own shape
+        for sname, gs in schemes.items():
+            for gname, members in gs.items():
+                if not members:
+                    contract["stale"].append(f"group '{gname}'"
+                                             + (f" (scheme '{sname}')" if len(schemes) > 1 else "")
+                                             + " picks nothing")
+        all_secs = [s for s in (brief.get("sections") or []) if isinstance(s, dict)]
+        for t in (brief.get("tabs") or []):
+            if isinstance(t, dict):
+                all_secs += [s for s in (t.get("sections") or []) if isinstance(s, dict)]
+        for sec in all_secs:
+            by = sec.get("by")
+            if by and str(by) not in schemes and str(by) != "prefix" and not carried(str(by)):
+                contract["bad"].append(f"section '{sec.get('title') or '?'}' reads by '{by}', "
+                                       f"which is not a scheme the brief declares"
+                                       + (f" (declared: {', '.join(schemes)})" if schemes else "")
+                                       + " nor a field an entry carries")
+        tabs = [t for t in (brief.get("tabs") or []) if isinstance(t, dict)]
+        contract["tabs"] = len(tabs)
+        for t in tabs:
+            tname = str(t.get("title") or "?")
+            # a tab serves intents, and an intent is a session source: the one entry shape
+            # that carries what was asked
+            for s in (t.get("serves") or []):
+                if s not in E or not (raw.get(s) or {}).get("asked"):
+                    contract["bad"].append(f"tab '{tname}' serves {s}, which is not a session "
+                                           f"source - one carries what was asked")
+        waiting = tabs[1:] if brief.get("_first_tab_drawn") else tabs
+        later = [(t, s) for t in waiting for s in (t.get("sections") or []) if isinstance(s, dict)]
+        # a tab the page does not draw yet is checked as if it did: its picks must pick,
+        # its shapes must fit, and its own shape must still be the record's
+        for t, sec in later:
+            where = f"'{sec.get('title') or '?'}' (tab '{t.get('title') or '?'}')"
+            p = sec.get("pick")
+            picks = [p] if isinstance(p, str) else list(p or [])
+            got = set()
+            for x in picks:
+                got |= resolve(x, ids, jud, flags)
+            if picks and not got:
+                contract["bad"].append(f"section {where} picks nothing - it is about something "
+                                       f"the record no longer holds")
+            kind = str(sec.get("as") or "").strip()
+            by = str(sec.get("by") or "")
+            by = by if (by in schemes or by == "prefix" or carried(by)) else default_scheme
+            wrong = (fits(kind, sorted(got), jud, E, lambda k, s=by: groups_of(k, s))
+                     if kind and got else None)
+            if wrong:
+                contract["bad"].append(f"section {where}: {wrong}")
+        for t in waiting:
+            was = t.get("shape") or {}
+            mv = [f"{k}: {was[k]} -> {shape[k]}" for k in shape if k in was and was[k] != shape[k]]
+            if mv:
+                contract["stale"].append(f"tab '{t.get('title') or '?'}' recorded a different "
+                                         f"shape: " + "; ".join(mv))
+        secs = [s for s in (brief.get("sections") or []) if isinstance(s, dict)] + [s for _, s in later]
+        for sec in secs:
+            title = str(sec.get("title") or "?")
+            if sec.get("text"):
+                contract["texts"] += 1
+                for r in P.refs_in(sec["text"]):
+                    if r not in E and r not in J:
+                        contract["bad"].append(f"section '{title}': text references {r}, which "
+                                               f"is not an entry")
+            # the snapshot under a text is compared the way check compares a judgment's:
+            # a referenced value that moved since the text was read is said, never failed
+            for k, old in (sec.get("seen") or {}).items():
+                if k not in E and k not in J:
+                    contract["bad"].append(f"section '{title}': seen names {k}, which is not "
+                                           f"an entry")
+                    continue
+                now = P.value_of(raw0, ids, k)
+                if now is None or isinstance(now, (list, dict)) or isinstance(old, (list, dict)):
+                    continue
+                if not same_value(old, now):
+                    contract["moved"].append(f"section '{title}': its text saw {k} = {old}, "
+                                             f"now {now} - read it again")
+
     # ── the record's own tab ─────────────────────────────────────────────────
     rec_html = []
     if jud:
         rec_html.append(f'<h2>Judgments <span class="n">{len(jud)}</span></h2>')
         rec_html.append(cards(sorted(jud)))
-    for g, keys in sorted(groups.items(), key=lambda kv: (-len(kv[1]), kv[0])):
+    for g, keys in sorted(prefixes.items(), key=lambda kv: (-len(kv[1]), kv[0])):
         rec_html.append(f'<h2 id="g-{html.escape(g)}">{html.escape(g)}</h2>' + r_table(keys, True))
 
     # ── the page ─────────────────────────────────────────────────────────────
     ns = '<nav class="ns" dir="ltr">' + "".join(
         f'<a href="#g-{html.escape(g)}">{html.escape(g)} ({len(v)})</a>'
-        for g, v in sorted(groups.items(), key=lambda kv: (-len(kv[1]), kv[0]))) + "</nav>"
+        for g, v in sorted(prefixes.items(), key=lambda kv: (-len(kv[1]), kv[0]))) + "</nav>"
     head = [h1]
     if meta.get("scope"):
         head.append(f'<p class="scope" dir="auto">{html.escape(str(meta["scope"]).strip())}</p>')
@@ -784,7 +1002,9 @@ def build(paths, brief_path=None):
             'the trunk is where they meet</p>')
     tabs = ['<div class="tabs" role="tablist">']
     if brief:
-        tabs.append('<button type="button" data-tab="now" aria-selected="true">Now'
+        # a tab written as a tab carries its own name; a bare brief is "Now"
+        tabs.append('<button type="button" data-tab="now" aria-selected="true">'
+                    + html.escape(str(brief.get("_tab_title") or "Now"))
                     + (f' <span class="n">{len(covered)}</span>' if covered else "") + "</button>")
     tabs.append(f'<button type="button" data-tab="record" aria-selected='
                 f'"{"false" if brief else "true"}">Record <span class="n">{len(ids)}</span></button>')
@@ -801,14 +1021,16 @@ def build(paths, brief_path=None):
                'everything that rests on it and a dashed one what it rests on. Generated from '
                'the record - nothing here was typed twice.' + (' The <b>Now</b> tab is an arrangement someone chose; '
                '<b>Record</b> is everything, arranged by nothing.' if brief else '') + "</footer>")
-    out.append("</div><script>window.__E=" + json.dumps(_plain(E), ensure_ascii=False)
-               + ";window.__J=" + json.dumps(_plain(J), ensure_ascii=False) + ";</script>")
+    # sorted keys, so two builds of an unchanged record are the same bytes - the one thing
+    # a generated page is for is being diffed against the last one
+    out.append("</div><script>window.__E=" + json.dumps(_plain(E), ensure_ascii=False, sort_keys=True)
+               + ";window.__J=" + json.dumps(_plain(J), ensure_ascii=False, sort_keys=True) + ";</script>")
     out.append(f"<script>{JS}</script></body></html>")
     return "\n".join(out), E, J, ids, {"shape": shape, "empty": empty_sections,
                                        "misfit": misfit, "brief": bool(brief), "anchored": tuple(anchored),
                                        "unnamed": sorted(k for k in E if not E[k].get("name")
                                                          and k not in labels),
-                                       "covered": covered, "flags": flags}
+                                       "covered": covered, "flags": flags, "contract": contract}
 
 
 def verify(paths, brief_path=None):
@@ -846,6 +1068,20 @@ def verify(paths, brief_path=None):
                         f"the rest are reachable only by hovering the judgment")
         if 'data-tab="now" aria-selected="true"' not in page:
             fail.append("a brief exists but the session tab is not the default")
+        c = info["contract"]
+        fail += c["bad"]
+        note += c["moved"] + c["stale"]
+        if c["tabs"] > 1:
+            note.append(f"{c['tabs']} tabs declared; the page draws the first and keeps the rest")
+        if c["texts"]:
+            note.append(f"text on {c['texts']} section{'s' if c['texts'] != 1 else ''} is "
+                        f"checked and not yet drawn")
+        # a falsifier over a page count is decided here and nowhere else, so here is where
+        # it fails
+        for name, j in sorted(J.items()):
+            if "falsified" in info["flags"].get(name, ()) and \
+                    any(t in P.PAGE for t in P.ID.findall(j["pred"])):
+                fail.append(f"{name}: wrong_if holds ({j['pred']}) - decided by the page")
         # An authored section that picks nothing is the alert row about something already
         # closed: it costs trust on everything else on the page.
         for t, why in info["misfit"]:
@@ -874,7 +1110,7 @@ if __name__ == "__main__":
     if "--verify" in a:
         sys.exit(verify(files, brief))
     page, _, _, _, info = build(files, brief)
-    if info["brief"] and not (yaml.safe_load(io.open(brief, encoding="utf-8").read()) or {}).get("shape"):
+    if info["brief"] and not effective(yaml.safe_load(io.open(brief, encoding="utf-8").read()) or {}).get("shape"):
         sys.stderr.write("# no shape recorded in the brief. paste this into it, so a later\n"
                          "# render can tell you the arrangement went stale:\nshape:\n"
                          + "".join(f"  {k}: {v}\n" for k, v in info["shape"].items()))

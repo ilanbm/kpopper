@@ -80,10 +80,10 @@ td.v{font-variant-numeric:tabular-nums}
 .tlr.mark{background:var(--wash);color:var(--acc);font-size:11px;letter-spacing:.09em;
  text-transform:uppercase;padding:5px 15px}
 .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:13px}
-.front{background:var(--sf);border:1px solid var(--ln);border-radius:12px;padding:12px 14px}
-.front h3{margin:0 0 7px;font:600 12px ui-monospace,Menlo,monospace;color:var(--acc)}
+.group{background:var(--sf);border:1px solid var(--ln);border-radius:12px;padding:12px 14px}
+.group h3{margin:0 0 7px;font:600 12px ui-monospace,Menlo,monospace;color:var(--acc)}
 .kv{display:flex;gap:10px;font-size:13px;padding:5px 0;border-top:1px solid var(--ln)}
-.front .kv:first-of-type{border-top:none}
+.group .kv:first-of-type{border-top:none}
 .kv .kl{flex:1;min-width:0;color:var(--ink2)}
 .derived{color:var(--mut);font-style:normal;font-size:12.5px}
 td.kl{width:1%;white-space:nowrap;color:var(--ink2)}

@@ -7,16 +7,48 @@
 ```
 git switch -c my-change
 # work
+python3 -m unittest discover -s tests
 git push -u origin HEAD
 gh pr create
 ```
 
-Every pull request runs `kpopper check` and `kpopper page --verify` on the two Python
-versions the package claims to support, and fails if `PROVENANCE.view.yaml` no longer
-matches the record it renders from — the record moved, the view did not.
+Every pull request runs the tests, then `kpopper check` and `kpopper page --verify` on the
+two Python versions the package claims to support, and fails if `PROVENANCE.view.yaml` no
+longer matches the record it renders from — the record moved, the view did not. The tests
+run against the fixture record in `tests/fixtures/page`, which exercises every field the
+reader and the page accept; a new field goes there first.
 
 Merges are squashed: one commit on `main` per pull request, subject taken from the
 pull request title. The branch is deleted once it lands.
+
+## Releasing
+
+A feature pull request never touches the version. It says what it asks of the version instead,
+in one line of its body that the template carries and the checks require:
+
+```
+Bump: minor
+```
+
+`patch` is a fix, a doc, tooling — nothing a user of the reader, the page or the hooks has to
+learn. `minor` adds something — a command, a field the reader accepts, a computed name, a page
+behaviour. `major` removes something or changes its meaning.
+
+Every push to `main` refreshes one pull request, **Release x.y.z**, holding the three version
+files (`pyproject.toml`, `plugin.json`, `marketplace.json`) and a changelog entry: what merged
+since the last release, the bump each declared, and the decisions the record gained. The
+version is the largest declared bump. Merging that pull request is the release; several merges
+in a day fold into one release if nobody merges it in between. After it lands:
+
+```
+claude plugin update kpopper@kpopper
+```
+
+The pull request is opened by the workflow's own token, which runs no checks of its own, so
+the script runs `kpopper check` and `kpopper page --verify` on the release tree before pushing
+it. One repository setting must allow it, once: *Settings → Actions → General → Workflow
+permissions → Allow GitHub Actions to create and approve pull requests*. Until then the branch
+is pushed and the run says which command opens the pull request by hand.
 
 ## Keep main behind the guard
 
