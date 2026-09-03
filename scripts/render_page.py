@@ -816,14 +816,17 @@ def build(paths, brief_path=None):
             f'<div class="cap" dir="auto">{kicker(k, {g for x in keys for g in groups_of(x)})}'
             f'{html.escape(lbl(k))}</div>{note(k)}</div>' for k in keys) + "</div>"
 
+    page_counts = {k: E[k]["v"] for k in E if k in P.PAGE and "v" in E[k]}
+
     def moved_in(sec):
         """What the section's text saw that the record no longer holds: {ref: (was, now)}.
-        The comparison check makes for a judgment's snapshot, made for a text's seen."""
+        Compared as the snapshot `review` writes it - a value, a rule, a judgment's verdict,
+        a source's date - so a verdict rewritten under a placed reasoning is a move too."""
         out = {}
         for k, old in (sec.get("seen") or {}).items():
             if k not in E and k not in J:
                 continue
-            now = P.value_of(raw0, ids, k)
+            now = P.snapshot_value(k, raw0, ids, jud, page_counts)
             if now is None or isinstance(now, (list, dict)) or isinstance(old, (list, dict)):
                 continue
             if not same_value(old, now):

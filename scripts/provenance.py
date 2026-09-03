@@ -28,7 +28,7 @@ Where two fields genuinely fit the same role it refuses to guess and asks for a
 one-line `schema:` block. A checker that quietly passes over what it cannot read
 is worse than no checker, so every ambiguity is an error, never a skip.
 """
-import io, os, re, sys, glob, subprocess, datetime, textwrap, yaml
+import io, os, re, sys, glob, subprocess, datetime, textwrap, tempfile, contextlib, yaml
 from decimal import Decimal, InvalidOperation
 
 ID = re.compile(r"[A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z0-9_]+)+")
@@ -1615,29 +1615,58 @@ def _shape_in(lines, where, shape):
 
 # ── the one write ────────────────────────────────────────────────────────────
 def _write_text(path, text):
-    """The whole file replaced in one step, so a reader never meets half a record."""
-    tmp = path + ".tmp"
-    with io.open(tmp, "w", encoding="utf-8") as f:
+    """The whole file replaced in one step, so a reader never meets half a record; the
+    temporary file is this writer's own, and the record keeps its permissions."""
+    d = os.path.dirname(os.path.abspath(path))
+    fd, tmp = tempfile.mkstemp(prefix="." + os.path.basename(path) + ".", suffix=".tmp", dir=d)
+    with io.open(fd, "w", encoding="utf-8") as f:
         f.write(text)
+    if os.path.exists(path):
+        os.chmod(tmp, os.stat(path).st_mode & 0o7777)
     os.replace(tmp, path)
 
 
+@contextlib.contextmanager
+def _locked(path):
+    """One writer at a time on a record: the whole write - load, validate, edit, replace -
+    runs under an exclusive lock on the record's directory, so two sessions on one file
+    take turns instead of the last one silently discarding the first. Where the platform
+    offers no such lock the write is unguarded."""
+    try:
+        import fcntl
+    except ImportError:
+        yield
+        return
+    fd = os.open(os.path.dirname(os.path.abspath(path)), os.O_RDONLY)
+    try:
+        fcntl.flock(fd, fcntl.LOCK_EX)
+        yield
+    finally:
+        fcntl.flock(fd, fcntl.LOCK_UN)
+        os.close(fd)
+
+
 def _files_of(paths):
-    """The files `load` reads, in order - a pointer record is followed here the same way."""
-    out = []
+    """The files `load` reads, in order - every pointer followed the same way, as deep as
+    it goes, each file once."""
+    out, seen = [], set()
+
+    def follow(f):
+        if os.path.abspath(f) in seen or not os.path.exists(f):
+            return
+        seen.add(os.path.abspath(f))
+        out.append(f)
+        d = yaml.safe_load(io.open(f, encoding="utf-8").read()) or {}
+        for key in ("record", "also"):
+            v = d.get(key)
+            v = [v] if isinstance(v, str) else v if isinstance(v, list) else \
+                list(v.values()) if isinstance(v, dict) else []
+            for c in v:
+                if isinstance(c, str) and c.endswith((".yaml", ".yml")):
+                    follow(os.path.join(os.path.dirname(f), c))
     for p in paths:
         for f in sorted(glob.glob(p)) or [p]:
-            out.append(f)
-            d = yaml.safe_load(io.open(f, encoding="utf-8").read()) or {}
-            for key in ("record", "also"):
-                v = d.get(key)
-                v = [v] if isinstance(v, str) else v if isinstance(v, list) else \
-                    list(v.values()) if isinstance(v, dict) else []
-                for c in v:
-                    if isinstance(c, str) and c.endswith((".yaml", ".yml")):
-                        cf = os.path.join(os.path.dirname(f), c)
-                        if os.path.exists(cf) and cf not in out:
-                            out.append(cf)
+            follow(f)
     return out
 
 
@@ -1680,10 +1709,64 @@ def _collection_for(doc, ids, jud, fields, nid, body, explicit):
 def apply(paths, action):
     """The one write. `action` says what kind (set, add, review) and what that kind needs;
     it is validated whole before a byte is touched, applied to the file's text without
-    reformatting anything else, read back, and answered with the reach."""
+    reformatting anything else, read back, and answered with the reach. All of it under
+    one lock, so a second writer waits rather than overwrites."""
+    with _locked(paths[0]):
+        return _apply(paths, action)
+
+
+def _snapshot(deps, raw, ids, jud, paths, brief):
+    """`seen` for these dependencies, from what each holds now. A page count needs the
+    brief beside the record; a dependency declared missing has nothing to snapshot."""
+    page = _page_side(paths)[0] if brief and any(d in PAGE for d in deps) else {}
+    seen = {}
+    for d in deps:
+        if d not in ids and not is_builtin(d):
+            continue
+        v = snapshot_value(d, raw, ids, jud, page)
+        if v is None:
+            raise Refused(f"refused - {d} has no value to snapshot: the page counts it, and no "
+                          f"brief sits beside the record")
+        seen[d] = v
+    return seen
+
+
+def _review_section(paths, brief, title, stamp, raw, ids, jud):
+    """A section of the brief reviewed by its title: the references of its text
+    snapshotted into `seen`, and `reviewed` moved. The record is not touched."""
+    btext = io.open(brief, encoding="utf-8").read()
+    b = yaml.safe_load(btext) or {}
+    secs = [s for s in (b.get("sections") or []) if isinstance(s, dict)]
+    for tab in (b.get("tabs") or []):
+        if isinstance(tab, dict):
+            secs += [s for s in (tab.get("sections") or []) if isinstance(s, dict)]
+    sec = next((s for s in secs if str(s.get("title")) == title and s.get("text")), None)
+    if not sec:
+        raise Refused(f"refused - {title} is not a judgment, and no section of the brief with "
+                      f"that title carries text")
+    refs = [r for r in refs_in(sec["text"]) if r in ids]
+    was = dict(sec.get("seen") or {})
+    seen = _snapshot(refs, raw, ids, jud, paths, brief)
+    blines = btext.split("\n")
+    _review_section_in(blines, title, seen, stamp)
+    _write_text(brief, "\n".join(blines))
+    print(f"review text '{title}': reviewed {stamp}")
+    for k in refs:
+        if k in was and k in seen and not _same(was[k], seen[k]):
+            print(f"  seen {k}: {short(was[k])} -> {short(seen[k])}")
+        elif k not in was and k in seen:
+            print(f"  seen {k}: {short(seen[k])} (never read against it before)")
+    return 0
+
+
+def _apply(paths, action):
     doc = load(paths)
     ids, jud, fields = infer(doc)
     raw = with_builtins(doc, ids, jud, fields)
+    # every count the reader can take, whether or not the record mentions it yet: a new
+    # judgment may be the first to rest on one
+    for k, v in counts(doc, ids, jud, fields, bodies(doc)).items():
+        raw.setdefault(k, {"name": COMPUTED[k], "v": v})
     files = _files_of(paths)
     stamp = action.get("as_of") or datetime.date.today().isoformat()
     kind, nid = action["kind"], action["id"]
@@ -1693,102 +1776,51 @@ def apply(paths, action):
     refusals = validate(action, doc, ids, jud, fields, raw)
     if refusals:
         raise Refused("refused - " + "\n          ".join(refusals))
+    if kind == "review" and action.get("section"):
+        return _review_section(paths, brief, nid, stamp, raw, ids, jud)
 
+    snapshot_field = fields["snapshot"] or "seen"
     # which file holds the entry: the one it is found in; a new one goes where its
     # collection is, else into the first file
     target = files[0]
-    if kind in ("set", "review") and not action.get("section"):
+    if kind in ("set", "review"):
         for f in files:
             if _locate(io.open(f, encoding="utf-8").read().split("\n"), nid):
                 target = f
                 break
+    out, seen, arrangement = [], {}, False
+    if kind == "add":
+        body = action["body"]
+        if isinstance(body, dict) and fields["deps"] in body:
+            seen = _snapshot(list(body[fields["deps"]]), raw, ids, jud, paths, brief)
+            body[snapshot_field] = seen
+        collection = _collection_for(doc, ids, jud, fields, nid, body, action.get("into"))
+        for f in files:
+            if collection in {n for n, _, _ in
+                              _collections_in(io.open(f, encoding="utf-8").read().split("\n"))}:
+                target = f
+                break
     original = io.open(target, encoding="utf-8").read()
     lines = original.split("\n")
-    out = []
-    page, shape = ({}, None)
     if kind == "set":
-        if value_of(raw, ids, nid) is not None and \
-                " ".join(str(value_of(raw, ids, nid)).split()) == " ".join(str(action["value"]).split()) \
-                and not action.get("as_of"):
+        now = value_of(raw, ids, nid)
+        if now is not None and _same(now, action["value"]) and not action.get("as_of"):
             print(f"{nid} is already {scalar(action['value'], fold=False)}; nothing written")
             return 0
         old, field = _set_in(lines, nid, action["value"], stamp, action.get("why"))
         out.append(f"set {nid}: {old} -> {scalar(action['value'], fold=False)} (as of {stamp})")
     elif kind == "add":
-        body = action["body"]
-        if isinstance(body, dict) and fields["deps"] in body:
-            deps = list(body[fields["deps"]])
-            if any(d in PAGE for d in deps):
-                page, shape = _page_side(paths)
-            seen = {}
-            for d in deps:
-                if d not in ids and not is_builtin(d):
-                    continue                         # declared missing: nothing to snapshot
-                v = snapshot_value(d, raw, ids, jud, page)
-                if v is None:
-                    raise Refused(f"refused - {d} has no value to snapshot: the page counts it, and "
-                                  f"no brief sits beside the record")
-                seen[d] = v
-            body[fields["snapshot"] or "seen"] = seen
-        collection = _collection_for(doc, ids, jud, fields, nid, body, action.get("into"))
-        for f in files:
-            if collection in {n for n, _, _ in _collections_in(io.open(f, encoding="utf-8").read().split("\n"))}:
-                target = f
-                break
-        if target != files[0]:
-            original = io.open(target, encoding="utf-8").read()
-            lines = original.split("\n")
         out.append("add " + _add_in(lines, nid, body, collection))
     else:
-        if action.get("section"):
-            btext = io.open(brief, encoding="utf-8").read()
-            blines = btext.split("\n")
-            b = yaml.safe_load(btext) or {}
-            secs = [s for s in (b.get("sections") or []) if isinstance(s, dict)]
-            for tab in (b.get("tabs") or []):
-                if isinstance(tab, dict):
-                    secs += [s for s in (tab.get("sections") or []) if isinstance(s, dict)]
-            sec = next((s for s in secs if str(s.get("title")) == nid), None)
-            if not sec or not sec.get("text"):
-                raise Refused(f"refused - {nid} is not a judgment, and no section of the brief "
-                              f"with that title carries text")
-            refs = [r for r in refs_in(sec["text"]) if r in ids]
-            if any(r in PAGE for r in refs):
-                page, shape = _page_side(paths)
-            was = dict(sec.get("seen") or {})
-            seen = {r: snapshot_value(r, raw, ids, jud, page) for r in refs}
-            seen = {k: v for k, v in seen.items() if v is not None}
-            _review_section_in(blines, nid, seen, stamp)
-            _write_text(brief, "\n".join(blines))
-            out.append(f"review text '{nid}': reviewed {stamp}")
-            for k in refs:
-                if k in was and not _same(was[k], seen.get(k)):
-                    out.append(f"  seen {k}: {short(was[k])} -> {short(seen[k])}")
-                elif k not in was:
-                    out.append(f"  seen {k}: {short(seen[k])} (never read against it before)")
-            for l in out:
-                print(l)
-            return 0
         j = jud[nid]
         arrangement = nid.startswith("v.") or any(d in PAGE for d in j["deps"])
-        if arrangement and brief:
-            page, shape = _page_side(paths)
         was = dict(j["snap"])
-        seen = {}
-        for d in j["deps"]:
-            if d not in ids and not is_builtin(d):
-                continue
-            v = snapshot_value(d, raw, ids, jud, page)
-            if v is None:
-                raise Refused(f"refused - {d} has no value to snapshot: the page counts it, and no "
-                              f"brief sits beside the record")
-            seen[d] = v
-        loc = _locate(lines, nid)
-        _, ind, s, e = loc
+        seen = _snapshot(j["deps"], raw, ids, jud, paths, brief)
+        _, ind, s, e = _locate(lines, nid)
         changed = [d for d in seen if d not in was or not _same(was[d], seen[d])] + \
             [d for d in was if d not in seen]
         if changed:
-            e = _seen_lines(lines, s, e, fields["snapshot"] or "seen", seen)
+            e = _seen_lines(lines, s, e, snapshot_field, seen)
         if _field_span(lines, s, e, "reviewed"):
             _stamp_field(lines, s, e, "reviewed", stamp, None)
         out.append(f"review {nid}: " + (f"seen rewritten from what the record holds ({stamp})"
@@ -1798,24 +1830,10 @@ def apply(paths, action):
                 out.append(f"  {d}: {short(was[d])} -> {short(seen[d])}")
             elif d not in was and d in seen:
                 out.append(f"  {d}: {short(seen[d])} (never checked against it before)")
-        # an arrangement's review also rewrites the shape it stood on
-        if shape is not None:
-            b = yaml.safe_load(io.open(brief, encoding="utf-8").read()) or {}
-            where = _tab_for(b, j, ids)
-            if where is None:
-                out.append("  the brief's tabs serve no session source this rests on - no shape "
-                           "rewritten; say which tab by making it serve one")
-            else:
-                blines = io.open(brief, encoding="utf-8").read().split("\n")
-                _shape_in(blines, where, shape)
-                _write_text(brief, "\n".join(blines))
-                out.append(f"  shape of {'tab ' + repr(where[0]) if where[1] else 'the brief'}: "
-                           + ", ".join(f"{k}: {v}" for k, v in shape.items()))
     _bump_updated(lines, stamp)
     _write_text(target, "\n".join(lines))
 
-    # read it back: the record must still load, and hold what was written
-    try:
+    def read_back():
         doc2 = load(paths)
         ids2, jud2, fields2 = infer(doc2)
         raw2 = with_builtins(doc2, ids2, jud2, fields2)
@@ -1823,11 +1841,48 @@ def apply(paths, action):
             now = value_of(raw2, ids2, nid)
             if now is None or not _same(now, action["value"]):
                 raise ValueError(f"{nid} reads back as {now!r}")
-        elif kind == "add" and nid not in ids2 and nid not in (doc2.get("meta") or {}):
+        elif nid not in ids2 and nid not in (doc2.get("meta") or {}):
             raise ValueError(f"{nid} is not in the record after the write")
+        return doc2, ids2, jud2, fields2, raw2
+
+    # read it back: the record must still load, and hold what was written. Then a page
+    # count in the snapshot is settled against the record as it now stands - the write
+    # itself changes what the page counts, an arrangement no longer moved or a new
+    # judgment that spills, and a count taken a moment earlier would be flagged by the
+    # very next build. The shape an arrangement stood on is taken last, for the same reason.
+    shape = None
+    try:
+        doc2, ids2, jud2, fields2, raw2 = read_back()
+        if seen and brief and any(d in PAGE for d in seen):
+            page2, shape = _page_side(paths)
+            drift = {d: page2[d] for d in seen if d in PAGE and d in page2 and not _same(seen[d], page2[d])}
+            if drift:
+                seen.update(drift)
+                lines2 = io.open(target, encoding="utf-8").read().split("\n")
+                _, ind, s, e = _locate(lines2, nid)
+                _seen_lines(lines2, s, e, snapshot_field, seen)
+                _write_text(target, "\n".join(lines2))
+                doc2, ids2, jud2, fields2, raw2 = read_back()
+                shape = _page_side(paths)[1]
+        elif arrangement and brief:
+            shape = _page_side(paths)[1]
     except (Exception, SystemExit) as e:
         _write_text(target, original)
         raise Refused(f"the write broke the record and was undone: {e}")
+    # an arrangement's review also rewrites the shape it stood on - once the record is
+    # safely written, so a failed write leaves the brief as it was
+    if kind == "review" and arrangement and shape is not None:
+        b = yaml.safe_load(io.open(brief, encoding="utf-8").read()) or {}
+        where = _tab_for(b, jud2[nid], ids2)
+        if where is None:
+            out.append("  the brief's tabs serve no session source this rests on - no shape "
+                       "rewritten; say which tab by making it serve one")
+        else:
+            blines = io.open(brief, encoding="utf-8").read().split("\n")
+            _shape_in(blines, where, shape)
+            _write_text(brief, "\n".join(blines))
+            out.append(f"  shape of {'tab ' + repr(where[0]) if where[1] else 'the brief'}: "
+                       + ", ".join(f"{k}: {v}" for k, v in shape.items()))
     for l in out:
         print(l)
     _report(paths, kind, nid, doc2, ids2, jud2, fields2, raw2)
@@ -1930,6 +1985,8 @@ def write_command(cmd, rest):
     as_of = opts.get("as_of")
     if as_of and not re.match(r"^\d{4}-\d{2}-\d{2}$", as_of):
         raise Refused("--as-of takes a date, YYYY-MM-DD")
+    if opts.get("why") and "\n" in opts["why"]:
+        raise Refused("--why is one line: a second line would be a line of the record")
     action = {"kind": cmd, "id": nid, "as_of": as_of, "why": opts.get("why"), "into": opts.get("in")}
     if cmd == "set":
         if not args:

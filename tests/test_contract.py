@@ -419,6 +419,18 @@ class TheWrittenLayer(unittest.TestCase):
             self.assertIn("heat.loss_kw: 35", brief)
             self.assertIn('reviewed: "2026-09-03"', brief)
 
+    def test_a_rewritten_verdict_tints_the_text_that_placed_it(self):
+        with tempfile.TemporaryDirectory() as d:
+            rec = copy_fixture(pathlib.Path(d))
+            edit(rec, 'verdict: "the old boiler cannot hold 12°C on the coldest February night"',
+                 'verdict: "the old boiler cannot hold 12°C on any February night"')
+            code, out, _ = run(SCRIPTS / "render_page.py", "--verify", rec)
+            self.assertEqual(code, 0, out)
+            self.assertIn("section 'What the numbers say': its text saw c.boiler_short = the old "
+                          "boiler cannot hold 12°C on the coldest February night, now the old boiler "
+                          "cannot hold 12°C on any February night - read it again", out)
+            self.assertIn('<div class="txt moved" dir="auto">', dom_of(run(SCRIPTS / "render_page.py", rec)[1]))
+
     def test_a_moved_dependency_tints_the_card_and_review_clears_it(self):
         with tempfile.TemporaryDirectory() as d:
             rec = copy_fixture(pathlib.Path(d))
@@ -498,6 +510,30 @@ class TheWritePath(unittest.TestCase):
                 self.assertIn(why, out + err)
                 self.assertEqual(rec.read_text(encoding="utf-8"), before)
 
+    def test_a_reason_is_one_line(self):
+        with tempfile.TemporaryDirectory() as d:
+            rec = copy_fixture(pathlib.Path(d))
+            before = rec.read_text(encoding="utf-8")
+            code, out, err = run(SCRIPTS / "provenance.py", "set", "heat.loss_kw", "35",
+                                 "--why", "re-measured\ninjected: true", rec)
+            self.assertEqual(code, 1)
+            self.assertIn("--why is one line", out + err)
+            self.assertEqual(rec.read_text(encoding="utf-8"), before)
+
+    def test_a_pointer_record_is_followed_to_the_file_that_holds_the_entry(self):
+        with tempfile.TemporaryDirectory() as d:
+            root, mid, leaf = (pathlib.Path(d) / n for n in ("PROVENANCE.yaml", "mid.yaml", "leaf.yaml"))
+            root.write_text("record: mid.yaml\n", encoding="utf-8")
+            mid.write_text("also: leaf.yaml\nknown:\n  x.one: {v: 1, name: one}\n", encoding="utf-8")
+            leaf.write_text("known:\n  x.two: {v: 2, name: two}\njudgments:\n  c.two:\n"
+                            "    rests_on: [x.two]\n    verdict: small\n    wrong_if: \"x.two > 5\"\n"
+                            "    seen: {x.two: 2}\n", encoding="utf-8")
+            code, out, err = run(SCRIPTS / "provenance.py", "set", "x.two", "3", "--as-of", "2026-09-03", root)
+            self.assertEqual(code, 0, out + err)
+            self.assertIn("MUTED     c.two: x.two moved 2 -> 3", out)
+            self.assertIn('x.two: {v: 3, of: "2026-09-03", name: two}', leaf.read_text(encoding="utf-8"))
+            self.assertEqual(root.read_text(encoding="utf-8"), "record: mid.yaml\n")
+
     def test_set_of_the_same_value_writes_nothing(self):
         with tempfile.TemporaryDirectory() as d:
             rec = copy_fixture(pathlib.Path(d))
@@ -575,6 +611,17 @@ class TheWritePath(unittest.TestCase):
                 self.assertIn(why, out + err)
             self.assertEqual(rec.read_text(encoding="utf-8"), before)
 
+    def test_add_may_rest_on_a_count_nothing_mentioned_yet(self):
+        with tempfile.TemporaryDirectory() as d:
+            rec = copy_fixture(pathlib.Path(d))
+            code, out, err = run(SCRIPTS / "provenance.py", "add", "c.small", "rests_on=[graph.entries]",
+                                 "verdict=a record small enough to read whole",
+                                 "wrong_if=graph.entries > 100", "--as-of", "2026-09-03", rec)
+            self.assertEqual(code, 0, out + err)
+            self.assertIn("the new judgment holds: wrong_if does not hold (graph.entries > 100)", out)
+            self.assertIn("seen: {graph.entries: 7}", rec.read_text(encoding="utf-8"))
+            self.assertEqual(run(SCRIPTS / "provenance.py", "check", rec)[0], 0)
+
     def test_add_takes_an_open_question(self):
         with tempfile.TemporaryDirectory() as d:
             rec = copy_fixture(pathlib.Path(d))
@@ -620,6 +667,27 @@ class TheWritePath(unittest.TestCase):
                           brief.read_text(encoding="utf-8"))
             _, page, _ = run(SCRIPTS / "render_page.py", rec)
             self.assertNotIn("changed shape since this arrangement was written", page)
+
+    def test_review_of_a_moved_arrangement_writes_the_settled_shape(self):
+        with tempfile.TemporaryDirectory() as d:
+            rec = copy_fixture(pathlib.Path(d))
+            brief = pathlib.Path(d) / "PROVENANCE.view.yaml"
+            # a snapshot that no longer matches puts the arrangement in front of a person -
+            # and its own flag is part of the shape it stands on
+            edit(rec, 'graph.flagged: 0, page.spill: 0}', 'graph.flagged: 1, page.spill: 0}')
+            self.assertIn("flagged: 0 &rarr; 1", run(SCRIPTS / "render_page.py", rec)[1])
+            code, out, _ = run(SCRIPTS / "provenance.py", "review", "v.heating_tab",
+                               "--as-of", "2026-09-03", rec)
+            self.assertEqual(code, 0, out)
+            self.assertIn("graph.flagged: 1 -> 0", out)
+            # the shape written is the record's shape after the review, not before it
+            self.assertIn("shape of tab 'The February night': entries: 7, judgments: 2, flagged: 0, "
+                          "blocked: 0", out)
+            self.assertIn("shape: {entries: 7, judgments: 2, flagged: 0, blocked: 0}",
+                          brief.read_text(encoding="utf-8"))
+            page = run(SCRIPTS / "render_page.py", rec)[1]
+            self.assertNotIn("changed shape since this arrangement was written", page)
+            self.assertEqual(run(SCRIPTS / "render_page.py", "--verify", rec)[0], 0)
 
     def test_a_long_value_folds_and_reads_back_whole(self):
         for s in ("It gives 24 kW against a loss of 31 kW - a shortfall of 7 kW before any wind, "
