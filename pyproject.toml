@@ -48,5 +48,7 @@ packages = ["kpopper"]
 package-dir = { kpopper = "scripts" }
 
 [tool.setuptools.package-data]
-# The page's own files ship with the renderer that reads them.
-kpopper = ["page/*.css", "page/*.js"]
+# The page's own files ship with the renderer that reads them, and the browser checks ship
+# with the command line that runs them - `kpopper page --checks` is only as installable as
+# the file it hands to node.
+kpopper = ["page/*.css", "page/*.js", "verify_page.js"]

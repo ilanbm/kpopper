@@ -1,9 +1,13 @@
-"""The release pull request's arithmetic, and the invariant the three version files keep.
+"""The release pull request's arithmetic, and the invariants a release carries: what the
+version files keep, and what the packages ship.
 
     python3 -m unittest discover -s tests
 """
+import fnmatch
 import importlib.util
+import json
 import pathlib
+import re
 import unittest
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
@@ -32,9 +36,18 @@ class TheBump(unittest.TestCase):
 
 
 class TheVersionFiles(unittest.TestCase):
-    def test_the_three_files_agree(self):
+    def test_every_channel_carries_the_same_version(self):
         found = R.versions_in(R.read_texts())
         self.assertEqual(len(set(found.values())), 1, found)
+
+    def test_the_npm_package_is_one_of_them(self):
+        # The npm package ships the browser checks, so it moves with everything else. Read
+        # by the manifest rather than by the pattern, so a dependency version appearing
+        # above the package's own cannot pass for it.
+        self.assertIn("package.json", R.VERSION_FILES)
+        found = R.versions_in(R.read_texts())
+        manifest = json.loads((ROOT / "package.json").read_text(encoding="utf-8"))
+        self.assertEqual(found["package.json"], manifest["version"])
 
     def test_moving_the_version_touches_only_the_version(self):
         texts = R.read_texts()
@@ -44,6 +57,18 @@ class TheVersionFiles(unittest.TestCase):
             before, after = texts[name].splitlines(), text.splitlines()
             self.assertEqual(len(before), len(after))
             self.assertEqual(sum(1 for a, b in zip(before, after) if a != b), 1, name)
+
+
+class WhatShips(unittest.TestCase):
+    def test_the_browser_checks_travel_with_the_command_line(self):
+        # `kpopper page --checks` runs the file that came with the reader, so a wheel that
+        # declares everything except that file turns the flag into an error message on every
+        # installed copy - and nothing else in the suite opens a wheel to notice.
+        toml = (ROOT / "pyproject.toml").read_text(encoding="utf-8")
+        block = re.search(r"\[tool\.setuptools\.package-data\](.*?)(?:\n\[|\Z)", toml, re.S)
+        self.assertIsNotNone(block, "no package-data section")
+        globs = re.findall(r'"([^"]+)"', block.group(1))
+        self.assertTrue(any(fnmatch.fnmatch("verify_page.js", g) for g in globs), globs)
 
 
 class TheChangelog(unittest.TestCase):

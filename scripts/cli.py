@@ -12,20 +12,34 @@ straight through to provenance.py; page renders the record and can open what it 
   kpopper review  <id | "section title">  it still holds: seen rewritten from what the record holds
   kpopper page    [--out PATH] [--open] [--tree] [args...]   the record as one page
                   add --verify to check the page instead of writing one
+                  add --checks [PAGE] for the browser checks on a page already written
 
 Run from the directory the record sits in, same as the two scripts underneath - or from
 any checkout of a project that registered its record (see `where`).
 """
-import os, sys, pathlib, subprocess, webbrowser
+import os, shutil, sys, pathlib, subprocess, webbrowser
 
 HERE = pathlib.Path(__file__).resolve().parent
 READ = ("open", "check", "affects", "pull", "where", "set", "add", "review")
 
 
+def do_checks(args):
+    """The browser checks, on a page that was already written. They are Node, so all this
+    does is find the copy that shipped beside the reader and hand it over - an installed one
+    sits somewhere nobody would think to look."""
+    checker = HERE / "verify_page.js"
+    if not checker.exists():
+        sys.exit(f"the browser checks are not in this install: {checker}")
+    node = shutil.which("node")
+    if not node:
+        sys.exit("the browser checks run on Node 18+, and there is no node on the path")
+    return subprocess.run([node, str(checker)] + args).returncode
+
+
 def do_page(args):
-    """--out/--open/--tree belong to this dispatcher, not to render_page.py, so they are
-    peeled off here and never forwarded."""
-    out, after, tree, rest = "record.html", False, False, []
+    """--out/--open/--tree/--checks belong to this dispatcher, not to render_page.py, so they
+    are peeled off here and never forwarded."""
+    out, after, tree, checks, rest = "record.html", False, False, False, []
     i = 0
     while i < len(args):
         a = args[i]
@@ -37,8 +51,13 @@ def do_page(args):
             after, i = True, i + 1
         elif a == "--tree":
             tree, i = True, i + 1
+        elif a == "--checks":
+            checks, i = True, i + 1
         else:
             rest.append(a); i += 1
+    if checks:
+        # a written page, not a record: nothing here is rendered and nothing is verified
+        sys.exit(do_checks(rest))
     script = str(HERE / "render_page.py")
     if "--verify" in rest:
         # nothing is written in this mode; the exit code is the whole answer.
