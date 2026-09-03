@@ -128,7 +128,9 @@ judgment declares it missing with `blocked_on`), a dependency with no snapshot, 
 naming something undeclared, prose sitting in a predicate field, or a plain-comparison
 predicate that currently holds — a judgment broken by its own condition. A declared hole is a
 note, not a failure — a build that stays red over an honest declaration teaches records to
-stop declaring. A dependency that moved since a judgment's snapshot is reported as `MOVED`
+stop declaring. So is a judgment decided on the session's own prior — a `prior.*` claim whose
+value is the confidence — that names in `reopened_by` the sign a person would read to re-open
+it. A dependency that moved since a judgment's snapshot is reported as `MOVED`
 and does not fail the build either: it puts the judgment in front of a person, and it is
 muted when the predicate names it and still evaluates false — moved, not across the line.
 

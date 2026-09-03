@@ -309,6 +309,7 @@ compared with the record's - a tab whose shape moved says so at its top, and `--
 | `{{id}}` | in any text field — `because`, `via`, `note` | a reference, never a retyped value. `check` fails one that names nothing, and one inside a judgment that names something the judgment does not rest on. A card draws it: the value where there is one, the name where there is only a rule, the verdict for a judgment — each hoverable. |
 | `born:`, `stood:` | on an arrangement judgment (`v.*`) | when the arrangement was decided, and how many builds it has stood. Drift is counted from the newest `born` the record carries. |
 | `graph.*`, `page.*` | as a dependency, or inside a falsifier | names the reader computes; see below. |
+| `reopened_by:` | on a judgment | the prose sign that re-opens a judgment decided on a session's prior — a `prior.*` claim whose value is the confidence — or on taste. `blocked_on` keeps its meaning: the predicate cannot be evaluated, and why. Not a hole and not waiting: the judgment needs no person, `check` counts it among the declared, and the card shows it in a row of its own. |
 
 **Computed names**
 
