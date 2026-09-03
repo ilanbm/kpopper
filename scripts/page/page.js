@@ -21,6 +21,7 @@
       return '<span class="dep" data-go="'+esc(d)+'">'+esc(d)+'</span>'}).join('')+'</span>')+
     (j.pred?row('wrong if',link(j.pred)):'')+
     (j.blocked?row('blocked',esc(j.blocked)):'')+
+    (j.reopened?row('reopened by',esc(j.reopened)):'')+
     (j.because?row('because',esc(j.because)):'')}
   var e=E[id]||{};
   return h+(e.name?'<div class="nm">'+esc(e.name)+'</div>':'')+

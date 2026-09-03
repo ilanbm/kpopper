@@ -98,7 +98,7 @@ Three sections, mirroring the three things worth keeping. Grow it freely; do not
 meta:
   updated: 2026-08-31
 
-sources:      # documents, pages, people, messages — things nothing else produced
+sources:      # documents, pages, people, messages, a session's prior — things nothing else produced
   msa:      {name: "the master agreement", file: "contracts/acme-msa-2026.pdf", of: "2026-04-02"}
   pricing:  {name: "Acme's pricing page", url: "https://…/pricing", read: "2026-08-30"}
 
@@ -157,7 +157,10 @@ judgments:
 
 `blocked_on` says a predicate cannot be evaluated *and why*. That is a real state and it should
 be visible — what must never happen is a predicate that reads like one and is actually prose,
-because nothing evaluates it and nobody notices. Say it is blocked instead.
+because nothing evaluates it and nobody notices. Say it is blocked instead. A judgment that is
+*decided* — on a session's prior, or on taste — and names only the sign that would re-open it
+is a third state, and says `reopened_by`: not a hole, and not waiting (see *An agent's prior as
+a source*, under Step 5).
 
 ## Step 2 — Record what you touch, do not survey
 
@@ -176,7 +179,8 @@ source, and the next session should not have to look again.
 that produced the number. Record it as one: what was done, when, and in which session,
 precisely enough to go back to the transcript. The judgments a session writes need no
 session field; if two sessions ever disagree about one, that is the question that earns it,
-and not before.
+and not before. A session is also a source when what it already knew is what a judgment rests
+on — a `prior.*` claim whose value is the confidence; see *An agent's prior as a source*.
 
 **And record how faithful it is.** This matters far more for text than for numbers, because a number is either read correctly or not, while text degrades in stages:
 
@@ -373,7 +377,66 @@ a silent hole that no amount of reading will reveal.
 Measure thresholds as change since the last review rather than absolute level where you can — it
 keeps a literal out of the predicate and survives the value moving for unrelated reasons.
 
-**Never invent a threshold to make a predicate evaluable.** A vague quantifier is a signal that the threshold lives in someone's head and was never stated — surface it and ask. If it cannot honestly be made evaluable, say so with `blocked_on` rather than writing prose in the predicate field.
+**Never invent a threshold to make a predicate evaluable.** A vague quantifier is a signal that the threshold lives in someone's head and was never stated — surface it and ask. If it cannot honestly be made evaluable, say so with `blocked_on` rather than writing prose in the predicate field — and if the judgment is decided and the prose is what would re-open it, say `reopened_by`.
+
+### An agent's prior as a source
+
+What a session already knows is a source. It enters the record as a claim that says where it came
+from, with one difference: **the value is the confidence.**
+
+```yaml
+known:
+  prior.macros_bind_by_position:
+    v: 0.9                        # the confidence, and nothing else
+    unit: confidence
+    reach: general
+    name: "spreadsheet macros written against an export bind to column positions, not names"
+    from: s.2026_09_03_export     # the session source - s.<date>_<slug>, with asked: verbatim
+```
+
+`from:` names the session source, never a model: which model answered is a fact about the run, and
+calibrating models is not the record's job. `reach` says what kind of claim it is. **General** is
+how things usually work anywhere; the session has seen the pattern countless times and its
+confidence is earned. **Local** is this project right now, which training cannot know: the session
+is guessing from what is typical, and the specific case is specific. Scored on one day, a
+session's general claims held 3 of 3, its local claims checked first 6 of 6, its local claims
+assumed 0 of 4, each of which felt like 0.85. So `reach: general` may rest on the prior; `reach:
+local` wants a `run.` or a `doc.` beside it — and a judgment resting on a prior also rests on at
+least one measured local fact.
+
+**Who decides is confidence × the cost of being wrong** — the lane policy applied to a judgment:
+confidence attaches to the claim, never to the decision; cost is reversibility and blast radius.
+
+| | high confidence (≥ ~0.8) | low confidence |
+|---|---|---|
+| **cheap to reverse** | decided: one line in the record, no person | try it: the reversal is the test; record what was tried |
+| **costly to reverse** | decided, recorded, and the person sees it — to confirm, not to wait on | the person decides — or buys information with the cheapest experiment |
+
+Only the last cell waits for an event, and there by choice: 0.7 behind a reversible choice is a
+decision, not a hypothesis. **Always write what would re-open the judgment; pursue it only when
+being wrong is costly.** Three fields, three meanings:
+
+| field | meaning | read by |
+|---|---|---|
+| `wrong_if` | a predicate over entries the judgment rests on | the reader, at every `check` |
+| `blocked_on` | the predicate cannot be evaluated, and why | nobody — a declared hole |
+| `reopened_by` | the prose sign that re-opens a judgment decided on a prior, or on taste | a person, when the sign appears |
+
+```yaml
+  c.order_is_the_contract:
+    rests_on: [prior.macros_bind_by_position, export.header_changes]
+    verdict: "the column order of the export is a contract: a column is added at the end, never between"
+    reopened_by: "a macro that breaks on an export whose column order did not change"
+    seen: {prior.macros_bind_by_position: 0.9, export.header_changes: 0}
+```
+
+A judgment with `reopened_by` and an empty `wrong_if` is decided, not waiting: `check` counts it
+among the declared, nothing lists it as needing a person, and its card shows the sign in a row of
+its own. Write `wrong_if` beside it where the record holds what it reads: `prior.x < 0.8` re-opens
+the decision when the confidence is re-stated below the line. Rating everything 0.9 buys nothing:
+the sign still has to be written, and a bad one is visible — "wrong if it turns out wrong" reads
+as what it is. The kind carries its own falsifier: if judgments resting on priors at 0.8 or above
+keep reversing, the confidences carry no information and `prior.*` is demoted to a note.
 
 ## Step 6 — Changing the shape
 
