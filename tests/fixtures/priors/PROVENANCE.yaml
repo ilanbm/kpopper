@@ -33,6 +33,12 @@ known:
     name: "spreadsheet macros written against an export bind to column positions, not to names"
     from: s.2026_09_03_export
     reach: general
+  prior.regeneration_is_deterministic:
+    v: 0.6
+    unit: confidence
+    name: "regenerating this export from the ledger twice over produces the same file both times"
+    from: s.2026_09_03_export
+    reach: local
 
 judgments:
   c.fourteen_fit:
@@ -40,6 +46,17 @@ judgments:
     verdict: "fourteen columns fit one printed page in landscape"
     wrong_if: "export.columns > 16"
     seen: {export.columns: 14}
+  c.monthly_export_regenerated:
+    rests_on: [prior.regeneration_is_deterministic, export.header_changes]
+    verdict: "the monthly export is regenerated from the ledger each month rather than edited
+              in place"
+    because: "Whether regenerating twice over gives the same file is a guess about this ledger
+              at {{prior.regeneration_is_deterministic}}, not something the session has seen
+              anywhere - so it is tried rather than decided, and the trying is the test: a header
+              that differs across the last three exports is regeneration not reproducing what it
+              replaced, and {{export.header_changes}} of them differ."
+    wrong_if: "export.header_changes > 0"
+    seen: {prior.regeneration_is_deterministic: 0.6, export.header_changes: 0}
   c.order_is_the_contract:
     rests_on: [prior.macros_bind_by_position, export.header_changes]
     verdict: "the column order of the export is a contract: a column is added at the end, never

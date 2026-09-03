@@ -436,7 +436,10 @@ its own. Write `wrong_if` beside it where the record holds what it reads: `prior
 the decision when the confidence is re-stated below the line. Rating everything 0.9 buys nothing:
 the sign still has to be written, and a bad one is visible — "wrong if it turns out wrong" reads
 as what it is. The kind carries its own falsifier: if judgments resting on priors at 0.8 or above
-keep reversing, the confidences carry no information and `prior.*` is demoted to a note.
+keep reversing, the confidences carry no information and `prior.*` is demoted to a note. How many
+they are is counted rather than guessed at: `check` says how many judgments rest on `prior.*`
+claims and how many of those on a prior at 0.8 or above, and the opener carries the same line
+where a record has any.
 
 ## Step 6 — Changing the shape
 

@@ -1,6 +1,7 @@
 """A session's prior as a source, and the judgment decided on it: the prior.* claim whose
-value is the confidence, and the reopened_by field the reader accepts beside blocked_on -
-a decided judgment that names the sign a person reads, never a hole and never waiting.
+value is the confidence, the reopened_by field the reader accepts beside blocked_on - a
+decided judgment that names the sign a person reads, never a hole and never waiting - and
+the count of how much of a record stands on a session's own confidence.
 Runs against the fixture record in tests/fixtures/priors with no browser and no network:
 
     python3 -m unittest discover -s tests
@@ -24,6 +25,13 @@ import render_page as R  # noqa: E402
 
 DECIDED = "c.order_is_the_contract"
 PRIOR = "prior.macros_bind_by_position"
+# the fixture's other prior-resting judgment: a local claim below the line, tried rather
+# than decided, so the count has one judgment on each side of it
+TRIED = "c.monthly_export_regenerated"
+LOW = "prior.regeneration_is_deterministic"
+OWN = ROOT / "PROVENANCE.yaml"                      # this project's own record
+NO_PRIORS = ROOT / "tests" / "fixtures" / "hypotheses" / "PROVENANCE.yaml"
+COUNT = "{} judgments rest on prior.* claims, {} of them on a prior at 0.8 or above"
 
 
 def run(*args, cwd=None):
@@ -59,7 +67,7 @@ class TheReaderAcceptsAReopener(unittest.TestCase):
         self.assertIn(f"NOTE {DECIDED}: no predicate at all - decided; reopened by: a macro "
                       f"that breaks on an export whose column order did not change", out)
         self.assertNotIn("blocked", out.lower())
-        self.assertRegex(out, r"\n2 judgments, 7 entries, 0 problems, 1 declared\n")
+        self.assertRegex(out, r"\n3 judgments, 9 entries, 0 problems, 2 declared\n")
 
     def test_a_decided_judgment_needs_no_person(self):
         doc, ids, jud, fields, raw = read(RECORD)
@@ -80,7 +88,8 @@ class TheReaderAcceptsAReopener(unittest.TestCase):
         self.assertIn("    reopened by: a macro that breaks on an export whose column order did "
                       "not change - the binding would then", out)
         self.assertNotIn("blocked", out)
-        self.assertNotIn("wrong_if", out)
+        under = out.split(f"+ {DECIDED}:")[1].split("\n+ ")[0]
+        self.assertNotIn("wrong_if", under)
 
     def test_without_the_reopener_the_same_judgment_fails(self):
         with tempfile.TemporaryDirectory() as d:
@@ -167,6 +176,82 @@ class TheReaderAcceptsAReopener(unittest.TestCase):
             self.assertIn(f"NOTE {DECIDED}: no predicate at all - decided; reopened by:", out)
 
 
+class TheReaderCountsWhatRestsOnPriors(unittest.TestCase):
+    """How much of a record stands on a session's own confidence, said at every check and at
+    every open - the count the demotion rule is read against."""
+
+    def test_check_says_the_count_and_never_fails_on_it(self):
+        code, out, err = run(SCRIPTS / "provenance.py", "check", RECORD)
+        self.assertEqual(code, 0, out + err)
+        self.assertIn("NOTE " + COUNT.format(2, 1), out)
+        # the two it counts are the two the fixture draws on a prior, one on each side of
+        # the line; the third judgment rests on a measured column count and is not among them
+        _, ids, jud, _, raw = read(RECORD)
+        self.assertEqual(sorted(n for n, j in jud.items()
+                                if any(d.startswith("prior.") for d in j["deps"])),
+                         [TRIED, DECIDED])
+        self.assertEqual((P.value_of(raw, ids, PRIOR), P.value_of(raw, ids, LOW)), (0.9, 0.6))
+
+    def test_the_opener_carries_it_under_the_judgments_it_counts(self):
+        _, out, _ = run(SCRIPTS / "provenance.py", "open", RECORD)
+        self.assertIn("9 entries, 3 judgments, updated 2026-09-03\n" + COUNT.format(2, 1) + "\n",
+                      out)
+
+    def test_a_record_with_no_priors_is_told_nothing_about_them(self):
+        for cmd in ("check", "open"):
+            code, out, err = run(SCRIPTS / "provenance.py", cmd, NO_PRIORS)
+            self.assertEqual(code, 0, out + err)
+            self.assertNotIn("prior", out, cmd)
+
+    def test_the_count_reads_the_value_the_record_holds_now(self):
+        # a confidence restated below the line moves the judgment out of the high count at
+        # the next read: nothing is stored, so nothing has to be refreshed
+        with tempfile.TemporaryDirectory() as d:
+            rec = copy_fixture(pathlib.Path(d))
+            code, out, err = run(SCRIPTS / "provenance.py", "set", PRIOR, "0.5",
+                                 "--why", "calibrated lower", "--as-of", "2026-09-04", rec)
+            self.assertEqual(code, 0, out + err)
+            _, out, _ = run(SCRIPTS / "provenance.py", "check", rec)
+            self.assertIn("NOTE " + COUNT.format(2, 0), out)
+            _, out, _ = run(SCRIPTS / "provenance.py", "open", rec)
+            self.assertIn(COUNT.format(2, 0), out)
+
+    def test_a_prior_the_record_does_not_hold_is_counted_but_never_above_the_line(self):
+        # the judgment says it rests on a prior, so it is one of them; what that prior is
+        # worth is unknown, and an unknown is not a confidence at 0.8
+        with tempfile.TemporaryDirectory() as d:
+            rec = copy_fixture(pathlib.Path(d))
+            code, out, err = run(SCRIPTS / "provenance.py", "add", "c.by_hand",
+                                 "rests_on=[prior.unwritten, export.header_changes]",
+                                 "verdict=the ledger is reconciled by hand before each export",
+                                 "blocked_on=observational: the session never wrote the claim "
+                                 "down, so nothing holds its confidence",
+                                 "--as-of", "2026-09-04", rec)
+            self.assertEqual(code, 0, out + err)
+            code, out, _ = run(SCRIPTS / "provenance.py", "check", rec)
+            self.assertEqual(code, 0, out)
+            self.assertIn("NOTE " + COUNT.format(3, 1), out)
+
+    def test_this_record_says_what_it_stands_on(self):
+        # the count on the record this method keeps about itself, taken twice: once by the
+        # reader, and once here from the file, so the line cannot drift from what it counts
+        _, ids, jud, _, raw = read(OWN)
+
+        def above(name):
+            for d in jud[name]["deps"]:
+                v = P.value_of(raw, ids, d) if d.startswith("prior.") else None
+                if isinstance(v, (int, float)) and v >= 0.8:
+                    return True
+            return False
+        rest = sorted(n for n, j in jud.items()
+                      if any(d.startswith("prior.") for d in j["deps"]))
+        high = [n for n in rest if above(n)]
+        self.assertEqual((len(rest), len(high)), (6, 4), rest)
+        code, out, err = run(SCRIPTS / "provenance.py", "check", OWN, cwd=ROOT)
+        self.assertEqual(code, 0, out + err)
+        self.assertIn("NOTE " + COUNT.format(len(rest), len(high)), out)
+
+
 class ThePageShowsTheReopener(unittest.TestCase):
     def test_verify_is_clean(self):
         # from the record's own directory, as a session runs it: no brief sits beside this one
@@ -200,7 +285,8 @@ class TheWritePathTakesAPrior(unittest.TestCase):
                                  "name=a column keeps its header once macros depend on it",
                                  "from=s.2026_09_03_export", "--as-of", "2026-09-03", rec)
             self.assertEqual(code, 0, out + err)
-            self.assertIn(f"add prior.names_are_stable into known, after {PRIOR}", out)
+            self.assertIn("add prior.names_are_stable into known, before "
+                          "prior.regeneration_is_deterministic", out)
             code, out, err = run(SCRIPTS / "provenance.py", "add", "c.rename_is_safe",
                                  "rests_on=[prior.names_are_stable, export.header_changes]",
                                  "verdict=a column may be renamed in place",
@@ -220,7 +306,7 @@ class TheWritePathTakesAPrior(unittest.TestCase):
             self.assertEqual(code, 0, out)
             self.assertIn("NOTE c.rename_is_safe: no predicate at all - decided; reopened by: a "
                           "macro that breaks on a rename alone", out)
-            self.assertRegex(out, r"\n3 judgments, 9 entries, 0 problems, 2 declared\n")
+            self.assertRegex(out, r"\n4 judgments, 11 entries, 0 problems, 3 declared\n")
 
     def test_a_prior_restated_below_the_line_fires_the_judgment_drawn_against_it(self):
         with tempfile.TemporaryDirectory() as d:
