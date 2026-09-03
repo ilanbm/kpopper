@@ -154,16 +154,41 @@ class ThePageAcceptsTheContract(unittest.TestCase):
             text = text[:text.index("groups:")] + (
                 "groups:\n  Heating: [heat., c.boiler_short]\n  Calendar: [when.first_cold_night]\n"
                 "labels:\n  when.first_cold_night: first cold night\n")
-            brief.write_text(text.replace("        by: threads\n", ""), encoding="utf-8")
+            brief.write_text(re.sub(r"\n        by: [^\n]*", "", text), encoding="utf-8")
             code, out, _ = run(SCRIPTS / "render_page.py", "--verify", rec)
             self.assertEqual(code, 0, out)
             _, page, _ = run(SCRIPTS / "render_page.py", rec)
             self.assertIn('<h3 dir="auto">Heating</h3>', page)
 
-    def test_several_schemes_are_declared_and_the_first_is_drawn(self):
-        code, out, _ = run(SCRIPTS / "render_page.py", "--verify", RECORD)
-        self.assertEqual(code, 0, out)
-        self.assertIn("2 grouping schemes declared; the page draws 'threads' and keeps the rest", out)
+    def test_a_section_draws_by_its_own_scheme(self):
+        _, page, _ = run(SCRIPTS / "render_page.py", RECORD)
+        dom = re.sub(r"<script>.*?</script>", "", page, flags=re.S)
+        i = dom.index("By where it came from")
+        section = dom[i:dom.index("<h2", i + 1)]
+        for name in ("The service sheet", "Worked out in the session", "Cold-night inputs"):
+            self.assertIn(f'<h3 dir="auto">{name}</h3>', section)
+        # heat.loss_kw is under two groups of this scheme, so it is drawn under both
+        self.assertEqual(section.count('data-id="heat.loss_kw"'), 2)
+        self.assertNotIn("Heating", section)
+
+    def test_a_section_may_read_by_the_source_an_entry_came_from(self):
+        with tempfile.TemporaryDirectory() as d:
+            rec = copy_fixture(pathlib.Path(d))
+            edit(pathlib.Path(d) / "PROVENANCE.view.yaml", "by: threads", "by: from")
+            code, out, _ = run(SCRIPTS / "render_page.py", "--verify", rec)
+            self.assertEqual(code, 0, out)
+            _, page, _ = run(SCRIPTS / "render_page.py", rec)
+            self.assertIn('<h3 dir="auto">the boiler&#x27;s service sheet</h3>', page)
+
+    def test_the_older_shape_name_still_reads(self):
+        with tempfile.TemporaryDirectory() as d:
+            rec = copy_fixture(pathlib.Path(d))
+            edit(pathlib.Path(d) / "PROVENANCE.view.yaml",
+                 "        as: grouped\n        by: threads", "        as: fronts\n        by: threads")
+            code, out, _ = run(SCRIPTS / "render_page.py", "--verify", rec)
+            self.assertEqual(code, 0, out)
+            _, page, _ = run(SCRIPTS / "render_page.py", rec)
+            self.assertIn('<h3 dir="auto">Heating</h3>', page)
 
     def test_a_section_reading_by_no_scheme_fails_verify(self):
         with tempfile.TemporaryDirectory() as d:
@@ -174,21 +199,14 @@ class ThePageAcceptsTheContract(unittest.TestCase):
             self.assertIn("section 'By thread' reads by 'owners', which is not a scheme the brief "
                           "declares (declared: threads, where it came from)", out)
 
-    def test_a_section_may_read_by_what_the_record_carries(self):
-        with tempfile.TemporaryDirectory() as d:
-            rec = copy_fixture(pathlib.Path(d))
-            edit(pathlib.Path(d) / "PROVENANCE.view.yaml", "by: threads", "by: from")
-            code, out, _ = run(SCRIPTS / "render_page.py", "--verify", rec)
-            self.assertEqual(code, 0, out)
-
     def test_an_empty_group_is_said(self):
         with tempfile.TemporaryDirectory() as d:
             rec = copy_fixture(pathlib.Path(d))
             edit(pathlib.Path(d) / "PROVENANCE.view.yaml",
-                 "Calendar: [when.first_cold_night]", "Calendar: [when.nothing]")
+                 "Cold-night inputs: [heat.loss_kw, heat.boiler_kw]", "Cold-night inputs: [heat.nothing]")
             code, out, _ = run(SCRIPTS / "render_page.py", "--verify", rec)
             self.assertEqual(code, 0, out)
-            self.assertIn("group 'Calendar' (scheme 'threads') picks nothing", out)
+            self.assertIn("group 'Cold-night inputs' (scheme 'where it came from') picks nothing", out)
 
     def test_the_first_tab_is_drawn_under_its_own_name(self):
         _, page, _ = run(SCRIPTS / "render_page.py", RECORD)

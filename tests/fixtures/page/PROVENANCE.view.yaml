@@ -15,8 +15,13 @@ tabs:
       - title: "By thread"
         why: "the heating numbers and the calendar, side by side"
         pick: [heat., when.first_cold_night]
-        as: fronts
+        as: grouped
         by: threads
+      - title: "By where it came from"
+        why: "the same numbers, read by what they rest on"
+        pick: [heat., when.first_cold_night]
+        as: grouped
+        by: where it came from
       - title: "What stands"
         why: "every verdict here says what would make it wrong"
         pick: judgments
@@ -29,5 +34,6 @@ groups:
   where it came from:
     The service sheet: [heat.boiler_kw]
     Worked out in the session: [heat.loss_kw, heat.deficit_kw, when.first_cold_night]
+    Cold-night inputs: [heat.loss_kw, heat.boiler_kw]
 labels:
   when.first_cold_night: first cold night

@@ -71,7 +71,7 @@ build failure rather than a page that looks arranged and is not:
 | `as` | for | requires |
 |---|---|---|
 | `timeline` | anything that happens on a date — deadlines, validity windows | every pick has a date value; today is marked in place |
-| `fronts` | separate groups read side by side (a grid on a wide screen) | two or more groups among the picks |
+| `grouped` | separate groups read side by side (a grid on a wide screen); `fronts` still reads as this shape | two or more groups among the picks, in the scheme the section reads by |
 | `headline` | the one to four numbers everything else turns on | one to four picks, each with a literal value |
 | `alerts` | what needs a person, worst first | picks are judgments |
 | `cards` | judgments read for their reasoning | — (default for judgments) |
@@ -114,16 +114,16 @@ groups:
 sections:
   - title: Who is holding what
     pick: [mtg., crypto., q.]
-    as: fronts
+    as: grouped
     by: counterparts
 ```
 
 A flat `groups:` is one scheme. Two schemes the record carries by its own shape need no
-declaration: `by: prefix` and `by: from`. A section that reads by a scheme nobody declared
-fails `--verify`; a group that picks nothing is said. The page draws the first scheme today and
-checks the rest. `fronts:` was one record's name for its one scheme and still reads as one; the
-grid shape that lays groups side by side is still called `fronts` below, until the renderer owns
-no grouping name at all.
+declaration: `by: prefix` and `by: from`. A section draws by the scheme it reads by, and an id
+under two groups of that scheme is drawn under both — which is all a tag is: a scheme whose
+groups overlap. A section that reads by a scheme nobody declared fails `--verify`; a group that
+picks nothing is said. `fronts:` and `as: fronts` are the older names for one scheme and this
+shape; they still read, until the briefs that use them are renamed.
 
 Give sections a `why:` as well as a `title:`. A title names a section; the `why` says what the
 reader is supposed to do with it, and it is the difference between a heading and a hand-off.

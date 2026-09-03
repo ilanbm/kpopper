@@ -141,10 +141,11 @@ known:
     name: "Written sentences across the three existing briefs - every section only picks"
     from: doc.three_briefs
   p.grouping_mentions:
-    v: 23
-    name: "Places the renderer names its one built-in grouping, fronts"
+    v: 3
+    name: "Places the renderer still reads the older name for a grouping, fronts - kept as an
+           alias for briefs not yet renamed"
     from: "scripts/render_page.py"
-    of: "2026-09-02"
+    of: "2026-09-03"
   m.multi.sessions:
     v: 7
     name: "Sessions that worked on this repository in one day, every one opened by the hook"
@@ -500,10 +501,11 @@ judgments:
               that record's name for it. A thread that reads on its own is general - fields,
               subsystems, environments - but naming it once in code is how one project's shape
               becomes every project's layout."
-    blocked_on: "implementation: the renderer still names the one grouping in 23 places, and the
-                 decision is in force when that count is zero; falsified only if a second real
-                 project needs a grouping the declared form cannot express"
-    seen: {p.grouping_mentions: 23,
+    blocked_on: "implementation: the renderer owns no grouping name now and reads the older one
+                 in 3 places, as an alias for briefs not yet renamed; the decision is fully in
+                 force when that count is zero; falsified only if a second real project needs a
+                 grouping the declared form cannot express"
+    seen: {p.grouping_mentions: 3,
            goal.portable: "usable by any session, in any project, with no author present"}
   d.reasoning_in_record:
     rests_on: [d.page_is_graph, doc.hub_seam, doc.agent_graph]
@@ -589,9 +591,10 @@ judgments:
               nothing but a scheme whose groups overlap. Naming the scheme on the section, and
               letting a session open one when a mixed list needs it, is the difference between
               an option the framework offers and a habit of its first author."
-    blocked_on: "implementation: the page draws the first scheme today and checks the rest;
-                 falsified if real briefs never declare a second scheme, which would make the
-                 shape an unused generality"
+    blocked_on: "observational: a section draws by any scheme, so a brief that declares one is
+                 a choice and not the only offer; falsified if the live briefs, rewritten under
+                 the page's own writing guidance, still declare one scheme each - the option
+                 would then be an unused generality"
     seen: {d.groupings_declared: "groupings are declared by the session, any number, under its
                                   own names; the renderer owns none",
            run.design_talk: "read 2026-09-02"}

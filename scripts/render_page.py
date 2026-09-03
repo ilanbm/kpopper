@@ -113,10 +113,10 @@ td.v{font-variant-numeric:tabular-nums}
 .tlr.mark{background:var(--wash);color:var(--acc);font-size:11px;letter-spacing:.09em;
  text-transform:uppercase;padding:5px 15px}
 .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:13px}
-.front{background:var(--sf);border:1px solid var(--ln);border-radius:12px;padding:12px 14px}
-.front h3{margin:0 0 7px;font:600 12px ui-monospace,Menlo,monospace;color:var(--acc)}
+.group{background:var(--sf);border:1px solid var(--ln);border-radius:12px;padding:12px 14px}
+.group h3{margin:0 0 7px;font:600 12px ui-monospace,Menlo,monospace;color:var(--acc)}
 .kv{display:flex;gap:10px;font-size:13px;padding:5px 0;border-top:1px solid var(--ln)}
-.front .kv:first-of-type{border-top:none}
+.group .kv:first-of-type{border-top:none}
 .kv .kl{flex:1;min-width:0;color:var(--ink2)}
 .derived{color:var(--mut);font-style:normal;font-size:12.5px}
 td.kl{width:1%;white-space:nowrap;color:var(--ink2)}
@@ -668,7 +668,7 @@ def human(k):
 # Layout is where intent shows. But a renderer that silently accepts data it cannot
 # express produces a page that looks arranged and is not, so each one says what it
 # needs and a mismatch is a failure, not a shrug.
-def fits(kind, keys, jud, E):
+def fits(kind, keys, jud, E, groups_of=None):
     if kind in ("table", "lines", "cards"):
         return None
     if kind == "timeline":
@@ -683,9 +683,13 @@ def fits(kind, keys, jud, E):
         return (f"headline needs values; {', '.join(blank)} "
                 f"{'is derived and this reader does not evaluate rules' if len(blank) == 1 else 'are derived'}"
                 ) if blank else None
-    if kind == "fronts":
-        g = {k.split(".")[0] for k in keys if k not in jud}
-        return f"fronts lays groups side by side; these are all one group ({g})" if len(g) < 2 else None
+    if kind in ("grouped", "fronts"):
+        g = set()
+        for k in keys:
+            if k not in jud:
+                g |= set(groups_of(k)) if groups_of else {k.split(".")[0]}
+        return (f"grouped lays groups side by side; these are all one group "
+                f"({', '.join(sorted(g)) or '-'})") if len(g) < 2 else None
     if kind == "alerts":
         e = [k for k in keys if k not in jud]
         return f"alerts ranks judgments; {len(e)} of these are entries" if e else None
@@ -979,14 +983,14 @@ def build(paths, brief_path=None):
     labels = (brief.get("labels") or {}) if brief else {}
     # A grouping is a scheme, and a brief may declare several: `groups:` is either one
     # scheme - group name -> selectors - or several, scheme name -> group name -> selectors.
-    # A section says which scheme it reads by; the first declared is what the page draws
-    # today. `fronts` is one record's name for its one scheme, and still reads as one.
+    # A section says which scheme it reads by, and an id under two groups of one scheme is
+    # under both. The older field name still reads as one scheme.
     gdecl = (brief.get("groups") or brief.get("fronts") or {}) if brief else {}
-    schemes = {}
+    schemes, index = {}, {}
     if isinstance(gdecl, dict) and gdecl:
         nested = all(isinstance(v, dict) for v in gdecl.values())
         for sname, gs in (gdecl.items() if nested else [("groups", gdecl)]):
-            schemes[str(sname)] = {}
+            schemes[str(sname)], index[str(sname)] = {}, {}
             if not isinstance(gs, dict):
                 continue
             for gname, sels in gs.items():
@@ -994,12 +998,10 @@ def build(paths, brief_path=None):
                 for sel in ([sels] if isinstance(sels, str) else list(sels or [])):
                     members |= resolve(sel, ids, jud, flags)
                 schemes[str(sname)][str(gname)] = members
+                for k in members:
+                    index[str(sname)].setdefault(k, []).append(str(gname))
     default_scheme = next(iter(schemes), None)
-    front_map = {}
-    if default_scheme:
-        for gname, members in schemes[default_scheme].items():
-            for k in sorted(members):
-                front_map.setdefault(k, gname)
+    reading_by = [default_scheme]        # the scheme the section being drawn reads by
 
     def fx(k, text=None, cls="fx"):
         return (f'<span class="{cls}" data-id="{html.escape(k)}">'
@@ -1033,13 +1035,26 @@ def build(paths, brief_path=None):
             return html.escape(fmt(e["v"]) if pretty else str(e["v"]))[:400]
         return ("= " + refs(str(e["rule"]))) if e.get("rule") else ""
 
-    def front(k):
-        return front_map.get(k, "")
+    def groups_of(k, scheme=None):
+        """The groups this id is under in the scheme being read by - every one of them,
+        since a scheme may overlap. `prefix` and `from` are read off the record itself."""
+        s = scheme or reading_by[0]
+        if s == "prefix":
+            return [labels.get(k.split(".")[0]) or k.split(".")[0]] if "." in k else []
+        if s == "from":
+            src = (E.get(k) or {}).get("from")
+            return [lbl(src)] if isinstance(src, str) and src in E else []
+        return list(index.get(s, {}).get(k, []))
 
-    def kicker(k, seen_fronts):
-        """Which front this row is under - shown only where it is not already obvious."""
-        f = front(k)
-        return f'<span class="grp">{html.escape(f)}</span>' if f and len(seen_fronts) > 1 else ""
+    def group_of(k):
+        gs = groups_of(k)
+        return gs[0] if gs else ""
+
+    def kicker(k, seen_groups):
+        """Which groups this row is under - shown only where it is not already obvious."""
+        gs = groups_of(k)
+        return (f'<span class="grp">{html.escape(" · ".join(gs))}</span>'
+                if gs and len(seen_groups) > 1 else "")
 
     def note(k):
         n = (E.get(k) or {}).get("note")
@@ -1129,7 +1144,7 @@ def build(paths, brief_path=None):
             why = J[name]["blocked"] or "; ".join(SAYS.get(f, f) for f in fs) or "holds"
             if miss and not J[name]["blocked"]:
                 why += " \u2014 " + ", ".join(lbl(d) for d in miss)
-            fr = front(name) or next((front(d) for d in jud[name]["deps"] if front(d)), "")
+            fr = group_of(name) or next((group_of(d) for d in jud[name]["deps"] if group_of(d)), "")
             o.append(f'<div class="al"><span class="dot" style="background:var(--{tone})"></span>'
                      f'<span class="at">'
                      + (f'<span class="grp">{html.escape(fr)}</span>' if fr else "")
@@ -1158,7 +1173,7 @@ def build(paths, brief_path=None):
     def r_timeline(keys):
         today = datetime.date.today()
         seq = sorted(((as_date(val(k)), k) for k in keys), key=lambda t: t[0])
-        fs = {front(k) for k in keys if front(k)}
+        fs = {g for k in keys for g in groups_of(k)}
         o, marked = ['<div class="tl">'], False
         for d, k in seq:
             if not marked and d >= today:
@@ -1172,14 +1187,16 @@ def build(paths, brief_path=None):
             o.append(f'<div class="tlr mark">today &middot; {today.strftime("%d/%m/%Y")}</div>')
         return "".join(o) + "</div>"
 
-    def r_fronts(keys):
+    def r_grouped(keys):
         g = {}
         for k in keys:
-            g.setdefault(front(k) or labels.get(k.split(".")[0])
-                         or (k.split(".")[0] if "." in k else "-"), []).append(k)
+            names = groups_of(k) or [labels.get(k.split(".")[0])
+                                     or (k.split(".")[0] if "." in k else "-")]
+            for name in names:               # an id under two groups is drawn under both
+                g.setdefault(name, []).append(k)
         o = ['<div class="grid">']
         for name, ks in sorted(g.items(), key=lambda kv: (-len(kv[1]), kv[0])):
-            o.append(f'<div class="front"><h3 dir="auto">{html.escape(name)}</h3>' + "".join(
+            o.append(f'<div class="group"><h3 dir="auto">{html.escape(name)}</h3>' + "".join(
                 (f'<div class="kv"><span class="kl">{fx(k, lbl(k))}</span>'
                  f'<span class="kvv">{shown(k, True)}</span></div>'
                  if has_value(k) else
@@ -1191,11 +1208,11 @@ def build(paths, brief_path=None):
     def r_headline(keys):
         return '<div class="heads">' + "".join(
             f'<div class="head"><div class="big">{fx(k, fmt((E.get(k) or {}).get("v")))}</div>'
-            f'<div class="cap" dir="auto">{kicker(k, {front(x) for x in keys if front(x)})}'
+            f'<div class="cap" dir="auto">{kicker(k, {g for x in keys for g in groups_of(x)})}'
             f'{html.escape(lbl(k))}</div>{note(k)}</div>' for k in keys) + "</div>"
 
     ENTRY_R = {"table": r_table, "lines": r_lines, "timeline": r_timeline,
-               "fronts": r_fronts, "headline": r_headline}
+               "grouped": r_grouped, "fronts": r_grouped, "headline": r_headline}
     JUD_R = {"cards": r_cards, "alerts": r_alerts}
     cards = r_cards
 
@@ -1255,7 +1272,9 @@ def build(paths, brief_path=None):
             en = sorted(x for x in got if x not in jud)
             title = str(sec.get("title") or ",".join(picks))
             kind = str(sec.get("as") or "").strip()
-            wrong = fits(kind, sorted(got), jud, E) if kind else None
+            by = str(sec.get("by") or "")
+            reading_by[0] = by if (by in schemes or by in DERIVED_SCHEMES) else default_scheme
+            wrong = fits(kind, sorted(got), jud, E, groups_of) if kind else None
             if wrong:
                 misfit.append((title, wrong))
                 kind = ""
@@ -1277,6 +1296,7 @@ def build(paths, brief_path=None):
         # It may order. It may not drop. This section is not optional and the brief
         # cannot switch it off: an arrangement that hides what it did not anticipate
         # is worth less than no arrangement.
+        reading_by[0] = default_scheme
         spill = sorted(k for k, f in flags.items() if f and k not in covered)
         if spill:
             now_html.append(f'<h2 class="spill" dir="ltr">Not covered by this arrangement '
@@ -1296,9 +1316,6 @@ def build(paths, brief_path=None):
                     contract["stale"].append(f"group '{gname}'"
                                              + (f" (scheme '{sname}')" if len(schemes) > 1 else "")
                                              + " picks nothing")
-        if len(schemes) > 1:
-            contract["stale"].append(f"{len(schemes)} grouping schemes declared; the page draws "
-                                     f"'{default_scheme}' and keeps the rest")
         all_secs = [s for s in (brief.get("sections") or []) if isinstance(s, dict)]
         for t in (brief.get("tabs") or []):
             if isinstance(t, dict):
@@ -1334,7 +1351,10 @@ def build(paths, brief_path=None):
                 contract["bad"].append(f"section {where} picks nothing - it is about something "
                                        f"the record no longer holds")
             kind = str(sec.get("as") or "").strip()
-            wrong = fits(kind, sorted(got), jud, E) if kind and got else None
+            by = str(sec.get("by") or "")
+            by = by if (by in schemes or by in DERIVED_SCHEMES) else default_scheme
+            wrong = (fits(kind, sorted(got), jud, E, lambda k, s=by: groups_of(k, s))
+                     if kind and got else None)
             if wrong:
                 contract["bad"].append(f"section {where}: {wrong}")
         for t in waiting:
