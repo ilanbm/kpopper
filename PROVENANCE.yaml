@@ -135,7 +135,7 @@ known:
     from: "landscape survey"
     of: "2026-09-01"
   lit.registry_names:
-    v: "kpopper is on npm since 2026-09-03, first at 0.21.0, and unregistered on PyPI; ground-tree is unregistered on both"
+    v: "kpopper is published on both npm and PyPI since 2026-09-03, first at 0.21.0 on each; ground-tree is unregistered on both"
     name: "What the registries hold"
     from: "registry lookup"
     of: "2026-09-03"
@@ -585,7 +585,7 @@ judgments:
               written against. The tree is a surface of this record, not a separate install."
     blocked_on: "observational: falsified the day the name is taken by someone else before the
                  tree ships as its own artifact - the only cost here that was avoidable"
-    seen: {lit.registry_names: "kpopper is on npm since 2026-09-03, first at 0.21.0, and unregistered on PyPI; ground-tree is unregistered on both",
+    seen: {lit.registry_names: "kpopper is published on both npm and PyPI since 2026-09-03, first at 0.21.0 on each; ground-tree is unregistered on both",
            lit.name_risk: "bare-term search is owned by a fandom; the org and handle are taken;
                            every package registry is free; qualified search works"}
   d.npm_holds_the_name:
@@ -602,7 +602,7 @@ judgments:
               there; see d.checks_ship_with_the_reader."
     wrong_if: "p.npm_files < 1"
     seen: {prior.ts_direction: 0.7, p.npm_files: 1, p.script_copies: 1,
-           lit.registry_names: "kpopper is on npm since 2026-09-03, first at 0.21.0, and unregistered on PyPI; ground-tree is unregistered on both"}
+           lit.registry_names: "kpopper is published on both npm and PyPI since 2026-09-03, first at 0.21.0 on each; ground-tree is unregistered on both"}
   d.checks_ship_with_the_reader:
     rests_on: [p.checks_in_the_wheel, p.script_copies]
     verdict: "the browser checks install with the command line - `kpopper page --checks` runs the
