@@ -34,8 +34,8 @@ Bump: minor
 learn. `minor` adds something — a command, a field the reader accepts, a computed name, a page
 behaviour. `major` removes something or changes its meaning.
 
-Every push to `main` refreshes one pull request, **Release x.y.z**, holding the three version
-files (`pyproject.toml`, `plugin.json`, `marketplace.json`) and a changelog entry: what merged
+Every push to `main` refreshes one pull request, **Release x.y.z**, holding the version files
+(`pyproject.toml`, `package.json`, `plugin.json`, `marketplace.json`) and a changelog entry: what merged
 since the last release, the bump each declared, and the decisions the record gained. The
 version is the largest declared bump. Merging that pull request is the release; several merges
 in a day fold into one release if nobody merges it in between. After it lands:
@@ -66,11 +66,16 @@ goes through.
 ## The browser pass
 
 `scripts/verify_page.js` opens a rendered page in Chrome and exercises the provenance
-layer in both themes — what `--verify` cannot reach. It needs a driver the plugin does
-not ship, so it stays a local step:
+layer in both themes and under reduced motion — what `--verify` cannot reach. It installs with
+every channel, but the driver that drives the browser ships with none of them, so it stays a
+local step:
 
 ```
 kpopper page --out record.html
 npm i --no-save playwright-core
-NODE_PATH="$PWD/node_modules" node scripts/verify_page.js record.html
+kpopper page --checks record.html
 ```
+
+`--checks` runs the copy of the checker that came with the reader, so it works the same from a
+checkout and from an installed command. The driver is found in the `node_modules` beside the
+page; point `NODE_PATH` at another one to use a project's own.
