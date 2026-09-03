@@ -8,6 +8,7 @@ labels:
   s.2026_09_03_coverage: "Make the page answer for its intents"
   s.2026_09_03_language: "Which language the renderer should be"
   s.2026_09_03_written_layer: "The written layer, and a write path"
+  s.2026_09_04_priors_count: "Count what the record stands on"
   run.records_read_both_ways: "Four records read under both meanings"
   run.blocked_on_read: "Every blocked_on, read for which meaning"
   run.design_talk: "Seven decisions that lived only in chat"
@@ -53,11 +54,12 @@ tabs:
         why: frozen, in the requester's own words - a tab may claim to serve one of these only by picking what that session wrote
         pick: s.
         as: lines
-    shape: {entries: 82, judgments: 60, flagged: 0, blocked: 0}
+    shape: {entries: 84, judgments: 61, flagged: 0, blocked: 0}
 
   - title: What holds
     occasion: "you are about to write something here and need to know what this project already decided, and on what"
-    serves: [s.2026_09_03_coverage, s.2026_09_03_written_layer, s.2026_09_03_hypotheses]
+    serves: [s.2026_09_03_coverage, s.2026_09_03_written_layer, s.2026_09_03_hypotheses,
+             s.2026_09_04_priors_count]
     sections:
       - title: How to read what follows
         why: a wall of cards is not an argument until you know what separates them
@@ -82,7 +84,7 @@ tabs:
         why: every one says what would make it wrong - hover any reference in the reasoning to see the value it was decided against
         pick: judgments
         as: cards
-    shape: {entries: 82, judgments: 60, flagged: 0, blocked: 0}
+    shape: {entries: 84, judgments: 61, flagged: 0, blocked: 0}
 
   - title: What this rests on
     occasion: "you are weighing a decision here and want to see the ground under it rather than the reasoning on top"
@@ -101,4 +103,4 @@ tabs:
         why: a prior is the one input with no measurement under it, so resting on one is itself a decision with a sign of its own
         pick: [d.prior_carries_its_own_falsifier, d.intent_is_a_source]
         as: cards
-    shape: {entries: 82, judgments: 60, flagged: 0, blocked: 0}
+    shape: {entries: 84, judgments: 61, flagged: 0, blocked: 0}

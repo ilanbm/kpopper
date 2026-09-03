@@ -66,6 +66,18 @@ sources:
     of: "2026-09-03, given the page design's written-layer section, the page contract at 84af70a, the
          fixture record under tests/, and the finance lab's write tool"
     read: "2026-09-03"
+  s.2026_09_04_priors_count:
+    asked: "Count what rests on priors: check notes how many judgments rest on prior claims and how
+            many at high confidence, and open carries the line when there are any."
+    name: "The session that made the reader count what rests on a prior - what it was asked, and
+           what it was given. Its reading: how much of the record stands on a session's own
+           confidence is a fact the reader takes at every read and prints for a person, never a
+           stored number and never a gate, and the line it splits the count at is the matrix's own,
+           said out loud in the line so it can be argued with"
+    of: "2026-09-04, given the four cells of the consequence matrix and their line at 0.8, the
+         record's own judgments resting on prior.* claims, the reader's check and opener, and the
+         fixture record under tests/"
+    read: "2026-09-04"
   doc.fact_moves:
     url: "https://claude.ai/code/artifact/ca99e558-60ae-4b22-9221-e3b29d7d7e2b"
     name: "מה קורה כשעובדה זזה - the unified node model"
@@ -307,6 +319,14 @@ known:
     v: 1
     name: "How many times the stop gate blocks before yielding"
     from: "scripts/session_gate.sh"
+  p.prior_count_thresholds:
+    v: 1
+    name: "Lines the count of what rests on priors draws in code - a confidence past which it counts
+           separately"
+    from: "scripts/provenance.py"
+    at: "HIGH_CONFIDENCE, read by priors_line - the matrix's own line, printed inside the line the
+         count prints"
+    of: "2026-09-04"
   p.reference_resolvers:
     v: 1
     name: "Functions that resolve a reference to what it shows - the value, a rule's name, a
@@ -725,6 +745,34 @@ judgments:
                                    truth is pending - its premises in rests_on, its claim in verdict,
                                    what would refute its success in wrong_if - and the merge is its
                                    test"
+  d.priors_counted_at_the_matrix_line:
+    rests_on: [s.2026_09_04_priors_count, d.computed_names_when_named, d.metrics_derived_builtin, d.prior_carries_its_own_falsifier, p.prior_count_thresholds]
+    verdict: "how much of a record stands on a session's own confidence is counted at every check
+              and every open and printed as two numbers - the judgments resting on a prior.* claim,
+              and how many of those on a prior at 0.8 or above - and nothing in the mechanism acts on
+              either"
+    because: "The rule that would demote the kind is a share, and a share needs a denominator
+              someone can see; until the reader counts them, how many judgments stand on a prior is
+              read by hand off the file. The line the count splits at is the matrix's own, not one
+              the count invents, and it is printed inside the line rather than kept in the code where
+              nobody can disagree with it - {{p.prior_count_thresholds}} of them lives there, and the
+              count is what would show a second creeping in: an age past which a prior goes stale, a
+              share past which the line turns red. Neither number gets a computed name, because
+              {{d.computed_names_when_named}} and none is rested on yet - the judgment that will rest
+              on one is the demotion rule itself, once refuted findings make reversals countable."
+    wrong_if: "p.prior_count_thresholds > 1"
+    seen:
+      s.2026_09_04_priors_count: "read 2026-09-04"
+      d.computed_names_when_named: "a computed name becomes an entry only when something in the
+                                    record mentions it; a count nobody rests on does not exist"
+      d.metrics_derived_builtin: "graph.* and page.* are derived entries the reader computes itself
+                                  - counts and shares, never stored, thresholds only inside
+                                  falsifiers"
+      d.prior_carries_its_own_falsifier: "the prior kind carries its own falsifier: if judgments
+                                          resting on priors at 0.8 or above are reversed more than
+                                          about one in five, the confidences carry no information and
+                                          prior.* is demoted to a note"
+      p.prior_count_thresholds: 1
   d.record_is_code:
     rests_on: [s.2026_09_01_consolidation, d.register_out_of_tree, d.base_shared_forks_on_contradiction, p.hypothesis_homes]
     verdict: "the record of what is known about the code lives in the tree - committed with the work
