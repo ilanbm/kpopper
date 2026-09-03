@@ -598,6 +598,21 @@ judgments:
     seen: {d.groupings_declared: "groupings are declared by the session, any number, under its
                                   own names; the renderer owns none",
            run.design_talk: "read 2026-09-02"}
+  d.falsifier_beyond_reach:
+    rests_on: [doc.fact_moves, run.design_talk]
+    verdict: "a falsifier names a sign the decision itself cannot suppress; one that can only
+              appear when people do what the decision stops offering is sealed, not falsifiable"
+    because: "A decision shapes the world it is judged in. The grouping-schemes decision first
+              said it would be wrong if no brief ever declared a second scheme, while the page
+              drew only the first - nobody declares what nothing draws, so the sign could never
+              appear and the judgment was sealed by its own mechanism. The test is one question
+              asked of every wrong_if: under this decision, could that still happen? A sign that
+              lives outside the decision's reach - a person's request, a record someone else
+              writes, a measurement the change cannot touch - can."
+    blocked_on: "observational: falsified if reviews reading falsifiers as a foreign agent keep
+                 finding sealed ones written after this rule, or if the rule makes sessions stop
+                 writing predicates at all"
+    seen: {doc.fact_moves: "read 2026-09-01", run.design_talk: "read 2026-09-02"}
   d.computed_names_when_named:
     rests_on: [d.metrics_derived_builtin]
     verdict: "a computed name becomes an entry only when something in the record mentions it;

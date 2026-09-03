@@ -340,6 +340,23 @@ Write each judgment's **verdict** — a short line stating what it concludes —
 
 Without this, re-examining any judgment marks everything beneath it as needing review, including the many cases where the reasoning did not change and only the wording did. Within days the marks mean nothing and people stop reading them. `verdict: "prefer Acme above ~150 seats"` can stay fixed through three rewrites of the paragraph explaining it — and while it stays fixed, nothing downstream needs a second look.
 
+### A falsifier your own decision can suppress is no falsifier
+
+Before you keep a `wrong_if`, ask one question of it: *under this decision, could that still
+happen?* A decision shapes the world it is judged in. If the sign you named can only appear
+when people do something the decision itself stops offering, the sign will never appear, and
+the judgment is sealed rather than falsifiable. "This page draws one grouping; wrong if a
+brief ever declares a second" is sealed — nobody declares what nothing draws. "Wrong if the
+briefs rewritten under the writing guidance still declare one each" is not: the option is
+open, and the sign is a choice people can make against you.
+
+The same test catches the quieter forms: a threshold measured only by the code the decision
+governs, a survey the decision's author runs, a "nobody asked" over a channel the decision
+closed. Name a sign that lives outside the decision's reach — a person's request, a record
+written by someone else, a measurement the change cannot touch — and say when it will be
+read. A reviewer reading falsifiers as a foreign agent should find at least one that could
+fire.
+
 ### Make `wrong_if` a predicate where you honestly can
 
 `wrong_if: "acme.seats < 150"` can be evaluated; `wrong_if: "if the numbers move materially"` cannot. When it is a predicate:

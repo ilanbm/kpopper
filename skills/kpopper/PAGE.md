@@ -118,8 +118,11 @@ sections:
     by: counterparts
 ```
 
-A flat `groups:` is one scheme. Two schemes the record carries by its own shape need no
-declaration: `by: prefix` and `by: from`. A section draws by the scheme it reads by, and an id
+A flat `groups:` is one scheme. What the record already carries needs no declaration: `by:
+prefix` reads the id's namespace, and `by: from`, `by: unit`, `by: kind` — any field the entries
+carry — read that field, naming the group by the value's own name when the value is an entry.
+Declare a scheme only for a reading the record does not know; where membership is a fact about
+the world, record it on the entry and read by the field. A section draws by the scheme it reads by, and an id
 under two groups of that scheme is drawn under both — which is all a tag is: a scheme whose
 groups overlap. A section that reads by a scheme nobody declared fails `--verify`; a group that
 picks nothing is said. `fronts:` and `as: fronts` are the older names for one scheme and this
@@ -235,7 +238,7 @@ record in `tests/fixtures/page` first, so the reader, the page and the tests agr
 |---|---|---|
 | `tabs:` | top level | a list of tabs, each with `title`, `occasion` (when the reader opens it and for what), `serves` (the session sources it answers), `sections`, and its own `shape`. The page draws the first tab today and counts the rest. |
 | `groups:` | top level | grouping schemes, any number, each a mapping of group name → selectors under the session's own names; a flat mapping is one scheme. `fronts:` still reads as one scheme. |
-| `by:` | on a section | the scheme this section reads by — one the brief declares, or `prefix` / `from`, which the record carries by its own shape. |
+| `by:` | on a section | the scheme this section reads by — one the brief declares, or one the record carries by its own shape: `prefix`, or any field the entries carry (`from`, `unit`, `kind`), whose value names the group. |
 | `text:` | on a section | connective prose with `{{id}}` references, resolved where the page draws it; `{{c.id}}` asks for that judgment's reasoning at that spot. Checked now — every reference must be an entry — and drawn soon. |
 | `reviewed:`, `seen:` | on a section with `text` | when the text was last read against what it references, and the values it saw. `--verify` compares them with the record the way `check` compares a judgment's snapshot and says which moved; the tint follows when the text is drawn. |
 

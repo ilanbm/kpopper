@@ -197,7 +197,21 @@ class ThePageAcceptsTheContract(unittest.TestCase):
             code, out, _ = run(SCRIPTS / "render_page.py", "--verify", rec)
             self.assertEqual(code, 1, out)
             self.assertIn("section 'By thread' reads by 'owners', which is not a scheme the brief "
-                          "declares (declared: threads, where it came from)", out)
+                          "declares (declared: threads, where it came from) nor a field an entry "
+                          "carries", out)
+
+    def test_a_section_may_read_by_any_field_the_entries_carry(self):
+        with tempfile.TemporaryDirectory() as d:
+            rec = copy_fixture(pathlib.Path(d))
+            edit(pathlib.Path(d) / "PROVENANCE.view.yaml", "by: threads", "by: unit")
+            code, out, _ = run(SCRIPTS / "render_page.py", "--verify", rec)
+            self.assertEqual(code, 0, out)
+            _, page, _ = run(SCRIPTS / "render_page.py", rec)
+            dom = re.sub(r"<script>.*?</script>", "", page, flags=re.S)
+            i = dom.index("By thread")
+            section = dom[i:dom.index("<h2", i + 1)]
+            self.assertIn('<h3 dir="auto">kW</h3>', section)      # the two entries with a unit
+            self.assertEqual(section.count('data-id="heat.'), 3)
 
     def test_an_empty_group_is_said(self):
         with tempfile.TemporaryDirectory() as d:

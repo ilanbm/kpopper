@@ -529,11 +529,6 @@ def find_brief(paths, explicit=None):
     return None
 
 
-# Schemes the record carries by its own shape, so a section may read by them with nothing
-# declared: the id's prefix, and the source an entry came from.
-DERIVED_SCHEMES = ("prefix", "from")
-
-
 def same_value(old, now):
     """The comparison `check` makes between a snapshot and a value: text after whitespace,
     then number - so 1,702,093 and 1702093 are the same value and 31 and 35 are not."""
@@ -687,7 +682,10 @@ def fits(kind, keys, jud, E, groups_of=None):
         g = set()
         for k in keys:
             if k not in jud:
-                g |= set(groups_of(k)) if groups_of else {k.split(".")[0]}
+                # an entry under no group of the scheme is drawn under its prefix, so it
+                # counts as that group here too
+                gs = groups_of(k) if groups_of else []
+                g |= set(gs) if gs else {k.split(".")[0]}
         return (f"grouped lays groups side by side; these are all one group "
                 f"({', '.join(sorted(g)) or '-'})") if len(g) < 2 else None
     if kind == "alerts":
@@ -926,11 +924,11 @@ def build(paths, brief_path=None):
     if brief_path and os.path.exists(brief_path):
         brief = effective(yaml.safe_load(io.open(brief_path, encoding="utf-8").read()) or {})
 
-    groups = {}
+    prefixes = {}
     for k in sorted(ids):
         if k in jud:
             continue
-        groups.setdefault(k.split(".")[0] if "." in k else "-", []).append(k)
+        prefixes.setdefault(k.split(".")[0] if "." in k else "-", []).append(k)
 
     # the payload: entries and judgments, keyed by id. one copy, shared by every element
     # on every tab.
@@ -1037,14 +1035,23 @@ def build(paths, brief_path=None):
 
     def groups_of(k, scheme=None):
         """The groups this id is under in the scheme being read by - every one of them,
-        since a scheme may overlap. `prefix` and `from` are read off the record itself."""
+        since a scheme may overlap. A scheme nobody declared is read off the record itself:
+        the id's prefix, or any field the entries carry - `from`, `unit`, `kind` - whose
+        value names the group, by its own name when the value is an entry."""
         s = scheme or reading_by[0]
+        if s in schemes:
+            return list(index.get(s, {}).get(k, []))
         if s == "prefix":
             return [labels.get(k.split(".")[0]) or k.split(".")[0]] if "." in k else []
-        if s == "from":
-            src = (E.get(k) or {}).get("from")
-            return [lbl(src)] if isinstance(src, str) and src in E else []
-        return list(index.get(s, {}).get(k, []))
+        v = (raw.get(k) or {}).get(s) if isinstance(raw.get(k), dict) else None
+        if v is None or isinstance(v, (dict, list)):
+            return []
+        v = str(v)
+        return [lbl(v) if v in E or v in J else v]
+
+    def carried(field):
+        """Whether any entry carries this field - what makes `by: <field>` a scheme."""
+        return any(isinstance(b, dict) and field in b for b in raw.values())
 
     def group_of(k):
         gs = groups_of(k)
@@ -1273,7 +1280,7 @@ def build(paths, brief_path=None):
             title = str(sec.get("title") or ",".join(picks))
             kind = str(sec.get("as") or "").strip()
             by = str(sec.get("by") or "")
-            reading_by[0] = by if (by in schemes or by in DERIVED_SCHEMES) else default_scheme
+            reading_by[0] = by if (by in schemes or by == "prefix" or carried(by)) else default_scheme
             wrong = fits(kind, sorted(got), jud, E, groups_of) if kind else None
             if wrong:
                 misfit.append((title, wrong))
@@ -1322,10 +1329,11 @@ def build(paths, brief_path=None):
                 all_secs += [s for s in (t.get("sections") or []) if isinstance(s, dict)]
         for sec in all_secs:
             by = sec.get("by")
-            if by and str(by) not in schemes and str(by) not in DERIVED_SCHEMES:
+            if by and str(by) not in schemes and str(by) != "prefix" and not carried(str(by)):
                 contract["bad"].append(f"section '{sec.get('title') or '?'}' reads by '{by}', "
                                        f"which is not a scheme the brief declares"
-                                       + (f" (declared: {', '.join(schemes)})" if schemes else ""))
+                                       + (f" (declared: {', '.join(schemes)})" if schemes else "")
+                                       + " nor a field an entry carries")
         tabs = [t for t in (brief.get("tabs") or []) if isinstance(t, dict)]
         contract["tabs"] = len(tabs)
         for t in tabs:
@@ -1352,7 +1360,7 @@ def build(paths, brief_path=None):
                                        f"the record no longer holds")
             kind = str(sec.get("as") or "").strip()
             by = str(sec.get("by") or "")
-            by = by if (by in schemes or by in DERIVED_SCHEMES) else default_scheme
+            by = by if (by in schemes or by == "prefix" or carried(by)) else default_scheme
             wrong = (fits(kind, sorted(got), jud, E, lambda k, s=by: groups_of(k, s))
                      if kind and got else None)
             if wrong:
@@ -1391,13 +1399,13 @@ def build(paths, brief_path=None):
     if jud:
         rec_html.append(f'<h2>Judgments <span class="n">{len(jud)}</span></h2>')
         rec_html.append(cards(sorted(jud)))
-    for g, keys in sorted(groups.items(), key=lambda kv: (-len(kv[1]), kv[0])):
+    for g, keys in sorted(prefixes.items(), key=lambda kv: (-len(kv[1]), kv[0])):
         rec_html.append(f'<h2 id="g-{html.escape(g)}">{html.escape(g)}</h2>' + r_table(keys, True))
 
     # ── the page ─────────────────────────────────────────────────────────────
     ns = '<nav class="ns" dir="ltr">' + "".join(
         f'<a href="#g-{html.escape(g)}">{html.escape(g)} ({len(v)})</a>'
-        for g, v in sorted(groups.items(), key=lambda kv: (-len(kv[1]), kv[0]))) + "</nav>"
+        for g, v in sorted(prefixes.items(), key=lambda kv: (-len(kv[1]), kv[0]))) + "</nav>"
     head = [h1]
     if meta.get("scope"):
         head.append(f'<p class="scope" dir="auto">{html.escape(str(meta["scope"]).strip())}</p>')

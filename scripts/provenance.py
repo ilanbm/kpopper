@@ -153,7 +153,7 @@ def load(paths):
     return doc
 
 
-def groups_of(doc):
+def collections_of(doc):
     """Any mapping-of-mappings is a candidate collection of entries."""
     out = {}
     for k, v in (doc or {}).items():
@@ -200,10 +200,10 @@ def _no_deps(unresolved):
 
 
 def infer(doc):
-    groups = groups_of(doc)
-    ids = {k for m in groups.values() for k in m}
+    collections = collections_of(doc)
+    ids = {k for m in collections.values() for k in m}
     # A computed name is an entry the moment something in the record mentions it.
-    for members in groups.values():
+    for members in collections.values():
         for body in members.values():
             for t in _mentioned(body):
                 if is_builtin(t):
@@ -213,7 +213,7 @@ def infer(doc):
     # for no role at all. When that is why the record ends up with no dependency field,
     # it is the whole story - so keep what each one listed and what was missing from it.
     unresolved, present = {}, set()
-    for members in groups.values():
+    for members in collections.values():
         for nid, body in members.items():
             if not isinstance(body, dict):
                 continue
@@ -258,7 +258,7 @@ def infer(doc):
     # bodies that carry the dependency field: a derived entry's rule has a predicate's
     # shape and would otherwise outvote them in any record with more rules than
     # judgments. Prose that names entries as references is prose, never a predicate.
-    for members in groups.values():
+    for members in collections.values():
         for nid, body in members.items():
             if not isinstance(body, dict) or fields["deps"] not in body:
                 continue
@@ -272,7 +272,7 @@ def infer(doc):
     fields["snapshot"] = pick("snapshot")
     fields["predicate"] = pick("predicate")
     jud = {}
-    for members in groups.values():
+    for members in collections.values():
         for nid, body in members.items():
             if isinstance(body, dict) and fields["deps"] in body:
                 snap = body.get(fields["snapshot"]) if fields["snapshot"] else None
@@ -632,14 +632,14 @@ def opening(paths, budget=25, chars=None):
     # The namespace, not the values. Without this a session cannot turn a question
     # into a seed: it has no idea what this record even holds. One line, and
     # "what about the mortgage" becomes mtg.
-    groups = {}
+    prefixes = {}
     for k in ids:
         if k in jud or is_builtin(k):      # judgments are reported separately; counts are not held
             continue
         g = k.split(".")[0] if "." in k else k
-        groups[g] = groups.get(g, 0) + 1
-    heavy = [(g, n) for g, n in groups.items() if n > 1]
-    loose = sum(n for g, n in groups.items() if n == 1)
+        prefixes[g] = prefixes.get(g, 0) + 1
+    heavy = [(g, n) for g, n in prefixes.items() if n > 1]
+    loose = sum(n for g, n in prefixes.items() if n == 1)
     if heavy:
         head.append("holds: " + " · ".join(f"{g} ({n})" for g, n in
                                             sorted(heavy, key=lambda kv: (-kv[1], kv[0])))
