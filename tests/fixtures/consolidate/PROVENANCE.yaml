@@ -1,0 +1,51 @@
+meta:
+  updated: 2026-09-03
+  name: Greenhouse
+  scope: "Whether the old boiler can hold the greenhouse above 12°C through February - the base
+          record, and beside it two hypotheses that disagree about the loss."
+
+sources:
+  s.2026_09_02_heating:
+    asked: "Can we keep the greenhouse above 12°C through February on the old boiler?"
+    name: "the heating question, as this session read it: a shortfall in kilowatts, not a
+           yes or no"
+    of: "this session"
+    read: "2026-09-02"
+  doc.boiler_sheet:
+    name: "the boiler's service sheet"
+    file: "boiler/service-2025.pdf"
+    read: "2026-09-02"
+
+known:
+  heat.boiler_kw:
+    v: 24
+    unit: kW
+    name: "boiler output"
+    from: doc.boiler_sheet
+  heat.loss_kw:
+    v: 31
+    unit: kW
+    name: "heat loss on a -5°C night"
+    from: s.2026_09_02_heating
+    at: "worked out from the glazing area during the session"
+    of: "2026-09-02"
+  heat.deficit_kw:
+    rule: "heat.loss_kw - heat.boiler_kw"
+    name: "shortfall on the coldest night"
+  when.first_cold_night:
+    v: "2027-02-01"
+    name: "first night that matters"
+    from: s.2026_09_02_heating
+
+open:
+  q.second_boiler: "is a second boiler cheaper than glazing the north wall?"
+
+judgments:
+  c.boiler_short:
+    rests_on: [heat.boiler_kw, heat.loss_kw, heat.deficit_kw]
+    verdict: "the old boiler cannot hold 12°C on the coldest February night"
+    because: "It gives {{heat.boiler_kw}} kW against a loss of {{heat.loss_kw}} kW - a
+              shortfall of {{heat.deficit_kw}} kW before any wind."
+    wrong_if: "heat.loss_kw <= heat.boiler_kw"
+    seen: {heat.boiler_kw: 24, heat.loss_kw: 31,
+           heat.deficit_kw: "heat.loss_kw - heat.boiler_kw"}
