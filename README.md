@@ -50,7 +50,7 @@ plugin is all of that plus the method and the session hooks:
 | `scripts/kpopper` | One entry point: `open · check · affects · pull · page`. The dispatcher itself is `scripts/cli.py` — the same code the installed `kpopper` command runs. |
 | `scripts/provenance.py` | The reader underneath. Field names are inferred by shape, so it reads records written in any vocabulary. |
 | `scripts/render_page.py` | The record as one self-contained page, three tabs, no dependencies beyond the reader. |
-| `scripts/verify_page.js` | Browser checks for that page, in both themes. Playwright. Plugin only. |
+| `scripts/verify_page.js` | Browser checks for that page, in both themes and under reduced motion. Playwright. Also the whole of the npm package. |
 | `tests/` | The contract the reader and the page keep, run as `python3 -m unittest discover -s tests` against the fixture record in `tests/fixtures/page` — every field they accept, exercised once. |
 | `hooks/` | A session opener and a stop gate. The opener runs `provenance.py open` when the project keeps a record — at its root, or registered with the checkout — and is silent everywhere else; the gate bounces a session once, with the failures, if it tries to finish having left `check` worse than it found it. |
 
@@ -171,6 +171,12 @@ The command line on its own, for any project and any editor:
 pipx install kpopper             # or: pip install kpopper
 ```
 
+The browser checks, which are Node rather than Python and so ship separately:
+
+```bash
+npm i -g kpopper                 # then: kpopper-verify record.html
+```
+
 The Claude Code plugin — the method as a skill, the session opener, the stop gate, and the
 same commands:
 
@@ -188,19 +194,19 @@ claude plugin install kpopper@kpopper --scope user
 `--scope user` makes it available in every project on the machine; `--scope project` commits
 it to the repo you are in. Other editors are wired up from `adapters/`.
 
-Where the two overlap they are the same files rather than two copies of them: the package is
-mapped onto the plugin's `scripts/`, so the reader, the renderer and the dispatcher have
-nothing to keep in step. This repository is the
+Where the channels overlap they are the same files rather than copies of them: both packages
+are mapped onto the plugin's `scripts/`, so the reader, the renderer, the dispatcher and the
+browser checks have nothing to keep in step. One version number covers all three. This repository is the
 only place any of it is edited; every installed copy is a read-only distribution.
 
 ## Requirements
 
 Python 3.9+ and PyYAML — `pipx` brings it along; a plugin-only install wants
-`pip3 install pyyaml`. The plugin's browser checks additionally want Node, a Chrome/Chromium
+`pip3 install pyyaml`. The browser checks additionally want Node 18+, a Chrome/Chromium
 binary (`CHROME=/path/to/chrome` when it is not on a known path), and `playwright-core` — the
-driver, which the plugin does not ship: it is found beside the page when the project already
-uses Playwright, and otherwise `npm i --no-save playwright-core` next to the page is enough.
-Nothing else.
+driver, which neither the plugin nor the npm package ships: it is found beside the page when
+the project already uses Playwright, and otherwise `npm i --no-save playwright-core` next to
+the page is enough. Nothing else.
 
 ## What would show this was not worth it
 

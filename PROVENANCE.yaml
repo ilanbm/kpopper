@@ -120,6 +120,12 @@ known:
     name: "What the registries hold"
     from: "registry lookup"
     of: "2026-09-01"
+  p.npm_files:
+    v: 1
+    name: "Files of substance the npm package ships"
+    from: "package.json"
+    at: "files"
+    of: "2026-09-03"
   m.record_scale:
     v: 107
     name: "Largest live record, entries"
@@ -469,6 +475,17 @@ judgments:
     seen: {lit.registry_names: "kpopper and ground-tree are both unregistered on PyPI and on npm",
            lit.name_risk: "bare-term search is owned by a fandom; the org and handle are taken;
                            every package registry is free; qualified search works"}
+  d.npm_carries_the_checks:
+    rests_on: [p.npm_files, p.script_copies, lit.registry_names]
+    verdict: "the npm name is claimed by the browser checks - the one part of this that is Node
+              and cannot travel in the python package - and never by a placeholder"
+    because: "The name is worth holding and the checks are a real thing to hold it with, so the
+              claim costs nothing in honesty. Publishing an empty package to reserve a word is
+              the move every registry's naming policy exists to refuse, and this record already
+              declined it once for ground-tree."
+    wrong_if: "p.npm_files < 1"
+    seen: {p.npm_files: 1, p.script_copies: 1,
+           lit.registry_names: "kpopper and ground-tree are both unregistered on PyPI and on npm"}
   d.tree_springs_back:
     rests_on: [d.page_reads_only, p.tree_positions_kept]
     verdict: "the tree can be handled - pulled about, and grown into place once - and nothing a

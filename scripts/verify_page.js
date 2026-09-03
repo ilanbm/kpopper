@@ -1,3 +1,4 @@
+#!/usr/bin/env node
 /* Browser checks for a rendered record page. What --verify cannot catch: whether the
    provenance layer actually behaves. Both themes, because dark breaks in the one
    combination nobody exercises. Waits on elements, never on a fixed sleep - a flaky
@@ -16,7 +17,7 @@ const chromium = (() => {
   for (const spec of ['playwright-core', ...roots.map(r => path.join(r, 'playwright-core'))]) {
     try { return require(spec).chromium; } catch (e) { if (e.code !== 'MODULE_NOT_FOUND') throw e; }
   }
-  console.log('verify_page.js needs playwright-core, the driver that opens the page in Chrome; the plugin does not ship it.');
+  console.log('verify_page.js needs playwright-core, the driver that opens the page in Chrome; it is not bundled.');
   console.log("Point NODE_PATH at a node_modules that has it - the project's own, if it uses Playwright - or install one beside the page:");
   console.log('  npm i --no-save playwright-core && NODE_PATH="$PWD/node_modules" node verify_page.js record.html');
   process.exit(1);
