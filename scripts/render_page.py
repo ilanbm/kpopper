@@ -529,6 +529,11 @@ def find_brief(paths, explicit=None):
     return None
 
 
+# Schemes the record carries by its own shape, so a section may read by them with nothing
+# declared: the id's prefix, and the source an entry came from.
+DERIVED_SCHEMES = ("prefix", "from")
+
+
 def same_value(old, now):
     """The comparison `check` makes between a snapshot and a value: text after whitespace,
     then number - so 1,702,093 and 1702093 are the same value and 31 and 35 are not."""
@@ -972,14 +977,29 @@ def build(paths, brief_path=None):
                    "blocked": why, "waiting": keys}
 
     labels = (brief.get("labels") or {}) if brief else {}
-    # a grouping is declared under whatever name the session gives it; `fronts` is one
-    # record's name for its grouping, and still reads as one
-    fronts_decl = (brief.get("groups") or brief.get("fronts") or {}) if brief else {}
+    # A grouping is a scheme, and a brief may declare several: `groups:` is either one
+    # scheme - group name -> selectors - or several, scheme name -> group name -> selectors.
+    # A section says which scheme it reads by; the first declared is what the page draws
+    # today. `fronts` is one record's name for its one scheme, and still reads as one.
+    gdecl = (brief.get("groups") or brief.get("fronts") or {}) if brief else {}
+    schemes = {}
+    if isinstance(gdecl, dict) and gdecl:
+        nested = all(isinstance(v, dict) for v in gdecl.values())
+        for sname, gs in (gdecl.items() if nested else [("groups", gdecl)]):
+            schemes[str(sname)] = {}
+            if not isinstance(gs, dict):
+                continue
+            for gname, sels in gs.items():
+                members = set()
+                for sel in ([sels] if isinstance(sels, str) else list(sels or [])):
+                    members |= resolve(sel, ids, jud, flags)
+                schemes[str(sname)][str(gname)] = members
+    default_scheme = next(iter(schemes), None)
     front_map = {}
-    for fname, sels in fronts_decl.items():
-        for sel in ([sels] if isinstance(sels, str) else sels):
-            for k in resolve(sel, ids, jud, flags):
-                front_map.setdefault(k, str(fname))
+    if default_scheme:
+        for gname, members in schemes[default_scheme].items():
+            for k in sorted(members):
+                front_map.setdefault(k, gname)
 
     def fx(k, text=None, cls="fx"):
         return (f'<span class="{cls}" data-id="{html.escape(k)}">'
@@ -1268,6 +1288,27 @@ def build(paths, brief_path=None):
     # what the brief declares beyond what this page draws - checked now, drawn later
     contract = {"tabs": 0, "texts": 0, "bad": [], "moved": [], "stale": []}
     if brief:
+        # every grouping scheme must group something, and a section that reads by a scheme
+        # must name one the brief declares - or one the record carries by its own shape
+        for sname, gs in schemes.items():
+            for gname, members in gs.items():
+                if not members:
+                    contract["stale"].append(f"group '{gname}'"
+                                             + (f" (scheme '{sname}')" if len(schemes) > 1 else "")
+                                             + " picks nothing")
+        if len(schemes) > 1:
+            contract["stale"].append(f"{len(schemes)} grouping schemes declared; the page draws "
+                                     f"'{default_scheme}' and keeps the rest")
+        all_secs = [s for s in (brief.get("sections") or []) if isinstance(s, dict)]
+        for t in (brief.get("tabs") or []):
+            if isinstance(t, dict):
+                all_secs += [s for s in (t.get("sections") or []) if isinstance(s, dict)]
+        for sec in all_secs:
+            by = sec.get("by")
+            if by and str(by) not in schemes and str(by) not in DERIVED_SCHEMES:
+                contract["bad"].append(f"section '{sec.get('title') or '?'}' reads by '{by}', "
+                                       f"which is not a scheme the brief declares"
+                                       + (f" (declared: {', '.join(schemes)})" if schemes else ""))
         tabs = [t for t in (brief.get("tabs") or []) if isinstance(t, dict)]
         contract["tabs"] = len(tabs)
         for t in tabs:

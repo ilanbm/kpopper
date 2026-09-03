@@ -579,6 +579,22 @@ judgments:
            d.tree_springs_back: "the tree can be handled - pulled about, and grown into place
                                  once - and nothing a hand does to it is kept",
            run.design_talk: "read 2026-09-02"}
+  d.grouping_schemes:
+    rests_on: [d.groupings_declared, run.design_talk]
+    verdict: "a grouping is a scheme and a brief may declare several; a section says which one
+              it reads by, membership may overlap, and the record's own shape is the scheme
+              nothing declared"
+    because: "One partition of the ids was an opinion hiding in the mechanism: a project reads
+              its entries by thread on one section and by counterpart on another, and a tag is
+              nothing but a scheme whose groups overlap. Naming the scheme on the section, and
+              letting a session open one when a mixed list needs it, is the difference between
+              an option the framework offers and a habit of its first author."
+    blocked_on: "implementation: the page draws the first scheme today and checks the rest;
+                 falsified if real briefs never declare a second scheme, which would make the
+                 shape an unused generality"
+    seen: {d.groupings_declared: "groupings are declared by the session, any number, under its
+                                  own names; the renderer owns none",
+           run.design_talk: "read 2026-09-02"}
   d.computed_names_when_named:
     rests_on: [d.metrics_derived_builtin]
     verdict: "a computed name becomes an entry only when something in the record mentions it;

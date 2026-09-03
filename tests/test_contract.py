@@ -146,6 +146,50 @@ class ThePageAcceptsTheContract(unittest.TestCase):
             self.assertIn('<h3 dir="auto">Heating</h3>', page)
             self.assertIn('<h3 dir="auto">Calendar</h3>', page)
 
+    def test_a_flat_grouping_is_one_scheme(self):
+        with tempfile.TemporaryDirectory() as d:
+            rec = copy_fixture(pathlib.Path(d))
+            brief = pathlib.Path(d) / "PROVENANCE.view.yaml"
+            text = brief.read_text(encoding="utf-8")
+            text = text[:text.index("groups:")] + (
+                "groups:\n  Heating: [heat., c.boiler_short]\n  Calendar: [when.first_cold_night]\n"
+                "labels:\n  when.first_cold_night: first cold night\n")
+            brief.write_text(text.replace("        by: threads\n", ""), encoding="utf-8")
+            code, out, _ = run(SCRIPTS / "render_page.py", "--verify", rec)
+            self.assertEqual(code, 0, out)
+            _, page, _ = run(SCRIPTS / "render_page.py", rec)
+            self.assertIn('<h3 dir="auto">Heating</h3>', page)
+
+    def test_several_schemes_are_declared_and_the_first_is_drawn(self):
+        code, out, _ = run(SCRIPTS / "render_page.py", "--verify", RECORD)
+        self.assertEqual(code, 0, out)
+        self.assertIn("2 grouping schemes declared; the page draws 'threads' and keeps the rest", out)
+
+    def test_a_section_reading_by_no_scheme_fails_verify(self):
+        with tempfile.TemporaryDirectory() as d:
+            rec = copy_fixture(pathlib.Path(d))
+            edit(pathlib.Path(d) / "PROVENANCE.view.yaml", "by: threads", "by: owners")
+            code, out, _ = run(SCRIPTS / "render_page.py", "--verify", rec)
+            self.assertEqual(code, 1, out)
+            self.assertIn("section 'By thread' reads by 'owners', which is not a scheme the brief "
+                          "declares (declared: threads, where it came from)", out)
+
+    def test_a_section_may_read_by_what_the_record_carries(self):
+        with tempfile.TemporaryDirectory() as d:
+            rec = copy_fixture(pathlib.Path(d))
+            edit(pathlib.Path(d) / "PROVENANCE.view.yaml", "by: threads", "by: from")
+            code, out, _ = run(SCRIPTS / "render_page.py", "--verify", rec)
+            self.assertEqual(code, 0, out)
+
+    def test_an_empty_group_is_said(self):
+        with tempfile.TemporaryDirectory() as d:
+            rec = copy_fixture(pathlib.Path(d))
+            edit(pathlib.Path(d) / "PROVENANCE.view.yaml",
+                 "Calendar: [when.first_cold_night]", "Calendar: [when.nothing]")
+            code, out, _ = run(SCRIPTS / "render_page.py", "--verify", rec)
+            self.assertEqual(code, 0, out)
+            self.assertIn("group 'Calendar' (scheme 'threads') picks nothing", out)
+
     def test_the_first_tab_is_drawn_under_its_own_name(self):
         _, page, _ = run(SCRIPTS / "render_page.py", RECORD)
         self.assertIn('data-tab="now" aria-selected="true">The February night', page)

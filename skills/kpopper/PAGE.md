@@ -96,9 +96,34 @@ groups:
 
 A group then appears as a small tag beside each item wherever a section mixes more than one —
 on a timeline row, an alert, a headline caption. Without it a reader looking at a list of
-eleven dates has no way to tell which of them are even about the same thing. `fronts:` was one
-record's name for its grouping and still reads as `groups:`; the grid shape that lays groups
-side by side is still called `fronts` below, until the renderer owns no grouping name at all.
+eleven dates has no way to tell which of them are even about the same thing.
+
+A grouping is a scheme, and a project rarely reads by one. The same entries group by thread
+on one section and by counterpart on another, and a tag is nothing but a scheme whose groups
+overlap. So `groups:` may declare several schemes, each under its own name, and a section says
+which one it reads by:
+
+```yaml
+groups:
+  threads:
+    The mortgage: [mtg., equity., d.rate_lock, c.equity_10pct]
+    Prague:       [prg., d.prg_out, d.prg_deadline]
+  counterparts:
+    Adi:   [mtg.adi_fee, q.adi_gift, q.cond7]
+    Dolev: [crypto., q.dolev_filed]
+sections:
+  - title: Who is holding what
+    pick: [mtg., crypto., q.]
+    as: fronts
+    by: counterparts
+```
+
+A flat `groups:` is one scheme. Two schemes the record carries by its own shape need no
+declaration: `by: prefix` and `by: from`. A section that reads by a scheme nobody declared
+fails `--verify`; a group that picks nothing is said. The page draws the first scheme today and
+checks the rest. `fronts:` was one record's name for its one scheme and still reads as one; the
+grid shape that lays groups side by side is still called `fronts` below, until the renderer owns
+no grouping name at all.
 
 Give sections a `why:` as well as a `title:`. A title names a section; the `why` says what the
 reader is supposed to do with it, and it is the difference between a heading and a hand-off.
@@ -209,7 +234,8 @@ record in `tests/fixtures/page` first, so the reader, the page and the tests agr
 | field | where | what it is |
 |---|---|---|
 | `tabs:` | top level | a list of tabs, each with `title`, `occasion` (when the reader opens it and for what), `serves` (the session sources it answers), `sections`, and its own `shape`. The page draws the first tab today and counts the rest. |
-| `groups:` | top level | named groupings of ids, any number, under the session's own names — what `fronts:` was; `fronts:` still reads as one grouping. |
+| `groups:` | top level | grouping schemes, any number, each a mapping of group name → selectors under the session's own names; a flat mapping is one scheme. `fronts:` still reads as one scheme. |
+| `by:` | on a section | the scheme this section reads by — one the brief declares, or `prefix` / `from`, which the record carries by its own shape. |
 | `text:` | on a section | connective prose with `{{id}}` references, resolved where the page draws it; `{{c.id}}` asks for that judgment's reasoning at that spot. Checked now — every reference must be an entry — and drawn soon. |
 | `reviewed:`, `seen:` | on a section with `text` | when the text was last read against what it references, and the values it saw. `--verify` compares them with the record the way `check` compares a judgment's snapshot and says which moved; the tint follows when the text is drawn. |
 
