@@ -455,6 +455,80 @@ rule is what turns "the method can change itself" from philosophy into something
 cannot add a kind of entry without answering what happens to the existing ones. It does not
 prevent change; it prevents *half* a change, which is what actually kills records like this.
 
+## Forks and hypotheses
+
+One record is written by everyone, from any session or branch, as long as the write is consistent
+with it. **A contradiction opens a hypothesis**, and the reader tells one by the id and the day.
+`set` of a reading no newer than the base's (its `of:`, else its source's read date) that differs is
+refused - two readings of one day that disagree are two writers, not the world moving; a newer
+reading updates the base and flags what rests on it. `add` of an id the base holds is refused, and
+with a different value or verdict it is a contradiction: a standing judgment is replaced only when
+its own `wrong_if` holds now, or the new body carries `request: s.<date>_<slug>` - a session source
+whose `asked:` is the person's request verbatim, rested on, said *on the word of* on every surface.
+A write resting on what only a hypothesis holds belongs in that hypothesis. Each refusal names the
+exact command that writes the same thing into `PROVENANCE.d/<name>.yaml` beside the record - the
+base untouched - named after the id unless `--hypothesis NAME` on `set`, `add` or `review` names it.
+The first write stamps `born` in the file's head; `claim:`, a head `wrong_if:` and `folds: never`
+are the one thing a hand writes there. Three uses, one file: a concurrent writer whose reading was
+refused; a proposal not yet approved - a branch's record *is* this, and travels with the branch; a
+what-if, `folds: never`, evaluated at every dry run and never written.
+
+Every command reads the hypotheses over the base and evaluates the base alone: `pull` shows what
+each proposes beside the value; `check` and `open` say CONTESTED where two hold one id with
+different claims - a rival claim a person must decide between, and nothing else is ever called
+contested; the opener's count line says how many wait, each with its age and how many judgments rest
+on it, and draws no line - when one has waited too long is your reading of it
+(`q.hypothesis_lifetime` is open). A hypothesis ends **folded** into the base by `consolidate`, or
+**refuted** by `consolidate --refute NAME "why"` - one negative finding stays, `hyp.<name>:
+refuted`, its claim as the name and the why as its place, and nothing else of it - or it stays
+**untested**, counted at every open until someone does one of the two.
+
+**A task is a judgment** whose truth is pending, and the fork is where it is written: the problem as
+a judgment about today's state, with its source; `rests_on`, the premises taken as true; `verdict`,
+the claim; `wrong_if`, what would refute the task's success - measurable where honest, else
+`blocked_on: observational`; `seen`, the premises at the fork, filled by `add`. Asked at the fork,
+never on a session's first turn: draft it from the task, and let the person confirm.
+
+**Pull before add.** If the subject exists, extend it; do not create a sibling. `add` names the
+nearest existing entries from declared fields alone - the same source and place is certain, the same
+source or rule less so, the same premises a pair to judge - and a name only orders that list. Two
+ids that are one subject fold with `same <a> <b>`: every reference rewritten, `also:` left on the
+survivor; two that only look alike are kept apart with `distinct <a> <b> "why"`, and the pair never
+returns. Neither shows on `pull` or the page yet - the file holds `also:` and `distinct_from`.
+
+**The consolidation walk.** `consolidate --dry-run` lays the hypotheses named - every one, when none
+is - over the base by id and runs the reader's own `check` on it, reported in a fixed order:
+arrived, updates (what a hypothesis replaces, and what rests on it), moved / falsified, contested,
+candidates, new subjects. Three lists ask three answers, each recorded by a command so the question
+never returns: a candidate pair is the **same** subject (`same a b`) or **different** (`distinct a b
+"why"`); a **contradictory** id - two hypotheses on one, or a reading the door refuses - is read
+again on a later day, `set` in the base, or in the hypothesis that read it when the newer reading
+bears its claim out but not its number, so the fold still carries what else it brought; or it is
+refuted. The run exits non-zero on a contested id, a falsifier that holds, a hole, or a head
+`wrong_if` it cannot decide; a premise that moved under a judgment leaves it green and blocks only
+the fold, and `review <id> --hypothesis NAME` refreshes the snapshot against the record as it stands
+under the hypothesis. `consolidate` runs the same test and, only when it is clean, writes the union
+through the write path: every replacement passes the one door a `set` passes, so a reading born of a
+same-day refusal waits until someone reads again on a later day; the result is read back and undone
+whole if `check` then says anything new; the folded files go, and what to commit is printed.
+
+**One rule, two containers.** What stands is contested only by something recorded: a rival claim, in
+a hypothesis; or a doubt with no rival value yet, an open question that names the id. The page says
+*a hypothesis contests this arrangement*, or *a question* does, `check` notes the same, and both
+stand until a person consolidates or answers. Deleting the file is neither.
+
+**How a merge goes.** git merges the files: additions in id order rarely meet, and hypothesis files
+never conflict. The dry run tests the result - on the pull request and again on `main`, once the CI
+step exists. Fold a hypothesis the dry run proves *before* the pull request, so `main` receives base
+changes; let an unproven one merge as a file, and `main` carries an open hypothesis the opener
+counts. Nothing crosses branches unasked: `pull <seed> --from <ref>` lays what another branch
+committed beside your pull, and `consolidate --from <ref> --dry-run` tests its record as one more
+hypothesis named after the ref - a pull, never a push, and how a dead branch's facts are harvested.
+Every write - `set`, `add`, `review`, `same`, `distinct`, the fold, the refutation - takes an
+exclusive lock on the record's directory, so two sessions on one file take turns instead of the last
+one discarding the first. In the tree each worktree writes its own copy and git merges them; out of
+the tree every worktree writes the one file, and only the lock stands between them.
+
 ## The reader
 
 A reader ships with this plugin at `scripts/provenance.py`, and the `kpopper` command line is the
@@ -465,10 +539,13 @@ Python and PyYAML:
 kpopper open                             # what to read instead of the whole record
 kpopper check
 kpopper affects <entry> [entry ...]
-kpopper pull <entry> [entry ...]
+kpopper pull <entry> [entry ...] [--from <ref>]   # --from: what another branch proposes, beside
 kpopper set <key> <value> [--why "..."]  # change one value; the reply is the reach
 kpopper add <id> field=value ...         # a new entry or judgment, in id order, seen filled
 kpopper review <id | "section title">    # it still holds: seen rewritten from the record
+kpopper consolidate [--dry-run] [NAME ...]   # the union, tested; then folded (--refute NAME "why")
+kpopper same <a> <b>                     # one subject under two ids: b retired into a
+kpopper distinct <a> <b> "why"           # two that only look alike, kept apart for good
 ```
 
 Where that command is not on the path, the reader still ships inside the plugin — but **do not
@@ -504,7 +581,8 @@ So it reads a record that says `known:`/`judgments:`/`from:` exactly as well as 
 `check` enforces every invariant above and **exits non-zero** when one fails: a dependency that is
 not an entry (unless the judgment declares it missing), a dependency with no snapshot, a predicate
 naming something the judgment does not declare, a predicate field holding prose, and a
-plain-comparison predicate that currently holds — a judgment broken by its own condition. The
+plain-comparison predicate that currently holds — a judgment broken by its own condition. It
+says CONTESTED, and fails nothing, where two hypotheses hold one id with different claims. The
 prose case matters most — prose in a predicate field is worse than an empty field, because it
 reads like a predicate while nothing evaluates it and nobody notices. Say `blocked_on` instead.
 
@@ -521,7 +599,8 @@ moved since the judgment last looked, a judgment nothing was ever checked agains
 hole still waiting, a judgment nothing evaluable would falsify. Ranked, budgeted, and it
 says how many it left out. What still stands is listed after that, and a judgment listed as
 needing a person is not repeated there. On a clean record it prints one line, which is the
-point.
+point; hypotheses beside the record add one to the head - how many wait, each with its age and
+how many judgments rest on it.
 
 `affects <entry>` answers the question the whole method exists for: something moved, what does it
 reach — including through intermediate judgments — and for each one, whether its predicate can now
@@ -534,8 +613,8 @@ A judgment seed pulls in what it rests on, so pulling a conclusion also grounds 
 and `open` print a judgment's reasoning with its `{{references}}` resolved to what the record
 holds now, under the judgment's own flag — so the re-reading a flag asks for can start there.
 
-`set`, `add` and `review` are how the record changes from the command line, and each answers
-with the reach: what is worked out from what it wrote, every judgment resting on it and its
+`set`, `add` and `review` are how the record changes from the command line - `same`, `distinct`
+and the fold write through the same path, under the same lock - and each answers with the reach: what is worked out from what it wrote, every judgment resting on it and its
 state now — MOVED, MUTED, FIRED — and the texts of the brief that saw the old value. `set` changes
 one value and stamps its date; `add` inserts a new entry or judgment in id order beside its
 siblings and fills `seen` from what the dependencies hold; `review` says "I read it, it still
