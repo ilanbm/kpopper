@@ -18,6 +18,10 @@ straight through to provenance.py; page renders the record and can open what it 
                   base when the test is clean; --refute NAME "why" leaves one negative finding and
                   deletes the file; --from REF reads another branch's committed record as one more
                   hypothesis, and pull <seed> --from REF shows what it proposes
+  kpopper same    <a> <b> [--keep a|b]    one subject under two ids: b retired into a, every
+                  reference rewritten across the record, its hypotheses and the brief
+  kpopper distinct <a> <b> "<why>"        two subjects that look alike: recorded on a, so the
+                  pair never returns as a candidate
   kpopper page    [--out PATH] [args...]  the record as one page
                   add --open to look at it in your own browser, --tree to land there
                   add --verify to check the page instead of writing one
@@ -29,7 +33,7 @@ any checkout of a project that registered its record (see `where`).
 import os, shutil, sys, pathlib, subprocess, webbrowser
 
 HERE = pathlib.Path(__file__).resolve().parent
-READ = ("open", "check", "affects", "pull", "where", "set", "add", "review")
+READ = ("open", "check", "affects", "pull", "where", "set", "add", "review", "same", "distinct")
 
 
 def do_checks(args):

@@ -1,0 +1,17 @@
+hypothesis:
+  claim: "the nameplate says 26 kW once the derating footnote is read"
+  born: "2026-09-03"
+
+known:
+  heat.nameplate_kw:
+    v: 26
+    unit: kW
+    name: "nameplate output of the boiler"
+    from: doc.boiler_sheet
+    at: "rated output, p. 3"
+    of: "2026-09-03"
+  glaze.quote_eur:
+    v: 2400
+    unit: EUR
+    name: "the glazier's quote for the north wall"
+    from: s.2026_09_03_resheet

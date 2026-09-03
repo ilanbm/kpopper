@@ -105,6 +105,19 @@ sources:
          record's own judgments resting on prior.* claims, the reader's check and opener, and the
          fixture record under tests/"
     read: "2026-09-04"
+  s.2026_09_04_sameness:
+    asked: "Judge sameness instead of guessing it: surface candidate duplicates from declared fields
+            only, migrate one id into another with every reference rewritten, and record a pair as
+            distinct so it never returns."
+    name: "The session that let the record judge sameness - what it was asked, and what it was
+           given. Its reading: two ids are one subject only when a person says so; the tool names the
+           nearest by what is declared - the same source and place, the same source, the same rule
+           read through what was retired, the same premises - and the answer is written where it was
+           given, so the pair never comes back"
+    of: "2026-09-04, given the consolidation design and its decisions in this record, the write path
+         and the fork at 77dd604, the fixture records under tests/, and the three live records this
+         reader serves"
+    read: "2026-09-04"
   doc.fact_moves:
     url: "https://claude.ai/code/artifact/ca99e558-60ae-4b22-9221-e3b29d7d7e2b"
     name: "מה קורה כשעובדה זזה - the unified node model"
@@ -250,6 +263,14 @@ known:
     name: "Writing the record itself, on the same run"
     from: run.first_external
     at: "17:28:50-17:29:52 UTC"
+  p.candidate_reasons:
+    v: 4
+    name: "Reasons the candidate list draws from - the same source and place, the same source, the
+           same rule, the same premises; a name ranks and is not among them"
+    from: "scripts/sameness.py"
+    at: "near - the reasons a pair is named; overlap only orders"
+    of: "2026-09-04"
+    also: [p.sameness_reasons]
   p.coverage_thresholds:
     v: 0
     name: "Thresholds the coverage report carries in code - a line drawn anywhere but inside a
@@ -683,6 +704,30 @@ judgments:
                                   - counts and shares, never stored, thresholds only inside
                                   falsifiers"
       p.coverage_thresholds: 0
+  d.distinct_is_a_bare_id:
+    rests_on: [s.2026_09_04_sameness, d.sameness_is_judged, d.locate_by_shape]
+    verdict: "distinct writes its edge as a bare id - or several, comma-separated - with the why as
+              a comment beneath, never as a list or an id-keyed mapping; the pair is left out of
+              every candidate list, and same refuses it until the edge is removed"
+    because: "The reader infers a field's role from its shape: a list of ids votes for the
+              dependency field and a mapping keyed by ids for the snapshot, so an edge written either
+              way would outvote rests_on or seen in a small record and change what every judgment
+              there means. A bare id has no role to claim. The why is for a person and lives beside
+              the field as a comment, the way a set's reason does; nothing evaluates it, and the edge
+              holds either way round."
+    blocked_on: "implementation: falsified by a record whose role inference tips on a distinct_from
+                 field - a bare id casts no vote, so the sign would be a reader that learned to read
+                 one as a list - or by a merger who needs the why on a surface, where a comment
+                 cannot be shown"
+    seen:
+      s.2026_09_04_sameness: "read 2026-09-04"
+      d.sameness_is_judged: "the tool never decides that two entries are the same: it shows the
+                             nearest existing entries when one is written and candidates when
+                             hypotheses consolidate; the writer or the merger decides, and the
+                             decision is recorded - same_as as a migration that leaves the build
+                             green, distinct_from as an edge that retires the pair"
+      d.locate_by_shape: "the docs locate a shipped script by matching its name and taking the
+                          highest version, never by a path written against today's layout"
   d.drift_from_newest_born:
     rests_on: [s.2026_09_03_coverage, d.metrics_derived_builtin]
     verdict: "drift is the share of what sessions read on or after the newest born among the
@@ -841,6 +886,31 @@ judgments:
       m.claims.general_held: 3
       m.claims.local_checked_held: 6
       m.claims.local_assumed_held: 0
+  d.names_rank_never_decide:
+    rests_on: [s.2026_09_04_sameness, d.sameness_is_judged, alt.sameness_from_names, p.candidate_reasons]
+    verdict: "a candidate pair is named for a declared reason - the same source and place, the same
+              source, the same rule read through what was retired, the same premises - and the
+              overlap of two names only orders a list; add says the nearest three and refuses
+              nothing, the dry run says a handful per arriving id"
+    because: "Each of the {{p.candidate_reasons}} reasons is read from a field a writer declared; a
+              name is text nobody declared as an identity, so it ranks what the reasons found and
+              adds nothing to it - the count is what would show a fifth reason creeping in, and a
+              name-shaped one first. Two judgments share premises when one's are among the other's, a
+              session source counting for nothing since every judgment rests on the session that
+              wrote it; five judgments here rest on one document with five verdicts and are named to
+              each other as pairs to judge, never refused. What arrives with a hypothesis is held
+              against the base and the other arrivals; the base's own pairs were named when they were
+              written, so the dry run does not list them again."
+    wrong_if: "p.candidate_reasons > 4"
+    seen:
+      s.2026_09_04_sameness: "read 2026-09-04"
+      d.sameness_is_judged: "the tool never decides that two entries are the same: it shows the
+                             nearest existing entries when one is written and candidates when
+                             hypotheses consolidate; the writer or the merger decides, and the
+                             decision is recorded - same_as as a migration that leaves the build
+                             green, distinct_from as an edge that retires the pair"
+      alt.sameness_from_names: rejected
+      p.candidate_reasons: 4
   d.one_reference_resolver:
     rests_on: [d.reasoning_in_record, p.reference_resolvers]
     verdict: "a reference resolves the same way on every surface - the value where the entry holds
@@ -1109,6 +1179,39 @@ judgments:
       d.metrics_derived_builtin: "graph.* and page.* are derived entries the reader computes itself
                                   - counts and shares, never stored, thresholds only inside
                                   falsifiers"
+  d.same_asks_the_one_door:
+    rests_on: [s.2026_09_04_sameness, d.contradiction_by_id_and_day, d.sameness_is_judged, p.supersede_doors]
+    verdict: "same is a migration through the record's own write path: the retired id is rewritten
+              everywhere it is named - dependencies, snapshots, predicates, rules, references in
+              text, the brief - the survivor takes the newer reading with its place and date, and
+              where the two readings disagree with nothing to order them the migration is refused
+              through the one door every same-id write goes through; check runs after, and a problem
+              it did not have undoes the whole of it"
+    because: "Two ids for one subject are two readings of it, and the record already has one rule
+              for two readings under one id: the newer supersedes, the same day or undated is two
+              writers. Asking {{p.supersede_doors}} door rather than writing a second keeps the
+              migration from becoming a way to overwrite a value that add and set would refuse. The
+              rewrite is by whole token across every file the record is, structural where a judgment
+              named both ids and would otherwise rest on the survivor twice; the survivor carries
+              also: with the retired id, so a write under the old id is refused and pointed at it.
+              Check after the write is what makes a migration safe to run without reading the diff: a
+              reference the rewrite missed fails there, and the files come back as they were."
+    wrong_if: "p.supersede_doors > 1"
+    seen:
+      s.2026_09_04_sameness: "read 2026-09-04"
+      d.contradiction_by_id_and_day: "a contradiction is told by the id and the day: the same id
+                                      with a value read no later than the base's own reading, or with
+                                      a different verdict, is refused into the base and named a
+                                      hypothesis; a newer reading supersedes, a standing judgment is
+                                      superseded only when its wrong_if holds or the request that
+                                      asked for the change is named; the same premises under
+                                      different ids are different subjects"
+      d.sameness_is_judged: "the tool never decides that two entries are the same: it shows the
+                             nearest existing entries when one is written and candidates when
+                             hypotheses consolidate; the writer or the merger decides, and the
+                             decision is recorded - same_as as a migration that leaves the build
+                             green, distinct_from as an edge that retires the pair"
+      p.supersede_doors: 1
   d.serving_earned_by_picks:
     rests_on: [s.2026_09_03_coverage, d.intent_is_a_source]
     verdict: "a tab serves an intent only when its sections pick something that session recorded; a
