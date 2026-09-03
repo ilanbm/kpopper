@@ -79,3 +79,8 @@ kpopper page --checks record.html
 `--checks` runs the copy of the checker that came with the reader, so it works the same from a
 checkout and from an installed command. The driver is found in the `node_modules` beside the
 page; point `NODE_PATH` at another one to use a project's own.
+
+None of that is a substitute for looking. `kpopper page --open` renders the page and opens it in
+your own browser, and `--tree` lands on the tree. It has to be a real browser: the provenance
+layer is all JavaScript, so a preview pane or a viewer that does not run the page's scripts shows
+every word of it and none of its behaviour.
