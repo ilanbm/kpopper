@@ -879,10 +879,17 @@ class IntentsTabsCoverage(unittest.TestCase):
             self.assertIn("FAIL v.glazing_tab: wrong_if holds (page.unserved > 0) - decided by the page", out)
             self.assertIn("hint: it wrote glaze. (3), v. (1) - 1 of 4 inside 'The February night'; "
                           "3 of 4 inside 'The glazing quote'", out)
-            # check leaves the line to the page, and still says which intent
+            # check leaves the line to the page and still says which intent - and fails the
+            # brief for no longer carrying what the arrangement decided, since a tab that
+            # drops its serves: line is the arrangement's reversal by another road
             code, out, _ = run(SCRIPTS / "provenance.py", "check", rec)
-            self.assertEqual(code, 0, out)
+            self.assertEqual(code, 1, out)
             self.assertIn("NOTE s.2026_09_03_glazing is served by no tab", out)
+            self.assertIn("NOTE v.glazing_tab: wrong_if holds (page.unserved > 0) - decided by the page, "
+                          "page.unserved is 1", out)
+            self.assertIn("FAIL the brief does not serve s.2026_09_03_glazing together, as v.glazing_tab "
+                          "decided (no tab's sections earn s.2026_09_03_glazing) - serve them on a tab "
+                          "whose sections pick what they wrote, or re-decide v.glazing_tab", out)
 
     def test_page_counts_are_snapshotted_by_add(self):
         with tempfile.TemporaryDirectory() as d:

@@ -25,6 +25,19 @@ sources:
          that answered at 0.7 and then proposed to wait for an event - the record's three prior.*
          claims and its open questions, and the day's own claims scored against what held"
     read: "2026-09-02"
+  s.2026_09_03_arrangements:
+    asked: "Make arrangement decisions the build maintains: born and stood, falsifiers over the
+            page's counts, muted moves inside an arrangement and fired ones outside it, the
+            brief-diff classifier, and the rule that a reversal without a fired falsifier is a
+            question."
+    name: "The session that made arrangement decisions something the build holds - what it was
+           asked, and what it was given. Its reading: an arrangement is a judgment like any other,
+           its sign is a count the page takes, and the brief is held against the decisions that stand
+           rather than against its own last version"
+    of: "2026-09-03, given the page design's stability section, the record's arrangement decisions,
+         the page contract at c738341 with the fixture's two arrangements, and the reader and the
+         page as they stand"
+    read: "2026-09-03"
   s.2026_09_03_coverage:
     asked: "Render the brief's tabs, make serving an intent something a tab earns by what its
             sections pick, and compute coverage — unserved intents, unpicked prefixes, spill, drift,
@@ -231,6 +244,13 @@ known:
     at: "coverage and coverage_lines: counts and shares, printed; the only comparison is a
          falsifier's own"
     of: "2026-09-03"
+  p.fields_a_build_writes:
+    v: 0
+    name: "Fields of the record a read command - check, open, page - writes"
+    from: "scripts/provenance.py"
+    at: "check_lines, opening and the page's build read the record; only set, add and review write
+         it"
+    of: "2026-09-04"
   p.hypothesis_homes:
     v: 1
     name: "Places the reader reads hypothesis files from"
@@ -506,6 +526,50 @@ judgments:
                                              contradicts the record opens a named hypothesis, and
                                              whatever later rests on the contradiction goes there - a
                                              session is never the unit"
+  d.arrangement_link_is_earned:
+    rests_on: [s.2026_09_03_arrangements, d.review_names_what_it_reads, d.serving_earned_by_picks]
+    verdict: "an arrangement's tabs are the ones whose picks earn a session source it rests on, and
+              any tab that claims no occasion; it is linked while every source is earned by some tab,
+              and its review settles every shape it governs"
+    because: "A link by the serves: line alone lets a tab keep its claim and lose its sections, then
+              cite the unserved count the gutting produced; earned picks are what serving already
+              means. An arrangement may decide the whole page at once, so it governs every tab that
+              earns one of its sources, and a tab with no serves: line is the page's own and belongs
+              to every decision as the one bare tab does. The older reading - the tab serving a
+              session source it rests on - is narrowed, not reversed: every tab this finds, it
+              found."
+    blocked_on: "observational: falsified if a real brief keeps an arrangement linked through a
+                 single token pick, or cuts one by a section moved between the tabs it governs"
+    seen:
+      s.2026_09_03_arrangements: "read 2026-09-03"
+      d.review_names_what_it_reads: "review takes a judgment's id or a section's title; an
+                                     arrangement's review also rewrites the shape of the one tab, or
+                                     of the tab serving a session source it rests on; nothing
+                                     refreshes a snapshot by itself"
+      d.serving_earned_by_picks: "a tab serves an intent only when its sections pick something that
+                                  session recorded; a declaration nothing picks fails the build, and
+                                  an intent that recorded nothing stands outside coverage"
+  d.arrangement_sign_is_one_comparison:
+    rests_on: [s.2026_09_03_arrangements, d.falsifier_beyond_reach, d.metrics_derived_builtin]
+    verdict: "an arrangement's sign is one comparison over a count that can hold - a name, an
+              operator, one value; a compound or an impossible one is refused, and a re-opener stands
+              beside it, never in its place"
+    because: "A compound sign reads as evaluable and is never decided - worse, the comparison shape
+              takes everything after the operator as the value, so page.spill > 0 or page.unserved >
+              0 was decided as a text comparison and held nothing forever. A count below zero or a
+              share above one never happens. An arrangement's sign is a count the build takes, or it
+              is decoration, and decoration is freeze in disguise."
+    blocked_on: "observational: falsified if sessions answer the rule by writing arrangements with
+                 no sign at all - blocked_on where a comparison was available - or if the one value a
+                 sign may carry proves too narrow for a real arrangement"
+    seen:
+      s.2026_09_03_arrangements: "read 2026-09-03"
+      d.falsifier_beyond_reach: "a falsifier names a sign the decision itself cannot suppress; one
+                                 that can only appear when people do what the decision stops offering
+                                 is sealed, not falsifiable"
+      d.metrics_derived_builtin: "graph.* and page.* are derived entries the reader computes itself
+                                  - counts and shares, never stored, thresholds only inside
+                                  falsifiers"
   d.browser_code_in_browser_files:
     rests_on: [m.page_string_lines, prior.strings_lose_tooling]
     verdict: "the page's CSS and JS live in their own files under scripts/page/, read whole at
@@ -859,6 +923,51 @@ judgments:
       m.older_records_changed: 0
       d.declared_hole_is_a_note: "check fails only an undeclared gap; a hole declared with
                                   blocked_on is a note"
+  d.request_is_a_visible_claim:
+    rests_on: [s.2026_09_03_arrangements, d.reversal_is_a_redecision]
+    verdict: "a person's request is named explicitly - request: a session source whose asked: is the
+              request verbatim, rested on - and said on every surface that shows the decision"
+    because: "Nothing by shape tells a request from an intent: every entry comes from a session
+              source and every arrangement rests on the session that wrote it, so a door read from
+              from: or rests_on would admit every rewrite by every later session, and with it the
+              flip. An explicit field is a claim under the session's name that a reader can hold
+              against the asked: it points at; the alternative - no door until a person folds a
+              hypothesis - makes the person answer their own question. Chosen at the person's word:
+              execute immediately, with a visible note."
+    blocked_on: "observational: falsified if request: appears on re-decisions whose named asked:
+                 does not ask for them, and no reader catches it"
+    seen:
+      s.2026_09_03_arrangements: "read 2026-09-03"
+      d.reversal_is_a_redecision: "a reversal is the arrangement written again under its own id -
+                                   admitted in place when its sign holds with its tabs intact, or on
+                                   a person's request, never twice in a day - and otherwise refused
+                                   into a hypothesis that contests it"
+  d.reversal_is_a_redecision:
+    rests_on: [s.2026_09_03_arrangements, d.reversal_is_a_question, d.contradiction_by_id_and_day]
+    verdict: "a reversal is the arrangement written again under its own id - admitted in place when
+              its sign holds with its tabs intact, or on a person's request, never twice in a day -
+              and otherwise refused into a hypothesis that contests it"
+    because: "The brief cannot reverse a decision by being edited - the record's own claims fail it
+              - and a new id contradicts nothing, so the same id is where a reversal lives and the
+              door every same-id write goes through decides it. The sign is read only from a brief
+              that still carries what the decision made: a tab deleted or gutted makes the very sign
+              it would cite. One re-decision a day makes one radical change per session mechanical
+              rather than remembered, and replaced: keeps each decision's born, how long it stood and
+              what ended it, so a flip reads from the record alone."
+    blocked_on: "observational: falsified if an arrangement flips across days by sessions each
+                 citing a sign the other's repair produced, or if a gradual edit - a pick narrowed
+                 until something spills - is used to manufacture the sign"
+    seen:
+      s.2026_09_03_arrangements: "read 2026-09-03"
+      d.reversal_is_a_question: "undoing an arrangement whose falsifier did not fire is a question
+                                 for the person, never a change"
+      d.contradiction_by_id_and_day: "a contradiction is told by the id and the day: the same id
+                                      with a value read no later than the base's own reading, or with
+                                      a different verdict, is refused into the base and named a
+                                      hypothesis; a newer reading supersedes, a standing judgment is
+                                      superseded only when its wrong_if holds or the request that
+                                      asked for the change is named; the same premises under
+                                      different ids are different subjects"
   d.review_names_what_it_reads:
     rests_on: [d.reasoning_in_record, d.metrics_derived_builtin]
     verdict: "review takes a judgment's id or a section's title; an arrangement's review also
@@ -899,6 +1008,25 @@ judgments:
       s.2026_09_03_coverage: "read 2026-09-03"
       d.intent_is_a_source: "a session records what it was for as a source; a tab is a reading
                              occasion that serves intents, and serving is earned by picks"
+  d.shape_move_read_by_its_sign:
+    rests_on: [s.2026_09_03_arrangements, d.arrangement_replaced_by_trigger, d.coverage_printed_never_acted, p.coverage_thresholds]
+    verdict: "a tab's shape move is muted or fired by its arrangement's own sign, with the counts
+              beside it as facts; the mechanism draws no line of its own"
+    because: "The first draft classified a move by spill, unserved and drift all at zero - three
+              comparisons outside a falsifier, where the coverage report carries
+              {{p.coverage_thresholds}} - and a drift of one entry in fifty would have fired every
+              tab until someone wanted 0.1. The arrangement's own wrong_if is the line its author
+              drew; the counts are printed beside it and never acted on."
+    wrong_if: "p.coverage_thresholds > 0"
+    seen:
+      s.2026_09_03_arrangements: "read 2026-09-03"
+      d.arrangement_replaced_by_trigger: "an arrangement is replaced only when its falsifier fires,
+                                          a coverage gap exists, or a person asks"
+      d.coverage_printed_never_acted: "coverage is counted at every build and check and printed as
+                                       facts - each intent no tab serves with one hint beside it, the
+                                       prefixes nothing picks, spill, drift, the recent streak - and
+                                       nothing in the mechanism acts on a number"
+      p.coverage_thresholds: 0
   d.spill_on_every_tab:
     rests_on: [s.2026_09_03_coverage, d.author_free_build_guarantees]
     verdict: "what fell through the arrangement - flagged judgments nothing picked, and what a
@@ -914,6 +1042,25 @@ judgments:
       s.2026_09_03_coverage: "read 2026-09-03"
       d.author_free_build_guarantees: "the session composes freely and the build enforces the
                                        element rules on the output"
+  d.stood_is_derived:
+    rests_on: [s.2026_09_03_arrangements, d.metrics_derived_builtin, d.minimal_repair, p.fields_a_build_writes]
+    verdict: "how long an arrangement stood is derived - the sessions read on a later day than it
+              was born that one of its tabs served - and never stored"
+    because: "A counter a build bumps has a read command write the record, counts builds that are
+              not events - ten renders fixing a section would age every arrangement by ten - and
+              moves a line every pair of branches would conflict on. Sessions are what the record
+              counts, and only the later sessions a tab went on serving are evidence it held: one
+              that landed unserved is the sign, one that recorded nothing never met it. Today
+              {{p.fields_a_build_writes}} fields are written by a build."
+    wrong_if: "p.fields_a_build_writes > 0"
+    seen:
+      s.2026_09_03_arrangements: "read 2026-09-03"
+      d.metrics_derived_builtin: "graph.* and page.* are derived entries the reader computes itself
+                                  - counts and shares, never stored, thresholds only inside
+                                  falsifiers"
+      d.minimal_repair: "seniority is evidence, never a threshold; a trigger is cleared by the
+                         smallest structural change that suffices"
+      p.fields_a_build_writes: 0
   d.whole_shape_surface:
     rests_on: [doc.fact_moves]
     verdict: "the shape of the whole gets one surface of its own - the tree - and the reading
@@ -1478,7 +1625,6 @@ judgments:
               selector only matches on a namespace boundary."
     wrong_if: "page.unserved > 0"
     born: "2026-09-04"
-    stood: 0
     seen:
       s.2026_09_01_consolidation: "read 2026-09-03"
       s.2026_09_02_priors: "read 2026-09-02"

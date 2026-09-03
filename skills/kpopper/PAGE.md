@@ -255,11 +255,129 @@ intent, add a section, or open a tab - recorded as an arrangement decision with 
 over these counts. The mechanism decides none of it and carries no threshold.
 
 The opener says the newest unserved intent in its `next:` line - one line, and `check` carries
-the rest. The Stop gate holds the session's end against the mark its opener took and reminds,
+the rest; an arrangement whose sign appeared comes first in that line, since it is the gap read
+by a decision. The Stop gate holds the session's end against the mark its opener took and reminds,
 once, about what the session itself left: the record failing worse than it found it, an intent
 it left unserved, entries it wrote with no intent recorded. What was already red or unserved
 when the session opened never bounces it. The two commands behind the hooks, `mark <state
 file>` and `gate <state file>`, are the hooks' own.
+
+## Arrangements: the decisions the page is held to
+
+A tab is an arrangement someone chose, and the choice is a judgment like any other - recorded,
+with what it rests on and what would make it wrong. Nothing here invents a second kind of
+staleness for it; what is special is only what it is *held against*.
+
+**An arrangement, by shape**, is a judgment that rests on a session source - the occasion it
+decides - and whose sign is a name the build computes, read by its `wrong_if` or rested on. `v.`
+is the prefix to use and nothing depends on it. A judgment over the page's counts that rests
+on no session source decides no occasion; a judgment resting on a session source with no count
+in its sign is that session's ordinary decision.
+
+```yaml
+v.glazing_tab:
+  rests_on: [s.2026_09_03_glazing, page.unserved]
+  verdict: "a second tab, for the day the quote is read"
+  because: "... the two merge the day a judgment on one tab rests on the other's numbers."
+  wrong_if: "page.unserved > 0"
+  born: "2026-09-03"          # written by add
+  seen: {s.2026_09_03_glazing: "read 2026-09-03", page.unserved: 0}
+```
+
+**Its sign is one comparison that can hold.** `check` fails an arrangement whose `wrong_if` is not
+`<name> <op> <one value>` - a compound sign reads as evaluable and is never decided, which is
+freeze in disguise - or one that can never hold (a count below zero, a share above one), and `add`
+refuses both. A `reopened_by:` may stand beside the comparison, never in its place. The sign the
+build cannot count goes in `because`, in prose, beside the nearest count that can: *the two merge
+the day a judgment on one tab rests on the other's numbers*, beside `page.unserved > 0`. And ask of
+every one the question the record asks of every falsifier: under this arrangement, can the sign
+still appear?
+
+| write | it fires when | the smallest repair |
+|---|---|---|
+| `page.unserved > 0` | an intent landed that no tab serves - while this arrangement stands, never its own - a new occasion, or one this tab should claim | a tab declares it serves it, if its sections pick what it wrote; else a section; else a tab, entering last |
+| `page.spill > 0` | something flagged fell outside every section | widen a pick; add a section |
+| `page.drift > 0.<n>` | that share of what sessions recorded since the page was last decided is picked by nothing; counted from the newest `born` on the page, so a newer decision resets it | widen picks; a section; the threshold is the author's claim |
+| `page.recent_unserved > <n>` | the last n sessions in a row were unrepresented | a new occasion, decided |
+| `graph.flagged`, `graph.blocked`, `graph.judgments`, `graph.entries` `> <n>` | the record's shape outgrew the layout | the shape the arrangement stood on is reviewed with it |
+| `graph.hypotheses`, `graph.contested` `> <n>` | contested claims pile up under the arrangement | consolidate before rearranging |
+
+**Its tabs are the ones that earn its sources.** A tab serves an intent only by picking what that
+session recorded, so an arrangement's tabs are the tabs whose picks earn a source it rests on -
+one tab, or several when it decides the whole page at once - and a tab that claims no occasion
+(no `serves:` line) belongs to every arrangement, as the one bare tab does. It is *linked* while
+every source it rests on is earned by some tab. A tab deleted, or gutted with its `serves:` line
+kept, cuts the link the same way.
+
+**What the page draws for it**, under the tab's occasion line and quietly: *decided 2026-09-02 ·
+stood 4 sessions · on the word of …*. `stood` is derived - the sessions read on a later day than
+it was born that one of its tabs served; a later session that landed unserved is the sign, not
+evidence, and one that recorded nothing never met it - and it is never stored. The decision drawn
+on its tab is not a pick: a tab that wants the session that decided it to count as served picks
+the decision in a section of its own.
+
+**A shape move reads by the arrangement's own sign.** When a tab's stored `shape:` no longer
+matches the record and an arrangement governs the tab, the move is *fired* if that arrangement's
+`wrong_if` holds - the banner, the failure at `--verify`, the `next:` line at `open` - and *muted*
+otherwise: said quietly with the counts beside it as facts (spill, unserved, drift, and the share
+of what sessions recorded since *this* arrangement was born that nothing picks), and settled by
+`kpopper review` whenever a session next reads it. The mechanism draws no line of its own. A tab
+no arrangement governs keeps the plain banner.
+
+**The brief is held against the decisions that stand**, not against its own last version - an
+out-of-tree record has no git to ask. What the link sees is the radical layer, and only that:
+
+- a tab that earns intents no arrangement rests on is *an arrangement no decision records* -
+  a note, at `--verify` and `check`: add one;
+- a standing arrangement whose sources no tab earns together - a split, a gutting, a deletion -
+  is *the brief does not serve … as it decided*: a failure at `--verify` **and at `check`**, so
+  the Stop gate bounces once on a record `--verify` never runs on;
+- two arrangements with no source in common, both earning sources on one tab, is a merge no
+  decision records: a failure the same way - re-decide the one whose occasion changed, and review
+  the other;
+- a brief with no arrangement at all is said once by `--verify`, on a record whose sessions could
+  be served by one.
+
+Everything else is gradual and needs no decision: a section repopulating, a section added, a pick
+widened, text reviewed, a label, a group, a tab declaring it serves one more intent. A section
+moved across tabs is not seen by the link; it is seen by its effect on the counts. Deletion has no
+green ending of its own: an intent that recorded something is served or unserved for good, so a
+deleted tab either leaves its sources unserved - a gap printed at every open - or reads them on
+another tab, which is a merge.
+
+**A reversal is the arrangement written again under its own id.** Editing the brief past a
+standing decision fails; a decision changes only by `add v.x …` with a new verdict, which is a
+contradiction of what the base holds unless one of three things is true, decided by the same door
+every same-id write goes through:
+
+1. **its sign holds, with its tabs intact** - the world moved, and the re-decision is admitted in
+   place: `born` renewed, `seen` fresh, and one line appended to `replaced:` keeping the born of
+   what it replaced, how long it stood, and the sign that ended it. A tab already deleted or
+   gutted is refused with *restore the tab, then re-decide*: a deletion makes the very sign it
+   would cite;
+2. **a person asked** - the new body carries `request: s.<date>_<slug>` and rests on it, a
+   session source whose `asked:` is the person's words verbatim and nothing else; admitted the
+   same way, and *on the word of* that source on every surface;
+3. **neither** - refused, with the exact `--hypothesis` command that writes it beside the record
+   instead; the page then says *a hypothesis contests this arrangement*, and `check` says so, until
+   a person consolidates. An open question that names the arrangement contests it the same way.
+
+Never twice in a day: a re-decision of an arrangement born today is a contradiction, not a change,
+whatever its sign says - two sessions cannot flip it, and a second writer cannot re-decide it
+behind the first while the first's repair is still being made (a person's request is the one
+exception). A re-decision is exempt from the birth check - it is recorded while the sign that
+ended the old decision still holds - and the next build decides it against the repaired brief. A
+new tab is the other way round: give the tab first, then decide it, since an arrangement whose own
+sign already holds is refused at birth.
+
+**Repair, smallest first.** When a sign appears, clear it with the smallest structural change that
+suffices - declare a tab serves one more intent before adding a section; add a section before
+moving one; move before removing; remove before rebuilding. A new tab enters last, until it earns
+its place. If you chose the bigger change, say in the arrangement's `because` why the smaller one
+was not enough. One radical change per session, at its end, when the session knows what it did -
+and the record holds you to one re-decision of an arrangement per day. Seniority is evidence,
+never a threshold: the page shows how many later sessions a tab served so that a reader can weigh
+it; nothing in the mechanism weighs it for them.
 
 ## What each check is for
 
@@ -311,7 +429,9 @@ compared with the record's - a tab whose shape moved says so at its top, and `--
 |---|---|---|
 | `asked:` | on a session source (`s.*`) | the request verbatim, frozen; `name:` beside it is the session's own reading, which that session may revise until it stops. Entries the session writes carry `from:` it, and a judgment the request is a premise of rests on it. The hover on the source shows it, a tab that serves it quotes it, and it is what makes the source an intent the page is held against. |
 | `{{id}}` | in any text field — `because`, `via`, `note` | a reference, never a retyped value. `check` fails one that names nothing, and one inside a judgment that names something the judgment does not rest on. A card draws it: the value where there is one, the name where there is only a rule, the verdict for a judgment — each hoverable. |
-| `born:`, `stood:` | on an arrangement judgment (`v.*`) | when the arrangement was decided, and how many builds it has stood. Drift is counted from the newest `born` the record carries. |
+| `born:` | on an arrangement | the day it was decided - stamped by `add` like `seen`, renewed when it is re-decided, refused when typed. Drift is counted from the newest `born` the record carries; how long an arrangement stood is derived from it and never stored (below). |
+| `request:` | on an arrangement | the person's request it was taken from: a session source whose `asked:` is the request verbatim, which the arrangement also rests on. Nothing by shape can tell a request from a session's intent, so the claim is explicit, and every surface that shows the decision says *on the word of* that source. |
+| `replaced:` | on an arrangement | written by `add` when a decision replaces another under the same id, one line each, oldest first: the born of what it replaced, how many sessions it stood, and the sign that ended it - so the sequence of decisions reads from the record alone. |
 | `graph.*`, `page.*` | as a dependency, or inside a falsifier | names the reader computes; see below. |
 | `reopened_by:` | on a judgment | the prose sign that re-opens a judgment decided on a session's prior — a `prior.*` claim whose value is the confidence — or on taste. `blocked_on` keeps its meaning: the predicate cannot be evaluated, and why. Not a hole and not waiting: the judgment needs no person, `check` counts it among the declared, and the card shows it in a row of its own. |
 
