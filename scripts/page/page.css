@@ -149,4 +149,11 @@ svg g.rel-chain circle{stroke:var(--read);stroke-width:2.5}
  65%{transform:translate(-.8px,1px)}100%{transform:translate(0,0)}}
 svg g.sway{animation:sway .7s ease-out 1;transform-box:fill-box;transform-origin:center}
 @media(prefers-reduced-motion:reduce){svg g.sway{animation:none}}
+.txt{font-size:14.5px;line-height:1.6;margin:0 0 12px;max-width:72ch}
+.txt .rsn{color:var(--ink2);border-bottom:1px dotted var(--mind)}
+.txt.moved,.card.moved{border-inline-start:3px solid var(--warn)}
+.txt.moved{padding-inline-start:10px}
+.fx.mv{background:var(--wash);border-bottom:2px solid var(--warn)}
+.mvd{font-size:12px;color:var(--warn);margin:-6px 0 12px}
+.card .mvd{margin:8px 0 0}
 footer{margin-top:40px;padding-top:14px;border-top:1px solid var(--ln);color:var(--mut);font-size:12.5px}

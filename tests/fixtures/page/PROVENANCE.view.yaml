@@ -9,7 +9,10 @@ tabs:
         text: "The boiler gives {{heat.boiler_kw}} kW and the coldest night takes
                {{heat.loss_kw}}. {{c.boiler_short}}"
         reviewed: "2026-09-02"
-        seen: {heat.boiler_kw: 24, heat.loss_kw: 31}
+        seen:
+          heat.boiler_kw: 24
+          heat.loss_kw: 31
+          c.boiler_short: "the old boiler cannot hold 12°C on the coldest February night"
         pick: [heat.boiler_kw, heat.loss_kw]
         as: headline
       - title: "By thread"
@@ -26,6 +29,12 @@ tabs:
         why: "every verdict here says what would make it wrong"
         pick: judgments
         as: cards
+      - title: "What comes first"
+        why: "one date, in the sentence it belongs to - a section can be text alone"
+        text: "The first night that matters is {{when.first_cold_night}}; every number above is
+               for that night."
+        reviewed: "2026-09-02"
+        seen: {when.first_cold_night: "2027-02-01"}
     shape: {entries: 7, judgments: 2, flagged: 0, blocked: 0}
 groups:
   threads:

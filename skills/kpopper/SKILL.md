@@ -332,7 +332,8 @@ possible version of this.
 That report is a push, and it is not a substitute for comparing against `seen` at build time. The
 comparison is what survives edits made by hand, by another session, or by a refreshed source —
 and it is derived rather than stored, so unlike a saved dirty flag it cannot itself go stale, get
-cleared by accident, or survive a change that was reverted.
+cleared by accident, or survive a change that was reverted. The reader's `set` is this write
+path: its reply is what the write reached, and `check` still makes the comparison afterwards.
 
 ### Verdict separate from explanation
 
@@ -395,6 +396,9 @@ kpopper open                             # what to read instead of the whole rec
 kpopper check
 kpopper affects <entry> [entry ...]
 kpopper pull <entry> [entry ...]
+kpopper set <key> <value> [--why "..."]  # change one value; the reply is the reach
+kpopper add <id> field=value ...         # a new entry or judgment, in id order, seen filled
+kpopper review <id | "section title">    # it still holds: seen rewritten from the record
 ```
 
 Where that command is not on the path, the reader still ships inside the plugin — but **do not
@@ -456,7 +460,19 @@ reliably in its head, and the part the next session cannot do at all.
 
 `pull <entry>` answers the other question — not what a change reaches but what is known here now:
 that subject's own values with their sources, and the judgments resting on them, cut to a budget.
-A judgment seed pulls in what it rests on, so pulling a conclusion also grounds it.
+A judgment seed pulls in what it rests on, so pulling a conclusion also grounds it. Both `pull`
+and `open` print a judgment's reasoning with its `{{references}}` resolved to what the record
+holds now, under the judgment's own flag — so the re-reading a flag asks for can start there.
+
+`set`, `add` and `review` are how the record changes from the command line, and each answers
+with the reach: what is worked out from what it wrote, every judgment resting on it and its
+state now — MOVED, MUTED, FIRED — and the texts of the brief that saw the old value. `set` changes
+one value and stamps its date; `add` inserts a new entry or judgment in id order beside its
+siblings and fills `seen` from what the dependencies hold; `review` says "I read it, it still
+holds" and rewrites `seen` from the record — a judgment's, or a section text's by its title.
+**Never type `seen` by hand once these exist.** The one field the method says no hand writes is
+the one the tool writes, and a hand-typed snapshot is the paraphrase the reader cannot tell from
+a move.
 
 ### The page
 

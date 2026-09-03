@@ -13,6 +13,15 @@ sources:
     of: "2026-09-03, given scripts/render_page.py at b47f7a0, the plugin layout, pyproject.toml,
          and how the page's verifier and the checker each read the record"
     read: "2026-09-03"
+  s.2026_09_03_written_layer:
+    name: "The session that built the page's written layer and the record's write path - what it
+           was asked, and what it was given"
+    asked: "Build the page's written layer and the record's write path: section text with references
+            resolved, the moved-since-reviewed tint, reasoning shown by pull and open, and set / add /
+            review printing their reach."
+    of: "2026-09-03, given the page design's written-layer section, the page contract at 84af70a, the
+         fixture record under tests/, and the finance lab's write tool"
+    read: "2026-09-03"
   doc.fact_moves:
     url: "https://claude.ai/code/artifact/ca99e558-60ae-4b22-9221-e3b29d7d7e2b"
     name: "מה קורה כשעובדה זזה - the unified node model"
@@ -130,6 +139,13 @@ known:
     v: 1
     name: "How many times the stop gate blocks before yielding"
     from: "scripts/session_gate.sh"
+  p.reference_resolvers:
+    v: 1
+    name: "Functions that resolve a reference to what it shows - the value, a rule's name, a
+           judgment's verdict"
+    from: "scripts/provenance.py"
+    at: "reference_text - the page's spans, pull and open all call it"
+    of: "2026-09-03"
   p.script_copies:
     v: 1
     name: "Editable copies of the reader and the renderer"
@@ -242,6 +258,26 @@ open:
                           by age, by how much rests on it, or only when a person asks?"
 
 judgments:
+  d.add_places_by_prefix:
+    rests_on: [m.multi.record_pairs_conflicting, d.base_shared_forks_on_contradiction]
+    verdict: "add inserts a new entry beside the entries it shares the longest dotted prefix with,
+              in id order among them, and at a collection's tail only when id order puts it there"
+    because: "Every parallel pair conflicted on this file because every session appended at the same
+              tail. An entry placed by its id lands where its subject already sits, so two sessions
+              writing about different subjects touch different lines and git merges them, and two
+              writing about the same subject meet - which is the honest signal. A collection nobody
+              sorted still has a first sibling that sorts after the new id, so the rule reorders
+              nothing that is there."
+    blocked_on: "observational: falsified if a later survey of parallel branches, all writing
+                 through add, still conflicts on the record in most pairs -
+                 m.multi.record_pairs_conflicting measured again"
+    seen:
+      m.multi.record_pairs_conflicting: "4 of 4"
+      d.base_shared_forks_on_contradiction: "a consistent addition goes straight to the shared
+                                             record from any session or branch; a write that
+                                             contradicts the record opens a named hypothesis, and
+                                             whatever later rests on the contradiction goes there - a
+                                             session is never the unit"
   d.browser_code_in_browser_files:
     rests_on: [m.page_string_lines, prior.strings_lose_tooling]
     verdict: "the page's CSS and JS live in their own files under scripts/page/, read whole at
@@ -253,6 +289,21 @@ judgments:
               the move having happened. Cheap to reverse, so decided on the prior alone."
     wrong_if: "prior.strings_lose_tooling < 0.6"
     seen: {m.page_string_lines: 0, prior.strings_lose_tooling: 0.95}
+  d.one_reference_resolver:
+    rests_on: [d.reasoning_in_record, p.reference_resolvers]
+    verdict: "a reference resolves the same way on every surface - the value where the entry holds
+              one, its name where it holds only a rule, the verdict for a judgment - and one function
+              does it"
+    because: "The card, the section text, the hover, pull and open each show a reasoning, and four
+              renderings of one sentence would drift the day one of them learned a new case. So one
+              function resolves, every surface calls it, and the count of such functions -
+              {{p.reference_resolvers}} today - is what would show a second one creeping in."
+    wrong_if: "p.reference_resolvers > 1"
+    seen:
+      d.reasoning_in_record: "reasoning is the because of the judgment it belongs to, in the record;
+                              the page's connective text lives in the brief; both resolve references
+                              at build and both carry seen"
+      p.reference_resolvers: 1
   d.open_is_a_slot:
     rests_on: [goal.measure, m.open_whole, m.open_clean, p.hook_slot]
     verdict: "the session opener fills a fixed character slot, highest value per character
@@ -311,6 +362,28 @@ judgments:
     blocked_on: "observational: falsified by a reading task that genuinely needs the record
                  changed from the page; none has appeared"
     seen: {doc.fact_moves: "read 2026-09-01"}
+  d.review_names_what_it_reads:
+    rests_on: [d.reasoning_in_record, d.metrics_derived_builtin]
+    verdict: "review takes a judgment's id or a section's title; an arrangement's review also
+              rewrites the shape of the one tab, or of the tab serving a session source it rests on;
+              nothing refreshes a snapshot by itself"
+    because: "Connective text has no id, so its title is its address, and a section reviewed by
+              title gets its references snapshotted the way a judgment's dependencies are. An
+              arrangement's shape is its seen kept in the brief, so the same review refreshes both -
+              but a brief with several tabs has to say which, and until an arrangement names its tab,
+              the tab serving what the arrangement rests on is the only link the record holds.
+              Refreshing any of it automatically would erase the difference a snapshot exists to
+              show."
+    blocked_on: "implementation: falsified the day a real brief carries two tabs serving one session
+                 source, so that the link picks arbitrarily - when an arrangement has to name its
+                 tab"
+    seen:
+      d.reasoning_in_record: "reasoning is the because of the judgment it belongs to, in the record;
+                              the page's connective text lives in the brief; both resolve references
+                              at build and both carry seen"
+      d.metrics_derived_builtin: "graph.* and page.* are derived entries the reader computes itself
+                                  - counts and shares, never stored, thresholds only inside
+                                  falsifiers"
   d.whole_shape_surface:
     rests_on: [doc.fact_moves]
     verdict: "the shape of the whole gets one surface of its own - the tree - and the reading
@@ -784,3 +857,50 @@ judgments:
                  could not have warned them about"
     seen: {d.open_is_a_slot: "the session opener fills a fixed character slot, highest value per
                               character first; values never preload"}
+
+  d.write_path_returns_reach:
+    rests_on: [s.2026_09_03_written_layer, d.moved_is_a_flag, d.base_shared_forks_on_contradiction]
+    verdict: "the record changes from the command line through set, add and review; each edits the
+              file in place, writes seen itself, and answers with the reach - what rests on the
+              write, what is MOVED now, which predicate fired"
+    because: "A session that edits the record by hand reads the whole file to change one line, types
+              the one field the method says no hand writes, and has to remember to run the check
+              afterwards. Attaching the report to the write turns discipline into mechanics: the
+              reply is what the write reached. One write function with one validation step in front
+              of it is the seam the consolidation work needs - a value that contradicts the base, the
+              entries nearest a new one - so those rules land in one place and nowhere else."
+    blocked_on: "observational: falsified if sessions keep editing the record by hand once the
+                 commands exist - seen lines changed in commits that ran no command - or if the reach
+                 printed at the write goes unread while check finds the same moves later"
+    seen:
+      s.2026_09_03_written_layer: "read 2026-09-03"
+      d.moved_is_a_flag: "a dependency that moved since the snapshot flags the judgment for a
+                          person; only a predicate that holds fails the build"
+      d.base_shared_forks_on_contradiction: "a consistent addition goes straight to the shared
+                                             record from any session or branch; a write that
+                                             contradicts the record opens a named hypothesis, and
+                                             whatever later rests on the contradiction goes there - a
+                                             session is never the unit"
+
+  d.written_layer_drawn_by_build:
+    rests_on: [d.reasoning_in_record, d.moved_is_a_flag, d.page_reads_only]
+    verdict: "the build resolves a section's references, places a judgment's reasoning where the
+              text asks, and marks what moved since a text or a card was reviewed - in the markup, so
+              the warning shows wherever the page does"
+    because: "A tint applied by script would vanish in a host that strips scripts, and those are the
+              surfaces where a stale sentence is most dangerous, because nothing else there says it
+              moved. The comparison is the one check already makes - a text's seen against the
+              record, a judgment's snapshot against its dependencies - drawn once, at build, never a
+              second reading of what stale means. The page still writes nothing: review clears the
+              tint, and review is a command."
+    blocked_on: "observational: falsified if readers of a page with scripts stripped still miss a
+                 tinted sentence, or if the tint is read as the value having been corrected rather
+                 than as a question"
+    seen:
+      d.reasoning_in_record: "reasoning is the because of the judgment it belongs to, in the record;
+                              the page's connective text lives in the brief; both resolve references
+                              at build and both carry seen"
+      d.moved_is_a_flag: "a dependency that moved since the snapshot flags the judgment for a
+                          person; only a predicate that holds fails the build"
+      d.page_reads_only: "the page is a reading surface - no write path, nothing a hand does to it
+                          is kept; a trial value that persists nothing is a way of reading the reach"
