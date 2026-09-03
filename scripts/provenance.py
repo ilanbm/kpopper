@@ -706,6 +706,43 @@ def _misfiled_reopener(body, ids):
     return r if m and m.group(1) in ids else ""
 
 
+# The line the consequence matrix draws. At or above it a session's confidence in a claim is
+# high enough that a cheap-to-reverse judgment is decided on the prior alone; below it the
+# judgment is tried, or it waits for a person. The count says the line in the line it prints:
+# a number nobody can see is a number nobody can argue with, and it is the only one this
+# count draws - the record keeps that as p.prior_count_thresholds, and the judgment drawn on
+# it says a second would be wrong.
+HIGH_CONFIDENCE = 0.8
+
+
+def priors_line(ids, jud, raw):
+    """How much of the record stands on a session's own confidence: how many judgments rest on
+    a prior.* claim, and how many of those on one the record holds at HIGH_CONFIDENCE or above.
+    -> the line, or '' where nothing rests on a prior and there is nothing to say. Facts, never
+    a verdict: whether too many of them have since been reversed - which is what would demote
+    the kind to a note - is read against this count, by a person."""
+    n = k = 0
+    for j in jud.values():
+        priors = [d for d in j["deps"] if d.startswith("prior.")]
+        if not priors:
+            continue
+        n += 1
+        for d in priors:
+            try:
+                # read through str(), the way every other comparison in this reader reads a
+                # number: a value too large for a float then lands where a falsifier over it
+                # would put it, instead of stopping the count with an error
+                if float(str(value_of(raw, ids, d))) >= HIGH_CONFIDENCE:
+                    k += 1
+                    break
+            except (TypeError, ValueError, OverflowError):
+                continue           # a prior the record does not hold as a number says nothing
+    if not n:
+        return ""
+    return (f"{n} judgment{'' if n == 1 else 's'} rest{'s' if n == 1 else ''} on prior.* claims, "
+            f"{k} of them on a prior at {HIGH_CONFIDENCE} or above")
+
+
 def flags(ids, jud, fields, raw):
     """Per judgment: the conditions that put it in front of a person, derived the one way
     every surface derives them. A predicate over a value `raw` does not carry - a count
@@ -874,6 +911,11 @@ def check_lines(paths):
             if state == "moved":
                 moved.append(f"{name}: {dep} differs from its snapshot "
                              f"({short(old)} -> {short(now)}) - re-review, or refresh seen")
+    # What the record stands on: one line, printed and never failed on - the confidences are
+    # the record's to defend, and a count of them is not a problem with it.
+    priors = priors_line(ids, jud, raw)
+    if priors:
+        note.append(priors)
     # Coverage, when a brief sits beside the record: which intents no tab of the page serves,
     # and where what each of them wrote falls - facts the page counted, said here so a session
     # that never builds the page still hears them. The page decides its own falsifiers.
@@ -1005,6 +1047,11 @@ def opening(paths, budget=25, chars=None):
     head.append(f"{held} entries, {len(jud)} judgments"
                + (f", {len(open_ids)} open questions" if open_ids else "")
                + (f", updated {meta['updated']}" if meta.get("updated") else ""))
+    # of those judgments, how many stand on a session's own confidence - only where any do:
+    # a record with no prior.* claims has nothing to say here and keeps the room
+    priors = priors_line(ids, jud, raw)
+    if priors:
+        head.append(priors)
     # hypotheses beside the record: one line, how many wait and for how long - nothing of what
     # they claim, which is pulled by seed or met as a collision on an id
     waiting = hypothesis_line(doc)
