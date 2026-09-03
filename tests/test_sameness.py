@@ -7,6 +7,7 @@ their own - with no browser and no network:
 
     python3 -m unittest discover -s tests
 """
+import os
 import pathlib
 import shutil
 import subprocess
@@ -335,8 +336,8 @@ class SameIsAMigration(unittest.TestCase):
             # untouched but for the retired id beside it
             h = (pathlib.Path(d) / "PROVENANCE.d" / "resheet.yaml").read_text(encoding="utf-8")
             self.assertNotIn("heat.nameplate_kw:", h)
-            self.assertIn('  heat.boiler_kw:\n    unit: kW\n    name: "boiler output"\n    from: doc.boiler_sheet\n'
-                          '    at: "rated output, p. 3"\n    v: 26\n    of: "2026-09-03"\n'
+            self.assertIn('  heat.boiler_kw:\n    v: 26\n    unit: kW\n    name: "boiler output"\n'
+                          '    from: doc.boiler_sheet\n    at: "rated output, p. 3"\n    of: "2026-09-03"\n'
                           '    also: [heat.nameplate_kw]\n', h)
             base = rec.read_text(encoding="utf-8")
             self.assertIn('  heat.boiler_kw:\n    v: 24\n    unit: kW\n    name: "boiler output"\n'
@@ -480,6 +481,153 @@ class SameIsAMigration(unittest.TestCase):
             self.assertEqual(texts_under(d), before)
 
 
+class WhatTheReviewFound(unittest.TestCase):
+    """The edges of the migration: a record in shards, a hypothesis naming both ids, a survivor
+    written inline, a write that fails halfway, and the arguments' edges."""
+
+    def test_a_sharded_record_keeps_one_copy_of_the_survivor(self):
+        with tempfile.TemporaryDirectory() as d:
+            rec = copy_fixture(pathlib.Path(d))
+            base = rec.read_text(encoding="utf-8")
+            block = ('  heat.output_kw:\n    v: 25\n    unit: kW\n    name: "rated output of the boiler"\n'
+                     '    from: doc.boiler_sheet\n    at: "rated output, p. 3"\n    of: "2026-09-03"\n')
+            self.assertIn(block, base)
+            (pathlib.Path(d) / "core.yaml").write_text(base.replace(block, ""), encoding="utf-8")
+            (pathlib.Path(d) / "more.yaml").write_text("known:\n" + block, encoding="utf-8")
+            rec.write_text("record: [core.yaml, more.yaml]\n", encoding="utf-8")
+            self.assertEqual(run(SCRIPTS / "provenance.py", "check", rec)[0], 0)
+            code, out, err = run(SCRIPTS / "provenance.py", "same", "heat.boiler_kw", "heat.output_kw",
+                                 "--as-of", "2026-09-04", rec)
+            self.assertEqual(code, 0, out + err)
+            self.assertIn("  5 mentions in core.yaml · 4 mentions in PROVENANCE.d/wind.yaml · 3 mentions in "
+                          "PROVENANCE.view.yaml\n", out)
+            got = texts_under(d)
+            self.assertEqual(got["more.yaml"], "")           # the shard is left empty, not a null known:
+            self.assertEqual(got["core.yaml"].count("  heat.boiler_kw:\n"), 1)
+            self.assertIn("  updated: 2026-09-04\n", got["core.yaml"])
+            self.assertIn("    also: [heat.output_kw]\n", got["core.yaml"])
+            self.assertEqual(got["PROVENANCE.yaml"], "record: [core.yaml, more.yaml]\n")
+            self.assertEqual(run(SCRIPTS / "provenance.py", "check", rec)[0], 0)
+
+    def test_a_hypothesis_naming_both_ids_rests_on_the_survivor_once(self):
+        with tempfile.TemporaryDirectory() as d:
+            rec = copy_fixture(pathlib.Path(d))
+            both = pathlib.Path(d) / "PROVENANCE.d" / "both.yaml"
+            both.write_text('hypothesis: {born: "2026-09-03"}\n\njudgments:\n  c.two_readings:\n'
+                            "    rests_on: [heat.boiler_kw, heat.output_kw]\n"
+                            '    verdict: "the two readings of the sheet agree to a kilowatt"\n'
+                            '    wrong_if: "heat.output_kw < heat.boiler_kw"\n'
+                            "    seen: {heat.boiler_kw: 24, heat.output_kw: 25}\n", encoding="utf-8")
+            self.assertEqual(run(SCRIPTS / "provenance.py", "check", rec)[0], 0)
+            code, out, err = run(SCRIPTS / "provenance.py", "same", "heat.boiler_kw", "heat.output_kw",
+                                 "--as-of", "2026-09-04", rec)
+            self.assertEqual(code, 0, out + err)
+            self.assertIn("c.two_readings (in hypothesis both)", out)
+            self.assertEqual(both.read_text(encoding="utf-8"),
+                             'hypothesis: {born: "2026-09-03"}\n\njudgments:\n  c.two_readings:\n'
+                             "    rests_on: [heat.boiler_kw]\n"
+                             '    verdict: "the two readings of the sheet agree to a kilowatt"\n'
+                             '    wrong_if: "heat.boiler_kw < heat.boiler_kw"\n'
+                             "    seen: {heat.boiler_kw: 24}\n")
+            self.assertEqual(run(SCRIPTS / "provenance.py", "check", rec)[0], 0)
+
+    def test_an_inline_survivor_keeps_its_comments_and_its_bare_also(self):
+        with tempfile.TemporaryDirectory() as d:
+            rec = copy_fixture(pathlib.Path(d))
+            edit(rec, '  heat.boiler_kw:\n    v: 24\n    unit: kW\n    name: "boiler output"\n'
+                      '    from: doc.boiler_sheet\n    at: "rated output, p. 3"\n',
+                 '  heat.boiler_kw: {v: 24, name: "boiler output", from: doc.boiler_sheet, also: heat.plate_kw}\n'
+                 '    # set 2026-09-01: read off the plate\n')
+            edit(rec, '    v: 25\n    unit: kW\n    name: "rated output of the boiler"\n    from: doc.boiler_sheet\n'
+                      '    at: "rated output, p. 3"\n',
+                 '    v: 25\n    name: "rated output of the boiler"\n    from: doc.boiler_sheet\n')
+            code, out, err = run(SCRIPTS / "provenance.py", "same", "heat.boiler_kw", "heat.output_kw",
+                                 "--as-of", "2026-09-04", rec)
+            self.assertEqual(code, 0, out + err)
+            base = rec.read_text(encoding="utf-8")
+            self.assertIn('  heat.boiler_kw: {v: 25, name: "boiler output", from: doc.boiler_sheet, of: "2026-09-03", '
+                          'also: [heat.plate_kw, heat.output_kw]}\n'
+                          "    # set 2026-09-01: read off the plate\n  heat.loss_kw:\n", base)
+            # a survivor written in block style keeps its comments last, the retired id before them
+            edit(rec, '    of: "2026-09-02"\n  heat.deficit_kw:', '    of: "2026-09-02"\n    # set 2026-09-02: the glazing area\n  heat.deficit_kw:')
+            run(SCRIPTS / "provenance.py", "add", "heat.loss2_kw", "v=31", "unit=kW", "name=the loss again",
+                "from=s.2026_09_02_heating", "--as-of", "2026-09-03", rec)
+            code, out, err = run(SCRIPTS / "provenance.py", "same", "heat.loss_kw", "heat.loss2_kw",
+                                 "--as-of", "2026-09-04", rec)
+            self.assertEqual(code, 0, out + err)
+            self.assertIn('    of: "2026-09-02"\n    also: [heat.loss2_kw]\n    # set 2026-09-02: the glazing area\n'
+                          '  heat.deficit_kw:\n', rec.read_text(encoding="utf-8"))
+            # both retired ids point at it now
+            code, out, err = run(SCRIPTS / "provenance.py", "add", "heat.plate_kw", "v=1", rec)
+            self.assertEqual(code, 1)
+            self.assertIn("heat.plate_kw was retired into heat.boiler_kw", out + err)
+            self.assertEqual(run(SCRIPTS / "provenance.py", "check", rec)[0], 0)
+
+    def test_the_newer_reading_brings_its_own_provenance_or_none(self):
+        with tempfile.TemporaryDirectory() as d:
+            rec = copy_fixture(pathlib.Path(d))
+            # the retired reading is newer and names no place: the survivor's old place goes with
+            # the old value, and only the unit stays
+            edit(rec, '    name: "rated output of the boiler"\n    from: doc.boiler_sheet\n    at: "rated output, p. 3"\n'
+                      '    of: "2026-09-03"\n',
+                 '    name: "rated output of the boiler"\n    of: "2026-09-03"\n')
+            code, out, err = run(SCRIPTS / "provenance.py", "same", "heat.boiler_kw", "heat.output_kw",
+                                 "--as-of", "2026-09-04", rec)
+            self.assertEqual(code, 0, out + err)
+            self.assertIn('  heat.boiler_kw:\n    v: 25\n    unit: kW\n    name: "boiler output"\n    of: "2026-09-03"\n'
+                          '    also: [heat.output_kw]\n  heat.loss_kw:\n', rec.read_text(encoding="utf-8"))
+
+    def test_a_list_that_repeats_something_else_keeps_it(self):
+        with tempfile.TemporaryDirectory() as d:
+            rec = copy_fixture(pathlib.Path(d))
+            brief = pathlib.Path(d) / "PROVENANCE.view.yaml"
+            edit(brief, "        pick: [heat.boiler_kw, heat.output_kw, heat.loss_kw]\n",
+                 "        pick: [heat.boiler_kw, heat.output_kw, heat.loss_kw, heat.loss_kw]\n")
+            code, out, err = run(SCRIPTS / "provenance.py", "same", "heat.boiler_kw", "heat.output_kw",
+                                 "--as-of", "2026-09-04", rec)
+            self.assertEqual(code, 0, out + err)
+            self.assertIn("        pick: [heat.boiler_kw, heat.loss_kw, heat.loss_kw]\n", brief.read_text(encoding="utf-8"))
+
+    def test_a_write_that_fails_halfway_puts_everything_back(self):
+        if os.geteuid() == 0:
+            self.skipTest("permissions do not bind root")
+        with tempfile.TemporaryDirectory() as d:
+            rec = copy_fixture(pathlib.Path(d))
+            before = texts_under(d)
+            hyp_dir = pathlib.Path(d) / "PROVENANCE.d"
+            os.chmod(hyp_dir, 0o555)
+            try:
+                code, out, err = run(SCRIPTS / "provenance.py", "same", "heat.boiler_kw", "heat.output_kw",
+                                     "--as-of", "2026-09-04", rec)
+            finally:
+                os.chmod(hyp_dir, 0o755)
+            self.assertEqual(code, 1, out + err)
+            self.assertIn("could not be written", out + err)
+            self.assertIn("so nothing was changed", out + err)
+            self.assertEqual(texts_under(d), before)
+
+    def test_open_questions_are_not_folded(self):
+        with tempfile.TemporaryDirectory() as d:
+            rec = copy_fixture(pathlib.Path(d))
+            run(SCRIPTS / "provenance.py", "add", "q.glazing", "is glazing the north wall cheaper?",
+                "--as-of", "2026-09-03", rec)
+            before = texts_under(d)
+            code, out, err = run(SCRIPTS / "provenance.py", "same", "q.second_boiler", "q.glazing", rec)
+            self.assertEqual(code, 1)
+            self.assertIn("q.second_boiler is a line, not an entry with fields - an open question is closed by "
+                          "answering it, not folded into another", out + err)
+            self.assertEqual(texts_under(d), before)
+
+    def test_the_why_may_end_like_a_file_name(self):
+        with tempfile.TemporaryDirectory() as d:
+            rec = copy_fixture(pathlib.Path(d))
+            code, out, err = run(SCRIPTS / "provenance.py", "distinct", "heat.output_kw", "heat.boiler_kw",
+                                 "the second reading is in boiler/notes.yaml", "--as-of", "2026-09-04", rec)
+            self.assertEqual(code, 0, out + err)
+            self.assertIn("    # distinct 2026-09-04: the second reading is in boiler/notes.yaml\n",
+                          rec.read_text(encoding="utf-8"))
+
+
 class DistinctRetiresThePair(unittest.TestCase):
     def test_distinct_writes_the_edge_and_the_dry_run_forgets_the_pair(self):
         with tempfile.TemporaryDirectory() as d:
@@ -511,10 +659,12 @@ class DistinctRetiresThePair(unittest.TestCase):
             code, out, _ = run(SCRIPTS / "provenance.py", "distinct", "c.wind_short", "c.boiler_short",
                                "the wind again", "--as-of", "2026-09-04", rec)
             self.assertEqual(code, 0, out)
-            self.assertIn("    distinct_from: c.margin_thin, c.boiler_short\n"
+            self.assertIn('    distinct_from: "c.margin_thin, c.boiler_short"\n'
                           "    # distinct 2026-09-04: the wind is a premise the second reading never counted\n"
                           "    # distinct 2026-09-04: the wind again\n", h.read_text(encoding="utf-8"))
             self.assertEqual(run(SCRIPTS / "provenance.py", "check", rec)[0], 0)
+            self.assertEqual(S.distinct_pairs([P.load([str(rec)]).hypotheses["wind"]["raw"]]),
+                             {frozenset(("c.wind_short", "c.margin_thin")), frozenset(("c.wind_short", "c.boiler_short"))})
 
     def test_distinct_in_the_base_and_what_reads_it(self):
         with tempfile.TemporaryDirectory() as d:
@@ -557,6 +707,22 @@ class DistinctRetiresThePair(unittest.TestCase):
                           'from: s.2026_09_02_heating, distinct_from: heat.loss_kw}\n'
                           '    # distinct 2026-09-04: a date is not a loss\n', rec.read_text(encoding="utf-8"))
             self.assertEqual(run(SCRIPTS / "provenance.py", "check", rec)[0], 0)
+            # a second id on a flow entry is quoted, or the comma would split the mapping
+            code, out, err = run(SCRIPTS / "provenance.py", "distinct", "when.first_cold_night", "heat.boiler_kw",
+                                 "a date is not an output either", "--as-of", "2026-09-04", rec)
+            self.assertEqual(code, 0, out + err)
+            self.assertIn('from: s.2026_09_02_heating, distinct_from: "heat.loss_kw, heat.boiler_kw"}\n'
+                          '    # distinct 2026-09-04: a date is not a loss\n'
+                          '    # distinct 2026-09-04: a date is not an output either\n', rec.read_text(encoding="utf-8"))
+            self.assertEqual(run(SCRIPTS / "provenance.py", "check", rec)[0], 0)
+            # an unreadable hypothesis stops a migration: it would not reach what the file holds
+            (pathlib.Path(d) / "PROVENANCE.d" / "broken.yaml").write_text("hypothesis: [1, 2\n", encoding="utf-8")
+            before = texts_under(d)
+            code, out, err = run(SCRIPTS / "provenance.py", "same", "heat.boiler_kw", "heat.nameplate_kw", rec)
+            self.assertEqual(code, 1)
+            self.assertIn("hypothesis broken could not be read (while parsing", out + err)
+            self.assertIn("so the migration could not reach what it holds", out + err)
+            self.assertEqual(texts_under(d), before)
 
     def test_what_distinct_refuses(self):
         with tempfile.TemporaryDirectory() as d:

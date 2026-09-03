@@ -295,8 +295,6 @@ def _merge(S, R, sb, rb, ids, jud, fields, raw, as_of):
     stays; whatever only the retired one carried is taken over. A judgment keeps its own
     verdict unless the other may supersede it. Two readings that disagree with nothing to
     order them are a contradiction, not one subject twice, and are refused."""
-    if not isinstance(sb, dict) or not isinstance(rb, dict):
-        return (sb if isinstance(sb, str) or not isinstance(rb, str) else rb), []
     notes = []
     if not sb:
         sb = {}                                 # nothing of S here: R's body, under S's name
@@ -342,12 +340,24 @@ def _merge(S, R, sb, rb, ids, jud, fields, raw, as_of):
             notes.append(f"{S} takes {R}'s reading of {dr}")
         if not sb:
             body = dict(rb)                     # the retired body whole, in its own order
+        elif winner == R:
+            # the newer reading in the place the old one had; its own provenance with it, the
+            # survivor's provenance of the reading it replaces gone, the unit kept
+            body = {}
+            for f, v in sb.items():
+                if f in READING and f != "unit":
+                    if f in rb:
+                        body[f] = rb[f]
+                else:
+                    body[f] = v
+            for f in READING:
+                if f in rb and f not in body:
+                    body[f] = rb[f]
+            for f, v in rb.items():
+                if f not in body and f not in READING and f not in ("also", "distinct_from"):
+                    body[f] = v
         else:
             body = dict(sb)
-            if winner == R:
-                for f in ("v", "quoted", "rule", "of", "read"):
-                    body.pop(f, None)
-                body.update({f: rb[f] for f in READING if f in rb})
             for f, v in rb.items():
                 if f not in body and f not in READING and f not in ("also", "distinct_from"):
                     body[f] = v
@@ -403,7 +413,9 @@ def _set_fields(lines, nid, body, was):
     included - stays as it was."""
     _, ind, s, e = P._locate(lines, nid)
     if P._inline(lines[s]).startswith("{"):
-        P._replace_in(lines, nid, body)
+        comments = [l for l in lines[s + 1:e] if l.strip().startswith("#")]
+        find = P._members_of(lines, s, e)[0] or ind + 2
+        lines[s:e] = P._entry_lines(nid, body, ind, find, True) + comments
         return
     find = P._members_of(lines, s, e)[0] or ind + 2
     for f in list(was):
@@ -437,28 +449,32 @@ def _rewrite_text(text, R, S):
 
 
 def _dedupe_flow_lists(text, S):
-    """A flow list that came to hold S twice holds it once."""
+    """A flow list that came to hold S twice holds it once; every other item stays as it was."""
     def fix(m):
         inner = m.group(1)
         if len(_token(S).findall(inner)) < 2:
             return m.group(0)
-        items, seen, out = [x.strip() for x in inner.replace("\n", " ").split(",")], set(), []
+        items, out, had = [x.strip() for x in inner.replace("\n", " ").split(",")], [], False
         for x in items:
-            if x and x not in seen:
-                seen.add(x)
+            if x == S:
+                if had:
+                    continue
+                had = True
+            if x:
                 out.append(x)
         return "[" + ", ".join(out) + "]"
     return re.sub(r"\[([^\[\]]*)\]", fix, text)
 
 
 def _dedupe_distinct(text, S):
+    """A distinct_from that came to name S twice names it once."""
     def fix(m):
-        ids, out = _ids_in(m.group(2)), []
+        ids, out = _ids_in(m.group(3)), []
         for x in ids:
             if x not in out:
                 out.append(x)
-        return m.group(1) + ", ".join(out)
-    return re.sub(r"^(\s*distinct_from:\s*)([A-Za-z0-9_.,\s]+?)\s*$", fix, text, flags=re.M)
+        return m.group(1) + P.scalar(", ".join(out), fold=False)
+    return re.sub(r"^(\s*distinct_from:\s*)([\"']?)([A-Za-z0-9_.,\s]+?)\2\s*$", fix, text, flags=re.M)
 
 
 def _mentions(R, worlds, fields, brief):
@@ -544,9 +560,10 @@ def same(paths, a, b, keep=None, as_of=None):
     if frozenset((S, R)) in distinct_pairs(raws):
         raise P.Refused(f"refused - {a} and {b} were declared distinct; remove the distinct_from that "
                         f"says so before saying otherwise")
-    for h in hyps.values():
+    for n, h in sorted((getattr(doc, "hypotheses", None) or {}).items()):
         if h["error"]:
-            raise P.Refused(f"refused - hypothesis {h['name']} could not be read: {h['error']}")
+            raise P.Refused(f"refused - hypothesis {n} could not be read ({h['error']}), so the migration "
+                            f"could not reach what it holds")
     # the worlds: the base, whole, then each hypothesis file - each holding S, R, both or neither
     files = P._files_of(paths)
     brief = P._brief_beside(paths[0])
@@ -561,9 +578,10 @@ def same(paths, a, b, keep=None, as_of=None):
                         f"{'a judgment' if any(jr) else 'an entry'}: one subject cannot be both")
     def body_of(k):
         return base[k] if k in base else next(h["raw"][k] for h in hyps.values() if k in h["raw"])
-    if isinstance(body_of(S), dict) != isinstance(body_of(R), dict):
-        raise P.Refused(f"refused - {S} and {R} are not written the same way: one is a line and the "
-                        f"other an entry with fields")
+    for k in (S, R):
+        if not isinstance(body_of(k), dict):
+            raise P.Refused(f"refused - {k} is a line, not an entry with fields - an open question is "
+                            f"closed by answering it, not folded into another")
     mentions = _mentions(R, worlds, fields, brief)
     before_fail = P.check_lines(paths)[0]
 
@@ -580,8 +598,6 @@ def same(paths, a, b, keep=None, as_of=None):
     def world_edit(name, wraw, wfiles, ids_w, jud_w, raw_w):
         """One world's files: R's block out, S's body merged or born, both-and-R deduped."""
         has_s, has_r = S in wraw, R in wraw
-        if not has_r and not has_s:
-            return
         merged = None
         if has_r:
             sb = wraw[S] if has_s else (base_s if base_s is not None else {})
@@ -589,7 +605,7 @@ def same(paths, a, b, keep=None, as_of=None):
             notes.extend((w + (f" (in hypothesis {name})" if name else "")) for w in why)
             if isinstance(merged, dict):
                 also_of[name] = merged.pop("also")
-        elif isinstance(wraw[S], dict):
+        elif has_s and isinstance(wraw[S], dict):
             al = wraw[S].get("also")
             al = [al] if isinstance(al, str) else list(al) if isinstance(al, list) else []
             also_of[name] = al + [x for x in [R] if x not in al]
@@ -614,9 +630,13 @@ def same(paths, a, b, keep=None, as_of=None):
             r_block, collection = None, None
             if has_r and P._locate(lines, R):
                 collection, r_block = _remove_block(lines, R)
+                cols = {n_: (s_, e_) for n_, s_, e_ in P._collections_in(lines)}
+                if collection in cols and not P._members_of(lines, *cols[collection])[1]:
+                    s_, e_ = cols[collection]
+                    del lines[s_:e_]
             if isinstance(merged, dict) and P._locate(lines, S):
                 _set_fields(lines, S, merged, wraw[S])
-            elif isinstance(merged, dict) and r_block is not None:
+            elif isinstance(merged, dict) and r_block is not None and not has_s:
                 P._add_in(lines, S, merged, collection)
             if r_block is not None and P._locate(lines, S):
                 # the retired entry's own comments - a reason a set left - stay with the survivor
@@ -686,23 +706,39 @@ def same(paths, a, b, keep=None, as_of=None):
                 k = block.rfind("}")
                 block = block[:k].rstrip() + ", also: [" + ", ".join(want) + "]" + block[k:]
             else:
-                block = re.sub(r"\balso:\s*\[[^\]]*\]", "also: [" + ", ".join(want) + "]", block)
+                block = re.sub(r"\balso:\s*(\[[^\]]*\]|" + P.FLOW_VALUE + ")",
+                               "also: [" + ", ".join(want) + "]", block)
             lines[s:e] = block.split("\n")
         else:
             find = P._members_of(lines, s, e)[0] or ind + 2
-            P._replace_field(lines, s, e, "also", P._field_lines("also", want, find))
+            if P._field_span(lines, s, e, "also"):
+                P._replace_field(lines, s, e, "also", P._field_lines("also", want, find))
+            else:
+                while e > s + 1 and lines[e - 1].strip().startswith("#"):
+                    e -= 1
+                lines[e:e] = P._field_lines("also", want, find)
         texts[f] = "\n".join(lines)
-    lines = texts[files[0]].split("\n")
-    P._bump_updated(lines, stamp)
-    texts[files[0]] = "\n".join(lines)
-    for f, t in texts.items():
-        if t != originals[f]:
-            P._write_text(f, t)
+    for f in files:
+        lines = texts[f].split("\n")
+        if P._bump_updated(lines, stamp):
+            texts[f] = "\n".join(lines)
+            break
+
+    written = []
 
     def undo():
-        for f, t in originals.items():
-            if texts[f] != t:
+        for f in written:
+            P._write_text(f, originals[f])
+    # every file written, or none: a write that fails halfway puts the earlier ones back
+    try:
+        for f, t in texts.items():
+            if t != originals[f]:
                 P._write_text(f, t)
+                written.append(f)
+    except OSError as e:
+        undo()
+        raise P.Refused(f"refused - {os.path.relpath(f, os.path.dirname(os.path.abspath(paths[0])))} "
+                        f"could not be written ({e.strerror or e}), so nothing was changed")
     # read back: R gone, S held, and check no worse than it was - with the old lines read
     # through the rename, so a problem that only changed its name is not a new one
     try:
@@ -784,19 +820,20 @@ def distinct(paths, a, b, why, as_of=None):
     _, ind, s, e = P._locate(lines, a)
     now = _ids_in(body.get("distinct_from"))
     value = ", ".join(now + [b])
+    written = P.scalar(value, fold=False)      # one id bare; several quoted, or a comma would split a flow mapping
     comment = f"# distinct {stamp}: {why}"
     if P._inline(lines[s]).startswith("{"):
         block = "\n".join(lines[s:e])
         if re.search(r"\bdistinct_from:", block):
-            block = re.sub(r"\bdistinct_from:\s*" + P.FLOW_VALUE, "distinct_from: " + value, block)
+            block = re.sub(r"\bdistinct_from:\s*" + P.FLOW_VALUE, "distinct_from: " + written, block)
         else:
             k = block.rfind("}")
-            block = block[:k].rstrip() + ", distinct_from: " + value + block[k:]
+            block = block[:k].rstrip() + ", distinct_from: " + written + block[k:]
         new = block.split("\n") + [" " * (ind + 2) + comment]
         lines[s:e] = new
     else:
         find = P._members_of(lines, s, e)[0] or ind + 2
-        e = P._replace_field(lines, s, e, "distinct_from", [" " * find + "distinct_from: " + value])
+        e = P._replace_field(lines, s, e, "distinct_from", [" " * find + "distinct_from: " + written])
         lines[e:e] = [" " * find + comment]
     if in_hypothesis is None:
         P._bump_updated(lines, stamp)
@@ -862,22 +899,31 @@ def command(cmd, rest):
             continue
         args.append(x)
         i += 1
-    files = [x for x in args if x.endswith((".yaml", ".yml"))]
-    given = [x for x in args if x not in files]
+    # the two ids first; distinct's why is whatever follows them, a record path or not; only
+    # what comes after those can name the record
+    at = [i for i, x in enumerate(args) if not x.endswith((".yaml", ".yml"))][:2]
+    if len(at) != 2:
+        raise P.Refused(HELP[cmd].strip("\n"))
+    n = 2 if cmd == "same" else 3
+    why_at = -1
+    if cmd == "distinct" and at[1] + 1 < len(args):
+        # the why is whatever follows the ids - unless that is the record itself, given last
+        nxt = args[at[1] + 1]
+        if not (at[1] + 2 == len(args) and nxt.endswith((".yaml", ".yml")) and os.path.exists(nxt)):
+            why_at = at[1] + 1
+    given = [args[at[0]], args[at[1]]] + ([args[why_at]] if why_at >= 0 else [])
+    files = [x for i, x in enumerate(args) if i not in at and i != why_at]
+    if len(given) != n or not all(f.endswith((".yaml", ".yml")) for f in files):
+        raise P.Refused(HELP[cmd].strip("\n"))
     as_of = opts.get("as_of")
     if as_of and not re.match(r"^\d{4}-\d{2}-\d{2}$", as_of):
         raise P.Refused("--as-of takes a date, YYYY-MM-DD")
+    paths = files or P.default_paths()
     if cmd == "same":
-        if len(given) != 2:
-            raise P.Refused(HELP["same"].strip("\n"))
-        paths = files or P.default_paths()
         with P._locked(paths[0]):
             return same(paths, given[0], given[1], opts.get("keep"), as_of)
-    if len(given) != 3:
-        raise P.Refused(HELP["distinct"].strip("\n"))
     if "\n" in given[2]:
         raise P.Refused("the why is one line: a second line would be a line of the record")
-    paths = files or P.default_paths()
     with P._locked(paths[0]):
         return distinct(paths, given[0], given[1], given[2], as_of)
 
