@@ -1,7 +1,7 @@
 name: release
 
-# Every push to main refreshes one pull request, "Release x.y.z", holding the three version
-# files and the changelog entry for everything merged since the last release. The bump is
+# Every push to main refreshes one pull request, "Release x.y.z", holding the version files
+# and the changelog entry for everything merged since the last release. The bump is
 # the largest one the merged pull requests declared. A person merges it; nothing else does.
 
 on:
