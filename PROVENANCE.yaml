@@ -1,5 +1,5 @@
 meta:
-  updated: 2026-09-01
+  updated: 2026-09-03
   name: kpopper
   scope: "What this plugin is for and the decisions that shaped it, kept in its own format -
           the tools eat their own cooking, and every session here opens grounded."
@@ -16,6 +16,11 @@ sources:
   run.first_external:
     name: "The first run on a project this plugin did not build - the g2next keyboard pilot"
     of: "session 'Keyboard size feedback', 2026-09-01, plugin 0.14.0"
+    read: "2026-09-01"
+  run.multisession_survey:
+    name: "A survey of one day of parallel sessions on this repository"
+    of: "session 'provenance-yaml-review', 2026-09-01: the day's transcripts, every branch, and
+         dry-run merges of each pair"
     read: "2026-09-01"
 
 known:
@@ -104,6 +109,26 @@ known:
     name: "Locator resolves to the install the harness records as enabled, 1 yes 0 no"
     from: "ran the documented find against the recorded installPath"
     of: "2026-09-01"
+  m.multi.sessions:
+    v: 7
+    name: "Sessions that worked on this repository in one day, every one opened by the hook"
+    from: run.multisession_survey
+    at: "the day's transcripts under the project directories"
+  m.multi.record_pairs_conflicting:
+    v: "4 of 4"
+    name: "Branch pairs whose dry-run merge conflicted on the record or its brief"
+    from: run.multisession_survey
+    at: "git merge-tree over main and the three branches in flight"
+  m.multi.code_conflicts:
+    v: 0
+    name: "Branch pairs whose dry-run merge conflicted on code"
+    from: run.multisession_survey
+    at: "the same merge-tree runs"
+  m.multi.id_collisions:
+    v: 0
+    name: "Entry ids that two sessions chose for different things"
+    from: run.multisession_survey
+    at: "the namespaces the four writers added that day, compared by hand"
 
 open:
   q.pull_defaults: "does a session that ran pull still open the record file for values - and if
@@ -113,11 +138,13 @@ open:
   q.locator_authority: "the locator takes the highest cached version, while the harness records
                         one enabled install path - they agree today, but should the locator read
                         that record instead of ranking what it finds?"
-  q.mergeable_record: "four sessions appended to the tail of this file in one day and every pair
-                       conflicted there and on the brief's stored shape line, while the code merged
-                       clean - insert in id order, drop the stored shape, or shard?"
-  q.merge_recheck: "consolidation happens at merge, so should the merge be the moment the record
-                    re-checks itself and reports what arrived and what it moved?"
+  q.contradiction_rule: "which writes open a hypothesis - a different value on an id the base
+                         holds is clear; is an opposite verdict on the same rests_on one too, and
+                         how is opposite told from merely different?"
+  q.ci_remeasure: "how does a pull request re-measure the entries a task's falsifier reads - a
+                   measurement recipe kept beside the entry, or the session's own report?"
+  q.hypothesis_lifetime: "when is an untested hypothesis stale enough for the opener to say so -
+                          by age, by how much rests on it, or only when a person asks?"
 
 judgments:
   d.open_is_a_slot:
@@ -318,3 +345,82 @@ judgments:
               of a loose match rather than an arbitrary first hit."
     wrong_if: "m.locator_agrees < 1"
     seen: {p.install_segments: 1, m.locator_agrees: 1}
+  d.base_shared_forks_on_contradiction:
+    rests_on: [m.multi.record_pairs_conflicting, m.multi.code_conflicts, m.multi.id_collisions,
+               skill.two_shapes]
+    verdict: "a consistent addition goes straight to the shared record from any session or
+              branch; a write that contradicts the record opens a named hypothesis, and whatever
+              later rests on the contradiction goes there - a session is never the unit"
+    because: "Seven sessions in one day merged clean on code and conflicted only on this file,
+              never on a subject: the writers agreed, the file could not. A notebook per session
+              piles up unread at ends that never come; a fork per branch repeats what git already
+              knows. The one event that needs separation is a contradiction, and a contradiction
+              can be detected at the moment of writing. The write path inserts in id order, so
+              parallel additions rarely meet; out of the tree it locks the file, since no git
+              protects it there."
+    blocked_on: "observational: falsified if hypotheses pile up untested past the point a person
+                 reads the count, or if sessions keep writing contradicting values into the base
+                 by hand"
+    seen: {m.multi.record_pairs_conflicting: "4 of 4", m.multi.code_conflicts: 0,
+           m.multi.id_collisions: 0,
+           skill.two_shapes: "Two parallel records is the most expensive mistake available here"}
+  d.hypothesis_is_a_judgment:
+    rests_on: [d.base_shared_forks_on_contradiction, doc.fact_moves]
+    verdict: "a task, a branch and a what-if are one thing: a judgment whose truth is pending -
+              its premises in rests_on, its claim in verdict, what would refute its success in
+              wrong_if - and the merge is its test"
+    because: "The record already holds every field a hypothesis needs; only a container and a
+              moment were missing. Written so, a merge can check that the premises still stand
+              and that the claimed improvement holds where it is measurable; refuted work stays
+              as a negative finding with its source instead of vanishing with its branch. The
+              falsifier is asked for at the fork, never on a session's first turn, and an
+              observational one is declared with blocked_on rather than invented."
+    blocked_on: "observational: falsified if sessions write hypotheses and never test them, or if
+                 naming the falsifier becomes a ritual that delays work rather than the line the
+                 person already had in mind"
+    seen: {d.base_shared_forks_on_contradiction: "a consistent addition goes straight to the
+                                                  shared record; a contradiction opens a named
+                                                  hypothesis",
+           doc.fact_moves: "read 2026-09-01"}
+  d.consolidation_is_a_test:
+    rests_on: [d.hypothesis_is_a_judgment, m.multi.record_pairs_conflicting]
+    verdict: "consolidating hypotheses into the base tests whether the writers worked on the same
+              world: premises re-checked, falsifiers evaluated, contradictions stopped - as a dry
+              run at any moment, and as a step on every pull request"
+    because: "Tests check code against the spec one session assumed; nothing checks that two
+              sessions' specs agree. The record is exactly the material that check needs, and a
+              dry run makes it cheap enough to run before anything merges. Its output is three
+              lists a merger walks - contested, candidates, new subjects - never a merge it
+              performed by itself."
+    blocked_on: "observational: falsified if the dry run finds nothing across many merges of
+                 parallel work, or finds only paraphrases and never a premise that moved"
+    seen: {d.hypothesis_is_a_judgment: "a task, a branch and a what-if are one thing: a judgment
+                                        whose truth is pending, and the merge is its test",
+           m.multi.record_pairs_conflicting: "4 of 4"}
+  d.sameness_is_judged:
+    rests_on: [d.relevance_stays_declared]
+    verdict: "the tool never decides that two entries are the same: it shows the nearest existing
+              entries when one is written and candidates when hypotheses consolidate; the writer
+              or the merger decides, and the decision is recorded - same_as as a migration that
+              leaves the build green, distinct_from as an edge that retires the pair"
+    because: "A tool that guesses merges silently and wrongly. The two moments a model already
+              holds the meaning are writing and merging, so the question is asked there and
+              nowhere else. Candidates come from declared fields alone - the same source and
+              location, the same rule, overlapping rests_on, a prefix the base does not know -
+              and declared answers accumulate, so the lists shrink without anything learning."
+    blocked_on: "observational: falsified if the candidate lists miss duplicates that later
+                 surface as two values for one subject, or grow past what a merger will read"
+    seen: {d.relevance_stays_declared: "retrieval follows declared edges and names; no learned
+                                        relevance at record scale"}
+  d.no_feed_of_other_branches:
+    rests_on: [d.open_is_a_slot]
+    verdict: "the opener adds one line - how many hypotheses wait, and for how long; nothing
+              another branch claims is pushed into a session, it is pulled by seed or surfaces
+              as a collision on the same id"
+    because: "Uncommitted state elsewhere cannot be read. Most of what another branch touches is
+              not this session's subject. The slot pays by value per character, and a feed
+              invites reconciling what nobody asked to reconcile."
+    blocked_on: "observational: falsified if sessions keep colliding on subjects the count line
+                 could not have warned them about"
+    seen: {d.open_is_a_slot: "the session opener fills a fixed character slot, highest value per
+                              character first; values never preload"}
