@@ -10,7 +10,8 @@ straight through to provenance.py; page renders the record and can open what it 
   kpopper set     <key> <value> [--why "..."] [--as-of DATE]   change one value; the reply is the reach
   kpopper add     <id> field=value ...    a new entry or judgment, in id order, its seen filled
   kpopper review  <id | "section title">  it still holds: seen rewritten from what the record holds
-  kpopper page    [--out PATH] [--open] [--tree] [args...]   the record as one page
+  kpopper page    [--out PATH] [args...]  the record as one page
+                  add --open to look at it in your own browser, --tree to land there
                   add --verify to check the page instead of writing one
                   add --checks [PAGE] for the browser checks on a page already written
 
