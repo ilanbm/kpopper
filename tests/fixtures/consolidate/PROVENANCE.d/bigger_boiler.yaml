@@ -1,0 +1,35 @@
+hypothesis:
+  claim: "a 36 kW boiler holds the greenhouse even with the wind counted"
+  wrong_if: "heat.loss_kw > heat.boiler_kw"
+  born: "2026-09-03"
+  folds: never
+
+sources:
+  doc.boiler_catalogue:
+    name: "the supplier's catalogue, the 36 kW model"
+    url: "https://example.test/boilers/36kw"
+    read: "2026-09-03"
+
+known:
+  heat.boiler_kw:
+    v: 36
+    unit: kW
+    name: "boiler output"
+    from: doc.boiler_catalogue
+    at: "rated output of the 36 kW model"
+  heat.loss_kw:
+    v: 33
+    unit: kW
+    name: "heat loss on a -5°C night"
+    from: s.2026_09_02_heating
+    at: "the session's figure plus 2 kW for the wind"
+    of: "2026-09-03"
+
+judgments:
+  c.boiler_enough:
+    rests_on: [heat.boiler_kw, heat.loss_kw]
+    verdict: "a 36 kW boiler holds 12°C on the coldest night, wind included"
+    because: "It gives {{heat.boiler_kw}} kW against a loss of {{heat.loss_kw}} kW with the wind
+              counted in."
+    wrong_if: "heat.loss_kw > heat.boiler_kw"
+    seen: {heat.boiler_kw: 36, heat.loss_kw: 33}

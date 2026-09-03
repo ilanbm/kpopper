@@ -13,6 +13,11 @@ straight through to provenance.py; page renders the record and can open what it 
                   add --hypothesis NAME to any of the three: the write lands in
                   PROVENANCE.d/NAME.yaml beside the record and the base is not touched - where a
                   write contradicts the base, the refusal names this command
+  kpopper consolidate [--dry-run] [<hypothesis> ...]   the record with its hypotheses laid over
+                  it, tested with the reader's own check - and, without --dry-run, folded into the
+                  base when the test is clean; --refute NAME "why" leaves one negative finding and
+                  deletes the file; --from REF reads another branch's committed record as one more
+                  hypothesis, and pull <seed> --from REF shows what it proposes
   kpopper page    [--out PATH] [args...]  the record as one page
                   add --open to look at it in your own browser, --tree to land there
                   add --verify to check the page instead of writing one
@@ -81,6 +86,13 @@ def main():
         print(__doc__.strip("\n"))
         sys.exit(0)
     cmd, rest = argv[0], argv[1:]
+    if cmd == "consolidate" or (cmd == "pull" and "--from" in rest):
+        # the union and the fold live beside the reader; pull --from is theirs too, since
+        # another branch's record is read the way a hypothesis is
+        tool = [sys.executable, str(HERE / "consolidate.py")] + ([cmd] if cmd == "pull" else []) + rest
+        if os.name == "nt":
+            sys.exit(subprocess.run(tool).returncode)
+        os.execv(sys.executable, tool)
     if cmd in READ:
         reader = [sys.executable, str(HERE / "provenance.py"), cmd] + rest
         if os.name == "nt":

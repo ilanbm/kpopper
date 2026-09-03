@@ -1,0 +1,20 @@
+hypothesis:
+  claim: "the loss was overcounted - the north wall is double glazed already"
+  wrong_if: "heat.loss_kw >= 31"
+  born: "2026-09-03"
+
+sources:
+  s.2026_09_03_recount:
+    asked: "Recount the loss with the north wall as it is, not as the plan drew it."
+    name: "the recount, as this session read it: the same wall at its real U-value"
+    of: "this session"
+    read: "2026-09-03"
+
+known:
+  heat.loss_kw:
+    v: 28
+    unit: kW
+    name: "heat loss on a -5°C night"
+    from: s.2026_09_03_recount
+    at: "the north wall at its measured U-value"
+    of: "2026-09-03"
