@@ -479,6 +479,25 @@ def _reopened_text(body):
     return ""
 
 
+def _decided(j):
+    """The re-opener that stands for a judgment's falsifier: only when the predicate field
+    is empty. Prose in the predicate field is still prose, and a re-opener beside it does
+    not make it a declaration - that is what blocked_on says, with the reason."""
+    return "" if j["pred"] else _reopened_text(j["body"])
+
+
+COMPARISON = re.compile(r"^\s*([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z0-9_]+)+)\s*(<=|>=|==|!=|<|>)")
+
+
+def _misfiled_reopener(body, ids):
+    """A re-opener written as a comparison over an entry is a predicate in the wrong field:
+    the reader would neither evaluate it nor refuse it, and a line nobody evaluates that
+    looks evaluated is the one thing this method refuses. -> the text, or ''."""
+    r = _reopened_text(body)
+    m = COMPARISON.match(r)
+    return r if m and m.group(1) in ids else ""
+
+
 def flags(ids, jud, fields, raw):
     """Per judgment: the conditions that put it in front of a person, derived the one way
     every surface derives them. A predicate over a value `raw` does not carry - a count
@@ -493,7 +512,7 @@ def flags(ids, jud, fields, raw):
             elif fields["snapshot"] and d not in j["seen"]:
                 f.add("unchecked")
         named = [t for t in ID.findall(j["pred"]) if t in ids]
-        if not named and not blocked and not _reopened_text(j["body"]):
+        if not named and not blocked and not _decided(j):
             f.add("no_predicate")
         elif named and evaluate(j["pred"], raw, ids) is True:
             f.add("falsified")
@@ -609,15 +628,24 @@ def check_lines(paths):
         # A predicate field holding prose is not a predicate. It reads like one,
         # which is worse than an empty field: nothing evaluates it and nobody notices.
         evaluable = bool([t for t in ID.findall(j["pred"]) if t in ids])
+        misfiled = _misfiled_reopener(j["body"], ids)
+        if misfiled:
+            fail.append(f"{name}: reopened_by reads as a comparison ({short(misfiled, 60)}) - a "
+                        f"predicate belongs in wrong_if, where it is evaluated; a re-opener is the "
+                        f"sign a person reads")
         if not evaluable:
             what = "prose, not an evaluable predicate" if j["pred"] else "no predicate at all"
             reopened = _reopened_text(j["body"])
             if blocked:
                 note.append(f"{name}: {what} (declared: {blocked[:90]})")
-            elif reopened:
+            elif reopened and not j["pred"]:
                 # decided, and it says what would re-open it - a sign a person reads, so
                 # the judgment is declared rather than failed, and it is not waiting
                 note.append(f"{name}: {what} - decided; reopened by: {reopened[:90]}")
+            elif reopened:
+                # a re-opener stands for an empty predicate field, never for prose in it
+                fail.append(f"{name}: {what} - a re-opener does not stand in for it: a predicate "
+                            f"is evaluated, or declared un-evaluable with blocked_on")
             else:
                 fail.append(f"{name}: {what} - and nothing says why not, so it can never be "
                             f"re-checked")
@@ -690,7 +718,10 @@ def opening(paths, budget=25, chars=None):
                 items.append((100, name, f"predicate reads {tok}, which it does not declare - "
                                          f"a change to it never reaches this"))
         evaluable = bool([t for t in ID.findall(j["pred"]) if t in ids])
-        if not evaluable and not blocked and not _reopened_text(j["body"]):
+        if _misfiled_reopener(j["body"], ids):
+            items.append((100, name, "reopened_by reads as a comparison - a predicate belongs in "
+                                     "wrong_if"))
+        if not evaluable and not blocked and not _decided(j):
             items.append((40, name, "nothing evaluable would falsify it"))
         elif evaluable and evaluate(j["pred"], raw, ids) is True:
             items.append((95, name, f"wrong_if holds ({j['pred'][:60]}) - broken by its own "
@@ -1349,7 +1380,7 @@ def _state(name, j, raw, ids, fields, touched=()):
         return "MUTED", (f"{d} moved {short(o)} -> {short(n)}, inside wrong_if ({j['pred']}) - "
                          f"nothing is asked")
     if not named_ and not blocked:
-        reopened = _reopened_text(j["body"])
+        reopened = _decided(j)
         if reopened:
             return "HOLDS", "decided; reopened by " + short(reopened, 80)
         return "HOLDS", "nothing evaluable would say otherwise"
@@ -1460,6 +1491,18 @@ def _sound_references(a, doc, ids, jud, fields, raw):
     return out
 
 
+def _reopener_is_prose(a, doc, ids, jud, fields, raw):
+    """A re-opener is the sign a person reads; one written as a comparison over an entry is
+    a predicate in the wrong field, and it is refused before it can look evaluated."""
+    if a["kind"] != "add" or not isinstance(a["body"], dict):
+        return []
+    misfiled = _misfiled_reopener(a["body"], ids)
+    if misfiled:
+        return [f"reopened_by reads as a comparison ({short(misfiled, 60)}) - a predicate belongs "
+                f"in wrong_if, where it is evaluated"]
+    return []
+
+
 def _not_born_broken(a, doc, ids, jud, fields, raw):
     """A judgment whose own condition holds the moment it is written is a mistake caught
     here, not a record that fails check a second later."""
@@ -1473,7 +1516,8 @@ def _not_born_broken(a, doc, ids, jud, fields, raw):
 
 # Every refusal a write can meet, in one place. A later rule - a value that contradicts
 # what the base holds, the entries nearest a new one - is one more function here.
-VALIDATORS = [_known_key, _sound_dependencies, _sound_references, _not_born_broken]
+VALIDATORS = [_known_key, _sound_dependencies, _sound_references, _reopener_is_prose,
+              _not_born_broken]
 
 
 def validate(action, doc, ids, jud, fields, raw):

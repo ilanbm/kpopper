@@ -430,13 +430,13 @@ being wrong is costly.** Three fields, three meanings:
     seen: {prior.macros_bind_by_position: 0.9, export.header_changes: 0}
 ```
 
-A judgment with `reopened_by` and no predicate is decided, not waiting: `check` counts it among
-the declared, nothing lists it as needing a person, and its card shows the sign in a row of its
-own. Write `wrong_if` beside it where the record holds what it reads: `prior.x < 0.8` re-opens the
-decision the day the confidence is re-stated below the line. Rating everything 0.9 buys nothing —
-the sign still has to be written, and a bad one is visible: "wrong if it turns out wrong" reads as
-what it is. The kind carries its own falsifier: if judgments resting on priors at 0.8 or above
-keep being reversed, the confidences carry no information and `prior.*` is demoted to a note.
+A judgment with `reopened_by` and an empty `wrong_if` is decided, not waiting: `check` counts it
+among the declared, nothing lists it as needing a person, and its card shows the sign in a row of
+its own. Write `wrong_if` beside it where the record holds what it reads: `prior.x < 0.8` re-opens
+the decision when the confidence is re-stated below the line. Rating everything 0.9 buys nothing:
+the sign still has to be written, and a bad one is visible — "wrong if it turns out wrong" reads
+as what it is. The kind carries its own falsifier: if judgments resting on priors at 0.8 or above
+keep reversing, the confidences carry no information and `prior.*` is demoted to a note.
 
 ## Step 6 — Changing the shape
 

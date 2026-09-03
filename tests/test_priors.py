@@ -111,6 +111,44 @@ class TheReaderAcceptsAReopener(unittest.TestCase):
             self.assertIn("rests on export.nothing, which is not an entry - add it first, or "
                           "declare it missing with blocked_on", out + err)
 
+    def test_a_reopener_does_not_excuse_prose_in_the_predicate_field(self):
+        with tempfile.TemporaryDirectory() as d:
+            rec = copy_fixture(pathlib.Path(d))
+            edit(rec, "    reopened_by: \"a macro that breaks",
+                 "    wrong_if: \"if the macros ever bind by name\"\n    reopened_by: \"a macro that breaks")
+            code, out, _ = run(SCRIPTS / "provenance.py", "check", rec)
+            self.assertEqual(code, 1, out)
+            self.assertIn(f"FAIL {DECIDED}: prose, not an evaluable predicate - a re-opener does not "
+                          f"stand in for it: a predicate is evaluated, or declared un-evaluable with "
+                          f"blocked_on", out)
+            _, ids, jud, fields, raw = read(rec)
+            self.assertIn("no_predicate", P.flags(ids, jud, fields, raw)[DECIDED])
+            self.assertIn("no_predicate", R.build([str(rec)], None)[4]["flags"][DECIDED])
+            _, out, _ = run(SCRIPTS / "provenance.py", "open", rec)
+            self.assertIn(f"{DECIDED}: nothing evaluable would falsify it", out)
+
+    def test_a_reopener_written_as_a_comparison_is_refused(self):
+        with tempfile.TemporaryDirectory() as d:
+            rec = copy_fixture(pathlib.Path(d))
+            code, out, err = run(SCRIPTS / "provenance.py", "add", "c.by_position",
+                                 "rests_on=[export.header_changes]", "verdict=x",
+                                 "reopened_by=export.header_changes > 0", rec)
+            self.assertEqual(code, 1, out + err)
+            self.assertIn("reopened_by reads as a comparison (export.header_changes > 0) - a "
+                          "predicate belongs in wrong_if, where it is evaluated", out + err)
+            text = rec.read_text(encoding="utf-8")
+            text = re.sub(r"    reopened_by: \"[^\"]*\"\n",
+                          "    reopened_by: \"export.header_changes > 0\"\n", text, flags=re.S)
+            rec.write_text(text, encoding="utf-8")
+            code, out, _ = run(SCRIPTS / "provenance.py", "check", rec)
+            self.assertEqual(code, 1, out)
+            self.assertIn(f"FAIL {DECIDED}: reopened_by reads as a comparison (export.header_changes "
+                          f"> 0) - a predicate belongs in wrong_if, where it is evaluated; a "
+                          f"re-opener is the sign a person reads", out)
+            _, out, _ = run(SCRIPTS / "provenance.py", "open", rec)
+            self.assertIn(f"{DECIDED}: reopened_by reads as a comparison - a predicate belongs in "
+                          f"wrong_if", out)
+
     def test_the_reopener_never_votes_for_the_predicate(self):
         # The fixture's re-opener names an entry and carries a dash - the shape of a
         # predicate. Against the record's one wrong_if it would tie, and the reader would
