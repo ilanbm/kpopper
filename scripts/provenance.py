@@ -480,8 +480,8 @@ def infer(doc):
             if not isinstance(body, dict) or fields["deps"] not in body:
                 continue
             for f, val in body.items():
-                if f in REOPENED:
-                    continue           # prose by declaration: it never reads as a predicate
+                if f in REOPENED or f in ARRANGEMENT_PROSE:
+                    continue           # read by name: it never reads as a predicate or a snapshot
                 if isinstance(val, dict) and val and all(k in ids for k in val):
                     cand["snapshot"][f] = cand["snapshot"].get(f, 0) + 1
                 elif isinstance(val, str) and val and "{{" not in val:
@@ -513,6 +513,11 @@ BLOCKED = ("blocked_on", "unverified", "status")
 # decided, and this says when to look again. Beside blocked_on, which keeps its meaning -
 # the predicate cannot be evaluated, and why - so every record written before it still reads.
 REOPENED = ("reopened_by",)
+# An arrangement carries two fields the reader reads by name and never by shape: the person's
+# request it was taken from (`request:`, a session source), and the decisions it replaced
+# (`replaced:`, one line each, naming a count and the sign that ended them - which would
+# otherwise read as a predicate).
+ARRANGEMENT_PROSE = ("request", "replaced")
 OPEN = ("open", "questions")
 
 # The one field this method asks for by name rather than inferring by shape - a sentence
@@ -743,6 +748,67 @@ def priors_line(ids, jud, raw):
             f"{k} of them on a prior at {HIGH_CONFIDENCE} or above")
 
 
+# ── arrangements ─────────────────────────────────────────────────────────────
+# An arrangement is a judgment by shape: it rests on a session source - the occasion it
+# decides - and its sign is a name the build computes, read by its predicate or rested on.
+# Nothing depends on the `v.` prefix, which is only the convention the page's reference
+# recommends. What is special about an arrangement is only what it is held against: the
+# page's counts, the record's shape kept in the brief, and the decisions that stand.
+def is_intent(k, raw):
+    """A session source: the one entry shape that carries what was asked."""
+    b = raw.get(k)
+    return isinstance(b, dict) and bool(b.get("asked"))
+
+
+def intents_of(j, raw):
+    """The session sources a judgment rests on - its occasion, when it is an arrangement."""
+    return [d for d in j["deps"] if is_intent(d, raw)]
+
+
+def is_arrangement(j, raw):
+    return bool(intents_of(j, raw)) and (any(is_builtin(t) for t in ID.findall(j["pred"]))
+                                          or any(is_builtin(d) for d in j["deps"]))
+
+
+def _arrangement_shaped(body, fields, raw):
+    """Whether a body being written would read as an arrangement."""
+    if not _judgment_shaped(body, fields):
+        return False
+    deps = body[fields["deps"]]
+    pred = str(body.get(fields["predicate"]) or "") if fields["predicate"] else ""
+    return any(is_intent(d, raw) for d in deps) and (any(is_builtin(t) for t in ID.findall(pred))
+                                                     or any(is_builtin(d) for d in deps))
+
+
+def one_comparison(pred, raw=None, ids=None):
+    """An arrangement's sign, as the build can decide it: one comparison - a name, an
+    operator, a number or a text or another entry - that can hold. -> '' when it is, else
+    what is wrong with it. A compound sign reads as evaluable today and is never decided,
+    which is freeze in disguise; a count below zero or a share above one never happens; an
+    entry with no value to compare would leave the sign green forever."""
+    m = CMP.match(str(pred or ""))
+    # the right-hand side must be one value too: a number, a quoted text, or an entry - the
+    # comparison shape alone would let "a > 0 or b > 0" through with "0 or b > 0" as its value
+    rhs = m.group(3).strip() if m else ""
+    quoted = len(rhs) > 1 and rhs[0] in "\"'" and rhs[-1] == rhs[0] and not EXPR.search(rhs[1:-1])
+    if not m or not (NUMBER.match(rhs) or ID.fullmatch(rhs) or quoted):
+        return "is not one comparison this reader decides (a name, an operator, one value)"
+    name, op = m.group(1), m.group(2)
+    if ID.fullmatch(rhs) and raw is not None and not is_builtin(rhs) \
+            and (rhs not in (ids or ()) or value_of(raw, ids, rhs) is None):
+        return f"compares against {rhs}, which holds no value the build can compare"
+    try:
+        x = float(rhs.replace(",", ""))
+    except ValueError:
+        return ""
+    if is_builtin(name):
+        if (op == "<" and x <= 0) or (op in ("<=", "==") and x < 0):
+            return f"can never hold - a count is never below zero ({name} {op} {rhs})"
+        if name == "page.drift" and ((op == ">" and x >= 1) or (op in (">=", "==") and x > 1)):
+            return f"can never hold - a share is never above one ({name} {op} {rhs})"
+    return ""
+
+
 def flags(ids, jud, fields, raw):
     """Per judgment: the conditions that put it in front of a person, derived the one way
     every surface derives them. A predicate over a value `raw` does not carry - a count
@@ -904,6 +970,20 @@ def check_lines(paths):
             named_page = sorted({t for t in ID.findall(j["pred"]) if t in PAGE})
             note.append(f"{name}: wrong_if reads {', '.join(named_page)}, which is counted "
                         f"when the page is built - `page --verify` decides it")
+        # An arrangement's sign is decided by the build - by check for a count of the record,
+        # by the page for a count of the page - so it is one comparison that can hold. A
+        # re-opener may stand beside it, never in its place: an unevaluable sign on an
+        # arrangement is decoration, and decoration is freeze in disguise.
+        if is_arrangement(j, raw):
+            bad = one_comparison(j["pred"], raw, ids)
+            if bad:
+                fail.append(f"{name}: wrong_if {bad} - an arrangement's sign is decided by the "
+                            f"build, or it is decoration")
+            req = j["body"].get("request")
+            if req is not None and not (isinstance(req, str) and is_intent(req, raw)
+                                        and req in j["deps"]):
+                fail.append(f"{name}: request: {req} is not a session source carrying what was "
+                            f"asked, that it rests on - a person's word is a source, or it is nobody's")
         # A dependency that moved since the snapshot puts the judgment in front of a
         # person; it does not fail the build. Movement is a question and a crossed line
         # is the answer, and only the predicate can say which line matters.
@@ -918,14 +998,20 @@ def check_lines(paths):
         note.append(priors)
     # Coverage, when a brief sits beside the record: which intents no tab of the page serves,
     # and where what each of them wrote falls - facts the page counted, said here so a session
-    # that never builds the page still hears them. The page decides its own falsifiers.
-    cov = _coverage(paths)
-    if cov and "error" in cov:
-        note.append(f"the brief beside the record could not be built: {cov['error']}")
-    elif cov:
+    # that never builds the page still hears them. The page decides its own falsifiers; the
+    # brief held against the arrangements that stand is the record's own claim, so a brief
+    # that no longer carries what an arrangement decided fails here too.
+    info = _page_or_error(paths)
+    if info and "error" in info:
+        note.append(f"the brief beside the record could not be built: {info['error']}")
+    elif info:
         sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
         import render_page as R
-        note += R.coverage_lines(cov, full=False)
+        if info.get("coverage"):
+            note += R.coverage_lines(info["coverage"], full=False)
+        af, an = R.arrangement_lines(info, page_decides=True)
+        fail += af
+        note += an
     # Hypotheses beside the record: a file the reader cannot read fails; an id two of them hold
     # with different claims needs a person and fails nothing - which of them folds, or neither,
     # is decided at consolidation, where the union is tested.
@@ -1091,13 +1177,21 @@ def opening(paths, budget=25, chars=None):
              "(what a change reaches) · check")
     # An intent no tab of the page serves is said at every open, in the one line that is
     # already about what to do next: the newest first and how many more, never the list -
-    # the slot is for what needs a person, and check names the rest with a hint each.
-    unserved = _unserved(paths)
-    if unserved:
+    # the slot is for what needs a person, and check names the rest with a hint each. An
+    # arrangement whose sign appeared comes first: it is the gap read by a decision.
+    info = _page_or_error(paths)
+    facts = (info.get("arrangements") or {}) if info and "error" not in info else {}
+    fired = sorted(k for k, f in facts.items() if f["fired"])
+    cov = info.get("coverage") if info and "error" not in info else None
+    unserved = [r["id"] for r in cov["rows"] if r["unserved"]] if cov else []
+    rest = (" · pull <entry|prefix> (values with sources) · affects <entry> "
+            "(what a change reaches)")
+    if fired:
+        footer = (f"next: check - {fired[0]} fired ({short(jud[fired[0]]['pred'], 40)})"
+                  + (f" (and {len(fired) - 1} more)" if len(fired) > 1 else "") + rest)
+    elif unserved:
         footer = (f"next: check - {unserved[0]} is served by no tab"
-                  + (f" (and {len(unserved) - 1} more)" if len(unserved) > 1 else "")
-                  + " · pull <entry|prefix> (values with sources) · affects <entry> "
-                  "(what a change reaches)")
+                  + (f" (and {len(unserved) - 1} more)" if len(unserved) > 1 else "") + rest)
 
     for l in head:
         print(l)
@@ -1127,7 +1221,8 @@ def opening(paths, budget=25, chars=None):
         for name in live:
             b = jud[name]["body"]
             v = str(b.get("verdict") or b.get("title") or name)
-            line = f"  = {name}: {v}"
+            req = b.get("request")
+            line = f"  = {name}" + (f" (on the word of {req})" if req else "") + f": {v}"
             standing.append(line if len(line) < 80 else line[:80] + " ...")
 
     body = [""] + needs
@@ -1376,6 +1471,10 @@ def pull(paths, seeds, budget=40):
         reopened = _reopened_text(body)
         if reopened:
             out.append(cut(f"    reopened by: {reopened}", 110))
+        # a decision taken on a person's request says so wherever it is read: the request
+        # is the door that let it past the arrangement's sign
+        if body.get("request"):
+            out.append(cut(f"    on the word of: {body['request']}", 110))
 
         # Every move since the snapshot, with what the predicate made of it - pull is
         # the grounding surface, so here even a muted move is worth a line.
@@ -1679,21 +1778,31 @@ def _page_info(paths):
 
 def _page_side(paths):
     """page.* as the page counts them - every name, mentioned or not, since a new judgment
-    may be the first to rest on one - and the record's shape: -> (values, shape). ({}, None)
-    without a brief; a count the page could not take is left out."""
+    may be the first to rest on one - the record's shape, and every arrangement held against
+    the brief: -> (values, shape, arrangements). ({}, None, {}) without a brief; a count the
+    page could not take is left out."""
     info = _page_info(paths)
     if info is None:
-        return {}, None
-    return {k: v for k, v in info["page"].items() if v is not None}, info["shape"]
+        return {}, None, {}
+    return ({k: v for k, v in info["page"].items() if v is not None}, info["shape"],
+            info.get("arrangements") or {})
+
+
+def _page_or_error(paths):
+    """What the page knows, or None without a brief, or {"error": why} when the brief cannot
+    be built - the reader never fails on the page's account, it says so in a line."""
+    try:
+        return _page_info(paths)
+    except (Exception, SystemExit) as e:
+        return {"error": str(e)}
 
 
 def _coverage(paths):
     """The page's coverage report, or None: without a brief, or when the brief cannot be
-    built - the reader never fails on the page's account, it says so in a line."""
-    try:
-        info = _page_info(paths)
-    except (Exception, SystemExit) as e:
-        return {"error": str(e)}
+    built."""
+    info = _page_or_error(paths)
+    if info and "error" in info:
+        return info
     return info["coverage"] if info and info.get("coverage") else None
 
 
@@ -1761,7 +1870,11 @@ def _state(name, j, raw, ids, fields, touched=()):
         return "HOLDS", "no predicate to evaluate; declared - " + short(blocked, 80)
     pred = short(j["pred"], 80)
     if evaluate(j["pred"], raw, ids) is None:
-        return "HOLDS", f"wrong_if is not a comparison this reader decides ({pred})"
+        if not CMP.match(j["pred"]):
+            return "HOLDS", f"wrong_if is not a comparison this reader decides ({pred})"
+        if any(t in PAGE for t in ID.findall(j["pred"])):
+            return "HOLDS", f"wrong_if is counted when the page is built ({pred}) - page --verify decides it"
+        return "HOLDS", f"wrong_if compares against something with no value to compare ({pred})"
     return "HOLDS", f"wrong_if does not hold ({pred})"
 
 
@@ -1844,7 +1957,8 @@ def _known_key(a, doc, ids, jud, fields, raw):
             if a.get("hypothesis"):
                 out.append(f"{k} is already in hypothesis {a['hypothesis']} - set changes its value "
                            f"there, review its snapshot")
-            elif _disagreement(a, raw.get(k), raw, ids, jud, fields) is None:   # else the fork rule speaks
+            elif _disagreement(a, raw.get(k), raw, ids, jud, fields,
+                               getattr(doc, "page", None)) is None:   # else the fork rule speaks
                 out.append(f"{k} is already an entry - set changes its value, review its snapshot")
         elif is_builtin(k):
             out.append(f"{k} is a name the reader computes; it cannot be written")
@@ -1911,10 +2025,47 @@ def _reopener_is_prose(a, doc, ids, jud, fields, raw):
     return []
 
 
+def _arrangement_is_sound(a, doc, ids, jud, fields, raw):
+    """An arrangement's sign is decided by the build, so it is one comparison that can hold;
+    its `born` is the day it is written, stamped by this tool like `seen`; a person's
+    request it was taken from is a session source carrying what was asked, rested on."""
+    if a["kind"] != "add" or not isinstance(a["body"], dict):
+        return []
+    if not _arrangement_shaped(a["body"], fields, raw):
+        # what replaces an arrangement is an arrangement: a body that drops the occasion or
+        # the count would replace the decision with a judgment nothing holds a tab to, and
+        # its born and what it replaced would go with it
+        if a["id"] in jud and is_arrangement(jud[a["id"]], raw) and _judgment_shaped(a["body"], fields):
+            return ["what replaces an arrangement is an arrangement - rest on the session sources "
+                    "of the occasion it decides and give it a sign over a count; an occasion read "
+                    "elsewhere is re-decided as that, never dropped"]
+        return []
+    out, body = [], a["body"]
+    if "born" in body:
+        out.append("born is written by this tool - the day the arrangement is decided - leave it out")
+    if "replaced" in body:
+        out.append("replaced is written by this tool, when a decision replaces another - leave it out")
+    pred = str(body.get(fields["predicate"]) or "") if fields["predicate"] else ""
+    bad = one_comparison(pred, raw, ids)
+    if bad:
+        out.append(f"wrong_if {bad} - an arrangement's sign is decided by the build, or it is "
+                   f"decoration")
+    req = body.get("request")
+    if req is not None and not (isinstance(req, str) and is_intent(req, raw)
+                                and req in body[fields["deps"]]):
+        out.append(f"request: {req} is not a session source carrying what was asked, that the "
+                   f"arrangement also rests on")
+    return out
+
+
 def _not_born_broken(a, doc, ids, jud, fields, raw):
     """A judgment whose own condition holds the moment it is written is a mistake caught
-    here, not a record that fails check a second later."""
+    here, not a record that fails check a second later. A re-decision of an arrangement is
+    the one exception: it is recorded while the sign that ended the old decision still
+    holds, and the next build decides it against the repaired brief."""
     if a["kind"] != "add" or not isinstance(a["body"], dict) or fields["deps"] not in a["body"]:
+        return []
+    if a["id"] in jud and is_arrangement(jud[a["id"]], raw):
         return []
     pred = str(a["body"].get(fields["predicate"]) or "") if fields["predicate"] else ""
     if pred and evaluate(pred, raw, ids) is True:
@@ -1940,7 +2091,7 @@ def _read_on(body, raw):
     return None
 
 
-def may_supersede(nid, existing, new, raw, ids, jud, fields, as_of=None):
+def may_supersede(nid, existing, new, raw, ids, jud, fields, as_of=None, page=None):
     """May a write under an id the base holds replace what it holds? -> (yes, why). The one
     door every same-id write goes through - `set` of a value, `add` of a judgment under a
     standing id - so the rules that open it live here and nowhere else. An entry: when the
@@ -1952,11 +2103,33 @@ def may_supersede(nid, existing, new, raw, ids, jud, fields, as_of=None):
     rests on it too: a request in a person's words is a root nothing outranks. Resting on a
     session source alone says nothing - every judgment rests on the session that wrote it.
     Everything else contradicts, and a contradiction forks. `existing` is the base's body,
-    `new` the value or the body being written."""
+    `new` the value or the body being written.
+
+    An arrangement - `page` carries what the page holds it to - has three rules of its own
+    before those: never twice in a day, so two sessions cannot flip it and a second writer
+    cannot re-decide it behind the first while the first's repair is still being made (a
+    person's request is the exception, a root nothing outranks); only while the brief still
+    carries what it decided, since a tab deleted or gutted makes the very sign it would
+    cite - so a cut link is refused with "restore, then re-decide"; and its sign read with
+    its tabs intact is what "its wrong_if holds" means for it."""
     if nid in jud:
         if not _judgment_shaped(new, fields):
             return False, "what replaces a judgment must rest on something, and this carries no " \
                           + str(fields["deps"] or "dependencies")
+        facts = (page or {}).get(nid)
+        req = new.get("request") if isinstance(new, dict) else None
+        if facts is not None:
+            stamp = _as_day(as_of) or datetime.date.today()
+            born = _as_day(jud[nid]["body"].get("born"))
+            if born and born >= stamp and not req:
+                return False, (f"it was decided on {born} - a second decision on the same day is a "
+                               f"contradiction, not a change")
+            if not req and not facts["linked"]:
+                return False, ("the brief no longer carries what it decided - " + facts["cut"]
+                               + " - restore the tab, then re-decide")
+            if not req and facts["fired"]:
+                return True, (f"its sign holds ({short(jud[nid]['pred'], 60)}) with its tab intact"
+                              + (f" - {facts['reading']}" if facts.get("reading") else ""))
         if evaluate(jud[nid]["pred"], raw, ids) is True:
             return True, f"its wrong_if holds ({short(jud[nid]['pred'], 60)})"
         deps = new.get(fields["deps"])
@@ -1979,18 +2152,31 @@ def may_supersede(nid, existing, new, raw, ids, jud, fields, as_of=None):
                    else f"a reading from {stamp} that is older than the base's")
 
 
-def _disagreement(a, body, raw, ids, jud, fields):
+def _disagreement(a, body, raw, ids, jud, fields, page=None):
     """What the write says against what the base holds under that id -> None when they agree,
     or when the id claims nothing comparable; else (kind, old, new, may, why, when): the two
-    claims, whether the write may supersede the base and why, and the base's day."""
+    claims, whether the write may supersede the base and why, and the base's day. An
+    arrangement written again with its verdict kept is a re-decision all the same - its
+    occasion or its sign changed - so for one, any difference in what the session writes
+    counts."""
     k = a["id"]
     if k in jud:
         if a["kind"] != "add" or not _judgment_shaped(a["body"], fields):
             return None
         old, new = _verdict_of(jud[k]["body"]), _verdict_of(a["body"])
-        if old is None or new is None or _same(old, new):
+        if old is None or new is None:
             return None
-        may, why = may_supersede(k, jud[k]["body"], a["body"], raw, ids, jud, fields, a.get("as_of"))
+        if _same(old, new):
+            if not is_arrangement(jud[k], raw):
+                return None
+            skip = ("born", "replaced")
+            was = {f: v for f, v in jud[k]["body"].items()
+                   if f not in skip and f != fields["snapshot"]}
+            now = {f: v for f, v in a["body"].items() if f not in skip and f != fields["snapshot"]}
+            if was == now:
+                return None
+        may, why = may_supersede(k, jud[k]["body"], a["body"], raw, ids, jud, fields,
+                                 a.get("as_of"), page)
         return "verdict", old, new, may, why, None
     if not isinstance(body, dict):
         return None
@@ -2080,7 +2266,7 @@ def _forks_on_contradiction(a, doc, ids, jud, fields, raw):
     if a["kind"] != "add":
         return out
     if k in ids:
-        d = _disagreement(a, raw.get(k), raw, ids, jud, fields)
+        d = _disagreement(a, raw.get(k), raw, ids, jud, fields, getattr(doc, "page", None))
         if d and not (d[0] == "verdict" and d[3]):        # a verdict that may supersede replaces
             kind, old, new, newer, why, when = d
             name = _hypothesis_name(doc, k, new)
@@ -2120,7 +2306,7 @@ def _forks_on_contradiction(a, doc, ids, jud, fields, raw):
 # Every refusal a write can meet, in one place. The fork on a contradiction is the last of
 # them; a later rule - the entries nearest a new one - is one more function here.
 VALIDATORS = [_known_key, _sound_dependencies, _sound_references, _reopener_is_prose,
-              _not_born_broken, _forks_on_contradiction]
+              _arrangement_is_sound, _not_born_broken, _forks_on_contradiction]
 
 
 def validate(action, doc, ids, jud, fields, raw):
@@ -2314,19 +2500,16 @@ def _review_section_in(lines, title, seen, stamp):
     _replace_field(lines, s, e, "reviewed", [" " * find + f'reviewed: "{stamp}"'], after="text")
 
 
-def _tab_for(brief, j, ids):
-    """The tab whose shape an arrangement's review rewrites: the brief's one shape when it
-    has one; else the tab serving a session source the arrangement rests on. -> (title,
-    is_tab) or None."""
+def _tabs_for(brief, nid, facts):
+    """The tabs whose shape an arrangement's review rewrites: the brief's one shape when it
+    has no tabs; else every tab whose picks earn a session source the arrangement rests on,
+    as the page links them - an arrangement that decides several occasions at once governs
+    every one of them. -> [(title, is_tab)], empty when no tab earns any of its sources."""
     tabs = [t for t in (brief.get("tabs") or []) if isinstance(t, dict)]
-    if brief.get("shape") is not None and not tabs:
-        return None, False
-    if len(tabs) == 1:
-        return str(tabs[0].get("title") or ""), True
-    for t in tabs:
-        if set(t.get("serves") or []) & set(j["deps"]):
-            return str(t.get("title") or ""), True
-    return None
+    if not tabs:
+        return [(None, False)]
+    f = (facts or {}).get(nid) or {}
+    return [(t, True) for t in (f.get("tabs") or [])]
 
 
 def _shape_in(lines, where, shape):
@@ -2641,15 +2824,20 @@ def _fork(paths, action):
     return 0
 
 
-def _snapshot(deps, raw, ids, jud, paths, brief):
+def _snapshot(deps, raw, ids, jud, paths, brief, first_born=False):
     """`seen` for these dependencies, from what each holds now. A page count needs the
-    brief beside the record; a dependency declared missing has nothing to snapshot."""
+    brief beside the record; a dependency declared missing has nothing to snapshot. A
+    record's first arrangement may rest on `page.drift` before anything dates it: with
+    `first_born` the share is taken as nothing-yet, and settled against its own `born`
+    once it is written."""
     page = _page_side(paths)[0] if brief and any(d in PAGE for d in deps) else {}
     seen = {}
     for d in deps:
         if d not in ids and not is_builtin(d):
             continue
         v = snapshot_value(d, raw, ids, jud, page)
+        if v is None and d == "page.drift" and first_born and brief:
+            v = 0.0
         if v is None:
             raise Refused(f"refused - {d} has no value to snapshot: "
                           + ("the page counts it, and no brief sits beside the record" if not brief
@@ -2702,6 +2890,21 @@ def _apply(paths, action):
     brief = _brief_beside(paths[0])
     if kind == "review" and nid not in jud and brief:
         action["section"] = nid
+    # an arrangement's write is held against the page - its counts, and what the brief
+    # carries of every decision that stands - taken now, before anything is written, by the
+    # same build a snapshot runs; so the birth check and the supersede door decide against
+    # the numbers --verify decides. A brief that cannot be built leaves the page out of it.
+    facts = {}
+    if brief and kind == "add" and isinstance(action["body"], dict) and \
+            (_arrangement_shaped(action["body"], fields, raw)
+             or (nid in jud and is_arrangement(jud[nid], raw))):
+        try:
+            page0, _, facts = _page_side(paths)
+        except (Exception, SystemExit):
+            page0, facts = {}, {}
+        for k, v in page0.items():
+            raw.setdefault(k, {"name": COMPUTED[k]})["v"] = v
+        doc.page = facts
     refusals = validate(action, doc, ids, jud, fields, raw)
     if refusals:
         raise Refused("refused - " + "\n          ".join(refusals))
@@ -2717,15 +2920,39 @@ def _apply(paths, action):
             if _locate(io.open(f, encoding="utf-8").read().split("\n"), nid):
                 target = f
                 break
-    out, seen, arrangement, supersede = [], {}, False, False
+    out, seen, arrangement, supersede, arranged = [], {}, False, False, False
     if kind == "add":
         body = action["body"]
         # a judgment under a standing judgment's id got past validation only because it may
         # supersede it - its wrong_if holds, or a person asked - so it replaces it in place
         supersede = nid in jud and isinstance(body, dict)
+        arranged = isinstance(body, dict) and _arrangement_shaped(body, fields, raw)
         if isinstance(body, dict) and fields["deps"] in body:
-            seen = _snapshot(list(body[fields["deps"]]), raw, ids, jud, paths, brief)
+            seen = _snapshot(list(body[fields["deps"]]), raw, ids, jud, paths, brief,
+                             first_born=arranged)
             body[snapshot_field] = seen
+        if arranged:
+            # an arrangement is born when it is written; a re-decision renews its born and
+            # keeps, in one line, the decision it replaces - born, how long it stood, and
+            # what ended it - so the sequence of decisions reads from the record alone
+            extra = {"born": stamp}
+            if supersede and is_arrangement(jud[nid], raw):
+                old = jud[nid]["body"]
+                prior = old.get("replaced") or []
+                prior = [prior] if isinstance(prior, str) else list(prior)
+                f = facts.get(nid) or {}
+                _, why = may_supersede(nid, old, body, raw, ids, jud, fields, action.get("as_of"),
+                                       facts)
+                ended = f"on the word of {body['request']}" if body.get("request") else why
+                stood = f.get("stood")
+                extra["replaced"] = prior + [
+                    f"born {old.get('born') or 'undated'}"
+                    + (f", stood {stood} session{'' if stood == 1 else 's'}" if stood is not None else "")
+                    + f"; {ended} on {stamp}"]
+            body = {k: v for k, v in body.items() if k not in extra and k != snapshot_field}
+            body.update(extra)
+            body[snapshot_field] = seen
+            action["body"] = body
         if supersede:
             for f in files:
                 if _locate(io.open(f, encoding="utf-8").read().split("\n"), nid):
@@ -2748,7 +2975,8 @@ def _apply(paths, action):
         old, field = _set_in(lines, nid, action["value"], stamp, action.get("why"))
         out.append(f"set {nid}: {old} -> {scalar(action['value'], fold=False)} (as of {stamp})")
     elif kind == "add" and supersede:
-        _, why = may_supersede(nid, jud[nid]["body"], body, raw, ids, jud, fields, action.get("as_of"))
+        _, why = may_supersede(nid, jud[nid]["body"], body, raw, ids, jud, fields, action.get("as_of"),
+                               facts)
         was = str(_verdict_of(jud[nid]["body"]) or nid)
         _replace_in(lines, nid, body)
         out.append(f"supersede {nid}: {short(was, 60)} -> {short(_verdict_of(body), 60)} - {why}")
@@ -2756,7 +2984,7 @@ def _apply(paths, action):
         out.append("add " + _add_in(lines, nid, body, collection))
     else:
         j = jud[nid]
-        arrangement = nid.startswith("v.") or any(d in PAGE for d in j["deps"])
+        arrangement = is_arrangement(j, raw)
         was = dict(j["snap"])
         seen = _snapshot(j["deps"], raw, ids, jud, paths, brief)
         _, ind, s, e = _locate(lines, nid)
@@ -2793,11 +3021,11 @@ def _apply(paths, action):
     # itself changes what the page counts, an arrangement no longer moved or a new
     # judgment that spills, and a count taken a moment earlier would be flagged by the
     # very next build. The shape an arrangement stood on is taken last, for the same reason.
-    shape = None
+    shape, facts2 = None, {}
     try:
         doc2, ids2, jud2, fields2, raw2 = read_back()
         if seen and brief and any(d in PAGE for d in seen):
-            page2, shape = _page_side(paths)
+            page2, shape, facts2 = _page_side(paths)
             drift = {d: page2[d] for d in seen if d in PAGE and d in page2 and not _same(seen[d], page2[d])}
             if drift:
                 seen.update(drift)
@@ -2806,26 +3034,40 @@ def _apply(paths, action):
                 _seen_lines(lines2, s, e, snapshot_field, seen)
                 _write_text(target, "\n".join(lines2))
                 doc2, ids2, jud2, fields2, raw2 = read_back()
-                shape = _page_side(paths)[1]
+                shape, facts2 = _page_side(paths)[1:]
+            # a new arrangement's sign is decided once more against the counts as they stand
+            # with it written - its own born may date what was added, and a first drift was
+            # taken as nothing-yet - so a decision born broken is undone, never left green
+            if arranged and not supersede and nid in jud2:
+                with_page = dict(raw2)
+                for k, v in page2.items():
+                    with_page[k] = dict(with_page.get(k) or {"name": COMPUTED[k]})
+                    with_page[k]["v"] = v
+                pred = jud2[nid]["pred"]
+                if pred and evaluate(pred, with_page, ids2) is True:
+                    raise ValueError(f"wrong_if already holds ({pred}) once the page counts it - the "
+                                     f"arrangement would be born broken")
         elif arrangement and brief:
-            shape = _page_side(paths)[1]
+            shape, facts2 = _page_side(paths)[1:]
     except (Exception, SystemExit) as e:
         _write_text(target, original)
         raise Refused(f"the write broke the record and was undone: {e}")
-    # an arrangement's review also rewrites the shape it stood on - once the record is
-    # safely written, so a failed write leaves the brief as it was
+    # an arrangement's review also rewrites the shape it stood on - every tab it governs -
+    # once the record is safely written, so a failed write leaves the brief as it was
     if kind == "review" and arrangement and shape is not None:
         b = yaml.safe_load(io.open(brief, encoding="utf-8").read()) or {}
-        where = _tab_for(b, jud2[nid], ids2)
-        if where is None:
-            out.append("  the brief's tabs serve no session source this rests on - no shape "
-                       "rewritten; say which tab by making it serve one")
+        wheres = _tabs_for(b, nid, facts2)
+        if not wheres:
+            out.append("  no tab's sections earn a session source this rests on - no shape "
+                       "rewritten; serve it on the tab that reads what it wrote")
         else:
             blines = io.open(brief, encoding="utf-8").read().split("\n")
-            _shape_in(blines, where, shape)
+            for where in wheres:
+                _shape_in(blines, where, shape)
             _write_text(brief, "\n".join(blines))
-            out.append(f"  shape of {'tab ' + repr(where[0]) if where[1] else 'the brief'}: "
-                       + ", ".join(f"{k}: {v}" for k, v in shape.items()))
+            for where in wheres:
+                out.append(f"  shape of {'tab ' + repr(where[0]) if where[1] else 'the brief'}: "
+                           + ", ".join(f"{k}: {v}" for k, v in shape.items()))
     for l in out:
         print(l)
     _report(paths, kind, nid, doc2, ids2, jud2, fields2, raw2)
@@ -2988,14 +3230,21 @@ A contradiction is refused into the base and named a hypothesis: the same id wit
 different value or verdict, or a judgment resting on what only a hypothesis holds - the
 refusal names the `--hypothesis NAME` command that writes it into `PROVENANCE.d/NAME.yaml`
 beside the record instead, where its `seen` is taken from the record as it stands under
-that hypothesis, and the base is not touched.""",
+that hypothesis, and the base is not touched.
+
+An arrangement - a judgment resting on a session source, with a sign over a count the build
+takes - is born when it is written: `born` is stamped like `seen`, its sign is one comparison
+that can hold, and `request: s.<date>_<slug>` names the person's request it was taken from.
+Written again under its own id it is re-decided: admitted when its sign holds with its tabs
+intact, or on a request; refused twice in a day, or once the brief no longer carries what it
+decided; `replaced:` keeps each decision it replaced, one line.""",
     "review": """  review <id> [--as-of YYYY-MM-DD] [--hypothesis NAME] [file]
   review "<section title>"
 
 "I read it, and it still holds." A judgment's `seen` is rewritten from what its
 dependencies hold now, and `reviewed:` moves when the judgment carries one; an
-arrangement's review also rewrites the brief's shape line - the one tab's, or the tab
-serving a session source it rests on. A section of the brief is reviewed by its title:
+arrangement's review also rewrites the brief's shape line - the one tab's, or of every tab
+whose sections earn a session source it rests on. A section of the brief is reviewed by its title:
 its text's references are snapshotted into `seen` and `reviewed:` moves. Never automatic:
 a snapshot that refreshed itself could not show a difference. `--hypothesis NAME` reviews
 a judgment the hypothesis holds, against the record as it stands under it.""",

@@ -80,7 +80,6 @@ judgments:
               numbers."
     wrong_if: "page.unserved > 0"
     born: "2026-09-03"
-    stood: 0
     seen: {s.2026_09_03_glazing: "read 2026-09-03", page.unserved: 0}
   v.heating_tab:
     rests_on: [s.2026_09_02_heating, graph.flagged, page.spill]
@@ -89,5 +88,4 @@ judgments:
               when an intent lands outside this one."
     wrong_if: "page.spill > 0"
     born: "2026-09-02"
-    stood: 0
     seen: {s.2026_09_02_heating: "read 2026-09-02", graph.flagged: 0, page.spill: 0}

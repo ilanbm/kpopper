@@ -288,6 +288,145 @@ def coverage_lines(cov, full=True):
     return out
 
 
+# ── arrangements, held against the brief ─────────────────────────────────────
+# An arrangement is a judgment by shape (the reader says which): it rests on the session
+# sources of the occasion it decides, and its sign is a count the build takes. What is
+# special about it is only what it is held against - the page's counts, the record's shape
+# kept in the brief, and the decisions that stand - and every fact below is a count or a
+# link, never a verdict: whether its sign holds is decided where every sign is.
+def arrangements_of(ids, jud, raw, tabs, picks, cov, flags, doc):
+    """Every arrangement the record carries -> {id: facts}. Its tabs are the ones whose picks
+    *earn* a source it rests on - served as coverage counts it, never merely claimed - and it
+    is linked while every source it rests on is earned by some tab: a tab deleted, or gutted
+    with its `serves:` line kept, cuts the link the same way. A brief of one bare tab links
+    every arrangement to it. `stood` counts the sessions read on a later day than it was
+    born that one of its tabs served - the only later sessions that are evidence it held;
+    `drift` is the share of what sessions recorded since its own born that nothing picks,
+    where the page's drift counts from the newest born on the page."""
+    rows = {r["id"]: r for r in (cov["rows"] if cov else [])}
+    title_of = {t["key"]: (t["title"] or "Now") for t in tabs}
+    bare_one = len(tabs) == 1 and tabs[0]["bare"]
+    earned = {t["key"]: sorted(s for s, r in rows.items() if title_of[t["key"]] in r["served"])
+              for t in tabs}
+    # a tab that claims no occasion - no serves: line at all - is the page's own, and belongs
+    # to every arrangement the way the one bare tab does: decided with it, settled by its
+    # review, never the ground of a merge
+    unclaimed = [t["key"] for t in tabs if not t["serves"]]
+    picked_all = set().union(*picks.values()) if picks else set()
+    questions = {}
+    for g in P.OPEN:
+        for k, v in (doc.get(g) or {}).items():
+            questions[k] = v if isinstance(v, str) else str(v)
+    hyps = getattr(doc, "hypotheses", None) or {}
+    out = {}
+    for v, j in sorted(jud.items()):
+        if not P.is_arrangement(j, raw):
+            continue
+        srcs = P.intents_of(j, raw)
+        if bare_one:
+            own, cut = [tabs[0]["key"]], ""
+        else:
+            own = [t["key"] for t in tabs if set(srcs) & set(earned[t["key"]])]
+            unearned = [s for s in srcs if not any(s in earned[k] for k in own)]
+            cut = f"no tab's sections earn {', '.join(unearned)}" if unearned else ""
+        keys = [t["key"] for t in tabs if t["key"] in own or t["key"] in unclaimed]
+        titles = [title_of[k] for k in keys]
+        born = as_date(j["body"].get("born"))
+        stood = sum(1 for r in rows.values() if born and r["date"] and r["date"] > born
+                    and any(t in r["served"] for t in titles))
+        added = set()
+        for r in rows.values():
+            if born and r["date"] and r["date"] >= born:
+                added |= set(r["recorded"])
+        drift = (round(len(added - picked_all) / len(added), 2) if added else 0.0) if born else None
+        contested = []
+
+        def decided(body):
+            """What an arrangement decides - everything the session wrote, not what the tool
+            stamped - so a re-decision that keeps the verdict and moves the occasion or the
+            sign is a contest too."""
+            return ({f: x for f, x in body.items() if f not in ("seen", "born", "replaced")}
+                    if isinstance(body, dict) else body)
+        for name, h in sorted(hyps.items()):
+            if h["error"] or v not in h["ids"]:
+                continue
+            other = h["raw"].get(v)
+            if decided(other) != decided(j["body"]):
+                contested.append(("hypothesis", name, str(P.claim_of(other))))
+        for q, text in sorted(questions.items()):
+            if v in P.ID.findall(text):
+                contested.append(("question", q, text))
+        m = P.CMP.match(j["pred"])
+        counted = P.value_of(raw, ids, m.group(1)) if m else None
+        out[v] = {"sources": srcs, "tabs": titles, "keys": keys, "own": [title_of[k] for k in own],
+                  "linked": not cut, "cut": cut,
+                  "fired": "falsified" in flags.get(v, ()), "pred": j["pred"],
+                  "reading": (f"{m.group(1)} is {counted}" if m and counted is not None else ""),
+                  "born": born, "stood": stood, "drift": drift,
+                  # the request is drawn only as the record accepts it: a session source
+                  # carrying what was asked, rested on - check fails any other
+                  "request": (j["body"].get("request")
+                              if isinstance(j["body"].get("request"), str)
+                              and P.is_intent(j["body"]["request"], raw)
+                              and j["body"]["request"] in j["deps"] else None),
+                  "contested": contested, "moved": {}}
+    return out, earned
+
+
+def arrangement_lines(info, page_decides=False):
+    """The arrangements held against the brief, as lines -> (fail, note). A brief that no
+    longer carries what a standing arrangement decided fails - the record's own claim, so
+    `check` fails it too and the Stop gate bounces once on an out-of-tree record, where
+    `--verify` never runs; a tab no decision records is a note. With `page_decides` the
+    arrangements whose sign the page found holding are said too - for `check`, which
+    otherwise only knows the page would decide them; `--verify` fails those itself, and is
+    the one surface that says when a brief records no arrangement at all - once, and only
+    on a record whose sessions could be served by one."""
+    facts = info.get("arrangements") or {}
+    cov, tabs = info.get("coverage"), info.get("tabs") or []
+    fail, note = [], []
+    if not facts:
+        if cov and cov.get("rows") and not page_decides:
+            note.append("no arrangement decision is recorded, so the brief is held against none - "
+                        "an arrangement is a judgment resting on the session sources a tab serves, "
+                        "with a sign over a count: add v.<slug> rests_on=[s.<...>, page.unserved] "
+                        "verdict=... wrong_if='page.unserved > 0'")
+        return fail, note
+    by_tab = {}
+    for v, f in sorted(facts.items()):
+        if not f["linked"]:
+            fail.append(f"the brief does not serve {', '.join(f['sources'])} together, as {v} "
+                        f"decided ({f['cut']}) - serve them on a tab whose sections pick what they "
+                        f"wrote, or re-decide {v}")
+        for t in f["own"]:
+            by_tab.setdefault(t, []).append(v)
+        if f["fired"]:
+            if page_decides:
+                note.append(f"{v}: wrong_if holds ({f['pred']}) - decided by the page"
+                            + (f", {f['reading']}" if f["reading"] else ""))
+        else:
+            for title, moves in sorted(f["moved"].items()):
+                note.append(f"tab '{title}': shape moved ({moves}) - muted, {v}'s sign has not "
+                            f"appeared")
+        for kind, who, claim in f["contested"]:
+            note.append(f"{v} is contested by {kind} {who}: {P.short(claim, 80)}")
+    for title, vs in sorted(by_tab.items()):
+        for i, a in enumerate(vs):
+            for b in vs[i + 1:]:
+                if not set(facts[a]["sources"]) & set(facts[b]["sources"]):
+                    fail.append(f"the brief reads {a} and {b} on one tab ('{title}'), which neither "
+                                f"decided - re-decide the one whose occasion changed, and review "
+                                f"the other")
+    earned = info.get("earned") or {}
+    for t in tabs:
+        if t["bare"] or (t["title"] or "Now") in by_tab or not earned.get(t["key"]):
+            continue
+        note.append(f"tab '{t['title']}' is an arrangement no decision records - add v.<slug> "
+                    f"rests_on=[{', '.join(earned[t['key']])}, page.unserved] verdict=... "
+                    f"wrong_if='page.unserved > 0'")
+    return fail, note
+
+
 def resolve(sel, ids, jud, flags):
     """A selector is a state, a group, a prefix, or an exact id. Evaluated now, not frozen -
     which is the whole reason a section keeps up with the record without being edited."""
@@ -1083,6 +1222,10 @@ def build(paths, brief_path=None):
         page_counts.update({k: v for k, v in cov["page"].items() if v is not None})
         flags = flags_of(ids, jud, fields, raw0)
         shape = shape_of(ids, jud, flags)
+    # every arrangement held against the brief - after the counts, since its sign is read
+    # from them, and before anything is drawn
+    arrangements, earned = (arrangements_of(ids, jud, raw0, tabs, picks, cov, flags, doc)
+                            if brief else ({}, {}))
     resolve_payload()
 
     def where_of(t, title):
@@ -1114,6 +1257,22 @@ def build(paths, brief_path=None):
                          + " &middot; ".join(fx(s, asked_of(s)) for s in t["serves"]) + "</p>")
             o.append(f'<p class="sub" dir="ltr">The Record tab has all {len(ids)} entries and '
                      'judgments, arranged by nothing.</p>')
+        # the decision this tab stands on, quietly: when it was decided, how many later
+        # sessions the tab served, whose word it was taken on - and what contests it. Drawn
+        # here and counted nowhere: a decision drawn on its tab is not a pick.
+        mine = [v for v in sorted(arrangements) if t["key"] in arrangements[v]["keys"]]
+        for v in mine:
+            f = arrangements[v]
+            bits = ["decided " + (fx(v, f["born"].isoformat()) if f["born"] else "as " + fx(v, lbl(v)))]
+            if f["stood"]:
+                bits.append(f"stood {f['stood']} session{'' if f['stood'] == 1 else 's'}")
+            if f["request"] and f["request"] in E:
+                bits.append("on the word of " + fx(f["request"], P.short(asked_of(f["request"]), 80)))
+            o.append('<p class="sub" dir="auto">' + " &middot; ".join(bits) + "</p>")
+            for kind, who, claim in f["contested"]:
+                o.append(f'<p class="sub" dir="auto">A {kind} contests this arrangement &mdash; '
+                         + (fx(who, P.short(claim, 120)) if who in E or who in J
+                            else f'{html.escape(who)}: {html.escape(P.short(claim, 120))}') + "</p>")
         was = t["shape"] or {}
         if not was:
             o.append('<div class="banner">This arrangement records no shape, so nothing '
@@ -1122,14 +1281,30 @@ def build(paths, brief_path=None):
         else:
             moved = [f"{k}: {was[k]} &rarr; {shape[k]}" for k in shape if k in was and was[k] != shape[k]]
             if moved:
-                o.append('<div class="banner" dir="auto">The record has changed shape since '
-                         'this arrangement was written &mdash; ' + "; ".join(moved) +
-                         '. The sections below still fill themselves, but the sections '
-                         'themselves may no longer be the right ones.</div>')
+                plain = "; ".join(f"{k}: {was[k]} -> {shape[k]}" for k in shape
+                                  if k in was and was[k] != shape[k])
                 contract["stale"].append((f"tab '{t['title'] or '?'}'" if not t["bare"] else "the brief")
-                                         + " recorded a different shape: "
-                                         + "; ".join(f"{k}: {was[k]} -> {shape[k]}" for k in shape
-                                                     if k in was and was[k] != shape[k]))
+                                         + " recorded a different shape: " + plain)
+                # a tab an arrangement decided reads the move by that arrangement's own
+                # sign: fired, or muted - shown either way with the counts beside it as facts
+                for v in mine:
+                    arrangements[v]["moved"][t["title"] or "Now"] = plain
+                p = cov["page"]
+                facts = ("spill " + str(p.get("page.spill", "-")) + f" &middot; {p['page.unserved']} "
+                         "intents no tab serves &middot; drift "
+                         + ("-" if p["page.drift"] is None else f"{p['page.drift']} since {cov['born']}")
+                         + "".join(f" &middot; since {html.escape(v)} was decided {arrangements[v]['drift']}"
+                                   for v in mine if arrangements[v]["drift"] is not None))
+                if mine and not any(arrangements[v]["fired"] for v in mine):
+                    o.append('<div class="banner mut" dir="auto">The record has changed shape since '
+                             'this arrangement was written &mdash; ' + "; ".join(moved)
+                             + ". Its sign has not appeared: " + facts + ".</div>")
+                else:
+                    o.append('<div class="banner" dir="auto">The record has changed shape since '
+                             'this arrangement was written &mdash; ' + "; ".join(moved) +
+                             '. The sections below still fill themselves, but the sections '
+                             'themselves may no longer be the right ones.'
+                             + (" " + facts + "." if mine else "") + '</div>')
         for sec in t["sections"]:
             picked = sec.get("pick")
             picked = [picked] if isinstance(picked, str) else list(picked or [])
@@ -1344,7 +1519,8 @@ def build(paths, brief_path=None):
                                        "covered": covered, "flags": flags, "contract": contract,
                                        "tabs": [{"key": t["key"], "title": t["title"], "bare": t["bare"],
                                                  "shape": t["shape"]} for t in tabs],
-                                       "coverage": cov, "page": dict(cov["page"]) if cov else {}}
+                                       "coverage": cov, "page": dict(cov["page"]) if cov else {},
+                                       "arrangements": arrangements, "earned": earned}
 
 
 def verify(paths, brief_path=None):
@@ -1392,6 +1568,16 @@ def verify(paths, brief_path=None):
             if "falsified" in info["flags"].get(name, ()) and \
                     any(t in P.PAGE for t in P.ID.findall(j["pred"])):
                 fail.append(f"{name}: wrong_if holds ({j['pred']}) - decided by the page")
+        # the arrangements held against the brief: a reversal made by editing the brief
+        # fails, a tab no decision records is said, a muted move is said - and an arrangement
+        # whose sign holds fails here whichever count it reads, since the page it is drawn on
+        # says it fired
+        af, an = arrangement_lines(info)
+        fail += af
+        note += an
+        for v, f in sorted((info.get("arrangements") or {}).items()):
+            if f["fired"] and not any(t in P.PAGE for t in P.ID.findall(f["pred"])):
+                fail.append(f"{v}: wrong_if holds ({f['pred']}) - the arrangement fired")
         # An authored section that picks nothing is the alert row about something already
         # closed: it costs trust on everything else on the page.
         for w, why in info["misfit"]:
