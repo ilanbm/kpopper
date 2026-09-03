@@ -19,6 +19,13 @@ what it wrote, what is MOVED now, which predicate fired. `set --help`, `add --he
 Without a file argument the record is PROVENANCE.yaml here, else the path this checkout
 registered in `<git common dir>/kpopper-record` - for a project whose tree cannot hold it.
 
+The record forks on a contradiction, never on a session: a write that contradicts the base
+is refused into it and goes into a hypothesis - `PROVENANCE.d/<name>.yaml` beside the record,
+the record's own shape - with `--hypothesis <name>`. Every command reads the hypotheses over
+the base: `pull` shows what each proposes, `check` and `open` say where two disagree
+(CONTESTED), the opener counts what waits, and the base alone is what is evaluated until
+consolidation tests the union.
+
 It does not know your field names. Each role has a distinctive *shape*, and the
 shape is enough:
 
@@ -31,7 +38,7 @@ Where two fields genuinely fit the same role it refuses to guess and asks for a
 one-line `schema:` block. A checker that quietly passes over what it cannot read
 is worse than no checker, so every ambiguity is an error, never a skip.
 """
-import io, os, re, sys, glob, json, subprocess, datetime, textwrap, tempfile, contextlib, yaml
+import io, os, re, sys, glob, json, shlex, subprocess, datetime, textwrap, tempfile, contextlib, yaml
 from decimal import Decimal, InvalidOperation
 
 ID = re.compile(r"[A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z0-9_]+)+")
@@ -57,6 +64,8 @@ GRAPH = {
     "graph.moved":        "judgments a dependency moved under since they were reviewed",
     "graph.falsified":    "judgments broken by their own condition",
     "graph.no_predicate": "judgments nothing evaluable would falsify",
+    "graph.hypotheses":   "hypotheses waiting beside the record",
+    "graph.contested":    "ids two hypotheses hold with different claims",
 }
 PAGE = {
     "page.spill":           "flagged judgments no section of the page picked up",
@@ -129,8 +138,198 @@ def default_paths():
     return [rec] if rec else DEFAULT
 
 
+HYPOTHESES = "PROVENANCE.d"      # beside the record: one file per hypothesis, the record's shape
+HYPOTHESIS_NAME = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_\-]*$")
+
+
+class Record(dict):
+    """The base record's document. The hypotheses beside it ride along as an attribute rather
+    than a key, so nothing that walks the document's collections mistakes one for an entry:
+    every reader sees the base, and asks for the layer by name."""
+    def __init__(self, *a, **k):
+        super().__init__(*a, **k)
+        self.hypotheses = {}
+
+
+def hypothesis_dir(paths):
+    """Where a record's hypotheses live: PROVENANCE.d beside the file the reader opens first -
+    the root of a pointer record, the registered file of a project whose tree holds none."""
+    first = sorted(glob.glob(paths[0])) or [paths[0]]
+    return os.path.join(os.path.dirname(os.path.abspath(first[0])), HYPOTHESES)
+
+
+def hypothesis_path(paths, name):
+    return os.path.join(hypothesis_dir(paths), name + ".yaml")
+
+
+def _as_day(v):
+    """A date the record wrote - a bare date, an ISO string, or a text that opens with one."""
+    if isinstance(v, datetime.datetime):
+        return v.date()
+    if isinstance(v, datetime.date):
+        return v
+    m = re.match(r"\s*(\d{4})-(\d{2})-(\d{2})", str(v or ""))
+    if not m:
+        return None
+    try:
+        return datetime.date(int(m.group(1)), int(m.group(2)), int(m.group(3)))
+    except ValueError:
+        return None
+
+
+def _hypothesis(name, path):
+    return {"name": name, "path": path, "head": {}, "doc": {}, "ids": set(), "raw": {}, "error": None}
+
+
+def load_hypotheses(paths):
+    """Every hypothesis beside the record -> {name: hypothesis}, in name order. A hypothesis is
+    a file of the record's own shape with an optional head - `hypothesis: {claim, wrong_if,
+    born, folds}` - saying what it claims and since when; `folds: never` marks a what-if that
+    is only ever evaluated. A file the reader cannot read is kept with its error, so `check`
+    fails it and nothing passes over it in silence."""
+    out = {}
+    d = hypothesis_dir(paths)
+    if not os.path.isdir(d):
+        return out
+    for f in sorted(glob.glob(os.path.join(d, "*.yaml")) + glob.glob(os.path.join(d, "*.yml"))):
+        name = re.sub(r"\.ya?ml$", "", os.path.basename(f))
+        hyp = _hypothesis(name, f)
+        try:
+            body = yaml.safe_load(io.open(f, encoding="utf-8").read()) or {}
+            if not isinstance(body, dict):
+                raise ValueError("not a mapping of collections")
+            head = body.pop("hypothesis", None)
+            if head is not None and not isinstance(head, dict):
+                raise ValueError("hypothesis: must be a mapping - claim, wrong_if, born, folds")
+            hyp["head"] = head or {}
+            hyp["doc"] = body
+            hyp["raw"] = bodies(body)
+            hyp["ids"] = {k for m in collections_of(body).values() for k in m}
+        except (yaml.YAMLError, ValueError) as e:
+            hyp["error"] = " ".join(str(e).split())[:120]
+        out[name] = hyp
+    return out
+
+
+def layered(doc, hyp):
+    """The record as it stands under one hypothesis: the base with the hypothesis's entries
+    laid over it by id - an id both hold is the hypothesis's here, wherever the base kept it."""
+    out = Record()
+    for k, v in doc.items():
+        out[k] = dict(v) if isinstance(v, dict) else v
+    for col, members in collections_of(hyp["doc"]).items():
+        for k in members:
+            for c2, m2 in out.items():
+                if c2 != col and isinstance(m2, dict) and k in m2:
+                    del m2[k]
+        if isinstance(out.get(col), dict):
+            out[col].update(members)
+        else:
+            out[col] = dict(members)
+    out.hypotheses = doc.hypotheses
+    return out
+
+
+def view(doc):
+    """-> (ids, jud, fields, raw): what every command reads of a document."""
+    ids, jud, fields = infer(doc)
+    return ids, jud, fields, with_builtins(doc, ids, jud, fields)
+
+
+def _layer_view(doc, hyp):
+    """The view under a hypothesis, or None when the layer cannot be read by shape."""
+    try:
+        return view(layered(doc, hyp))
+    except SystemExit:
+        return None
+
+
+def claim_of(body):
+    """What an id claims, for telling two holders of it apart: a judgment's verdict, an entry's
+    value or quoted text, a rule; a body with none of these claims all of itself."""
+    if not isinstance(body, dict):
+        return body
+    for f in ("verdict", "v", "quoted", "rule"):
+        if body.get(f) is not None:
+            return body[f]
+    return body
+
+
+def _same_claim(a, b):
+    if isinstance(a, (dict, list)) or isinstance(b, (dict, list)):
+        return a == b
+    return _same(a, b)
+
+
+def contested(doc):
+    """Ids two or more hypotheses hold with different claims -> {id: [(name, claim), ...]}, in
+    name order. Two hypotheses that agree contest nothing; a person is needed only where they
+    do not."""
+    holders = {}
+    for name, h in sorted((getattr(doc, "hypotheses", None) or {}).items()):
+        if h["error"]:
+            continue
+        for k in h["ids"]:
+            holders.setdefault(k, []).append((name, claim_of(h["raw"].get(k))))
+    out = {}
+    for k, hs in sorted(holders.items()):
+        if len(hs) > 1 and any(not _same_claim(hs[0][1], c) for _, c in hs[1:]):
+            out[k] = hs
+    return out
+
+
+def _age(born, today):
+    d = _as_day(born)
+    if not d:
+        return "undated"
+    n = (today - d).days
+    return "today" if n <= 0 else ("1 day" if n == 1 else f"{n} days")
+
+
+def hypothesis_line(doc, today=None, width=110):
+    """The opener's one line about hypotheses: how many wait, and for each - one the reader
+    could not read first, then the oldest first - its age and how many judgments rest on what
+    it holds. Facts, no threshold: when one has waited too long is a person's reading of the
+    line."""
+    hyps = getattr(doc, "hypotheses", None) or {}
+    if not hyps:
+        return ""
+    today = today or datetime.date.today()
+    parts = []
+
+    def order(h):
+        if h["error"]:
+            return datetime.date.min, h["name"]
+        return _as_day(h["head"].get("born")) or datetime.date.max, h["name"]
+    for h in sorted(hyps.values(), key=order):
+        if h["error"]:
+            parts.append(f"{h['name']} (unreadable: {h['error']})")
+            continue
+        got = _layer_view(doc, h)
+        if got is None:
+            parts.append(f"{h['name']} (unreadable by shape)")
+            continue
+        k = sum(1 for j in got[1].values() if set(j["deps"]) & h["ids"])
+        bits = [_age(h["head"].get("born"), today)]
+        if str(h["head"].get("folds") or "") == "never":
+            bits.append("never folds")
+        bits.append(f"{k} rest{'s' if k == 1 else ''} on it")
+        parts.append(f"{h['name']} ({', '.join(bits)})")
+    n = len(hyps)
+    line = f"{n} hypothes{'is waits' if n == 1 else 'es wait'} - " + " · ".join(parts)
+    return line if len(line) < width else line[:width] + " ..."
+
+
+def _every_id(doc, ids):
+    """The ids the record holds anywhere: the base's, and every hypothesis's."""
+    out = {k for k in ids if not is_builtin(k)}
+    for h in (getattr(doc, "hypotheses", None) or {}).values():
+        out |= h["ids"]
+    return out
+
+
 def load(paths):
-    doc, seen = {}, set()
+    doc, seen = Record(), set()
 
     def merge(f, d):
         seen.add(os.path.abspath(f))
@@ -159,6 +358,7 @@ def load(paths):
                 sys.exit(f"{f}: no record here. Run this from the directory the record sits "
                          "in, or name the record file as an argument.")
             merge(f, yaml.safe_load(io.open(f, encoding="utf-8").read()) or {})
+    doc.hypotheses = load_hypotheses(paths)
     return doc
 
 
@@ -541,6 +741,8 @@ def counts(doc, ids, jud, fields, raw):
         "graph.blocked": count("blocked"), "graph.broken": count("broken"),
         "graph.unchecked": count("unchecked"), "graph.moved": count("moved"),
         "graph.falsified": count("falsified"), "graph.no_predicate": count("no_predicate"),
+        "graph.hypotheses": len(getattr(doc, "hypotheses", None) or {}),
+        "graph.contested": len(contested(doc)),
     }
 
 
@@ -573,11 +775,13 @@ def with_builtins(doc, ids, jud, fields):
 
 
 def check(paths):
-    fail, note, moved, summary = check_lines(paths)
+    fail, note, moved, cont, summary = check_lines(paths)
     for n in note:
         print("NOTE", n)
     for m in moved:
         print("MOVED", m)
+    for c in cont:
+        print("CONTESTED", c)
     for f in fail:
         print("FAIL", f)
     print("\n" + summary)
@@ -585,8 +789,8 @@ def check(paths):
 
 
 def check_lines(paths):
-    """What check finds -> (fail, note, moved, summary), unprinted: the gate reads the same
-    lines the command prints."""
+    """What check finds -> (fail, note, moved, contested, summary), unprinted: the gate reads
+    the same lines the command prints."""
     doc = load(paths)
     ids, jud, fields = infer(doc)
     raw = with_builtins(doc, ids, jud, fields)
@@ -672,11 +876,22 @@ def check_lines(paths):
         sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
         import render_page as R
         note += R.coverage_lines(cov, full=False)
+    # Hypotheses beside the record: a file the reader cannot read fails; an id two of them hold
+    # with different claims needs a person and fails nothing - which of them folds, or neither,
+    # is decided at consolidation, where the union is tested.
+    cont = []
+    for name, h in sorted(doc.hypotheses.items()):
+        if h["error"]:
+            fail.append(f"hypothesis {name} could not be read: {h['error']}")
+    for k, hs in contested(doc).items():
+        cont.append(f"{k}: " + ", ".join(f"{n} says {short(c)}" for n, c in hs)
+                    + " - one of them folds, or neither; a person decides")
     held = sum(1 for k in ids if not is_builtin(k))
     summary = (f"{len(jud)} judgments, {held} entries, {len(fail)} problems"
                + (f", {len(moved)} moved" if moved else "")
+               + (f", {len(cont)} contested" if cont else "")
                + (f", {len(note)} declared" if note else ""))
-    return fail, note, moved, summary
+    return fail, note, moved, cont, summary
 
 
 def opening(paths, budget=25, chars=None):
@@ -730,6 +945,10 @@ def opening(paths, budget=25, chars=None):
             if state == "moved":
                 items.append((70, name, f"{dep} differs from what it last saw: "
                                         f"{short(old, 28)} -> {short(now, 28)}"))
+    # an id two hypotheses disagree on is ranked above everything: nothing decides it but a
+    # person, and consolidation will refuse to run over it
+    for k, hs in contested(doc).items():
+        items.append((110, k, "CONTESTED - " + ", ".join(f"{n} says {short(c, 30)}" for n, c in hs)))
     items.sort(key=lambda x: (-x[0], x[1]))
     kept, dropped = items[:budget], max(0, len(items) - budget)
 
@@ -774,6 +993,11 @@ def opening(paths, budget=25, chars=None):
     head.append(f"{held} entries, {len(jud)} judgments"
                + (f", {len(open_ids)} open questions" if open_ids else "")
                + (f", updated {meta['updated']}" if meta.get("updated") else ""))
+    # hypotheses beside the record: one line, how many wait and for how long - nothing of what
+    # they claim, which is pulled by seed or met as a collision on an id
+    waiting = hypothesis_line(doc)
+    if waiting:
+        head.append(waiting)
     if not fields["snapshot"]:
         head.append("no snapshot field: drift cannot be detected in this record")
 
@@ -784,7 +1008,7 @@ def opening(paths, budget=25, chars=None):
     reasoned = set()
     for _, name, why in kept:
         needs.append(f"  {name}: {why}")
-        because = jud[name]["body"].get("because")
+        because = jud[name]["body"].get("because") if name in jud else None
         if because and name not in reasoned:
             reasoned.add(name)
             line = "      because: " + said(because, raw, ids, jud, 400)[0]
@@ -907,6 +1131,20 @@ def affects(paths, changed):
     doc = load(paths)
     ids, jud, _ = infer(doc)
     raw = bodies(doc)
+    # the hypotheses ride along: a judgment one holds rests on the base too, so a change in
+    # the base reaches it - said with the hypothesis's name, since the base does not hold it
+    where = {}
+    for n, h in sorted(doc.hypotheses.items()):
+        got = None if h["error"] else _layer_view(doc, h)
+        if got is None:
+            continue
+        ids_h, jud_h = got[0], got[1]
+        for k in sorted(h["ids"]):
+            if k in jud_h and k not in jud:
+                jud[k], where[k] = jud_h[k], n
+            elif k not in ids and k not in jud_h:
+                raw[k] = h["raw"][k]
+        ids |= ids_h
     # A seed may be an exact entry or a prefix. A question names a subject, not a key.
     expanded = []
     for c in changed:
@@ -927,21 +1165,16 @@ def affects(paths, changed):
         j = jud[name]
         named = [d for d in j["deps"] if d in moved and re.search(rf"\b{re.escape(d)}\b", j["pred"])]
         why = ("evaluate the predicate against " + ", ".join(named)) if named else "flagged only"
-        print(f"{name}\n    via {via} -> {why}"
+        print(f"{name}" + (f" (in hypothesis {where[name]})" if name in where else "")
+              + f"\n    via {via} -> {why}"
               + (f"\n    predicate: {j['pred']}" if j["pred"] else ""))
     print(f"\n{len(hit)} judgments reached")
     return 0
 
 
-def pull(paths, seeds, budget=40):
-    """
-    The seeded projection, with values and sources - ground a session on a subject
-    instead of reading the whole record for it. Where `affects` walks forward from a
-    seed to what depends on it, this reads the seed itself: its entries, as recorded,
-    and the judgments that rest on them.
-    """
-    doc = load(paths)
-    ids, jud, fields = infer(doc)
+def _pull_raw(doc, ids, jud, fields):
+    """The bodies `pull` reads: every entry as recorded - a bare value wrapped - plus the
+    computed names the record mentions."""
     raw = {}
     for v in doc.values():
         if isinstance(v, dict):
@@ -951,16 +1184,49 @@ def pull(paths, seeds, budget=40):
                 elif nid in ids:
                     raw[nid] = {"v": b}
     raw.update(builtins(doc, ids, jud, fields, raw))
+    return raw
+
+
+def pull(paths, seeds, budget=40):
+    """
+    The seeded projection, with values and sources - ground a session on a subject
+    instead of reading the whole record for it. Where `affects` walks forward from a
+    seed to what depends on it, this reads the seed itself: its entries, as recorded,
+    and the judgments that rest on them. The hypotheses beside the record are read over
+    it: what each proposes for an id the base holds, what it adds, and where two disagree.
+    """
+    doc = load(paths)
+    ids, jud, fields = infer(doc)
+    raw = _pull_raw(doc, ids, jud, fields)
+    # the record as it stands under each hypothesis, in name order
+    layers = {}
+    for n, h in sorted(doc.hypotheses.items()):
+        if h["error"]:
+            continue
+        under = layered(doc, h)
+        ids_h, jud_h, fields_h = infer(under)
+        layers[n] = (h, ids_h, jud_h, fields_h, _pull_raw(under, ids_h, jud_h, fields_h))
+    every = set(ids)
+    for _, ids_h, _, _, _ in layers.values():
+        every |= ids_h
+    disputed = contested(doc)
+
+    def in_hypothesis(k):
+        """The layers whose hypothesis holds k -> [(name, layer)]."""
+        return [(n, l) for n, l in layers.items() if k in l[0]["ids"]]
+
+    def is_judgment(k):
+        return k in jud or any(k in l[2] for _, l in in_hypothesis(k))
 
     # Seed resolution matches `affects`: an exact id, or a prefix expanded over the
     # namespace. A judgment seed pulls in what it rests on - the point of `pull` is
     # to ground, and a judgment without its own entries is not grounded in anything.
     expanded = []
     for c in seeds:
-        if c in ids:
+        if c in every:
             expanded.append(c)
             continue
-        hits = sorted(k for k in ids if k.split(".")[0] == c or k.startswith(c + "."))
+        hits = sorted(k for k in every if k.split(".")[0] == c or k.startswith(c + "."))
         if not hits:
             raise SystemExit(f"{c} is not an entry or a prefix in this record. "
                              f"Run `open` to see what it holds.")
@@ -968,30 +1234,33 @@ def pull(paths, seeds, budget=40):
 
     entries, judgments = set(), set()
     for k in expanded:
-        if k in jud:
+        if is_judgment(k):
             judgments.add(k)
-            entries |= {d for d in jud[k]["deps"] if d in ids and d not in jud}
+            for j in [jud.get(k)] + [l[2].get(k) for _, l in in_hypothesis(k)]:
+                if j:
+                    entries |= {d for d in j["deps"] if d in every and not is_judgment(d)}
         else:
             entries.add(k)
     judgments |= {name for name, j in jud.items() if set(j["deps"]) & entries}
+    for n, (h, ids_h, jud_h, fields_h, raw_h) in layers.items():
+        judgments |= {name for name, j in jud_h.items() if name in h["ids"] and set(j["deps"]) & entries}
 
     def cut(line, n):
         return line if len(line) < n else line[:n] + " ..."
 
-    def resolved(body):
+    def resolved(body, ids_):
         """-> (v, rule). A value that is itself a formula is a rule wearing a `v:` field -
         same shape render_page.py already treats that way - so it is never compared as a
         literal here either."""
         v, rule = body.get("v"), body.get("rule")
         if v is not None and isinstance(v, str) and EXPR.search(v) and \
-                any(t in ids for t in ID.findall(v)):
+                any(t in ids_ for t in ID.findall(v)):
             v, rule = None, rule or v
         return v, rule
 
-    lines = []
-    for k in sorted(entries):
-        b = raw.get(k) or {}
-        v, rule = resolved(b)
+    def describe(k, b, ids_):
+        """-> (line, shown): an entry's line, and the value it shows."""
+        v, rule = resolved(b, ids_)
         if v is not None:
             shown = str(v)
         elif rule:
@@ -1007,49 +1276,89 @@ def pull(paths, seeds, budget=40):
         of = b.get("of") or b.get("read")
         if of:
             line += f" as of {of}"
-        lines.append(cut(line, 110))
+        return line, shown
 
-    for name in sorted(judgments):
-        j = jud[name]
+    def judgment_lines(name, j, raw_, ids_, jud_, fields_, tag=""):
         body = j["body"]
         verdict = str(body.get("verdict") or body.get("title") or name)
-        lines.append(cut(f"+ {name}: {verdict}", 110))
+        out = [cut(f"+ {name}{tag}: {verdict}", 110)]
 
         # State, derived the same way `check` derives a problem: a dependency that
         # is not an entry is broken, unless the judgment declares it missing, in
         # which case it is blocked; short of that, a dependency present but never
         # snapshotted is unchecked; short of that, the judgment holds.
         blocked = _blocked_text(body)
-        missing = [d for d in j["deps"] if d not in ids]
+        missing = [d for d in j["deps"] if d not in ids_]
         if missing:
             state = (f"blocked: {blocked}" if blocked else
                      f"broken: rests on {', '.join(missing)}, which is not an entry")
-        elif evaluate(j["pred"], raw, ids) is True:
+        elif evaluate(j["pred"], raw_, ids_) is True:
             state = f"broken: wrong_if holds ({j['pred']})"
-        elif fields["snapshot"] and any(d not in j["seen"] for d in j["deps"]):
+        elif fields_["snapshot"] and any(d not in j["seen"] for d in j["deps"]):
             stale = [d for d in j["deps"] if d not in j["seen"]]
             state = f"unchecked: never checked against {', '.join(stale)}"
         else:
             state = "holds"
-        lines.append(cut("    " + state, 110))
+        out.append(cut("    " + state, 110))
 
         # The reasoning, with its references resolved to what the record holds now: an
         # agent that never opens the page reads the argument here, under its own flag.
         if body.get("because"):
-            for i, l in enumerate(said(body["because"], raw, ids, jud, 96)):
-                lines.append(("    because: " if i == 0 else "             ") + l)
+            for i, l in enumerate(said(body["because"], raw_, ids_, jud_, 96)):
+                out.append(("    because: " if i == 0 else "             ") + l)
 
         if j["pred"]:
-            lines.append(cut(f"    wrong_if: {j['pred']}", 110))
+            out.append(cut(f"    wrong_if: {j['pred']}", 110))
         reopened = _reopened_text(body)
         if reopened:
-            lines.append(cut(f"    reopened by: {reopened}", 110))
+            out.append(cut(f"    reopened by: {reopened}", 110))
 
         # Every move since the snapshot, with what the predicate made of it - pull is
         # the grounding surface, so here even a muted move is worth a line.
-        for dep, old, now, state in sorted(moved_deps(j, raw, ids)):
-            tag = {"muted": " - within wrong_if", "crossed": " - across wrong_if"}.get(state, "")
-            lines.append(cut(f"    moved since review: {dep} {old} -> {now}{tag}", 110))
+        for dep, old, now, state in sorted(moved_deps(j, raw_, ids_)):
+            mark_ = {"muted": " - within wrong_if", "crossed": " - across wrong_if"}.get(state, "")
+            out.append(cut(f"    moved since review: {dep} {old} -> {now}{mark_}", 110))
+        return out
+
+    def dispute(k):
+        return cut("    CONTESTED: " + ", ".join(f"{n} says {short(c)}" for n, c in disputed[k]), 110)
+
+    lines = []
+    for k in sorted(entries):
+        holders = in_hypothesis(k)
+        if k in raw:
+            line, shown = describe(k, raw.get(k) or {}, ids)
+            lines.append(cut(line, 110))
+            # what each hypothesis proposes for it - read from the record as it stands under
+            # that hypothesis, so a rule or a reference resolves there
+            for n, l in holders:
+                _, now = describe(k, l[4].get(k) or {}, l[1])
+                if now != shown:
+                    lines.append(cut(f"    proposes {shown} -> {now}, from {n}", 110))
+        elif holders:
+            n, l = holders[0]
+            line, _ = describe(k, l[4].get(k) or {}, l[1])
+            lines.append(cut(line + " - held by " + ", ".join(n2 for n2, _ in holders), 110))
+        if k in disputed:
+            lines.append(dispute(k))
+
+    for name in sorted(judgments):
+        holders = [(n, l) for n, l in in_hypothesis(name) if name in l[2]]
+        if name in jud:
+            lines += judgment_lines(name, jud[name], raw, ids, jud, fields)
+            b = jud[name]["body"]
+            was = str(b.get("verdict") or b.get("title") or name)
+            for n, l in holders:
+                b2 = l[2][name]["body"]
+                now = str(b2.get("verdict") or b2.get("title") or name)
+                if not _same(was, now):
+                    lines.append(cut(f"    proposes instead, from {n}: {now}", 110))
+        elif holders:
+            n, l = holders[0]
+            lines += judgment_lines(name, l[2][name], l[4], l[1], l[2], l[3],
+                                    tag=f" (in hypothesis {n})")
+        if name in disputed:
+            lines.append(dispute(name))
 
     kept, remain = lines[:budget], max(0, len(lines) - budget)
     for l in kept:
@@ -1058,7 +1367,6 @@ def pull(paths, seeds, budget=40):
         print(f"... {remain} more lines - raise the budget")
     print("\naffects <entry> shows what a change reaches")
     return 0
-
 
 
 # ── the write path ───────────────────────────────────────────────────────────
@@ -1419,11 +1727,26 @@ def _texts_that_saw(paths, keys):
 
 
 # ── the one validation step ──────────────────────────────────────────────────
+def _own_ids(a, doc, ids):
+    """The ids the file this write goes into already holds: a hypothesis's own, else the
+    base's - an id the base holds and a hypothesis does not is what the hypothesis proposes."""
+    h = a.get("hypothesis")
+    hyps = getattr(doc, "hypotheses", None) or {}
+    return hyps[h]["ids"] if h and h in hyps else ids
+
+
+def _held_by(doc, k):
+    """The hypotheses that hold `k`, in name order."""
+    return [n for n, h in sorted((getattr(doc, "hypotheses", None) or {}).items())
+            if not h["error"] and k in h["ids"]]
+
+
 def _known_key(a, doc, ids, jud, fields, raw):
     out, k = [], a["id"]
     if a["kind"] == "set":
         if k not in ids:
-            out.append(f"{k} is not an entry. A new entry is added, with its source: add {k} v=... from=...")
+            if a.get("hypothesis") or not _held_by(doc, k):     # else the fork rule says where it is
+                out.append(f"{k} is not an entry. A new entry is added, with its source: add {k} v=... from=...")
         elif k in jud:
             out.append(f"{k} is a judgment: it is reviewed, not set")
         elif is_builtin(k):
@@ -1439,8 +1762,12 @@ def _known_key(a, doc, ids, jud, fields, raw):
     elif a["kind"] == "add":
         if not re.match(r"^[A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z0-9_]+)*$", k):
             out.append(f"{k} is not an id: letters, digits, underscores, dots")
-        elif k in ids or k in (doc.get("meta") or {}):
-            out.append(f"{k} is already an entry - set changes its value, review its snapshot")
+        elif k in _own_ids(a, doc, ids) or k in (doc.get("meta") or {}):
+            if a.get("hypothesis"):
+                out.append(f"{k} is already in hypothesis {a['hypothesis']} - set changes its value "
+                           f"there, review its snapshot")
+            elif _disagreement(a, raw.get(k), raw, ids, jud, fields) is None:   # else the fork rule speaks
+                out.append(f"{k} is already an entry - set changes its value, review its snapshot")
         elif is_builtin(k):
             out.append(f"{k} is a name the reader computes; it cannot be written")
         if isinstance(a["body"], dict) and fields["snapshot"] and fields["snapshot"] in a["body"]:
@@ -1464,7 +1791,8 @@ def _sound_dependencies(a, doc, ids, jud, fields, raw):
         out.append(f"{fields['deps']} must be a list of entry ids")
         return out
     for d in deps:
-        if d not in ids and not is_builtin(d) and not _blocked_text(body):
+        if d not in ids and not is_builtin(d) and not _blocked_text(body) \
+                and not (a.get("hypothesis") is None and _held_by(doc, d)):
             out.append(f"rests on {d}, which is not an entry - add it first, or declare it "
                        f"missing with blocked_on")
     pred = str(body.get(fields["predicate"]) or "") if fields["predicate"] else ""
@@ -1484,6 +1812,8 @@ def _sound_references(a, doc, ids, jud, fields, raw):
             continue
         for r in refs_in(val):
             if r not in ids and not is_builtin(r):
+                if a.get("hypothesis") is None and _held_by(doc, r):
+                    continue                    # the fork rule says which hypothesis holds it
                 out.append(f"{f} references {r}, which is not an entry")
             elif isinstance(deps, list) and r not in deps and r != a["id"]:
                 out.append(f"{f} references {r}, which the judgment does not rest on - a change "
@@ -1514,10 +1844,203 @@ def _not_born_broken(a, doc, ids, jud, fields, raw):
     return []
 
 
-# Every refusal a write can meet, in one place. A later rule - a value that contradicts
-# what the base holds, the entries nearest a new one - is one more function here.
+def _read_on(body, raw):
+    """The day an entry's value was read: its own `of` or `read`, else its source's read date -
+    a day is the finest clock the record keeps. None when nothing dates it."""
+    if not isinstance(body, dict):
+        return None
+    for f in ("of", "read"):
+        d = _as_day(body.get(f)) if body.get(f) is not None else None
+        if d:
+            return d
+    src = body.get("from")
+    if isinstance(src, str) and isinstance(raw.get(src), dict):
+        for f in ("read", "of"):
+            d = _as_day(raw[src].get(f)) if raw[src].get(f) is not None else None
+            if d:
+                return d
+    return None
+
+
+def may_supersede(nid, existing, new, raw, ids, jud, fields, as_of=None):
+    """May a write under an id the base holds replace what it holds? -> (yes, why). The one
+    door every same-id write goes through - `set` of a value, `add` of a judgment under a
+    standing id - so the rules that open it live here and nowhere else. An entry: when the
+    new reading is newer than the base's own - its `of:`, else its source's read date; a day
+    is the finest clock the record keeps, and a value nothing dates is superseded by one
+    something does. A judgment: when the standing one's wrong_if holds now - it is broken,
+    and the new verdict is its repair - or when the new body names a person's request with
+    `request: s.<date>_<slug>`, a session source whose asked: is that request verbatim, and
+    rests on it too: a request in a person's words is a root nothing outranks. Resting on a
+    session source alone says nothing - every judgment rests on the session that wrote it.
+    Everything else contradicts, and a contradiction forks. `existing` is the base's body,
+    `new` the value or the body being written."""
+    if nid in jud:
+        if evaluate(jud[nid]["pred"], raw, ids) is True:
+            return True, f"its wrong_if holds ({short(jud[nid]['pred'], 60)})"
+        deps = new.get(fields["deps"]) if isinstance(new, dict) and fields["deps"] else None
+        deps = deps if isinstance(deps, list) else []
+        req = new.get("request") if isinstance(new, dict) else None
+        if isinstance(req, str) and req:
+            b = raw.get(req)
+            if isinstance(b, dict) and b.get("asked") and req in deps:
+                return True, f"a person asked - it carries request: {req} and rests on it"
+            return False, (f"request: {req} is not a session source carrying what was asked, that "
+                           f"the new judgment also rests on")
+        return False, ("the standing judgment holds, and no request: names a person's asking for "
+                       "the change")
+    when = _read_on(existing, raw)
+    stamp = _as_day(as_of) or datetime.date.today()
+    if when is None:
+        return True, "nothing dates the reading the base holds"
+    if stamp > when:
+        return True, f"a reading from {stamp} that is newer than the base's"
+    return False, ("a reading of the same day" if stamp == when
+                   else f"a reading from {stamp} that is older than the base's")
+
+
+def _disagreement(a, body, raw, ids, jud, fields):
+    """What the write says against what the base holds under that id -> None when they agree,
+    or when the id claims nothing comparable; else (kind, old, new, may, why, when): the two
+    claims, whether the write may supersede the base and why, and the base's day."""
+    k = a["id"]
+    if k in jud:
+        if a["kind"] != "add" or not isinstance(a["body"], dict):
+            return None
+        old, new = jud[k]["body"].get("verdict"), a["body"].get("verdict")
+        if old is None or new is None or _same(old, new):
+            return None
+        may, why = may_supersede(k, jud[k]["body"], a["body"], raw, ids, jud, fields, a.get("as_of"))
+        return "verdict", old, new, may, why, None
+    if not isinstance(body, dict):
+        return None
+    old = value_of(raw, ids, k)
+    if old is None or isinstance(old, (list, dict)):
+        return None
+    if a["kind"] == "set":
+        new = a["value"]
+    else:
+        b = a["body"] if isinstance(a["body"], dict) else {}
+        new = b.get("v") if b.get("v") is not None else b.get("quoted")
+        if new is None or isinstance(new, (list, dict)):
+            return None
+    if _same(old, new):
+        return None
+    may, why = may_supersede(k, body, new, raw, ids, jud, fields, a.get("as_of"))
+    return "value", old, new, may, why, _read_on(body, raw)
+
+
+def _command_of(a, name):
+    """The write as it was asked, aimed at a hypothesis instead: the exact command."""
+    parts = [a["kind"], a["id"]]
+    if a["kind"] == "set":
+        parts.append(scalar(a["value"], "'", fold=False) if isinstance(a["value"], str)
+                     and not _bare_ok(a["value"]) else str(a["value"]).lower()
+                     if isinstance(a["value"], bool) else str(a["value"]))
+    elif a["kind"] == "add":
+        body = a["body"]
+        if isinstance(body, dict):
+            for f, v in body.items():
+                if isinstance(v, list):
+                    s = "[" + ", ".join(scalar(x, fold=False) for x in v) + "]"
+                elif isinstance(v, dict):
+                    s = "{" + ", ".join(f"{k2}: {scalar(x, fold=False)}" for k2, x in v.items()) + "}"
+                elif isinstance(v, bool):
+                    s = str(v).lower()
+                else:
+                    s = str(v)
+                parts.append(f"{f}={s}")
+        else:
+            parts.append(str(body))
+    for opt, key in (("--in", "into"), ("--as-of", "as_of"), ("--why", "why")):
+        if a.get(key):
+            parts += [opt, str(a[key])]
+    parts += ["--hypothesis", name]
+    return " ".join(p if p.startswith("--") else shlex.quote(p) for p in parts)
+
+
+def _hypothesis_name(doc, k, claim):
+    """A name for the hypothesis a refused write would open: the id's, unless a hypothesis
+    of that name already holds the id with another claim."""
+    base = re.sub(r"[^A-Za-z0-9_\-]", "_", k)
+    hyps = getattr(doc, "hypotheses", None) or {}
+    name, n = base, 1
+    while name in hyps and k in hyps[name]["ids"] \
+            and not _same_claim(claim_of(hyps[name]["raw"].get(k)), claim):
+        n += 1
+        name = f"{base}_{n}"
+    return name
+
+
+def _forks_on_contradiction(a, doc, ids, jud, fields, raw):
+    """The record forks on a contradiction, told by the id and the day. A value the base
+    already holds under that id, read no later than the base's own reading and differing
+    from it, is refused into the base - two readings of one day that disagree are two
+    writers, not the world moving - and so is a verdict that differs under a judgment's id;
+    each refusal names the command that writes it into a hypothesis instead. A write that
+    rests on what only a hypothesis holds belongs in that hypothesis. A write aimed at a
+    hypothesis is never refused for disagreeing: the file is where disagreement goes."""
+    if a.get("hypothesis"):
+        return []
+    out, k = [], a["id"]
+    if a["kind"] == "set":
+        if k not in ids:
+            held = _held_by(doc, k)
+            if held:
+                out.append(f"{k} is held only by hypothes{'is' if len(held) == 1 else 'es'} "
+                           f"{', '.join(held)} - it is set there: {_command_of(a, held[0])}")
+            return out
+        d = _disagreement(a, raw.get(k), raw, ids, jud, fields)
+        if d and not d[3]:
+            _, old, new, _, why, when = d
+            out.append(f"{k} holds {short(old)} as of {when}, and {why} says {short(new)} - the base "
+                       f"keeps what it holds and a hypothesis holds the other: "
+                       f"{_command_of(a, _hypothesis_name(doc, k, new))}")
+        return out
+    if a["kind"] != "add":
+        return out
+    if k in ids:
+        d = _disagreement(a, raw.get(k), raw, ids, jud, fields)
+        if d and not (d[0] == "verdict" and d[3]):        # a verdict that may supersede replaces
+            kind, old, new, newer, why, when = d
+            name = _hypothesis_name(doc, k, new)
+            if kind == "verdict":
+                out.append(f"{k} is already a judgment, concluding {short(old, 60)!r} - {why}, so a "
+                           f"different verdict under the same id contradicts it, and a hypothesis "
+                           f"holds the other: {_command_of(a, name)}")
+            elif newer:
+                out.append(f"{k} is already an entry, holding {short(old)}"
+                           + (f" as of {when}" if when else "")
+                           + f" - a newer reading updates it: set {k} {shlex.quote(str(new))}; one "
+                           f"that disagrees opens a hypothesis: {_command_of(a, name)}")
+            else:
+                out.append(f"{k} is already an entry, holding {short(old)} as of {when}, and {why} "
+                           f"says {short(new)} - the base keeps what it holds and a hypothesis holds "
+                           f"the other: {_command_of(a, name)}")
+    # the cone: whatever rests on a hypothesis goes into it, so that it folds - or is
+    # refuted - together with what it rests on
+    body = a["body"] if isinstance(a["body"], dict) else {}
+    deps = body.get(fields["deps"]) if fields["deps"] and fields["deps"] in body else None
+    deps = [d for d in deps if isinstance(d, str)] if isinstance(deps, list) else []
+    refs = []
+    for f, val in body.items():
+        if isinstance(val, str):
+            refs += [r for r in refs_in(val) if r not in refs]
+    for dep, how in [(d, "rests on") for d in deps] + [(r, "references") for r in refs if r not in deps]:
+        if dep in ids or is_builtin(dep):
+            continue
+        held = _held_by(doc, dep)
+        if held:
+            out.append(f"{how} {dep}, which only hypothes{'is' if len(held) == 1 else 'es'} "
+                       f"{', '.join(held)} hold{'s' if len(held) == 1 else ''} - what rests on a "
+                       f"hypothesis goes into it: {_command_of(a, held[0])}")
+    return out
+
+
+# Every refusal a write can meet, in one place. The fork on a contradiction is the last of
+# them; a later rule - the entries nearest a new one - is one more function here.
 VALIDATORS = [_known_key, _sound_dependencies, _sound_references, _reopener_is_prose,
-              _not_born_broken]
+              _not_born_broken, _forks_on_contradiction]
 
 
 def validate(action, doc, ids, jud, fields, raw):
@@ -1591,6 +2114,14 @@ def _entry_lines(nid, body, ind, find, flow):
     for k, v in body.items():
         out += _field_lines(k, v, find)
     return out
+
+
+def _replace_in(lines, nid, body):
+    """The entry's lines replaced whole by `body`, where it stands and in its style."""
+    _, ind, s, e = _locate(lines, nid)
+    flow = _inline(lines[s]).startswith("{")
+    find = _members_of(lines, s, e)[0] or ind + 2
+    lines[s:e] = _entry_lines(nid, body, ind, find, flow)
 
 
 def _place(members, nid):
@@ -1839,9 +2370,189 @@ def apply(paths, action):
     """The one write. `action` says what kind (set, add, review) and what that kind needs;
     it is validated whole before a byte is touched, applied to the file's text without
     reformatting anything else, read back, and answered with the reach. All of it under
-    one lock, so a second writer waits rather than overwrites."""
+    one lock, so a second writer waits rather than overwrites. Aimed at a hypothesis, the
+    same write lands in the file beside the record and the base is not touched."""
     with _locked(paths[0]):
+        if action.get("hypothesis"):
+            return _fork(paths, action)
         return _apply(paths, action)
+
+
+def _ensure_collection(lines, collection):
+    """The collection opened at the end of the file when it lacks one; the file still ends
+    in a newline."""
+    if collection in {n for n, _, _ in _collections_in(lines)}:
+        return
+    while lines and not lines[-1].strip():
+        lines.pop()
+    lines += ([""] if lines else []) + [f"{collection}:", ""]
+
+
+def _carry(files, nid):
+    """-> (collection, lines): an entry's own lines in the base, whole - comments, style and
+    all - and the collection they sit in; None when no file holds it."""
+    for f in files:
+        lines = io.open(f, encoding="utf-8").read().split("\n")
+        loc = _locate(lines, nid)
+        if loc:
+            name, _, s, e = loc
+            block = lines[s:e]
+            while block and not block[-1].strip():
+                block.pop()
+            return name, block
+    return None
+
+
+def _insert_block(lines, collection, nid, block):
+    """A block of lines - an entry carried over whole - placed in `collection` in id order,
+    at the indent of the members it lands beside; the collection is opened if the file lacks
+    it. -> a line saying where it went."""
+    _ensure_collection(lines, collection)
+    cols = {n: (s, e) for n, s, e in _collections_in(lines)}
+    s, e = cols[collection]
+    ind, members = _members_of(lines, s, e)
+    shift = (ind if ind is not None else 2) - _indent(block[0])
+    block = [(" " * max(0, _indent(l) + shift) + l.lstrip(" ")) if l.strip() else l for l in block]
+    if not members:
+        lines[s + 1:s + 1] = block
+        return f"{nid} into {collection}, its first entry"
+    anchor, before = _place([m for m, _ in members], nid)
+    ai = next(i for m, i in members if m == anchor)
+    pos = ai if before else _block_end(lines, ai, ind, e)
+    lines[pos:pos] = block
+    return f"{nid} into {collection}, {'before' if before else 'after'} {anchor}"
+
+
+def _fork(paths, action):
+    """A write into a hypothesis beside the record: the same validation and the same edits,
+    on `PROVENANCE.d/<name>.yaml` - the base is not touched. The record is read as it stands
+    under the hypothesis, so a judgment written there rests on what it proposes and its
+    snapshot says so. A hypothesis that does not exist yet is opened by its first write, with
+    the day it was born in its head; an entry the base holds is carried over whole and set
+    there."""
+    doc = load(paths)
+    name, kind, nid = action["hypothesis"], action["kind"], action["id"]
+    hyp = doc.hypotheses.get(name)
+    if hyp and hyp["error"]:
+        raise Refused(f"refused - hypothesis {name} could not be read: {hyp['error']}")
+    fresh = hyp is None
+    if fresh:
+        hyp = _hypothesis(name, hypothesis_path(paths, name))
+        doc.hypotheses = dict(doc.hypotheses, **{name: hyp})
+    under = layered(doc, hyp)
+    ids, jud, fields = infer(under)
+    raw = with_builtins(under, ids, jud, fields)
+    for k, v in counts(under, ids, jud, fields, bodies(under)).items():
+        raw.setdefault(k, {"name": COMPUTED[k], "v": v})
+    stamp = action.get("as_of") or datetime.date.today().isoformat()
+    refusals = validate(action, under, ids, jud, fields, raw)
+    if refusals:
+        raise Refused("refused - " + "\n          ".join(refusals))
+    if kind == "review" and nid not in hyp["ids"]:
+        raise Refused(f"refused - {nid} is not in hypothesis {name}"
+                      + (" - review it in the base, or propose it here with add" if nid in jud else ""))
+    snapshot_field = fields["snapshot"] or "seen"
+    original = None if fresh else io.open(hyp["path"], encoding="utf-8").read()
+    lines = (original if original is not None else f'hypothesis: {{born: "{stamp}"}}\n').split("\n")
+    out, seen = [], {}
+    if kind == "set":
+        now = value_of(raw, ids, nid)
+        if nid in hyp["ids"] and now is not None and _same(now, action["value"]) \
+                and not action.get("as_of"):
+            print(f"{nid} is already {scalar(action['value'], fold=False)} in hypothesis {name}; "
+                  f"nothing written")
+            return 0
+        if nid not in hyp["ids"]:
+            got = _carry(_files_of(paths), nid)
+            if not got:
+                raise Refused(f"refused - no file of the record holds {nid}")
+            collection, block = got
+            out.append("carry " + _insert_block(lines, collection, nid, block) + f" of hypothesis {name}")
+        old, field = _set_in(lines, nid, action["value"], stamp, action.get("why"))
+        out.append(f"set {nid} in hypothesis {name}: {old} -> {scalar(action['value'], fold=False)} "
+                   f"(as of {stamp})")
+    elif kind == "add":
+        body = action["body"]
+        if isinstance(body, dict) and fields["deps"] in body:
+            seen = _snapshot(list(body[fields["deps"]]), raw, ids, jud, paths, None)
+            body[snapshot_field] = seen
+        collection = _collection_for(under, ids, jud, fields, nid, body, action.get("into"))
+        _ensure_collection(lines, collection)
+        out.append("add " + _add_in(lines, nid, body, collection) + f" of hypothesis {name}")
+    else:
+        j = jud[nid]
+        was = dict(j["snap"])
+        seen = _snapshot(j["deps"], raw, ids, jud, paths, None)
+        _, ind, s, e = _locate(lines, nid)
+        changed = [d for d in seen if d not in was or not _same(was[d], seen[d])] + \
+            [d for d in was if d not in seen]
+        if changed:
+            e = _seen_lines(lines, s, e, snapshot_field, seen)
+        if _field_span(lines, s, e, "reviewed"):
+            _stamp_field(lines, s, e, "reviewed", stamp, None)
+        out.append(f"review {nid} in hypothesis {name}: "
+                   + (f"seen rewritten from what the record holds under it ({stamp})" if changed
+                      else f"what it saw is what the record holds under it ({stamp})"))
+        for d in j["deps"]:
+            if d in was and d in seen and not _same(was[d], seen[d]):
+                out.append(f"  {d}: {short(was[d])} -> {short(seen[d])}")
+            elif d not in was and d in seen:
+                out.append(f"  {d}: {short(seen[d])} (never checked against it before)")
+    made_dir = False
+    if fresh and not os.path.isdir(os.path.dirname(hyp["path"])):
+        os.makedirs(os.path.dirname(hyp["path"]))
+        made_dir = True
+    _write_text(hyp["path"], "\n".join(lines))
+    # read it back: the hypothesis must still load, and hold what was written
+    try:
+        doc2 = load(paths)
+        h2 = doc2.hypotheses.get(name)
+        if h2 is None or h2["error"]:
+            raise ValueError(h2["error"] if h2 else "the file is not found after the write")
+        if nid not in h2["ids"]:
+            raise ValueError(f"{nid} is not in the hypothesis after the write")
+        under2 = layered(doc2, h2)
+        ids2, jud2, fields2 = infer(under2)
+        raw2 = with_builtins(under2, ids2, jud2, fields2)
+        if kind == "set":
+            now = value_of(raw2, ids2, nid)
+            if now is None or not _same(now, action["value"]):
+                raise ValueError(f"{nid} reads back as {now!r}")
+    except (Exception, SystemExit) as e:
+        if original is None:
+            os.remove(hyp["path"])
+            if made_dir:
+                os.rmdir(os.path.dirname(hyp["path"]))
+        else:
+            _write_text(hyp["path"], original)
+        raise Refused(f"the write broke the hypothesis and was undone: {e}")
+    for l in out:
+        print(l)
+    # the reach, read with the hypothesis laid over the base: what would move if it folded.
+    # Nothing in the base has.
+    if kind == "review":
+        tag, why = _state(nid, jud2[nid], raw2, ids2, fields2)
+        print(f"  {nid} {tag.lower()}: {why}")
+    else:
+        hit, moved, derived = reach_of(ids2, jud2, raw2, [nid])
+        if derived:
+            print("worked out from it: " + ", ".join(derived))
+        if kind == "add" and nid in jud2:
+            tag, why = _state(nid, jud2[nid], raw2, ids2, fields2)
+            print(f"the new judgment {tag.lower()}: {why}")
+            hit = {n: v for n, v in hit.items() if n != nid}
+        if hit:
+            print(f"rests on it, under {name}:")
+            for n2 in sorted(hit):
+                print("  " + _state_line(n2, jud2[n2], raw2, ids2, fields2, touched=moved))
+        elif kind == "set":
+            print("nothing rests on it")
+    nj = sum(1 for k in h2["ids"] if k in jud2)
+    ne = len(h2["ids"]) - nj
+    print(f"\nthe base is untouched; {name} holds {ne} entr{'y' if ne == 1 else 'ies'} and "
+          f"{nj} judgment{'' if nj == 1 else 's'}"
+          + (", and never folds" if str(h2["head"].get("folds") or "") == "never" else ""))
+    return 0
 
 
 def _snapshot(deps, raw, ids, jud, paths, brief):
@@ -1920,18 +2631,27 @@ def _apply(paths, action):
             if _locate(io.open(f, encoding="utf-8").read().split("\n"), nid):
                 target = f
                 break
-    out, seen, arrangement = [], {}, False
+    out, seen, arrangement, supersede = [], {}, False, False
     if kind == "add":
         body = action["body"]
+        # a judgment under a standing judgment's id got past validation only because it may
+        # supersede it - its wrong_if holds, or a person asked - so it replaces it in place
+        supersede = nid in jud and isinstance(body, dict)
         if isinstance(body, dict) and fields["deps"] in body:
             seen = _snapshot(list(body[fields["deps"]]), raw, ids, jud, paths, brief)
             body[snapshot_field] = seen
-        collection = _collection_for(doc, ids, jud, fields, nid, body, action.get("into"))
-        for f in files:
-            if collection in {n for n, _, _ in
-                              _collections_in(io.open(f, encoding="utf-8").read().split("\n"))}:
-                target = f
-                break
+        if supersede:
+            for f in files:
+                if _locate(io.open(f, encoding="utf-8").read().split("\n"), nid):
+                    target = f
+                    break
+        else:
+            collection = _collection_for(doc, ids, jud, fields, nid, body, action.get("into"))
+            for f in files:
+                if collection in {n for n, _, _ in
+                                  _collections_in(io.open(f, encoding="utf-8").read().split("\n"))}:
+                    target = f
+                    break
     original = io.open(target, encoding="utf-8").read()
     lines = original.split("\n")
     if kind == "set":
@@ -1941,6 +2661,11 @@ def _apply(paths, action):
             return 0
         old, field = _set_in(lines, nid, action["value"], stamp, action.get("why"))
         out.append(f"set {nid}: {old} -> {scalar(action['value'], fold=False)} (as of {stamp})")
+    elif kind == "add" and supersede:
+        _, why = may_supersede(nid, jud[nid]["body"], body, raw, ids, jud, fields, action.get("as_of"))
+        was = str(jud[nid]["body"].get("verdict") or jud[nid]["body"].get("title") or nid)
+        _replace_in(lines, nid, body)
+        out.append(f"supersede {nid}: {short(was, 60)} -> {short(body.get('verdict'), 60)} - {why}")
     elif kind == "add":
         out.append("add " + _add_in(lines, nid, body, collection))
     else:
@@ -2073,9 +2798,9 @@ def mark(state_path, paths):
     page serves, and the ids the record holds."""
     doc = load(paths)
     ids, jud, fields = infer(doc)
-    fail, _, _, _ = check_lines(paths)
+    fail, _, _, _, _ = check_lines(paths)
     state = {"fails": len(fail), "unserved": _unserved(paths),
-             "ids": sorted(k for k in ids if not is_builtin(k))}
+             "ids": sorted(_every_id(doc, ids))}
     with io.open(state_path, "w", encoding="utf-8") as f:
         json.dump(state, f)
     return 0
@@ -2103,7 +2828,7 @@ def gate(state_path, paths):
     wrote with no intent recorded. Printed, and 2 when there is anything - the hook bounces
     once and yields."""
     base = _marked(state_path)
-    fail, _, _, _ = check_lines(paths)
+    fail, _, _, _, _ = check_lines(paths)
     out = []
     if len(fail) > base["fails"]:
         out.append(f"{paths[0]} fails check with {len(fail)} problems ({base['fails']} at "
@@ -2118,16 +2843,25 @@ def gate(state_path, paths):
         doc = load(paths)
         ids, jud, fields = infer(doc)
         raw = bodies(doc)
+        # what a hypothesis holds is the session's writing too, attributed the same way
+        rests = {}
+        for h in doc.hypotheses.values():
+            for k, b in h["raw"].items():
+                raw.setdefault(k, b)
+                if isinstance(b, dict) and fields["deps"] in b and isinstance(b[fields["deps"]], list):
+                    rests[k] = [d for d in b[fields["deps"]] if isinstance(d, str)]
+        every = _every_id(doc, ids)
         was = set(base["ids"])
-        new = sorted(k for k in ids if not is_builtin(k) and k not in was)
-        intents = {k for k in ids if k not in jud and isinstance(raw.get(k), dict)
+        new = sorted(k for k in every if k not in was)
+        intents = {k for k in every if k not in jud and isinstance(raw.get(k), dict)
                    and raw[k].get("asked")}
 
         def attributed(k):
             b = raw.get(k)
             if isinstance(b, dict) and str(b.get("from") or "") in intents:
                 return True
-            return k in jud and bool(set(jud[k]["deps"]) & intents)
+            deps = jud[k]["deps"] if k in jud else rests.get(k, [])
+            return bool(set(deps) & intents)
         if new and not (set(new) & intents) and not any(attributed(k) for k in new):
             named_ = ", ".join(new[:4]) + (f" and {len(new) - 4} more" if len(new) > 4 else "")
             out.append(f"this session wrote {len(new)} {'entry' if len(new) == 1 else 'entries'} "
@@ -2139,15 +2873,21 @@ def gate(state_path, paths):
 
 
 HELP = {
-    "set": """  set <key> <value> [--why "..."] [--as-of YYYY-MM-DD] [file]
+    "set": """  set <key> <value> [--why "..."] [--as-of YYYY-MM-DD] [--hypothesis NAME] [file]
 
 Change one value. The entry's `v:` (or `quoted:`) is rewritten where it stands, `of:` is
 stamped with the date, and the reason - if given - is kept as a comment beneath. A number
 is written as a number, `true`/`false` as booleans, anything else as text. A worked-out
 entry is refused: change its rule, not its result. A judgment is refused: review it. The
 reply is the reach: what is worked out from it, every judgment resting on it and its state
-now, and the texts of the brief that saw the old value.""",
-    "add": """  add <id> field=value ... [--in COLLECTION] [--as-of YYYY-MM-DD] [file]
+now, and the texts of the brief that saw the old value.
+
+A reading newer than the one the base holds - its `of:`, else its source's read date -
+updates it. One of the same day or earlier that differs is a contradiction: refused into
+the base, and the refusal names the command that writes it into a hypothesis instead.
+`--hypothesis NAME` writes into `PROVENANCE.d/NAME.yaml` beside the record, opened by its
+first write, and the base is not touched: the entry is carried over whole and set there.""",
+    "add": """  add <id> field=value ... [--in COLLECTION] [--as-of YYYY-MM-DD] [--hypothesis NAME] [file]
   add <id> '{field: value, ...}'
   add <id> "an open question"
 
@@ -2156,8 +2896,14 @@ never at the tail - in the style of the entry it lands beside; meta.updated move
 is written as `rests_on='[a, b]'`; a judgment's `seen` is filled by this tool from what its
 dependencies hold now and must not be given. Refused: an id already in the record, a
 dependency that is not an entry (add it first, or declare it with blocked_on), a reference
-to nothing, a judgment whose wrong_if already holds. The reply is the reach.""",
-    "review": """  review <id> [--as-of YYYY-MM-DD] [file]
+to nothing, a judgment whose wrong_if already holds. The reply is the reach.
+
+A contradiction is refused into the base and named a hypothesis: the same id with a
+different value or verdict, or a judgment resting on what only a hypothesis holds - the
+refusal names the `--hypothesis NAME` command that writes it into `PROVENANCE.d/NAME.yaml`
+beside the record instead, where its `seen` is taken from the record as it stands under
+that hypothesis, and the base is not touched.""",
+    "review": """  review <id> [--as-of YYYY-MM-DD] [--hypothesis NAME] [file]
   review "<section title>"
 
 "I read it, and it still holds." A judgment's `seen` is rewritten from what its
@@ -2165,7 +2911,8 @@ dependencies hold now, and `reviewed:` moves when the judgment carries one; an
 arrangement's review also rewrites the brief's shape line - the one tab's, or the tab
 serving a session source it rests on. A section of the brief is reviewed by its title:
 its text's references are snapshotted into `seen` and `reviewed:` moves. Never automatic:
-a snapshot that refreshed itself could not show a difference.""",
+a snapshot that refreshed itself could not show a difference. `--hypothesis NAME` reviews
+a judgment the hypothesis holds, against the record as it stands under it.""",
 }
 
 
@@ -2177,7 +2924,7 @@ def write_command(cmd, rest):
     i = 0
     while i < len(rest):
         a = rest[i]
-        if a in ("--why", "--as-of", "--in"):
+        if a in ("--why", "--as-of", "--in", "--hypothesis"):
             if i + 1 >= len(rest):
                 raise Refused(f"{a} needs a value")
             opts[a[2:].replace("-", "_")] = rest[i + 1]
@@ -2193,7 +2940,11 @@ def write_command(cmd, rest):
         raise Refused("--as-of takes a date, YYYY-MM-DD")
     if opts.get("why") and "\n" in opts["why"]:
         raise Refused("--why is one line: a second line would be a line of the record")
-    action = {"kind": cmd, "id": nid, "as_of": as_of, "why": opts.get("why"), "into": opts.get("in")}
+    if opts.get("hypothesis") and not HYPOTHESIS_NAME.match(opts["hypothesis"]):
+        raise Refused("--hypothesis takes a name - letters, digits, underscores, dashes - that "
+                      f"becomes {HYPOTHESES}/<name>.yaml beside the record")
+    action = {"kind": cmd, "id": nid, "as_of": as_of, "why": opts.get("why"), "into": opts.get("in"),
+              "hypothesis": opts.get("hypothesis")}
     if cmd == "set":
         if not args:
             raise Refused("set needs a value: set <key> <value>")

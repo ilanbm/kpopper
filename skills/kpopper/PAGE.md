@@ -35,6 +35,10 @@ and not know. Write layout if you need layout; call this for the mechanism.
 record's own prefixes. It is the fallback when an arrangement is wrong, and it is the only tab
 when you supply no brief.
 
+When hypotheses wait beside the record (`PROVENANCE.d/`), one line under the heading says how
+many, and how many are contested; the page draws the base alone - what a hypothesis proposes is
+read with `kpopper pull`.
+
 **Now** is the tab *you* write, and you are the only one who can: the arrangement of this record
 aimed at what this session is for. Intent is the one input the record cannot derive — it lives
 in the conversation, and a session records it as a source (`s.*`, below) so the page can be held
@@ -333,6 +337,7 @@ drawing of it. Every surface then decides such a judgment against the same numbe
 | `graph.entries`, `graph.judgments`, `graph.open` | what the record holds |
 | `graph.flagged` | judgments that need a person, for any reason |
 | `graph.blocked`, `graph.broken`, `graph.unchecked`, `graph.moved`, `graph.falsified`, `graph.no_predicate` | the reasons, one each |
+| `graph.hypotheses`, `graph.contested` | hypotheses waiting beside the record, and the ids two of them hold with different claims |
 | `page.spill` | flagged judgments no section of the page picked up |
 | `page.unserved` | intents no tab serves - declared and earned by picks; an intent that recorded nothing is not counted |
 | `page.recent_unserved` | the newest sessions in a row whose intent no tab serves, counted by day: a day on which any intent is served ends the run |

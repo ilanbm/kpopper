@@ -1,10 +1,21 @@
 meta:
-  updated: 2026-09-03
+  updated: 2026-09-04
   name: kpopper
   scope: "What this plugin is for and the decisions that shaped it, kept in its own format -
           the tools eat their own cooking, and every session here opens grounded."
 
 sources:
+  s.2026_09_01_consolidation:
+    asked: "four sessions appended to the tail of this file in one day and every pair conflicted
+            there and on the brief's stored shape line, while the code merged clean - insert in id
+            order, drop the stored shape, or shard?"
+    name: "The shaping conversation that decided how the record forks and merges - what it was
+           asked, and what it was given. Its reading: the shared record forks only on a
+           contradiction, a hypothesis is a judgment whose truth is pending, and consolidation is the
+           test"
+    of: "2026-09-01 to 2026-09-03, given one day of seven parallel sessions on this repository,
+         dry-run merges of every pair, and the first external run"
+    read: "2026-09-03"
   s.2026_09_02_priors:
     name: "The session that asked whether an agent's own knowledge can be a source here - what it
            was asked, and what it was given"
@@ -24,6 +35,19 @@ sources:
     of: "2026-09-03, given the page design's intents section and its scenario, the page contract at
          2e5f4f3, the fixture record under tests/, and the opener's output on the now record at its
          2000-character slot"
+    read: "2026-09-03"
+  s.2026_09_03_hypotheses:
+    asked: "Let the record fork on a contradiction: a write that contradicts the base opens a
+            hypothesis file beside it, the reader layers hypotheses over the base, two hypotheses on
+            one id are contested, and the opener counts what waits."
+    name: "The session that let the record fork - what it was asked, and what it was given. Its
+           reading: a contradiction is told by the id and the day, never by resemblance; the base is
+           what every surface evaluates and a hypothesis is read beside it - proposals in pull,
+           contested ids in check and open, one count line in the opener - until consolidation tests
+           it"
+    of: "2026-09-03, given the consolidation design and its five decisions in this record, the write
+         path and the page counts at 3d47dcb, the fixture record under tests/, and the three live
+         records this reader serves"
     read: "2026-09-03"
   s.2026_09_03_language:
     name: "The session that weighed the renderer's language - what it was asked, and what it was given"
@@ -115,6 +139,45 @@ sources:
     read: "2026-09-03"
 
 known:
+  alt.drop_shape_line:
+    v: rejected
+    name: "Dropping the brief's shape line"
+    from: s.2026_09_01_consolidation
+    at: "the shape line is the brief's own snapshot: review of an arrangement rewrites it from the
+         record, and a tab whose shape moved says so at its top"
+  alt.feed_of_other_branches:
+    v: rejected
+    name: "Pushing other branches' claims into the opener"
+    from: s.2026_09_01_consolidation
+    at: "unreadable when uncommitted, low value per character, and it invites reconciling what
+         nobody asked to reconcile"
+  alt.fork_per_branch:
+    v: rejected
+    name: "A fork of the record per branch"
+    from: s.2026_09_01_consolidation
+    at: "git already knows the branch; a second copy of what it knows only drifts from it"
+  alt.notebook_per_session:
+    v: rejected
+    name: "A notebook per session beside the shared record"
+    from: s.2026_09_01_consolidation
+    at: "stale at ends that never come: a session's notebook piles up unread, and no moment closes
+         it"
+  alt.record_merge_driver:
+    v: rejected
+    name: "A git merge driver for the record"
+    from: s.2026_09_01_consolidation
+    at: "hypotheses are separate files, so there is no textual conflict left to drive"
+  alt.sameness_from_names:
+    v: rejected
+    name: "A tool that infers sameness from names"
+    from: s.2026_09_01_consolidation
+    at: "merges silently and wrongly; the writer and the merger judge instead, at the two moments a
+         model holds the meaning"
+  alt.session_local_tags:
+    v: rejected
+    name: "A tag per entry marking it session-local"
+    from: s.2026_09_01_consolidation
+    at: "hand-maintained state; the branch is the tag"
   m.blocked_on_reopeners:
     v: 37
     name: "Judgments whose blocked_on names the sign that would re-open them, not an input the
@@ -156,6 +219,19 @@ known:
     at: "coverage and coverage_lines: counts and shares, printed; the only comparison is a
          falsifier's own"
     of: "2026-09-03"
+  p.hypothesis_homes:
+    v: 1
+    name: "Places the reader reads hypothesis files from"
+    from: "scripts/provenance.py"
+    at: "hypothesis_dir - PROVENANCE.d beside the file the reader opens first"
+    of: "2026-09-04"
+  p.hypothesis_thresholds:
+    v: 0
+    name: "Thresholds the hypothesis count line carries in code - an age or a reach past which it
+           draws a line"
+    from: "scripts/provenance.py"
+    at: "hypothesis_line - age and reach printed as facts; the only comparison is a falsifier's own"
+    of: "2026-09-04"
   p.pointer_home:
     v: "<git common dir>/kpopper-record"
     name: "Where a record the tree cannot hold registers its path"
@@ -289,6 +365,13 @@ known:
            to matter, and the page stays JS either way"
     from: s.2026_09_03_language
     reach: general
+  p.supersede_doors:
+    v: 1
+    name: "Functions that decide whether a write under an id the base holds may replace what it
+           holds"
+    from: "scripts/provenance.py"
+    at: "may_supersede - set of a value and add under a standing judgment's id both ask it"
+    of: "2026-09-04"
   p.tree_positions_kept:
     v: 0
     name: "Places a dragged position is written down"
@@ -414,6 +497,40 @@ judgments:
               the move having happened. Cheap to reverse, so decided on the prior alone."
     wrong_if: "prior.strings_lose_tooling < 0.6"
     seen: {m.page_string_lines: 0, prior.strings_lose_tooling: 0.95}
+  d.contradiction_by_id_and_day:
+    rests_on: [s.2026_09_03_hypotheses, d.base_shared_forks_on_contradiction, d.write_path_returns_reach, p.supersede_doors]
+    verdict: "a contradiction is told by the id and the day: the same id with a value read no later
+              than the base's own reading, or with a different verdict, is refused into the base and
+              named a hypothesis; a newer reading supersedes, a standing judgment is superseded only
+              when its wrong_if holds or the request that asked for the change is named; the same
+              premises under different ids are different subjects"
+    because: "set is the update path - the world moving, flagged as it always was - so a differing
+              value alone cannot be the contradiction, or the reach would have nothing left to reach.
+              What the record can tell apart is time: a reading newer than the one the base holds -
+              its own date, else its source's - supersedes it; one of the same day or older that
+              disagrees is two writers, not the world moving. A value nothing dates is superseded by
+              the first dated write, which starts the clock; a concurrent second writer is then
+              same-day and refused - the case the mechanism exists for. Resting on a session source
+              proves nothing, since every judgment rests on the session that wrote it, so a judgment
+              is replaced only when it is already broken by its own condition or when the new one
+              names the request that asked for the change and rests on it. Five judgments here rest
+              on one source with five verdicts, so the same premises under different ids stay
+              different subjects until someone says otherwise - a candidate to judge, never a
+              refusal. One function decides all of it; {{p.supersede_doors}} is the count that would
+              show a second one creeping in."
+    wrong_if: "p.supersede_doors > 1"
+    seen:
+      s.2026_09_03_hypotheses: "read 2026-09-03"
+      d.base_shared_forks_on_contradiction: "a consistent addition goes straight to the shared
+                                             record from any session or branch; a write that
+                                             contradicts the record opens a named hypothesis, and
+                                             whatever later rests on the contradiction goes there - a
+                                             session is never the unit"
+      d.write_path_returns_reach: "the record changes from the command line through set, add and
+                                   review; each edits the file in place, writes seen itself, and
+                                   answers with the reach - what rests on the write, what is MOVED
+                                   now, which predicate fired"
+      p.supersede_doors: 1
   d.coverage_printed_never_acted:
     rests_on: [s.2026_09_03_coverage, d.intent_is_a_source, d.metrics_derived_builtin, p.coverage_thresholds]
     verdict: "coverage is counted at every build and check and printed as facts - each intent no tab
@@ -494,6 +611,31 @@ judgments:
                                    truth is pending - its premises in rests_on, its claim in verdict,
                                    what would refute its success in wrong_if - and the merge is its
                                    test"
+  d.hypotheses_read_beside_the_base:
+    rests_on: [s.2026_09_03_hypotheses, d.consolidation_is_a_test, d.no_feed_of_other_branches, p.hypothesis_thresholds]
+    verdict: "every command reads the hypotheses beside the record over the base - pull shows what
+              each proposes, check and open say where two disagree, the opener counts what waits with
+              each one's age and reach - and evaluates the base alone; the union is tested by
+              consolidation, and the page draws the base"
+    because: "A hypothesis laid over the base at every check would move every judgment resting on
+              what it proposes, in every session, for a claim nobody has tested - the dry run is
+              where that question is asked, once, with the answer in three lists. Reading it beside
+              the base costs almost nothing: a proposal is a line under the value it would replace, a
+              contested id is the one thing that needs a person now, and the count line says how long
+              each has waited and how much rests on it without drawing a line -
+              {{p.hypothesis_thresholds}} thresholds live in the code, and the count is what would
+              show one creeping in."
+    wrong_if: "p.hypothesis_thresholds > 0"
+    seen:
+      s.2026_09_03_hypotheses: "read 2026-09-03"
+      d.consolidation_is_a_test: "consolidating hypotheses into the base tests whether the writers
+                                  worked on the same world: premises re-checked, falsifiers
+                                  evaluated, contradictions stopped - as a dry run at any moment, and
+                                  as a step on every pull request"
+      d.no_feed_of_other_branches: "the opener adds one line - how many hypotheses wait, and for how
+                                    long; nothing another branch claims is pushed into a session, it
+                                    is pulled by seed or surfaces as a collision on the same id"
+      p.hypothesis_thresholds: 0
   d.local_claims_want_a_run:
     rests_on: [prior.local_needs_a_run, m.claims.general_held, m.claims.local_checked_held, m.claims.local_assumed_held]
     verdict: "a claim with reach general may rest on the session's prior; a claim with reach local
@@ -583,6 +725,35 @@ judgments:
                                    truth is pending - its premises in rests_on, its claim in verdict,
                                    what would refute its success in wrong_if - and the merge is its
                                    test"
+  d.record_is_code:
+    rests_on: [s.2026_09_01_consolidation, d.register_out_of_tree, d.base_shared_forks_on_contradiction, p.hypothesis_homes]
+    verdict: "the record of what is known about the code lives in the tree - committed with the work
+              it describes, reviewed in the same pull request, checked by the same CI - and a
+              hypothesis travels with its branch; an out-of-tree record holds only what the tree
+              cannot hold, the world outside the code; a user-level directory is at most an index of
+              records, never content; a session named as a source is provenance, not process"
+    because: "Code and the knowledge about it move together or drift apart: a record beside the tree
+              is reviewed by whoever reviews the change and tested by whatever tests it, and a
+              hypothesis committed with its branch is one file the merge carries - an untracked one
+              dies with its worktree, the honest fate of a claim nobody committed. What the tree
+              cannot hold - an environment, a pull request, a measurement against a deployment - has
+              no branch, so it lives in the one record every worktree registers. A directory of
+              records at the user level would be a second place every reader must know, so it may
+              index and never hold. A session in a source field says where a claim was made, the way
+              a document does, and instructs no one. The reader looks for hypotheses in
+              {{p.hypothesis_homes}} place, beside the record; the count is what would show a second
+              home creeping in."
+    wrong_if: "p.hypothesis_homes > 1"
+    seen:
+      s.2026_09_01_consolidation: "read 2026-09-03"
+      d.register_out_of_tree: "a record the tree cannot hold registers its path in the git common
+                               dir, so every worktree finds it and nothing enters the tree"
+      d.base_shared_forks_on_contradiction: "a consistent addition goes straight to the shared
+                                             record from any session or branch; a write that
+                                             contradicts the record opens a named hypothesis, and
+                                             whatever later rests on the contradiction goes there - a
+                                             session is never the unit"
+      p.hypothesis_homes: 1
   d.relevance_stays_declared:
     rests_on: [doc.fact_moves, m.record_scale]
     verdict: "retrieval follows declared edges and names; no learned relevance at record scale"
