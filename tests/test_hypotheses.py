@@ -548,5 +548,121 @@ class ThePageDrawsTheBase(unittest.TestCase):
         self.assertIn("--hypothesis NAME", out)
 
 
+class TheEdgesHold(unittest.TestCase):
+    """What a review of the fork found at its edges, and what now holds there."""
+
+    def test_a_judgment_is_replaced_only_by_a_judgment(self):
+        with tempfile.TemporaryDirectory() as d:
+            rec = copy_fixture(pathlib.Path(d))
+            run(SCRIPTS / "provenance.py", "set", "heat.loss_kw", "20", "--as-of", "2026-09-04", rec)
+            before = rec.read_text(encoding="utf-8")
+            for extra in ([], ["--hypothesis", "bigger_boiler"]):
+                code, out, err = run(SCRIPTS / "provenance.py", "add", "c.boiler_short",
+                                     "verdict=the old boiler holds", "wrong_if=heat.loss_kw > 90", *extra, rec)
+                self.assertEqual(code, 1, extra)
+                self.assertIn("c.boiler_short is a judgment - what replaces it rests on something: give "
+                              "rests_on=[...] with the new verdict, or review it", out + err)
+            self.assertEqual(rec.read_text(encoding="utf-8"), before)
+            self.assertIn("c.boiler_short:\n    rests_on:", before)
+            doc = P.load([str(rec)])
+            ids, jud, fields = P.infer(doc)
+            raw = P.with_builtins(doc, ids, jud, fields)
+            self.assertEqual(P.may_supersede("c.boiler_short", jud["c.boiler_short"]["body"],
+                                             {"verdict": "x"}, raw, ids, jud, fields),
+                             (False, "what replaces a judgment must rest on something, and this carries no rests_on"))
+
+    def test_a_hypothesis_the_base_cannot_read_by_shape_fails_check(self):
+        with tempfile.TemporaryDirectory() as d:
+            rec = copy_fixture(pathlib.Path(d))
+            # a second field with a dependency list's shape: over the base the reader cannot
+            # tell which is the role, and it does not guess
+            (pathlib.Path(d) / "PROVENANCE.d" / "odd.yaml").write_text(
+                "judgments:\n  c.odd:\n    depends: [heat.loss_kw]\n    verdict: odd\n"
+                "    wrong_if: \"heat.loss_kw > 90\"\n    seen: {heat.loss_kw: 31}\n", encoding="utf-8")
+            code, out, _ = run(SCRIPTS / "provenance.py", "check", rec)
+            self.assertEqual(code, 1, out)
+            self.assertIn("FAIL hypothesis odd cannot be read over the base: two fields fit 'deps'", out)
+            code, out, _ = run(SCRIPTS / "provenance.py", "open", rec)
+            self.assertEqual(code, 0, out)
+            self.assertIn("3 hypotheses wait - odd (unreadable over the base: two fields fit 'deps'", out)
+            code, out, err = run(SCRIPTS / "provenance.py", "pull", "heat", rec)
+            self.assertEqual(code, 0, out + err)
+            self.assertTrue(out.startswith("! hypothesis odd cannot be read over the base: two fields fit 'deps'"), out)
+            self.assertIn("proposes 31 -> 28, from glazing_redo", out)
+
+    def test_affects_walks_every_world(self):
+        with tempfile.TemporaryDirectory() as d:
+            rec = copy_fixture(pathlib.Path(d))
+            code, out, err = run(SCRIPTS / "provenance.py", "add", "c.boiler_short",
+                                 "rests_on=[heat.boiler_kw, heat.loss_kw, when.first_cold_night]",
+                                 "verdict=the old boiler cannot hold 12°C on the first cold night",
+                                 "wrong_if=heat.loss_kw > 90", "--as-of", "2026-09-04",
+                                 "--hypothesis", "c_boiler_short", rec)
+            self.assertEqual(code, 0, out + err)
+            # a dependency only the hypothesis's variant of the judgment rests on
+            code, out, _ = run(SCRIPTS / "provenance.py", "affects", "when.first_cold_night", rec)
+            self.assertEqual(code, 0, out)
+            self.assertIn("c.boiler_short (in hypothesis c_boiler_short)\n    via when.first_cold_night", out)
+            self.assertIn("1 judgments reached", out)
+            code, out, _ = run(SCRIPTS / "provenance.py", "affects", "heat.loss_kw", rec)
+            self.assertIn("c.boiler_short\n    via heat.loss_kw", out)
+            self.assertIn("c.boiler_enough (in hypothesis bigger_boiler)", out)
+            self.assertIn("c.boiler_short (in hypothesis c_boiler_short)", out)
+            self.assertIn("3 judgments reached", out)
+
+    def test_a_hypothesis_judgment_may_rest_on_a_page_count(self):
+        with tempfile.TemporaryDirectory() as d:
+            rec = copy_fixture(pathlib.Path(d))
+            code, out, err = run(SCRIPTS / "provenance.py", "add", "c.served", "rests_on=[page.unserved]",
+                                 "verdict=every intent is served", "wrong_if=page.unserved > 0",
+                                 "--as-of", "2026-09-04", "--hypothesis", "glazing_redo", rec)
+            self.assertEqual(code, 0, out + err)
+            self.assertIn("seen: {page.unserved: 0}",
+                          (pathlib.Path(d) / "PROVENANCE.d" / "glazing_redo.yaml").read_text(encoding="utf-8"))
+
+    def test_pull_shows_a_source_read_again(self):
+        with tempfile.TemporaryDirectory() as d:
+            rec = copy_fixture(pathlib.Path(d))
+            (pathlib.Path(d) / "PROVENANCE.d" / "resheet.yaml").write_text(
+                "sources:\n  doc.boiler_sheet:\n    name: \"the boiler's service sheet\"\n"
+                "    file: \"boiler/service-2026.pdf\"\n    read: \"2026-09-04\"\n", encoding="utf-8")
+            code, out, _ = run(SCRIPTS / "provenance.py", "pull", "doc.boiler_sheet", rec)
+            self.assertEqual(code, 0, out)
+            self.assertIn("doc.boiler_sheet:  (the boiler's service sheet) as of 2026-09-02\n"
+                          "    proposes instead, from resheet: (the boiler's service sheet) as of 2026-09-04\n", out)
+
+    def test_a_title_backed_conclusion_is_a_claim(self):
+        with tempfile.TemporaryDirectory() as d:
+            rec = pathlib.Path(d) / "PROVENANCE.yaml"
+            rec.write_text("meta:\n  updated: 2026-09-01\nknown:\n  x.one: {v: 1, name: one, of: \"2026-09-01\"}\n"
+                           "judgments:\n  c.one:\n    rests_on: [x.one]\n    title: \"one is small\"\n"
+                           "    wrong_if: \"x.one > 5\"\n    seen: {x.one: 1}\n", encoding="utf-8")
+            code, out, err = run(SCRIPTS / "provenance.py", "add", "c.one", "rests_on=[x.one]",
+                                 "title=one is large", "wrong_if=x.one > 9", "--as-of", "2026-09-02", rec)
+            self.assertEqual(code, 1)
+            self.assertIn("c.one is already a judgment, concluding 'one is small'", out + err)
+            self.assertIn("--hypothesis c_one", out + err)
+            for name, title, seen in (("h1", "one is small", "1"), ("h2", "one is small", "2")):
+                (pathlib.Path(d) / "PROVENANCE.d").mkdir(exist_ok=True)
+                (pathlib.Path(d) / "PROVENANCE.d" / f"{name}.yaml").write_text(
+                    f"judgments:\n  c.one:\n    rests_on: [x.one]\n    title: \"{title}\"\n"
+                    f"    wrong_if: \"x.one > 5\"\n    seen: {{x.one: {seen}}}\n", encoding="utf-8")
+            self.assertEqual(P.contested(P.load([str(rec)])), {})
+            (pathlib.Path(d) / "PROVENANCE.d" / "h2.yaml").write_text(
+                "judgments:\n  c.one:\n    rests_on: [x.one]\n    title: \"one is large\"\n"
+                "    wrong_if: \"x.one > 5\"\n    seen: {x.one: 1}\n", encoding="utf-8")
+            self.assertEqual(P.contested(P.load([str(rec)])),
+                             {"c.one": [("h1", "one is small"), ("h2", "one is large")]})
+
+    def test_an_occupied_name_is_not_reused(self):
+        doc = P.load([str(RECORD)])
+        taken = {"name": "a_b", "path": "", "head": {}, "doc": {}, "ids": {"a.b"},
+                 "raw": {"a.b": {"v": 1}}, "error": None}
+        doc.hypotheses = {"a_b": taken}
+        self.assertEqual(P._hypothesis_name(doc, "a.b", 1), "a_b")        # the same claim: its own
+        self.assertEqual(P._hypothesis_name(doc, "a.b", 2), "a_b_2")      # another claim on the id
+        self.assertEqual(P._hypothesis_name(doc, "a_b", 5), "a_b_2")      # an unrelated id: not there
+
+
 if __name__ == "__main__":
     unittest.main()
