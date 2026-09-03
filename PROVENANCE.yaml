@@ -1,5 +1,5 @@
 meta:
-  updated: 2026-09-04
+  updated: 2026-09-03
   name: kpopper
   scope: "What this plugin is for and the decisions that shaped it, kept in its own format -
           the tools eat their own cooking, and every session here opens grounded."
@@ -25,6 +25,19 @@ sources:
          that answered at 0.7 and then proposed to wait for an event - the record's three prior.*
          claims and its open questions, and the day's own claims scored against what held"
     read: "2026-09-02"
+  s.2026_09_03_arrangements:
+    asked: "Make arrangement decisions the build maintains: born and stood, falsifiers over the
+            page's counts, muted moves inside an arrangement and fired ones outside it, the
+            brief-diff classifier, and the rule that a reversal without a fired falsifier is a
+            question."
+    name: "The session that made arrangement decisions something the build holds - what it was
+           asked, and what it was given. Its reading: an arrangement is a judgment like any other,
+           its sign is a count the page takes, and the brief is held against the decisions that stand
+           rather than against its own last version"
+    of: "2026-09-03, given the page design's stability section, the record's arrangement decisions,
+         the page contract at c738341 with the fixture's two arrangements, and the reader and the
+         page as they stand"
+    read: "2026-09-03"
   s.2026_09_03_coverage:
     asked: "Render the brief's tabs, make serving an intent something a tab earns by what its
             sections pick, and compute coverage — unserved intents, unpicked prefixes, spill, drift,
