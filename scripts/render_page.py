@@ -1048,6 +1048,13 @@ def build(paths, brief_path=None):
     rec_name = named(meta) or str(brief.get("title") or "").strip()
     h1 = (f'<h1 dir="auto">{html.escape(rec_name)}</h1>' if rec_name
           else '<h1 dir="ltr">What is known here</h1>')
+    # hypotheses beside the record are counted under the heading and drawn nowhere: the page
+    # is the base, and what a hypothesis proposes is read with pull until consolidation
+    hyps = getattr(doc, "hypotheses", None) or {}
+    if hyps:
+        n, c = len(hyps), len(P.contested(doc))
+        h1 += (f'<p class="meta" dir="ltr">{n} hypothes{"is waits" if n == 1 else "es wait"} beside '
+               f'this record' + (f', {c} contested' if c else '') + '. The page draws the base.</p>')
     # what the brief declares beyond what the page draws - checked as the tabs are drawn
     contract = {"tabs": len(tabs), "bad": [], "moved": [], "stale": [], "unread": [], "coverage": []}
     # What the arrangement covers, before anything is drawn: the page's own counts have to

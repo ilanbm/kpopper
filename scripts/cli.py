@@ -10,6 +10,9 @@ straight through to provenance.py; page renders the record and can open what it 
   kpopper set     <key> <value> [--why "..."] [--as-of DATE]   change one value; the reply is the reach
   kpopper add     <id> field=value ...    a new entry or judgment, in id order, its seen filled
   kpopper review  <id | "section title">  it still holds: seen rewritten from what the record holds
+                  add --hypothesis NAME to any of the three: the write lands in
+                  PROVENANCE.d/NAME.yaml beside the record and the base is not touched - where a
+                  write contradicts the base, the refusal names this command
   kpopper page    [--out PATH] [args...]  the record as one page
                   add --open to look at it in your own browser, --tree to land there
                   add --verify to check the page instead of writing one
