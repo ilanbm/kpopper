@@ -29,6 +29,18 @@ jobs:
         with:
           python-version: ${{ matrix.python }}
 
+      - name: The pull request declares its bump
+        if: github.event_name == 'pull_request' && !startsWith(github.event.pull_request.title, 'Release ')
+        env:
+          BODY: ${{ github.event.pull_request.body }}
+        run: |
+          if printf '%s\n' "$BODY" | grep -qiE '^[[:space:]]*bump[[:space:]]*:[[:space:]]*(patch|minor|major)\b'; then
+            echo "bump declared"
+          else
+            echo "::error::Say what this change asks of the version, in the pull request body: 'Bump: patch', 'Bump: minor' or 'Bump: major' - the template carries the line."
+            exit 1
+          fi
+
       - name: Install the package the way a user gets it
         run: pip install .
 
