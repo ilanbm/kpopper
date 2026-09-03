@@ -439,7 +439,11 @@ as what it is. The kind carries its own falsifier: if judgments resting on prior
 keep reversing, the confidences carry no information and `prior.*` is demoted to a note. How many
 they are is counted rather than guessed at: `check` says how many judgments rest on `prior.*`
 claims and how many of those on a prior at 0.8 or above, and the opener carries the same line
-where a record has any.
+where a record has any; `graph.prior_reversal_rate` is the share of those high-confidence
+judgments refuted by consolidation, linked by the judgment id as the hypothesis's whole
+`claim` or a `{{judgment.id}}` reference in it (preserved as the finding's `name`), counted
+once per judgment and read as 0.0 when none qualify, with the demotion line only in a
+judgment's `wrong_if`.
 
 ## Step 6 — Changing the shape
 

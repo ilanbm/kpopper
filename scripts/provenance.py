@@ -70,6 +70,7 @@ GRAPH = {
     "graph.no_predicate": "judgments nothing evaluable would falsify",
     "graph.hypotheses":   "hypotheses waiting beside the record",
     "graph.contested":    "ids two hypotheses hold with different claims",
+    "graph.prior_reversal_rate": "share of high-confidence prior-resting judgments refuted",
 }
 PAGE = {
     "page.spill":           "flagged judgments no section of the page picked up",
@@ -724,14 +725,15 @@ def _misfiled_reopener(body, ids):
 HIGH_CONFIDENCE = 0.8
 
 
-def priors_line(ids, jud, raw):
+def priors_line(ids, jud, raw, *, with_high=False):
     """How much of the record stands on a session's own confidence: how many judgments rest on
     a prior.* claim, and how many of those on one the record holds at HIGH_CONFIDENCE or above.
-    -> the line, or '' where nothing rests on a prior and there is nothing to say. Facts, never
-    a verdict: whether too many of them have since been reversed - which is what would demote
-    the kind to a note - is read against this count, by a person."""
-    n = k = 0
-    for j in jud.values():
+    -> the line, or '' where nothing rests on a prior and there is nothing to say. With
+    with_high, also return the high-confidence judgment ids from this same pass: their count
+    is the reversal share's denominator, and their membership bounds its numerator. Facts,
+    never a verdict: a judgment draws the line that would demote the kind to a note."""
+    n, high = 0, set()
+    for name, j in jud.items():
         priors = [d for d in j["deps"] if d.startswith("prior.")]
         if not priors:
             continue
@@ -742,14 +744,13 @@ def priors_line(ids, jud, raw):
                 # number: a value too large for a float then lands where a falsifier over it
                 # would put it, instead of stopping the count with an error
                 if float(str(value_of(raw, ids, d))) >= HIGH_CONFIDENCE:
-                    k += 1
+                    high.add(name)
                     break
             except (TypeError, ValueError, OverflowError):
                 continue           # a prior the record does not hold as a number says nothing
-    if not n:
-        return ""
-    return (f"{n} judgment{'' if n == 1 else 's'} rest{'s' if n == 1 else ''} on prior.* claims, "
-            f"{k} of them on a prior at {HIGH_CONFIDENCE} or above")
+    line = (f"{n} judgment{'' if n == 1 else 's'} rest{'s' if n == 1 else ''} on prior.* claims, "
+            f"{len(high)} of them on a prior at {HIGH_CONFIDENCE} or above") if n else ""
+    return (line, high) if with_high else line
 
 
 # ── arrangements ─────────────────────────────────────────────────────────────
@@ -850,6 +851,18 @@ def counts(doc, ids, jud, fields, raw):
 
     def count(flag):
         return sum(1 for f in fl.values() if flag in f)
+    _, high = priors_line(ids, jud, raw, with_high=True)
+    refuted = set()
+    for k in held:
+        body = raw.get(k)
+        if not k.startswith("hyp.") or not isinstance(body, dict) or body.get("v") != "refuted":
+            continue
+        # Consolidation preserves the hypothesis's claim as name, then deletes its file.
+        # A bare judgment id or an explicit {{id}} reference links that claim to what it
+        # refutes; unmarked prose is not a link. Repeated findings count the judgment once.
+        claim = body.get("name")
+        if isinstance(claim, str):
+            refuted.update(high.intersection([claim.strip()] + refs_in(claim)))
     return {
         "graph.entries": len(held), "graph.judgments": len(jud), "graph.open": len(open_ids),
         "graph.flagged": sum(1 for f in fl.values() if f),
@@ -858,6 +871,7 @@ def counts(doc, ids, jud, fields, raw):
         "graph.falsified": count("falsified"), "graph.no_predicate": count("no_predicate"),
         "graph.hypotheses": len(getattr(doc, "hypotheses", None) or {}),
         "graph.contested": len(contested(doc)),
+        "graph.prior_reversal_rate": len(refuted) / len(high) if high else 0.0,
     }
 
 
