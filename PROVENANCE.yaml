@@ -631,6 +631,23 @@ judgments:
     seen: {d.metrics_derived_builtin: "graph.* and page.* are derived entries the reader
                                        computes itself - counts and shares, never stored,
                                        thresholds only inside falsifiers"}
+  d.release_is_its_own_pull_request:
+    rests_on: [d.one_source, run.design_talk]
+    verdict: "the version moves in a release pull request of its own, computed from what
+              merged since the last release; a feature pull request never touches it"
+    because: "Three worktrees claimed one version number in a day, and a merged contract sat
+              invisible to installed plugins until someone remembered the bump. A bump inside
+              feature work conflicts with every parallel branch and depends on memory. A branch
+              that only ever holds the three version files and the changelog conflicts with
+              nothing, and a push to main is the moment that knows what merged. Each pull
+              request declares the bump it asks for and the largest wins; the release itself is
+              still a person's merge."
+    blocked_on: "observational: falsified if release pull requests pile up unmerged so that
+                 installed plugins lag main for days, or if declared bumps prove wrong often
+                 enough that the release needs a floor computed from the contract itself"
+    seen: {d.one_source: "this repository is the only place the plugin is edited; every
+                          installed or hosted copy is a read-only distribution",
+           run.design_talk: "read 2026-09-02"}
   d.base_shared_forks_on_contradiction:
     rests_on: [m.multi.record_pairs_conflicting, m.multi.code_conflicts, m.multi.id_collisions,
                skill.two_shapes]
