@@ -51,6 +51,7 @@ plugin is all of that plus the method and the session hooks:
 | `scripts/provenance.py` | The reader underneath. Field names are inferred by shape, so it reads records written in any vocabulary. |
 | `scripts/render_page.py` | The record as one self-contained page, three tabs, no dependencies beyond the reader. |
 | `scripts/verify_page.js` | Browser checks for that page, in both themes. Playwright. Plugin only. |
+| `tests/` | The contract the reader and the page keep, run as `python3 -m unittest discover -s tests` against the fixture record in `tests/fixtures/page` — every field they accept, exercised once. |
 | `hooks/` | A session opener and a stop gate. The opener runs `provenance.py open` when the project keeps a record — at its root, or registered with the checkout — and is silent everywhere else; the gate bounces a session once, with the failures, if it tries to finish having left `check` worse than it found it. |
 
 ## The record
