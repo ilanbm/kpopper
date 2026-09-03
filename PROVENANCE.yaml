@@ -5,11 +5,13 @@ meta:
           the tools eat their own cooking, and every session here opens grounded."
 
 sources:
-  agent.language_session:
-    name: "The session that weighed the renderer's language - what it was given, and what it brought"
-    of: "claude-fable-5-1, 2026-09-03, given scripts/render_page.py at b47f7a0, the plugin layout,
-         pyproject.toml, and how the page's verifier and the checker each read the record"
-    ground: prior
+  s.2026_09_03_language:
+    name: "The session that weighed the renderer's language - what it was asked, and what it was given"
+    asked: "why are we using python? should we use python? for the html generation maybe ts is
+            better? and in general maybe the best language to use today with ai coding agents and
+            if aiming high and want it to be efficent maybe rust from the starT?"
+    of: "2026-09-03, given scripts/render_page.py at b47f7a0, the plugin layout, pyproject.toml,
+         and how the page's verifier and the checker each read the record"
     read: "2026-09-03"
   doc.fact_moves:
     url: "https://claude.ai/code/artifact/ca99e558-60ae-4b22-9221-e3b29d7d7e2b"
@@ -137,20 +139,20 @@ known:
     v: 0.95
     unit: confidence
     name: "Browser code kept inside a host language's strings loses highlighting, linting, types and bundling"
-    from: agent.language_session
+    from: s.2026_09_03_language
     reach: general
   prior.ts_direction:
     v: 0.7
     unit: confidence
     name: "The tool's direction is TypeScript for all of it - page, renderer, command line, checker - or none of it"
-    from: agent.language_session
+    from: s.2026_09_03_language
     reach: general
   prior.rust_unwarranted:
     v: 0.9
     unit: confidence
     name: "A compiled binary buys an install with no runtime, not speed - the work is too small for speed
            to matter, and the page stays JS either way"
-    from: agent.language_session
+    from: s.2026_09_03_language
     reach: general
   p.tree_positions_kept:
     v: 0
@@ -204,7 +206,7 @@ known:
     at: "the namespaces the four writers added that day, compared by hand"
 
 open:
-  q.agent_as_source: "an agent's prior is a source here for the first time - agent.language_session, its
+  q.agent_as_source: "an agent's prior is a source here for the first time - s.2026_09_03_language, its
                       claims as prior.* entries whose value is the confidence - so what must the record hold
                       before a judgment may rest on one: a measured local fact beside it, a gate on what
                       being wrong costs, and a reversal count that can demote the kind?"
