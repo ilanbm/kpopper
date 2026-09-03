@@ -9,9 +9,12 @@
   python3 provenance.py set     <key> <value> [--why "..."] [--as-of DATE]
   python3 provenance.py add     <id> field=value ... [--in COLLECTION]
   python3 provenance.py review  <id | "section title"> [--as-of DATE]
+  python3 provenance.py mark    <state file> [file]  the hooks' own: where a session began
+  python3 provenance.py gate    <state file> [file]  ... and what it left, said once at its end
 
-The last three change the record, and each answers with the reach: what rests on what it
-wrote, what is MOVED now, which predicate fired. `set --help`, `add --help`, `review --help`.
+The three before them change the record, and each answers with the reach: what rests on
+what it wrote, what is MOVED now, which predicate fired. `set --help`, `add --help`,
+`review --help`.
 
 Without a file argument the record is PROVENANCE.yaml here, else the path this checkout
 registered in `<git common dir>/kpopper-record` - for a project whose tree cannot hold it.
@@ -28,7 +31,7 @@ Where two fields genuinely fit the same role it refuses to guess and asks for a
 one-line `schema:` block. A checker that quietly passes over what it cannot read
 is worse than no checker, so every ambiguity is an error, never a skip.
 """
-import io, os, re, sys, glob, subprocess, datetime, textwrap, tempfile, contextlib, yaml
+import io, os, re, sys, glob, json, subprocess, datetime, textwrap, tempfile, contextlib, yaml
 from decimal import Decimal, InvalidOperation
 
 ID = re.compile(r"[A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z0-9_]+)+")
@@ -534,6 +537,20 @@ def with_builtins(doc, ids, jud, fields):
 
 
 def check(paths):
+    fail, note, moved, summary = check_lines(paths)
+    for n in note:
+        print("NOTE", n)
+    for m in moved:
+        print("MOVED", m)
+    for f in fail:
+        print("FAIL", f)
+    print("\n" + summary)
+    return 1 if fail else 0
+
+
+def check_lines(paths):
+    """What check finds -> (fail, note, moved, summary), unprinted: the gate reads the same
+    lines the command prints."""
     doc = load(paths)
     ids, jud, fields = infer(doc)
     raw = with_builtins(doc, ids, jud, fields)
@@ -593,17 +610,21 @@ def check(paths):
             if state == "moved":
                 moved.append(f"{name}: {dep} differs from its snapshot "
                              f"({short(old)} -> {short(now)}) - re-review, or refresh seen")
-    for n in note:
-        print("NOTE", n)
-    for m in moved:
-        print("MOVED", m)
-    for f in fail:
-        print("FAIL", f)
+    # Coverage, when a brief sits beside the record: which intents no tab of the page serves,
+    # and where what each of them wrote falls - facts the page counted, said here so a session
+    # that never builds the page still hears them. The page decides its own falsifiers.
+    cov = _coverage(paths)
+    if cov and "error" in cov:
+        note.append(f"the brief beside the record could not be built: {cov['error']}")
+    elif cov:
+        sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+        import render_page as R
+        note += R.coverage_lines(cov, full=False)
     held = sum(1 for k in ids if not is_builtin(k))
-    print(f"\n{len(jud)} judgments, {held} entries, {len(fail)} problems"
-          + (f", {len(moved)} moved" if moved else "")
-          + (f", {len(note)} declared" if note else ""))
-    return 1 if fail else 0
+    summary = (f"{len(jud)} judgments, {held} entries, {len(fail)} problems"
+               + (f", {len(moved)} moved" if moved else "")
+               + (f", {len(note)} declared" if note else ""))
+    return fail, note, moved, summary
 
 
 def opening(paths, budget=25, chars=None):
@@ -730,6 +751,15 @@ def opening(paths, budget=25, chars=None):
 
     footer = ("next: pull <entry|prefix> (values with sources) · affects <entry> "
              "(what a change reaches) · check")
+    # An intent no tab of the page serves is said at every open, in the one line that is
+    # already about what to do next: the newest first and how many more, never the list -
+    # the slot is for what needs a person, and check names the rest with a hint each.
+    unserved = _unserved(paths)
+    if unserved:
+        footer = (f"next: check - {unserved[0]} is served by no tab"
+                  + (f" (and {len(unserved) - 1} more)" if len(unserved) > 1 else "")
+                  + " · pull <entry|prefix> (values with sources) · affects <entry> "
+                  "(what a change reaches)")
 
     for l in head:
         print(l)
@@ -1205,16 +1235,41 @@ def _brief_beside(path):
     return b if os.path.exists(b) else None
 
 
-def _page_side(paths):
-    """page.* as the page counts them, and the record's shape, when a brief sits beside the
-    record: -> (values, shape). ({}, None) without one."""
+def _page_info(paths):
+    """What the page knows when it is built beside this record - its counts, its shape, the
+    coverage report - or None when no brief sits beside the record."""
     brief = _brief_beside(paths[0])
     if not brief:
-        return {}, None
+        return None
     sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
     import render_page as R
-    _, E, _, _, info = R.build(paths, brief)
-    return {k: E[k]["v"] for k in E if k in PAGE and "v" in E[k]}, info["shape"]
+    return R.build(paths, brief)[4]
+
+
+def _page_side(paths):
+    """page.* as the page counts them - every name, mentioned or not, since a new judgment
+    may be the first to rest on one - and the record's shape: -> (values, shape). ({}, None)
+    without a brief; a count the page could not take is left out."""
+    info = _page_info(paths)
+    if info is None:
+        return {}, None
+    return {k: v for k, v in info["page"].items() if v is not None}, info["shape"]
+
+
+def _coverage(paths):
+    """The page's coverage report, or None: without a brief, or when the brief cannot be
+    built - the reader never fails on the page's account, it says so in a line."""
+    try:
+        info = _page_info(paths)
+    except (Exception, SystemExit) as e:
+        return {"error": str(e)}
+    return info["coverage"] if info and info.get("coverage") else None
+
+
+def _unserved(paths):
+    """Intents no tab of the page serves, newest first."""
+    cov = _coverage(paths)
+    return [r["id"] for r in cov["rows"] if r["unserved"]] if cov and "rows" in cov else []
 
 
 def snapshot_value(dep, raw, ids, jud, page):
@@ -1725,8 +1780,11 @@ def _snapshot(deps, raw, ids, jud, paths, brief):
             continue
         v = snapshot_value(d, raw, ids, jud, page)
         if v is None:
-            raise Refused(f"refused - {d} has no value to snapshot: the page counts it, and no "
-                          f"brief sits beside the record")
+            raise Refused(f"refused - {d} has no value to snapshot: "
+                          + ("the page counts it, and no brief sits beside the record" if not brief
+                             else "the page could not count it"
+                             + (" - no arrangement carries born, so nothing dates what was added"
+                                if d == "page.drift" else "")))
         seen[d] = v
     return seen
 
@@ -1932,6 +1990,80 @@ def _report(paths, kind, nid, doc, ids, jud, fields, raw):
           + " - check says the rest")
 
 
+# ── the hooks' own two commands ──────────────────────────────────────────────
+# The opener marks where a session began; the stop gate holds the end against that mark.
+# What already failed, or was already unserved, when the session opened is never the
+# session's doing - so the gate reminds about what the session itself left, once.
+def mark(state_path, paths):
+    """Written at session start: how many problems check finds, which intents no tab of the
+    page serves, and the ids the record holds."""
+    doc = load(paths)
+    ids, jud, fields = infer(doc)
+    fail, _, _, _ = check_lines(paths)
+    state = {"fails": len(fail), "unserved": _unserved(paths),
+             "ids": sorted(k for k in ids if not is_builtin(k))}
+    with io.open(state_path, "w", encoding="utf-8") as f:
+        json.dump(state, f)
+    return 0
+
+
+def _marked(state_path):
+    """The state the opener wrote - or, from an opener that wrote only the count, that."""
+    text = io.open(state_path, encoding="utf-8").read().strip()
+    try:
+        state = json.loads(text)
+    except ValueError:
+        state = text
+    if not isinstance(state, dict):
+        try:
+            state = {"fails": int(str(state).strip() or 0)}
+        except ValueError:
+            state = {"fails": 0}
+    return {"fails": int(state.get("fails") or 0), "unserved": list(state.get("unserved") or []),
+            "ids": state.get("ids")}
+
+
+def gate(state_path, paths):
+    """What a session hears before it can finish, against the mark its opener left: the
+    record failing worse than it found it; an intent the session left unserved; entries it
+    wrote with no intent recorded. Printed, and 2 when there is anything - the hook bounces
+    once and yields."""
+    base = _marked(state_path)
+    fail, _, _, _ = check_lines(paths)
+    out = []
+    if len(fail) > base["fails"]:
+        out.append(f"{paths[0]} fails check with {len(fail)} problems ({base['fails']} at "
+                   f"session start).")
+        out.append("Fix the record - or declare the hole with blocked_on - before finishing:")
+        out += ["FAIL " + f for f in fail[:12]]
+    for s in _unserved(paths):
+        if s not in base["unserved"]:
+            out.append(f"{s} is served by no tab of the page - serve it in a tab whose sections "
+                       f"pick what it wrote, or leave it outside and say why")
+    if base["ids"] is not None:
+        doc = load(paths)
+        ids, jud, fields = infer(doc)
+        raw = bodies(doc)
+        was = set(base["ids"])
+        new = sorted(k for k in ids if not is_builtin(k) and k not in was)
+        intents = {k for k in ids if k not in jud and isinstance(raw.get(k), dict)
+                   and raw[k].get("asked")}
+
+        def attributed(k):
+            b = raw.get(k)
+            if isinstance(b, dict) and str(b.get("from") or "") in intents:
+                return True
+            return k in jud and bool(set(jud[k]["deps"]) & intents)
+        if new and not (set(new) & intents) and not any(attributed(k) for k in new):
+            named_ = ", ".join(new[:4]) + (f" and {len(new) - 4} more" if len(new) > 4 else "")
+            out.append(f"this session wrote {len(new)} {'entry' if len(new) == 1 else 'entries'} "
+                       f"({named_}) and recorded no intent: add s.<date>_<slug> asked=\"...\" "
+                       f"name=\"...\", and from: it on what it wrote")
+    for l in out:
+        print(l)
+    return 2 if out else 0
+
+
 HELP = {
     "set": """  set <key> <value> [--why "..."] [--as-of YYYY-MM-DD] [file]
 
@@ -2039,6 +2171,12 @@ if __name__ == "__main__":
             print(os.path.abspath(p))
             sys.exit(0)
         sys.exit(1)
+    if cmd in ("mark", "gate"):
+        # the hooks' own: the state file the opener writes, then the record
+        if not rest:
+            sys.exit(f"{cmd} needs the state file the opener writes")
+        files = [x for x in rest[1:] if x.endswith((".yaml", ".yml"))] or default_paths()
+        sys.exit((mark if cmd == "mark" else gate)(rest[0], files))
     if cmd in ("set", "add", "review"):
         sys.exit(write_command(cmd, rest))
     if cmd == "affects":

@@ -24,6 +24,7 @@
     (j.because?row('because',esc(j.because)):'')}
   var e=E[id]||{};
   return h+(e.name?'<div class="nm">'+esc(e.name)+'</div>':'')+
+   (e.asked?row('asked',esc(e.asked)):'')+
    (e.v!=null?row('value','<b>'+esc(e.v)+'</b>'):'')+
    (e.rule?row('rule',link(e.rule)):'')+
    (e.from?row('from',esc(e.from)):'')+(e.at?row('at',esc(e.at)):'')+

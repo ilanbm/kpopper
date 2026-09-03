@@ -1,5 +1,5 @@
 meta:
-  updated: 2026-09-02
+  updated: 2026-09-03
   name: Greenhouse
   scope: "Whether the old boiler can hold the greenhouse above 12°C through February -
           one session, one arrangement, every field the page reads."
@@ -11,12 +11,36 @@ sources:
            yes or no"
     of: "this session"
     read: "2026-09-02"
+  s.2026_09_03_glazing:
+    asked: "What would glazing the north wall cost, and how much of the shortfall would it close?"
+    name: "the glazing question, as this session read it: a price and a kilowatt figure, not a yes
+           or no"
+    of: "this session"
+    read: "2026-09-03"
   doc.boiler_sheet:
     name: "the boiler's service sheet"
     file: "boiler/service-2025.pdf"
     read: "2026-09-02"
 
 known:
+  glaze.north_wall_m2:
+    v: 18
+    unit: m2
+    name: "north wall, the area a glazier would cover"
+    from: s.2026_09_03_glazing
+    at: "measured on site during the session"
+  glaze.quote_eur:
+    v: 2400
+    unit: EUR
+    name: "the glazier's quote for the north wall"
+    from: s.2026_09_03_glazing
+    at: "the quote of 2026-09-03"
+  glaze.saving_kw:
+    v: 4
+    unit: kW
+    name: "loss the glazing would stop on the coldest night"
+    from: s.2026_09_03_glazing
+    at: "the glazier's U-value against the wall's"
   heat.boiler_kw:
     v: 24
     unit: kW
@@ -48,6 +72,16 @@ judgments:
     wrong_if: "heat.loss_kw <= heat.boiler_kw"
     seen: {heat.boiler_kw: 24, heat.loss_kw: 31,
            heat.deficit_kw: "heat.loss_kw - heat.boiler_kw"}
+  v.glazing_tab:
+    rests_on: [s.2026_09_03_glazing, page.unserved]
+    verdict: "a second tab, for the day the quote is read"
+    because: "The glazing question is asked on a different day from the February night, so it gets
+              its own occasion; the two merge the day a judgment on one tab rests on the other's
+              numbers."
+    wrong_if: "page.unserved > 0"
+    born: "2026-09-03"
+    stood: 0
+    seen: {s.2026_09_03_glazing: "read 2026-09-03", page.unserved: 0}
   v.heating_tab:
     rests_on: [s.2026_09_02_heating, graph.flagged, page.spill]
     verdict: "one tab, for the night the greenhouse is decided on"
