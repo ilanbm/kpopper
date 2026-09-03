@@ -74,7 +74,24 @@ if (!CHROME) { console.log('no Chrome/Chromium found - set CHROME to a browser b
       await p.mouse.move(4, 4);
       chk(`${T} and closes on leaving`, await gone(p, '.pop'));
 
-      const j = p.locator('.card [data-id]').first();
+      // Cards need not be on the tab you land on - a brief may give the decisions a tab of
+      // their own. Find the panel that has one, show it, check there, and come back: an
+      // unscoped locator finds a card inside a hidden panel and then waits forever to
+      // scroll to it, which reads as a hang rather than as a page with several tabs.
+      const landed = await p.locator('.tabs button[aria-selected=true]').getAttribute('data-tab')
+                            .catch(() => null);
+      let j = p.locator('section:not([hidden]) .card [data-id]').first();
+      if (!(await j.count())) {
+        const key = await p.evaluate(() => {
+          const s = [...document.querySelectorAll('section[id^=panel-]')]
+                    .find(x => x.querySelector('.card [data-id]'));
+          return s ? s.id.slice('panel-'.length) : null;
+        });
+        if (key) {
+          await p.locator(`.tabs button[data-tab=${key}]`).click();
+          j = p.locator('section:not([hidden]) .card [data-id]').first();
+        }
+      }
       if (await j.count()) {
         await j.scrollIntoViewIfNeeded(); await j.click();
         chk(`${T} a judgment card opens`, await seen(p, '.pop'));
@@ -90,6 +107,7 @@ if (!CHROME) { console.log('no Chrome/Chromium found - set CHROME to a browser b
           chk(`${T} back returns to the judgment`, /rests on/i.test(await txt(p)));
         }
       }
+      if (landed) { await p.locator(`.tabs button[data-tab=${landed}]`).click(); }
       const hasNow = await p.locator('.tabs button[data-tab=now]').count() > 0;
       if (hasNow) {
         chk(`${T} the arrangement is the tab you land on`,

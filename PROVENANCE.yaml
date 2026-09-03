@@ -1413,3 +1413,29 @@ judgments:
                           person; only a predicate that holds fails the build"
       d.page_reads_only: "the page is a reading surface - no write path, nothing a hand does to it
                           is kept; a trial value that persists nothing is a way of reading the reach"
+  v.three_occasions:
+    rests_on: [s.2026_09_01_consolidation, s.2026_09_02_priors, s.2026_09_03_coverage,
+               s.2026_09_03_hypotheses, s.2026_09_03_language, s.2026_09_03_written_layer,
+               page.unserved]
+    verdict: "this record is read on three occasions, so it has three tabs: what is still open,
+              what already holds, and the ground under it"
+    because: "One arrangement served this record from the day it had nineteen judgments to the day
+              it had fifty-six, and it was never rewritten because nothing made it wrong - only its
+              shape line moved. It was also written before tabs, occasions and coverage existed
+              here, so the record that built them was the one record not arranged by them: four
+              sessions had recorded what they were for and no tab answered any of them, and seven
+              prefixes, every prior and every measured run among them, were picked by nothing. The
+              split is by when a reader opens the page, not by what the ids are called - picking by
+              subject is not available anyway, since every decision here is a flat d. and a prefix
+              selector only matches on a namespace boundary."
+    wrong_if: "page.unserved > 0"
+    born: "2026-09-04"
+    stood: 0
+    seen:
+      s.2026_09_01_consolidation: "read 2026-09-03"
+      s.2026_09_02_priors: "read 2026-09-02"
+      s.2026_09_03_coverage: "read 2026-09-03"
+      s.2026_09_03_hypotheses: "read 2026-09-03"
+      s.2026_09_03_language: "read 2026-09-03"
+      s.2026_09_03_written_layer: "read 2026-09-03"
+      page.unserved: 0
