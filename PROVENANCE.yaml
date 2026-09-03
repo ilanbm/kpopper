@@ -106,6 +106,14 @@ sources:
          then re-measured with seen left as it was, then seen refreshed by hand"
     read: "2026-09-03"
 
+  run.records_read_both_ways:
+    name: "Four records written before the reader knew reopened_by, read by the reader before and
+           after it learned the field - check, open, pull, affects, verify, and the page with its
+           style and script stripped"
+    of: "this record as main held it, the page fixture, and two live records outside this
+         repository, 2026-09-03"
+    read: "2026-09-03"
+
 known:
   m.blocked_on_reopeners:
     v: 37
@@ -166,6 +174,11 @@ known:
     from: "skills/kpopper/SKILL.md"
     at: "Step 1"
     name: "The cost of a second copy"
+  m.older_records_changed:
+    v: 0
+    name: "Records written before the field whose reading changed once the reader learned it"
+    from: run.records_read_both_ways
+    at: "of 4 - every surface identical, byte for byte"
   m.open_whole:
     v: 39777
     name: "Reading a live record whole, characters"
@@ -600,7 +613,8 @@ judgments:
                  changed from the page; none has appeared"
     seen: {doc.fact_moves: "read 2026-09-01"}
   d.reopened_by_is_not_blocked_on:
-    rests_on: [prior.field_name_reads_as_gate, m.blocked_on_reopeners, d.declared_hole_is_a_note]
+    rests_on: [prior.field_name_reads_as_gate, m.blocked_on_reopeners, m.older_records_changed,
+               d.declared_hole_is_a_note]
     verdict: "three fields, three meanings: wrong_if is a predicate the reader evaluates, blocked_on
               says the predicate cannot be evaluated and why, reopened_by is the prose sign that
               re-opens a judgment decided on a prior or on taste - additive, so every record written
@@ -613,13 +627,17 @@ judgments:
               meaning gets a name beside it rather than a rename. Nothing is migrated: owners re-sort
               their judgments when they next touch them, and a judgment with neither field still
               fails the build. At 0.7 this sits in the cheap row below the line, so it is tried: a
-              field the reader accepts is an hour to take out."
+              field the reader accepts is an hour to take out. Additive is measured, not
+              promised: {{m.older_records_changed}} of 4 records written before the field read
+              differently once the reader learned it."
+    wrong_if: "m.older_records_changed > 0"
     reopened_by: "owners still filing re-openers under blocked_on once the field exists, or
                   judgments carrying reopened_by turning out, when re-read, to have been waiting on
                   an input after all"
     seen:
       prior.field_name_reads_as_gate: 0.7
       m.blocked_on_reopeners: 37
+      m.older_records_changed: 0
       d.declared_hole_is_a_note: "check fails only an undeclared gap; a hole declared with
                                   blocked_on is a note"
   d.review_names_what_it_reads:
