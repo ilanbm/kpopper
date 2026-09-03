@@ -35,7 +35,17 @@ tabs:
                for that night."
         reviewed: "2026-09-02"
         seen: {when.first_cold_night: "2027-02-01"}
-    shape: {entries: 7, judgments: 2, flagged: 0, blocked: 0}
+    shape: {entries: 11, judgments: 3, flagged: 0, blocked: 0}
+  - title: "The glazing quote"
+    occasion: "opened when the glazier's quote comes in, to set it against the shortfall"
+    serves: [s.2026_09_03_glazing]
+    sections:
+      - title: "What the quote buys"
+        why: "the price, and the kilowatts it would keep in - both read against the shortfall on
+              the first tab"
+        pick: glaze.
+        as: table
+    shape: {entries: 11, judgments: 3, flagged: 0, blocked: 0}
 groups:
   threads:
     Heating: [heat., c.boiler_short]

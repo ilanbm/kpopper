@@ -110,27 +110,177 @@ def same_value(old, now):
         return False
 
 
-def effective(brief):
-    """The brief as the page reads it today. A brief written as `tabs:` draws its first tab;
-    the others are declared and counted, and `--verify` says how many wait. What a tab
-    carries that the page does not yet draw - `occasion`, `serves`, a section's `text` with
-    its `reviewed`/`seen` - is kept and checked all the same."""
+def tabs_of(brief):
+    """The tabs the page draws, in order. A brief written as `tabs:` draws every one of them
+    under its own name, each a reading occasion that `serves` a set of intents; a brief that
+    is bare `sections:` is one tab, called Now, aimed at its `intent`. Each tab carries what
+    the drawing needs and the key its panel is drawn under - `now` for the first, so a link
+    to it keeps working."""
     if not isinstance(brief, dict):
-        return {}
-    if not brief.get("tabs") or brief.get("sections"):
-        return brief
-    tabs = [t for t in brief["tabs"] if isinstance(t, dict)]
-    if not tabs:
-        return brief
-    out, first = dict(brief), tabs[0]
-    out["sections"] = list(first.get("sections") or [])
-    if not out.get("intent") and (first.get("occasion") or first.get("title")):
-        out["intent"] = first.get("occasion") or first.get("title")
-    if out.get("shape") is None and first.get("shape") is not None:
-        out["shape"] = first["shape"]
-    out["_first_tab_drawn"] = True
-    if first.get("title"):
-        out["_tab_title"] = str(first["title"])
+        return []
+    out = []
+    secs = [s for s in (brief.get("sections") or []) if isinstance(s, dict)]
+    if secs or not brief.get("tabs"):
+        out.append({"key": "now", "title": "", "occasion": "", "serves": [], "bare": True,
+                    "sections": secs, "shape": brief.get("shape"), "intent": brief.get("intent")})
+    for t in (brief.get("tabs") or []):
+        if not isinstance(t, dict):
+            continue
+        out.append({"key": "now" if not out else f"now{len(out) + 1}",
+                    "title": str(t.get("title") or ""), "occasion": str(t.get("occasion") or ""),
+                    "serves": [str(s) for s in (t.get("serves") or [])], "bare": False,
+                    "sections": [s for s in (t.get("sections") or []) if isinstance(s, dict)],
+                    "shape": t.get("shape"), "intent": None})
+    return out
+
+
+# ── intents, and whether the page still answers them ─────────────────────────
+# An intent is a session source: the one entry shape that carries what was asked. What a
+# session recorded comes `from:` it, or rests on it. Coverage holds the page against those
+# facts and is deliberately dumb - counts and shares, printed, never acted on. Whether two
+# intents are one world is a session's judgment, never the mechanism's.
+def intent_date(k, body):
+    """When a session was read: its `read` or `of` date, else the date its id carries."""
+    for f in ("read", "of"):
+        d = as_date(body.get(f)) if body.get(f) is not None else None
+        if d:
+            return d
+    m = re.search(r"(\d{4})_(\d{2})_(\d{2})", k)
+    if m:
+        try:
+            return datetime.date(int(m.group(1)), int(m.group(2)), int(m.group(3)))
+        except ValueError:
+            return None
+    return None
+
+
+def intents_of(ids, jud, raw):
+    """Every session source, newest first -> [(id, body, date)]."""
+    out = []
+    for k in ids:
+        b = raw.get(k)
+        if k not in jud and isinstance(b, dict) and b.get("asked"):
+            out.append((k, b, intent_date(k, b)))
+    return sorted(out, key=lambda t: (t[2] or datetime.date.min, t[0]), reverse=True)
+
+
+def recorded_by(s, ids, jud, raw):
+    """What a session wrote: every entry that comes `from:` it, and every judgment that rests
+    on it - the two ways the record attributes a thing to the session that produced it."""
+    out = set()
+    for k in ids:
+        b = raw.get(k)
+        if isinstance(b, dict) and str(b.get("from") or "") == s:
+            out.add(k)
+        elif k in jud and s in jud[k]["deps"]:
+            out.add(k)
+    return out
+
+
+def born_of(jud):
+    """The newest `born` an arrangement judgment carries - the last day the page as a whole
+    was decided - or None when none carries one."""
+    dates = [as_date(j["body"].get("born")) for j in jud.values() if j["body"].get("born")]
+    dates = [d for d in dates if d]
+    return max(dates) if dates else None
+
+
+def coverage(ids, jud, raw, tabs, picks, born):
+    """The page held against what its sessions were for. `picks[key]` is what each tab's
+    sections pick, taken before anything is drawn. -> {rows, tabs, unpicked_prefixes, empty,
+    born, page} where every number is a fact and none is a verdict."""
+    picked_all = set().union(*picks.values()) if picks else set()
+    rows = []
+    for k, b, d in intents_of(ids, jud, raw):
+        rec = recorded_by(k, ids, jud, raw)
+        claimed = [t for t in tabs if k in t["serves"]]
+        earned = [t for t in claimed if rec & picks.get(t["key"], set())]
+        prefixes = {}
+        for x in sorted(rec):
+            p = x.split(".")[0] if "." in x else x
+            prefixes[p] = prefixes.get(p, 0) + 1
+        rows.append({"id": k, "asked": str(b.get("asked")), "date": d, "recorded": sorted(rec),
+                     "picked": sorted(rec & picked_all), "unpicked": sorted(rec - picked_all),
+                     "share": (round(len(rec & picked_all) / len(rec), 2) if rec else None),
+                     "claimed": [t["title"] or "Now" for t in claimed],
+                     "served": [t["title"] or "Now" for t in earned],
+                     "unearned": [t["title"] or "Now" for t in claimed if t not in earned],
+                     "empty": not rec, "unserved": bool(rec) and not earned,
+                     "prefixes": prefixes,
+                     "inside": [(t["title"] or "Now", len(rec & picks.get(t["key"], set())), len(rec))
+                                for t in tabs]})
+    tab_rows = []
+    for t in tabs:
+        rec = set()
+        for r in rows:
+            if r["id"] in t["serves"]:
+                rec |= set(r["recorded"])
+        got = rec & picks.get(t["key"], set())
+        tab_rows.append({"title": t["title"] or "Now", "serves": list(t["serves"]),
+                         "recorded": len(rec), "picked": len(got),
+                         "share": (round(len(got) / len(rec), 2) if rec else None)})
+    groups = {}
+    for k in ids:
+        if P.is_builtin(k):
+            continue
+        groups.setdefault(k.split(".")[0] if "." in k else k, []).append(k)
+    unpicked_prefixes = sorted(g for g, ks in groups.items() if not any(k in picked_all for k in ks))
+    # the newest sessions in a row no tab serves, by day - a day is the finest clock the
+    # record keeps, so same-day sessions count together, and a day on which any intent is
+    # served ends the run
+    days = []
+    for r in rows:
+        if r["empty"]:
+            continue
+        if days and days[-1][0] == r["date"]:
+            days[-1][1].append(r)
+        else:
+            days.append((r["date"], [r]))
+    streak = 0
+    for _, rs in days:
+        if any(not r["unserved"] for r in rs):
+            break
+        streak += len(rs)
+    drift = None
+    if born:
+        added = set()
+        for r in rows:
+            if r["date"] and r["date"] >= born:
+                added |= set(r["recorded"])
+        drift = round(len(added - picked_all) / len(added), 2) if added else 0.0
+    return {"rows": rows, "tabs": tab_rows, "unpicked_prefixes": unpicked_prefixes,
+            "empty": [r["id"] for r in rows if r["empty"]], "born": born,
+            "page": {"page.unserved": sum(1 for r in rows if r["unserved"]),
+                     "page.recent_unserved": streak, "page.drift": drift,
+                     "page.covered": len(picked_all)}}
+
+
+def coverage_lines(cov, full=True):
+    """The coverage report as lines: the counts, each tab against what it serves, every
+    intent no tab serves with one hint beside it, the prefixes nothing picks. Without
+    `full`, only the intents - what `check` and the gate say."""
+    out, p = [], cov["page"]
+    if full:
+        drift = "-" if p["page.drift"] is None else f"{p['page.drift']} since {cov['born']}"
+        out.append(f"coverage: {p['page.covered']} covered · spill {p.get('page.spill', '-')} · "
+                   f"{p['page.unserved']} intents no tab serves · {p['page.recent_unserved']} "
+                   f"recent in a row · drift {drift}")
+        for t in cov["tabs"]:
+            if not t["serves"]:
+                continue
+            out.append(f"tab '{t['title']}' serves {', '.join(t['serves'])}: picks {t['picked']} "
+                       f"of {t['recorded']} they recorded")
+    for r in cov["rows"]:
+        if not r["unserved"]:
+            continue
+        out.append(f"{r['id']} is served by no tab - asked: {P.short(r['asked'], 90)}")
+        touched = ", ".join(f"{g}. ({n})" for g, n in sorted(r["prefixes"].items()))
+        inside = "; ".join(f"{n} of {m} inside '{t}'" for t, n, m in r["inside"]) or "no tab yet"
+        out.append(f"  hint: it wrote {touched} - {inside}")
+    for k in cov["empty"]:
+        out.append(f"{k} recorded nothing, so no tab can serve it and none needs to")
+    if full and cov["unpicked_prefixes"]:
+        out.append("no section picks: " + ", ".join(cov["unpicked_prefixes"]))
     return out
 
 
@@ -488,9 +638,11 @@ def build(paths, brief_path=None):
     raw0.update(built)
     flags = flags_of(ids, jud, fields, raw0)
     shape = shape_of(ids, jud, flags)
-    brief = {}
+    brief, tabs = {}, []
     if brief_path and os.path.exists(brief_path):
-        brief = effective(yaml.safe_load(io.open(brief_path, encoding="utf-8").read()) or {})
+        brief = yaml.safe_load(io.open(brief_path, encoding="utf-8").read()) or {}
+        brief = brief if isinstance(brief, dict) else {}
+        tabs = tabs_of(brief)
 
     prefixes = {}
     for k in sorted(ids):
@@ -518,7 +670,8 @@ def build(paths, brief_path=None):
         if k in jud:
             continue
         b = raw.get(k, {})
-        E[k] = {kk: b.get(kk) for kk in ("v", "rule", "from", "at", "of", "read", "quoted", "url", "file")
+        E[k] = {kk: b.get(kk) for kk in ("v", "rule", "from", "at", "of", "read", "quoted", "url",
+                                          "file", "asked")
                 if b.get(kk) is not None}
         if b.get("quoted") and "v" not in E[k]:
             E[k]["v"] = b["quoted"]
@@ -584,12 +737,16 @@ def build(paths, brief_path=None):
     # The record's own words, references as written, are what the cards draw from; the
     # payload carries them resolved, so a hover reads the same sentence a card shows.
     RAW = {name: dict(J[name]) for name in J}
-    for name in J:
-        for f in ("verdict", "because", "blocked"):
-            J[name][f] = P.resolve_refs(J[name][f], raw0, ids, jud, lbl)
-    for k in E:
-        if "note" in E[k]:
-            E[k]["note"] = P.resolve_refs(E[k]["note"], raw0, ids, jud, lbl)
+
+    def resolve_payload():
+        """Run once the page has counted, so a reference to a page count reads the number
+        on the hover as it does on the card."""
+        for name in J:
+            for f in ("verdict", "because", "blocked"):
+                J[name][f] = P.resolve_refs(RAW[name][f], raw0, ids, jud, lbl)
+        for k in E:
+            if "note" in E[k]:
+                E[k]["note"] = P.resolve_refs(E[k]["note"], raw0, ids, jud, lbl)
 
     def refs(text):
         """Link every entry id the text literally names. No inference: the id is there."""
@@ -759,11 +916,17 @@ def build(paths, brief_path=None):
         return "".join(o) + "</div>"
 
     DERIVED = '<span class="derived">worked out</span>'
+    UNCOUNTED = '<span class="derived">not counted yet</span>'
+
+    def blank(k):
+        """What stands where a value would: a rule's entry was worked out; a page count the
+        build could not take - nothing dates what was added - is said so, never left empty."""
+        return UNCOUNTED if k in P.PAGE else DERIVED
 
     def r_table(keys, raw_keys=False):
         rows = []
         for k in keys:
-            cell = shown(k, True) if has_value(k) else DERIVED
+            cell = shown(k, True) if has_value(k) else blank(k)
             head = fx(k) if raw_keys else fx(k, lbl(k))
             cls = "k" if raw_keys else "kl"
             rows.append(f'<tr><td class="{cls}" dir="auto">{head}</td>'
@@ -806,7 +969,7 @@ def build(paths, brief_path=None):
                  f'<span class="kvv">{shown(k, True)}</span></div>'
                  if has_value(k) else
                  f'<div class="kv"><span class="kl">{fx(k, lbl(k))}</span>'
-                 f'<span class="kvv">{DERIVED}</span></div>')
+                 f'<span class="kvv">{blank(k)}</span></div>')
                 for k in ks) + "</div>")
         return "".join(o) + "</div>"
 
@@ -816,7 +979,7 @@ def build(paths, brief_path=None):
             f'<div class="cap" dir="auto">{kicker(k, {g for x in keys for g in groups_of(x)})}'
             f'{html.escape(lbl(k))}</div>{note(k)}</div>' for k in keys) + "</div>"
 
-    page_counts = {k: E[k]["v"] for k in E if k in P.PAGE and "v" in E[k]}
+    page_counts = {}          # filled once the page has counted, before anything is drawn
 
     def moved_in(sec):
         """What the section's text saw that the record no longer holds: {ref: (was, now)}.
@@ -869,103 +1032,164 @@ def build(paths, brief_path=None):
     JUD_R = {"cards": r_cards, "alerts": r_alerts}
     cards = r_cards
 
-    # ── the session's tab ───────────────────────────────────────
-    now_html, covered, empty_sections, misfit = [], set(), [], []
+    # ── the session's tabs ───────────────────────────────────────
     # the record's own name heads the page; a record without one borrows the brief's
     # title, which is presentation and so lives in the brief
     rec_name = named(meta) or str(brief.get("title") or "").strip()
     h1 = (f'<h1 dir="auto">{html.escape(rec_name)}</h1>' if rec_name
           else '<h1 dir="ltr">What is known here</h1>')
+    # what the brief declares beyond what the page draws - checked as the tabs are drawn
+    contract = {"tabs": len(tabs), "bad": [], "moved": [], "stale": [], "unread": [], "coverage": []}
+    # What the arrangement covers, before anything is drawn: the page's own counts have to
+    # exist before what rests on them is decided. So every tab's picks are resolved once
+    # here, the counts taken, the flags and the shape decided again - and only then is
+    # anything drawn. Spill is what fell through before the arrangement's own falsifiers
+    # were decided; the other counts hold the page against what its sessions were for.
+    picks = {}
+    for t in tabs:
+        got = set()
+        for sec in t["sections"]:
+            p = sec.get("pick")
+            for x in ([p] if isinstance(p, str) else list(p or [])):
+                got |= resolve(x, ids, jud, flags)
+            got |= {r for r in P.refs_in(sec.get("text")) if r in E or r in J}
+        picks[t["key"]] = got
+    pre = set().union(*picks.values()) if picks else set()
+    cov = None
     if brief:
-        # What the arrangement covers, before anything is drawn: the page's own count has to
-        # exist before what rests on it is decided. So the picks are resolved once here, the
-        # count set, the flags and the shape decided again - and only then is anything drawn.
-        # The count is what fell through before the arrangement's own falsifiers were decided.
-        pre = set()
-        for sec in brief.get("sections") or []:
-            if isinstance(sec, dict):
-                p = sec.get("pick")
-                for x in ([p] if isinstance(p, str) else list(p or [])):
-                    pre |= resolve(x, ids, jud, flags)
-                pre |= {r for r in P.refs_in(sec.get("text")) if r in E or r in J}
-        if "page.spill" in E:
-            n = sum(1 for k, f in flags.items() if f and k not in pre)
-            E["page.spill"]["v"] = n
-            raw0["page.spill"]["v"] = n
-            flags = flags_of(ids, jud, fields, raw0)
-            shape = shape_of(ids, jud, flags)
-        now_html.append(h1)
-        if brief.get("intent"):
-            # the page is named for the record; the intent is the arrangement's aim,
-            # not a title - it is another task on the way, and it reads like one.
-            now_html.append('<p class="purpose" dir="auto">Everything on this tab was picked '
-                            f'for one purpose — <b dir="auto">{html.escape(str(brief["intent"]))}</b></p>'
-                            + '<p class="sub" dir="ltr">'
-                            + f'The Record tab has all {len(ids)} entries and judgments, '
-                            f'arranged by nothing.</p>')
-        was = brief.get("shape") or {}
+        cov = coverage(ids, jud, raw0, tabs, picks, born_of(jud))
+        cov["page"]["page.spill"] = sum(1 for k, f in flags.items() if f and k not in pre)
+        for k, v in cov["page"].items():
+            if k in E and v is not None:
+                E[k]["v"] = v
+                raw0[k]["v"] = v
+        page_counts.update({k: v for k, v in cov["page"].items() if v is not None})
+        flags = flags_of(ids, jud, fields, raw0)
+        shape = shape_of(ids, jud, flags)
+    resolve_payload()
+
+    def where_of(t, title):
+        return f"'{title}'" if t["bare"] else f"'{title}' (tab '{t['title'] or '?'}')"
+
+    def asked_of(s):
+        b = raw.get(s)
+        return str(b.get("asked")) if isinstance(b, dict) and b.get("asked") else lbl(s)
+
+    panels, counts, covered, empty_sections, misfit = {}, {}, set(), [], []
+    for t in tabs:
+        o, got_tab = [h1], set()
+        if t["bare"]:
+            if t["intent"]:
+                # the page is named for the record; the intent is the arrangement's aim,
+                # not a title - it is another task on the way, and it reads like one.
+                o.append('<p class="purpose" dir="auto">Everything on this tab was picked '
+                         f'for one purpose — <b dir="auto">{html.escape(str(t["intent"]))}</b></p>'
+                         + '<p class="sub" dir="ltr">'
+                         + f'The Record tab has all {len(ids)} entries and judgments, '
+                         f'arranged by nothing.</p>')
+        else:
+            # a tab is a reading occasion: when the reader opens it and for what - and the
+            # intents it serves, each in the requester's own words, one hover from its source
+            o.append('<p class="purpose" dir="auto">This tab is for one occasion &mdash; '
+                     f'<b dir="auto">{html.escape(t["occasion"] or t["title"])}</b></p>')
+            if t["serves"]:
+                o.append('<p class="sub" dir="auto">It serves: '
+                         + " &middot; ".join(fx(s, asked_of(s)) for s in t["serves"]) + "</p>")
+            o.append(f'<p class="sub" dir="ltr">The Record tab has all {len(ids)} entries and '
+                     'judgments, arranged by nothing.</p>')
+        was = t["shape"] or {}
         if not was:
-            now_html.append('<div class="banner">This arrangement records no shape, so nothing '
-                            'can tell whether it went stale. Add a <code>shape:</code> block '
-                            '(printed on stderr when this page was generated).</div>')
+            o.append('<div class="banner">This arrangement records no shape, so nothing '
+                     'can tell whether it went stale. Add a <code>shape:</code> block '
+                     '(printed on stderr when this page was generated).</div>')
         else:
             moved = [f"{k}: {was[k]} &rarr; {shape[k]}" for k in shape if k in was and was[k] != shape[k]]
             if moved:
-                now_html.append('<div class="banner" dir="auto">The record has changed shape since '
-                                'this arrangement was written &mdash; ' + "; ".join(moved) +
-                                '. The sections below still fill themselves, but the sections '
-                                'themselves may no longer be the right ones.</div>')
-        for sec in brief.get("sections") or []:
-            picks = sec.get("pick")
-            picks = [picks] if isinstance(picks, str) else list(picks or [])
+                o.append('<div class="banner" dir="auto">The record has changed shape since '
+                         'this arrangement was written &mdash; ' + "; ".join(moved) +
+                         '. The sections below still fill themselves, but the sections '
+                         'themselves may no longer be the right ones.</div>')
+                contract["stale"].append((f"tab '{t['title'] or '?'}'" if not t["bare"] else "the brief")
+                                         + " recorded a different shape: "
+                                         + "; ".join(f"{k}: {was[k]} -> {shape[k]}" for k in shape
+                                                     if k in was and was[k] != shape[k]))
+        for sec in t["sections"]:
+            picked = sec.get("pick")
+            picked = [picked] if isinstance(picked, str) else list(picked or [])
             got = set()
-            for x in picks:
+            for x in picked:
                 got |= resolve(x, ids, jud, flags)
             text = str(sec.get("text") or "")
             # a section is text, picks, or both: what the text places counts as picked up
-            covered |= got | {r for r in P.refs_in(text) if r in E or r in J}
+            got_tab |= got | {r for r in P.refs_in(text) if r in E or r in J}
             jn = sorted(x for x in got if x in jud)
             en = sorted(x for x in got if x not in jud)
-            title = str(sec.get("title") or ",".join(picks))
+            title = str(sec.get("title") or ",".join(picked))
             kind = str(sec.get("as") or "").strip()
             by = str(sec.get("by") or "")
             reading_by[0] = by if (by in schemes or by == "prefix" or carried(by)) else default_scheme
             wrong = fits(kind, sorted(got), jud, E, groups_of) if kind and got else None
             if wrong:
-                misfit.append((title, wrong))
+                misfit.append((where_of(t, title), wrong))
                 kind = ""
-            if (picks and not got) or not (picks or text):
-                empty_sections.append(title)
-            now_html.append(f'<h2 dir="auto">{html.escape(title)}'
-                            + (f' <span class="n">{len(got)}</span>' if picks else "") + "</h2>")
+            if (picked and not got) or not (picked or text):
+                empty_sections.append(where_of(t, title))
+            o.append(f'<h2 dir="auto">{html.escape(title)}'
+                     + (f' <span class="n">{len(got)}</span>' if picked else "") + "</h2>")
             if sec.get("why"):
-                now_html.append(f'<div class="why" dir="auto">{html.escape(str(sec["why"]))}</div>')
+                o.append(f'<div class="why" dir="auto">{html.escape(str(sec["why"]))}</div>')
             if text:
-                now_html.append(r_text(sec)[0])
+                o.append(r_text(sec)[0])
             if wrong:
-                now_html.append(f'<div class="bad">{html.escape(wrong)} &mdash; fell back to the '
-                                f'default shape</div>')
-            if picks and not got:
-                now_html.append('<div class="why">Nothing in the record matches this section. '
-                                'It is about something the record no longer holds.</div>')
+                o.append(f'<div class="bad">{html.escape(wrong)} &mdash; fell back to the '
+                         f'default shape</div>')
+            if picked and not got:
+                o.append('<div class="why">Nothing in the record matches this section. '
+                         'It is about something the record no longer holds.</div>')
             if jn:
-                now_html.append((JUD_R.get(kind) or r_cards)(jn))
+                o.append((JUD_R.get(kind) or r_cards)(jn))
             if en:
-                now_html.append((ENTRY_R.get(kind) or r_table)(en))
-        # It may order. It may not drop. This section is not optional and the brief
-        # cannot switch it off: an arrangement that hides what it did not anticipate
-        # is worth less than no arrangement.
-        reading_by[0] = default_scheme
-        spill = sorted(k for k, f in flags.items() if f and k not in covered)
+                o.append((ENTRY_R.get(kind) or r_table)(en))
+        covered |= got_tab
+        panels[t["key"]], counts[t["key"]] = o, len(got_tab)
+    # It may order. It may not drop. This section is not optional and the brief cannot
+    # switch it off: an arrangement that hides what it did not anticipate is worth less
+    # than no arrangement. Flagged judgments nothing picked up, and what a session wrote
+    # for an intent no tab serves - counted once for the page, drawn on every tab, since a
+    # reader opens a tab and not the page.
+    reading_by[0] = default_scheme
+    spill = sorted(k for k, f in flags.items() if f and k not in covered)
+    # each id once: a judgment both flagged and written for an unserved intent is the alert,
+    # and what two unserved intents share is drawn under the newer
+    loose, drawn = [], set(spill)
+    for r in (cov["rows"] if cov else []):
+        ks = [k for k in r["recorded"] if k not in covered and k not in drawn] if r["unserved"] else []
+        if ks:
+            loose.append((r, ks))
+            drawn |= set(ks)
+    if spill or loose:
+        n = len(drawn)
+        tail = [f'<h2 class="spill" dir="ltr">Not covered by this arrangement '
+                f'<span class="n">{n}</span></h2>'
+                '<div class="why">' + ("Flagged, or written for an intent no tab serves, and no "
+                                       "section above picked it up. " if loose else
+                                       "Flagged, and no section above picked it up. ")
+                + 'This section is written by the page, not by the brief.</div>']
         if spill:
-            now_html.append(f'<h2 class="spill" dir="ltr">Not covered by this arrangement '
-                            f'<span class="n">{len(spill)}</span></h2>'
-                            '<div class="why">Flagged, and no section above picked it up. '
-                            'This section is written by the page, not by the brief.</div>')
-            now_html.append(r_alerts(spill))
+            tail.append(r_alerts(spill))
+        for r, ks in loose:
+            tail.append(f'<div class="why" dir="auto">Written for <span class="fx" '
+                        f'data-id="{html.escape(r["id"])}">{html.escape(r["asked"])}</span>, '
+                        f'which no tab serves.</div>')
+            jn = [k for k in ks if k in jud]
+            en = [k for k in ks if k not in jud]
+            if jn:
+                tail.append(r_cards(jn))
+            if en:
+                tail.append(r_table(en))
+        for key in panels:
+            panels[key] = panels[key] + tail
 
-    # what the brief declares beyond what this page draws - checked now, drawn later
-    contract = {"tabs": 0, "bad": [], "moved": [], "stale": [], "unread": []}
     if brief:
         # every grouping scheme must group something, and a section that reads by a scheme
         # must name one the brief declares - or one the record carries by its own shape
@@ -975,10 +1199,7 @@ def build(paths, brief_path=None):
                     contract["stale"].append(f"group '{gname}'"
                                              + (f" (scheme '{sname}')" if len(schemes) > 1 else "")
                                              + " picks nothing")
-        all_secs = [s for s in (brief.get("sections") or []) if isinstance(s, dict)]
-        for t in (brief.get("tabs") or []):
-            if isinstance(t, dict):
-                all_secs += [s for s in (t.get("sections") or []) if isinstance(s, dict)]
+        all_secs = [s for t in tabs for s in t["sections"]]
         for sec in all_secs:
             by = sec.get("by")
             if by and str(by) not in schemes and str(by) != "prefix" and not carried(str(by)):
@@ -986,45 +1207,23 @@ def build(paths, brief_path=None):
                                        f"which is not a scheme the brief declares"
                                        + (f" (declared: {', '.join(schemes)})" if schemes else "")
                                        + " nor a field an entry carries")
-        tabs = [t for t in (brief.get("tabs") or []) if isinstance(t, dict)]
-        contract["tabs"] = len(tabs)
         for t in tabs:
-            tname = str(t.get("title") or "?")
+            tname = t["title"] or "?"
             # a tab serves intents, and an intent is a session source: the one entry shape
             # that carries what was asked
-            for s in (t.get("serves") or []):
+            for s in t["serves"]:
                 if s not in E or not (raw.get(s) or {}).get("asked"):
                     contract["bad"].append(f"tab '{tname}' serves {s}, which is not a session "
                                            f"source - one carries what was asked")
-        waiting = tabs[1:] if brief.get("_first_tab_drawn") else tabs
-        later = [(t, s) for t in waiting for s in (t.get("sections") or []) if isinstance(s, dict)]
-        # a tab the page does not draw yet is checked as if it did: its picks must pick,
-        # its shapes must fit, and its own shape must still be the record's
-        for t, sec in later:
-            where = f"'{sec.get('title') or '?'}' (tab '{t.get('title') or '?'}')"
-            p = sec.get("pick")
-            picks = [p] if isinstance(p, str) else list(p or [])
-            got = set()
-            for x in picks:
-                got |= resolve(x, ids, jud, flags)
-            if picks and not got:
-                contract["bad"].append(f"section {where} picks nothing - it is about something "
-                                       f"the record no longer holds")
-            kind = str(sec.get("as") or "").strip()
-            by = str(sec.get("by") or "")
-            by = by if (by in schemes or by == "prefix" or carried(by)) else default_scheme
-            wrong = (fits(kind, sorted(got), jud, E, lambda k, s=by: groups_of(k, s))
-                     if kind and got else None)
-            if wrong:
-                contract["bad"].append(f"section {where}: {wrong}")
-        for t in waiting:
-            was = t.get("shape") or {}
-            mv = [f"{k}: {was[k]} -> {shape[k]}" for k in shape if k in was and was[k] != shape[k]]
-            if mv:
-                contract["stale"].append(f"tab '{t.get('title') or '?'}' recorded a different "
-                                         f"shape: " + "; ".join(mv))
-        secs = [s for s in (brief.get("sections") or []) if isinstance(s, dict)] + [s for _, s in later]
-        for sec in secs:
+        # serving is earned by picks: a tab that declares an intent and shows nothing the
+        # session wrote for it makes a claim the page cannot keep
+        for r in cov["rows"]:
+            for tname in r["unearned"]:
+                contract["bad"].append(f"tab '{tname}' serves {r['id']} and picks nothing it "
+                                       f"recorded - serving is earned by picks"
+                                       + (" - it recorded nothing" if r["empty"] else ""))
+        contract["coverage"] = coverage_lines(cov)
+        for sec in all_secs:
             title = str(sec.get("title") or "?")
             seen = sec.get("seen") or {}
             if sec.get("text"):
@@ -1088,27 +1287,34 @@ def build(paths, brief_path=None):
             '<p class="sub" dir="ltr" style="margin-top:8px">roots — read from the world '
             '&middot; branches — worked out &middot; blossoms — concluded &middot; '
             'the trunk is where they meet</p>')
-    tabs = ['<div class="tabs" role="tablist">']
-    if brief:
-        # a tab written as a tab carries its own name; a bare brief is "Now"
-        tabs.append('<button type="button" data-tab="now" aria-selected="true">'
-                    + html.escape(str(brief.get("_tab_title") or "Now"))
-                    + (f' <span class="n">{len(covered)}</span>' if covered else "") + "</button>")
-    tabs.append(f'<button type="button" data-tab="record" aria-selected='
-                f'"{"false" if brief else "true"}">Record <span class="n">{len(ids)}</span></button>')
-    tabs.append('<button type="button" data-tab="tree" aria-selected="false">Tree</button></div>')
-    out.append("".join(tabs))
-    if brief:
-        out.append('<section id="panel-now">' + "".join(now_html) + "</section>")
+    bar = ['<div class="tabs" role="tablist">']
+    for i, t in enumerate(tabs):
+        # a tab written as a tab carries its own name; a bare brief is "Now". The first is
+        # the default: a brief exists, so the page opens on what the session chose.
+        n = counts[t["key"]]
+        bar.append(f'<button type="button" data-tab="{t["key"]}" aria-selected='
+                   f'"{"true" if i == 0 else "false"}">' + html.escape(t["title"] or "Now")
+                   + (f' <span class="n">{n}</span>' if n else "") + "</button>")
+    bar.append(f'<button type="button" data-tab="record" aria-selected='
+               f'"{"false" if brief else "true"}">Record <span class="n">{len(ids)}</span></button>')
+    bar.append('<button type="button" data-tab="tree" aria-selected="false">Tree</button></div>')
+    out.append("".join(bar))
+    for i, t in enumerate(tabs):
+        out.append(f'<section id="panel-{t["key"]}"{"" if i == 0 else " hidden"}>'
+                   + "".join(panels[t["key"]]) + "</section>")
     out.append(f'<section id="panel-record"{" hidden" if brief else ""}>'
                + "".join(head + rec_html) + "</section>")
     out.append('<section id="panel-tree" hidden>' + tree + "</section>")
 
+    chosen = ("" if not brief else
+              ' The <b>Now</b> tab is an arrangement someone chose; '
+              '<b>Record</b> is everything, arranged by nothing.' if len(tabs) == 1 and tabs[0]["bare"] else
+              ' The tabs before <b>Record</b> are arrangements someone chose; '
+              '<b>Record</b> is everything, arranged by nothing.')
     out.append('<footer dir="ltr">Hover any key for where it came from. Click to pin, click a dependency '
                'to walk to it, Esc to step back. While a card is open, a solid outline marks '
                'everything that rests on it and a dashed one what it rests on. Generated from '
-               'the record - nothing here was typed twice.' + (' The <b>Now</b> tab is an arrangement someone chose; '
-               '<b>Record</b> is everything, arranged by nothing.' if brief else '') + "</footer>")
+               'the record - nothing here was typed twice.' + chosen + "</footer>")
     # sorted keys, so two builds of an unchanged record are the same bytes - the one thing
     # a generated page is for is being diffed against the last one
     out.append("</div><script>window.__E=" + json.dumps(_plain(E), ensure_ascii=False, sort_keys=True)
@@ -1118,7 +1324,10 @@ def build(paths, brief_path=None):
                                        "misfit": misfit, "brief": bool(brief), "anchored": tuple(anchored),
                                        "unnamed": sorted(k for k in E if not E[k].get("name")
                                                          and k not in labels),
-                                       "covered": covered, "flags": flags, "contract": contract}
+                                       "covered": covered, "flags": flags, "contract": contract,
+                                       "tabs": [{"key": t["key"], "title": t["title"], "bare": t["bare"],
+                                                 "shape": t["shape"]} for t in tabs],
+                                       "coverage": cov, "page": dict(cov["page"]) if cov else {}}
 
 
 def verify(paths, brief_path=None):
@@ -1158,9 +1367,8 @@ def verify(paths, brief_path=None):
             fail.append("a brief exists but the session tab is not the default")
         c = info["contract"]
         fail += c["bad"]
-        note += c["moved"] + c["stale"] + c["unread"]
-        if c["tabs"] > 1:
-            note.append(f"{c['tabs']} tabs declared; the page draws the first and keeps the rest")
+        # the coverage report: facts the page counted, printed here and never acted on
+        note += c["moved"] + c["stale"] + c["unread"] + c["coverage"]
         # a falsifier over a page count is decided here and nowhere else, so here is where
         # it fails
         for name, j in sorted(J.items()):
@@ -1169,10 +1377,10 @@ def verify(paths, brief_path=None):
                 fail.append(f"{name}: wrong_if holds ({j['pred']}) - decided by the page")
         # An authored section that picks nothing is the alert row about something already
         # closed: it costs trust on everything else on the page.
-        for t, why in info["misfit"]:
-            fail.append(f"section '{t}': {why}")
-        for t in info["empty"]:
-            fail.append(f"section '{t}' picks nothing - it is about something the record "
+        for w, why in info["misfit"]:
+            fail.append(f"section {w}: {why}")
+        for w in info["empty"]:
+            fail.append(f"section {w} picks nothing - it is about something the record "
                         f"no longer holds")
         missed = [k for k, f in info["flags"].items() if f and
                   f'data-id="{k}"' not in dom]
@@ -1182,8 +1390,9 @@ def verify(paths, brief_path=None):
         print("NOTE", n)
     for f in fail:
         print("FAIL", f)
+    drawn = len(info["tabs"]) + 1
     print(f"{len(shown)} elements, {len(E)} entries, {len(J)} judgments, "
-          + ("2 tabs, " if info["brief"] else "1 tab, ") + f"{len(fail)} problems")
+          f"{drawn} tab{'s' if drawn != 1 else ''}, {len(fail)} problems")
     return 1 if fail else 0
 
 
@@ -1195,8 +1404,15 @@ if __name__ == "__main__":
     if "--verify" in a:
         sys.exit(verify(files, brief))
     page, _, _, _, info = build(files, brief)
-    if info["brief"] and not effective(yaml.safe_load(io.open(brief, encoding="utf-8").read()) or {}).get("shape"):
-        sys.stderr.write("# no shape recorded in the brief. paste this into it, so a later\n"
-                         "# render can tell you the arrangement went stale:\nshape:\n"
-                         + "".join(f"  {k}: {v}\n" for k, v in info["shape"].items()))
+    for t in info["tabs"]:
+        if t["shape"]:
+            continue
+        if t["bare"]:
+            sys.stderr.write("# no shape recorded in the brief. paste this into it, so a later\n"
+                             "# render can tell you the arrangement went stale:\nshape:\n"
+                             + "".join(f"  {k}: {v}\n" for k, v in info["shape"].items()))
+        else:
+            sys.stderr.write(f"# no shape recorded for tab '{t['title']}'. paste this into it, so a "
+                             "later\n# render can tell you the arrangement went stale:\n    shape: {"
+                             + ", ".join(f"{k}: {v}" for k, v in info["shape"].items()) + "}\n")
     sys.stdout.write(page)

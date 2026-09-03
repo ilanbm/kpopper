@@ -1,9 +1,10 @@
 #!/bin/sh
 # The stop gate, run by the plugin's Stop hook: a session that leaves the record
-# failing worse than it found it is bounced once, with the failures, before it
-# can finish. The comparison is against the count taken at session start, so a
-# record that was already red never blocks a session that did not touch it - and
-# the gate yields after one bounce, so it reminds rather than imprisons.
+# failing worse than it found it, leaves an intent no tab of the page serves, or wrote
+# entries and recorded no intent, is bounced once - with the reasons - before it can
+# finish. Everything is compared against the mark taken at session start, so a record
+# that was already red or already unserved never blocks a session that did not touch
+# it - and the gate yields after one bounce, so it reminds rather than imprisons.
 IN=$(cat)
 # the record is at the root, or where the checkout registered it - same as the opener
 REC=PROVENANCE.yaml
@@ -18,13 +19,12 @@ echo "$IN" | python3 -c 'import json,sys; sys.exit(0 if json.load(sys.stdin).get
 SID=$(echo "$IN" | python3 -c 'import json,sys; print(json.load(sys.stdin).get("session_id",""))' 2>/dev/null)
 BASE_FILE="${TMPDIR:-/tmp}/kpopper-base-$SID"
 [ -n "$SID" ] && [ -f "$BASE_FILE" ] || exit 0
-OUT=$(python3 "$(dirname "$0")/provenance.py" check "$REC" 2>/dev/null)
-NOW=$(printf '%s\n' "$OUT" | grep -c '^FAIL')
-BASE=$(cat "$BASE_FILE" 2>/dev/null || echo 0)
-[ "$NOW" -gt "$BASE" ] 2>/dev/null || exit 0
-{
-  echo "$REC fails check with $NOW problems ($BASE at session start)."
-  echo "Fix the record - or declare the hole with blocked_on - before finishing:"
-  printf '%s\n' "$OUT" | grep '^FAIL' | head -12
-} >&2
-exit 2
+# 2 is the gate's own answer: something to say. Any other failure is the reader's, and a
+# reader that cannot run must not hold a session at its end.
+OUT=$(python3 "$(dirname "$0")/provenance.py" gate "$BASE_FILE" "$REC" 2>/dev/null)
+RC=$?
+if [ "$RC" -eq 2 ]; then
+  printf '%s\n' "$OUT" >&2
+  exit 2
+fi
+exit 0

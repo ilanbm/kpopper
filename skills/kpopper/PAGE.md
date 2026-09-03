@@ -29,16 +29,17 @@ are the same gesture, which is why one mechanism serves both.
 a browser and six bugs to get right, and a session rebuilding it will produce something worse
 and not know. Write layout if you need layout; call this for the mechanism.
 
-## Two tabs, and who writes each
+## The tabs, and who writes each
 
 **Record** is the tab nobody writes: everything in the record, grouped by nothing but the
 record's own prefixes. It is the fallback when an arrangement is wrong, and it is the only tab
 when you supply no brief.
 
 **Now** is the tab *you* write, and you are the only one who can: the arrangement of this record
-aimed at what this session is for. Intent is the single input that is not in the record — it
-lives in the conversation and dies with it, so it cannot ship and cannot be derived. Put it in a
-brief beside the record (`<record>.view.yaml`, picked up automatically):
+aimed at what this session is for. Intent is the one input the record cannot derive — it lives
+in the conversation, and a session records it as a source (`s.*`, below) so the page can be held
+against it. The arrangement itself goes in a brief beside the record (`<record>.view.yaml`,
+picked up automatically):
 
 ```yaml
 title: "The loan, this week"
@@ -200,8 +201,10 @@ sentence against the new value.
 Two properties keep an opinionated tab honest, and both are mechanical rather than remembered:
 
 - **It may order. It may not drop.** Anything flagged that no section picked up lands in a
-  trailing section written by the page, which the brief cannot switch off. An arrangement that
-  hides what it did not anticipate is worth less than no arrangement.
+  trailing section written by the page, which the brief cannot switch off - and so does whatever
+  a session wrote for an intent no tab serves. It is counted once for the page and drawn on
+  every tab, because a reader opens a tab and not the page. An arrangement that hides what it
+  did not anticipate is worth less than no arrangement.
 - **The arrangement itself can be wrong.** `shape:` is the brief's own `seen` — over the
   record's *shape*, not its values, because a date moving does not make a layout wrong but a
   fourth blocked judgment might. Render with no `shape:` and the command prints the block to
@@ -212,11 +215,53 @@ Two properties keep an opinionated tab honest, and both are mechanical rather th
 Rewrite the brief freely. It is the cheapest file in the method — derived from a moment, not
 from the record — and an arrangement nobody chose to keep is not one worth maintaining.
 
+## Intents, tabs, coverage
+
+A session records what it was for as a source - `s.<date>_<slug>` with `asked:` verbatim and
+frozen, and `name:` as the session's own reading, revisable until it stops. What the session
+writes carries `from:` that source, and a judgment the request itself is a premise of rests on
+it; those two are how the record knows what a session recorded. A session that turns out to
+have done two things splits into two sources.
+
+A tab is a reading occasion, not an intent: `occasion:` says when the reader opens it and for
+what, and `serves:` lists the intents it answers - several can share one occasion. Every tab a
+brief declares is drawn, under its own name, the first as the default; each says what it serves,
+in the requester's own words and one hover from the source.
+
+**Serving is earned by picks.** A tab serves an intent when its sections pick something that
+session recorded. Declare `serves` and pick nothing of it and `--verify` fails: the claim cannot
+be kept. An intent that recorded nothing stands outside coverage - it is said once and counted
+nowhere, since nothing could serve it and nothing needs to.
+
+**Coverage is mechanical and deliberately dumb.** Every build and every `check` hold the page
+against the intents and print what they count, as facts:
+
+- each intent no tab serves, with one hint beside it: the prefixes it wrote, and how many of
+  its entries already fall inside each tab's picks;
+- each tab against what it serves - how much of what those sessions recorded it picks;
+- the prefixes no section picks;
+- the counts: what is covered, the spill, how many intents are unserved, how many of the newest
+  sessions in a row are - by day, since a day is the finest clock the record keeps, and a day
+  on which any intent is served ends the run - and drift, the share of what sessions read on or
+  after the newest `born` recorded that nothing picks.
+
+The hint is printed and never acted on. Whether an intent is the same world as a tab that
+already picks most of what it wrote is a session's judgment - declare that the tab serves the
+intent, add a section, or open a tab - recorded as an arrangement decision with its own falsifier
+over these counts. The mechanism decides none of it and carries no threshold.
+
+The opener says the newest unserved intent in its `next:` line - one line, and `check` carries
+the rest. The Stop gate holds the session's end against the mark its opener took and reminds,
+once, about what the session itself left: the record failing worse than it found it, an intent
+it left unserved, entries it wrote with no intent recorded. What was already red or unserved
+when the session opened never bounces it. The two commands behind the hooks, `mark <state
+file>` and `gate <state file>`, are the hooks' own.
+
 ## What each check is for
 
 `--verify` is deterministic: every element resolves to an entry, every entry in the payload is
 shown, every dependency points at something carried, the session tab is the default when a brief
-exists, and no authored section picks nothing. That last one matters more than it looks — a
+exists, no authored section picks nothing, and every `serves` is earned. That last one matters more than it looks — a
 section about something the record no longer holds is the alert row for a closed problem, and it
 costs trust on everything else on the page. A dependency that is missing but *declared* missing
 by a `blocked_on` is not a failure; it is reported as a note and drawn as awaited rather than
@@ -246,23 +291,23 @@ record in `tests/fixtures/page` first, so the reader, the page and the tests agr
 
 | field | where | what it is |
 |---|---|---|
-| `tabs:` | top level | a list of tabs, each with `title`, `occasion` (when the reader opens it and for what), `serves` (the session sources it answers), `sections`, and its own `shape`. The page draws the first tab today and counts the rest. |
+| `tabs:` | top level | a list of tabs, each with `title`, `occasion` (when the reader opens it and for what), `serves` (the session sources it answers - a claim its sections earn by picking what they recorded), `sections`, and its own `shape`. Every tab is drawn, the first as the default. |
 | `groups:` | top level | grouping schemes, any number, each a mapping of group name → selectors under the session's own names; a flat mapping is one scheme. `fronts:` still reads as one scheme. |
 | `by:` | on a section | the scheme this section reads by — one the brief declares, or one the record carries by its own shape: `prefix`, or any field the entries carry (`from`, `unit`, `kind`), whose value names the group. |
 | `text:` | on a section | connective prose with `{{id}}` references, drawn where the section stands with every reference resolved — the value, a rule's name, a judgment's verdict — and `{{c.id}}` placing that judgment's reasoning at that spot, marked as a judgment and hoverable as one. A section may be text alone; whatever the text places counts as picked up, so it never lands in spill. Every reference must be an entry. |
 | `reviewed:`, `seen:` | on a section with `text` | when the text was last read against what it references, and the values it saw. `--verify` compares them with the record the way `check` compares a judgment's snapshot; a value that moved tints the text on the page, marks it in place with what it was, and says what moved beneath. `kpopper review "<section title>"` rewrites both from the record. A reference the `seen` does not carry is noted: the text was never read against it. |
 
-A tab the page does not draw yet is checked as if it did: its picks must pick something, its
-shapes must fit what they pick, its `serves` must name session sources, and its own `shape`
-is compared with the record's.
+Every tab is checked the same way: its picks must pick something, its shapes must fit what they
+pick, its `serves` must name session sources and be earned by its picks, and its own `shape` is
+compared with the record's - a tab whose shape moved says so at its top, and `--verify` notes it.
 
 **In the record**
 
 | field | where | what it is |
 |---|---|---|
-| `asked:` | on a session source (`s.*`) | the request verbatim, frozen; `name:` beside it is the session's own reading, which that session may revise until it stops. Entries the session writes carry `from:` it. |
+| `asked:` | on a session source (`s.*`) | the request verbatim, frozen; `name:` beside it is the session's own reading, which that session may revise until it stops. Entries the session writes carry `from:` it, and a judgment the request is a premise of rests on it. The hover on the source shows it, a tab that serves it quotes it, and it is what makes the source an intent the page is held against. |
 | `{{id}}` | in any text field — `because`, `via`, `note` | a reference, never a retyped value. `check` fails one that names nothing, and one inside a judgment that names something the judgment does not rest on. A card draws it: the value where there is one, the name where there is only a rule, the verdict for a judgment — each hoverable. |
-| `born:`, `stood:` | on an arrangement judgment (`v.*`) | when the arrangement was decided, and how many builds it has stood. |
+| `born:`, `stood:` | on an arrangement judgment (`v.*`) | when the arrangement was decided, and how many builds it has stood. Drift is counted from the newest `born` the record carries. |
 | `graph.*`, `page.*` | as a dependency, or inside a falsifier | names the reader computes; see below. |
 
 **Computed names**
@@ -271,10 +316,12 @@ A judgment may rest on a count, and a falsifier may draw its line against one:
 `wrong_if: "page.spill > 0"`. These names are never written and never stored. One becomes an
 entry the moment something in the record mentions it, with its value counted each time the
 record is read (`graph.*`) or each time the page is built (`page.*` — a predicate over it is
-decided by `page --verify`, and `check` says so). Of the page names, `page.spill` is counted
-today — what fell through the arrangement before the arrangement's own falsifiers were
-decided — and a falsifier over it that holds fails `page --verify`; the other page names are
-reserved and hold no value yet, so a falsifier over one stays undecided until they do.
+decided by `page --verify`, and `check` says so). Every page name is counted before the
+arrangement's own falsifiers are decided, and a falsifier over one that holds fails `page
+--verify`. One of them can hold no value: `page.drift` needs a `born` to count from, and a
+record whose arrangements carry none leaves it uncounted - the page says *not counted yet*
+where its value would stand, `add` refuses to snapshot it, and a falsifier over it stays
+undecided.
 
 A count is taken before any judgment that reads a count is decided, so it never includes what
 reading it decided: a line drawn against "how many are flagged" cannot be crossed by the
@@ -286,7 +333,8 @@ drawing of it. Every surface then decides such a judgment against the same numbe
 | `graph.flagged` | judgments that need a person, for any reason |
 | `graph.blocked`, `graph.broken`, `graph.unchecked`, `graph.moved`, `graph.falsified`, `graph.no_predicate` | the reasons, one each |
 | `page.spill` | flagged judgments no section of the page picked up |
-| `page.unserved`, `page.recent_unserved` | intents no tab serves; recent sessions in a row left unserved |
-| `page.drift` | the share of what was added since the arrangement was born that nothing picks |
+| `page.unserved` | intents no tab serves - declared and earned by picks; an intent that recorded nothing is not counted |
+| `page.recent_unserved` | the newest sessions in a row whose intent no tab serves, counted by day: a day on which any intent is served ends the run |
+| `page.drift` | the share of what sessions read on or after the newest `born` recorded that nothing picks; 0 when nothing was added, no value without a `born` |
 | `page.covered` | entries and judgments some section picks |
 

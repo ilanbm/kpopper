@@ -4,6 +4,9 @@ network:
 
     python3 -m unittest discover -s tests
 """
+import datetime
+import json
+import os
 import pathlib
 import re
 import shutil
@@ -20,7 +23,25 @@ BRIEF = FIXTURE / "PROVENANCE.view.yaml"
 
 sys.path.insert(0, str(SCRIPTS))
 import provenance as P  # noqa: E402
+import render_page as R  # noqa: E402
 import yaml  # noqa: E402
+
+PLAIN_NEXT = ("next: pull <entry|prefix> (values with sources) · affects <entry> (what a change "
+              "reaches) · check\n")
+# the second tab of the fixture brief, as written - the scenario tests start without it
+TAB_TWO = '''  - title: "The glazing quote"
+    occasion: "opened when the glazier's quote comes in, to set it against the shortfall"
+    serves: [s.2026_09_03_glazing]
+    sections:
+      - title: "What the quote buys"
+        why: "the price, and the kilowatts it would keep in - both read against the shortfall on
+              the first tab"
+        pick: glaze.
+        as: table
+    shape: {entries: 11, judgments: 3, flagged: 0, blocked: 0}
+'''
+STRAY = ("  c.stray:\n    rests_on: [heat.gone]\n    verdict: \"a judgment on nothing\"\n"
+         "    wrong_if: \"\"\n    seen: {}\n")
 
 
 def run(*args, cwd=None):
@@ -37,10 +58,10 @@ def copy_fixture(into):
     return into / "PROVENANCE.yaml"
 
 
-def edit(path, old, new):
+def edit(path, old, new, count=-1):
     text = path.read_text(encoding="utf-8")
     assert old in text, f"{old!r} is not in {path.name}"
-    path.write_text(text.replace(old, new), encoding="utf-8")
+    path.write_text(text.replace(old, new, count), encoding="utf-8")
 
 
 class CheckAcceptsTheContract(unittest.TestCase):
@@ -59,8 +80,8 @@ class CheckAcceptsTheContract(unittest.TestCase):
         ids, jud, fields = P.infer(doc)
         raw = P.bodies(doc)
         values = P.counts(doc, ids, jud, fields, raw)
-        self.assertEqual(values["graph.judgments"], 2)
-        self.assertEqual(values["graph.entries"], 7)
+        self.assertEqual(values["graph.judgments"], 3)
+        self.assertEqual(values["graph.entries"], 11)
         self.assertEqual(values["graph.flagged"], 0)
         self.assertEqual(values["graph.open"], 1)
 
@@ -72,7 +93,7 @@ class CheckAcceptsTheContract(unittest.TestCase):
         self.assertIn("page.spill", ids)
         self.assertNotIn("graph.entries", ids)   # nothing rests on it, so it is not an entry here
         built = P.builtins(doc, ids, jud, fields, raw)
-        self.assertEqual(sorted(built), ["graph.flagged", "page.spill"])
+        self.assertEqual(sorted(built), ["graph.flagged", "page.spill", "page.unserved"])
         self.assertEqual(built["graph.flagged"]["v"], 0)
         # page.* has no value in the reader: it is counted where the brief is
         self.assertNotIn("v", built["page.spill"])
@@ -282,7 +303,7 @@ class ThePageAcceptsTheContract(unittest.TestCase):
             self.assertEqual(code, 0, out)
             self.assertIn("its text saw heat.loss_kw = 31, now 35 - read it again", out)
 
-    def test_a_waiting_tab_is_checked_as_if_drawn(self):
+    def test_every_tab_is_checked_as_drawn(self):
         with tempfile.TemporaryDirectory() as d:
             rec = copy_fixture(pathlib.Path(d))
             brief = pathlib.Path(d) / "PROVENANCE.view.yaml"
@@ -291,14 +312,18 @@ class ThePageAcceptsTheContract(unittest.TestCase):
                 "  - title: \"Later\"\n    occasion: \"opened after the first frost\"\n"
                 "    serves: [s.2026_09_02_heating]\n"
                 "    sections:\n      - title: \"Gone\"\n        pick: heat.typo\n"
-                "    shape: {entries: 99, judgments: 2, flagged: 0, blocked: 0}\n"
+                "    shape: {entries: 99, judgments: 3, flagged: 0, blocked: 0}\n"
                 "groups:\n"), encoding="utf-8")
             code, out, _ = run(SCRIPTS / "render_page.py", "--verify", rec)
             self.assertEqual(code, 1, out)
             self.assertIn("section 'Gone' (tab 'Later') picks nothing", out)
-            self.assertIn("tab 'Later' recorded a different shape: entries: 99 -> 7", out)
-            self.assertIn("2 tabs declared; the page draws the first and keeps the rest", out)
-
+            self.assertIn("tab 'Later' recorded a different shape: entries: 99 -> 11", out)
+            self.assertIn("tab 'Later' serves s.2026_09_02_heating and picks nothing it recorded - "
+                          "serving is earned by picks", out)
+            self.assertNotIn("draws the first", out)
+            _, page, _ = run(SCRIPTS / "render_page.py", rec)
+            self.assertIn('<button type="button" data-tab="now3" aria-selected="false">Later</button>', page)
+            self.assertIn('<section id="panel-now3" hidden>', page)
 
 class TheCountsHoldTogether(unittest.TestCase):
     def test_a_falsified_judgment_is_counted(self):
@@ -341,8 +366,8 @@ class TheCountsHoldTogether(unittest.TestCase):
             text = brief.read_text(encoding="utf-8")
             brief.write_text(re.sub(r"\n    shape:.*", "", text), encoding="utf-8")
             _, _, err = run(SCRIPTS / "render_page.py", rec)
-            self.assertIn("entries: 7", err)
-            self.assertIn("judgments: 2", err)
+            self.assertIn("entries: 11", err)
+            self.assertIn("judgments: 3", err)
 
 
 def dom_of(page):
@@ -619,7 +644,7 @@ class TheWritePath(unittest.TestCase):
                                  "wrong_if=graph.entries > 100", "--as-of", "2026-09-03", rec)
             self.assertEqual(code, 0, out + err)
             self.assertIn("the new judgment holds: wrong_if does not hold (graph.entries > 100)", out)
-            self.assertIn("seen: {graph.entries: 7}", rec.read_text(encoding="utf-8"))
+            self.assertIn("seen: {graph.entries: 11}", rec.read_text(encoding="utf-8"))
             self.assertEqual(run(SCRIPTS / "provenance.py", "check", rec)[0], 0)
 
     def test_add_takes_an_open_question(self):
@@ -655,15 +680,15 @@ class TheWritePath(unittest.TestCase):
         with tempfile.TemporaryDirectory() as d:
             rec = copy_fixture(pathlib.Path(d))
             brief = pathlib.Path(d) / "PROVENANCE.view.yaml"
-            edit(brief, "shape: {entries: 7,", "shape: {entries: 9,")
+            edit(brief, "shape: {entries: 11,", "shape: {entries: 9,", count=1)
             _, page, _ = run(SCRIPTS / "render_page.py", rec)
             self.assertIn("changed shape since this arrangement was written", page)
             code, out, _ = run(SCRIPTS / "provenance.py", "review", "v.heating_tab",
                                "--as-of", "2026-09-03", rec)
             self.assertEqual(code, 0, out)
-            self.assertIn("shape of tab 'The February night': entries: 7, judgments: 2, flagged: 0, "
+            self.assertIn("shape of tab 'The February night': entries: 11, judgments: 3, flagged: 0, "
                           "blocked: 0", out)
-            self.assertIn("shape: {entries: 7, judgments: 2, flagged: 0, blocked: 0}",
+            self.assertIn("shape: {entries: 11, judgments: 3, flagged: 0, blocked: 0}",
                           brief.read_text(encoding="utf-8"))
             _, page, _ = run(SCRIPTS / "render_page.py", rec)
             self.assertNotIn("changed shape since this arrangement was written", page)
@@ -681,9 +706,9 @@ class TheWritePath(unittest.TestCase):
             self.assertEqual(code, 0, out)
             self.assertIn("graph.flagged: 1 -> 0", out)
             # the shape written is the record's shape after the review, not before it
-            self.assertIn("shape of tab 'The February night': entries: 7, judgments: 2, flagged: 0, "
+            self.assertIn("shape of tab 'The February night': entries: 11, judgments: 3, flagged: 0, "
                           "blocked: 0", out)
-            self.assertIn("shape: {entries: 7, judgments: 2, flagged: 0, blocked: 0}",
+            self.assertIn("shape: {entries: 11, judgments: 3, flagged: 0, blocked: 0}",
                           brief.read_text(encoding="utf-8"))
             page = run(SCRIPTS / "render_page.py", rec)[1]
             self.assertNotIn("changed shape since this arrangement was written", page)
@@ -711,6 +736,346 @@ class TheWritePath(unittest.TestCase):
         self.assertIn("in id order", out)
         code, out, _ = run(SCRIPTS / "kpopper")
         self.assertIn("kpopper review", out)
+
+
+def before_second_session(d):
+    """The fixture as the first session left it: one tab, and none of what the second wrote."""
+    rec = copy_fixture(d)
+    brief = d / "PROVENANCE.view.yaml"
+    lines = rec.read_text(encoding="utf-8").split("\n")
+    for nid in ("v.glazing_tab", "glaze.saving_kw", "glaze.quote_eur", "glaze.north_wall_m2",
+                "s.2026_09_03_glazing"):
+        _, _, s, e = P._locate(lines, nid)
+        del lines[s:e]
+    rec.write_text("\n".join(lines), encoding="utf-8")
+    edit(brief, TAB_TWO, "")
+    return rec, brief
+
+
+class IntentsTabsCoverage(unittest.TestCase):
+    """A session records what it was for as a source; a tab serves intents and earns the claim
+    by picks; coverage is counted, printed at build and check, and never acted on."""
+
+    def test_every_tab_is_drawn_and_says_what_it_serves(self):
+        dom = dom_of(run(SCRIPTS / "render_page.py", RECORD)[1])
+        self.assertIn('data-tab="now" aria-selected="true">The February night', dom)
+        self.assertIn('<button type="button" data-tab="now2" aria-selected="false">The glazing quote '
+                      '<span class="n">3</span></button>', dom)
+        self.assertIn('<section id="panel-now2" hidden>', dom)
+        self.assertIn('This tab is for one occasion &mdash; <b dir="auto">opened when the glazier&#x27;s '
+                      'quote comes in, to set it against the shortfall</b>', dom)
+        self.assertIn('It serves: <span class="fx" data-id="s.2026_09_03_glazing">What would glazing the '
+                      'north wall cost, and how much of the shortfall would it close?</span>', dom)
+
+    def test_the_hover_carries_what_a_session_asked(self):
+        _, page, _ = run(SCRIPTS / "render_page.py", RECORD)
+        self.assertIn('"asked": "Can we keep the greenhouse above 12°C through February on the old '
+                      'boiler?"', page)
+
+    def test_intents_are_dated_and_ordered_newest_first(self):
+        self.assertEqual(R.intent_date("s.2026_09_03_x", {}), datetime.date(2026, 9, 3))
+        self.assertEqual(R.intent_date("s.x", {"read": "2026-08-30"}), datetime.date(2026, 8, 30))
+        self.assertIsNone(R.intent_date("s.x", {"of": "this session"}))
+        doc = P.load([str(RECORD)])
+        ids, jud, fields = P.infer(doc)
+        raw = P.bodies(doc)
+        self.assertEqual([k for k, _, _ in R.intents_of(ids, jud, raw)],
+                         ["s.2026_09_03_glazing", "s.2026_09_02_heating"])
+        # what a session recorded: what comes from it, and the judgment that rests on it
+        self.assertEqual(sorted(R.recorded_by("s.2026_09_03_glazing", ids, jud, raw)),
+                         ["glaze.north_wall_m2", "glaze.quote_eur", "glaze.saving_kw", "v.glazing_tab"])
+
+    def test_coverage_is_reported_at_verify(self):
+        code, out, _ = run(SCRIPTS / "render_page.py", "--verify", RECORD)
+        self.assertEqual(code, 0, out)
+        self.assertIn("NOTE coverage: 10 covered · spill 0 · 0 intents no tab serves · 0 recent in a "
+                      "row · drift 0.0 since 2026-09-03", out)
+        self.assertIn("NOTE tab 'The February night' serves s.2026_09_02_heating: picks 3 of 3 they "
+                      "recorded", out)
+        self.assertIn("NOTE tab 'The glazing quote' serves s.2026_09_03_glazing: picks 3 of 4 they "
+                      "recorded", out)
+        self.assertIn("NOTE no section picks: doc, q, s", out)
+        self.assertNotIn("served by no tab", out)
+
+    def test_a_second_session_plays_out(self):
+        with tempfile.TemporaryDirectory() as d:
+            rec, brief = before_second_session(pathlib.Path(d))
+            code, out, _ = run(SCRIPTS / "render_page.py", "--verify", rec)
+            self.assertEqual(code, 0, out)
+            self.assertIn("0 intents no tab serves", out)
+            # a second session records its intent and writes under a new prefix, through add
+            for args in (["s.2026_09_03_glazing", "asked=What would glazing the north wall cost, and "
+                          "how much of the shortfall would it close?", "name=the glazing question",
+                          "of=this session", "read=2026-09-03"],
+                         ["glaze.north_wall_m2", "v=18", "unit=m2", "name=north wall",
+                          "from=s.2026_09_03_glazing"],
+                         ["glaze.quote_eur", "v=2400", "unit=EUR", "name=the quote",
+                          "from=s.2026_09_03_glazing"],
+                         ["glaze.saving_kw", "v=4", "unit=kW", "name=loss stopped",
+                          "from=s.2026_09_03_glazing"]):
+                code, out, err = run(SCRIPTS / "provenance.py", "add", *args, "--as-of", "2026-09-03", rec)
+                self.assertEqual(code, 0, out + err)
+            # check says the intent is served by no tab, and where what it wrote falls
+            code, out, _ = run(SCRIPTS / "provenance.py", "check", rec)
+            self.assertEqual(code, 0, out)
+            self.assertIn("NOTE s.2026_09_03_glazing is served by no tab - asked: What would glazing the "
+                          "north wall cost, and how much of the shortfall would it close?\n"
+                          "NOTE   hint: it wrote glaze. (3) - 0 of 3 inside 'The February night'\n", out)
+            # the page already shows the entries, in the section the brief cannot switch off
+            dom = dom_of(run(SCRIPTS / "render_page.py", rec)[1])
+            self.assertIn('<h2 class="spill" dir="ltr">Not covered by this arrangement <span class="n">3'
+                          '</span></h2>', dom)
+            self.assertIn('Written for <span class="fx" data-id="s.2026_09_03_glazing">What would glazing '
+                          'the north wall cost, and how much of the shortfall would it close?</span>, '
+                          'which no tab serves.', dom)
+            self.assertIn('<span class="fx" data-id="glaze.quote_eur">the quote</span></td>'
+                          '<td class="v" dir="auto">2,400</td>', dom)
+            code, out, _ = run(SCRIPTS / "render_page.py", "--verify", rec)
+            self.assertEqual(code, 0, out)
+            self.assertIn("coverage: 6 covered · spill 0 · 1 intents no tab serves · 1 recent in a row · "
+                          "drift 0.5 since 2026-09-02", out)
+            self.assertIn("no section picks: doc, glaze, q, s", out)
+            # a tab that declares it serves the intent and picks nothing it wrote fails
+            edit(brief, "groups:\n", TAB_TWO.replace("pick: glaze.", "pick: heat.") + "groups:\n")
+            code, out, _ = run(SCRIPTS / "render_page.py", "--verify", rec)
+            self.assertEqual(code, 1, out)
+            self.assertIn("FAIL tab 'The glazing quote' serves s.2026_09_03_glazing and picks nothing it "
+                          "recorded - serving is earned by picks", out)
+            self.assertIn("hint: it wrote glaze. (3) - 0 of 3 inside 'The February night'; 0 of 3 inside "
+                          "'The glazing quote'", out)
+            # a section that picks them earns it
+            edit(brief, "pick: heat.\n        as: table\n    shape:", "pick: glaze.\n        as: table\n    shape:")
+            code, out, _ = run(SCRIPTS / "render_page.py", "--verify", rec)
+            self.assertEqual(code, 0, out)
+            self.assertIn("0 intents no tab serves · 0 recent in a row · drift 0.0", out)
+            self.assertIn("tab 'The glazing quote' serves s.2026_09_03_glazing: picks 3 of 3 they recorded", out)
+            self.assertNotIn('class="spill"', dom_of(run(SCRIPTS / "render_page.py", rec)[1]))
+
+    def test_an_intent_that_recorded_nothing_is_outside_coverage(self):
+        with tempfile.TemporaryDirectory() as d:
+            rec = copy_fixture(pathlib.Path(d))
+            code, out, _ = run(SCRIPTS / "provenance.py", "add", "s.2026_09_04_idle",
+                               "asked=is the greenhouse worth heating at all?",
+                               "name=a question, and nothing written for it", "read=2026-09-04",
+                               "--as-of", "2026-09-04", rec)
+            self.assertEqual(code, 0, out)
+            code, out, _ = run(SCRIPTS / "render_page.py", "--verify", rec)
+            self.assertEqual(code, 0, out)
+            self.assertIn("NOTE s.2026_09_04_idle recorded nothing, so no tab can serve it and none needs to", out)
+            self.assertIn("0 intents no tab serves · 0 recent in a row", out)
+            edit(pathlib.Path(d) / "PROVENANCE.view.yaml", "serves: [s.2026_09_03_glazing]",
+                 "serves: [s.2026_09_03_glazing, s.2026_09_04_idle]")
+            code, out, _ = run(SCRIPTS / "render_page.py", "--verify", rec)
+            self.assertEqual(code, 1, out)
+            self.assertIn("FAIL tab 'The glazing quote' serves s.2026_09_04_idle and picks nothing it "
+                          "recorded - serving is earned by picks - it recorded nothing", out)
+
+    def test_a_falsifier_over_unserved_is_decided_by_the_page(self):
+        with tempfile.TemporaryDirectory() as d:
+            rec = copy_fixture(pathlib.Path(d))
+            edit(pathlib.Path(d) / "PROVENANCE.view.yaml", "    serves: [s.2026_09_03_glazing]\n", "")
+            code, out, _ = run(SCRIPTS / "render_page.py", "--verify", rec)
+            self.assertEqual(code, 1, out)
+            self.assertIn("FAIL v.glazing_tab: wrong_if holds (page.unserved > 0) - decided by the page", out)
+            self.assertIn("hint: it wrote glaze. (3), v. (1) - 1 of 4 inside 'The February night'; "
+                          "3 of 4 inside 'The glazing quote'", out)
+            # check leaves the line to the page, and still says which intent
+            code, out, _ = run(SCRIPTS / "provenance.py", "check", rec)
+            self.assertEqual(code, 0, out)
+            self.assertIn("NOTE s.2026_09_03_glazing is served by no tab", out)
+
+    def test_page_counts_are_snapshotted_by_add(self):
+        with tempfile.TemporaryDirectory() as d:
+            rec = copy_fixture(pathlib.Path(d))
+            code, out, err = run(SCRIPTS / "provenance.py", "add", "v.both_tabs",
+                                 "rests_on=[page.unserved, page.recent_unserved, page.drift, page.covered]",
+                                 "verdict=two tabs, each earning what it serves",
+                                 "wrong_if=page.unserved > 0", "--as-of", "2026-09-03", rec)
+            self.assertEqual(code, 0, out + err)
+            # settled against the record as written: the new judgment is itself picked
+            self.assertIn("seen: {page.unserved: 0, page.recent_unserved: 0, page.drift: 0.0, "
+                          "page.covered: 11}", rec.read_text(encoding="utf-8"))
+            self.assertEqual(run(SCRIPTS / "render_page.py", "--verify", rec)[0], 0)
+
+    def test_drift_has_no_value_without_a_born(self):
+        with tempfile.TemporaryDirectory() as d:
+            rec = copy_fixture(pathlib.Path(d))
+            edit(rec, '    born: "2026-09-02"\n', "")
+            edit(rec, '    born: "2026-09-03"\n', "")
+            code, out, _ = run(SCRIPTS / "render_page.py", "--verify", rec)
+            self.assertEqual(code, 0, out)
+            self.assertIn("· drift -", out)
+            code, out, err = run(SCRIPTS / "provenance.py", "add", "v.drifty", "rests_on=[page.drift]",
+                                 "verdict=x", "wrong_if=page.drift > 0.5", "--as-of", "2026-09-03", rec)
+            self.assertEqual(code, 1)
+            self.assertIn("page.drift has no value to snapshot: the page could not count it - no "
+                          "arrangement carries born", out + err)
+            # named anyway, the page says so where the value would stand
+            edit(rec, "rests_on: [s.2026_09_03_glazing, page.unserved]",
+                 "rests_on: [s.2026_09_03_glazing, page.unserved, page.drift]")
+            dom = dom_of(run(SCRIPTS / "render_page.py", rec)[1])
+            self.assertIn('<td class="k" dir="auto"><span class="fx" data-id="page.drift">page.drift</span>'
+                          '</td><td class="v" dir="auto"><span class="derived">not counted yet</span></td>', dom)
+
+    def test_spill_is_drawn_on_every_tab(self):
+        with tempfile.TemporaryDirectory() as d:
+            rec = copy_fixture(pathlib.Path(d))
+            edit(pathlib.Path(d) / "PROVENANCE.view.yaml", "pick: judgments",
+                 "pick: [c.boiler_short, v.heating_tab, v.glazing_tab]")
+            rec.write_text(rec.read_text(encoding="utf-8") + STRAY, encoding="utf-8")
+            dom = dom_of(run(SCRIPTS / "render_page.py", rec)[1])
+            self.assertEqual(dom.count('<h2 class="spill" dir="ltr">Not covered by this arrangement '
+                                       '<span class="n">1</span></h2>'), 2)
+            for key in ("now", "now2"):
+                i = dom.index(f'<section id="panel-{key}"')
+                self.assertIn('data-id="c.stray"', dom[i:dom.index("</section>", i)])
+
+    def test_the_opener_names_the_newest_unserved_intent(self):
+        with tempfile.TemporaryDirectory() as d:
+            rec, brief = before_second_session(pathlib.Path(d))
+            run(SCRIPTS / "provenance.py", "add", "s.2026_09_03_glazing",
+                "asked=What would glazing the north wall cost?", "name=the glazing question",
+                "read=2026-09-03", "--as-of", "2026-09-03", rec)
+            run(SCRIPTS / "provenance.py", "add", "glaze.quote_eur", "v=2400", "name=the quote",
+                "from=s.2026_09_03_glazing", "--as-of", "2026-09-03", rec)
+            code, out, _ = run(SCRIPTS / "provenance.py", "open", rec)
+            self.assertEqual(code, 0, out)
+            self.assertTrue(out.endswith("next: check - s.2026_09_03_glazing is served by no tab · pull "
+                                         "<entry|prefix> (values with sources) · affects <entry> (what a "
+                                         "change reaches)\n"), out)
+        # every intent served, or no brief at all: the line is what it always was
+        _, out, _ = run(SCRIPTS / "provenance.py", "open", RECORD)
+        self.assertTrue(out.endswith(PLAIN_NEXT), out)
+        with tempfile.TemporaryDirectory() as d:
+            rec = pathlib.Path(d) / "PROVENANCE.yaml"
+            shutil.copy(RECORD, rec)
+            _, out, _ = run(SCRIPTS / "provenance.py", "open", rec)
+            self.assertTrue(out.endswith(PLAIN_NEXT), out)
+
+    def test_the_gate_reminds_about_what_the_session_left(self):
+        with tempfile.TemporaryDirectory() as d:
+            rec = copy_fixture(pathlib.Path(d))
+            state = pathlib.Path(d) / "state"
+            self.assertEqual(run(SCRIPTS / "provenance.py", "mark", state, rec)[0], 0)
+            self.assertEqual(run(SCRIPTS / "provenance.py", "gate", state, rec)[0], 0)
+            # entries written, no intent recorded
+            run(SCRIPTS / "provenance.py", "add", "heat.wind_kw", "v=3", "unit=kW", "name=loss to wind",
+                "from=doc.boiler_sheet", "--as-of", "2026-09-04", rec)
+            code, out, _ = run(SCRIPTS / "provenance.py", "gate", state, rec)
+            self.assertEqual(code, 2, out)
+            self.assertEqual(out, 'this session wrote 1 entry (heat.wind_kw) and recorded no intent: add '
+                                  's.<date>_<slug> asked="..." name="...", and from: it on what it wrote\n')
+            # the intent recorded, with what it wrote from it: now it is the intent no tab serves
+            run(SCRIPTS / "provenance.py", "add", "s.2026_09_04_wind", "asked=how much does the wind add?",
+                "name=the wind question", "read=2026-09-04", "--as-of", "2026-09-04", rec)
+            run(SCRIPTS / "provenance.py", "add", "heat.gust_kw", "v=2", "unit=kW", "name=loss in a gust",
+                "from=s.2026_09_04_wind", "--as-of", "2026-09-04", rec)
+            code, out, _ = run(SCRIPTS / "provenance.py", "gate", state, rec)
+            self.assertEqual(code, 2, out)
+            self.assertEqual(out, "s.2026_09_04_wind is served by no tab of the page - serve it in a tab "
+                                  "whose sections pick what it wrote, or leave it outside and say why\n")
+            # served by a tab whose sections pick what it wrote, the gate has nothing to say
+            edit(pathlib.Path(d) / "PROVENANCE.view.yaml", "    serves: [s.2026_09_02_heating]\n",
+                 "    serves: [s.2026_09_02_heating, s.2026_09_04_wind]\n")
+            self.assertEqual(run(SCRIPTS / "provenance.py", "gate", state, rec)[0], 0)
+
+    def test_the_gate_holds_the_record_against_its_mark(self):
+        with tempfile.TemporaryDirectory() as d:
+            rec = copy_fixture(pathlib.Path(d))
+            state = pathlib.Path(d) / "state"
+            # a record already red at session start never bounces the session for it
+            rec.write_text(rec.read_text(encoding="utf-8") + STRAY, encoding="utf-8")
+            run(SCRIPTS / "provenance.py", "mark", state, rec)
+            self.assertEqual(run(SCRIPTS / "provenance.py", "gate", state, rec)[0], 0)
+            rec.write_text(rec.read_text(encoding="utf-8")
+                           + STRAY.replace("c.stray", "c.stray2").replace("heat.gone", "heat.gone2"),
+                           encoding="utf-8")
+            code, out, _ = run(SCRIPTS / "provenance.py", "gate", state, rec)
+            self.assertEqual(code, 2, out)
+            self.assertIn(f"{rec} fails check with 4 problems (2 at session start).\n"
+                          "Fix the record - or declare the hole with blocked_on - before finishing:\n", out)
+            self.assertIn("FAIL c.stray2: rests on heat.gone2, which is not an entry\n", out)
+            self.assertIn("this session wrote 1 entry (c.stray2) and recorded no intent", out)
+            # a mark that holds only the count, as an older opener wrote it, is still read
+            state.write_text("2\n", encoding="utf-8")
+            code, out, _ = run(SCRIPTS / "provenance.py", "gate", state, rec)
+            self.assertEqual(code, 2, out)
+            self.assertIn("fails check with 4 problems (2 at session start)", out)
+            self.assertNotIn("recorded no intent", out)
+
+    def test_the_hooks_mark_at_open_and_bounce_once_at_stop(self):
+        with tempfile.TemporaryDirectory() as d:
+            rec = copy_fixture(pathlib.Path(d))
+            env = dict(os.environ, TMPDIR=d)
+
+            def hook(name, payload):
+                return subprocess.run(["sh", str(SCRIPTS / name)], cwd=d, input=json.dumps(payload),
+                                      capture_output=True, text=True, env=env)
+            p = hook("session_open.sh", {"session_id": "t1"})
+            self.assertEqual(p.returncode, 0, p.stderr)
+            self.assertIn("nothing needs a person right now.", p.stdout)
+            self.assertTrue((pathlib.Path(d) / "kpopper-base-t1").exists())
+            self.assertEqual(hook("session_gate.sh", {"session_id": "t1"}).returncode, 0)
+            run(SCRIPTS / "provenance.py", "add", "heat.storm_kw", "v=5", "unit=kW", "name=loss in a storm",
+                "from=doc.boiler_sheet", "--as-of", "2026-09-04", rec)
+            p = hook("session_gate.sh", {"session_id": "t1"})
+            self.assertEqual(p.returncode, 2)
+            self.assertIn("this session wrote 1 entry (heat.storm_kw) and recorded no intent", p.stderr)
+            # once: the second stop goes through
+            p = hook("session_gate.sh", {"session_id": "t1", "stop_hook_active": True})
+            self.assertEqual(p.returncode, 0)
+            self.assertEqual(p.stderr, "")
+
+    def test_a_reference_to_a_page_count_reads_the_same_on_both_surfaces(self):
+        with tempfile.TemporaryDirectory() as d:
+            rec = copy_fixture(pathlib.Path(d))
+            edit(rec, '              numbers."', '              numbers. Today {{page.unserved}} intents are unserved."')
+            code, out, _ = run(SCRIPTS / "provenance.py", "check", rec)
+            self.assertEqual(code, 0, out)
+            _, page, _ = run(SCRIPTS / "render_page.py", rec)
+            # the hover payload and the card both read the count, not the count's name
+            self.assertIn("Today 0 intents are unserved.", page)
+            self.assertIn('Today <span class="fx in" data-id="page.unserved">0</span> intents are unserved.',
+                          dom_of(page))
+            self.assertNotIn("Today intents no tab", page)
+
+    def test_spill_shows_each_id_once(self):
+        with tempfile.TemporaryDirectory() as d:
+            rec, brief = before_second_session(pathlib.Path(d))
+            edit(brief, "pick: judgments", "pick: [c.boiler_short, v.heating_tab]")
+            run(SCRIPTS / "provenance.py", "add", "s.2026_09_03_glazing",
+                "asked=What would glazing the north wall cost?", "name=the glazing question",
+                "read=2026-09-03", "--as-of", "2026-09-03", rec)
+            run(SCRIPTS / "provenance.py", "add", "glaze.quote_eur", "v=2400", "name=the quote",
+                "from=s.2026_09_03_glazing", "--as-of", "2026-09-03", rec)
+            # a judgment the unserved session wrote that is also flagged, and nothing picks
+            rec.write_text(rec.read_text(encoding="utf-8") + (
+                "  c.glaze_hope:\n    rests_on: [s.2026_09_03_glazing, glaze.gone]\n"
+                "    verdict: \"glazing closes the gap\"\n    wrong_if: \"\"\n    seen: {}\n"),
+                encoding="utf-8")
+            dom = dom_of(run(SCRIPTS / "render_page.py", rec)[1])
+            i = dom.index('<section id="panel-now"')
+            panel = dom[i:dom.index("</section>", i)]
+            self.assertIn('<h2 class="spill" dir="ltr">Not covered by this arrangement <span class="n">2'
+                          '</span></h2>', panel)
+            self.assertEqual(panel.count('data-id="c.glaze_hope"'), 1)
+            self.assertEqual(panel.count('data-id="glaze.quote_eur"'), 1)
+
+    def test_the_recent_streak_counts_by_day(self):
+        with tempfile.TemporaryDirectory() as d:
+            rec = copy_fixture(pathlib.Path(d))
+            brief = pathlib.Path(d) / "PROVENANCE.view.yaml"
+            run(SCRIPTS / "provenance.py", "add", "s.2026_09_03_frost", "asked=when is the first frost due?",
+                "name=the frost question", "read=2026-09-03", "--as-of", "2026-09-03", rec)
+            run(SCRIPTS / "provenance.py", "add", "when.first_frost", "v=2026-11-02", "name=first frost",
+                "from=s.2026_09_03_frost", "--as-of", "2026-09-03", rec)
+            # the same day as a served intent: the page noticed that day, so the run is 0
+            _, out, _ = run(SCRIPTS / "render_page.py", "--verify", rec)
+            self.assertIn("1 intents no tab serves · 0 recent in a row", out)
+            # nothing of that day served: both count, and the day before ends the run
+            edit(brief, "    serves: [s.2026_09_03_glazing]\n", "")
+            _, out, _ = run(SCRIPTS / "render_page.py", "--verify", rec)
+            self.assertIn("2 intents no tab serves · 2 recent in a row", out)
 
 
 if __name__ == "__main__":
