@@ -178,8 +178,6 @@ open:
   q.arrangement_falsifiers: "will sessions write arrangement falsifiers a build can evaluate and
                              that say something - to be read as a foreign agent would, after
                              fifteen real arrangements?"
-  q.intent_attribution: "how does an entry bind to the session that wrote it - a from: on the
-                         session's source, or the version history at build time?"
   q.unprompted_recording: "what makes a session record what it decided in conversation,
                            unasked? seven decisions lived only in chat until a person asked;
                            the opener had shown the rule, and the gate cannot see a record
