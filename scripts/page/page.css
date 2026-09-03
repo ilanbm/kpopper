@@ -108,6 +108,8 @@ td.kl{width:1%;white-space:nowrap;color:var(--ink2)}
  border-radius:4px;padding:1px 6px;margin-inline-end:7px;vertical-align:1px}
 .nt{font-size:12px;color:var(--mut);margin-top:2px;max-width:62ch}
 .rest{font-size:11.5px;color:var(--mut);margin-top:9px}
+.card .rb{font-size:12.5px;color:var(--mut);margin-top:7px}
+.card .rb .lbl{font-size:10.5px;letter-spacing:.08em;text-transform:uppercase;margin-inline-end:7px}
 .bad{color:var(--stop);font-size:12.5px;margin:-4px 0 9px}
 .fx.in{border-bottom:1px dotted var(--acc)}
 .rel-down{outline:1.5px solid var(--acc);outline-offset:3px;border-radius:3px}

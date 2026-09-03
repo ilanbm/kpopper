@@ -272,6 +272,8 @@ def infer(doc):
             if not isinstance(body, dict) or fields["deps"] not in body:
                 continue
             for f, val in body.items():
+                if f in REOPENED:
+                    continue           # prose by declaration: it never reads as a predicate
                 if isinstance(val, dict) and val and all(k in ids for k in val):
                     cand["snapshot"][f] = cand["snapshot"].get(f, 0) + 1
                 elif isinstance(val, str) and val and "{{" not in val:
@@ -298,6 +300,11 @@ def infer(doc):
 
 # A judgment may decline any of these, but only out loud.
 BLOCKED = ("blocked_on", "unverified", "status")
+# A judgment decided on a prior - or on taste - names the sign that would re-open it, in
+# prose a person reads when it appears. Not a predicate and not a hole: the judgment is
+# decided, and this says when to look again. Beside blocked_on, which keeps its meaning -
+# the predicate cannot be evaluated, and why - so every record written before it still reads.
+REOPENED = ("reopened_by",)
 OPEN = ("open", "questions")
 
 # The one field this method asks for by name rather than inferring by shape - a sentence
@@ -463,10 +470,20 @@ def _blocked_text(body):
     return ""
 
 
+def _reopened_text(body):
+    """The declared re-opener, when the judgment carries one."""
+    for k in REOPENED:
+        v = body.get(k)
+        if v:
+            return str(v)
+    return ""
+
+
 def flags(ids, jud, fields, raw):
     """Per judgment: the conditions that put it in front of a person, derived the one way
     every surface derives them. A predicate over a value `raw` does not carry - a count
-    not yet taken - is left undecided, never guessed."""
+    not yet taken - is left undecided, never guessed. A judgment decided with a re-opener
+    and no predicate is in front of nobody: it is decided, and a person reads the sign."""
     out = {}
     for name, j in jud.items():
         f, blocked = set(), _blocked_text(j["body"])
@@ -476,7 +493,7 @@ def flags(ids, jud, fields, raw):
             elif fields["snapshot"] and d not in j["seen"]:
                 f.add("unchecked")
         named = [t for t in ID.findall(j["pred"]) if t in ids]
-        if not named and not blocked:
+        if not named and not blocked and not _reopened_text(j["body"]):
             f.add("no_predicate")
         elif named and evaluate(j["pred"], raw, ids) is True:
             f.add("falsified")
@@ -594,9 +611,16 @@ def check_lines(paths):
         evaluable = bool([t for t in ID.findall(j["pred"]) if t in ids])
         if not evaluable:
             what = "prose, not an evaluable predicate" if j["pred"] else "no predicate at all"
-            (note if blocked else fail).append(
-                f"{name}: {what}" + (f" (declared: {blocked[:90]})" if blocked
-                else " - and nothing says why not, so it can never be re-checked"))
+            reopened = _reopened_text(j["body"])
+            if blocked:
+                note.append(f"{name}: {what} (declared: {blocked[:90]})")
+            elif reopened:
+                # decided, and it says what would re-open it - a sign a person reads, so
+                # the judgment is declared rather than failed, and it is not waiting
+                note.append(f"{name}: {what} - decided; reopened by: {reopened[:90]}")
+            else:
+                fail.append(f"{name}: {what} - and nothing says why not, so it can never be "
+                            f"re-checked")
         elif evaluate(j["pred"], raw, ids) is True:
             fail.append(f"{name}: wrong_if holds ({j['pred']}) - broken by its own condition")
         elif [t for t in ID.findall(j["pred"]) if t in PAGE]:
@@ -666,7 +690,7 @@ def opening(paths, budget=25, chars=None):
                 items.append((100, name, f"predicate reads {tok}, which it does not declare - "
                                          f"a change to it never reaches this"))
         evaluable = bool([t for t in ID.findall(j["pred"]) if t in ids])
-        if not evaluable and not blocked:
+        if not evaluable and not blocked and not _reopened_text(j["body"]):
             items.append((40, name, "nothing evaluable would falsify it"))
         elif evaluable and evaluate(j["pred"], raw, ids) is True:
             items.append((95, name, f"wrong_if holds ({j['pred'][:60]}) - broken by its own "
@@ -986,6 +1010,9 @@ def pull(paths, seeds, budget=40):
 
         if j["pred"]:
             lines.append(cut(f"    wrong_if: {j['pred']}", 110))
+        reopened = _reopened_text(body)
+        if reopened:
+            lines.append(cut(f"    reopened by: {reopened}", 110))
 
         # Every move since the snapshot, with what the predicate made of it - pull is
         # the grounding surface, so here even a muted move is worth a line.
@@ -1322,6 +1349,9 @@ def _state(name, j, raw, ids, fields, touched=()):
         return "MUTED", (f"{d} moved {short(o)} -> {short(n)}, inside wrong_if ({j['pred']}) - "
                          f"nothing is asked")
     if not named_ and not blocked:
+        reopened = _reopened_text(j["body"])
+        if reopened:
+            return "HOLDS", "decided; reopened by " + short(reopened, 80)
         return "HOLDS", "nothing evaluable would say otherwise"
     if not named_:
         return "HOLDS", "no predicate to evaluate; declared - " + short(blocked, 80)

@@ -48,12 +48,14 @@ def flags_of(ids, jud, fields, raw):
     out = {}
     for name, j in jud.items():
         f, blocked = set(), next((str(j["body"][k]) for k in P.BLOCKED if j["body"].get(k)), "")
+        reopened = next((str(j["body"][k]) for k in P.REOPENED if j["body"].get(k)), "")
         for d in j["deps"]:
             if d not in ids:
                 f.add("blocked" if blocked else "broken")
             elif fields["snapshot"] and d not in j["seen"]:
                 f.add("unchecked")
-        if not [t for t in P.ID.findall(j["pred"]) if t in ids] and not blocked:
+        # a judgment decided with a re-opener is in front of nobody: a person reads the sign
+        if not [t for t in P.ID.findall(j["pred"]) if t in ids] and not blocked and not reopened:
             f.add("no_predicate")
         elif P.evaluate(j["pred"], raw, ids) is True:
             f.add("falsified")
@@ -697,7 +699,8 @@ def build(paths, brief_path=None):
         J[name] = {"deps": j["deps"], "used": sorted(used.get(name, [])), "pred": j["pred"],
                    "verdict": str(b.get("verdict") or b.get("title") or ""),
                    "because": str(b.get("because") or b.get("breaks_if") or "")[:400],
-                   "blocked": why, "waiting": keys}
+                   "blocked": why, "waiting": keys,
+                   "reopened": next((str(b[k]) for k in P.REOPENED if b.get(k)), "")}
 
     labels = (brief.get("labels") or {}) if brief else {}
     # A grouping is a scheme, and a brief may declare several: `groups:` is either one
@@ -742,7 +745,7 @@ def build(paths, brief_path=None):
         """Run once the page has counted, so a reference to a page count reads the number
         on the hover as it does on the card."""
         for name in J:
-            for f in ("verdict", "because", "blocked"):
+            for f in ("verdict", "because", "blocked", "reopened"):
                 J[name][f] = P.resolve_refs(RAW[name][f], raw0, ids, jud, lbl)
         for k in E:
             if "note" in E[k]:
@@ -866,9 +869,12 @@ def build(paths, brief_path=None):
             moved = moves_of(name)
             verdict, h1 = prose(b["verdict"], j["deps"], moved)
             because, h2 = prose(b["because"], j["deps"], moved)
+            # the sign that would re-open a decided judgment, in its own row: a person
+            # reads it here, which is what keeps a bad one from hiding
+            reopened, h3 = prose(b["reopened"], j["deps"], moved)
             miss = [d for d in j["deps"] if d not in E and d not in J]
-            rest = [d for d in j["deps"] if d not in (h1 | h2) and d not in miss]
-            anchored[0] += len(h1 | h2)
+            rest = [d for d in j["deps"] if d not in (h1 | h2 | h3) and d not in miss]
+            anchored[0] += len(h1 | h2 | h3)
             anchored[1] += len([d for d in j["deps"] if d not in miss])
             # a judgment something moved under since it was reviewed is tinted, and says
             # what moved - in the markup, so the warning shows where scripts do not run
@@ -876,6 +882,8 @@ def build(paths, brief_path=None):
             o.append('<div class="card' + (" moved" if mv else "") + '">'
                      f'<div class="vd fx" data-id="{html.escape(name)}" dir="auto">{verdict}</div>'
                      + (f'<div class="bc" dir="auto">{because}</div>' if because else "")
+                     + (f'<div class="rb" dir="auto"><span class="lbl">reopened by</span>'
+                        f'{reopened}</div>' if reopened else "")
                      + (moved_note(mv, "reviewed") if mv else "")
                      # what is missing stays visible; what is present is reachable by
                      # hovering the words that already mention it.
