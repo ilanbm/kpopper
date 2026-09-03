@@ -25,7 +25,11 @@ import provenance as P  # noqa: E402
 import sameness as S  # noqa: E402
 
 LOCATION = 'same from and at (doc.boiler_sheet, "rated output, p. 3") - certain'
-HINT = "  one subject: same <a> <b> retires b into a · two: distinct <a> <b> \"why\""
+PAIRS = [f"heat.nameplate_kw (resheet) and heat.boiler_kw: {LOCATION}",
+         f"heat.nameplate_kw (resheet) and heat.output_kw: {LOCATION}",
+         "c.wind_short (wind) and c.margin_thin: rests on heat.loss_kw, heat.output_kw too - verdicts differ, "
+         "a pair to judge",
+         "heat.gap_kw (wind) and heat.shortfall_kw: same rule (heat.loss_kw - heat.output_kw)"]
 
 
 def run(*args, cwd=None):
@@ -165,16 +169,8 @@ class TheCandidatesAMergerWalks(unittest.TestCase):
 
     def test_the_dry_run_lists_pairs_by_subject_and_the_new_prefixes(self):
         lines, news = S.candidate_lines(P.load([str(RECORD)]))
-        self.assertEqual(lines, [
-            "  heat.nameplate_kw (resheet):",
-            f"    heat.boiler_kw: {LOCATION}",
-            f"    heat.output_kw: {LOCATION}",
-            "  c.wind_short (wind):",
-            "    c.margin_thin: rests on heat.loss_kw, heat.output_kw too - verdicts differ, a pair to judge",
-            "  heat.gap_kw (wind):",
-            "    heat.shortfall_kw: same rule (heat.loss_kw - heat.output_kw)",
-            HINT])
-        self.assertEqual(news, ["  glaze. (resheet): glaze.quote_eur"])
+        self.assertEqual(lines, PAIRS)
+        self.assertEqual(news, ["glaze (resheet): glaze.quote_eur"])
         pairs, subjects = S.candidates(P.load([str(RECORD)]))
         self.assertEqual(sorted(pairs), ["c.wind_short", "heat.gap_kw", "heat.nameplate_kw"])
         self.assertEqual(pairs["heat.nameplate_kw"]["hypothesis"], "resheet")
@@ -185,6 +181,26 @@ class TheCandidatesAMergerWalks(unittest.TestCase):
         pairs, subjects = S.candidates(P.load([str(RECORD)]), ["wind"])
         self.assertEqual(sorted(pairs), ["c.wind_short", "heat.gap_kw"])
         self.assertEqual(subjects, {})
+        # or as the dicts the reader builds for them, the way consolidate holds them
+        doc = P.load([str(RECORD)])
+        pairs, _ = S.candidates(doc, [doc.hypotheses["wind"]])
+        self.assertEqual(sorted(pairs), ["c.wind_short", "heat.gap_kw"])
+
+    def test_the_dry_run_prints_the_candidates_and_the_new_subjects(self):
+        with tempfile.TemporaryDirectory() as d:
+            rec = copy_fixture(pathlib.Path(d))
+            code, out, err = run(SCRIPTS / "consolidate.py", "--dry-run", rec)
+            self.assertEqual(code, 0, out + err)
+            self.assertIn("candidates (4): pairs for a person to judge as the same subject or distinct\n"
+                          + "".join(f"  {l}\n" for l in PAIRS)
+                          + "new subjects (1): prefixes the base does not hold\n  glaze: glaze.quote_eur\n", out)
+            # a distinct declared retires its pair from the next dry run
+            run(SCRIPTS / "provenance.py", "distinct", "c.wind_short", "c.margin_thin", "the wind is a premise",
+                "--as-of", "2026-09-04", rec)
+            code, out, err = run(SCRIPTS / "consolidate.py", "--dry-run", rec)
+            self.assertEqual(code, 0, out + err)
+            self.assertIn("candidates (3): pairs", out)
+            self.assertNotIn("c.wind_short", out.split("candidates (3)")[1])
 
     def test_a_pair_two_arrivals_make_is_listed_once(self):
         with tempfile.TemporaryDirectory() as d:
@@ -290,15 +306,13 @@ class SameIsAMigration(unittest.TestCase):
             # the hypothesis's judgment now shares with two judgments
             lines, _ = S.candidate_lines(P.load([str(rec)]))
             self.assertEqual(lines, [
-                "  heat.nameplate_kw (resheet):",
-                f"    heat.boiler_kw: {LOCATION}",
-                "  c.wind_short (wind):",
-                "    c.boiler_short: rests on heat.boiler_kw, heat.loss_kw too - verdicts differ, a pair to judge",
-                "    c.margin_thin: rests on heat.boiler_kw, heat.loss_kw too - verdicts differ, a pair to judge",
-                "  heat.gap_kw (wind):",
-                "    heat.deficit_kw: same rule (heat.loss_kw - heat.boiler_kw)",
-                "    heat.shortfall_kw: same rule (heat.loss_kw - heat.boiler_kw)",
-                HINT])
+                f"heat.nameplate_kw (resheet) and heat.boiler_kw: {LOCATION}",
+                "c.wind_short (wind) and c.boiler_short: rests on heat.boiler_kw, heat.loss_kw too - verdicts "
+                "differ, a pair to judge",
+                "c.wind_short (wind) and c.margin_thin: rests on heat.boiler_kw, heat.loss_kw too - verdicts "
+                "differ, a pair to judge",
+                "heat.gap_kw (wind) and heat.deficit_kw: same rule (heat.loss_kw - heat.boiler_kw)",
+                "heat.gap_kw (wind) and heat.shortfall_kw: same rule (heat.loss_kw - heat.boiler_kw)"])
 
     def test_a_retired_id_points_at_its_survivor(self):
         with tempfile.TemporaryDirectory() as d:
@@ -648,7 +662,7 @@ class DistinctRetiresThePair(unittest.TestCase):
             # the base is not touched: the edge is written where the id lives
             self.assertEqual(rec.read_text(encoding="utf-8"), RECORD.read_text(encoding="utf-8"))
             lines, _ = S.candidate_lines(P.load([str(rec)]))
-            self.assertNotIn("  c.wind_short (wind):", lines)
+            self.assertFalse([l for l in lines if l.startswith("c.wind_short (wind)")], lines)
             self.assertNotIn("c.margin_thin", "\n".join(lines))
             # declared once is declared; a second distinct on the same id joins the first
             before = h.read_text(encoding="utf-8")

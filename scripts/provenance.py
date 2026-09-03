@@ -1345,15 +1345,17 @@ def _pull_raw(doc, ids, jud, fields):
     return raw
 
 
-def pull(paths, seeds, budget=40):
+def pull(paths, seeds, budget=40, doc=None):
     """
     The seeded projection, with values and sources - ground a session on a subject
     instead of reading the whole record for it. Where `affects` walks forward from a
     seed to what depends on it, this reads the seed itself: its entries, as recorded,
     and the judgments that rest on them. The hypotheses beside the record are read over
     it: what each proposes for an id the base holds, what it adds, and where two disagree.
+    `doc` is the record already loaded, for a caller that laid something over it - another
+    branch's record, read and never written.
     """
-    doc = load(paths)
+    doc = load(paths) if doc is None else doc
     ids, jud, fields = infer(doc)
     raw = _pull_raw(doc, ids, jud, fields)
     # the record as it stands under each hypothesis, in name order

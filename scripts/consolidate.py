@@ -24,6 +24,7 @@ import yaml
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import provenance as P  # noqa: E402
+import sameness  # noqa: E402
 
 NEVER = "never"
 
@@ -235,6 +236,9 @@ def union_of(doc, hyps, base_check=None):
     # subjects the base does not hold: the first segment of what arrives
     have = {k.split(".")[0] for k in bids if "." in k}
     c.new_subjects = sorted({k.split(".")[0] for k, _ in c.arrived if "." in k} - have)
+    # the pairs a person judges: what arrives, held against the base and against each other
+    # by declared fields alone; a pair a distinct_from declared is not named
+    c.candidates = sameness.candidate_lines(doc, c.hyps)[0]
     return c
 
 
@@ -723,29 +727,14 @@ def from_ref(paths, ref, doc=None):
     return out
 
 
-@contextlib.contextmanager
-def _read_with(hyps):
-    """The reader's commands load the record by path; for the length of this block, what they
-    load carries these hypotheses too - another branch's record, read and never written."""
-    real = P.load
-
-    def load(paths):
-        doc = real(paths)
-        doc.hypotheses = dict(doc.hypotheses, **{h["name"]: h for h in hyps})
-        return doc
-    P.load = load
-    try:
-        yield
-    finally:
-        P.load = real
-
-
 def pull_from(paths, ref, seeds, budget=40):
     """`pull`, with another branch's committed record laid beside this one: what it proposes
-    for the seed, said the way a hypothesis file's proposal is."""
+    for the seed, said the way a hypothesis file's proposal is - the record loaded once, the
+    branch's hypotheses laid over it, and handed to the reader's own pull."""
     hyps = from_ref(paths, ref)
-    with _read_with(hyps):
-        return P.pull(paths, seeds, budget)
+    doc = P.load(paths)
+    doc.hypotheses = dict(doc.hypotheses, **{h["name"]: h for h in hyps})
+    return P.pull(paths, seeds, budget, doc=doc)
 
 
 # ── the command ──────────────────────────────────────────────────────────────

@@ -217,23 +217,32 @@ def nearest_existing(a, doc, ids, jud, fields, raw):
 # ── the candidates a merger walks ────────────────────────────────────────────
 def candidates(doc, hypotheses=None, limit=5):
     """The pairs a merger judges when hypotheses consolidate, from declared fields alone
-    -> (pairs, new_subjects). `doc` is the loaded record; `hypotheses` names the ones being
-    consolidated (default: every readable one beside the record). What arrives - an id a
-    hypothesis holds and the base does not - is held against the base and against what the
-    other hypotheses bring; a pair two arrivals make is listed once. pairs: {arriving id:
-    {"hypothesis": name, "near": [{"id", "hypothesis" (None for the base), "rank", "reasons",
-    "score"}, ...]}}, at most `limit` per subject. new_subjects: {prefix: [(hypothesis, id),
-    ...]} for every prefix the base does not hold. Pairs a distinct_from declared are left out."""
+    -> (pairs, new_subjects). `doc` is the loaded record; `hypotheses` the ones being
+    consolidated - names of hypotheses beside the record, or the dicts the reader builds for
+    them, as consolidate holds them (default: every readable one beside the record). What
+    arrives - an id a hypothesis holds and the base does not - is held against the base and
+    against what the other hypotheses bring; a pair two arrivals make is listed once. pairs:
+    {arriving id: {"hypothesis": name, "near": [{"id", "hypothesis" (None for the base),
+    "rank", "reasons", "score"}, ...]}}, at most `limit` per subject. new_subjects: {prefix:
+    [(hypothesis, id), ...]} for every prefix the base does not hold. Pairs a distinct_from
+    declared are left out."""
     ids, jud, fields = P.infer(doc)
-    base, hyps, live = _every_raw(doc)
-    names = [n for n in (sorted(hyps) if hypotheses is None else hypotheses) if n in hyps]
+    base, beside, live = _every_raw(doc)
+    chosen = []
+    for x in (sorted(beside) if hypotheses is None else hypotheses):
+        h = x if isinstance(x, dict) else beside.get(x)
+        if h is not None and not h.get("error") and h["name"] not in {c["name"] for c in chosen}:
+            chosen.append(h)
+    hyps = dict(beside, **{h["name"]: h for h in chosen})
+    for h in chosen:
+        live |= set(h["ids"])
     raws = [base] + [h["raw"] for h in hyps.values()]
     raw_all = {}
     for r in reversed(raws):
         raw_all.update(r)
     retired = retired_into(raws, live)
     distinct = distinct_pairs(raws)
-    arrivals = [(n, k) for n in names for k in sorted(hyps[n]["ids"]) if k not in ids]
+    arrivals = [(h["name"], k) for h in chosen for k in sorted(h["ids"]) if k not in ids]
     base_pool = {x: base[x] for x in ids if isinstance(base.get(x), dict)}
     pairs, new_subjects = {}, {}
     for n, k in arrivals:
@@ -257,17 +266,15 @@ def candidates(doc, hypotheses=None, limit=5):
 
 def candidate_lines(doc, hypotheses=None, limit=5):
     """`candidates` as the lines the dry run prints under its two headings ->
-    (candidates, new_subjects), each a list of indented lines, empty when there is nothing."""
+    (candidates, new_subjects): one line per pair, grouped by the arriving id - "a (h) and b:
+    why" - and one per prefix the base does not hold; empty lists when there is nothing."""
     pairs, subjects = candidates(doc, hypotheses, limit)
     lines = []
     for k, got in sorted(pairs.items(), key=lambda kv: (kv[1]["hypothesis"], kv[0])):
-        lines.append(f"  {k} ({got['hypothesis']}):")
         for c in got["near"]:
-            tag = f" (in hypothesis {c['hypothesis']})" if c["hypothesis"] else ""
-            lines.append(f"    {c['id']}{tag}: {'; '.join(c['reasons'])}")
-    if lines:
-        lines.append("  one subject: same <a> <b> retires b into a · two: distinct <a> <b> \"why\"")
-    news = [f"  {p}. ({', '.join(sorted({n for n, _ in ks}))}): " + ", ".join(k for _, k in ks)
+            tag = f" ({c['hypothesis']})" if c["hypothesis"] else ""
+            lines.append(f"{k} ({got['hypothesis']}) and {c['id']}{tag}: {'; '.join(c['reasons'])}")
+    news = [f"{p} ({', '.join(sorted({n for n, _ in ks}))}): " + ", ".join(k for _, k in ks)
             for p, ks in sorted(subjects.items())]
     return lines, news
 
