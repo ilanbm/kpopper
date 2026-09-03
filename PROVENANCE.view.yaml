@@ -1,15 +1,104 @@
+title: kpopper
 intent: "A method any session can run - and what is still open on the way there"
-sections:
-  - title: The questions that pick the next piece of work
-    why: each is open on purpose - answering one is how the next thing gets chosen
-    pick: q.
-    as: table
-  - title: What the method promises, in numbers
-    why: the one measurement is the opening cost of session N - these are its bounds today
-    pick: [m.open_whole, m.open_clean, p.hook_slot]
-    as: headline
-  - title: The decisions that hold
-    why: every one says what would make it wrong - that is what separates a decision from an opinion
-    pick: judgments
-    as: cards
-shape: {entries: 82, judgments: 59, flagged: 0, blocked: 0}
+
+labels:
+  s.2026_09_01_consolidation: "How the record should merge across sessions"
+  s.2026_09_02_priors: "Can a model's own prior be a source"
+  s.2026_09_03_hypotheses: "Let the record fork on a contradiction"
+  s.2026_09_03_coverage: "Make the page answer for its intents"
+  s.2026_09_03_language: "Which language the renderer should be"
+  s.2026_09_03_written_layer: "The written layer, and a write path"
+  run.records_read_both_ways: "Four records read under both meanings"
+  run.blocked_on_read: "Every blocked_on, read for which meaning"
+  run.design_talk: "Seven decisions that lived only in chat"
+  run.claims_scored: "Thirteen claims of a day, scored by hand"
+  run.page_move_three_states: "The page's code out of Python strings"
+  run.hub_vs_now: "A hand-written page against this one"
+  run.constants_measured: "The renderer's own string constants"
+  run.first_external: "First run on a project this did not build"
+  run.multisession_survey: "One day of parallel sessions"
+  doc.hub_seam: "Why the lab's page stays hand-written"
+  doc.three_briefs: "The three briefs that exist"
+  doc.fact_moves: "What happens when a fact moves"
+  doc.agent_graph: "How an agent starts a graph"
+  prior.local_needs_a_run: "A claim about this project needs a run"
+  prior.rust_unwarranted: "A compiled binary is not warranted"
+  prior.gate_by_consequence: "Who decides, by what being wrong costs"
+  prior.ts_direction: "TypeScript for all of it, or none"
+  prior.strings_lose_tooling: "Browser code in strings loses its tools"
+  prior.field_name_reads_as_gate: "A field is read by its name"
+  prior.confidence_needs_calibration: "A confidence needs something to check it"
+
+groups:
+  grounding:
+    Measured here: [run.]
+    Read from the world: [doc., lit.]
+    Taken from a session's prior: [prior.]
+    Weighed and set aside: [alt.]
+    What this is for: [goal., scope., name., skill.]
+
+tabs:
+  - title: Now
+    occasion: "you are picking up this project and need what is still open, and what the sessions before you were asked for"
+    sections:
+      - title: The questions that pick the next piece of work
+        why: each is open on purpose - answering one is how the next thing gets chosen
+        pick: q.
+        as: table
+      - title: What the method promises, in numbers
+        why: the one measurement is the opening cost of session N - these are its bounds today
+        pick: [m.open_whole, m.open_clean, p.hook_slot]
+        as: headline
+      - title: What each session was asked
+        why: frozen, in the requester's own words - a tab may claim to serve one of these only by picking what that session wrote
+        pick: s.
+        as: lines
+    shape: {entries: 82, judgments: 60, flagged: 0, blocked: 0}
+
+  - title: What holds
+    occasion: "you are about to write something here and need to know what this project already decided, and on what"
+    serves: [s.2026_09_03_coverage, s.2026_09_03_written_layer, s.2026_09_03_hypotheses]
+    sections:
+      - title: How to read what follows
+        why: a wall of cards is not an argument until you know what separates them
+        text: >
+          Every card below carries a verdict and the sign that would make it wrong. That sign is
+          the whole difference between a decision and an opinion, and it is why so many of these
+          can be left standing without being re-argued: {{d.falsifier_beyond_reach}} rules out the
+          comfortable kind, the sign that can only appear once the decision has already stopped
+          anyone from producing it. Where a sign cannot be evaluated at all the judgment says so
+          rather than inventing one. The reasoning itself is not written here twice, because
+          {{d.reasoning_in_record}} - so what you are reading on this tab is the record, resolved,
+          and not a summary of it.
+        reviewed: "2026-09-04"
+        seen:
+          d.falsifier_beyond_reach: "a falsifier names a sign the decision itself cannot suppress;
+                                     one that can only appear when people do what the decision stops
+                                     offering is sealed, not falsifiable"
+          d.reasoning_in_record: "reasoning is the because of the judgment it belongs to, in the
+                                  record; the page's connective text lives in the brief; both resolve
+                                  references at build and both carry seen"
+      - title: The decisions that hold
+        why: every one says what would make it wrong - hover any reference in the reasoning to see the value it was decided against
+        pick: judgments
+        as: cards
+    shape: {entries: 82, judgments: 60, flagged: 0, blocked: 0}
+
+  - title: What this rests on
+    occasion: "you are weighing a decision here and want to see the ground under it rather than the reasoning on top"
+    serves: [s.2026_09_02_priors, s.2026_09_03_language, s.2026_09_01_consolidation]
+    sections:
+      - title: The ground
+        why: measured here, read from the world, or taken from a session's own prior - separated because they are not worth the same
+        pick: [run., doc., prior., alt., goal., scope., name., skill.]
+        as: grouped
+        by: grounding
+      - title: What the landscape said
+        why: the two findings whose value is an argument rather than a number, kept where they can be read as one
+        pick: lit.
+        as: table
+      - title: What a model's own confidence is allowed to carry
+        why: a prior is the one input with no measurement under it, so resting on one is itself a decision with a sign of its own
+        pick: [d.prior_carries_its_own_falsifier, d.intent_is_a_source]
+        as: cards
+    shape: {entries: 82, judgments: 60, flagged: 0, blocked: 0}
