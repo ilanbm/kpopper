@@ -65,8 +65,11 @@ def read(paths, names=(), refs=()):
         with io.open(h["path"], encoding="utf-8") as fh:
             h["text"] = fh.read().split("\n")
         pool[n] = h
-    for ref in refs:
+    for ref in list(dict.fromkeys(refs)):
         for h in from_ref(paths, ref, doc):
+            if h["name"] in pool:
+                raise P.Refused(f"refused - {h['name']} names both a hypothesis beside the record and "
+                                f"what {ref} holds; rename the file, or consolidate them one at a time")
             pool[h["name"]] = h
     if names:
         missing = [n for n in names if n not in pool]
@@ -187,7 +190,13 @@ def union_of(doc, hyps, base_check=None):
             may, why = P.may_supersede(k, old, new, c.raw, c.ids, bjud, bfields, None)
         else:
             day = _read_day(new, c.raw) if isinstance(new, dict) else None
-            may, why = P.may_supersede(k, old, new_claim, braw, bids, bjud, bfields, day)
+            base_day = P._read_on(old, braw) if isinstance(old, dict) else None
+            if day is None and base_day is not None:
+                # the door tells readings apart by the day; one nothing dates cannot be asked
+                # about, and the day of the fold is not the day it was read
+                may, why = False, f"the reading is undated, and the base's is from {base_day}"
+            else:
+                may, why = P.may_supersede(k, old, new_claim, braw, bids, bjud, bfields, day)
         if same and not may:
             continue            # the same claim, read no later: the base already holds it
         c.updates.append((k, h, old_claim, new_claim, may, why))
@@ -215,8 +224,14 @@ def union_of(doc, hyps, base_check=None):
     # a hypothesis's own falsifier, in its head, evaluated against the union
     for h in c.hyps:
         pred = str(h["head"].get("wrong_if") or "")
-        if pred and P.evaluate(pred, c.raw, c.ids) is True:
+        if not pred:
+            continue
+        got = P.evaluate(pred, c.raw, c.ids)
+        if got is True:
             c.head_falsified.append((h, pred))
+        elif got is None:
+            c.holes.append(f"{h['name']}: its wrong_if is not a comparison this reader decides "
+                           f"({P.short(pred, 60)}) - a falsifier nothing evaluates tests nothing")
     # subjects the base does not hold: the first segment of what arrives
     have = {k.split(".")[0] for k in bids if "." in k}
     c.new_subjects = sorted({k.split(".")[0] for k, _ in c.arrived if "." in k} - have)
@@ -363,6 +378,10 @@ def report(c, today=None):
         out.append("clean - and nothing here folds: " + ", ".join(names)
                    + (" are what-ifs" if len(names) > 1 else " is a what-if")
                    + ", evaluated and never written")
+    elif not c.arrived and not c.updates:
+        out.append("clean - and nothing to write: the base already holds everything "
+                   + ", ".join(foldable) + f" propose{'s' if len(foldable) == 1 else ''}; consolidate "
+                   + " ".join(foldable) + " removes the file" + ("s" if len(foldable) > 1 else ""))
     else:
         out.append("clean: " + ", ".join(foldable) + " may fold - consolidate " + " ".join(foldable))
     return out
@@ -414,31 +433,41 @@ def _rel(paths, p):
     return os.path.relpath(real, root)
 
 
-def fold(paths, c, stamp=None):
-    """The union written into the base: every id that arrived or was replaced, carried over
-    whole from the hypothesis that holds it, placed in id order beside its siblings - entries
-    first, then judgments, so each door is asked with the values already in place; then the
-    files read back and checked, and restored whole if the check says anything it did not
-    say before; then the folded files deleted. -> the lines to print. Refused when the dry run
-    is not clean, or when what is named never folds."""
-    if c.contested:
-        raise P.Refused("refused - a contested id stops the fold: " + ", ".join(c.contested))
-    if c.blocked:
-        raise P.Refused("refused - the dry run is not clean; nothing folds until it is")
-    never = [h["name"] for h in c.hyps if str(h["head"].get("folds") or "") == NEVER]
-    if never:
-        raise P.Refused(f"refused - {', '.join(never)} never fold{'s' if len(never) == 1 else ''}: a "
-                        f"what-if is evaluated and never written; consolidate the others by name")
-    if not c.arrived and not c.updates:
-        raise P.Refused("refused - nothing to fold: the base already holds everything "
-                        + ", ".join(h["name"] for h in c.hyps) + " proposes")
+def _text_of(f):
+    with io.open(f, encoding="utf-8") as fh:
+        return fh.read()
+
+
+def fold(paths, names=(), refs=(), stamp=None):
+    """The union written into the base, under one lock from the reading to the deletion:
+    the record and its hypotheses read, the union tested and its report printed, then -
+    only when the test is clean - every id that arrived or was replaced carried over whole
+    from the hypothesis that holds it, placed in id order beside its siblings, entries first
+    so each door is asked with the values already in place; the files read back and checked,
+    and restored whole if the check says anything it did not say before; the folded files
+    deleted. Refused when the dry run is not clean, or when what is named never folds."""
     stamp = stamp or datetime.date.today().isoformat()
-    doc, bids, bjud, bfields, braw = c.base
     with P._locked(paths[0]):
+        doc, hyps = read(paths, names, refs)
+        if not hyps:
+            print("no hypotheses beside the record - nothing to consolidate")
+            return 0
+        fail_b, _, moved_b, _, _ = P.check_lines(paths)
+        c = union_of(doc, hyps, (fail_b, moved_b))
+        for l in report(c):
+            print(l)
+        print()
+        if c.contested:
+            raise P.Refused("refused - a contested id stops the fold: " + ", ".join(c.contested))
+        if c.blocked:
+            raise P.Refused("refused - the dry run is not clean; nothing folds until it is")
+        never = [h["name"] for h in c.hyps if str(h["head"].get("folds") or "") == NEVER]
+        if never:
+            raise P.Refused(f"refused - {', '.join(never)} never fold{'s' if len(never) == 1 else ''}: "
+                            f"a what-if is evaluated and never written; consolidate the others by name")
         files = P._files_of(paths)
-        originals = {f: io.open(f, encoding="utf-8").read() for f in files}
+        originals = {f: _text_of(f) for f in files}
         texts = {f: originals[f].split("\n") for f in files}
-        fail_b, _, _, _, _ = P.check_lines(paths)
         writes = [(k, h, False) for k, h in c.arrived] + [(k, h, True) for k, h, _, _, _, _ in c.updates]
         writes.sort(key=lambda w: (w[0] in c.jud, w[0]))
         out, added, replaced = [], 0, 0
@@ -455,7 +484,10 @@ def fold(paths, c, stamp=None):
                 where = P._insert_block(texts[target], collection, k, block)
                 out.append("carry " + where.replace(f"{k} into", f"{k} from {h['name']} into", 1))
                 added += 1
-        P._bump_updated(texts[files[0]], stamp)
+        if writes:
+            for f in files:                     # meta lives in one of the files, not always the first
+                if P._bump_updated(texts[f], stamp):
+                    break
         changed = [f for f in files if "\n".join(texts[f]) != originals[f]]
         for f in changed:
             P._write_text(f, "\n".join(texts[f]))
@@ -485,20 +517,27 @@ def fold(paths, c, stamp=None):
         d = P.hypothesis_dir(paths)
         if os.path.isdir(d) and not os.listdir(d):
             os.rmdir(d)
-    names = ", ".join(h["name"] for h in c.hyps)
-    nj = sum(1 for k, _, _ in writes if k in c.jud)
-    ne = len(writes) - nj
-    out.append(f"folded {names}: {ne} entr{'y' if ne == 1 else 'ies'} and {nj} judgment"
-               f"{'' if nj == 1 else 's'} - {added} added, {replaced} replaced")
-    out.append("files to commit: " + ", ".join([_rel(paths, f) for f in changed]
-                                                + [_rel(paths, p) + " (deleted)" for p in deleted]))
+    names_ = ", ".join(h["name"] for h in c.hyps)
+    if not writes:
+        out.append(f"nothing to write: the base already holds everything {names_} propose"
+                   f"{'s' if len(c.hyps) == 1 else ''}")
+    else:
+        nj = sum(1 for k, _, _ in writes if k in c.jud)
+        ne = len(writes) - nj
+        out.append(f"folded {names_}: {ne} entr{'y' if ne == 1 else 'ies'} and {nj} judgment"
+                   f"{'' if nj == 1 else 's'} - {added} added, {replaced} replaced")
+    out.append("files to commit: " + (", ".join([_rel(paths, f) for f in changed]
+                                                 + [_rel(paths, p) + " (deleted)" for p in deleted])
+                                       or "none"))
     for h in c.hyps:
         if not h.get("path"):
             out.append(f"  nothing to delete for {h['name']}: another branch keeps its own record")
     n = P.counts(doc2, ids2, jud2, fields2, raw2)["graph.flagged"]
     out.append("")
     out.append(f"the record needs a person on {n} judgment{'s' if n != 1 else ''} - check says the rest")
-    return out
+    for l in out:
+        print(l)
+    return 0
 
 
 # ── the refutation ───────────────────────────────────────────────────────────
@@ -522,40 +561,51 @@ def _session_source(doc, ids, raw, given=None):
 def refute(paths, name, why, source=None, stamp=None):
     """The hypothesis's claim written into the base as a negative finding - `hyp.<name>`,
     `v: refuted`, its claim as the name, the why as `at:`, from a session source, dated - and
-    its file deleted. Nothing else of the hypothesis enters. -> the lines to print."""
+    its file deleted, under one lock and undone together: a finding without the deletion, or
+    the other way round, is never left behind. Nothing else of the hypothesis enters. -> the
+    lines to print."""
     if not why or not why.strip():
         raise P.Refused("refused - a refutation says why: consolidate --refute <hypothesis> \"<why>\"")
-    doc = P.load(paths)
-    h = doc.hypotheses.get(name)
-    if h is None:
-        raise P.Refused(f"refused - no hypothesis named {name} beside the record")
-    if h["error"]:
-        raise P.Refused(f"refused - hypothesis {name} could not be read: {h['error']}")
-    ids, jud, fields = P.infer(doc)
-    raw = P.with_builtins(doc, ids, jud, fields)
-    src = _session_source(doc, ids, raw, source)
     stamp = stamp or datetime.date.today().isoformat()
-    nid, n = "hyp." + re.sub(r"[^A-Za-z0-9_]", "_", name), 1
-    while nid in ids:
-        n += 1
-        nid = f"hyp.{re.sub(r'[^A-Za-z0-9_]', '_', name)}_{n}"
-    claim = h["head"].get("claim")
-    body = {"v": "refuted", "name": str(claim) if claim else f"hypothesis {name}", "from": src,
-            "at": " ".join(why.split()), "of": stamp}
-    action = {"kind": "add", "id": nid, "body": body, "as_of": stamp, "why": None, "into": None,
-              "hypothesis": None}
-    buf = io.StringIO()
-    with contextlib.redirect_stdout(buf):
-        P.apply(paths, action)
-    os.remove(h["path"])
-    d = P.hypothesis_dir(paths)
-    if os.path.isdir(d) and not os.listdir(d):
-        os.rmdir(d)
+    with P._locked(paths[0]):
+        doc = P.load(paths)
+        h = doc.hypotheses.get(name)
+        if h is None:
+            raise P.Refused(f"refused - no hypothesis named {name} beside the record")
+        if h["error"]:
+            raise P.Refused(f"refused - hypothesis {name} could not be read: {h['error']}")
+        ids, jud, fields = P.infer(doc)
+        raw = P.with_builtins(doc, ids, jud, fields)
+        src = _session_source(doc, ids, raw, source)
+        nid, n = "hyp." + re.sub(r"[^A-Za-z0-9_]", "_", name), 1
+        while nid in ids:
+            n += 1
+            nid = f"hyp.{re.sub(r'[^A-Za-z0-9_]', '_', name)}_{n}"
+        claim = h["head"].get("claim")
+        body = {"v": "refuted", "name": str(claim) if claim else f"hypothesis {name}", "from": src,
+                "at": " ".join(why.split()), "of": stamp}
+        action = {"kind": "add", "id": nid, "body": body, "as_of": stamp, "why": None, "into": None,
+                  "hypothesis": None}
+        files = P._files_of(paths)
+        originals = {f: _text_of(f) for f in files}
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            P._apply(paths, action)              # the write path, inside the lock already held
+        try:
+            os.remove(h["path"])
+        except OSError as e:
+            for f in files:
+                if _text_of(f) != originals[f]:
+                    P._write_text(f, originals[f])
+            raise P.Refused(f"refused - {h['path']} could not be deleted, so the finding was not "
+                            f"written either: {e}")
+        d = P.hypothesis_dir(paths)
+        if os.path.isdir(d) and not os.listdir(d):
+            os.rmdir(d)
+        written = [f for f in files if _text_of(f) != originals[f]]
     out = [l for l in buf.getvalue().split("\n") if l.strip()]
     out.append(f"refuted {name}: {nid} holds its claim as a negative finding, from {src}; "
                f"{_rel(paths, h['path'])} deleted, and nothing else of it enters")
-    written = [f for f in P._files_of(paths)
-               if P._locate(io.open(f, encoding="utf-8").read().split("\n"), nid)]
     out.append("files to commit: " + ", ".join([_rel(paths, f) for f in written]
                                                + [_rel(paths, h["path"]) + " (deleted)"]))
     return out
@@ -719,8 +769,11 @@ through the reader's own edits; the files read back and checked; the folded file
 the files to commit printed. Every replacement passes the one door a written value passes:
 an entry when its reading is newer than the base's, a judgment when the standing one is
 broken by its own condition or names the request - so a reading of the same day as the
-base's is contested, and stays beside the record until someone reads again. A hypothesis
-with `folds: never` in its head is a what-if: evaluated by the dry run, never written.
+base's is contested, and stays beside the record until someone reads again; one nothing
+dates is not compared with a dated one, and is contested until --as-of dates it. A head's
+own wrong_if is evaluated against the union: one that holds, or one the reader cannot
+decide, is red. A hypothesis with `folds: never` in its head is a what-if: evaluated by the
+dry run, never written.
 
 --refute writes the hypothesis's claim into the base as a negative finding and deletes the
 file - nothing else of it enters. The finding is one entry:
@@ -805,6 +858,8 @@ def main(argv=None):
         return 0
     if source:
         raise P.Refused("--as names the session source of a refutation: it goes with --refute")
+    if not dry:
+        return fold(paths, names, refs, as_of)
     doc, hyps = read(paths, names, refs)
     if not hyps:
         print("no hypotheses beside the record - nothing to consolidate")
@@ -813,12 +868,7 @@ def main(argv=None):
     c = union_of(doc, hyps, (fail_b, moved_b))
     for l in report(c):
         print(l)
-    if dry:
-        return 1 if c.red else 0
-    print()
-    for l in fold(paths, c, as_of):
-        print(l)
-    return 0
+    return 1 if c.red else 0
 
 
 if __name__ == "__main__":

@@ -6,6 +6,8 @@ browser and no network; the branch scenarios build a throwaway git repository:
 
     python3 -m unittest discover -s tests
 """
+import contextlib
+import io
 import os
 import pathlib
 import shutil
@@ -13,6 +15,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
+import warnings
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 SCRIPTS = ROOT / "scripts"
@@ -305,6 +308,59 @@ class TheDryRunTests(unittest.TestCase):
             self.assertIn("refused - hypothesis broken could not be read: while parsing", out + err)
 
 
+    def test_an_undated_reading_is_contested_against_a_dated_base(self):
+        with tempfile.TemporaryDirectory() as d:
+            rec = copy_fixture(pathlib.Path(d))
+            (pathlib.Path(d) / "PROVENANCE.d" / "undated.yaml").write_text(
+                "known:\n  heat.loss_kw:\n    v: 29\n    unit: kW\n    name: \"heat loss on a -5°C night\"\n"
+                "  when.first_cold_night:\n    v: \"2027-02-03\"\n    name: \"first night that matters\"\n",
+                encoding="utf-8")
+            code, out, err = kp("consolidate", "--dry-run", "undated", rec)
+            self.assertEqual(code, 1, out + err)
+            self.assertIn("  heat.loss_kw: 31 -> 29, from undated\n"
+                          "    the reading is undated, and the base's is from 2026-09-02 - the base keeps what it "
+                          "holds\n", out)
+            # dated through its source, the base's first cold night is kept the same way
+            self.assertIn("  when.first_cold_night: 2027-02-01 -> 2027-02-03, from undated\n"
+                          "    the reading is undated, and the base's is from 2026-09-02 - the base keeps what it "
+                          "holds\n", out)
+            self.assertIn("contested (2): the door refuses the reading, so the base keeps what it holds\n", out)
+            # a value nothing dates on either side is superseded, as the door says
+            rec.write_text(rec.read_text(encoding="utf-8").replace(
+                '    name: "first night that matters"\n    from: s.2026_09_02_heating\n',
+                '    name: "first night that matters"\n'), encoding="utf-8")
+            code, out, err = kp("consolidate", "--dry-run", "undated", rec)
+            self.assertEqual(code, 1, out + err)
+            self.assertIn("  when.first_cold_night: 2027-02-01 -> 2027-02-03, from undated\n"
+                          "    nothing dates the reading the base holds\n", out)
+            self.assertIn("contested (1):", out)
+
+    def test_a_head_falsifier_the_reader_cannot_decide_is_red(self):
+        with tempfile.TemporaryDirectory() as d:
+            rec = copy_fixture(pathlib.Path(d))
+            h = pathlib.Path(d) / "PROVENANCE.d" / "glazing_redo.yaml"
+            before = h.read_text(encoding="utf-8")
+            h.write_text(before.replace('wrong_if: "heat.loss_kw >= 31"', 'wrong_if: "heat.nothing > 1"'),
+                         encoding="utf-8")
+            code, out, err = kp("consolidate", "--dry-run", "glazing_redo", rec)
+            self.assertEqual(code, 1, out + err)
+            self.assertIn("moved / falsified (1): what the union moves or breaks\n"
+                          "  FAIL glazing_redo: its wrong_if is not a comparison this reader decides "
+                          "(heat.nothing > 1) - a falsifier nothing evaluates tests nothing\n", out)
+            self.assertIn("\nnot clean: a hole - nothing folds until it is read again\n", out)
+            code, out, err = kp("consolidate", "glazing_redo", rec)
+            self.assertEqual(code, 1)
+            self.assertIn("refused - the dry run is not clean", out + err)
+            self.assertTrue(h.exists())
+            # prose in the head's wrong_if is the same hole
+            h.write_text(before.replace('wrong_if: "heat.loss_kw >= 31"', 'wrong_if: "the wall is single glazed"'),
+                         encoding="utf-8")
+            code, out, err = kp("consolidate", "--dry-run", "glazing_redo", rec)
+            self.assertEqual(code, 1, out + err)
+            self.assertIn("  FAIL glazing_redo: its wrong_if is not a comparison this reader decides "
+                          "(the wall is single glazed)", out)
+
+
 class TheFold(unittest.TestCase):
     """The union written into the base with the reader's own edits: blocks carried over whole,
     in id order, the folded file deleted, the files to commit printed."""
@@ -369,15 +425,39 @@ class TheFold(unittest.TestCase):
                           "consolidate the others by name", out + err)
             self.assertTrue(h.exists())
 
-    def test_nothing_to_fold_is_said(self):
+    def test_a_hypothesis_the_base_already_holds_is_only_removed(self):
         with tempfile.TemporaryDirectory() as d:
             rec = copy_fixture(pathlib.Path(d))
-            (pathlib.Path(d) / "PROVENANCE.d" / "same.yaml").write_text(
-                "known:\n  heat.boiler_kw:\n    v: 24\n    unit: kW\n    name: \"boiler output\"\n"
-                "    from: doc.boiler_sheet\n", encoding="utf-8")
+            before = rec.read_text(encoding="utf-8")
+            h = pathlib.Path(d) / "PROVENANCE.d" / "same.yaml"
+            h.write_text("known:\n  heat.boiler_kw:\n    v: 24\n    unit: kW\n    name: \"boiler output\"\n"
+                         "    from: doc.boiler_sheet\n", encoding="utf-8")
+            code, out, err = kp("consolidate", "--dry-run", "same", rec)
+            self.assertEqual(code, 0, out + err)
+            self.assertIn("\nclean - and nothing to write: the base already holds everything same proposes; "
+                          "consolidate same removes the file\n", out)
             code, out, err = kp("consolidate", "same", rec)
-            self.assertEqual(code, 1)
-            self.assertIn("refused - nothing to fold: the base already holds everything same proposes", out + err)
+            self.assertEqual(code, 0, out + err)
+            self.assertIn("\nnothing to write: the base already holds everything same proposes\n"
+                          "files to commit: PROVENANCE.d/same.yaml (deleted)\n", out)
+            self.assertFalse(h.exists())
+            self.assertEqual(rec.read_text(encoding="utf-8"), before)
+
+    def test_a_pointer_record_folds_into_the_file_that_holds_the_entries(self):
+        with tempfile.TemporaryDirectory() as d:
+            root = pathlib.Path(d)
+            (root / "PROVENANCE.yaml").write_text("record: data.yaml\n", encoding="utf-8")
+            shutil.copy(FIXTURE / "PROVENANCE.yaml", root / "data.yaml")
+            shutil.copytree(FIXTURE / "PROVENANCE.d", root / "PROVENANCE.d")
+            code, out, err = kp("consolidate", "glazing_redo", "--as-of", "2026-09-04", root / "PROVENANCE.yaml")
+            self.assertEqual(code, 0, out + err)
+            self.assertIn("files to commit: data.yaml, PROVENANCE.d/glazing_redo.yaml (deleted)\n", out)
+            data = (root / "data.yaml").read_text(encoding="utf-8")
+            self.assertIn("  updated: 2026-09-04\n", data)
+            self.assertIn(RECOUNT_BLOCK, data)
+            self.assertIn(LOSS_AFTER, data)
+            self.assertEqual((root / "PROVENANCE.yaml").read_text(encoding="utf-8"), "record: data.yaml\n")
+            self.assertEqual(run(SCRIPTS / "provenance.py", "check", root / "PROVENANCE.yaml")[0], 0)
 
 
 class TheRefutation(unittest.TestCase):
@@ -462,6 +542,23 @@ class TheRefutation(unittest.TestCase):
         code, out, _ = kp()
         self.assertIn("kpopper consolidate", out)
         self.assertIn("pull <seed> --from REF", out)
+
+
+    @unittest.skipIf(hasattr(os, "geteuid") and os.geteuid() == 0, "root deletes from any directory")
+    def test_a_finding_is_not_left_behind_when_the_file_cannot_go(self):
+        with tempfile.TemporaryDirectory() as d:
+            rec = copy_fixture(pathlib.Path(d))
+            before = rec.read_text(encoding="utf-8")
+            hdir = pathlib.Path(d) / "PROVENANCE.d"
+            os.chmod(hdir, 0o555)
+            try:
+                code, out, err = kp("consolidate", "--refute", "glazing_redo", "why", "--as-of", "2026-09-04", rec)
+            finally:
+                os.chmod(hdir, 0o755)
+            self.assertEqual(code, 1, out + err)
+            self.assertIn("could not be deleted, so the finding was not written either", out + err)
+            self.assertEqual(rec.read_text(encoding="utf-8"), before)
+            self.assertTrue((hdir / "glazing_redo.yaml").exists())
 
 
 def branch_with_a_recount(d):
@@ -583,9 +680,33 @@ class AnotherBranch(unittest.TestCase):
             self.assertIn("is not in a git checkout", out + err)
 
 
+    def test_a_ref_named_like_a_hypothesis_beside_the_record_is_refused(self):
+        with tempfile.TemporaryDirectory() as d:
+            rec = branch_with_a_recount(d)
+            (pathlib.Path(d) / "PROVENANCE.d").mkdir()
+            shutil.copy(FIXTURE / "PROVENANCE.d" / "glazing_redo.yaml", pathlib.Path(d) / "PROVENANCE.d" / "recount.yaml")
+            before = rec.read_text(encoding="utf-8")
+            for args in (["--dry-run", "--from", "recount"], ["--from", "recount"]):
+                code, out, err = kp("consolidate", *args, rec)
+                self.assertEqual(code, 1, args)
+                self.assertIn("refused - recount names both a hypothesis beside the record and what recount "
+                              "holds; rename the file, or consolidate them one at a time", out + err)
+            self.assertEqual(rec.read_text(encoding="utf-8"), before)
+            # the same ref twice is one ref
+            shutil.rmtree(pathlib.Path(d) / "PROVENANCE.d")
+            code, out, err = kp("consolidate", "--dry-run", "--from", "recount", "--from", "recount",
+                                "recount", rec)
+            self.assertEqual(code, 0, out + err)
+
+
 class TheCallable(unittest.TestCase):
     """The union-and-re-check as a function: a what-if held in memory asks it and reads the
     answer, and nothing touches the disk."""
+
+    def setUp(self):
+        # the reader reads its files without closing them; in one process that is a warning
+        # per read, and not this module's
+        warnings.simplefilter("ignore", ResourceWarning)
 
     def test_a_what_if_in_memory_is_evaluated(self):
         doc = P.load([str(RECORD)])
@@ -607,9 +728,28 @@ class TheCallable(unittest.TestCase):
         self.assertIn("  FALSIFIED c.boiler_short: wrong_if holds (heat.loss_kw <= heat.boiler_kw) - broken by "
                       "its own condition", lines)
         self.assertEqual(lines[-1], "not clean: a falsifier holds - nothing folds until it is read again")
-        with self.assertRaises(SystemExit):
-            C.fold([str(RECORD)], c)
+        with self.assertRaises(SystemExit), contextlib.redirect_stdout(io.StringIO()):
+            C.fold([str(RECORD)], ["bigger_boiler"])
         self.assertEqual(P.load([str(RECORD)]).hypotheses.keys(), doc.hypotheses.keys())
+
+    def test_the_fold_reads_the_record_under_its_own_lock(self):
+        with tempfile.TemporaryDirectory() as d:
+            rec = copy_fixture(pathlib.Path(d))
+            paths = [str(rec)]
+            doc, hyps = C.read(paths, ["glazing_redo"])
+            self.assertFalse(C.union_of(doc, hyps).blocked)
+            # what a parallel writer left between the test and the fold is what the fold reads
+            h = pathlib.Path(d) / "PROVENANCE.d" / "glazing_redo.yaml"
+            h.write_text(h.read_text(encoding="utf-8").replace('wrong_if: "heat.loss_kw >= 31"',
+                                                                'wrong_if: "heat.loss_kw < 30"'), encoding="utf-8")
+            before = rec.read_text(encoding="utf-8")
+            buf = io.StringIO()
+            with self.assertRaises(SystemExit) as got, contextlib.redirect_stdout(buf):
+                C.fold(paths, ["glazing_redo"], stamp="2026-09-04")
+            self.assertIn("refused - the dry run is not clean", str(got.exception))
+            self.assertIn("  FALSIFIED glazing_redo: its own wrong_if holds (heat.loss_kw < 30)\n", buf.getvalue())
+            self.assertEqual(rec.read_text(encoding="utf-8"), before)
+            self.assertTrue(h.exists())
 
     def test_the_union_is_read_the_way_the_reader_reads(self):
         doc, hyps = C.read([str(RECORD)], ["glazing_redo"])
