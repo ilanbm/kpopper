@@ -71,7 +71,7 @@ build failure rather than a page that looks arranged and is not:
 | `as` | for | requires |
 |---|---|---|
 | `timeline` | anything that happens on a date — deadlines, validity windows | every pick has a date value; today is marked in place |
-| `fronts` | separate fronts read side by side (a grid on a wide screen) | two or more fronts among the picks |
+| `fronts` | separate groups read side by side (a grid on a wide screen) | two or more groups among the picks |
 | `headline` | the one to four numbers everything else turns on | one to four picks, each with a literal value |
 | `alerts` | what needs a person, worst first | picks are judgments |
 | `cards` | judgments read for their reasoning | — (default for judgments) |
@@ -82,20 +82,23 @@ A run of key/value rows is not an arrangement, it is a dump with a heading. If t
 that fits a section is `table`, that is a signal the section is not about anything in
 particular.
 
-**Fronts are declared, not inferred.** The record's prefixes say what *kind* a thing is —
-`d.` is a date — and that is a different question from which front it belongs to. `d.prg_out`
-is a date and it is Prague; nothing in the record says so. So the brief declares the fronts
-once, and every renderer can then say what a row is under:
+**Groupings are declared, not inferred.** The record's prefixes say what *kind* a thing is —
+`d.` is a date — and that is a different question from which thread it belongs to. `d.prg_out`
+is a date and it is Prague; nothing in the record says so. So the brief declares its groupings
+once, under whatever names the project reads by — fronts, fields, subsystems, environments —
+and every renderer can then say what a row is under:
 
 ```yaml
-fronts:
+groups:
   The mortgage: [mtg., equity., d.rate_lock, c.equity_10pct]
   Prague:       [prg., d.prg_out, d.prg_deadline]
 ```
 
-A front then appears as a small tag beside each item wherever a section mixes more than one —
+A group then appears as a small tag beside each item wherever a section mixes more than one —
 on a timeline row, an alert, a headline caption. Without it a reader looking at a list of
-eleven dates has no way to tell which of them are even about the same thing.
+eleven dates has no way to tell which of them are even about the same thing. `fronts:` was one
+record's name for its grouping and still reads as `groups:`; the grid shape that lays groups
+side by side is still called `fronts` below, until the renderer owns no grouping name at all.
 
 Give sections a `why:` as well as a `title:`. A title names a section; the `why` says what the
 reader is supposed to do with it, and it is the difference between a heading and a hand-off.

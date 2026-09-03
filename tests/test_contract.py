@@ -138,6 +138,14 @@ class ThePageAcceptsTheContract(unittest.TestCase):
         self.assertIn('<h3 dir="auto">Heating</h3>', page)
         self.assertIn('<h3 dir="auto">Calendar</h3>', page)
 
+    def test_the_older_name_for_a_grouping_still_reads(self):
+        with tempfile.TemporaryDirectory() as d:
+            rec = copy_fixture(pathlib.Path(d))
+            edit(pathlib.Path(d) / "PROVENANCE.view.yaml", "groups:\n", "fronts:\n")
+            _, page, _ = run(SCRIPTS / "render_page.py", rec)
+            self.assertIn('<h3 dir="auto">Heating</h3>', page)
+            self.assertIn('<h3 dir="auto">Calendar</h3>', page)
+
     def test_the_first_tab_is_drawn_under_its_own_name(self):
         _, page, _ = run(SCRIPTS / "render_page.py", RECORD)
         self.assertIn('data-tab="now" aria-selected="true">The February night', page)
