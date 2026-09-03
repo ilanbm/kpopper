@@ -225,13 +225,22 @@ def coverage(ids, jud, raw, tabs, picks, born):
             continue
         groups.setdefault(k.split(".")[0] if "." in k else k, []).append(k)
     unpicked_prefixes = sorted(g for g, ks in groups.items() if not any(k in picked_all for k in ks))
-    streak = 0
+    # the newest sessions in a row no tab serves, by day - a day is the finest clock the
+    # record keeps, so same-day sessions count together, and a day on which any intent is
+    # served ends the run
+    days = []
     for r in rows:
         if r["empty"]:
             continue
-        if not r["unserved"]:
+        if days and days[-1][0] == r["date"]:
+            days[-1][1].append(r)
+        else:
+            days.append((r["date"], [r]))
+    streak = 0
+    for _, rs in days:
+        if any(not r["unserved"] for r in rs):
             break
-        streak += 1
+        streak += len(rs)
     drift = None
     if born:
         added = set()
@@ -728,12 +737,16 @@ def build(paths, brief_path=None):
     # The record's own words, references as written, are what the cards draw from; the
     # payload carries them resolved, so a hover reads the same sentence a card shows.
     RAW = {name: dict(J[name]) for name in J}
-    for name in J:
-        for f in ("verdict", "because", "blocked"):
-            J[name][f] = P.resolve_refs(J[name][f], raw0, ids, jud, lbl)
-    for k in E:
-        if "note" in E[k]:
-            E[k]["note"] = P.resolve_refs(E[k]["note"], raw0, ids, jud, lbl)
+
+    def resolve_payload():
+        """Run once the page has counted, so a reference to a page count reads the number
+        on the hover as it does on the card."""
+        for name in J:
+            for f in ("verdict", "because", "blocked"):
+                J[name][f] = P.resolve_refs(RAW[name][f], raw0, ids, jud, lbl)
+        for k in E:
+            if "note" in E[k]:
+                E[k]["note"] = P.resolve_refs(E[k]["note"], raw0, ids, jud, lbl)
 
     def refs(text):
         """Link every entry id the text literally names. No inference: the id is there."""
@@ -1053,6 +1066,7 @@ def build(paths, brief_path=None):
         page_counts.update({k: v for k, v in cov["page"].items() if v is not None})
         flags = flags_of(ids, jud, fields, raw0)
         shape = shape_of(ids, jud, flags)
+    resolve_payload()
 
     def where_of(t, title):
         return f"'{title}'" if t["bare"] else f"'{title}' (tab '{t['title'] or '?'}')"
@@ -1145,13 +1159,16 @@ def build(paths, brief_path=None):
     # reader opens a tab and not the page.
     reading_by[0] = default_scheme
     spill = sorted(k for k, f in flags.items() if f and k not in covered)
-    loose = []
+    # each id once: a judgment both flagged and written for an unserved intent is the alert,
+    # and what two unserved intents share is drawn under the newer
+    loose, drawn = [], set(spill)
     for r in (cov["rows"] if cov else []):
-        ks = [k for k in r["recorded"] if k not in covered] if r["unserved"] else []
+        ks = [k for k in r["recorded"] if k not in covered and k not in drawn] if r["unserved"] else []
         if ks:
             loose.append((r, ks))
+            drawn |= set(ks)
     if spill or loose:
-        n = len(spill) + sum(len(ks) for _, ks in loose)
+        n = len(drawn)
         tail = [f'<h2 class="spill" dir="ltr">Not covered by this arrangement '
                 f'<span class="n">{n}</span></h2>'
                 '<div class="why">' + ("Flagged, or written for an intent no tab serves, and no "

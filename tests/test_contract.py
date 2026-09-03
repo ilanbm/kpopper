@@ -1026,6 +1026,57 @@ class IntentsTabsCoverage(unittest.TestCase):
             self.assertEqual(p.returncode, 0)
             self.assertEqual(p.stderr, "")
 
+    def test_a_reference_to_a_page_count_reads_the_same_on_both_surfaces(self):
+        with tempfile.TemporaryDirectory() as d:
+            rec = copy_fixture(pathlib.Path(d))
+            edit(rec, '              numbers."', '              numbers. Today {{page.unserved}} intents are unserved."')
+            code, out, _ = run(SCRIPTS / "provenance.py", "check", rec)
+            self.assertEqual(code, 0, out)
+            _, page, _ = run(SCRIPTS / "render_page.py", rec)
+            # the hover payload and the card both read the count, not the count's name
+            self.assertIn("Today 0 intents are unserved.", page)
+            self.assertIn('Today <span class="fx in" data-id="page.unserved">0</span> intents are unserved.',
+                          dom_of(page))
+            self.assertNotIn("Today intents no tab", page)
+
+    def test_spill_shows_each_id_once(self):
+        with tempfile.TemporaryDirectory() as d:
+            rec, brief = before_second_session(pathlib.Path(d))
+            edit(brief, "pick: judgments", "pick: [c.boiler_short, v.heating_tab]")
+            run(SCRIPTS / "provenance.py", "add", "s.2026_09_03_glazing",
+                "asked=What would glazing the north wall cost?", "name=the glazing question",
+                "read=2026-09-03", "--as-of", "2026-09-03", rec)
+            run(SCRIPTS / "provenance.py", "add", "glaze.quote_eur", "v=2400", "name=the quote",
+                "from=s.2026_09_03_glazing", "--as-of", "2026-09-03", rec)
+            # a judgment the unserved session wrote that is also flagged, and nothing picks
+            rec.write_text(rec.read_text(encoding="utf-8") + (
+                "  c.glaze_hope:\n    rests_on: [s.2026_09_03_glazing, glaze.gone]\n"
+                "    verdict: \"glazing closes the gap\"\n    wrong_if: \"\"\n    seen: {}\n"),
+                encoding="utf-8")
+            dom = dom_of(run(SCRIPTS / "render_page.py", rec)[1])
+            i = dom.index('<section id="panel-now"')
+            panel = dom[i:dom.index("</section>", i)]
+            self.assertIn('<h2 class="spill" dir="ltr">Not covered by this arrangement <span class="n">2'
+                          '</span></h2>', panel)
+            self.assertEqual(panel.count('data-id="c.glaze_hope"'), 1)
+            self.assertEqual(panel.count('data-id="glaze.quote_eur"'), 1)
+
+    def test_the_recent_streak_counts_by_day(self):
+        with tempfile.TemporaryDirectory() as d:
+            rec = copy_fixture(pathlib.Path(d))
+            brief = pathlib.Path(d) / "PROVENANCE.view.yaml"
+            run(SCRIPTS / "provenance.py", "add", "s.2026_09_03_frost", "asked=when is the first frost due?",
+                "name=the frost question", "read=2026-09-03", "--as-of", "2026-09-03", rec)
+            run(SCRIPTS / "provenance.py", "add", "when.first_frost", "v=2026-11-02", "name=first frost",
+                "from=s.2026_09_03_frost", "--as-of", "2026-09-03", rec)
+            # the same day as a served intent: the page noticed that day, so the run is 0
+            _, out, _ = run(SCRIPTS / "render_page.py", "--verify", rec)
+            self.assertIn("1 intents no tab serves · 0 recent in a row", out)
+            # nothing of that day served: both count, and the day before ends the run
+            edit(brief, "    serves: [s.2026_09_03_glazing]\n", "")
+            _, out, _ = run(SCRIPTS / "render_page.py", "--verify", rec)
+            self.assertIn("2 intents no tab serves · 2 recent in a row", out)
+
 
 if __name__ == "__main__":
     unittest.main()

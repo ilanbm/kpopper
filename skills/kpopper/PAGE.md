@@ -241,8 +241,9 @@ against the intents and print what they count, as facts:
 - each tab against what it serves - how much of what those sessions recorded it picks;
 - the prefixes no section picks;
 - the counts: what is covered, the spill, how many intents are unserved, how many of the newest
-  sessions in a row are, and drift - the share of what sessions read on or after the newest
-  `born` recorded that nothing picks.
+  sessions in a row are - by day, since a day is the finest clock the record keeps, and a day
+  on which any intent is served ends the run - and drift, the share of what sessions read on or
+  after the newest `born` recorded that nothing picks.
 
 The hint is printed and never acted on. Whether an intent is the same world as a tab that
 already picks most of what it wrote is a session's judgment - declare that the tab serves the
@@ -333,7 +334,7 @@ drawing of it. Every surface then decides such a judgment against the same numbe
 | `graph.blocked`, `graph.broken`, `graph.unchecked`, `graph.moved`, `graph.falsified`, `graph.no_predicate` | the reasons, one each |
 | `page.spill` | flagged judgments no section of the page picked up |
 | `page.unserved` | intents no tab serves - declared and earned by picks; an intent that recorded nothing is not counted |
-| `page.recent_unserved` | the newest sessions in a row whose intent no tab serves |
+| `page.recent_unserved` | the newest sessions in a row whose intent no tab serves, counted by day: a day on which any intent is served ends the run |
 | `page.drift` | the share of what sessions read on or after the newest `born` recorded that nothing picks; 0 when nothing was added, no value without a `born` |
 | `page.covered` | entries and judgments some section picks |
 
