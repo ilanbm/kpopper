@@ -1,12 +1,15 @@
 #!/usr/bin/env python3
-"""One entry point instead of three full paths. open/check/affects/pull pass straight through
-to provenance.py; page renders the record and can open what it writes.
+"""One entry point instead of three full paths. The reading and writing commands pass
+straight through to provenance.py; page renders the record and can open what it writes.
 
   kpopper open    [file ...]              what a session should read instead of the whole record
   kpopper check   [file ...]              does the record still hold together
   kpopper affects <entry> [entry ...]     what a change reaches
   kpopper pull    <entry|prefix> [...]    values and sources for a subject
   kpopper where                           the record this directory answers for
+  kpopper set     <key> <value> [--why "..."] [--as-of DATE]   change one value; the reply is the reach
+  kpopper add     <id> field=value ...    a new entry or judgment, in id order, its seen filled
+  kpopper review  <id | "section title">  it still holds: seen rewritten from what the record holds
   kpopper page    [--out PATH] [--open] [--tree] [args...]   the record as one page
                   add --verify to check the page instead of writing one
 
@@ -16,7 +19,7 @@ any checkout of a project that registered its record (see `where`).
 import os, sys, pathlib, subprocess, webbrowser
 
 HERE = pathlib.Path(__file__).resolve().parent
-READ = ("open", "check", "affects", "pull", "where")
+READ = ("open", "check", "affects", "pull", "where", "set", "add", "review")
 
 
 def do_page(args):

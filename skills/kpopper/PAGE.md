@@ -189,6 +189,14 @@ A derived entry has no value in the record, it has a rule; the reader detects th
 expression naming other entries) and shows the rule, with the ids inside it live. It never shows
 an empty cell where a number belongs, and it never lets `headline` carry one.
 
+A card and a section's text carry the same warning when what they rest on has moved since they
+were reviewed: a tint, the moved value marked in place with what it was, and one line naming
+what moved — a judgment's dependencies against its `seen`, a text's references against its own.
+It is in the markup, not applied by script, so it shows in a host that strips scripts too, and
+it is a warning rather than a correction: nothing on the page rewrites the sentence. `kpopper
+review <judgment>` or `kpopper review "<section title>"` clears it, after someone has read the
+sentence against the new value.
+
 Two properties keep an opinionated tab honest, and both are mechanical rather than remembered:
 
 - **It may order. It may not drop.** Anything flagged that no section picked up lands in a
@@ -197,7 +205,9 @@ Two properties keep an opinionated tab honest, and both are mechanical rather th
 - **The arrangement itself can be wrong.** `shape:` is the brief's own `seen` — over the
   record's *shape*, not its values, because a date moving does not make a layout wrong but a
   fourth blocked judgment might. Render with no `shape:` and the command prints the block to
-  paste; render after the shape moved and the tab says so at the top.
+  paste; render after the shape moved and the tab says so at the top. `kpopper review` of the
+  arrangement judgment rewrites it from the record — the one tab's shape, or the shape of the
+  tab serving a session source the arrangement rests on — and nothing refreshes it by itself.
 
 Rewrite the brief freely. It is the cheapest file in the method — derived from a moment, not
 from the record — and an arrangement nobody chose to keep is not one worth maintaining.
@@ -239,8 +249,8 @@ record in `tests/fixtures/page` first, so the reader, the page and the tests agr
 | `tabs:` | top level | a list of tabs, each with `title`, `occasion` (when the reader opens it and for what), `serves` (the session sources it answers), `sections`, and its own `shape`. The page draws the first tab today and counts the rest. |
 | `groups:` | top level | grouping schemes, any number, each a mapping of group name → selectors under the session's own names; a flat mapping is one scheme. `fronts:` still reads as one scheme. |
 | `by:` | on a section | the scheme this section reads by — one the brief declares, or one the record carries by its own shape: `prefix`, or any field the entries carry (`from`, `unit`, `kind`), whose value names the group. |
-| `text:` | on a section | connective prose with `{{id}}` references, resolved where the page draws it; `{{c.id}}` asks for that judgment's reasoning at that spot. Checked now — every reference must be an entry — and drawn soon. |
-| `reviewed:`, `seen:` | on a section with `text` | when the text was last read against what it references, and the values it saw. `--verify` compares them with the record the way `check` compares a judgment's snapshot and says which moved; the tint follows when the text is drawn. |
+| `text:` | on a section | connective prose with `{{id}}` references, drawn where the section stands with every reference resolved — the value, a rule's name, a judgment's verdict — and `{{c.id}}` placing that judgment's reasoning at that spot, marked as a judgment and hoverable as one. A section may be text alone; whatever the text places counts as picked up, so it never lands in spill. Every reference must be an entry. |
+| `reviewed:`, `seen:` | on a section with `text` | when the text was last read against what it references, and the values it saw. `--verify` compares them with the record the way `check` compares a judgment's snapshot; a value that moved tints the text on the page, marks it in place with what it was, and says what moved beneath. `kpopper review "<section title>"` rewrites both from the record. A reference the `seen` does not carry is noted: the text was never read against it. |
 
 A tab the page does not draw yet is checked as if it did: its picks must pick something, its
 shapes must fit what they pick, its `serves` must name session sources, and its own `shape`

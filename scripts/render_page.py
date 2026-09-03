@@ -77,11 +77,7 @@ def direction(doc):
     return "rtl" if letters and len(RTL.findall(txt)) / len(letters) > 0.3 else "ltr"
 
 
-def fmt(v):
-    """Thousands separators on a hero number. Nothing else is touched."""
-    if isinstance(v, bool) or not isinstance(v, (int, float)):
-        return str(v)
-    return f"{v:,}" if isinstance(v, int) else f"{v:,.10g}".rstrip()
+fmt = P.fmt        # one formatting of a number, shared with every surface that prints one
 
 
 def shape_of(ids, jud, flags):
@@ -228,8 +224,7 @@ def anchor(text, deps, E):
     return "".join(out), {d for _, _, d in hits}
 
 
-def human(k):
-    return k.split(".")[-1].replace("_", " ")
+human = P.human
 
 
 # ── renderers: a closed set, each declaring the shape of data it can carry ────
@@ -547,8 +542,8 @@ def build(paths, brief_path=None):
         b = j["body"]
         why, keys = blocked_of(b)
         J[name] = {"deps": j["deps"], "used": sorted(used.get(name, [])), "pred": j["pred"],
-                   "verdict": b.get("verdict") or b.get("title") or "",
-                   "because": (b.get("because") or b.get("breaks_if") or "")[:400],
+                   "verdict": str(b.get("verdict") or b.get("title") or ""),
+                   "because": str(b.get("because") or b.get("breaks_if") or "")[:400],
                    "blocked": why, "waiting": keys}
 
     labels = (brief.get("labels") or {}) if brief else {}
@@ -585,6 +580,16 @@ def build(paths, brief_path=None):
         if k in labels:
             return str(labels[k])
         return named(raw.get(k)) or human(k)
+
+    # The record's own words, references as written, are what the cards draw from; the
+    # payload carries them resolved, so a hover reads the same sentence a card shows.
+    RAW = {name: dict(J[name]) for name in J}
+    for name in J:
+        for f in ("verdict", "because", "blocked"):
+            J[name][f] = P.resolve_refs(J[name][f], raw0, ids, jud, lbl)
+    for k in E:
+        if "note" in E[k]:
+            E[k]["note"] = P.resolve_refs(E[k]["note"], raw0, ids, jud, lbl)
 
     def refs(text):
         """Link every entry id the text literally names. No inference: the id is there."""
@@ -652,30 +657,45 @@ def build(paths, brief_path=None):
     # ── renderers ────────────────────────────────────────────────────────────
     anchored = [0, 0]
 
-    def prose(text, deps):
+    def ref(k, shown, moved):
+        """One reference drawn: hoverable, and marked - with what it was - when it moved
+        since the text around it was reviewed."""
+        if k in moved:
+            return (f'<span class="fx in mv" data-id="{html.escape(k)}" title="was '
+                    f'{html.escape(P.short(moved[k], 60))} when this was reviewed">'
+                    f'{html.escape(str(shown))}</span>')
+        return f'<span class="fx in" data-id="{html.escape(k)}">{html.escape(str(shown))}</span>'
+
+    def moved_note(pairs, what):
+        """The line under a tinted text or card: what moved since it was read, by name.
+        A warning, not a source - it is in the markup, so it shows wherever the page does."""
+        return (f'<div class="mvd" dir="auto">Moved since this was {what}: '
+                + "; ".join(f"{html.escape(lbl(k))} {html.escape(P.short(o))} &rarr; "
+                            f"{html.escape(P.short(n))}" for k, o, n in pairs) + "</div>")
+
+    def moves_of(name):
+        """{dep: what the judgment saw} for every dependency that moved under it - the
+        moves nothing decided, which are the ones that put it in front of a person."""
+        return {d: o for d, o, _, s in P.moved_deps(jud[name], raw0, ids) if s == "moved"}
+
+    def prose(text, deps, moved=None):
         """Escaped prose with its references drawn and its dependencies anchored. A reference
-        shows the value where there is one, the name where there is only a rule, and the
-        verdict for a judgment - each hoverable, so the sentence stays the interface."""
+        shows what every surface shows for it - the value where there is one, the name
+        where there is only a rule, the verdict for a judgment - each hoverable, so the
+        sentence stays the interface."""
         parts, pos, found = [], 0, set()
-        text = text or ""
+        text, moved = text or "", moved or {}
         for m in P.REF.finditer(text):
             a, h = anchor(text[pos:m.start()], deps, E)
             parts.append(a)
             found |= h
             k = m.group(1)
-            if k in E:
-                e = E[k]
-                shown = fmt(e["v"]) if e.get("v") is not None else lbl(k)
-            elif k in J:
-                shown = J[k]["verdict"]
-            else:
-                shown = None
+            shown = P.reference_text(k, raw0, ids, jud, lbl)
             if shown is None:
                 parts.append(html.escape(m.group(0)))
             else:
                 found.add(k)
-                parts.append(f'<span class="fx in" data-id="{html.escape(k)}">'
-                             f'{html.escape(str(shown))}</span>')
+                parts.append(ref(k, shown, moved))
             pos = m.end()
         a, h = anchor(text[pos:], deps, E)
         parts.append(a)
@@ -685,16 +705,21 @@ def build(paths, brief_path=None):
     def r_cards(names):
         o = []
         for name in names:
-            j, b = jud[name], J[name]
-            verdict, h1 = prose(b["verdict"], j["deps"])
-            because, h2 = prose(b["because"], j["deps"])
+            j, b = jud[name], RAW[name]
+            moved = moves_of(name)
+            verdict, h1 = prose(b["verdict"], j["deps"], moved)
+            because, h2 = prose(b["because"], j["deps"], moved)
             miss = [d for d in j["deps"] if d not in E and d not in J]
             rest = [d for d in j["deps"] if d not in (h1 | h2) and d not in miss]
             anchored[0] += len(h1 | h2)
             anchored[1] += len([d for d in j["deps"] if d not in miss])
-            o.append('<div class="card">'
+            # a judgment something moved under since it was reviewed is tinted, and says
+            # what moved - in the markup, so the warning shows where scripts do not run
+            mv = [(d, o, n) for d, o, n, s in P.moved_deps(j, raw0, ids) if s == "moved"]
+            o.append('<div class="card' + (" moved" if mv else "") + '">'
                      f'<div class="vd fx" data-id="{html.escape(name)}" dir="auto">{verdict}</div>'
                      + (f'<div class="bc" dir="auto">{because}</div>' if because else "")
+                     + (moved_note(mv, "reviewed") if mv else "")
                      # what is missing stays visible; what is present is reachable by
                      # hovering the words that already mention it.
                      + ('<div class="deps">' + "".join(
@@ -791,6 +816,51 @@ def build(paths, brief_path=None):
             f'<div class="cap" dir="auto">{kicker(k, {g for x in keys for g in groups_of(x)})}'
             f'{html.escape(lbl(k))}</div>{note(k)}</div>' for k in keys) + "</div>"
 
+    def moved_in(sec):
+        """What the section's text saw that the record no longer holds: {ref: (was, now)}.
+        The comparison check makes for a judgment's snapshot, made for a text's seen."""
+        out = {}
+        for k, old in (sec.get("seen") or {}).items():
+            if k not in E and k not in J:
+                continue
+            now = P.value_of(raw0, ids, k)
+            if now is None or isinstance(now, (list, dict)) or isinstance(old, (list, dict)):
+                continue
+            if not same_value(old, now):
+                out[k] = (old, now)
+        return out
+
+    def r_text(sec):
+        """Connective prose: its references resolved in place, and a judgment's reasoning
+        placed where the text asks for it - marked as a judgment, hoverable as one. Nothing
+        is anchored by guessing: the edges are exactly what the text cites. Tinted, with
+        what moved, when something it saw is no longer what the record holds.
+        -> (html, the ids it placed)."""
+        text, moved = str(sec.get("text") or ""), moved_in(sec)
+        parts, pos, placed = [], 0, set()
+        for m in P.REF.finditer(text):
+            parts.append(html.escape(text[pos:m.start()]))
+            k = m.group(1)
+            if k in J:
+                inner, _ = prose(RAW[k]["because"] or RAW[k]["verdict"], jud[k]["deps"], moves_of(k))
+                cls = "fx in rsn" + (" mv" if moves_of(k) else "")
+                parts.append(f'<span class="{cls}" data-id="{html.escape(k)}">{inner}</span>')
+                placed.add(k)
+            else:
+                shown = P.reference_text(k, raw0, ids, jud, lbl)
+                if shown is None:
+                    parts.append(html.escape(m.group(0)))
+                else:
+                    parts.append(ref(k, shown, {x: o for x, (o, _) in moved.items()}))
+                    placed.add(k)
+            pos = m.end()
+        parts.append(html.escape(text[pos:]))
+        out = ('<div class="txt' + (" moved" if moved else "") + '" dir="auto">'
+               + "".join(parts) + "</div>")
+        if moved:
+            out += moved_note([(k, o, n) for k, (o, n) in sorted(moved.items())], "read")
+        return out, placed
+
     ENTRY_R = {"table": r_table, "lines": r_lines, "timeline": r_timeline,
                "grouped": r_grouped, "fronts": r_grouped, "headline": r_headline}
     JUD_R = {"cards": r_cards, "alerts": r_alerts}
@@ -814,6 +884,7 @@ def build(paths, brief_path=None):
                 p = sec.get("pick")
                 for x in ([p] if isinstance(p, str) else list(p or [])):
                     pre |= resolve(x, ids, jud, flags)
+                pre |= {r for r in P.refs_in(sec.get("text")) if r in E or r in J}
         if "page.spill" in E:
             n = sum(1 for k, f in flags.items() if f and k not in pre)
             E["page.spill"]["v"] = n
@@ -847,26 +918,31 @@ def build(paths, brief_path=None):
             got = set()
             for x in picks:
                 got |= resolve(x, ids, jud, flags)
-            covered |= got
+            text = str(sec.get("text") or "")
+            # a section is text, picks, or both: what the text places counts as picked up
+            covered |= got | {r for r in P.refs_in(text) if r in E or r in J}
             jn = sorted(x for x in got if x in jud)
             en = sorted(x for x in got if x not in jud)
             title = str(sec.get("title") or ",".join(picks))
             kind = str(sec.get("as") or "").strip()
             by = str(sec.get("by") or "")
             reading_by[0] = by if (by in schemes or by == "prefix" or carried(by)) else default_scheme
-            wrong = fits(kind, sorted(got), jud, E, groups_of) if kind else None
+            wrong = fits(kind, sorted(got), jud, E, groups_of) if kind and got else None
             if wrong:
                 misfit.append((title, wrong))
                 kind = ""
-            if not got:
+            if (picks and not got) or not (picks or text):
                 empty_sections.append(title)
-            now_html.append(f'<h2 dir="auto">{html.escape(title)} <span class="n">{len(got)}</span></h2>')
+            now_html.append(f'<h2 dir="auto">{html.escape(title)}'
+                            + (f' <span class="n">{len(got)}</span>' if picks else "") + "</h2>")
             if sec.get("why"):
                 now_html.append(f'<div class="why" dir="auto">{html.escape(str(sec["why"]))}</div>')
+            if text:
+                now_html.append(r_text(sec)[0])
             if wrong:
                 now_html.append(f'<div class="bad">{html.escape(wrong)} &mdash; fell back to the '
                                 f'default shape</div>')
-            if not got:
+            if picks and not got:
                 now_html.append('<div class="why">Nothing in the record matches this section. '
                                 'It is about something the record no longer holds.</div>')
             if jn:
@@ -886,7 +962,7 @@ def build(paths, brief_path=None):
             now_html.append(r_alerts(spill))
 
     # what the brief declares beyond what this page draws - checked now, drawn later
-    contract = {"tabs": 0, "texts": 0, "bad": [], "moved": [], "stale": []}
+    contract = {"tabs": 0, "bad": [], "moved": [], "stale": [], "unread": []}
     if brief:
         # every grouping scheme must group something, and a section that reads by a scheme
         # must name one the brief declares - or one the record carries by its own shape
@@ -947,25 +1023,34 @@ def build(paths, brief_path=None):
         secs = [s for s in (brief.get("sections") or []) if isinstance(s, dict)] + [s for _, s in later]
         for sec in secs:
             title = str(sec.get("title") or "?")
+            seen = sec.get("seen") or {}
             if sec.get("text"):
-                contract["texts"] += 1
-                for r in P.refs_in(sec["text"]):
+                refs = P.refs_in(sec["text"])
+                for r in refs:
                     if r not in E and r not in J:
                         contract["bad"].append(f"section '{title}': text references {r}, which "
                                                f"is not an entry")
+                # a text with no snapshot can never be told it went stale; one with a
+                # snapshot that skips a reference was never read against that reference
+                if refs and not seen:
+                    contract["unread"].append(f"section '{title}': its text carries no seen, so "
+                                              f"nothing can tell when it goes stale - review "
+                                              f"\"{title}\" writes one")
+                else:
+                    for r in refs:
+                        if (r in E or r in J) and r not in seen:
+                            contract["unread"].append(f"section '{title}': text references {r}, "
+                                                      f"which its seen does not carry - never "
+                                                      f"read against it")
             # the snapshot under a text is compared the way check compares a judgment's:
             # a referenced value that moved since the text was read is said, never failed
-            for k, old in (sec.get("seen") or {}).items():
+            for k in seen:
                 if k not in E and k not in J:
                     contract["bad"].append(f"section '{title}': seen names {k}, which is not "
                                            f"an entry")
-                    continue
-                now = P.value_of(raw0, ids, k)
-                if now is None or isinstance(now, (list, dict)) or isinstance(old, (list, dict)):
-                    continue
-                if not same_value(old, now):
-                    contract["moved"].append(f"section '{title}': its text saw {k} = {old}, "
-                                             f"now {now} - read it again")
+            for k, (old, now) in sorted(moved_in(sec).items()):
+                contract["moved"].append(f"section '{title}': its text saw {k} = {old}, "
+                                         f"now {now} - read it again")
 
     # ── the record's own tab ─────────────────────────────────────────────────
     rec_html = []
@@ -1070,12 +1155,9 @@ def verify(paths, brief_path=None):
             fail.append("a brief exists but the session tab is not the default")
         c = info["contract"]
         fail += c["bad"]
-        note += c["moved"] + c["stale"]
+        note += c["moved"] + c["stale"] + c["unread"]
         if c["tabs"] > 1:
             note.append(f"{c['tabs']} tabs declared; the page draws the first and keeps the rest")
-        if c["texts"]:
-            note.append(f"text on {c['texts']} section{'s' if c['texts'] != 1 else ''} is "
-                        f"checked and not yet drawn")
         # a falsifier over a page count is decided here and nowhere else, so here is where
         # it fails
         for name, j in sorted(J.items()):
