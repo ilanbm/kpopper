@@ -785,7 +785,7 @@ judgments:
     because: "Three worktrees claimed one version number in a day, and a merged contract sat
               invisible to installed plugins until someone remembered the bump. A bump inside
               feature work conflicts with every parallel branch and depends on memory. A branch
-              that only ever holds the three version files and the changelog conflicts with
+              that only ever holds the version files and the changelog conflicts with
               nothing, and a push to main is the moment that knows what merged. Each pull
               request declares the bump it asks for and the largest wins; the release itself is
               still a person's merge."

@@ -1,8 +1,9 @@
-"""The release pull request's arithmetic, and the invariant the three version files keep.
+"""The release pull request's arithmetic, and the invariant the version files keep.
 
     python3 -m unittest discover -s tests
 """
 import importlib.util
+import json
 import pathlib
 import unittest
 
@@ -32,9 +33,18 @@ class TheBump(unittest.TestCase):
 
 
 class TheVersionFiles(unittest.TestCase):
-    def test_the_three_files_agree(self):
+    def test_every_channel_carries_the_same_version(self):
         found = R.versions_in(R.read_texts())
         self.assertEqual(len(set(found.values())), 1, found)
+
+    def test_the_npm_package_is_one_of_them(self):
+        # The npm package ships the browser checks, so it moves with everything else. Read
+        # by the manifest rather than by the pattern, so a dependency version appearing
+        # above the package's own cannot pass for it.
+        self.assertIn("package.json", R.VERSION_FILES)
+        found = R.versions_in(R.read_texts())
+        manifest = json.loads((ROOT / "package.json").read_text(encoding="utf-8"))
+        self.assertEqual(found["package.json"], manifest["version"])
 
     def test_moving_the_version_touches_only_the_version(self):
         texts = R.read_texts()

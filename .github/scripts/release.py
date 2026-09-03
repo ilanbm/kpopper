@@ -4,8 +4,8 @@
 Runs on every push to main. Finds the last release - the earliest commit on main whose
 pyproject.toml carries the current version - reads every pull request merged since it,
 takes the largest bump they declared (a `Bump: patch | minor | major` line in the pull
-request body), and keeps one branch, release/<next>, holding the three version files and
-the changelog entry, with the pull request "Release <next>" open for a person to merge.
+request body), and keeps one branch, release/<next>, holding the version files and the
+changelog entry, with the pull request "Release <next>" open for a person to merge.
 Nothing merges by itself, and a feature pull request never touches the version.
 
     python3 .github/scripts/release.py --dry-run     # print the plan, write nothing
@@ -19,8 +19,12 @@ import subprocess
 import sys
 
 ROOT = pathlib.Path(__file__).resolve().parents[2]
+# One version number for every channel a user can install from: the Python package, the
+# npm package, and the plugin as the marketplace lists it. A channel left out here is a
+# channel that silently stops moving.
 VERSION_FILES = {
     "pyproject.toml": (re.compile(r'^version = "(\d+\.\d+\.\d+)"', re.M), 'version = "{v}"'),
+    "package.json": (re.compile(r'"version": "(\d+\.\d+\.\d+)"'), '"version": "{v}"'),
     ".claude-plugin/plugin.json": (re.compile(r'"version": "(\d+\.\d+\.\d+)"'), '"version": "{v}"'),
     ".claude-plugin/marketplace.json": (re.compile(r'"version": "(\d+\.\d+\.\d+)"'), '"version": "{v}"'),
 }
