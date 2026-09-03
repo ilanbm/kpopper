@@ -5,6 +5,17 @@ meta:
           the tools eat their own cooking, and every session here opens grounded."
 
 sources:
+  s.2026_09_03_coverage:
+    asked: "Render the brief's tabs, make serving an intent something a tab earns by what its
+            sections pick, and compute coverage — unserved intents, unpicked prefixes, spill, drift,
+            recency — as page entries the opener and the Stop gate read."
+    name: "The session that made the page answer for its intents - what it was asked, and what it
+           was given. Its reading: whether the page still serves what each session was for is a count
+           the build takes and prints, never a judgment the mechanism makes"
+    of: "2026-09-03, given the page design's intents section and its scenario, the page contract at
+         2e5f4f3, the fixture record under tests/, and the opener's output on the now record at its
+         2000-character slot"
+    read: "2026-09-03"
   s.2026_09_03_language:
     name: "The session that weighed the renderer's language - what it was asked, and what it was given"
     asked: "why are we using python? should we use python? for the html generation maybe ts is
@@ -81,6 +92,14 @@ known:
     name: "Writing the record itself, on the same run"
     from: run.first_external
     at: "17:28:50-17:29:52 UTC"
+  p.coverage_thresholds:
+    v: 0
+    name: "Thresholds the coverage report carries in code - a line drawn anywhere but inside a
+           falsifier"
+    from: "scripts/render_page.py"
+    at: "coverage and coverage_lines: counts and shares, printed; the only comparison is a
+         falsifier's own"
+    of: "2026-09-03"
   p.pointer_home:
     v: "<git common dir>/kpopper-record"
     name: "Where a record the tree cannot hold registers its path"
@@ -301,6 +320,61 @@ judgments:
               the move having happened. Cheap to reverse, so decided on the prior alone."
     wrong_if: "prior.strings_lose_tooling < 0.6"
     seen: {m.page_string_lines: 0, prior.strings_lose_tooling: 0.95}
+  d.coverage_printed_never_acted:
+    rests_on: [s.2026_09_03_coverage, d.intent_is_a_source, d.metrics_derived_builtin, p.coverage_thresholds]
+    verdict: "coverage is counted at every build and check and printed as facts - each intent no tab
+              serves with one hint beside it, the prefixes nothing picks, spill, drift, the recent
+              streak - and nothing in the mechanism acts on a number"
+    because: "The hint says how much of what a session wrote already falls inside each tab's picks,
+              and stops there: whether that makes the intent the same world as the tab is a session's
+              judgment, recorded as an arrangement decision with its own falsifier. A line drawn in
+              code would be a threshold nobody chose and everybody wants to move;
+              {{p.coverage_thresholds}} of them exist, and the count is what would show one creeping
+              in."
+    wrong_if: "p.coverage_thresholds > 0"
+    seen:
+      s.2026_09_03_coverage: "read 2026-09-03"
+      d.intent_is_a_source: "a session records what it was for as a source; a tab is a reading
+                             occasion that serves intents, and serving is earned by picks"
+      d.metrics_derived_builtin: "graph.* and page.* are derived entries the reader computes itself
+                                  - counts and shares, never stored, thresholds only inside
+                                  falsifiers"
+      p.coverage_thresholds: 0
+  d.drift_from_newest_born:
+    rests_on: [s.2026_09_03_coverage, d.metrics_derived_builtin]
+    verdict: "drift is the share of what sessions read on or after the newest born among the
+              arrangement judgments that nothing picks; without a born it has no value"
+    because: "The newest arrangement decision is the last day someone looked at the page as a whole,
+              so what was left unpicked before it was chosen, not drifted. A session read on that
+              same day counts, because two sessions in one day are the common case here and a day is
+              the finest clock the record keeps; a record whose arrangements carry no born cannot
+              date what was added, and the count says so rather than guessing a start."
+    blocked_on: "observational: falsified if a real page shows drift at zero while its recent
+                 sessions sit unserved - a new tab's born hiding what the older tabs never picked"
+    seen:
+      s.2026_09_03_coverage: "read 2026-09-03"
+      d.metrics_derived_builtin: "graph.* and page.* are derived entries the reader computes itself
+                                  - counts and shares, never stored, thresholds only inside
+                                  falsifiers"
+  d.gate_and_opener_against_the_mark:
+    rests_on: [s.2026_09_03_coverage, d.gate_reminds, d.open_is_a_slot, p.gate_bounces]
+    verdict: "the opener marks where a session began - problems, unserved intents, the ids held -
+              and the gate reminds once about what the session itself left: a record failing worse,
+              an intent left unserved, entries written with no intent recorded; of coverage the
+              opener says only the newest unserved intent, in its line about what to do next"
+    because: "What was already red or unserved when a session opened is not its doing, and a gate
+              that bounced for it would teach sessions to fight the gate. The opener's slot is for
+              what needs a person, so coverage takes no line of its own there: the intent goes into
+              the line that already says what to run next, and check carries every unserved intent
+              with a hint each. The gate still yields after {{p.gate_bounces}} bounce."
+    wrong_if: "p.gate_bounces > 1"
+    seen:
+      s.2026_09_03_coverage: "read 2026-09-03"
+      d.gate_reminds: "the stop gate compares against the session-start count and yields after one
+                       bounce - it reminds, it does not imprison"
+      d.open_is_a_slot: "the session opener fills a fixed character slot, highest value per
+                         character first; values never preload"
+      p.gate_bounces: 1
   d.one_reference_resolver:
     rests_on: [d.reasoning_in_record, p.reference_resolvers]
     verdict: "a reference resolves the same way on every surface - the value where the entry holds
@@ -396,6 +470,39 @@ judgments:
       d.metrics_derived_builtin: "graph.* and page.* are derived entries the reader computes itself
                                   - counts and shares, never stored, thresholds only inside
                                   falsifiers"
+  d.serving_earned_by_picks:
+    rests_on: [s.2026_09_03_coverage, d.intent_is_a_source]
+    verdict: "a tab serves an intent only when its sections pick something that session recorded; a
+              declaration nothing picks fails the build, and an intent that recorded nothing stands
+              outside coverage"
+    because: "A tab could otherwise claim every intent and serve none, and coverage would read as
+              complete on a page that shows nothing a session wrote. What a session recorded is what
+              comes from its source or rests on it; one pick of that earns the claim, the share says
+              how much of it the tab shows. An intent with nothing recorded can be neither served nor
+              unserved, so it is said once and counted nowhere - a claim on it is the one claim that
+              cannot be earned."
+    blocked_on: "observational: falsified if tabs come to earn their claims with a single token pick
+                 - one entry of the intent, chosen to silence the failure - often enough that the
+                 failure stops meaning anything"
+    seen:
+      s.2026_09_03_coverage: "read 2026-09-03"
+      d.intent_is_a_source: "a session records what it was for as a source; a tab is a reading
+                             occasion that serves intents, and serving is earned by picks"
+  d.spill_on_every_tab:
+    rests_on: [s.2026_09_03_coverage, d.author_free_build_guarantees]
+    verdict: "what fell through the arrangement - flagged judgments nothing picked, and what a
+              session wrote for an intent no tab serves - is counted once for the page and drawn on
+              every tab"
+    because: "A reader opens a tab, not the page. The guarantee that an arrangement may order but
+              not drop has to hold on whichever tab is open, or a second tab becomes the place to
+              keep what the first did not anticipate out of sight. The count stays one, so a
+              falsifier over it means the same thing from every tab."
+    blocked_on: "observational: falsified if readers of a page with many tabs report the repeated
+                 section as noise they learn to skip - the guarantee failing the other way"
+    seen:
+      s.2026_09_03_coverage: "read 2026-09-03"
+      d.author_free_build_guarantees: "the session composes freely and the build enforces the
+                                       element rules on the output"
   d.whole_shape_surface:
     rests_on: [doc.fact_moves]
     verdict: "the shape of the whole gets one surface of its own - the tree - and the reading
