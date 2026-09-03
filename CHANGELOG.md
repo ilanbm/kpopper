@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.21.1 — 2026-09-03
+
+- Record that the npm name is held (#12) — patch
+
 ## 0.21.0 — 2026-09-03
 
 - Install the browser checks with the command line, and hold the name on npm (#5) — minor

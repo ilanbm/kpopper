@@ -1,6 +1,6 @@
 {
   "name": "kpopper",
-  "version": "0.21.0",
+  "version": "0.21.1",
   "description": "An epistemic record for work that gets revisited: what is known, how each piece is grounded, and what would make each judgment wrong. Self-evolving — judgments re-check against their dependencies and surface what drifted, so staleness is derived rather than remembered. Ships a reader, a checker, and a two-tab HTML page with a provenance layer: the arrangement this session chose, and the record itself.",
   "author": {
     "name": "Ilan Bar Magen"
