@@ -1,0 +1,30 @@
+title: "Greenhouse, this winter"
+tabs:
+  - title: "The February night"
+    occasion: "opened when deciding whether to fire the old boiler or fix the glazing"
+    serves: [s.2026_09_02_heating, s.2026_09_03_resheet]
+    sections:
+      - title: "What the numbers say"
+        why: "the shortfall is the only number the decision turns on"
+        text: "The sheet says {{heat.boiler_kw}} kW, read again as {{heat.output_kw}}; the coldest
+               night takes {{heat.loss_kw}}. {{c.boiler_short}}"
+        reviewed: "2026-09-03"
+        seen:
+          heat.boiler_kw: 24
+          heat.output_kw: 25
+          heat.loss_kw: 31
+          c.boiler_short: "the old boiler cannot hold 12°C on the coldest February night"
+        pick: [heat.boiler_kw, heat.output_kw, heat.loss_kw]
+        as: headline
+      - title: "Worked out"
+        why: "the two shortfalls, one from each reading of the sheet"
+        pick: [heat.deficit_kw, heat.shortfall_kw, when.first_cold_night]
+        as: table
+      - title: "What stands"
+        why: "every verdict here says what would make it wrong"
+        pick: judgments
+        as: cards
+    shape: {entries: 10, judgments: 2, flagged: 0, blocked: 0}
+labels:
+  heat.output_kw: "rated output, second reading"
+  when.first_cold_night: first cold night

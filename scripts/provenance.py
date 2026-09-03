@@ -9,12 +9,16 @@
   python3 provenance.py set     <key> <value> [--why "..."] [--as-of DATE]
   python3 provenance.py add     <id> field=value ... [--in COLLECTION]
   python3 provenance.py review  <id | "section title"> [--as-of DATE]
+  python3 provenance.py same    <a> <b> [--keep a|b]  one subject under two ids: b retired into a
+  python3 provenance.py distinct <a> <b> "<why>"      two subjects that look alike, told apart
   python3 provenance.py mark    <state file> [file]  the hooks' own: where a session began
   python3 provenance.py gate    <state file> [file]  ... and what it left, said once at its end
 
-The three before them change the record, and each answers with the reach: what rests on
+The five before them change the record, and each answers with the reach: what rests on
 what it wrote, what is MOVED now, which predicate fired. `set --help`, `add --help`,
-`review --help`.
+`review --help`, `same --help`, `distinct --help`. Sameness is judged, never guessed: `add`
+names the entries nearest a new one, and `same` or `distinct` records the answer
+(sameness.py).
 
 Without a file argument the record is PROVENANCE.yaml here, else the path this checkout
 registered in `<git common dir>/kpopper-record` - for a project whose tree cannot hold it.
@@ -2303,10 +2307,19 @@ def _forks_on_contradiction(a, doc, ids, jud, fields, raw):
     return out
 
 
+def _nearest_existing(a, doc, ids, jud, fields, raw):
+    """The entries nearest a new one, said in the reply - a note, never a refusal - and a
+    write under an id that was retired into another, refused and pointed at it. Both live in
+    sameness.py, beside the commands that record the answer."""
+    sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+    import sameness
+    return sameness.nearest_existing(a, doc, ids, jud, fields, raw)
+
+
 # Every refusal a write can meet, in one place. The fork on a contradiction is the last of
-# them; a later rule - the entries nearest a new one - is one more function here.
+# them; the entries nearest a new one are said just before it.
 VALIDATORS = [_known_key, _sound_dependencies, _sound_references, _reopener_is_prose,
-              _arrangement_is_sound, _not_born_broken, _forks_on_contradiction]
+              _arrangement_is_sound, _not_born_broken, _nearest_existing, _forks_on_contradiction]
 
 
 def validate(action, doc, ids, jud, fields, raw):
@@ -3339,6 +3352,10 @@ if __name__ == "__main__":
         sys.exit((mark if cmd == "mark" else gate)(rest[0], files))
     if cmd in ("set", "add", "review"):
         sys.exit(write_command(cmd, rest))
+    if cmd in ("same", "distinct"):
+        sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+        import sameness
+        sys.exit(sameness.command(cmd, rest))
     if cmd == "affects":
         files = [x for x in rest if x.endswith((".yaml", ".yml"))] or default_paths()
         sys.exit(affects(files, [x for x in rest if not x.endswith((".yaml", ".yml"))]))
