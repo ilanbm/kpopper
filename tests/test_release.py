@@ -1,10 +1,13 @@
-"""The release pull request's arithmetic, and the invariant the version files keep.
+"""The release pull request's arithmetic, and the invariants a release carries: what the
+version files keep, and what the packages ship.
 
     python3 -m unittest discover -s tests
 """
+import fnmatch
 import importlib.util
 import json
 import pathlib
+import re
 import unittest
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
@@ -54,6 +57,18 @@ class TheVersionFiles(unittest.TestCase):
             before, after = texts[name].splitlines(), text.splitlines()
             self.assertEqual(len(before), len(after))
             self.assertEqual(sum(1 for a, b in zip(before, after) if a != b), 1, name)
+
+
+class WhatShips(unittest.TestCase):
+    def test_the_browser_checks_travel_with_the_command_line(self):
+        # `kpopper page --checks` runs the file that came with the reader, so a wheel that
+        # declares everything except that file turns the flag into an error message on every
+        # installed copy - and nothing else in the suite opens a wheel to notice.
+        toml = (ROOT / "pyproject.toml").read_text(encoding="utf-8")
+        block = re.search(r"\[tool\.setuptools\.package-data\](.*?)(?:\n\[|\Z)", toml, re.S)
+        self.assertIsNotNone(block, "no package-data section")
+        globs = re.findall(r'"([^"]+)"', block.group(1))
+        self.assertTrue(any(fnmatch.fnmatch("verify_page.js", g) for g in globs), globs)
 
 
 class TheChangelog(unittest.TestCase):

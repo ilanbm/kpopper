@@ -126,6 +126,12 @@ known:
     from: "package.json"
     at: "files"
     of: "2026-09-03"
+  p.checks_in_the_wheel:
+    v: 1
+    name: "Browser checks the python package ships"
+    from: "pyproject.toml"
+    at: "tool.setuptools.package-data"
+    of: "2026-09-03"
   m.record_scale:
     v: 107
     name: "Largest live record, entries"
@@ -475,17 +481,33 @@ judgments:
     seen: {lit.registry_names: "kpopper and ground-tree are both unregistered on PyPI and on npm",
            lit.name_risk: "bare-term search is owned by a fandom; the org and handle are taken;
                            every package registry is free; qualified search works"}
-  d.npm_carries_the_checks:
-    rests_on: [p.npm_files, p.script_copies, lit.registry_names]
-    verdict: "the npm name is claimed by the browser checks - the one part of this that is Node
-              and cannot travel in the python package - and never by a placeholder"
-    because: "The name is worth holding and the checks are a real thing to hold it with, so the
-              claim costs nothing in honesty. Publishing an empty package to reserve a word is
-              the move every registry's naming policy exists to refuse, and this record already
-              declined it once for ground-tree."
+  d.npm_holds_the_name:
+    rests_on: [prior.ts_direction, p.npm_files, p.script_copies, lit.registry_names]
+    verdict: "the npm name is held against the day this becomes a Node tool, and it is held by
+              the browser checks rather than by a placeholder"
+    because: "q.language_direction is open and waits for a person: prior.ts_direction puts the
+              renderer, the command line and the checks in TypeScript, and of everything that
+              waiting costs, a name taken by someone else in the meantime is the only part that
+              cannot be undone later. Publishing an empty package to reserve a word is the move
+              every registry's naming policy exists to refuse, and this record declined it once
+              already for ground-tree - so the hold has to carry something, and the browser
+              checks are the one part that belongs on npm on its own terms. They are not exiled
+              there; see d.checks_ship_with_the_reader."
     wrong_if: "p.npm_files < 1"
-    seen: {p.npm_files: 1, p.script_copies: 1,
+    seen: {prior.ts_direction: 0.7, p.npm_files: 1, p.script_copies: 1,
            lit.registry_names: "kpopper and ground-tree are both unregistered on PyPI and on npm"}
+  d.checks_ship_with_the_reader:
+    rests_on: [p.checks_in_the_wheel, p.script_copies]
+    verdict: "the browser checks install with the command line - `kpopper page --checks` runs the
+              copy that came with the reader, wherever it was installed"
+    because: "The checks are the only thing that answers whether the page actually behaves, and a
+              wheel that leaves them out withholds that answer from everyone who installed the
+              ordinary way. Being Node is a reason to want node on the path, not a reason to live
+              in another registry - and an installed copy sits somewhere nobody would think to
+              look, so the dispatcher finds it instead of the person. The file ships in both
+              packages and is edited in neither."
+    wrong_if: "p.checks_in_the_wheel < 1"
+    seen: {p.checks_in_the_wheel: 1, p.script_copies: 1}
   d.tree_springs_back:
     rests_on: [d.page_reads_only, p.tree_positions_kept]
     verdict: "the tree can be handled - pulled about, and grown into place once - and nothing a
