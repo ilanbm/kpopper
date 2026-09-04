@@ -47,7 +47,7 @@ plugin is all of that plus the method and the session hooks:
 |---|---|
 | `skills/kpopper` | The method. Loads when work will be revisited, or when resuming such work. |
 | `skills/kpopper/PAGE.md` | The page reference — briefs, renderers, the tree. Read only when building a page. |
-| `scripts/kpopper` | One entry point: `open · check · affects · pull · page`. The dispatcher itself is `scripts/cli.py` — the same code the installed `kpopper` command runs. |
+| `scripts/kpopper` | One entry point: `open · check · affects · pull · set · add · review · consolidate · same · distinct · page`. The dispatcher itself is `scripts/cli.py` — the same code the installed `kpopper` command runs. |
 | `scripts/provenance.py` | The reader underneath. Field names are inferred by shape, so it reads records written in any vocabulary. |
 | `scripts/render_page.py` | The record as one self-contained page, three tabs, no dependencies beyond the reader. |
 | `scripts/verify_page.js` | Browser checks for that page, in both themes and under reduced motion. Playwright. Reached as `kpopper page --checks`. |
@@ -112,6 +112,11 @@ kpopper affects <entry>          # what a change reaches, through intermediate j
 kpopper pull <entry|prefix>      # a subject's values with their sources - and what moved
                                  # since each judgment last looked
 kpopper where                    # the record this directory answers for
+kpopper set | add | review       # change the record; the reply is what the write reached
+                                 # (--hypothesis NAME writes beside the record instead)
+kpopper consolidate [--dry-run]  # the record with its hypotheses laid over it, tested - then folded
+kpopper same <a> <b>             # one subject under two ids: b retired into a
+kpopper distinct <a> <b> "why"   # two that only look alike, kept apart for good
 ```
 
 Each command reads the record in the current directory, or the files you name. Without the
@@ -133,6 +138,17 @@ value is the confidence — that names in `reopened_by` the sign a person would 
 it. A dependency that moved since a judgment's snapshot is reported as `MOVED`
 and does not fail the build either: it puts the judgment in front of a person, and it is
 muted when the predicate names it and still evaluates false — moved, not across the line.
+
+Several sessions and branches write the one record, and a write that contradicts what it holds —
+the same id with a reading no newer than the base's, or a different verdict — is refused into a
+**hypothesis**: `PROVENANCE.d/<name>.yaml` beside the record, in the record's own shape, which
+every command reads over the base and nothing applies. `consolidate --dry-run` tests the record
+with its hypotheses laid over it — premises re-checked, falsifiers evaluated, an id two of them
+hold with different claims stopped, near-duplicates named for a person to judge — and
+`consolidate` folds what the test leaves clean, `--refute` keeps a failed one as a negative
+finding, and `--from <ref>` reads another branch's committed record the same way, pulled and
+never pushed. Sameness is judged, not guessed: `add` names the nearest existing entries, and
+`same` or `distinct` records the answer so the pair never returns.
 
 ## The page — and the tree
 

@@ -105,6 +105,19 @@ sources:
     of: "2026-09-04, given the hypotheses beside the record at db31e1c - the layer, the door and the
          cone - the fixture record under tests/, and the three live records this reader serves"
     read: "2026-09-04"
+  s.2026_09_04_forks_chapter:
+    asked: "Write the method's chapter on forks and hypotheses: a task as a judgment, pull before
+            add, the consolidation walk, the out-of-tree lock, how a merge goes, and the reader's new
+            commands."
+    name: "The session that wrote the method's chapter on forks and hypotheses - what it was asked,
+           and what it was given. Its reading: the chapter teaches exactly what the reader does - a
+           contradiction told by the id and the day, a hypothesis read beside the base and tested by
+           the dry run, three lists answered by three commands - and says plainly what is still open
+           and what no surface shows yet"
+    of: "2026-09-04, given the consolidation design and its decisions in this record, the reader
+         with the fork, the dry run and sameness at ad4e23f, the three fixture records under tests/,
+         and the method as it stood"
+    read: "2026-09-04"
   s.2026_09_04_prior_reversal_share:
     asked: "Count the share of high-confidence prior-resting judgments that consolidation refuted,
             as a computed entry, and make the demotion rule a predicate the build evaluates."
@@ -302,6 +315,14 @@ known:
     at: "near - the reasons a pair is named; overlap only orders"
     of: "2026-09-04"
     also: [p.sameness_reasons]
+  p.contested_meanings:
+    v: 1
+    name: "Meanings the reader gives the word contested - a rival claim laid against what the record
+           holds, which nothing but a person decides"
+    from: "scripts/provenance.py"
+    at: "contested, and the opener's standing line; the dry run's report and the page's arrangement
+         note say the word of the door's refusal and of a question - the same rival claim"
+    of: "2026-09-04"
   p.coverage_thresholds:
     v: 0
     name: "Thresholds the coverage report carries in code - a line drawn anywhere but inside a
@@ -704,6 +725,29 @@ judgments:
               the move having happened. Cheap to reverse, so decided on the prior alone."
     wrong_if: "prior.strings_lose_tooling < 0.6"
     seen: {m.page_string_lines: 0, prior.strings_lose_tooling: 0.95}
+  d.contested_is_a_rival_claim:
+    rests_on: [s.2026_09_04_forks_chapter, d.hypotheses_read_beside_the_base, p.contested_meanings]
+    verdict: "contested is said of one thing: a rival claim laid against what the record holds,
+              which nothing but a person decides - two hypotheses on one id, a reading the door
+              refuses at the fold, a hypothesis or an open question against an arrangement; a
+              judgment the opener lists as needing a person is said to need one, never to be
+              contested"
+    because: "The opener's standing line called every flagged judgment contested - a premise that
+              moved, a hole, a falsifier nothing evaluates - while check, pull, the dry run and the
+              page keep the word for a rival claim a person must decide between. A session reading
+              both takes a moved premise for a second writer and goes looking for a hypothesis that
+              does not exist. One word for one thing; {{p.contested_meanings}} is the count that
+              would show a second one creeping back in."
+    wrong_if: "p.contested_meanings > 1"
+    seen:
+      s.2026_09_04_forks_chapter: "read 2026-09-04"
+      d.hypotheses_read_beside_the_base: "every command reads the hypotheses beside the record over
+                                          the base - pull shows what each proposes, check and open
+                                          say where two disagree, the opener counts what waits with
+                                          each one's age and reach - and evaluates the base alone;
+                                          the union is tested by consolidation, and the page draws
+                                          the base"
+      p.contested_meanings: 1
   d.contradiction_by_id_and_day:
     rests_on: [s.2026_09_03_hypotheses, d.base_shared_forks_on_contradiction, d.write_path_returns_reach, p.supersede_doors]
     verdict: "a contradiction is told by the id and the day: the same id with a value read no later

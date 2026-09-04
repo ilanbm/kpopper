@@ -1245,7 +1245,8 @@ def opening(paths, budget=25, chars=None):
     standing = []
     live = [n for n in sorted(jud) if n not in flagged]
     if live:
-        standing.append("standing:" + (f"  ({len(flagged)} above are contested)" if flagged else ""))
+        standing.append("standing:" + (f"  ({len(flagged)} above need{'s' if len(flagged) == 1 else ''} "
+                                        f"a person)" if flagged else ""))
         for name in live:
             b = jud[name]["body"]
             v = str(b.get("verdict") or b.get("title") or name)
