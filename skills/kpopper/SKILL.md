@@ -597,6 +597,13 @@ crossed line is the answer. That comparison is only as good as the snapshot: `se
 hold the dependency's value as recorded, never a paraphrase of it — the reader cannot tell
 a paraphrase from a move, so it reports both, and a person has to look.
 
+Where the two readings are long and share an opening, each is clipped to **where they part**
+rather than to its first few words, and the dropped opening is marked with an ellipsis — so a
+line reads `…before the first cold night -> …after the first frost` instead of printing the
+same unchanged head twice. Every surface that sets two readings against each other reads them
+that way: `check`, `open`, what a write answers with, what a fork refusal asks you to choose
+by, and what `review` says it rewrote.
+
 `open` is the session opener: how large the record is, and then only what needs a person —
 a dependency that is not an entry, a judgment broken by its own condition, a dependency that
 moved since the judgment last looked, a judgment nothing was ever checked against, a declared

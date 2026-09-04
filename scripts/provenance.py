@@ -694,6 +694,32 @@ def short(v, n=40):
     return s if len(s) <= n else s[:n - 1] + "…"
 
 
+def apart(a, b, n=40):
+    """Two readings being compared, clipped to where they differ rather than to where they
+    agree -> (a, b). `short` cuts at the head, and when one value is written over another
+    the head is exactly the part that did not change: two long readings that part at the
+    end come back as the same clipped string twice, which tells a reader something moved
+    and shows them nothing to judge it by. So the window opens at the last whole word
+    before the two part, and what is dropped in front of it is marked.
+
+    Where they part early enough for the head to show it, this is `short`."""
+    sa, sb = " ".join(str(a).split()), " ".join(str(b).split())
+    if len(sa) <= n and len(sb) <= n:
+        return sa, sb
+    same = 0
+    while same < min(len(sa), len(sb)) and sa[same] == sb[same]:
+        same += 1
+    if same < n // 2:                  # they part inside what the head would have shown
+        return short(sa, n), short(sb, n)
+    at = sa.rfind(" ", 0, same) + 1    # open on a whole word, not mid-word
+    if at == 0 or same - at > n:
+        # no word to open on, or the nearest one too far back to be worth the room: a url,
+        # a hash, a long number. Cut into the token instead - a window that shows the
+        # difference is worth more here than one that starts where a reader would.
+        at = max(0, same - n // 4)
+    return "…" + short(sa[at:], n - 1), "…" + short(sb[at:], n - 1)
+
+
 def moved_deps(j, raw, ids):
     """Dependencies whose value differs from the snapshot taken when the judgment was
     written -> [(dep, seen, now, state)]. `state` is what the predicate makes of the move:
@@ -1102,8 +1128,9 @@ def check_lines(paths):
         # is the answer, and only the predicate can say which line matters.
         for dep, old, now, state in moved_deps(j, raw, ids):
             if state == "moved":
+                was, is_ = apart(old, now)
                 moved.append(f"{name}: {dep} differs from its snapshot "
-                             f"({short(old)} -> {short(now)}) - re-review, or refresh seen")
+                             f"({was} -> {is_}) - re-review, or refresh seen")
     # What the record stands on: one line, printed and never failed on - the confidences are
     # the record's to defend, and a count of them is not a problem with it.
     priors = priors_line(ids, jud, raw)
@@ -1202,8 +1229,8 @@ def opening(paths, budget=25, chars=None):
                                     f"condition"))
         for dep, old, now, state in moved_deps(j, raw, ids):
             if state == "moved":
-                items.append((70, name, f"{dep} differs from what it last saw: "
-                                        f"{short(old, 28)} -> {short(now, 28)}"))
+                was, is_ = apart(old, now, 28)
+                items.append((70, name, f"{dep} differs from what it last saw: {was} -> {is_}"))
     # an id two hypotheses disagree on is ranked above everything: nothing decides it but a
     # person, and consolidation will refuse to run over it
     for k, hs in contested(doc).items():
@@ -1604,7 +1631,15 @@ def pull(paths, seeds, budget=40, doc=None):
         # the grounding surface, so here even a muted move is worth a line.
         for dep, old, now, state in sorted(moved_deps(j, raw_, ids_)):
             mark_ = {"muted": " - within wrong_if", "crossed": " - across wrong_if"}.get(state, "")
-            out.append(cut(f"    moved since review: {dep} {old} -> {now}{mark_}", 110))
+            # the two readings are clipped to what the line has left for them, and the
+            # line itself is never cut: a budget spent on the first value would take the
+            # arrow and the second reading with it, which is the whole failure here.
+            head = f"    moved since review: {dep} "
+            room = 110 - len(head) - len(mark_) - len(" -> ")
+            # a floor under each side, so an id long enough to eat the line leaves a
+            # comparison a reader can still use rather than two stubs
+            was, is_ = apart(old, now, max(24, room // 2))
+            out.append(f"{head}{was} -> {is_}{mark_}")
         return out
 
     def dispute(k):
@@ -2042,14 +2077,16 @@ def _state(name, j, raw, ids, fields, touched=()):
     moves = [(d, o, n, s) for d, o, n, s in moved_deps(j, raw, ids) if not touched or d in touched]
     if any(s == "moved" for _, _, _, s in moves):
         d, o, n, _ = next(x for x in moves if x[3] == "moved")
-        return "MOVED", (f"{d} moved {short(o)} -> {short(n)} since it was reviewed - "
+        was, is_ = apart(o, n)
+        return "MOVED", (f"{d} moved {was} -> {is_} since it was reviewed - "
                          f"if it still holds: review {name}")
     if unchecked:
         return "UNCHECKED", (f"never checked against {', '.join(unchecked)} - "
                              f"if it holds: review {name}")
     if any(s == "muted" for _, _, _, s in moves):
         d, o, n, _ = next(x for x in moves if x[3] == "muted")
-        return "MUTED", (f"{d} moved {short(o)} -> {short(n)}, inside wrong_if ({j['pred']}) - "
+        was, is_ = apart(o, n)
+        return "MUTED", (f"{d} moved {was} -> {is_}, inside wrong_if ({j['pred']}) - "
                          f"nothing is asked")
     if not named_ and not blocked:
         reopened = _decided(j)
@@ -2453,7 +2490,8 @@ def _forks_on_contradiction(a, doc, ids, jud, fields, raw):
         d = _disagreement(a, raw.get(k), raw, ids, jud, fields)
         if d and not d[3]:
             _, old, new, _, why, when = d
-            out.append(f"{k} holds {short(old)} as of {when}, and {why} says {short(new)} - the base "
+            was, is_ = apart(old, new)
+            out.append(f"{k} holds {was} as of {when}, and {why} says {is_} - the base "
                        f"keeps what it holds and a hypothesis holds the other: "
                        f"{_command_of(a, _hypothesis_name(doc, k, new))}")
         return out
@@ -2474,8 +2512,9 @@ def _forks_on_contradiction(a, doc, ids, jud, fields, raw):
                            + f" - a newer reading updates it: set {k} {shlex.quote(str(new))}; one "
                            f"that disagrees opens a hypothesis: {_command_of(a, name)}")
             else:
-                out.append(f"{k} is already an entry, holding {short(old)} as of {when}, and {why} "
-                           f"says {short(new)} - the base keeps what it holds and a hypothesis holds "
+                was, is_ = apart(old, new)
+                out.append(f"{k} is already an entry, holding {was} as of {when}, and {why} "
+                           f"says {is_} - the base keeps what it holds and a hypothesis holds "
                            f"the other: {_command_of(a, name)}")
     # the cone: whatever rests on a hypothesis goes into it, so that it folds - or is
     # refuted - together with what it rests on
@@ -2977,7 +3016,7 @@ def _fork(paths, action):
                       else f"what it saw is what the record holds under it ({stamp})"))
         for d in j["deps"]:
             if d in was and d in seen and not _same(was[d], seen[d]):
-                out.append(f"  {d}: {short(was[d])} -> {short(seen[d])}")
+                out.append("  {}: {} -> {}".format(d, *apart(was[d], seen[d])))
             elif d not in was and d in seen:
                 out.append(f"  {d}: {short(seen[d])} (never checked against it before)")
     made_dir = False
@@ -3086,7 +3125,8 @@ def _review_section(paths, brief, title, stamp, raw, ids, jud):
     for k in refs:
         if k in was and k in seen and not same_seen(was[k], seen[k]):
             half, a, b = which_moved(was[k], seen[k])
-            print(f"  seen {k}{' - ' + half if half else ''}: {short(a)} -> {short(b)}")
+            was, is_ = apart(a, b)
+            print(f"  seen {k}{' - ' + half if half else ''}: {was} -> {is_}")
         elif k not in was and k in seen:
             print(f"  seen {k}: {short(seen[k])} (never read against it before)")
     return 0
@@ -3195,7 +3235,8 @@ def _apply(paths, action):
                                facts)
         was = str(_verdict_of(jud[nid]["body"]) or nid)
         _replace_in(lines, nid, body)
-        out.append(f"supersede {nid}: {short(was, 60)} -> {short(_verdict_of(body), 60)} - {why}")
+        out.append("supersede {}: {} -> {} - {}".format(
+            nid, *apart(was, _verdict_of(body), 60), why))
     elif kind == "add":
         out.append("add " + _add_in(lines, nid, body, collection))
     else:
@@ -3214,7 +3255,7 @@ def _apply(paths, action):
                                         if changed else f"what it saw is what the record holds ({stamp})"))
         for d in j["deps"]:
             if d in was and d in seen and not _same(was[d], seen[d]):
-                out.append(f"  {d}: {short(was[d])} -> {short(seen[d])}")
+                out.append("  {}: {} -> {}".format(d, *apart(was[d], seen[d])))
             elif d not in was and d in seen:
                 out.append(f"  {d}: {short(seen[d])} (never checked against it before)")
     _bump_updated(lines, stamp)
