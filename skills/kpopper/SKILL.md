@@ -470,9 +470,13 @@ with it. **A contradiction opens a hypothesis**, and the reader tells one by the
 `set` of a reading no newer than the base's (its `of:`, else its source's read date) that differs is
 refused - two readings of one day that disagree are two writers, not the world moving; a newer
 reading updates the base and flags what rests on it. `add` of an id the base holds is refused, and
-with a different value or verdict it is a contradiction: a standing judgment is replaced only when
-its own `wrong_if` holds now, or the new body carries `request: s.<date>_<slug>` - a session source
-whose `asked:` is the person's request verbatim, rested on, said *on the word of* on every surface.
+with a different value or verdict it is a contradiction: a standing judgment is replaced in the base
+only when its own `wrong_if` holds now, and otherwise the rewrite waits beside the record until a
+person folds it. Nothing written into the body opens that door - every session's first write is a
+source carrying what it was asked, so a field read as a person's authority would be a key every
+session already holds. `request: s.<date>_<slug>` - a session source whose `asked:` is the person's
+request verbatim, rested on - still names whose asking the change was taken from, said *on the word
+of* on every surface: provenance the person weighs at the fold, and permission for nothing.
 A write resting on what only a hypothesis holds belongs in that hypothesis. Each refusal names the
 command that writes the same thing into `PROVENANCE.d/<name>.yaml` beside the record - the base
 untouched - named after the id contradicted and a mark of the claim written, unless `--hypothesis
@@ -517,8 +521,10 @@ refuted. The run exits non-zero on a contested id, a falsifier that holds, a hol
 the fold, and `review <id> --hypothesis NAME` refreshes the snapshot against the record as it stands
 under the hypothesis. `consolidate` runs the same test and, only when it is clean, writes the union
 through the write path: every replacement passes the one door a `set` passes, so a reading born of a
-same-day refusal waits until someone reads again on a later day; the result is read back and undone
-whole if `check` then says anything new; the folded files go, and what to commit is printed.
+same-day refusal waits until someone reads again on a later day - while a verdict over a standing
+judgment the record's own sign has not broken passes here and nowhere else, because the fold is the
+person's act and says so in the line above it; the result is read back and undone whole if `check`
+then says anything new; the folded files go, and what to commit is printed.
 
 **One rule, two containers.** What stands is contested only by something recorded: a rival claim, in
 a hypothesis; or a doubt with no rival value yet, an open question that names the id. The page says

@@ -189,6 +189,15 @@ sources:
          aside on 2026-09-01, an independent review of the method's own chapter on merging, and two
          branches forked on one id in a throwaway repository"
     read: "2026-09-04"
+  s.2026_09_04_minted_permission:
+    asked: "Close the door a session can open for itself: a rewrite of a standing judgment whose
+            sign has not fired waits as a hypothesis until a person folds it."
+    name: "The session that closed the self-minted door - what it was asked, and what it read into
+           it. The record already required every session's first write to be a source carrying
+           asked:, so a field that opened the door on the word of such a source handed every session
+           the key to every standing judgment. Read as: the door keeps only the signs the build can
+           read, and what a person authorises they authorise by folding it."
+    read: "2026-09-04"
   s.2026_09_04_prior_reversal_share:
     asked: "Count the share of high-confidence prior-resting judgments that consolidation refuted,
             as a computed entry, and make the demotion rule a predicate the build evaluates."
@@ -1032,28 +1041,29 @@ judgments:
                                           the base"
       p.contested_meanings: 1
   d.contradiction_by_id_and_day:
-    rests_on: [s.2026_09_03_hypotheses, d.base_shared_forks_on_contradiction, d.write_path_returns_reach, p.supersede_doors]
+    rests_on: [s.2026_09_04_minted_permission, s.2026_09_03_hypotheses, d.base_shared_forks_on_contradiction, d.write_path_returns_reach, p.supersede_doors]
     verdict: "a contradiction is told by the id and the day: the same id with a value read no later
               than the base's own reading, or with a different verdict, is refused into the base and
               named a hypothesis; a newer reading supersedes, a standing judgment is superseded only
-              when its wrong_if holds or the request that asked for the change is named; the same
-              premises under different ids are different subjects"
+              when its wrong_if holds; the same premises under different ids are different subjects"
     because: "set is the update path - the world moving, flagged as it always was - so a differing
               value alone cannot be the contradiction, or the reach would have nothing left to reach.
               What the record can tell apart is time: a reading newer than the one the base holds -
               its own date, else its source's - supersedes it; one of the same day or older that
               disagrees is two writers, not the world moving. A value nothing dates is superseded by
               the first dated write, which starts the clock; a concurrent second writer is then
-              same-day and refused - the case the mechanism exists for. Resting on a session source
-              proves nothing, since every judgment rests on the session that wrote it, so a judgment
-              is replaced only when it is already broken by its own condition or when the new one
-              names the request that asked for the change and rests on it. Five judgments here rest
-              on one source with five verdicts, so the same premises under different ids stay
-              different subjects until someone says otherwise - a candidate to judge, never a
+              same-day and refused - the case the mechanism exists for. A judgment has no such clock,
+              and resting on a session source proves nothing, since every judgment rests on the
+              session that wrote it; naming one proves no more, since the session writes it. So a
+              judgment is replaced in the base only when it is already broken by its own condition,
+              and every other rewrite waits beside the record for a person to fold. Five judgments
+              here rest on one source with five verdicts, so the same premises under different ids
+              stay different subjects until someone says otherwise - a candidate to judge, never a
               refusal. One function decides all of it; {{p.supersede_doors}} is the count that would
               show a second one creeping in."
     wrong_if: "p.supersede_doors > 1"
     seen:
+      s.2026_09_04_minted_permission: "read 2026-09-04"
       s.2026_09_03_hypotheses: "read 2026-09-03"
       d.base_shared_forks_on_contradiction: "a consistent addition goes straight to the shared
                                              record from any session or branch; a write that
@@ -1153,28 +1163,32 @@ judgments:
                                           the base"
       p.union_tests: 1
   d.fold_passes_the_one_door:
-    rests_on: [s.2026_09_04_consolidate, d.contradiction_by_id_and_day, p.supersede_doors]
-    verdict: "a folded reading passes the same door a written one does: an entry replaces what the
-              base holds when its reading is newer, a judgment when the standing one is broken or
-              names the request - and a reading the door refuses is contested, never overwritten"
-    because: "The fold is a write under ids the base holds, and the record already has one function
-              that says whether such a write may replace what stands -
-              {{d.contradiction_by_id_and_day}} put the rule there so that nothing else decides it. A
-              fold that took sides on a same-day disagreement would be a second door, opened by
-              whoever ran the command; through the one door, a hypothesis born of a same-day
-              contradiction stays beside the record until someone reads again on a later day, which
-              is the act the day rule can tell apart from two writers. {{p.supersede_doors}} is the
-              count that would show a second door."
+    rests_on: [s.2026_09_04_minted_permission, s.2026_09_04_consolidate, d.contradiction_by_id_and_day, p.supersede_doors]
+    verdict: "a folded reading passes the one door a written one does, with a person's hand on it:
+              an entry replaces what the base holds when its reading is newer, a judgment when the
+              standing one is broken or when the fold itself is the person's - and a reading the door
+              refuses is contested, never overwritten"
+    because: "The fold is a write under ids the base holds, and one function still says whether such
+              a write may replace what stands - {{d.contradiction_by_id_and_day}} put the rule there
+              so that nothing else decides it, and the fold passes its hand through that function
+              rather than deciding beside it. Readings keep the day rule whole: a hypothesis born of
+              a same-day contradiction stays beside the record until someone reads again on a later
+              day, which is the act the day rule tells two writers apart by, and no hand makes an
+              older reading newer. A standing judgment has no clock to appeal to, so what could admit
+              its rewrite was a claim written into the write itself - which is what a session mints
+              for free. The fold is the one act here a session cannot write into the record, and it
+              is where the rewrite is read beside what it replaces, with the dry run naming both.
+              {{p.supersede_doors}} is the count that would show a second door."
     wrong_if: "p.supersede_doors > 1"
     seen:
+      s.2026_09_04_minted_permission: "read 2026-09-04"
       s.2026_09_04_consolidate: "read 2026-09-04"
       d.contradiction_by_id_and_day: "a contradiction is told by the id and the day: the same id
                                       with a value read no later than the base's own reading, or with
                                       a different verdict, is refused into the base and named a
                                       hypothesis; a newer reading supersedes, a standing judgment is
-                                      superseded only when its wrong_if holds or the request that
-                                      asked for the change is named; the same premises under
-                                      different ids are different subjects"
+                                      superseded only when its wrong_if holds; the same premises
+                                      under different ids are different subjects"
       p.supersede_doors: 1
   d.gate_and_opener_against_the_mark:
     rests_on: [s.2026_09_03_coverage, d.gate_reminds, d.open_is_a_slot, p.gate_bounces]
@@ -1709,40 +1723,52 @@ judgments:
       d.declared_hole_is_a_note: "check fails only an undeclared gap; a hole declared with
                                   blocked_on is a note"
   d.request_is_a_visible_claim:
-    rests_on: [s.2026_09_03_arrangements, d.reversal_is_a_redecision]
-    verdict: "a person's request is named explicitly - request: a session source whose asked: is the
-              request verbatim, rested on - and said on every surface that shows the decision"
-    because: "Nothing by shape tells a request from an intent: every entry comes from a session
-              source and every arrangement rests on the session that wrote it, so a door read from
-              from: or rests_on would admit every rewrite by every later session, and with it the
-              flip. An explicit field is a claim under the session's name that a reader can hold
-              against the asked: it points at; the alternative - no door until a person folds a
-              hypothesis - makes the person answer their own question. Chosen at the person's word:
-              execute immediately, with a visible note."
-    blocked_on: "observational: falsified if request: appears on re-decisions whose named asked:
-                 does not ask for them, and no reader catches it"
+    rests_on: [s.2026_09_04_minted_permission, s.2026_09_03_arrangements, d.reversal_is_a_redecision]
+    verdict: "request: names whose asking a judgment was taken from - a session source whose asked:
+              is the request verbatim, rested on - and says it on every surface that shows the
+              judgment; it is provenance a reader weighs at the fold, and it admits nothing"
+    because: "The session writes that source itself, and this method requires it to: every session's
+              first write is a source carrying what it was asked. A door that opened on request: was
+              therefore open to every session by the record's own convention - nothing told a
+              person's asking from a session's claim that a person asked - and since the field was
+              widened from arrangements to every judgment it could pass any standing falsifier in the
+              record. The visibility that was offered for it, on the page and in check, is audit
+              after the fact and not authority. What the field is good for survives: whose asking a
+              change answers is what a person wants in front of them when they fold it, and it
+              travels with the hypothesis to be read there. The alternative the exception lacked when
+              it was opened - a rewrite that waits beside the record until a person folds it - exists
+              now."
+    blocked_on: "observational: falsified if sessions stop naming the asking a change came from once
+                 the field carries no permission, so folds are read without it, or if a reader takes
+                 request: for authority anyway"
     seen:
+      s.2026_09_04_minted_permission: "read 2026-09-04"
       s.2026_09_03_arrangements: "read 2026-09-03"
       d.reversal_is_a_redecision: "a reversal is the arrangement written again under its own id -
                                    admitted in place when its sign holds with its tabs intact, or on
                                    a person's request, never twice in a day - and otherwise refused
                                    into a hypothesis that contests it"
   d.reversal_is_a_redecision:
-    rests_on: [s.2026_09_03_arrangements, d.reversal_is_a_question, d.contradiction_by_id_and_day]
+    rests_on: [s.2026_09_04_minted_permission, s.2026_09_03_arrangements, d.reversal_is_a_question, d.contradiction_by_id_and_day]
     verdict: "a reversal is the arrangement written again under its own id - admitted in place when
-              its sign holds with its tabs intact, or on a person's request, never twice in a day -
-              and otherwise refused into a hypothesis that contests it"
+              its sign holds with its tabs intact, never twice in a day - and otherwise refused into
+              a hypothesis that contests it until a person folds it"
     because: "The brief cannot reverse a decision by being edited - the record's own claims fail it
               - and a new id contradicts nothing, so the same id is where a reversal lives and the
               door every same-id write goes through decides it. The sign is read only from a brief
               that still carries what the decision made: a tab deleted or gutted makes the very sign
               it would cite. One re-decision a day makes one radical change per session mechanical
               rather than remembered, and replaced: keeps each decision's born, how long it stood and
-              what ended it, so a flip reads from the record alone."
+              what ended it, so a flip reads from the record alone. A session's own word that a
+              person asked bought a way past all three at once - the day, the cut link and the sign -
+              and the session writes that word, so it buys nothing now. {{d.reversal_is_a_question}}
+              is answered where it belongs instead: the question waits in the hypothesis until the
+              person answers it by folding."
     blocked_on: "observational: falsified if an arrangement flips across days by sessions each
                  citing a sign the other's repair produced, or if a gradual edit - a pick narrowed
                  until something spills - is used to manufacture the sign"
     seen:
+      s.2026_09_04_minted_permission: "read 2026-09-04"
       s.2026_09_03_arrangements: "read 2026-09-03"
       d.reversal_is_a_question: "undoing an arrangement whose falsifier did not fire is a question
                                  for the person, never a change"
@@ -1750,9 +1776,8 @@ judgments:
                                       with a value read no later than the base's own reading, or with
                                       a different verdict, is refused into the base and named a
                                       hypothesis; a newer reading supersedes, a standing judgment is
-                                      superseded only when its wrong_if holds or the request that
-                                      asked for the change is named; the same premises under
-                                      different ids are different subjects"
+                                      superseded only when its wrong_if holds; the same premises
+                                      under different ids are different subjects"
   d.review_names_what_it_reads:
     rests_on: [d.reasoning_in_record, d.metrics_derived_builtin]
     verdict: "review takes a judgment's id or a section's title; an arrangement's review also

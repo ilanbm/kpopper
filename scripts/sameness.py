@@ -354,7 +354,8 @@ def _merge(S, R, sb, rb, ids, jud, fields, raw, as_of):
                 raise P.Refused(f"refused - {S} concludes {P.short(vs, 60)!r} and {R} "
                                 f"{P.short(vr, 60)!r} - {why}: two verdicts on one subject are a "
                                 f"contradiction, not one subject twice; keep the one that holds, "
-                                f"or supersede it through add with request:")
+                                f"or write the other through add --hypothesis, for a person "
+                                f"to fold")
             body = dict(rb)
             notes.append(f"{S} takes {R}'s verdict - {why}")
         else:
