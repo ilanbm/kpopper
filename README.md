@@ -47,11 +47,12 @@ plugin is all of that plus the method and the session hooks:
 |---|---|
 | `skills/kpopper` | The method. Loads when work will be revisited, or when resuming such work. |
 | `skills/kpopper/PAGE.md` | The page reference — briefs, renderers, the tree. Read only when building a page. |
-| `scripts/kpopper` | One entry point: `open · check · affects · pull · set · add · review · consolidate · same · distinct · page`. The dispatcher itself is `scripts/cli.py` — the same code the installed `kpopper` command runs. |
+| `scripts/kpopper` | One entry point: `open · check · affects · pull · set · add · review · consolidate · remeasure · same · distinct · page`. The dispatcher itself is `scripts/cli.py` — the same code the installed `kpopper` command runs. |
 | `scripts/provenance.py` | The reader underneath. Field names are inferred by shape, so it reads records written in any vocabulary. |
 | `scripts/render_page.py` | The record as one self-contained page, three tabs, no dependencies beyond the reader. |
 | `scripts/verify_page.js` | Browser checks for that page, in both themes and under reduced motion. Playwright. Reached as `kpopper page --checks`. |
 | `tests/` | The contract the reader and the page keep, run as `python3 -m unittest discover -s tests` against the fixture record in `tests/fixtures/page` — every field they accept, exercised once. |
+| `PROVENANCE.measure.yaml` | The recipes the pull request takes this record's tree-facts with again — an argument list per name an entry cites with `measure:`, run by `kpopper remeasure --run` and by nothing else; what differs from the record is one more hypothesis through the dry run. |
 | `hooks/` | A session opener and a stop gate. The opener runs `provenance.py open` when the project keeps a record — at its root, or registered with the checkout — and is silent everywhere else; the gate bounces a session once, with the failures, if it tries to finish having left `check` worse than it found it. |
 
 ## The record

@@ -12,11 +12,44 @@ git push -u origin HEAD
 gh pr create
 ```
 
-Every pull request runs the tests, then `kpopper check` and `kpopper page --verify` on the
-two Python versions the package claims to support, and fails if `PROVENANCE.view.yaml` no
-longer matches the record it renders from — the record moved, the view did not. The tests
-run against the fixture record in `tests/fixtures/page`, which exercises every field the
-reader and the page accept; a new field goes there first.
+Every pull request runs the tests, then `kpopper check`, `kpopper consolidate --dry-run`,
+`kpopper remeasure --run` and `kpopper page --verify` on the two Python versions the package
+claims to support, and fails if `PROVENANCE.view.yaml` no longer matches the record it renders
+from — the record moved, the view did not. The tests run against the fixture record in
+`tests/fixtures/page`, which exercises every field the reader and the page accept; a new field
+goes there first.
+
+The dry run lays the hypotheses beside the record over it and checks the result: red on a
+contested id, a falsifier that holds, or a hole; a premise that moved under a judgment is green
+and blocks only the fold. On a pull request the tree it runs on is the merge commit — the merged
+tree — and the same steps run on every push to `main`, the second net for two pull requests that
+were each consistent and contradict together.
+
+`remeasure` takes every entry that names a recipe again from that tree. An entry whose value is
+a fact about the tree says `measure: <name>`, and `PROVENANCE.measure.yaml` at the root maps the
+name to an argument list — `[python3, -I, -c, "..."]`, `[sed, -n, '...', a/file]` — the one file
+whose content ever runs, reviewed as code in the pull request that edits it. A recipe runs once,
+without a shell, with sixty seconds and 64 KiB of output, from the root of the checkout the
+record sits in — for a record the tree cannot hold, from the record's own directory, beside the
+allowlist; the plan says which, every time. The one line it prints is the value, and it must be
+of the recorded value's kind: a plain number where the record holds a number, and text compared
+exactly, so `001` is not `1`.
+
+What differs from the record is laid over it as the hypothesis `tree/<commit>` through the same
+dry run: red on a falsifier that holds on the measured value, a hole (a recipe the file lacks, or
+one that fails), or a reading the tree contests — a reading of the same day that disagrees, which
+the author corrects in the pull request; an older reading that moved is green, and the log carries
+the `kpopper set … --why "measured by …" --as-of <the day it was measured>` that refreshes it, or
+says to edit the value by hand where no command carries it as it was measured. Nothing writes the
+record but that command, run by a person or a session.
+
+A hypothesis that replaces a measured entry carries the `measure:` line with it: the fold takes
+the hypothesis's block over whole, so a replacement that says nothing about the recipe would drop
+it and nothing would take that reading again — the step refuses that rather than going quiet.
+Locally `kpopper remeasure` prints the plan and runs nothing; add `--run` to reproduce a red step
+at your keyboard. Name a recipe only where a command honestly takes the count the entry's `at:`
+describes — `python3 -I` for the Python ones, so a file in the checkout cannot stand in for a
+module they import.
 
 Merges are squashed: one commit on `main` per pull request, subject taken from the
 pull request title. The branch is deleted once it lands.

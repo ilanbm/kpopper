@@ -1,0 +1,6 @@
+# How three readings of this record are taken from the files beside it. Read by `kpopper
+# remeasure` alone; a recipe is an argument list, run without a shell from the checkout's root -
+# for this fixture, the directory a test copies it to - and the one line it prints is the value.
+boiler_kw:   [python3, -I, -c, "print(open('boiler.txt').read().strip())"]
+loss_kw:     [python3, -I, -c, "print(open('loss.txt').read().strip())"]
+cold_nights: [python3, -I, -c, "print(len(open('readings.txt').read().split()))"]

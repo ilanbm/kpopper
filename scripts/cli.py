@@ -18,6 +18,9 @@ straight through to provenance.py; page renders the record and can open what it 
                   base when the test is clean; --refute NAME "why" leaves one negative finding and
                   deletes the file; --from REF reads another branch's committed record as one more
                   hypothesis, and pull <seed> --from REF shows what it proposes
+  kpopper remeasure [--run] [file]        the entries that name a recipe, taken again from the
+                  tree: the plan alone until --run; what differs is laid over the record as one
+                  more hypothesis and tested by the dry run - the pull request runs it
   kpopper same    <a> <b> [--keep a|b]    one subject under two ids: b retired into a, every
                   reference rewritten across the record, its hypotheses and the brief
   kpopper distinct <a> <b> "<why>"        two subjects that look alike: recorded on a, so the
@@ -94,6 +97,13 @@ def main():
         # the union and the fold live beside the reader; pull --from is theirs too, since
         # another branch's record is read the way a hypothesis is
         tool = [sys.executable, str(HERE / "consolidate.py")] + ([cmd] if cmd == "pull" else []) + rest
+        if os.name == "nt":
+            sys.exit(subprocess.run(tool).returncode)
+        os.execv(sys.executable, tool)
+    if cmd == "remeasure":
+        # the tree measured against the record: the one command that runs a recipe, kept in a
+        # module of its own so that nothing reading the record imports it
+        tool = [sys.executable, str(HERE / "remeasure.py")] + rest
         if os.name == "nt":
             sys.exit(subprocess.run(tool).returncode)
         os.execv(sys.executable, tool)

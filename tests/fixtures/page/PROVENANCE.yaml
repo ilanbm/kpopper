@@ -29,6 +29,7 @@ known:
     name: "north wall, the area a glazier would cover"
     from: s.2026_09_03_glazing
     at: "measured on site during the session"
+    measure: north_wall
   glaze.quote_eur:
     v: 2400
     unit: EUR

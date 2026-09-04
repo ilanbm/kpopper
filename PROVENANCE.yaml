@@ -140,6 +140,19 @@ sources:
          record's own judgments resting on prior.* claims, the reader's check and opener, and the
          fixture record under tests/"
     read: "2026-09-04"
+  s.2026_09_04_remeasure:
+    asked: "Make the pull request re-measure: run the consolidation dry run on every pull request
+            and push, red on contested or falsified, and decide how the entries a task's falsifier
+            reads are re-measured on the merged tree."
+    name: "The session that made the pull request re-measure - what it was asked, and what it was
+           given. Its reading: an entry whose value is a fact about the tree names its recipe, the
+           recipe lives beside the record as an argument list and runs only on the pull request, and
+           the tree's readings are one more hypothesis tested by the same dry run"
+    of: "2026-09-04, given the consolidation dry run at ad4e23f, the three-state run that counted
+         one stale green, the two candidate shapes, a person's word for the first - an approved
+         recipe run only in CI, over the session's report as a dated source - and an independent
+         design review of the proposal"
+    read: "2026-09-04"
   s.2026_09_04_sameness:
     asked: "Judge sameness instead of guessing it: surface candidate duplicates from declared fields
             only, migrate one id into another with every reference rewritten, and record a pair as
@@ -274,6 +287,16 @@ known:
     name: "A tag per entry marking it session-local"
     from: s.2026_09_01_consolidation
     at: "hand-maintained state; the branch is the tag"
+  alt.session_report_as_measurement:
+    v: rejected
+    name: "The session's own report accepted as the measurement, with its date, and the pull request
+           reduced to noticing a cited entry with no fresh reading"
+    from: s.2026_09_04_remeasure
+    at: "a date check catches an old reading and not a wrong one: the stale reading that raised the
+         question was fresh by its date and wrong about the tree, the session having measured before
+         its own change and written after; and 'no fresh reading' needs a threshold nobody stated,
+         which the method forbids inventing. An entry with no recipe is this shape still, so it stays
+         the default and a recipe is named per entry"
   m.blocked_on_reopeners:
     v: 37
     name: "Judgments whose blocked_on names the sign that would re-open them, not an input the
@@ -400,12 +423,14 @@ known:
     name: "Files of substance the npm package ships"
     from: "package.json"
     at: "files"
+    measure: npm_files
     of: "2026-09-03"
   p.checks_in_the_wheel:
     v: 1
     name: "Browser checks the python package ships"
     from: "pyproject.toml"
     at: "tool.setuptools.package-data"
+    measure: checks_in_the_wheel
     of: "2026-09-03"
   m.reach.assumed_at_high_confidence:
     v: 0
@@ -441,10 +466,12 @@ known:
     name: "Browser code held as Python strings - what the renderer carried inline"
     from: run.constants_measured
     at: "CSS 0 + JS 0 - they are scripts/page/page.css and page.js now; 154 + 277 before the move"
+    measure: page_string_lines
   p.hook_slot:
     v: 2000
     name: "The opener's character budget"
     from: "scripts/session_open.sh"
+    measure: hook_slot
   p.gate_bounces:
     v: 1
     name: "How many times the stop gate blocks before yielding"
@@ -457,6 +484,14 @@ known:
     at: "HIGH_CONFIDENCE, read by priors_line - the matrix's own line, printed inside the line the
          count prints"
     of: "2026-09-04"
+  p.recipe_runners:
+    v: 1
+    name: "Places a measurement recipe is executed - files under scripts/ that name the allowlist
+           file, which whatever runs a recipe has to read"
+    from: "scripts/remeasure.py"
+    at: "run_recipe, called by measure and by nothing else - the reader, the page, the hooks and
+         consolidate read the name an entry carries and run nothing"
+    measure: recipe_runners
   p.reference_resolvers:
     v: 1
     name: "Functions that resolve a reference to what it shows - the value, a rule's name, a
@@ -615,11 +650,6 @@ open:
   q.contradiction_rule: "which writes open a hypothesis - a different value on an id the base
                          holds is clear; is an opposite verdict on the same rests_on one too, and
                          how is opposite told from merely different?"
-  q.ci_remeasure: "how does a pull request re-measure the entries a task's falsifier reads - a
-                   measurement recipe kept beside the entry, or the session's own report?
-                   run.page_move_three_states is the evidence: check stayed green while
-                   m.page_string_lines was stale, and flagged MOVED only once a hand refreshed
-                   the value - m.remeasure.stale_green counts that once"
   q.hypothesis_lifetime: "when is an untested hypothesis stale enough for the opener to say so -
                           by age, by how much rests on it, or only when a person asks?"
 
@@ -1003,6 +1033,40 @@ judgments:
       m.reach.local_checked_held: 83
       m.reach.local_assumed_held: 25
       m.reach.assumed_at_high_confidence: 0
+  d.measure_names_a_recipe:
+    rests_on: [s.2026_09_04_remeasure, m.remeasure.stale_green, run.page_move_three_states, d.record_is_code, p.recipe_runners]
+    verdict: "an entry whose value is a fact about the tree names its recipe with measure: - a bare
+              name, never a command; the recipes live beside the record as argument lists in one file
+              reviewed as code, and run only on the pull request, by one runner, without a shell - so
+              the record never carries a command, and no command that reads the record runs one"
+    because: "check compares seen against the record's own stored value and never against the tree,
+              so a value wrong about the tree passes as long as it agrees with itself:
+              {{run.page_move_three_states}} counted {{m.remeasure.stale_green}} such green, on a
+              reading that was fresh by its date. A recipe is the entry's own at: made runnable - the
+              count behind that run already said python3 ast over the renderer, in prose - and it
+              lives where {{d.record_is_code}} puts everything the tree can hold: in the tree,
+              reviewed in the same pull request, checked by the same job. What the record may carry
+              is a name alone, refused when it is not one or stands on anything but a stored scalar
+              reading, so a data file edited in a pull request makes nothing run; the allowlist is
+              the one file whose content runs, trusted as the tests are, and {{p.recipe_runners}}
+              counts the places that run it - a reading command that started to would show as a
+              second."
+    wrong_if: "p.recipe_runners > 1"
+    reopened_by: "a disagreement between the tree and the record that the pull request did not
+                  report, or a crossed falsifier or a same-day disagreement that ran green - a stale
+                  green counted again on an entry with a recipe - or a recipe whose line is not a
+                  reading of the tree it ran on"
+    seen:
+      s.2026_09_04_remeasure: "read 2026-09-04"
+      m.remeasure.stale_green: 1
+      run.page_move_three_states: "read 2026-09-03"
+      d.record_is_code: "the record of what is known about the code lives in the tree - committed
+                         with the work it describes, reviewed in the same pull request, checked by
+                         the same CI - and a hypothesis travels with its branch; an out-of-tree
+                         record holds only what the tree cannot hold, the world outside the code; a
+                         user-level directory is at most an index of records, never content; a
+                         session named as a source is provenance, not process"
+      p.recipe_runners: 1
   d.names_rank_never_decide:
     rests_on: [s.2026_09_04_sameness, d.sameness_is_judged, alt.sameness_from_names, p.candidate_reasons]
     verdict: "a candidate pair is named for a declared reason - the same source and place, the same
@@ -1456,6 +1520,41 @@ judgments:
       d.minimal_repair: "seniority is evidence, never a threshold; a trigger is cleared by the
                          smallest structural change that suffices"
       p.fields_a_build_writes: 0
+  d.tree_reads_as_a_hypothesis:
+    rests_on: [s.2026_09_04_remeasure, d.dry_run_is_check_on_the_union, d.contradiction_by_id_and_day, d.moved_is_a_flag, p.union_tests]
+    verdict: "the tree's readings that differ from the record are laid over it as one more
+              hypothesis - named after the commit, never folded - with the hypotheses beside the
+              record and through the same dry run, so the pull request decides nothing check would
+              not: a falsifier that holds on the measured value is red, a reading the door refuses is
+              contested, an older reading that moved is green and says what refreshes it, and a value
+              enters the record only by a person's or a session's write"
+    because: "{{d.dry_run_is_check_on_the_union}} already tests the record as it would stand under a
+              claim, and a measurement is a claim about the tree with a date: laying it over the base
+              asks the one question that exists and adds no evaluator - {{p.union_tests}} stays the
+              count. The door decides the reading like any other, by
+              {{d.contradiction_by_id_and_day}}: one older than the tree's is superseded and the
+              judgments over it move, which {{d.moved_is_a_flag}} keeps a flag and not a failure; one
+              of the same day that disagrees is two writers, and here the second writer is the author
+              of the pull request, who corrects the number in it. The runner writes nothing: a value
+              with nobody's reading behind it is not a reading, and a commit nobody reviewed is not
+              the record."
+    wrong_if: "p.union_tests > 1"
+    seen:
+      s.2026_09_04_remeasure: "read 2026-09-04"
+      d.dry_run_is_check_on_the_union: "the dry run is the reader's own check, run on the base with
+                                        the hypotheses laid over it by id, said as what the fold
+                                        would change: what arrives, what it replaces and what rests
+                                        on that, what the union moves or breaks, what is contested"
+      d.contradiction_by_id_and_day: "a contradiction is told by the id and the day: the same id
+                                      with a value read no later than the base's own reading, or with
+                                      a different verdict, is refused into the base and named a
+                                      hypothesis; a newer reading supersedes, a standing judgment is
+                                      superseded only when its wrong_if holds or the request that
+                                      asked for the change is named; the same premises under
+                                      different ids are different subjects"
+      d.moved_is_a_flag: "a dependency that moved since the snapshot flags the judgment for a
+                          person; only a predicate that holds fails the build"
+      p.union_tests: 1
   d.whole_shape_surface:
     rests_on: [doc.fact_moves]
     verdict: "the shape of the whole gets one surface of its own - the tree - and the reading
