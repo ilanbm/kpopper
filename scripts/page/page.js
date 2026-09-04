@@ -245,7 +245,7 @@
  document.addEventListener('mouseout',function(e){if(!hit(e)||pin||drag)return;
   clearTimeout(tmr);tmr=setTimeout(function(){if(!pin)close()},260)});
  document.addEventListener('click',function(e){if(e.target.closest('.pop'))return;
-  var el=hit(e);if(el){e.stopPropagation();
+  var el=hit(e);if(el){e.stopPropagation();if(el.closest('a'))e.preventDefault();
    if(pin&&cur===el&&!hist.length)close();else{close();open(el,el.getAttribute('data-id'),true)}}
   else close()});
  document.addEventListener('keydown',function(e){if(e.key!=='Escape')return;

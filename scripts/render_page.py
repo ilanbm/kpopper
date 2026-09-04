@@ -868,8 +868,9 @@ def build(paths, brief_path=None):
     doc = P.load(paths)
     ids, jud, fields = P.infer(doc)
     meta = doc.get("meta") or {}
-    lang, page_dir = language(doc), direction(doc)
-    w = dict(WORDS.get(lang, WORDS["en"]), dir=page_dir)
+    declared_lang, page_dir = language(doc), direction(doc)
+    lang = declared_lang if declared_lang in WORDS else "en"
+    w = dict(WORDS[lang], dir=page_dir)
     built = P.builtins(doc, ids, jud, fields, P.bodies(doc))
     raw0 = P.bodies(doc)
     raw0.update(built)
@@ -1766,7 +1767,7 @@ def build(paths, brief_path=None):
                                                          and k not in labels),
                                        "covered": covered, "swollen": swollen,
                                        "flags": flags, "contract": contract,
-                                       "language": lang, "direction": page_dir,
+                                       "language": declared_lang, "direction": page_dir,
                                        "tabs": [{"key": t["key"], "title": t["title"],
                                                  "bare": t["bare"], "serves": t["serves"],
                                                  "shape": t["shape"]} for t in tabs],

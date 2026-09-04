@@ -54,6 +54,15 @@ if (!CHROME) { console.log('no Chrome/Chromium found - set CHROME to a browser b
       chk(`${T} no horizontal overflow`, await p.evaluate(
         () => document.documentElement.scrollWidth <= window.innerWidth + 1));
 
+      const linkedRef = p.locator('a [data-id]').first();
+      if (await linkedRef.count()) {
+        const before = p.url();
+        await linkedRef.click();
+        chk(`${T} a provenance reference inside a link opens without navigating`,
+            p.url() === before && await seen(p, '.pop'));
+        await p.keyboard.press('Escape');
+      }
+
       if (await p.locator('[data-countdown]').count()) {
         const lang = await p.locator('html').getAttribute('lang');
         const singular = { en: ['1 day left', 'today', '1 day ago'],

@@ -122,6 +122,7 @@ class Components(unittest.TestCase):
         link = self.elements('lk')[0]
         self.assertEqual(link.attrs['href'], 'https://example.org/greenhouse')
         self.assertIn('doc.guide', [n.attrs.get('data-id') for n in link.walk()])
+        self.assertIn("if(el.closest('a'))e.preventDefault()", R.JS)
         self.change(self.record, lambda d: d['known']['doc.guide'].update(url='javascript:alert(1)'))
         self.assertTrue(any('safe url' in reason for _, reason in self.build()[4]['misfit']))
 
@@ -272,6 +273,7 @@ class Components(unittest.TestCase):
 
     def test_a_missing_chrome_catalog_fails(self):
         self.change(self.record, lambda d: d['meta'].update(language='fr'))
+        self.assertIn('<html lang="en" dir="ltr">', self.build()[0])
         self.assertIn('no chrome catalog for record language fr', self.lint()[0])
 
     def test_changing_only_values_cannot_flip_language(self):
