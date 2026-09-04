@@ -501,5 +501,25 @@ class TheReadingTests(unittest.TestCase):
             self.assertTrue(label.startswith(commit), (commit, label))
 
 
+class TheRepositoryTests(unittest.TestCase):
+    """This repository's own record names recipes for its tree-facts, and its tree measures what
+    it says - the step the pull request runs, run here."""
+
+    def test_the_tree_measures_what_the_record_says(self):
+        code, out, err = kp("remeasure", "--run", cwd=str(ROOT))
+        self.assertEqual(code, 0, out + err)
+        for line in ("  m.page_string_lines: 0 - as recorded (page_string_lines)",
+                     "  p.recipe_runners: 1 - as recorded (recipe_runners)",
+                     "  p.hook_slot: 2000 - as recorded (hook_slot)"):
+            self.assertIn(line, out)
+        self.assertTrue(out.rstrip().endswith("the record holds what this tree measures"), out)
+
+    def test_nothing_that_reads_the_record_imports_the_runner(self):
+        for name in ("provenance.py", "consolidate.py", "sameness.py", "render_page.py", "cli.py"):
+            text = (SCRIPTS / name).read_text(encoding="utf-8")
+            self.assertNotIn("import remeasure", text, name)
+            self.assertNotIn(R.ALLOWLIST, text, name)
+
+
 if __name__ == "__main__":
     unittest.main()
