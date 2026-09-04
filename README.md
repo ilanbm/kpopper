@@ -17,9 +17,11 @@ Two mechanics carry the whole method:
 - **Every judgment states, in advance, what would make it wrong — or declares out loud why
   it cannot yet.** `wrong_if` is a predicate over the things the judgment declares it rests
   on. The reader refuses prose in its place, rejects a predicate that reads anything
-  undeclared — and when the predicate is a plain comparison, evaluates it: a judgment whose
-  own falsifier holds **fails the build**. Anything richer is surfaced beside exactly what
-  moved, never guessed at.
+  undeclared — and when the predicate is one comparison, evaluates it: a judgment whose own
+  falsifier holds **fails the build**. Anything richer is refused and said, never guessed
+  at: a predicate carrying a second comparison would be read as far as its first operator
+  and answered false ever after, so it is reported as the hole it is until it is split in
+  two or declared with `blocked_on`.
 - **Staleness fires on reality, not on the calendar.** Every judgment carries `seen`, a
   snapshot of what its dependencies held when it was last reviewed. Nothing stores a stale
   flag; drift is *derived* by comparison, so it cannot be forgotten, cleared by accident, or
@@ -131,8 +133,9 @@ K=$(find ~/.claude -name worktrees -prune -o -path '*kpopper*/scripts/kpopper' -
 
 `check` exits non-zero on an undeclared gap: a dependency that is not an entry (unless the
 judgment declares it missing with `blocked_on`), a dependency with no snapshot, a predicate
-naming something undeclared, prose sitting in a predicate field, or a plain-comparison
-predicate that currently holds — a judgment broken by its own condition. A declared hole is a
+naming something undeclared, prose sitting in a predicate field, a predicate this reader
+cannot decide as one comparison, or a one-comparison predicate that currently holds — a
+judgment broken by its own condition. A declared hole is a
 note, not a failure — a build that stays red over an honest declaration teaches records to
 stop declaring. So is a judgment decided on the session's own prior — a `prior.*` claim whose
 value is the confidence — that names in `reopened_by` the sign a person would read to re-open

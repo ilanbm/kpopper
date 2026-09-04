@@ -307,16 +307,17 @@ class TheReDecision(unittest.TestCase):
                           "quote is read' - the standing judgment holds, and its wrong_if has not fired, "
                           "so a different verdict under the same id contradicts it, and a hypothesis holds "
                           "the other: add v.glazing_tab", out + err)
-            command = re.search(r"add v\.glazing_tab .*--hypothesis \S+", out + err).group(0)
+            named = re.search(r"add v\.glazing_tab .*--hypothesis (\S+)", out + err)
+            command, name = named.group(0), named.group(1)
             base = rec.read_text(encoding="utf-8")
             code, out, err = run(SCRIPTS / "provenance.py", *shlex.split(command), rec)
             self.assertEqual(code, 0, out + err)
             self.assertEqual(rec.read_text(encoding="utf-8"), base)
             self.assertIn('<p class="sub" dir="auto">A hypothesis contests this arrangement &mdash; '
-                          "v_glazing_tab: the quote is read on the February night&#x27;s tab</p>", dom_of(rec))
+                          f"{name}: the quote is read on the February night&#x27;s tab</p>", dom_of(rec))
             code, out, _ = run(SCRIPTS / "provenance.py", "check", rec)
             self.assertEqual(code, 0, out)
-            self.assertIn("NOTE v.glazing_tab is contested by hypothesis v_glazing_tab: the quote is read on "
+            self.assertIn(f"NOTE v.glazing_tab is contested by hypothesis {name}: the quote is read on "
                           "the February night's tab", out)
         with tempfile.TemporaryDirectory() as d:
             # a re-decision that keeps the verdict and moves the sign is a contest too

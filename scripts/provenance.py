@@ -42,7 +42,7 @@ Where two fields genuinely fit the same role it refuses to guess and asks for a
 one-line `schema:` block. A checker that quietly passes over what it cannot read
 is worse than no checker, so every ambiguity is an error, never a skip.
 """
-import io, os, re, sys, glob, json, shlex, subprocess, datetime, textwrap, tempfile, contextlib, yaml
+import io, os, re, sys, glob, json, shlex, hashlib, subprocess, datetime, textwrap, tempfile, contextlib, yaml
 from decimal import Decimal, InvalidOperation
 
 ID = re.compile(r"[A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z0-9_]+)+")
@@ -275,6 +275,42 @@ def _same_claim(a, b):
     if isinstance(a, (dict, list)) or isinstance(b, (dict, list)):
         return a == b
     return _same(a, b)
+
+
+def _claim_key(claim):
+    """One claim written the way `_same_claim` reads it: two claims this record calls the same
+    are written the same, no two others are written alike, and every claim is written at all.
+    Each is written by its kind, so that nothing reads as anything else - a structure by its
+    parts in a fixed order, whatever kinds they are, each part with its length in front so a
+    delimiter cannot fall two ways; a number by its value alone, since trailing zeros, a signed
+    zero and an exponent are not the number and no working precision may round it; and any
+    other text by itself, with whitespace collapsed."""
+    if isinstance(claim, dict):
+        parts = sorted((_claim_key(k), _claim_key(v)) for k, v in claim.items())
+        return "{" + "".join(f"{len(p)}:{p}" for kv in parts for p in kv) + "}"
+    if isinstance(claim, (list, tuple)):
+        return "[" + "".join(f"{len(p)}:{p}" for p in map(_claim_key, claim)) + "]"
+    text = " ".join(str(claim).split())
+    try:
+        d = Decimal(text.replace(",", ""))
+    except InvalidOperation:
+        return "t" + text
+    if not d.is_finite():
+        return "n" + str(d)                     # a NaN or an infinity, by the one name for it
+    sign, digits, exp = d.as_tuple()
+    while len(digits) > 1 and digits[-1] == 0:  # by hand: normalize() would round to the context
+        digits, exp = digits[:-1], exp + 1
+    if digits == (0,):
+        return "n0"                             # 0, -0 and 0.00 are the one number
+    return "n" + ("-" if sign else "") + "".join(map(str, digits)) + "e" + str(exp)
+
+
+def _claim_mark(claim, n=6):
+    """Six characters standing for one claim: the same six on every machine and every day,
+    and none of the sentence itself. A digest of the whole claim, never a slug of its opening
+    words - two claims that read alike until their last word are exactly the pair a name has
+    to tell apart."""
+    return hashlib.sha256(_claim_key(claim).encode("utf-8")).hexdigest()[:n]
 
 
 def contested(doc):
@@ -601,6 +637,41 @@ def said(text, raw, ids, jud, width=100):
 
 
 CMP = re.compile(r"^\s*([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z0-9_]+)+)\s*(<=|>=|==|!=|<|>)\s*(.+?)\s*$")
+BOOL = re.compile(r"(?i)^(true|false)$")
+# Quoted text is a literal: whatever it holds, it is one value and none of it is read as an
+# operator. Taken out of a right-hand side before that side is looked at for a second
+# comparison - the thing the comparison shape would otherwise swallow as the value.
+QUOTED = re.compile(r"(['\"]).*?\1", re.S)
+SECOND = re.compile(r"(<=|>=|==|!=|<|>)|\bor\b|\band\b")
+
+
+def why_undecided(pred):
+    """Why this reader cannot decide `pred` as one comparison - '' when it can.
+
+    The comparison shape alone is not enough. It takes everything after the operator as
+    the value, so `a > 0 or b > 0` compares `a` against the text "0 or b > 0" and is false
+    in every state of the record - a falsifier that reads as evaluable and can never fire,
+    which is decoration. One reading of the shape, so what an arrangement refuses when it
+    is written, what check reports and what evaluate declines are the same thing.
+
+    What it asks of the right-hand side is only that it carry no second comparison. Any
+    narrower rule refuses a value the reader can compare perfectly well - a date and a
+    thousands separator both carry characters an expression would use - and refusing a
+    falsifier that works is this same failure from the other side.
+    """
+    m = CMP.match(str(pred or ""))
+    if not m or SECOND.search(QUOTED.sub("", m.group(3).strip())):
+        return "is not one comparison this reader decides (a name, an operator, one value)"
+    name, op, rhs = m.group(1), m.group(2), m.group(3).strip()
+    if BOOL.match(rhs):
+        # a truth value is matched, and only against another truth value. A computed name
+        # is a count whatever the record holds, so this one is decided here and not left
+        # to a reading that would come back None and be taken for green.
+        if op not in ("==", "!="):
+            return f"orders a truth value ({op} {rhs}), which is matched, never ordered"
+        if is_builtin(name):
+            return f"holds a count against a truth value ({name} {op} {rhs}), which never matches"
+    return ""
 
 
 def bodies(doc):
@@ -629,16 +700,26 @@ def value_of(raw, ids, k):
 def evaluate(pred, raw, ids):
     """-> True when the falsifier holds, False when it does not, None when it is not a
     single comparison this reader can decide. Richer predicates are surfaced, never
-    guessed at."""
+    guessed at - a compound would be decided against the text after its first operator,
+    so it is declined here and said where the record is checked.
+
+    A truth value is matched as one: a record writes `false` and the fact holds Python's
+    False, and comparing them as text matches in neither state of the fact.
+    """
     m = CMP.match(str(pred or ""))
-    if not m:
+    if not m or why_undecided(pred):
         return None
     a = value_of(raw, ids, m.group(1))
     if a is None:
         return None
-    rhs = m.group(3).strip()
+    rhs, op = m.group(3).strip(), m.group(2)
+    if BOOL.match(rhs):
+        if not isinstance(a, bool):
+            return None        # a truth value and a value that is not one never compare
+        same = a is (rhs.lower() == "true")
+        return same if op == "==" else not same
     b = value_of(raw, ids, rhs) if ID.fullmatch(rhs) else rhs.strip("\"'")
-    if b is None:
+    if b is None or isinstance(a, bool) != isinstance(b, bool):
         return None
 
     def num(x):
@@ -648,7 +729,6 @@ def evaluate(pred, raw, ids):
             return None
     na, nb = num(a), num(b)
     a, b = (na, nb) if na is not None and nb is not None else (str(a), str(b))
-    op = m.group(2)
     return {"<": a < b, ">": a > b, "<=": a <= b, ">=": a >= b,
             "==": a == b, "!=": a != b}[op]
 
@@ -656,6 +736,32 @@ def evaluate(pred, raw, ids):
 def short(v, n=40):
     s = " ".join(str(v).split())
     return s if len(s) <= n else s[:n - 1] + "…"
+
+
+def apart(a, b, n=40):
+    """Two readings being compared, clipped to where they differ rather than to where they
+    agree -> (a, b). `short` cuts at the head, and when one value is written over another
+    the head is exactly the part that did not change: two long readings that part at the
+    end come back as the same clipped string twice, which tells a reader something moved
+    and shows them nothing to judge it by. So the window opens at the last whole word
+    before the two part, and what is dropped in front of it is marked.
+
+    Where they part early enough for the head to show it, this is `short`."""
+    sa, sb = " ".join(str(a).split()), " ".join(str(b).split())
+    if len(sa) <= n and len(sb) <= n:
+        return sa, sb
+    same = 0
+    while same < min(len(sa), len(sb)) and sa[same] == sb[same]:
+        same += 1
+    if same < n // 2:                  # they part inside what the head would have shown
+        return short(sa, n), short(sb, n)
+    at = sa.rfind(" ", 0, same) + 1    # open on a whole word, not mid-word
+    if at == 0 or same - at > n:
+        # no word to open on, or the nearest one too far back to be worth the room: a url,
+        # a hash, a long number. Cut into the token instead - a window that shows the
+        # difference is worth more here than one that starts where a reader would.
+        at = max(0, same - n // 4)
+    return "…" + short(sa[at:], n - 1), "…" + short(sb[at:], n - 1)
 
 
 def moved_deps(j, raw, ids):
@@ -832,21 +938,33 @@ def _arrangement_shaped(body, fields, raw):
 
 def one_comparison(pred, raw=None, ids=None):
     """An arrangement's sign, as the build can decide it: one comparison - a name, an
-    operator, a number or a text or another entry - that can hold. -> '' when it is, else
-    what is wrong with it. A compound sign reads as evaluable today and is never decided,
-    which is freeze in disguise; a count below zero or a share above one never happens; an
-    entry with no value to compare would leave the sign green forever."""
+    operator, a number or a text or a truth value or another entry - that can hold. -> ''
+    when it is, else what is wrong with it. The shape is the reader's own, so a sign an
+    arrangement may carry is exactly a falsifier the record can decide; on top of that a
+    count below zero or a share above one never happens, and an entry with no value to
+    compare would leave the sign green forever."""
+    bad = why_undecided(pred)
+    if bad:
+        return bad
     m = CMP.match(str(pred or ""))
-    # the right-hand side must be one value too: a number, a quoted text, or an entry - the
-    # comparison shape alone would let "a > 0 or b > 0" through with "0 or b > 0" as its value
-    rhs = m.group(3).strip() if m else ""
-    quoted = len(rhs) > 1 and rhs[0] in "\"'" and rhs[-1] == rhs[0] and not EXPR.search(rhs[1:-1])
-    if not m or not (NUMBER.match(rhs) or ID.fullmatch(rhs) or quoted):
-        return "is not one comparison this reader decides (a name, an operator, one value)"
+    rhs = m.group(3).strip()
     name, op = m.group(1), m.group(2)
+    # On top of the shape, a sign names its value outright. This is the arrangement's own
+    # rule and not a second reading of the shape: what the reader can decide is settled in
+    # why_undecided, and this asks the narrower thing a sign over a count is held to.
+    if not (NUM_VALUE.match(rhs) or ID.fullmatch(rhs) or BOOL.match(rhs)
+            or QUOTED.fullmatch(rhs)):
+        return ("does not name one value a sign carries (a number, a truth value, a text in "
+                "quotes, or another entry)")
     if ID.fullmatch(rhs) and raw is not None and not is_builtin(rhs) \
             and (rhs not in (ids or ()) or value_of(raw, ids, rhs) is None):
         return f"compares against {rhs}, which holds no value the build can compare"
+    # and a count held against a truth value never matches, whether the truth value is
+    # written into the sign or reached through an entry - the shape alone cannot see the
+    # second one, and here the value is in hand
+    if is_builtin(name) and ID.fullmatch(rhs) and raw is not None \
+            and isinstance(value_of(raw, ids, rhs), bool):
+        return f"holds a count against a truth value ({name} {op} {rhs}), which never matches"
     try:
         x = float(rhs.replace(",", ""))
     except ValueError:
@@ -873,7 +991,10 @@ def flags(ids, jud, fields, raw):
                 f.add("blocked" if blocked else "broken")
             elif fields["snapshot"] and d not in j["seen"]:
                 f.add("unchecked")
-        named = [t for t in ID.findall(j["pred"]) if t in ids]
+        # A predicate this reader cannot decide falsifies nothing, whatever it names: it
+        # is counted where an empty field is counted, not passed over as one that holds.
+        named = bool([t for t in ID.findall(j["pred"]) if t in ids]) \
+            and not why_undecided(j["pred"])
         if not named and not blocked and not _decided(j):
             f.add("no_predicate")
         elif named and evaluate(j["pred"], raw, ids) is True:
@@ -1019,14 +1140,22 @@ def check_lines(paths):
                             f"dependency - a change to it would never reach this")
         # A predicate field holding prose is not a predicate. It reads like one,
         # which is worse than an empty field: nothing evaluates it and nobody notices.
-        evaluable = bool([t for t in ID.findall(j["pred"]) if t in ids])
+        # So does one this reader cannot decide - a compound is read to its first operator
+        # and false ever after - and it is said here rather than passed over.
+        undecided = why_undecided(j["pred"]) if j["pred"] else ""
+        evaluable = bool([t for t in ID.findall(j["pred"]) if t in ids]) and not undecided
         misfiled = _misfiled_reopener(j["body"], ids)
         if misfiled:
             fail.append(f"{name}: reopened_by reads as a comparison ({short(misfiled, 60)}) - a "
                         f"predicate belongs in wrong_if, where it is evaluated; a re-opener is the "
                         f"sign a person reads")
-        if not evaluable:
-            what = "prose, not an evaluable predicate" if j["pred"] else "no predicate at all"
+        # An arrangement's sign is held to the same shape a few lines down, and said
+        # there in the terms an arrangement is decided by; it is not said twice.
+        if not evaluable and not (undecided and is_arrangement(j, raw)):
+            what = ("no predicate at all" if not j["pred"] else
+                    "prose, not an evaluable predicate"
+                    if not [t for t in ID.findall(j["pred"]) if t in ids] else
+                    f"wrong_if {undecided}")
             reopened = _reopened_text(j["body"])
             if blocked:
                 note.append(f"{name}: {what} (declared: {blocked[:90]})")
@@ -1047,6 +1176,13 @@ def check_lines(paths):
             named_page = sorted({t for t in ID.findall(j["pred"]) if t in PAGE})
             note.append(f"{name}: wrong_if reads {', '.join(named_page)}, which is counted "
                         f"when the page is built - `page --verify` decides it")
+        elif evaluate(j["pred"], raw, ids) is None:
+            # one comparison, and the reading it needs is not there: a side that holds no
+            # value yet, or a truth value held against something that is not one. The shape
+            # is right and only the reading is missing, so it is noted rather than failed
+            note.append(f"{name}: nothing decides wrong_if ({short(j['pred'], 60)}) - a side "
+                        f"holds no value to compare, or a truth value is held against a "
+                        f"value that is not one")
         # An arrangement's sign is decided by the build - by check for a count of the record,
         # by the page for a count of the page - so it is one comparison that can hold. A
         # re-opener may stand beside it, never in its place: an unevaluable sign on an
@@ -1068,8 +1204,9 @@ def check_lines(paths):
         # is the answer, and only the predicate can say which line matters.
         for dep, old, now, state in moved_deps(j, raw, ids):
             if state == "moved":
+                was, is_ = apart(old, now)
                 moved.append(f"{name}: {dep} differs from its snapshot "
-                             f"({short(old)} -> {short(now)}) - re-review, or refresh seen")
+                             f"({was} -> {is_}) - re-review, or refresh seen")
     # What the record stands on: one line, printed and never failed on - the confidences are
     # the record's to defend, and a count of them is not a problem with it.
     priors = priors_line(ids, jud, raw)
@@ -1157,7 +1294,8 @@ def opening(paths, budget=25, chars=None):
             if tok in ids and tok not in j["deps"]:
                 items.append((100, name, f"predicate reads {tok}, which it does not declare - "
                                          f"a change to it never reaches this"))
-        evaluable = bool([t for t in ID.findall(j["pred"]) if t in ids])
+        evaluable = bool([t for t in ID.findall(j["pred"]) if t in ids]) \
+            and not why_undecided(j["pred"])
         if _misfiled_reopener(j["body"], ids):
             items.append((100, name, "reopened_by reads as a comparison - a predicate belongs in "
                                      "wrong_if"))
@@ -1168,8 +1306,8 @@ def opening(paths, budget=25, chars=None):
                                     f"condition"))
         for dep, old, now, state in moved_deps(j, raw, ids):
             if state == "moved":
-                items.append((70, name, f"{dep} differs from what it last saw: "
-                                        f"{short(old, 28)} -> {short(now, 28)}"))
+                was, is_ = apart(old, now, 28)
+                items.append((70, name, f"{dep} differs from what it last saw: {was} -> {is_}"))
     # an id two hypotheses disagree on is ranked above everything: nothing decides it but a
     # person, and consolidation will refuse to run over it
     for k, hs in contested(doc).items():
@@ -1570,7 +1708,15 @@ def pull(paths, seeds, budget=40, doc=None):
         # the grounding surface, so here even a muted move is worth a line.
         for dep, old, now, state in sorted(moved_deps(j, raw_, ids_)):
             mark_ = {"muted": " - within wrong_if", "crossed": " - across wrong_if"}.get(state, "")
-            out.append(cut(f"    moved since review: {dep} {old} -> {now}{mark_}", 110))
+            # the two readings are clipped to what the line has left for them, and the
+            # line itself is never cut: a budget spent on the first value would take the
+            # arrow and the second reading with it, which is the whole failure here.
+            head = f"    moved since review: {dep} "
+            room = 110 - len(head) - len(mark_) - len(" -> ")
+            # a floor under each side, so an id long enough to eat the line leaves a
+            # comparison a reader can still use rather than two stubs
+            was, is_ = apart(old, now, max(24, room // 2))
+            out.append(f"{head}{was} -> {is_}{mark_}")
         return out
 
     def dispute(k):
@@ -1638,6 +1784,7 @@ class Refused(SystemExit):
 
 
 NUMBER = re.compile(r"^-?\d+(\.\d+)?$")
+NUM_VALUE = re.compile(r"^-?\d[\d,]*(\.\d+)?$")   # as a record writes one: 1,000 is 1000
 DATE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 BARE = re.compile(r"^[A-Za-z_][A-Za-z0-9_.\-]*$")
 MEMBER = re.compile(r"^( +)([A-Za-z_][A-Za-z0-9_.]*):(?: |$)")
@@ -2008,14 +2155,16 @@ def _state(name, j, raw, ids, fields, touched=()):
     moves = [(d, o, n, s) for d, o, n, s in moved_deps(j, raw, ids) if not touched or d in touched]
     if any(s == "moved" for _, _, _, s in moves):
         d, o, n, _ = next(x for x in moves if x[3] == "moved")
-        return "MOVED", (f"{d} moved {short(o)} -> {short(n)} since it was reviewed - "
+        was, is_ = apart(o, n)
+        return "MOVED", (f"{d} moved {was} -> {is_} since it was reviewed - "
                          f"if it still holds: review {name}")
     if unchecked:
         return "UNCHECKED", (f"never checked against {', '.join(unchecked)} - "
                              f"if it holds: review {name}")
     if any(s == "muted" for _, _, _, s in moves):
         d, o, n, _ = next(x for x in moves if x[3] == "muted")
-        return "MUTED", (f"{d} moved {short(o)} -> {short(n)}, inside wrong_if ({j['pred']}) - "
+        was, is_ = apart(o, n)
+        return "MUTED", (f"{d} moved {was} -> {is_}, inside wrong_if ({j['pred']}) - "
                          f"nothing is asked")
     if not named_ and not blocked:
         reopened = _decided(j)
@@ -2026,7 +2175,7 @@ def _state(name, j, raw, ids, fields, touched=()):
         return "HOLDS", "no predicate to evaluate; declared - " + short(blocked, 80)
     pred = short(j["pred"], 80)
     if evaluate(j["pred"], raw, ids) is None:
-        if not CMP.match(j["pred"]):
+        if why_undecided(j["pred"]):
             return "HOLDS", f"wrong_if is not a comparison this reader decides ({pred})"
         if any(t in PAGE for t in ID.findall(j["pred"])):
             return "HOLDS", f"wrong_if is counted when the page is built ({pred}) - page --verify decides it"
@@ -2404,9 +2553,13 @@ def _command_of(a, name):
 
 
 def _hypothesis_name(doc, k, claim):
-    """A name for the hypothesis a refused write would open: the id's, unless a hypothesis
-    of that name already holds the id with another claim."""
-    base = re.sub(r"[^A-Za-z0-9_\-]", "_", k)
+    """A name for the hypothesis a refused write would open: the id contradicted and a mark
+    of the claim written. Two branches refused on one id open one file only where they claim
+    the same thing - and that meeting is worth having, since the two heads say one thing and
+    whoever merges them keeps either. Two that disagree, which is what the fork exists for,
+    open two files and merge. The count beside the name separates two claims that mark alike
+    in one checkout; it counts only what this checkout holds, so it never crosses a branch."""
+    base = re.sub(r"[^A-Za-z0-9_\-]", "_", k) + "_" + _claim_mark(claim)
     hyps = getattr(doc, "hypotheses", None) or {}
     name, n = base, 1
     while name in hyps and not (k in hyps[name]["ids"]
@@ -2437,7 +2590,8 @@ def _forks_on_contradiction(a, doc, ids, jud, fields, raw):
         d = _disagreement(a, raw.get(k), raw, ids, jud, fields)
         if d and not d[3]:
             _, old, new, _, why, when = d
-            out.append(f"{k} holds {short(old)} as of {when}, and {why} says {short(new)} - the base "
+            was, is_ = apart(old, new)
+            out.append(f"{k} holds {was} as of {when}, and {why} says {is_} - the base "
                        f"keeps what it holds and a hypothesis holds the other: "
                        f"{_command_of(a, _hypothesis_name(doc, k, new))}")
         return out
@@ -2458,8 +2612,9 @@ def _forks_on_contradiction(a, doc, ids, jud, fields, raw):
                            + f" - a newer reading updates it: set {k} {shlex.quote(str(new))}; one "
                            f"that disagrees opens a hypothesis: {_command_of(a, name)}")
             else:
-                out.append(f"{k} is already an entry, holding {short(old)} as of {when}, and {why} "
-                           f"says {short(new)} - the base keeps what it holds and a hypothesis holds "
+                was, is_ = apart(old, new)
+                out.append(f"{k} is already an entry, holding {was} as of {when}, and {why} "
+                           f"says {is_} - the base keeps what it holds and a hypothesis holds "
                            f"the other: {_command_of(a, name)}")
     # the cone: whatever rests on a hypothesis goes into it, so that it folds - or is
     # refuted - together with what it rests on
@@ -2961,7 +3116,7 @@ def _fork(paths, action):
                       else f"what it saw is what the record holds under it ({stamp})"))
         for d in j["deps"]:
             if d in was and d in seen and not _same(was[d], seen[d]):
-                out.append(f"  {d}: {short(was[d])} -> {short(seen[d])}")
+                out.append("  {}: {} -> {}".format(d, *apart(was[d], seen[d])))
             elif d not in was and d in seen:
                 out.append(f"  {d}: {short(seen[d])} (never checked against it before)")
     made_dir = False
@@ -3070,7 +3225,8 @@ def _review_section(paths, brief, title, stamp, raw, ids, jud):
     for k in refs:
         if k in was and k in seen and not same_seen(was[k], seen[k]):
             half, a, b = which_moved(was[k], seen[k])
-            print(f"  seen {k}{' - ' + half if half else ''}: {short(a)} -> {short(b)}")
+            was, is_ = apart(a, b)
+            print(f"  seen {k}{' - ' + half if half else ''}: {was} -> {is_}")
         elif k not in was and k in seen:
             print(f"  seen {k}: {short(seen[k])} (never read against it before)")
     return 0
@@ -3171,7 +3327,8 @@ def _apply(paths, action):
                                facts)
         was = str(_verdict_of(jud[nid]["body"]) or nid)
         _replace_in(lines, nid, body)
-        out.append(f"supersede {nid}: {short(was, 60)} -> {short(_verdict_of(body), 60)} - {why}")
+        out.append("supersede {}: {} -> {} - {}".format(
+            nid, *apart(was, _verdict_of(body), 60), why))
     elif kind == "add":
         out.append("add " + _add_in(lines, nid, body, collection))
     else:
@@ -3190,7 +3347,7 @@ def _apply(paths, action):
                                         if changed else f"what it saw is what the record holds ({stamp})"))
         for d in j["deps"]:
             if d in was and d in seen and not _same(was[d], seen[d]):
-                out.append(f"  {d}: {short(was[d])} -> {short(seen[d])}")
+                out.append("  {}: {} -> {}".format(d, *apart(was[d], seen[d])))
             elif d not in was and d in seen:
                 out.append(f"  {d}: {short(seen[d])} (never checked against it before)")
     _bump_updated(lines, stamp)

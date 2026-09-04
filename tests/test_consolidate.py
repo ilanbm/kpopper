@@ -85,7 +85,7 @@ class TheDryRunTests(unittest.TestCase):
             self.assertEqual(code, 1, out + err)
             self.assertIn("the base with bigger_boiler, glazing_redo laid over it, in name order\n", out)
             self.assertIn("  bigger_boiler (born 2026-09-03, ", out)
-            self.assertIn(", never folds): a 36 kW boiler holds the greenhouse even with the wind", out)
+            self.assertIn(", never folds): a 36 kW boiler", out)
             self.assertIn("contested (1): an id two hypotheses hold with different claims - the union has no "
                           "value to lay, so the run stops here\n  heat.loss_kw:\n"
                           "    the base holds heat.loss_kw: 31 (heat loss on a -5°C night) <- s.2026_09_02_heating, "

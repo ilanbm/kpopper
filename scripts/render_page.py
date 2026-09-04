@@ -55,8 +55,10 @@ def flags_of(ids, jud, fields, raw):
             elif fields["snapshot"] and d not in j["seen"]:
                 f.add("unchecked")
         # a judgment decided with a re-opener and an empty predicate field is in front of
-        # nobody: a person reads the sign. Prose in the predicate field is still prose.
-        if not [t for t in P.ID.findall(j["pred"]) if t in ids] and not blocked \
+        # nobody: a person reads the sign. Prose in the predicate field is still prose,
+        # and so is a predicate this reader cannot decide - the page counts what check does.
+        if not ([t for t in P.ID.findall(j["pred"]) if t in ids]
+                and not P.why_undecided(j["pred"])) and not blocked \
                 and not (reopened and not j["pred"]):
             f.add("no_predicate")
         elif P.evaluate(j["pred"], raw, ids) is True:
