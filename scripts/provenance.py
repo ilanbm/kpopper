@@ -441,6 +441,8 @@ def infer(doc):
                 continue
             for f, val in body.items():
                 present.add(f)
+                if f in IDENTITIES:
+                    continue  # other identities of this subject, never what it rests on
                 if f == "refutes" and isinstance(nid, str) and nid.startswith("hyp.") \
                         and body.get("v") == "refuted":
                     continue  # a finding's targets are identities, never its premises
@@ -488,7 +490,7 @@ def infer(doc):
             if not isinstance(body, dict) or fields["deps"] not in body:
                 continue
             for f, val in body.items():
-                if f in REOPENED or f in ARRANGEMENT_PROSE:
+                if f in REOPENED or f in ARRANGEMENT_PROSE or f in IDENTITIES:
                     continue           # read by name: it never reads as a predicate or a snapshot
                 if isinstance(val, dict) and val and all(k in ids for k in val):
                     cand["snapshot"][f] = cand["snapshot"].get(f, 0) + 1
@@ -526,6 +528,13 @@ REOPENED = ("reopened_by",)
 # (`replaced:`, one line each, naming a count and the sign that ended them - which would
 # otherwise read as a predicate).
 ARRANGEMENT_PROSE = ("request", "replaced")
+# `also:` names other identities of the subject - the ids retired into it, or the siblings a
+# record declares - and never what it rests on. It is read by name for that reason: a retired
+# id written again, by a merge that brings back the branch it came from, turns the field into
+# a list of ids that are all entries, which is the shape the dependency role is voted on by -
+# and in a small record it ties with the real one and nothing can be read at all. A record
+# that does keep its dependencies there says so: `schema: deps: also`.
+IDENTITIES = ("also",)
 OPEN = ("open", "questions")
 # An entry whose value is a fact about the tree names the recipe that takes it again:
 # `measure: <name>`, a bare name that the allowlist beside the record resolves to an argument
@@ -1080,6 +1089,12 @@ def check_lines(paths):
         af, an = R.arrangement_lines(info, page_decides=True)
         fail += af
         note += an
+    # `also:` where the named id is an entry after all: the retirement reading does not hold
+    # there, and the sibling reading is a record's own business - so this is said, and decided
+    # by nobody but a person.
+    sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+    import sameness
+    note += sameness.also_lines(doc, fields["deps"])
     # Hypotheses beside the record: a file the reader cannot read fails; an id two of them hold
     # with different claims needs a person and fails nothing - which of them folds, or neither,
     # is decided at consolidation, where the union is tested.
