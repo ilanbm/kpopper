@@ -226,11 +226,12 @@ sources:
   run.blocked_on_reread:
     name: "Every blocked_on in this record, read again for which meaning it carries - and for
            whether the field is still where a re-opener lands now that reopened_by exists"
-    of: "this record at 84 judgments, all 51 declarations read by hand, 2026-09-04 - the last two
-         written by the session that read them. Each names a sign; one names an entry, and the
-         record holds it; none is written as a list of what is missing. None of the eleven written
-         since reopened_by shipped rests on a prior; of the six judgments that do rest on one, four
-         carry reopened_by and two put their sign in wrong_if alone"
+    of: "this record at 86 judgments, all 53 declarations read by hand, 2026-09-04 - two written
+         by the session that read them, and two more read as they arrived with the branch it was
+         rebased onto. Each names a sign; one names an entry, and the record holds it; none is
+         written as a list of what is missing. None of the thirteen written since reopened_by
+         shipped rests on a prior; of the six judgments that do rest on one, four carry
+         reopened_by and two put their sign in wrong_if alone"
     read: "2026-09-04"
   run.claims_by_reach:
     from: s.2026_09_04_calibration
@@ -366,19 +367,20 @@ known:
     name: "Judgments whose declared hole calls itself an implementation hole - work not done yet -
            rather than an observation nobody has made"
     from: run.blocked_on_reread
-    at: "of 51 - the other 47 open observational; the split is measured on both sides, so neither
+    at: "of 53 - the other 49 open observational; the split is measured on both sides, so neither
          half drifts while the total holds"
     measure: blocked_on_implementation
   m.blocked_on_reopeners:
-    v: 51
+    v: 53
     of: "2026-09-04"
-    # measured by blocked_on_reopeners and re-read by hand, then corrected in the same pull
-    # request: the two judgments this change adds declare holes of their own
+    # measured by blocked_on_reopeners and re-read by hand, then corrected twice in the same
+    # pull request: the two judgments this change adds declare holes of their own, and two more
+    # arrived with the branch it was rebased onto
     name: "Judgments that declare a hole with blocked_on - the count. Whether each names a sign
            that would re-open the decision, or an input the record lacks, is read by hand and said
            beside it"
     from: run.blocked_on_reread
-    at: "of 51 declared holes - 47 say observational and 4 implementation, the second half
+    at: "of 53 declared holes - 49 say observational and 4 implementation, the second half
          measured beside this one; none is written as what the record is missing, and the one
          that names an entry names one the record holds"
     measure: blocked_on_reopeners
@@ -1485,7 +1487,7 @@ judgments:
                                  on the pull request, by one runner, without a shell - so the record
                                  never carries a command, and no command that reads the record runs
                                  one"
-      m.blocked_on_reopeners: 51
+      m.blocked_on_reopeners: 53
   d.refutations_keep_judgment_ids:
     from: s.2026_09_04_prior_reversal_share
     rests_on: [d.prior_confidence_survives_refutation, d.refuted_hypothesis_leaves_one_finding]
@@ -1585,7 +1587,7 @@ judgments:
                   an input after all"
     seen:
       prior.field_name_reads_as_gate: 0.7
-      m.blocked_on_reopeners: 51
+      m.blocked_on_reopeners: 53
       m.older_records_changed: 0
       d.declared_hole_is_a_note: "check fails only an undeclared gap; a hole declared with
                                   blocked_on is a note"
