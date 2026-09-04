@@ -377,6 +377,14 @@ a silent hole that no amount of reading will reveal.
 Measure thresholds as change since the last review rather than absolute level where you can — it
 keeps a literal out of the predicate and survives the value moving for unrelated reasons.
 
+**One comparison, or it is not evaluated.** `wrong_if` is a name, an operator and one value —
+`acme.seats < 150`, `flue.clear == false`, `signed_on < "2027-01-01"`. A right-hand side carrying a
+second comparison is not richer, it is unread: the shape takes everything after the operator as the
+value, so `a == false, or b == false` is compared against the text after the first operator and is
+false in every state of the record. Two conditions are two judgments, or one judgment whose second
+condition lives in `because` with `blocked_on` saying the reader cannot decide it. A truth value is
+matched (`== false`), never ordered.
+
 **Never invent a threshold to make a predicate evaluable.** A vague quantifier is a signal that the threshold lives in someone's head and was never stated — surface it and ask. If it cannot honestly be made evaluable, say so with `blocked_on` rather than writing prose in the predicate field — and if the judgment is decided and the prose is what would re-open it, say `reopened_by`.
 
 ### An agent's prior as a source

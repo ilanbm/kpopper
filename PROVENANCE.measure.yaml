@@ -49,6 +49,17 @@ checks_in_the_wheel:
     m = re.search(r'^kpopper = \[(.*?)\]', t, re.M)
     print(sum(1 for s in re.findall(r'"([^"]*)"', m.group(1)) if s.endswith('verify_page.js')))
 
+# p.predicate_shapes - places that decide whether a predicate is one comparison this reader
+# can decide: a refusal says so in those words, so a second shape test shows here
+predicate_shapes:
+  - python3
+  - -I
+  - -c
+  - |
+    import glob
+    print(sum(open(f, encoding='utf-8').read().count('is not one comparison this reader decides')
+              for f in glob.glob('scripts/*.py')))
+
 # m.blocked_on_reopeners - judgments of this record that declare a hole: an entry carrying both
 # rests_on and blocked_on, counted from the record's own text. Nothing is imported from the
 # checkout: a count taken through the reader would agree with the reader by construction, and

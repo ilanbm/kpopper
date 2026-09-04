@@ -42,6 +42,18 @@ TAB_TWO = '''  - title: "The glazing quote"
 '''
 STRAY = ("  c.stray:\n    rests_on: [heat.gone]\n    verdict: \"a judgment on nothing\"\n"
          "    wrong_if: \"\"\n    seen: {}\n")
+# a truth value beside the boiler, and a judgment whose falsifier matches it
+FLUE = ('  heat.flue_clear:\n    v: true\n    name: "the flue is clear"\n'
+        '    from: doc.boiler_sheet\n')
+FLUE_HELD = ('  c.flue_held:\n    rests_on: [heat.flue_clear]\n'
+             '    verdict: "the boiler is burning against an open flue"\n'
+             '    wrong_if: "heat.flue_clear == false"\n'
+             '    seen: {heat.flue_clear: true}\n')
+# one value written with hyphens: a date is not two comparisons
+DATED = ('  c.dated:\n    rests_on: [when.first_cold_night]\n'
+         '    verdict: "the cold comes after the new year"\n'
+         '    wrong_if: "when.first_cold_night < \'2027-01-01\'"\n'
+         '    seen: {when.first_cold_night: "2027-02-01"}\n')
 
 
 def run(*args, cwd=None):
@@ -62,6 +74,13 @@ def edit(path, old, new, count=-1):
     text = path.read_text(encoding="utf-8")
     assert old in text, f"{old!r} is not in {path.name}"
     path.write_text(text.replace(old, new, count), encoding="utf-8")
+
+
+def read(path):
+    """The record as the reader sees it, counts and all."""
+    doc = P.load([str(path)])
+    ids, jud, fields = P.infer(doc)
+    return doc, ids, jud, fields, P.with_builtins(doc, ids, jud, fields)
 
 
 class CheckAcceptsTheContract(unittest.TestCase):
@@ -137,6 +156,137 @@ class CheckAcceptsTheContract(unittest.TestCase):
         code, out, err = run(SCRIPTS / "provenance.py", "check", RECORD)
         self.assertEqual(code, 0, out + err)
         self.assertNotIn("two fields fit", err)
+
+    def test_a_compound_predicate_is_refused_rather_than_decided_false(self):
+        # the comparison shape takes everything after the operator as its value, so this
+        # was compared against the text "0 or graph.blocked > 0" - false in every state
+        with tempfile.TemporaryDirectory() as d:
+            rec = copy_fixture(pathlib.Path(d))
+            edit(rec, "rests_on: [heat.boiler_kw, heat.loss_kw, heat.deficit_kw]",
+                 "rests_on: [heat.boiler_kw, heat.loss_kw, heat.deficit_kw, graph.flagged, "
+                 "graph.blocked]")
+            edit(rec, 'wrong_if: "heat.loss_kw <= heat.boiler_kw"',
+                 'wrong_if: "graph.flagged > 0 or graph.blocked > 0"')
+            edit(rec, "seen: {heat.boiler_kw: 24, heat.loss_kw: 31,",
+                 "seen: {graph.flagged: 0, graph.blocked: 0, heat.boiler_kw: 24, heat.loss_kw: 31,")
+            _, ids, jud, fields, raw = read(rec)
+            self.assertIsNone(P.evaluate(jud["c.boiler_short"]["pred"], raw, ids))
+            self.assertIn("no_predicate", P.flags(ids, jud, fields, raw)["c.boiler_short"])
+            self.assertIn("no_predicate", R.build([str(rec)], None)[4]["flags"]["c.boiler_short"])
+            code, out, _ = run(SCRIPTS / "provenance.py", "check", rec)
+            self.assertEqual(code, 1, out)
+            self.assertIn("FAIL c.boiler_short: wrong_if is not one comparison this reader "
+                          "decides (a name, an operator, one value) - and nothing says why not, "
+                          "so it can never be re-checked", out)
+            _, out, _ = run(SCRIPTS / "provenance.py", "open", rec)
+            self.assertIn("c.boiler_short: nothing evaluable would falsify it", out)
+
+    def test_a_compound_predicate_declared_un_evaluable_is_noted(self):
+        # the door a judgment already has: say the reader cannot decide it, and why
+        with tempfile.TemporaryDirectory() as d:
+            rec = copy_fixture(pathlib.Path(d))
+            edit(rec, 'wrong_if: "heat.loss_kw <= heat.boiler_kw"',
+                 'wrong_if: "heat.loss_kw <= heat.boiler_kw, or the wind turns"\n'
+                 '    blocked_on: "the wind is nobody\'s number yet"')
+            code, out, err = run(SCRIPTS / "provenance.py", "check", rec)
+            self.assertEqual(code, 0, out + err)
+            self.assertIn("NOTE c.boiler_short: wrong_if is not one comparison this reader "
+                          "decides", out)
+
+    def test_a_truth_value_is_matched_in_both_of_its_states(self):
+        # `str(True)` is not the `false` a record writes, so comparing them as text matched
+        # in neither state: the falsifier stood green whichever way the fact went
+        with tempfile.TemporaryDirectory() as d:
+            rec = copy_fixture(pathlib.Path(d))
+            edit(rec, "  when.first_cold_night:", FLUE + "  when.first_cold_night:")
+            edit(rec, "judgments:\n", "judgments:\n" + FLUE_HELD)
+            code, out, err = run(SCRIPTS / "provenance.py", "check", rec)
+            self.assertEqual(code, 0, out + err)          # the fact holds true: it does not
+            _, ids, jud, fields, raw = read(rec)
+            self.assertIs(P.evaluate("heat.flue_clear == false", raw, ids), False)
+            self.assertIs(P.evaluate("heat.flue_clear != false", raw, ids), True)
+            # the flue blocks: the one moment the falsifier existed for
+            edit(rec, "  heat.flue_clear:\n    v: true", "  heat.flue_clear:\n    v: false")
+            _, ids, jud, fields, raw = read(rec)
+            self.assertIs(P.evaluate("heat.flue_clear == false", raw, ids), True)
+            self.assertIn("falsified", P.flags(ids, jud, fields, raw)["c.flue_held"])
+            code, out, _ = run(SCRIPTS / "provenance.py", "check", rec)
+            self.assertEqual(code, 1, out)
+            self.assertIn("FAIL c.flue_held: wrong_if holds (heat.flue_clear == false) - "
+                          "broken by its own condition", out)
+
+    def test_a_truth_value_is_never_ordered_and_never_held_against_another_kind(self):
+        with tempfile.TemporaryDirectory() as d:
+            rec = copy_fixture(pathlib.Path(d))
+            edit(rec, "  when.first_cold_night:", "  heat.flue_clear:\n    v: true\n"
+                      "    name: \"the flue is clear\"\n    from: doc.boiler_sheet\n"
+                      "  when.first_cold_night:")
+            _, ids, _, _, raw = read(rec)
+            # ordering decides nothing about a truth value, and it is refused by shape
+            self.assertIn("orders a truth value (< false), which is matched, never ordered",
+                          P.why_undecided("heat.flue_clear < false"))
+            self.assertIsNone(P.evaluate("heat.flue_clear < false", raw, ids))
+            # a truth value and a value that is not one are two kinds of thing
+            self.assertEqual(P.why_undecided("heat.flue_clear == 1"), "")
+            self.assertIsNone(P.evaluate("heat.flue_clear == 1", raw, ids))
+            self.assertIsNone(P.evaluate("heat.boiler_kw == true", raw, ids))
+
+    def test_one_value_is_anything_that_carries_no_second_comparison(self):
+        # a value is refused for carrying another comparison, never for what it is written
+        # with: refusing one the reader compares perfectly well would silence a falsifier
+        # that works, which is this same failure from the other side
+        for pred in ('when.first_cold_night < "2027-01-01"',            # hyphens: a date
+                     "tool.cli != 'legacy --denominator, cross-event'",  # hyphens and a comma
+                     "heat.loss_kw > 1,000",                            # a thousands separator
+                     'doc.note == "the "best" result"',                  # quotes inside quotes
+                     "heat.deficit_kw != 7"):
+            self.assertEqual(P.why_undecided(pred), "", pred)
+        self.assertEqual(P.one_comparison('when.first_cold_night < "2027-01-01"'), "")
+        self.assertEqual(P.one_comparison("page.spill > 1,000"), "")
+        # and the comparisons those values would have been read as
+        raw = {"x.n": {"v": 2000}, "x.t": {"v": 'the "best" result'}}
+        self.assertIs(P.evaluate("x.n > 1,000", raw, set(raw)), True)
+        self.assertIs(P.evaluate('x.t == "the "best" result"', raw, set(raw)), True)
+        # two quoted values are still two comparisons
+        self.assertIn("is not one comparison",
+                      P.why_undecided('a.b == "x" or c.d == "y"'))
+
+    def test_a_count_is_never_a_truth_value(self):
+        # a computed name is a count whatever the record holds, so `page.spill == false`
+        # would be read as None once the page counts it - and read as green by anything
+        # that only asks whether the sign holds
+        self.assertIn("holds a count against a truth value",
+                      P.why_undecided("page.spill == false"))
+        self.assertIn("holds a count against a truth value",
+                      P.why_undecided("graph.flagged != true"))
+        self.assertEqual(P.why_undecided("heat.flue_clear == false"), "")
+        # reached through an entry it is the same sign, and a sign is decided where the
+        # values are in hand - otherwise the arrangement is born green and never fires
+        raw = {"page.spill": {"v": 0}, "x.flag": {"v": True}, "x.n": {"v": 3}}
+        self.assertIn("holds a count against a truth value",
+                      P.one_comparison("page.spill == x.flag", raw, set(raw)))
+        self.assertEqual(P.one_comparison("page.spill == x.n", raw, set(raw)), "")
+        with tempfile.TemporaryDirectory() as d:
+            rec = copy_fixture(pathlib.Path(d))
+            edit(rec, "judgments:\n", "judgments:\n" + DATED)
+            code, out, err = run(SCRIPTS / "provenance.py", "check", rec)
+            self.assertEqual(code, 0, out + err)
+            _, ids, jud, fields, raw = read(rec)
+            self.assertIs(P.evaluate(jud["c.dated"]["pred"], raw, ids), False)
+
+    def test_the_shape_is_read_in_one_place(self):
+        # what an arrangement's sign is held to and what the reader will decide are the
+        # same question; two readings of it drift, and one of them silently
+        for pred in ("page.spill > 0 or page.unserved > 0", "graph.flagged >",
+                     "page.spill < true", "the wind turns"):
+            self.assertEqual(P.one_comparison(pred), P.why_undecided(pred), pred)
+        # and where an arrangement asks something narrower, it says its own thing: a count
+        # is never a truth value, and a sign names the value it carries
+        self.assertIn("holds a count against a truth value",
+                      P.one_comparison("page.spill == false"))
+        self.assertIn("does not name one value a sign carries",
+                      P.one_comparison("page.spill > lots"))
+        self.assertEqual(P.why_undecided("page.spill > lots"), "")
 
     def test_pull_reads_a_computed_name(self):
         code, out, _ = run(SCRIPTS / "provenance.py", "pull", "graph.flagged", RECORD)

@@ -13,7 +13,8 @@ Record three things while working, never as a separate step:
 Never restate recorded material from memory — reference it. Structure is added only when
 something observable forces it. When a dependency moves: flag, never rewrite — re-running
 is allowed, applying is not. A declared hole (`blocked_on`) is honest; prose in a
-predicate field is not. A session's own prior knowledge is a source too — a `prior.*`
+predicate field is not, and neither is a `wrong_if` carrying a second comparison - one
+comparison is evaluated, anything richer is refused and reported. A session's own prior knowledge is a source too — a `prior.*`
 claim whose value is the confidence — and a judgment decided on one says in `reopened_by`
 what would re-open it. A write that contradicts what the record holds is refused into a
 hypothesis beside it (`--hypothesis NAME`), which `consolidate --dry-run` tests against the

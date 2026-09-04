@@ -300,8 +300,8 @@ v.glazing_tab:
 
 **Its sign is one comparison that can hold.** `check` fails an arrangement whose `wrong_if` is not
 `<name> <op> <one value>` - a compound sign reads as evaluable and is never decided, which is
-freeze in disguise - or one that can never hold (a count below zero, a share above one), and `add`
-refuses both. A `reopened_by:` may stand beside the comparison, never in its place. The sign the
+freeze in disguise - or one that can never hold (a count below zero, a share above one, a count
+held against a truth value), and `add` refuses both. A `reopened_by:` may stand beside the comparison, never in its place. The sign the
 build cannot count goes in `because`, in prose, beside the nearest count that can: *the two merge
 the day a judgment on one tab rests on the other's numbers*, beside `page.unserved > 0`. And ask of
 every one the question the record asks of every falsifier: under this arrangement, can the sign
