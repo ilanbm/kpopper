@@ -1075,6 +1075,32 @@ judgments:
                                              whatever later rests on the contradiction goes there - a
                                              session is never the unit"
       p.hypothesis_homes: 1
+  d.refutations_keep_judgment_ids:
+    from: s.2026_09_04_prior_reversal_share
+    rests_on: [d.prior_confidence_survives_refutation, d.refuted_hypothesis_leaves_one_finding]
+    verdict: "a negative finding preserves the judgment ids its hypothesis held in refutes, so
+              refuting a hypothesis written by add changes the reversal share without an authored
+              head claim"
+    because: "The hypothesis file already carries each proposed judgment under its id, while its
+              optional claim is prose and a file written by add carries only a birth date in its
+              head. Consolidation keeps those ids in a sorted refutes list before deleting the file.
+              This list identifies what was refuted, not premises the finding rests on, so it never
+              votes for the dependency field. The reversal share reads this explicit list when
+              present and keeps the older name links only as a fallback for findings that predate it.
+              Each linked judgment counts once, and only while it belongs to the existing
+              high-confidence denominator."
+    blocked_on: "observational: refuting a hypothesis created entirely by the write commands leaves
+                 no link to a judgment it held, or a refutes list is mistaken for a dependency
+                 declaration; the end-to-end refutation tests exercise both signs"
+    seen:
+      d.prior_confidence_survives_refutation: "the prior kind remains a source of confidence while
+                                               at most one in five high-confidence prior-resting
+                                               judgments has been refuted; beyond that share, prior.*
+                                               is demoted to a note"
+      d.refuted_hypothesis_leaves_one_finding: "a refuted hypothesis leaves one entry in the base -
+                                                hyp.<name> with v: refuted, its claim as the name,
+                                                the why as at, from the session that refuted it,
+                                                dated - and nothing else of it enters"
   d.refuted_hypothesis_leaves_one_finding:
     rests_on: [s.2026_09_04_consolidate, d.hypothesis_is_a_judgment]
     verdict: "a refuted hypothesis leaves one entry in the base - hyp.<name> with v: refuted, its

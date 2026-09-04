@@ -29,16 +29,18 @@ known:
     from: run.header_diff
   hyp.column_order:
     v: refuted
-    name: c.order_is_the_contract
+    name: "hypothesis column_order"
     from: s.2026_09_03_export
-    at: "a macro failed even though the column order was unchanged"
+    at: "the export check contradicted the claim"
     of: "2026-09-04"
+    refutes: [c.order_is_the_contract]
   hyp.stable_names:
     v: refuted
-    name: c.names_are_stable
+    name: "hypothesis stable_names"
     from: s.2026_09_03_export
-    at: "regeneration changed a column name the macro read"
+    at: "the export check contradicted the claim"
     of: "2026-09-04"
+    refutes: [c.names_are_stable]
   prior.macros_bind_by_position:
     v: 0.9
     unit: confidence

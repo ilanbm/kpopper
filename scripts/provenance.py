@@ -441,6 +441,9 @@ def infer(doc):
                 continue
             for f, val in body.items():
                 present.add(f)
+                if f == "refutes" and isinstance(nid, str) and nid.startswith("hyp.") \
+                        and body.get("v") == "refuted":
+                    continue  # a finding's targets are identities, never its premises
                 if isinstance(val, list) and val and all(isinstance(x, str) for x in val):
                     if all(x in ids for x in val):
                         cand["deps"][f] = cand["deps"].get(f, 0) + 1
@@ -809,7 +812,8 @@ def one_comparison(pred, raw=None, ids=None):
     if is_builtin(name):
         if (op == "<" and x <= 0) or (op in ("<=", "==") and x < 0):
             return f"can never hold - a count is never below zero ({name} {op} {rhs})"
-        if name == "page.drift" and ((op == ">" and x >= 1) or (op in (">=", "==") and x > 1)):
+        if name in ("page.drift", "graph.prior_reversal_rate") \
+                and ((op == ">" and x >= 1) or (op in (">=", "==") and x > 1)):
             return f"can never hold - a share is never above one ({name} {op} {rhs})"
     return ""
 
@@ -858,9 +862,14 @@ def counts(doc, ids, jud, fields, raw):
         if not isinstance(k, str) or not k.startswith("hyp.") \
                 or not isinstance(body, dict) or body.get("v") != "refuted":
             continue
-        # Consolidation preserves the hypothesis's claim as name, then deletes its file.
-        # A bare judgment id or an explicit {{id}} reference links that claim to what it
-        # refutes; unmarked prose is not a link. Repeated findings count the judgment once.
+        # Consolidation preserves the ids its hypothesis held before deleting the file.
+        # Older findings may instead link by a bare id or an explicit {{id}} in name.
+        # Repeated findings count the judgment once; unmarked prose is never guessed from.
+        if "refutes" in body:
+            links = body["refutes"]
+            if isinstance(links, list):
+                refuted.update(k for k in links if isinstance(k, str) and k in high)
+            continue
         claim = body.get("name")
         if isinstance(claim, str):
             refuted.update(high.intersection([claim.strip()] + refs_in(claim)))

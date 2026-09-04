@@ -292,20 +292,20 @@ class TheReaderCountsReversalShare(unittest.TestCase):
                              f"wrong_if={RATE} > 0.2", "--as-of", "2026-09-04", rec)
         self.assertEqual(code, 0, out + err)
 
-    def refute(self, rec, name, target, claim=None):
-        # The hypothesis really holds the judgment it claims; add takes its snapshot,
-        # then the head names that claim for consolidation to preserve in the finding.
+    def refute(self, rec, name, target):
+        # Only public commands write this hypothesis and its finding. No test-only claim
+        # supplies the identity the product must preserve when it deletes the file.
         _, _, jud, _, _ = read(rec)
-        body = dict(jud[target]["body"])
-        body.pop("seen", None)
-        code, out, err = run(SCRIPTS / "kpopper", "add", target,
-                             yaml.safe_dump(body, default_flow_style=True),
-                             "--hypothesis", name, "--as-of", "2026-09-04", rec)
-        self.assertEqual(code, 0, out + err)
+        targets = [target] if isinstance(target, str) else target
+        for target in targets:
+            body = dict(jud[target]["body"])
+            body.pop("seen", None)
+            code, out, err = run(SCRIPTS / "kpopper", "add", target,
+                                 yaml.safe_dump(body, default_flow_style=True),
+                                 "--hypothesis", name, "--as-of", "2026-09-04", rec)
+            self.assertEqual(code, 0, out + err)
         hyp = rec.parent / "PROVENANCE.d" / (name + ".yaml")
-        doc = yaml.safe_load(hyp.read_text(encoding="utf-8"))
-        doc["hypothesis"]["claim"] = target if claim is None else claim
-        hyp.write_text(yaml.safe_dump(doc, sort_keys=False), encoding="utf-8")
+        self.assertNotIn("claim", yaml.safe_load(hyp.read_text(encoding="utf-8"))["hypothesis"])
         code, out, err = run(SCRIPTS / "kpopper", "consolidate", "--refute", name,
                              "the export check contradicted the claim", "--as-of", "2026-09-04", rec)
         self.assertEqual(code, 0, out + err)
@@ -324,7 +324,8 @@ class TheReaderCountsReversalShare(unittest.TestCase):
             self.assertEqual(run(SCRIPTS / "kpopper", "check", rec)[0], 0)
             finding = self.refute(rec, "column_order", DECIDED)
             self.assertEqual(finding, {
-                "v": "refuted", "name": DECIDED, "from": "s.2026_09_03_export",
+                "v": "refuted", "name": "hypothesis column_order", "from": "s.2026_09_03_export",
+                "refutes": [DECIDED],
                 "at": "the export check contradicted the claim", "of": "2026-09-04"})
             _, ids, jud, _, raw = read(rec)
             self.assertEqual(P.value_of(raw, ids, RATE), 0.2)
@@ -377,11 +378,9 @@ class TheReaderCountsReversalShare(unittest.TestCase):
             rec = self.copy_reversals(pathlib.Path(d), findings=False)
             self.add_rule(rec)
             self.refute(rec, "first", DECIDED)
-            self.refute(rec, "again", DECIDED,
-                        "the claim {{" + DECIDED + "}} no longer holds")
+            self.refute(rec, "again", DECIDED)
             self.refute(rec, "low", TRIED)
             self.refute(rec, "measured", "c.fourteen_fit")
-            self.refute(rec, "unlinked", DECIDED, "the column order is a contract")
             _, ids, _, _, raw = read(rec)
             self.assertEqual(P.value_of(raw, ids, RATE), 0.2)
             doc = P.load([str(rec)])
@@ -392,6 +391,87 @@ class TheReaderCountsReversalShare(unittest.TestCase):
                 doc["known"]["hyp.ignored_" + str(i)] = {"v": "refuted", "name": name}
             ids, jud, fields = P.infer(doc)
             self.assertEqual(P.counts(doc, ids, jud, fields, P.bodies(doc))[RATE], 0.2)
+
+    def test_old_claim_links_still_read_without_a_refutes_field(self):
+        for claim in (DECIDED, "  " + DECIDED + "  ", "the claim {{" + DECIDED + "}} failed"):
+            with self.subTest(claim=claim):
+                doc = P.load([str(RECORD)])
+                doc["known"]["hyp.older"] = {"v": "refuted", "name": claim}
+                ids, jud, fields = P.infer(doc)
+                self.assertEqual(P.counts(doc, ids, jud, fields, P.bodies(doc))[RATE], 1.0)
+
+    def test_one_refutation_preserves_all_its_judgments_but_counts_only_high_priors(self):
+        with tempfile.TemporaryDirectory() as d:
+            rec = self.copy_reversals(pathlib.Path(d), findings=False)
+            self.add_rule(rec)
+            targets = [DECIDED, "c.names_are_stable", TRIED, "c.fourteen_fit"]
+            finding = self.refute(rec, "all_claims", targets)
+            self.assertEqual(finding["refutes"], sorted(targets))
+            _, ids, jud, fields, raw = read(rec)
+            self.assertEqual(P.value_of(raw, ids, RATE), 0.4)
+            self.assertIn("falsified", P.flags(ids, jud, fields, raw)[DEMOTION])
+            self.assertNotIn("hyp.all_claims", jud)
+
+    def test_refutation_uses_the_records_judgment_shape_not_collection_names(self):
+        with tempfile.TemporaryDirectory() as d:
+            rec = copy_fixture(pathlib.Path(d))
+            edit(rec, "judgments:", "claims:")
+            edit(rec, "rests_on:", "depends:")
+            finding = self.refute(rec, "different_shape", DECIDED)
+            self.assertEqual(finding["refutes"], [DECIDED])
+            doc, ids, jud, fields, raw = read(rec)
+            self.assertEqual(fields["deps"], "depends")
+            self.assertEqual(P.counts(doc, ids, jud, fields, raw)[RATE], 1.0)
+
+    def test_rounding_must_not_hide_a_share_above_the_demotion_line(self):
+        doc, ids, jud, fields, raw = read(REVERSALS / "PROVENANCE.yaml")
+        high = {"c.claim_" + str(i) for i in range(99)}
+        raw = dict(raw, **{"hyp.near_boundary": {
+            "v": "refuted", "refutes": sorted(high)[:20]}})
+        with mock.patch.object(P, "priors_line", return_value=("counted", high)):
+            rate = P.counts(doc, ids | {"hyp.near_boundary"}, jud, fields, raw)[RATE]
+        self.assertEqual(rate, 20 / 99)
+        self.assertGreater(rate, 0.2)
+        self.assertEqual(round(rate, 2), 0.2)  # presentation rounding must not decide the predicate
+
+    def test_a_refutes_list_is_identity_not_a_dependency_vote(self):
+        doc = P.load([str(RECORD)])
+        doc["judgments"] = {DECIDED: doc["judgments"][DECIDED]}
+        for i in range(3):
+            doc["known"]["hyp.again_" + str(i)] = {
+                "v": "refuted", "name": "hypothesis again", "refutes": [DECIDED]}
+        ids, jud, fields = P.infer(doc)
+        self.assertEqual(fields["deps"], "rests_on")
+        self.assertEqual(set(jud), {DECIDED})
+        self.assertEqual(P.counts(doc, ids, jud, fields, P.bodies(doc))[RATE], 1.0)
+
+    def test_explicit_targets_are_authoritative_and_malformed_targets_do_not_crash(self):
+        for targets in ([], ["c.gone"], [LOW], [TRIED], [None, 1, {}, []], None, {}, DECIDED):
+            with self.subTest(targets=targets):
+                doc = P.load([str(RECORD)])
+                doc["known"]["hyp.targeted"] = {
+                    "v": "refuted", "name": DECIDED, "refutes": targets}
+                ids, jud, fields = P.infer(doc)
+                self.assertEqual(P.counts(doc, ids, jud, fields, P.bodies(doc))[RATE], 0.0)
+
+    def test_an_impossible_reversal_share_sign_is_refused_at_add_and_failed_at_check(self):
+        for predicate in (RATE + " > 1", RATE + " >= 1.1", RATE + " == 2", RATE + " < 0"):
+            with self.subTest(predicate=predicate), tempfile.TemporaryDirectory() as d:
+                rec = copy_fixture(pathlib.Path(d))
+                before = rec.read_bytes()
+                code, out, err = run(SCRIPTS / "kpopper", "add", "v.prior_policy",
+                                     f"rests_on=[s.2026_09_03_export, {RATE}]", "verdict=a policy tab",
+                                     "wrong_if=" + predicate, "--as-of", "2026-09-04", rec)
+                self.assertEqual(code, 1, out + err)
+                self.assertIn("can never hold", out + err)
+                self.assertEqual(rec.read_bytes(), before)
+                # check must also catch a file written outside the guarded add command.
+                with rec.open("a", encoding="utf-8") as f:
+                    f.write("\n  v.impossible:\n    rests_on: [s.2026_09_03_export, " + RATE
+                            + "]\n    verdict: a policy tab\n    wrong_if: \"" + predicate + "\"\n")
+                code, out, err = run(SCRIPTS / "kpopper", "check", rec)
+                self.assertEqual(code, 1, out + err)
+                self.assertIn("FAIL v.impossible: wrong_if can never hold", out)
 
     def test_the_shared_line_handles_boundary_multiple_and_nonnumeric_priors(self):
         doc, ids, jud, fields, raw = read(REVERSALS / "PROVENANCE.yaml")
