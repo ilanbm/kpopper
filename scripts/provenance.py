@@ -601,6 +601,41 @@ def said(text, raw, ids, jud, width=100):
 
 
 CMP = re.compile(r"^\s*([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z0-9_]+)+)\s*(<=|>=|==|!=|<|>)\s*(.+?)\s*$")
+BOOL = re.compile(r"(?i)^(true|false)$")
+# Quoted text is a literal: whatever it holds, it is one value and none of it is read as an
+# operator. Taken out of a right-hand side before that side is looked at for a second
+# comparison - the thing the comparison shape would otherwise swallow as the value.
+QUOTED = re.compile(r"(['\"]).*?\1", re.S)
+SECOND = re.compile(r"(<=|>=|==|!=|<|>)|\bor\b|\band\b")
+
+
+def why_undecided(pred):
+    """Why this reader cannot decide `pred` as one comparison - '' when it can.
+
+    The comparison shape alone is not enough. It takes everything after the operator as
+    the value, so `a > 0 or b > 0` compares `a` against the text "0 or b > 0" and is false
+    in every state of the record - a falsifier that reads as evaluable and can never fire,
+    which is decoration. One reading of the shape, so what an arrangement refuses when it
+    is written, what check reports and what evaluate declines are the same thing.
+
+    What it asks of the right-hand side is only that it carry no second comparison. Any
+    narrower rule refuses a value the reader can compare perfectly well - a date and a
+    thousands separator both carry characters an expression would use - and refusing a
+    falsifier that works is this same failure from the other side.
+    """
+    m = CMP.match(str(pred or ""))
+    if not m or SECOND.search(QUOTED.sub("", m.group(3).strip())):
+        return "is not one comparison this reader decides (a name, an operator, one value)"
+    name, op, rhs = m.group(1), m.group(2), m.group(3).strip()
+    if BOOL.match(rhs):
+        # a truth value is matched, and only against another truth value. A computed name
+        # is a count whatever the record holds, so this one is decided here and not left
+        # to a reading that would come back None and be taken for green.
+        if op not in ("==", "!="):
+            return f"orders a truth value ({op} {rhs}), which is matched, never ordered"
+        if is_builtin(name):
+            return f"holds a count against a truth value ({name} {op} {rhs}), which never matches"
+    return ""
 
 
 def bodies(doc):
@@ -629,16 +664,26 @@ def value_of(raw, ids, k):
 def evaluate(pred, raw, ids):
     """-> True when the falsifier holds, False when it does not, None when it is not a
     single comparison this reader can decide. Richer predicates are surfaced, never
-    guessed at."""
+    guessed at - a compound would be decided against the text after its first operator,
+    so it is declined here and said where the record is checked.
+
+    A truth value is matched as one: a record writes `false` and the fact holds Python's
+    False, and comparing them as text matches in neither state of the fact.
+    """
     m = CMP.match(str(pred or ""))
-    if not m:
+    if not m or why_undecided(pred):
         return None
     a = value_of(raw, ids, m.group(1))
     if a is None:
         return None
-    rhs = m.group(3).strip()
+    rhs, op = m.group(3).strip(), m.group(2)
+    if BOOL.match(rhs):
+        if not isinstance(a, bool):
+            return None        # a truth value and a value that is not one never compare
+        same = a is (rhs.lower() == "true")
+        return same if op == "==" else not same
     b = value_of(raw, ids, rhs) if ID.fullmatch(rhs) else rhs.strip("\"'")
-    if b is None:
+    if b is None or isinstance(a, bool) != isinstance(b, bool):
         return None
 
     def num(x):
@@ -648,7 +693,6 @@ def evaluate(pred, raw, ids):
             return None
     na, nb = num(a), num(b)
     a, b = (na, nb) if na is not None and nb is not None else (str(a), str(b))
-    op = m.group(2)
     return {"<": a < b, ">": a > b, "<=": a <= b, ">=": a >= b,
             "==": a == b, "!=": a != b}[op]
 
@@ -832,21 +876,33 @@ def _arrangement_shaped(body, fields, raw):
 
 def one_comparison(pred, raw=None, ids=None):
     """An arrangement's sign, as the build can decide it: one comparison - a name, an
-    operator, a number or a text or another entry - that can hold. -> '' when it is, else
-    what is wrong with it. A compound sign reads as evaluable today and is never decided,
-    which is freeze in disguise; a count below zero or a share above one never happens; an
-    entry with no value to compare would leave the sign green forever."""
+    operator, a number or a text or a truth value or another entry - that can hold. -> ''
+    when it is, else what is wrong with it. The shape is the reader's own, so a sign an
+    arrangement may carry is exactly a falsifier the record can decide; on top of that a
+    count below zero or a share above one never happens, and an entry with no value to
+    compare would leave the sign green forever."""
+    bad = why_undecided(pred)
+    if bad:
+        return bad
     m = CMP.match(str(pred or ""))
-    # the right-hand side must be one value too: a number, a quoted text, or an entry - the
-    # comparison shape alone would let "a > 0 or b > 0" through with "0 or b > 0" as its value
-    rhs = m.group(3).strip() if m else ""
-    quoted = len(rhs) > 1 and rhs[0] in "\"'" and rhs[-1] == rhs[0] and not EXPR.search(rhs[1:-1])
-    if not m or not (NUMBER.match(rhs) or ID.fullmatch(rhs) or quoted):
-        return "is not one comparison this reader decides (a name, an operator, one value)"
+    rhs = m.group(3).strip()
     name, op = m.group(1), m.group(2)
+    # On top of the shape, a sign names its value outright. This is the arrangement's own
+    # rule and not a second reading of the shape: what the reader can decide is settled in
+    # why_undecided, and this asks the narrower thing a sign over a count is held to.
+    if not (NUM_VALUE.match(rhs) or ID.fullmatch(rhs) or BOOL.match(rhs)
+            or QUOTED.fullmatch(rhs)):
+        return ("does not name one value a sign carries (a number, a truth value, a text in "
+                "quotes, or another entry)")
     if ID.fullmatch(rhs) and raw is not None and not is_builtin(rhs) \
             and (rhs not in (ids or ()) or value_of(raw, ids, rhs) is None):
         return f"compares against {rhs}, which holds no value the build can compare"
+    # and a count held against a truth value never matches, whether the truth value is
+    # written into the sign or reached through an entry - the shape alone cannot see the
+    # second one, and here the value is in hand
+    if is_builtin(name) and ID.fullmatch(rhs) and raw is not None \
+            and isinstance(value_of(raw, ids, rhs), bool):
+        return f"holds a count against a truth value ({name} {op} {rhs}), which never matches"
     try:
         x = float(rhs.replace(",", ""))
     except ValueError:
@@ -873,7 +929,10 @@ def flags(ids, jud, fields, raw):
                 f.add("blocked" if blocked else "broken")
             elif fields["snapshot"] and d not in j["seen"]:
                 f.add("unchecked")
-        named = [t for t in ID.findall(j["pred"]) if t in ids]
+        # A predicate this reader cannot decide falsifies nothing, whatever it names: it
+        # is counted where an empty field is counted, not passed over as one that holds.
+        named = bool([t for t in ID.findall(j["pred"]) if t in ids]) \
+            and not why_undecided(j["pred"])
         if not named and not blocked and not _decided(j):
             f.add("no_predicate")
         elif named and evaluate(j["pred"], raw, ids) is True:
@@ -1019,14 +1078,22 @@ def check_lines(paths):
                             f"dependency - a change to it would never reach this")
         # A predicate field holding prose is not a predicate. It reads like one,
         # which is worse than an empty field: nothing evaluates it and nobody notices.
-        evaluable = bool([t for t in ID.findall(j["pred"]) if t in ids])
+        # So does one this reader cannot decide - a compound is read to its first operator
+        # and false ever after - and it is said here rather than passed over.
+        undecided = why_undecided(j["pred"]) if j["pred"] else ""
+        evaluable = bool([t for t in ID.findall(j["pred"]) if t in ids]) and not undecided
         misfiled = _misfiled_reopener(j["body"], ids)
         if misfiled:
             fail.append(f"{name}: reopened_by reads as a comparison ({short(misfiled, 60)}) - a "
                         f"predicate belongs in wrong_if, where it is evaluated; a re-opener is the "
                         f"sign a person reads")
-        if not evaluable:
-            what = "prose, not an evaluable predicate" if j["pred"] else "no predicate at all"
+        # An arrangement's sign is held to the same shape a few lines down, and said
+        # there in the terms an arrangement is decided by; it is not said twice.
+        if not evaluable and not (undecided and is_arrangement(j, raw)):
+            what = ("no predicate at all" if not j["pred"] else
+                    "prose, not an evaluable predicate"
+                    if not [t for t in ID.findall(j["pred"]) if t in ids] else
+                    f"wrong_if {undecided}")
             reopened = _reopened_text(j["body"])
             if blocked:
                 note.append(f"{name}: {what} (declared: {blocked[:90]})")
@@ -1047,6 +1114,13 @@ def check_lines(paths):
             named_page = sorted({t for t in ID.findall(j["pred"]) if t in PAGE})
             note.append(f"{name}: wrong_if reads {', '.join(named_page)}, which is counted "
                         f"when the page is built - `page --verify` decides it")
+        elif evaluate(j["pred"], raw, ids) is None:
+            # one comparison, and the reading it needs is not there: a side that holds no
+            # value yet, or a truth value held against something that is not one. The shape
+            # is right and only the reading is missing, so it is noted rather than failed
+            note.append(f"{name}: nothing decides wrong_if ({short(j['pred'], 60)}) - a side "
+                        f"holds no value to compare, or a truth value is held against a "
+                        f"value that is not one")
         # An arrangement's sign is decided by the build - by check for a count of the record,
         # by the page for a count of the page - so it is one comparison that can hold. A
         # re-opener may stand beside it, never in its place: an unevaluable sign on an
@@ -1155,7 +1229,8 @@ def opening(paths, budget=25, chars=None):
             if tok in ids and tok not in j["deps"]:
                 items.append((100, name, f"predicate reads {tok}, which it does not declare - "
                                          f"a change to it never reaches this"))
-        evaluable = bool([t for t in ID.findall(j["pred"]) if t in ids])
+        evaluable = bool([t for t in ID.findall(j["pred"]) if t in ids]) \
+            and not why_undecided(j["pred"])
         if _misfiled_reopener(j["body"], ids):
             items.append((100, name, "reopened_by reads as a comparison - a predicate belongs in "
                                      "wrong_if"))
@@ -1636,6 +1711,7 @@ class Refused(SystemExit):
 
 
 NUMBER = re.compile(r"^-?\d+(\.\d+)?$")
+NUM_VALUE = re.compile(r"^-?\d[\d,]*(\.\d+)?$")   # as a record writes one: 1,000 is 1000
 DATE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 BARE = re.compile(r"^[A-Za-z_][A-Za-z0-9_.\-]*$")
 MEMBER = re.compile(r"^( +)([A-Za-z_][A-Za-z0-9_.]*):(?: |$)")
@@ -2024,7 +2100,7 @@ def _state(name, j, raw, ids, fields, touched=()):
         return "HOLDS", "no predicate to evaluate; declared - " + short(blocked, 80)
     pred = short(j["pred"], 80)
     if evaluate(j["pred"], raw, ids) is None:
-        if not CMP.match(j["pred"]):
+        if why_undecided(j["pred"]):
             return "HOLDS", f"wrong_if is not a comparison this reader decides ({pred})"
         if any(t in PAGE for t in ID.findall(j["pred"])):
             return "HOLDS", f"wrong_if is counted when the page is built ({pred}) - page --verify decides it"

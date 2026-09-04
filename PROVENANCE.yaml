@@ -119,6 +119,20 @@ sources:
     of: "2026-09-04, given the hypotheses beside the record at db31e1c - the layer, the door and the
          cone - the fixture record under tests/, and the three live records this reader serves"
     read: "2026-09-04"
+  s.2026_09_04_falsifier_shape:
+    asked: "Make a falsifier that cannot fire either fire or say so: a predicate with more than one
+            comparison is read as text, and one compared against a boolean never matches in either
+            state."
+    name: "The session that made a falsifier either fire or say so - what it was asked, and what it
+           was given. Its reading: what shape a predicate must have to be decided is one reading,
+           asked wherever a predicate is written, reported or evaluated - so a compound, which the
+           comparison shape would decide against the text after its first operator, is declined and
+           said rather than answered false; and a truth value is matched as one, since a record
+           writes false where the fact holds False"
+    of: "2026-09-04, given the three live records this reader serves and the compound and
+         truth-value falsifiers standing in one of them, the arrangement rule that already refused a
+         compound sign, and the fixture records under tests/"
+    read: "2026-09-04"
   s.2026_09_04_forks_chapter:
     asked: "Write the method's chapter on forks and hypotheses: a task as a judgment, pull before
             add, the consolidation walk, the out-of-tree lock, how a merge goes, and the reader's new
@@ -524,6 +538,15 @@ known:
     v: 1
     name: "How many times the stop gate blocks before yielding"
     from: "scripts/session_gate.sh"
+  p.predicate_shapes:
+    v: 1
+    name: "Places that decide whether a predicate is one comparison this reader can decide - the
+           shape a falsifier must have to be evaluated at all"
+    from: "scripts/provenance.py"
+    at: "why_undecided, asked by evaluate before it decides anything, by check and the opener before
+         they report a judgment, and by an arrangement's sign when it is written - every surface
+         reads that one answer"
+    measure: predicate_shapes
   p.prior_count_thresholds:
     v: 1
     name: "Lines the count of what rests on priors draws in code - a confidence past which it counts
@@ -1296,6 +1319,33 @@ judgments:
     blocked_on: "observational: falsified by a watcher whose reconstructed dependencies beat
                  the writer's own declarations on a real record; none has been tried"
     seen: {doc.agent_graph: "read 2026-09-01"}
+  d.predicate_shape_is_one_reading:
+    rests_on: [s.2026_09_04_falsifier_shape, p.predicate_shapes, d.arrangement_sign_is_one_comparison]
+    verdict: "what shape a predicate must have to be decided is one reading, asked wherever a
+              predicate is written, reported or evaluated: one comparison, which is a right-hand side
+              carrying no second comparison - text inside quotes is a literal and is not read for one
+              - and a predicate that is not one is declined by the reader and reported where an empty
+              predicate is, never answered false"
+    because: "The comparison shape takes everything after the operator as its value, so a == false,
+              or b == false was decided against the text after the first operator - false in every
+              state of the record, a falsifier that reads as evaluable and can never fire.
+              {{d.arrangement_sign_is_one_comparison}} refused that for an arrangement's sign and
+              named it there; every other judgment inherited it, and check passed over them because a
+              predicate that names an entry was taken as one it could read. {{p.predicate_shapes}}
+              counts the places that decide the shape: a second one drifts from the first, and it
+              drifts both ways. The path that had a shape test read a quoted value by looking inside
+              the quotes for operators, so a date - one value, written with hyphens - was refused
+              there while the path with no test compared it happily; a rule any narrower than
+              'carries no second comparison' refuses values the reader compares perfectly well, and
+              silencing a falsifier that works is this same failure from the other side."
+    wrong_if: "p.predicate_shapes > 1"
+    seen:
+      s.2026_09_04_falsifier_shape: "read 2026-09-04"
+      p.predicate_shapes: 1
+      d.arrangement_sign_is_one_comparison: "an arrangement's sign is one comparison over a count
+                                             that can hold - a name, an operator, one value; a
+                                             compound or an impossible one is refused, and a
+                                             re-opener stands beside it, never in its place"
   d.prior_carries_its_own_falsifier:
     rests_on: [prior.confidence_needs_calibration, m.claims.local_assumed_held, d.hypothesis_is_a_judgment]
     verdict: "the prior kind carries its own falsifier: if judgments resting on priors at 0.8 or
@@ -1739,6 +1789,30 @@ judgments:
       d.moved_is_a_flag: "a dependency that moved since the snapshot flags the judgment for a
                           person; only a predicate that holds fails the build"
       p.union_tests: 1
+  d.truth_value_is_matched:
+    rests_on: [s.2026_09_04_falsifier_shape, d.predicate_shape_is_one_reading]
+    verdict: "a falsifier compares a truth value by matching it - wrong_if x == false holds when x
+              holds false - and never as text, never ordered, and never against a value that is not
+              one"
+    because: "A record writes false and the fact holds a boolean, so comparing the two as text
+              matched in neither state: the falsifier stood green while the fact was true, and stayed
+              green when it turned false - the one moment it existed for. Matching is the only
+              comparison a truth value has, so under {{d.predicate_shape_is_one_reading}} a truth
+              value is one value a falsifier may name; ordering one decides nothing, and holding one
+              against a value that is not one is two kinds of thing, and both are declined rather
+              than answered."
+    reopened_by: "a record that writes a truth value as something else - yes and no, 1 and 0, a
+                  quoted true - and expects a falsifier to match it: the reading would then be about
+                  what a truth value may be written as, not about matching one"
+    seen:
+      s.2026_09_04_falsifier_shape: "read 2026-09-04"
+      d.predicate_shape_is_one_reading: "what shape a predicate must have to be decided is one
+                                         reading, asked wherever a predicate is written, reported or
+                                         evaluated: one comparison, which is a right-hand side
+                                         carrying no second comparison - text inside quotes is a
+                                         literal and is not read for one - and a predicate that is
+                                         not one is declined by the reader and reported where an
+                                         empty predicate is, never answered false"
   d.whole_shape_surface:
     rests_on: [doc.fact_moves]
     verdict: "the shape of the whole gets one surface of its own - the tree - and the reading
