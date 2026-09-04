@@ -467,11 +467,11 @@ its own `wrong_if` holds now, or the new body carries `request: s.<date>_<slug>`
 whose `asked:` is the person's request verbatim, rested on, said *on the word of* on every surface.
 A write resting on what only a hypothesis holds belongs in that hypothesis. Each refusal names the
 command that writes the same thing into `PROVENANCE.d/<name>.yaml` beside the record - the base
-untouched - named after the id unless `--hypothesis NAME` on `set`, `add` or `review` names it. The
-first write stamps `born` in the head; `claim:`, a head `wrong_if:` and `folds: never` are the one
-thing a hand writes there. Three uses: a concurrent writer whose reading was refused; a proposal not
-yet approved - a branch's record *is* this, and travels with the branch; a what-if, `folds: never`,
-evaluated at every dry run and never written.
+untouched - named after the id contradicted and a mark of the claim written, unless `--hypothesis
+NAME` on `set`, `add` or `review` names it. The first write stamps `born` in the head; `claim:`, a
+head `wrong_if:` and `folds: never` are the one thing a hand writes there. Three uses: a concurrent
+writer whose reading was refused; a proposal not yet approved - a branch's record *is* this, and
+travels with the branch; a what-if, `folds: never`, evaluated at every dry run and never written.
 
 Every command reads the hypotheses over the base and evaluates the base alone: `pull` shows what
 each proposes beside the value; `check` and `open` say CONTESTED where two hold one id with
@@ -518,8 +518,9 @@ a hypothesis; or a doubt with no rival value yet, an open question that names th
 stand until a person consolidates or answers. Deleting the file is neither.
 
 **How a merge goes.** git merges the files: additions in id order rarely meet, and hypothesis files
-meet only when two branches open one under the same name - the id's own, when both were refused on
-it - two writers on one subject: rename one and let the dry run judge them. The dry run tests the
+meet only when two branches claim the same thing under one id, since the name carries both - two
+readings that agree, and either head is the whole of them; two that disagree are two files git
+merges, and which of them stands is the dry run's question for a person. The dry run tests the
 result: the pull request runs it on the merged tree, and the push to `main` runs it again as the
 second net, for two pull requests each consistent alone that contradict together. Fold a hypothesis
 the dry run proves *before* the pull request, so `main` receives base changes; let an unproven one
