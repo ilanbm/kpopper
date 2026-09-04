@@ -640,24 +640,26 @@ LONG_B = ("the glazier will cover the north wall in toughened double glazing aft
           "first frost")
 
 
-def glazing(into, predicate='    wrong_if: "glaze.quote_eur > 9000"'):
+def glazing(into, predicate=None, key="glaze.terms"):
     """A record whose judgment rests on one long value - the shape every surface that
     compares two readings is exercised on. The predicate decides whether a move is muted
-    (it names the moved entry) or moved (it does not)."""
+    (it names the moved entry) or moved (it does not); `key` is the id that holds the
+    value, so a long one can be given where the line's own budget is under test."""
+    predicate = predicate or '    wrong_if: "glaze.quote_eur > 9000"'
     rec = into / "PROVENANCE.yaml"
     rec.write_text(
         "meta:\n  updated: 2026-09-04\n  name: Glazing\n"
         '  scope: "One long value, changed at its end."\n\n'
         'sources:\n  doc.quote: {name: "the quote", file: "q.pdf", read: "2026-09-04"}\n\n'
         'known:\n  glaze.quote_eur: {v: 4200, name: "the quote", from: doc.quote}\n'
-        "  glaze.terms:\n"
+        f"  {key}:\n"
         f'    quoted: "{LONG_A}"\n'
         '    name: "what the glazier undertook"\n    from: doc.quote\n\n'
         "judgments:\n  c.terms_hold:\n"
-        "    rests_on: [glaze.terms, glaze.quote_eur]\n"
+        f"    rests_on: [{key}, glaze.quote_eur]\n"
         '    verdict: "the wall is covered in time"\n'
         f"{predicate}\n"
-        f'    seen: {{glaze.quote_eur: 4200, glaze.terms: "{LONG_A}"}}\n', encoding="utf-8")
+        f'    seen: {{glaze.quote_eur: 4200, {key}: "{LONG_A}"}}\n', encoding="utf-8")
     return rec
 
 
@@ -709,6 +711,36 @@ class AComparisonShowsWhereItParts(unittest.TestCase):
             self.assertIn("->", line)
             self.assertIn("…after the first frost", line)
             self.assertLessEqual(len(line), 110)
+
+    def test_pull_keeps_the_comparison_whole_under_a_long_id(self):
+        # the sides are cut to what the line has left, and the line is never cut across
+        # the comparison - so a dependency long enough to eat the budget costs its own
+        # readings room, never the arrow or the second of them
+        with tempfile.TemporaryDirectory() as d:
+            long_id = "glaze.terms_as_the_glazier_set_them_out_in_the_quote_of_september"
+            rec = glazing(pathlib.Path(d), f'    wrong_if: "{long_id} == \'withdrawn\'"',
+                          key=long_id)
+            code, out, err = run(SCRIPTS / "provenance.py", "set", long_id, LONG_B,
+                                 "--as-of", "2026-09-05", rec)
+            self.assertEqual(code, 0, out + err)
+            _, out, _ = run(SCRIPTS / "provenance.py", "pull", "c.terms_hold", rec)
+            line = next(l for l in out.split("\n") if "moved since review" in l)
+            self.assertIn(" -> ", line)
+            self.assertIn("within wrong_if", line)          # the state survives too
+            self.assertIn("…before the first cold", line)
+            self.assertIn("…after the first frost", line)
+
+    def test_a_value_with_no_word_boundary_still_shows_its_difference(self):
+        # urls, hashes, long numbers: there is no word to open the window on, so it opens
+        # inside the token rather than falling back to the head both sides share
+        a = "https://example.org/quotes/north-wall-2026-09-04-v1.pdf"
+        b = "https://example.org/quotes/north-wall-2026-09-04-v2.pdf"
+        wa, wb = P.apart(a, b)
+        self.assertNotEqual(wa, wb)
+        self.assertTrue(wa.endswith("v1.pdf") and wb.endswith("v2.pdf"), (wa, wb))
+        h = "c3f1a9e2b7d4" * 4
+        ha, hb = P.apart(h, h[:38] + "ZZ" + h[40:])
+        self.assertNotEqual(ha, hb)
 
     def test_the_fork_refusal_says_how_the_two_readings_differ(self):
         # it asks a person to choose between two readings of one day; it may not show them

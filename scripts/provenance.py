@@ -676,6 +676,11 @@ def apart(a, b, n=40):
     if same < n // 2:                  # they part inside what the head would have shown
         return short(sa, n), short(sb, n)
     at = sa.rfind(" ", 0, same) + 1    # open on a whole word, not mid-word
+    if at == 0 or same - at > n:
+        # no word to open on, or the nearest one too far back to be worth the room: a url,
+        # a hash, a long number. Cut into the token instead - a window that shows the
+        # difference is worth more here than one that starts where a reader would.
+        at = max(0, same - n // 4)
     return "…" + short(sa[at:], n - 1), "…" + short(sb[at:], n - 1)
 
 
@@ -1590,10 +1595,15 @@ def pull(paths, seeds, budget=40, doc=None):
         # the grounding surface, so here even a muted move is worth a line.
         for dep, old, now, state in sorted(moved_deps(j, raw_, ids_)):
             mark_ = {"muted": " - within wrong_if", "crossed": " - across wrong_if"}.get(state, "")
-            # the two readings are clipped before the line is built, so what a long value
-            # eats is its own tail and never the arrow or the reading beside it
-            was, is_ = apart(old, now, 34)
-            out.append(cut(f"    moved since review: {dep} {was} -> {is_}{mark_}", 110))
+            # the two readings are clipped to what the line has left for them, and the
+            # line itself is never cut: a budget spent on the first value would take the
+            # arrow and the second reading with it, which is the whole failure here.
+            head = f"    moved since review: {dep} "
+            room = 110 - len(head) - len(mark_) - len(" -> ")
+            # a floor under each side, so an id long enough to eat the line leaves a
+            # comparison a reader can still use rather than two stubs
+            was, is_ = apart(old, now, max(24, room // 2))
+            out.append(f"{head}{was} -> {is_}{mark_}")
         return out
 
     def dispute(k):
