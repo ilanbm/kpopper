@@ -84,6 +84,25 @@ def direction(doc):
 fmt = P.fmt        # one formatting of a number, shared with every surface that prints one
 
 
+# What a card can carry. A reasoning longer than this is drawn to here and marked, because
+# a sentence that stops mid-word on the reading surface reads as the whole of what was
+# argued. The budget is also the sign `d.reasoning_in_record` named for itself - reasoning
+# swelling past what a card holds - so what was cut is said by `--verify` rather than only
+# shown.
+CARD_CHARS = 400
+
+
+def clipped(text, n=CARD_CHARS):
+    """-> (what a card draws, was it cut). Cut at the last word boundary inside the budget,
+    with an ellipsis, so the reader sees that the argument continues."""
+    s = str(text or "")
+    if len(s) <= n:
+        return s, False
+    cut = s[:n - 1]
+    space = cut.rfind(" ")
+    return (cut[:space] if space > n // 2 else cut).rstrip(" ,;:-") + "\u2026", True
+
+
 def shape_of(ids, jud, flags):
     held = [k for k in ids if k not in jud and not P.is_builtin(k)]
     return {"entries": len(held), "judgments": len(jud),
@@ -834,12 +853,24 @@ def build(paths, brief_path=None):
         n = next((str(b[f]) for f in ("via", "note", "why") if b.get(f)), "")
         if 0 < len(n) <= 150:
             E[k]["note"] = n
+    swollen = []
     for name, j in sorted(jud.items()):
         b = j["body"]
         why, keys = blocked_of(b)
+        written = P.reasoning_of(b)
+        because, cut = clipped(written)
+        # the budget is over what a card draws, and a reference is drawn as the value or
+        # verdict behind it - which can be longer than the `{{id}}` that stands for it. So
+        # what is counted is the resolved length: prose cut here, and prose that only
+        # overruns once the record is read into it, are the same swelling to a reader.
+        drawn = len(P.resolve_refs(because, raw0, ids, jud))
+        if cut:
+            swollen.append((name, len(written), "cut"))
+        elif drawn > CARD_CHARS:
+            swollen.append((name, drawn, "resolved"))
         J[name] = {"deps": j["deps"], "used": sorted(used.get(name, [])), "pred": j["pred"],
                    "verdict": str(b.get("verdict") or b.get("title") or ""),
-                   "because": str(b.get("because") or b.get("breaks_if") or "")[:400],
+                   "because": because,
                    "blocked": why, "waiting": keys,
                    "reopened": next((str(b[k]) for k in P.REOPENED if b.get(k)), "")}
 
@@ -969,10 +1000,16 @@ def build(paths, brief_path=None):
 
     def moved_note(pairs, what):
         """The line under a tinted text or card: what moved since it was read, by name.
-        A warning, not a source - it is in the markup, so it shows wherever the page does."""
+        A placed judgment says which of its halves moved, so the line does not print one
+        clipped verdict twice. A warning, not a source - it is in the markup, so it shows
+        wherever the page does."""
+        said = []
+        for k, o, n in pairs:
+            half, was, now = P.which_moved(o, n)
+            said.append(f"{html.escape(lbl(k))}{', ' + html.escape(half) if half else ''} "
+                        f"{html.escape(P.short(was))} &rarr; {html.escape(P.short(now))}")
         return (f'<div class="mvd" dir="auto">Moved since this was {what}: '
-                + "; ".join(f"{html.escape(lbl(k))} {html.escape(P.short(o))} &rarr; "
-                            f"{html.escape(P.short(n))}" for k, o, n in pairs) + "</div>")
+                + "; ".join(said) + "</div>")
 
     def moves_of(name):
         """{dep: what the judgment saw} for every dependency that moved under it - the
@@ -1132,16 +1169,19 @@ def build(paths, brief_path=None):
 
     def moved_in(sec):
         """What the section's text saw that the record no longer holds: {ref: (was, now)}.
-        Compared as the snapshot `review` writes it - a value, a rule, a judgment's verdict,
-        a source's date - so a verdict rewritten under a placed reasoning is a move too."""
+        Compared as the snapshot `review` writes it - a value, a rule, a source's date, and
+        for a judgment the sentence the text draws - so an argument rewritten under a
+        placement is a move, and not only a verdict that changed above it."""
         out = {}
         for k, old in (sec.get("seen") or {}).items():
             if k not in E and k not in J:
                 continue
-            now = P.snapshot_value(k, raw0, ids, jud, page_counts)
-            if now is None or isinstance(now, (list, dict)) or isinstance(old, (list, dict)):
+            now = P.shown_value(k, raw0, ids, jud, page_counts)
+            if now is None or isinstance(now, list) or isinstance(old, list):
                 continue
-            if not same_value(old, now):
+            if k not in J and (isinstance(now, dict) or isinstance(old, dict)):
+                continue          # an entry whose value is a mapping is not comparable
+            if not P.same_seen(old, now):
                 out[k] = (old, now)
         return out
 
@@ -1157,6 +1197,8 @@ def build(paths, brief_path=None):
             parts.append(html.escape(text[pos:m.start()]))
             k = m.group(1)
             if k in J:
+                # a judgment with no reasoning still has a conclusion; the text draws that
+                # rather than a hole, and `--verify` says the sentence is not the author's
                 inner, _ = prose(RAW[k]["because"] or RAW[k]["verdict"], jud[k]["deps"], moves_of(k))
                 cls = "fx in rsn" + (" mv" if moves_of(k) else "")
                 parts.append(f'<span class="{cls}" data-id="{html.escape(k)}">{inner}</span>')
@@ -1201,16 +1243,21 @@ def build(paths, brief_path=None):
     # here, the counts taken, the flags and the shape decided again - and only then is
     # anything drawn. Spill is what fell through before the arrangement's own falsifiers
     # were decided; the other counts hold the page against what its sessions were for.
-    picks = {}
+    # A section's prose covers what it names - the entry is on the page, and coverage asks
+    # whether the arrangement reached it. It does not *account* for it: prose shows a
+    # judgment's argument and never that the judgment is broken, unchecked or waiting. So
+    # what a section chose is kept apart from what its sentences mentioned, and the spill
+    # test - the one an arrangement's own sign is drawn against - reads only what was chosen.
+    picks, chosen = {}, {}
     for t in tabs:
-        got = set()
+        got, sel = set(), set()
         for sec in t["sections"]:
             p = sec.get("pick")
             for x in ([p] if isinstance(p, str) else list(p or [])):
-                got |= resolve(x, ids, jud, flags)
+                sel |= resolve(x, ids, jud, flags)
             got |= {r for r in P.refs_in(sec.get("text")) if r in E or r in J}
-        picks[t["key"]] = got
-    pre = set().union(*picks.values()) if picks else set()
+        picks[t["key"]], chosen[t["key"]] = got | sel, sel
+    pre = set().union(*chosen.values()) if chosen else set()
     cov = None
     if brief:
         cov = coverage(ids, jud, raw0, tabs, picks, born_of(jud))
@@ -1236,8 +1283,9 @@ def build(paths, brief_path=None):
         return str(b.get("asked")) if isinstance(b, dict) and b.get("asked") else lbl(s)
 
     panels, counts, covered, empty_sections, misfit = {}, {}, set(), [], []
+    accounted = set()          # what sections chose, apart from what their prose mentioned
     for t in tabs:
-        o, got_tab = [h1], set()
+        o, got_tab, chosen_tab = [h1], set(), set()
         if t["bare"]:
             if t["intent"]:
                 # the page is named for the record; the intent is the arrangement's aim,
@@ -1314,6 +1362,7 @@ def build(paths, brief_path=None):
             text = str(sec.get("text") or "")
             # a section is text, picks, or both: what the text places counts as picked up
             got_tab |= got | {r for r in P.refs_in(text) if r in E or r in J}
+            chosen_tab |= got
             jn = sorted(x for x in got if x in jud)
             en = sorted(x for x in got if x not in jud)
             title = str(sec.get("title") or ",".join(picked))
@@ -1343,6 +1392,7 @@ def build(paths, brief_path=None):
             if en:
                 o.append((ENTRY_R.get(kind) or r_table)(en))
         covered |= got_tab
+        accounted |= chosen_tab
         panels[t["key"]], counts[t["key"]] = o, len(got_tab)
     # It may order. It may not drop. This section is not optional and the brief cannot
     # switch it off: an arrangement that hides what it did not anticipate is worth less
@@ -1350,7 +1400,7 @@ def build(paths, brief_path=None):
     # for an intent no tab serves - counted once for the page, drawn on every tab, since a
     # reader opens a tab and not the page.
     reading_by[0] = default_scheme
-    spill = sorted(k for k, f in flags.items() if f and k not in covered)
+    spill = sorted(k for k, f in flags.items() if f and k not in accounted)
     # each id once: a judgment both flagged and written for an unserved intent is the alert,
     # and what two unserved intents share is drawn under the newer
     loose, drawn = [], set(spill)
@@ -1436,6 +1486,13 @@ def build(paths, brief_path=None):
                             contract["unread"].append(f"section '{title}': text references {r}, "
                                                       f"which its seen does not carry - never "
                                                       f"read against it")
+                # a judgment placed for its reasoning that has none is drawn as its verdict:
+                # the sentence a reader meets is then the record's, not the author's
+                for r in refs:
+                    if r in J and not J[r]["because"]:
+                        contract["unread"].append(f"section '{title}': places {r} for its "
+                                                  f"reasoning, which it does not carry - its "
+                                                  f"verdict is drawn in that sentence instead")
             # the snapshot under a text is compared the way check compares a judgment's:
             # a referenced value that moved since the text was read is said, never failed
             for k in seen:
@@ -1443,8 +1500,11 @@ def build(paths, brief_path=None):
                     contract["bad"].append(f"section '{title}': seen names {k}, which is not "
                                            f"an entry")
             for k, (old, now) in sorted(moved_in(sec).items()):
-                contract["moved"].append(f"section '{title}': its text saw {k} = {old}, "
-                                         f"now {now} - read it again")
+                half, was, is_ = P.which_moved(old, now)
+                contract["moved"].append(f"section '{title}': its text saw "
+                                         + (f"{half} of {k}" if half else f"{k}")
+                                         + f" = {P.short(was, 60)}, now {P.short(is_, 60)} - read "
+                                           f"it again, then: review \"{title}\"")
 
     # ── the record's own tab ─────────────────────────────────────────────────
     rec_html = []
@@ -1516,7 +1576,7 @@ def build(paths, brief_path=None):
                                        "misfit": misfit, "brief": bool(brief), "anchored": tuple(anchored),
                                        "unnamed": sorted(k for k in E if not E[k].get("name")
                                                          and k not in labels),
-                                       "covered": covered, "flags": flags, "contract": contract,
+                                       "covered": covered, "swollen": swollen, "flags": flags, "contract": contract,
                                        "tabs": [{"key": t["key"], "title": t["title"], "bare": t["bare"],
                                                  "shape": t["shape"]} for t in tabs],
                                        "coverage": cov, "page": dict(cov["page"]) if cov else {},
@@ -1546,6 +1606,19 @@ def verify(paths, brief_path=None):
                     + (" - declared, so the page shows it as awaited" if j["blocked"] else ""))
     if "window.__E=" not in page or "window.__J=" not in page:
         fail.append("payload missing")
+    # two ways past the budget, and they ask different things of an author: prose written
+    # long is cut and marked, prose that only overruns once the record resolves into it is
+    # drawn whole - what is long there is what the reasoning names, not what it says.
+    for kind, said in (("cut", f"longer than the {CARD_CHARS} characters a card carries; each "
+                               f"is drawn to its last whole word and marked"),
+                       ("resolved", f"within {CARD_CHARS} characters as written and past them "
+                                    f"once their references resolve; what each names is long, so "
+                                    f"the card is drawn whole")):
+        sw = sorted((x for x in info["swollen"] if x[2] == kind), key=lambda x: -x[1])
+        if sw:
+            note.append(f"{len(sw)} reasoning{'s' if len(sw) != 1 else ''} {said}. Longest first: "
+                        + ", ".join(f"{n} ({c})" for n, c, _ in sw[:3])
+                        + (f" and {len(sw) - 3} more" if len(sw) > 3 else ""))
     if info["brief"]:
         u = info["unnamed"]
         if u:

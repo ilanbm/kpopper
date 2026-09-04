@@ -191,6 +191,13 @@ sources:
          and the fork at 77dd604, the fixture records under tests/, and the three live records this
          reader serves"
     read: "2026-09-04"
+  s.2026_09_04_signals:
+    name: "The session that closed two ways an author could silence a signal without meaning to"
+    asked: "take both 3 and 4, in one pull request ... snapshot the because alongside the verdict
+            for placed judgments, and separate the spill test's set from covered so a mention still
+            counts for coverage but no longer silences a flagged item"
+    of: "2026-09-04, given the written layer at 2e5f4f3 and what four pieces since then built on it"
+    read: "2026-09-04"
   doc.fact_moves:
     url: "https://claude.ai/code/artifact/ca99e558-60ae-4b22-9221-e3b29d7d7e2b"
     name: "מה קורה כשעובדה זזה - the unified node model"
@@ -1197,6 +1204,29 @@ judgments:
                          user-level directory is at most an index of records, never content; a
                          session named as a source is provenance, not process"
       p.recipe_runners: 1
+  d.mention_covers_never_silences:
+    rests_on: [s.2026_09_04_signals, d.falsifier_beyond_reach, d.arrangement_replaced_by_trigger]
+    verdict: "prose covers what it names and never accounts for it: a mention counts for coverage,
+              and a flagged judgment no section picked still falls to spill"
+    because: "An arrangement's sign is drawn against what fell through, so an author who could empty
+              that count by writing well would hold their own falsifier at zero - which is exactly
+              what {{d.falsifier_beyond_reach}} refuses, turned on the mechanism instead of on a
+              judgment. Coverage asks whether the arrangement reached a thing, and a sentence naming
+              it does; the spill section asks whether the arrangement answered for its state, and
+              prose shows an argument while saying nothing about the judgment being broken, unchecked
+              or waiting. So the two sets part: picks account, mentions cover."
+    blocked_on: "observational: falsified if the spill section fills with judgments whose reasoning
+                 already stands a paragraph above it, so that readers learn to skip the section that
+                 exists to be unskippable"
+    seen:
+      s.2026_09_04_signals: "read 2026-09-04"
+      d.falsifier_beyond_reach: "a falsifier names a sign the decision itself cannot suppress; one
+                                 that can only appear when people do what the decision stops offering
+                                 is sealed, not falsifiable"
+      d.arrangement_replaced_by_trigger: "an arrangement is replaced only when its falsifier fires,
+                                          a coverage gap exists, or a person asks"
+    distinct_from: d.minimal_repair
+    # distinct 2026-09-04: minimal repair is how much structural change a fired trigger buys; this is what may fire one at all
   d.names_rank_never_decide:
     rests_on: [s.2026_09_04_sameness, d.sameness_is_judged, alt.sameness_from_names, p.candidate_reasons]
     verdict: "a candidate pair is named for a declared reason - the same source and place, the same
@@ -1650,6 +1680,30 @@ judgments:
       d.minimal_repair: "seniority is evidence, never a threshold; a trigger is cleared by the
                          smallest structural change that suffices"
       p.fields_a_build_writes: 0
+  d.text_holds_the_prose_it_places:
+    rests_on: [s.2026_09_04_signals, d.reasoning_in_record, d.moved_is_a_flag]
+    verdict: "a section's text is held to the sentence it draws - a judgment placed for its
+              reasoning is snapshotted by that reasoning, while what rests on a judgment keeps
+              snapshotting its verdict"
+    because: "A text that places {{d.reasoning_in_record}}'s reasoning puts an argument on the
+              reading surface, and until now it recorded only the verdict above it: the argument
+              could be rewritten to say the opposite with no tint and nothing said by the build. The
+              verdict is still the right snapshot everywhere else, because what rests on a judgment
+              rests on its conclusion and survives three rewrites of the prose - but a text is the
+              one place the prose itself is what a person reads, so it is the one place the prose is
+              what the text is held to."
+    blocked_on: "observational: falsified if sessions start clearing this tint without reading - a
+                 text re-reviewed for wording that did not change the argument is noise, and the sign
+                 is reviews that follow a rewrite too closely to have been read"
+    seen:
+      s.2026_09_04_signals: "read 2026-09-04"
+      d.reasoning_in_record: "reasoning is the because of the judgment it belongs to, in the record;
+                              the page's connective text lives in the brief; both resolve references
+                              at build and both carry seen"
+      d.moved_is_a_flag: "a dependency that moved since the snapshot flags the judgment for a
+                          person; only a predicate that holds fails the build"
+    distinct_from: d.written_layer_drawn_by_build
+    # distinct 2026-09-04: one says where the mark is made - by the build, in the markup, so it survives a host that strips scripts; this one says which reading the snapshot holds, which is what decides whether there is anything to mark
   d.tree_reads_as_a_hypothesis:
     rests_on: [s.2026_09_04_remeasure, d.dry_run_is_check_on_the_union, d.contradiction_by_id_and_day, d.moved_is_a_flag, p.union_tests]
     verdict: "the tree's readings that differ from the record are laid over it as one more

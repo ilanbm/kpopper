@@ -58,7 +58,7 @@ tabs:
         why: frozen, in the requester's own words - a tab may claim to serve one of these only by picking what that session wrote
         pick: s.
         as: lines
-    shape: {entries: 105, judgments: 82, flagged: 0, blocked: 0}
+    shape: {entries: 106, judgments: 84, flagged: 0, blocked: 0}
 
   - title: What holds
     occasion: "you are about to write something here and need to know what this project already decided, and on what"
@@ -66,7 +66,8 @@ tabs:
              s.2026_09_04_priors_count, s.2026_09_03_arrangements,
              s.2026_09_04_consolidate, s.2026_09_04_sameness, s.2026_09_04_calibration,
              s.2026_09_04_prior_reversal_share, s.2026_09_04_forks_chapter, s.2026_09_04_remeasure,
-             s.2026_09_04_merge_driver_reason, s.2026_09_04_also_reading]
+             s.2026_09_04_merge_driver_reason, s.2026_09_04_also_reading,
+             s.2026_09_04_signals]
     sections:
       - title: How to read what follows
         why: a wall of cards is not an argument until you know what separates them
@@ -81,17 +82,36 @@ tabs:
           and not a summary of it.
         reviewed: "2026-09-04"
         seen:
-          d.falsifier_beyond_reach: "a falsifier names a sign the decision itself cannot suppress;
-                                     one that can only appear when people do what the decision stops
-                                     offering is sealed, not falsifiable"
-          d.reasoning_in_record: "reasoning is the because of the judgment it belongs to, in the
-                                  record; the page's connective text lives in the brief; both resolve
-                                  references at build and both carry seen"
+          d.falsifier_beyond_reach:
+            verdict: "a falsifier names a sign the decision itself cannot suppress; one that can
+                      only appear when people do what the decision stops offering is sealed, not
+                      falsifiable"
+            because: "A decision shapes the world it is judged in. The grouping-schemes decision
+                      first said it would be wrong if no brief ever declared a second scheme, while
+                      the page drew only the first - nobody declares what nothing draws, so the sign
+                      could never appear and the judgment was sealed by its own mechanism. The test
+                      is one question asked of every wrong_if: under this decision, could that still
+                      happen? A sign that lives outside the decision's reach - a person's request, a
+                      record someone else writes, a measurement the change cannot touch - can."
+          d.reasoning_in_record:
+            verdict: "reasoning is the because of the judgment it belongs to, in the record; the
+                      page's connective text lives in the brief; both resolve references at build and
+                      both carry seen"
+            because: "The test is whether an agent that never opens the page needs the text. A
+                      judgment's reasoning: yes, so it lives where pull and open can serve it with
+                      its own flag, which today they cannot, because the reasoning lives only in a
+                      template. Connective text: no, so it stays in the cheapest file. The lab
+                      already wraps a domain claim and never a page judgment; a second kind of
+                      judgment beside the brief would split one conclusion across two files with two
+                      reviews. Giving connective text a snapshot of what it references earns it the
+                      same moved-since-reviewed tint without pretending it argues - it states, and a
+                      sentence that would deserve a falsifier is a judgment that belongs in the
+                      record."
       - title: The decisions that hold
         why: every one says what would make it wrong - hover any reference in the reasoning to see the value it was decided against
         pick: judgments
         as: cards
-    shape: {entries: 105, judgments: 82, flagged: 0, blocked: 0}
+    shape: {entries: 106, judgments: 84, flagged: 0, blocked: 0}
 
   - title: What this rests on
     occasion: "you are weighing a decision here and want to see the ground under it rather than the reasoning on top"
@@ -111,4 +131,4 @@ tabs:
         why: a prior is the one input with no measurement under it, so resting on one is itself a decision with a sign of its own
         pick: [d.prior_carries_its_own_falsifier, d.intent_is_a_source]
         as: cards
-    shape: {entries: 105, judgments: 82, flagged: 0, blocked: 0}
+    shape: {entries: 106, judgments: 84, flagged: 0, blocked: 0}

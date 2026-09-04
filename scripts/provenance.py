@@ -1925,6 +1925,72 @@ def snapshot_value(dep, raw, ids, jud, page):
     return named(b) or "present"
 
 
+def reasoning_of(body):
+    """The argument a judgment carries, under either of the names the page draws."""
+    return str(body.get("because") or body.get("breaks_if") or "")
+
+
+def shown_value(dep, raw, ids, jud, page):
+    """What a section's text records for a reference it draws. A judgment placed in prose
+    puts both halves of itself on the page - the conclusion the sentence around it was
+    written against, and the argument the sentence actually shows - so the text is held to
+    both, and a rewrite of either is a move under it. They are recorded as two fields rather
+    than as one line, because a delimiter is not a representation: prose contains every
+    separator anyone might pick, and a snapshot that has to be parsed back is a snapshot
+    that can be read wrongly. A judgment's *own* snapshot keeps only the verdict, because
+    what rests on a judgment rests on its conclusion and should survive three rewrites of
+    the prose; a text is the one place that prose is itself on the surface."""
+    if dep in jud:
+        b = jud[dep]["body"]
+        seen = {"verdict": str(b.get("verdict") or b.get("title") or dep)}
+        because = reasoning_of(b)
+        if because:
+            seen["because"] = because
+        return seen
+    return snapshot_value(dep, raw, ids, jud, page)
+
+
+def same_seen(old, now):
+    """Whether a snapshot still holds: text after whitespace, then number - and, for the two
+    fields a placed judgment records, field by field."""
+    if isinstance(old, dict) or isinstance(now, dict):
+        if not (isinstance(old, dict) and isinstance(now, dict)):
+            return False
+        return set(old) == set(now) and all(same_seen(old[k], now[k]) for k in old)
+    if " ".join(str(old).split()) == " ".join(str(now).split()):
+        return True
+    try:
+        return Decimal(str(old).replace(",", "")) == Decimal(str(now).replace(",", ""))
+    except InvalidOperation:
+        return False
+
+
+HALVES = {"because": "the reasoning it places",
+          "verdict": "the verdict over the reasoning it places"}
+
+
+def which_moved(old, now):
+    """-> (what to call it, was, now). A placed judgment records its conclusion and its
+    argument as two fields, so quoting the whole snapshot would print the same clipped
+    verdict twice when only the argument was rewritten. Name the field that moved and quote
+    that; every surface reporting a text's move reads the same reading. Anything that is
+    not a placement is quoted whole, under no name."""
+    if isinstance(old, dict) and isinstance(now, dict):
+        moved = [f for f in ("verdict", "because")
+                 if not same_seen(old.get(f, ""), now.get(f, ""))]
+        if len(moved) == 1:
+            f = moved[0]
+            return HALVES[f], old.get(f, "never read against it"), now.get(f, "")
+        return "", old.get("verdict", ""), now.get("verdict", "")
+    # a text written before a placement was held to its argument saw the verdict alone:
+    # nothing moved under it, it was never read against the sentence it shows
+    if not isinstance(old, dict) and isinstance(now, dict):
+        if same_seen(old, now.get("verdict", "")):
+            return HALVES["because"], "never read against it", now.get("because", "")
+        return HALVES["verdict"], old, now.get("verdict", "")
+    return "", old, now
+
+
 def _state(name, j, raw, ids, fields, touched=()):
     """-> (tag, reason): a judgment's state after a write - the reading `check` gives it,
     said in terms of what just moved."""
@@ -2931,18 +2997,20 @@ def _fork(paths, action):
     return 0
 
 
-def _snapshot(deps, raw, ids, jud, paths, brief, first_born=False):
+def _snapshot(deps, raw, ids, jud, paths, brief, first_born=False, value=None):
     """`seen` for these dependencies, from what each holds now. A page count needs the
     brief beside the record; a dependency declared missing has nothing to snapshot. A
     record's first arrangement may rest on `page.drift` before anything dates it: with
     `first_born` the share is taken as nothing-yet, and settled against its own `born`
-    once it is written."""
+    once it is written. `value` is the reading each is recorded by - what rests on a
+    judgment keeps its verdict, what a text draws keeps the sentence it draws."""
+    value = value or snapshot_value
     page = _page_side(paths)[0] if brief and any(d in PAGE for d in deps) else {}
     seen = {}
     for d in deps:
         if d not in ids and not is_builtin(d):
             continue
-        v = snapshot_value(d, raw, ids, jud, page)
+        v = value(d, raw, ids, jud, page)
         if v is None and d == "page.drift" and first_born and brief:
             v = 0.0
         if v is None:
@@ -2970,14 +3038,15 @@ def _review_section(paths, brief, title, stamp, raw, ids, jud):
                       f"that title carries text")
     refs = [r for r in refs_in(sec["text"]) if r in ids]
     was = dict(sec.get("seen") or {})
-    seen = _snapshot(refs, raw, ids, jud, paths, brief)
+    seen = _snapshot(refs, raw, ids, jud, paths, brief, value=shown_value)
     blines = btext.split("\n")
     _review_section_in(blines, title, seen, stamp)
     _write_text(brief, "\n".join(blines))
     print(f"review text '{title}': reviewed {stamp}")
     for k in refs:
-        if k in was and k in seen and not _same(was[k], seen[k]):
-            print(f"  seen {k}: {short(was[k])} -> {short(seen[k])}")
+        if k in was and k in seen and not same_seen(was[k], seen[k]):
+            half, a, b = which_moved(was[k], seen[k])
+            print(f"  seen {k}{' - ' + half if half else ''}: {short(a)} -> {short(b)}")
         elif k not in was and k in seen:
             print(f"  seen {k}: {short(seen[k])} (never read against it before)")
     return 0
