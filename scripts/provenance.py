@@ -1925,6 +1925,44 @@ def snapshot_value(dep, raw, ids, jud, page):
     return named(b) or "present"
 
 
+PLACED = " \u2014 "        # between the two halves a placed judgment puts on the page
+
+
+def shown_value(dep, raw, ids, jud, page):
+    """What a section's text records for a reference it draws. A judgment placed in prose
+    puts both halves of itself on the page - the conclusion the sentence around it was
+    written against, and the argument the sentence actually shows - so the text is held to
+    both, and a rewrite of either is a move under it. A judgment's *own* snapshot keeps only
+    the verdict, because what rests on a judgment rests on its conclusion and should survive
+    three rewrites of the prose; a text is the one place that prose is itself on the
+    surface, which is why it is the one place held to it."""
+    if dep in jud:
+        b = jud[dep]["body"]
+        verdict = str(b.get("verdict") or b.get("title") or dep)
+        because = str(b.get("because") or "")
+        return verdict + PLACED + because if because else verdict
+    return snapshot_value(dep, raw, ids, jud, page)
+
+
+def which_moved(old, now):
+    """-> (what to call it, was, now). A placed judgment carries its conclusion and its
+    argument in one snapshot, so quoting the whole of each would show the same clipped
+    verdict twice when only the argument was rewritten. Say which half moved, and quote
+    that - every surface that reports a text's move reads the same reading."""
+    old, now = str(old), str(now)
+    if PLACED in old and PLACED in now:
+        (ov, ob), (nv, nb) = (x.split(PLACED, 1) for x in (old, now))
+        if ov == nv:
+            return "the reasoning it places", ob, nb
+        if ob == nb:
+            return "the verdict over the reasoning it places", ov, nv
+    # a text written before a placement was held to its reasoning saw the verdict alone;
+    # nothing moved under it, it was simply never read against the argument it shows
+    if PLACED not in old and now.startswith(old + PLACED):
+        return "the reasoning it places", "never read against it", now.split(PLACED, 1)[1]
+    return "", old, now
+
+
 def _state(name, j, raw, ids, fields, touched=()):
     """-> (tag, reason): a judgment's state after a write - the reading `check` gives it,
     said in terms of what just moved."""
@@ -2931,18 +2969,20 @@ def _fork(paths, action):
     return 0
 
 
-def _snapshot(deps, raw, ids, jud, paths, brief, first_born=False):
+def _snapshot(deps, raw, ids, jud, paths, brief, first_born=False, value=None):
     """`seen` for these dependencies, from what each holds now. A page count needs the
     brief beside the record; a dependency declared missing has nothing to snapshot. A
     record's first arrangement may rest on `page.drift` before anything dates it: with
     `first_born` the share is taken as nothing-yet, and settled against its own `born`
-    once it is written."""
+    once it is written. `value` is the reading each is recorded by - what rests on a
+    judgment keeps its verdict, what a text draws keeps the sentence it draws."""
+    value = value or snapshot_value
     page = _page_side(paths)[0] if brief and any(d in PAGE for d in deps) else {}
     seen = {}
     for d in deps:
         if d not in ids and not is_builtin(d):
             continue
-        v = snapshot_value(d, raw, ids, jud, page)
+        v = value(d, raw, ids, jud, page)
         if v is None and d == "page.drift" and first_born and brief:
             v = 0.0
         if v is None:
@@ -2970,14 +3010,15 @@ def _review_section(paths, brief, title, stamp, raw, ids, jud):
                       f"that title carries text")
     refs = [r for r in refs_in(sec["text"]) if r in ids]
     was = dict(sec.get("seen") or {})
-    seen = _snapshot(refs, raw, ids, jud, paths, brief)
+    seen = _snapshot(refs, raw, ids, jud, paths, brief, value=shown_value)
     blines = btext.split("\n")
     _review_section_in(blines, title, seen, stamp)
     _write_text(brief, "\n".join(blines))
     print(f"review text '{title}': reviewed {stamp}")
     for k in refs:
         if k in was and k in seen and not _same(was[k], seen[k]):
-            print(f"  seen {k}: {short(was[k])} -> {short(seen[k])}")
+            half, a, b = which_moved(was[k], seen[k])
+            print(f"  seen {k}{' - ' + half if half else ''}: {short(a)} -> {short(b)}")
         elif k not in was and k in seen:
             print(f"  seen {k}: {short(seen[k])} (never read against it before)")
     return 0

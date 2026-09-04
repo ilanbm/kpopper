@@ -194,6 +194,12 @@ A derived entry has no value in the record, it has a rule; the reader detects th
 expression naming other entries) and shows the rule, with the ids inside it live. It never shows
 an empty cell where a number belongs, and it never lets `headline` carry one.
 
+**A card carries 400 characters of reasoning.** A `because` longer than that is drawn to its last
+whole word with an ellipsis — never cut mid-word in silence — and `--verify` names the judgments
+it had to cut, longest first, so reasoning swelling past what a card holds is a number you can
+read rather than something a reader discovers. Write a `because` to fit; what will not fit is
+usually two judgments.
+
 A card and a section's text carry the same warning when what they rest on has moved since they
 were reviewed: a tint, the moved value marked in place with what it was, and one line naming
 what moved — a judgment's dependencies against its `seen`, a text's references against its own.
@@ -208,7 +214,13 @@ Two properties keep an opinionated tab honest, and both are mechanical rather th
   trailing section written by the page, which the brief cannot switch off - and so does whatever
   a session wrote for an intent no tab serves. It is counted once for the page and drawn on
   every tab, because a reader opens a tab and not the page. An arrangement that hides what it
-  did not anticipate is worth less than no arrangement.
+  did not anticipate is worth less than no arrangement. **Naming something in prose is not
+  picking it up.** A sentence covers what it names — coverage asks whether the arrangement
+  reached the thing, and it did — but it never accounts for it: prose shows a judgment's argument
+  and says nothing about that judgment being broken, unchecked or waiting. So a flagged judgment
+  your sentence names and no section picks is drawn twice, once in the sentence and once in the
+  spill section, and `page.spill` counts it. Otherwise an arrangement's own sign could be held at
+  zero by writing well.
 - **The arrangement itself can be wrong.** `shape:` is the brief's own `seen` — over the
   record's *shape*, not its values, because a date moving does not make a layout wrong but a
   fourth blocked judgment might. Render with no `shape:` and the command prints the block to
@@ -416,8 +428,8 @@ record in `tests/fixtures/page` first, so the reader, the page and the tests agr
 | `tabs:` | top level | a list of tabs, each with `title`, `occasion` (when the reader opens it and for what), `serves` (the session sources it answers - a claim its sections earn by picking what they recorded), `sections`, and its own `shape`. Every tab is drawn, the first as the default. |
 | `groups:` | top level | grouping schemes, any number, each a mapping of group name → selectors under the session's own names; a flat mapping is one scheme. `fronts:` still reads as one scheme. |
 | `by:` | on a section | the scheme this section reads by — one the brief declares, or one the record carries by its own shape: `prefix`, or any field the entries carry (`from`, `unit`, `kind`), whose value names the group. |
-| `text:` | on a section | connective prose with `{{id}}` references, drawn where the section stands with every reference resolved — the value, a rule's name, a judgment's verdict — and `{{c.id}}` placing that judgment's reasoning at that spot, marked as a judgment and hoverable as one. A section may be text alone; whatever the text places counts as picked up, so it never lands in spill. Every reference must be an entry. |
-| `reviewed:`, `seen:` | on a section with `text` | when the text was last read against what it references, and the values it saw. `--verify` compares them with the record the way `check` compares a judgment's snapshot; a value that moved tints the text on the page, marks it in place with what it was, and says what moved beneath. `kpopper review "<section title>"` rewrites both from the record. A reference the `seen` does not carry is noted: the text was never read against it. |
+| `text:` | on a section | connective prose with `{{id}}` references, drawn where the section stands with every reference resolved — the value, a rule's name, a judgment's verdict — and `{{c.id}}` placing that judgment's reasoning at that spot, marked as a judgment and hoverable as one. A judgment placed this way that carries no reasoning is drawn as its verdict, and `--verify` says so: the sentence a reader meets is then the record's and not yours. A section may be text alone. What a text names counts as covered and never as accounted for — see **It may order** below. Every reference must be an entry. |
+| `reviewed:`, `seen:` | on a section with `text` | when the text was last read against what it references, and what it saw. A placed judgment is recorded by **both** halves it puts on the page, its verdict and its reasoning, so an argument rewritten under a placement moves the same way a value does — a judgment's own `seen` still keeps the verdict alone, because what rests on a judgment rests on its conclusion. `--verify` compares them with the record and names which half moved; the page tints the text and marks the reference in place. `kpopper review "<section title>"` rewrites both from the record. A reference the `seen` does not carry is noted: the text was never read against it. |
 
 Every tab is checked the same way: its picks must pick something, its shapes must fit what they
 pick, its `serves` must name session sources and be earned by its picks, and its own `shape` is
