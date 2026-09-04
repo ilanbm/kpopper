@@ -29,17 +29,22 @@ does not make a layout wrong; a fourth blocked judgment might.
 import io, os, re, sys, json, html, hashlib, pathlib, datetime, yaml
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 import provenance as P
+from page_words import WORDS
+from page_lint import lint_output
 
 # The page's own code lives beside this file, in the languages its tools speak. Read
 # whole at import and inlined at render, so a page is still one file.
 _PAGE = pathlib.Path(__file__).resolve().parent / "page"
 CSS = "\n" + (_PAGE / "page.css").read_text(encoding="utf-8")
 JS = "\n" + (_PAGE / "page.js").read_text(encoding="utf-8")
+COMPONENT_CSS = "\n" + (_PAGE / "components.css").read_text(encoding="utf-8")
+DATE_JS = "\n" + (_PAGE / "dates.js").read_text(encoding="utf-8")
 
 # ── what the record says about itself ────────────────────────────────────────
 # One reading of state, used by every section selector. The same four conditions
 # `provenance.py open` ranks by; named here so a brief can select on them.
 STATES = ("broken", "falsified", "unchecked", "moved", "blocked", "no_predicate")
+GROUPED_SHAPES = ("grouped", "fronts")
 
 
 def flags_of(ids, jud, fields, raw):
@@ -76,14 +81,46 @@ def direction(doc):
     """A record written in Hebrew should not be read left to right because the tool
     was written in English. This is a decision about the record's *shape*, so it is
     stable: values changing never flips the page."""
-    txt = "".join(str(v) for g in (doc or {}).values() if isinstance(g, dict)
-                  for b in g.values() for v in (b.values() if isinstance(b, dict) else [b])
-                  if isinstance(v, str))
-    letters = [c for c in txt if c.isalpha()]
-    return "rtl" if letters and len(RTL.findall(txt)) / len(letters) > 0.3 else "ltr"
+    meta = (doc or {}).get("meta") or {}
+    return meta.get("direction") or WORDS.get(language(doc), WORDS["en"])["dir"]
+
+
+def language(doc):
+    """Values, URLs and internal names cannot change the language of a page."""
+    meta = (doc or {}).get("meta") or {}
+    explicit = meta.get("language") or meta.get("lang")
+    if explicit:
+        return str(explicit).lower().replace("_", "-").split("-")[0]
+    descriptive = {"name", "title", "label", "what", "desc", "scope", "domain", "because",
+                   "verdict", "note", "why", "asked", "blocked_on", "reopened_by"}
+    parts = []
+    def visit(x):
+        if isinstance(x, dict):
+            for k, v in x.items():
+                if k in descriptive and isinstance(v, str):
+                    parts.append(v)
+                elif isinstance(v, (dict, list)):
+                    visit(v)
+        elif isinstance(x, list):
+            for v in x:
+                visit(v)
+    visit(doc)
+    text = " ".join(parts)
+    n = sum(c.isalpha() for c in text)
+    for lang, pattern in (("he", r"[\u0590-\u05ff]"), ("ar", r"[\u0600-\u06ff]")):
+        if n and len(re.findall(pattern, text)) / n > .3:
+            return lang
+    return "en"
 
 
 fmt = P.fmt        # one formatting of a number, shared with every surface that prints one
+
+
+def counted(words, key, n, lang="en"):
+    form = ('one' if n == 1 else 'two' if n == 2 else
+            'many' if lang == 'ar' and 11 <= n % 100 <= 99 else
+            'other' if lang == 'ar' and not 3 <= n % 100 <= 10 else '')
+    return words[key + ('_' + form if form else '')].format(n=n)
 
 
 # What a card can carry. A reasoning longer than this is drawn to here and marked, because
@@ -96,11 +133,14 @@ CARD_CHARS = 400
 
 def clipped(text, n=CARD_CHARS):
     """-> (what a card draws, was it cut). Cut at the last word boundary inside the budget,
-    with an ellipsis, so the reader sees that the argument continues."""
+    without splitting a record reference, with an ellipsis, so the reader sees that the
+    argument continues."""
     s = str(text or "")
     if len(s) <= n:
         return s, False
     cut = s[:n - 1]
+    if cut.rfind("{{") > cut.rfind("}}"):
+        cut = cut[:cut.rfind("{{")]
     space = cut.rfind(" ")
     return (cut[:space] if space > n // 2 else cut).rstrip(" ,;:-") + "\u2026", True
 
@@ -508,7 +548,7 @@ def renderings(v):
     return [x for x in dict.fromkeys(out) if len(x) >= 3]
 
 
-def anchor(text, deps, E):
+def anchor(text, deps, E, label=None):
     """-> (html, set of deps that found a place in the text)."""
     if not text:
         return "", set()
@@ -532,7 +572,8 @@ def anchor(text, deps, E):
     out, pos = [], 0
     for a, b, d in hits:
         out.append(html.escape(text[pos:a]))
-        out.append(f'<span class="fx in" data-id="{html.escape(d)}">{html.escape(text[a:b])}</span>')
+        display = label(d) if label and text[a:b] == d else text[a:b]
+        out.append(f'<span class="fx in" data-id="{html.escape(d)}">{html.escape(display)}</span>')
         pos = b
     out.append(html.escape(text[pos:]))
     return "".join(out), {d for _, _, d in hits}
@@ -545,35 +586,62 @@ human = P.human
 # Layout is where intent shows. But a renderer that silently accepts data it cannot
 # express produces a page that looks arranged and is not, so each one says what it
 # needs and a mismatch is a failure, not a shrug.
-def fits(kind, keys, jud, E, groups_of=None):
+def fits(kind, keys, jud, E, groups_of=None, words=None, label=None):
+    def problem(code, fallback, **values):
+        return words[code].format(**values) if words else fallback
+
+    def names(ks):
+        return ", ".join(label(k) if label else k for k in ks)
+
     if kind in ("table", "lines", "cards"):
         return None
     if kind == "timeline":
         bad = [k for k in keys if k not in jud and as_date((E.get(k) or {}).get("v")) is None]
-        return (f"timeline needs date values; {len(bad)} of {len(keys)} are not dates "
-                f"({', '.join(bad[:4])})") if bad else None
+        return problem("fit_timeline", f"timeline needs date values; {len(bad)} of {len(keys)} are not dates "
+                       f"({', '.join(bad[:4])})", bad=len(bad), total=len(keys), names=names(bad[:4])) if bad else None
     if kind == "headline":
         n = [k for k in keys if k not in jud]
         if not 1 <= len(n) <= 4:
-            return f"headline carries one to four values, not {len(n)}"
+            return problem("fit_headline_count", f"headline carries one to four values, not {len(n)}", n=len(n))
         blank = [k for k in n if (E.get(k) or {}).get("v") is None]
-        return (f"headline needs values; {', '.join(blank)} "
-                f"{'is derived and this reader does not evaluate rules' if len(blank) == 1 else 'are derived'}"
-                ) if blank else None
-    if kind in ("grouped", "fronts"):
-        g = set()
+        return problem("fit_headline_values", f"headline needs values; {', '.join(blank)} "
+                       f"{'is derived and this reader does not evaluate rules' if len(blank) == 1 else 'are derived'}",
+                       names=names(blank)) if blank else None
+    if kind in GROUPED_SHAPES:
+        groups = set()
         for k in keys:
-            if k not in jud:
-                # an entry under no group of the scheme is drawn under its prefix, so it
-                # counts as that group here too
-                gs = groups_of(k) if groups_of else []
-                g |= set(gs) if gs else {k.split(".")[0]}
-        return (f"grouped lays groups side by side; these are all one group "
-                f"({', '.join(sorted(g)) or '-'})") if len(g) < 2 else None
+            gs = groups_of(k) if groups_of else []
+            groups |= set(gs) if gs else {k.split(".")[0]}
+        return problem("fit_grouped", "grouped lays groups side by side; these are all one group "
+                       f"({', '.join(sorted(groups)) or '-'})", names=', '.join(sorted(groups)) or '-') if len(groups) < 2 else None
     if kind == "alerts":
-        e = [k for k in keys if k not in jud]
-        return f"alerts ranks judgments; {len(e)} of these are entries" if e else None
-    return f"unknown renderer '{kind}'"
+        entries = [k for k in keys if k not in jud]
+        return problem("fit_alerts", f"alerts ranks judgments; {len(entries)} of these are entries", n=len(entries)) if entries else None
+    if kind == "axis":
+        return None
+    if kind == "links":
+        bad = [k for k in keys if k in jud or not link_target(E.get(k) or {})]
+        return problem("fit_links", f"links needs a safe url or file: {', '.join(bad)}", names=names(bad)) if bad else None
+    return problem("fit_unknown", f"unknown renderer '{kind}'", kind=kind)
+
+
+def link_target(entry):
+    """Record destinations, never executable URLs. Local files remain local links."""
+    from urllib.parse import quote, urlsplit
+    v = str(entry.get("url") or entry.get("file") or "").strip()
+    if not v or any(ord(c) < 32 for c in v):
+        return ""
+    try:
+        parsed = urlsplit(v)
+    except ValueError:
+        return ""
+    scheme = parsed.scheme.lower()
+    if scheme:
+        if scheme in ("http", "https") and not parsed.netloc:
+            return ""
+        return v if scheme in ("https", "http", "mailto", "file") else ""
+    # A URL's query and fragment are navigation, while a file field is a literal path.
+    return quote(v, safe="/.-_~%?=&#+@" if entry.get("url") else "/.-_~") if not v.startswith("//") else ""
 
 
 URGENCY = {"broken": (100, "stop"), "falsified": (95, "stop"), "unchecked": (80, "stop"),
@@ -628,11 +696,13 @@ def _plain(o):
     return o
 
 
-def tree_svg(ids, jud, E, J, flags):
+def tree_svg(ids, jud, E, J, flags, words=None, label=None):
     """The record as one growing thing. What was read from the world is the root
     system, below the ground line; what was worked out and concluded branches up
     from it, judgments in the canopy. Same record, same tree - the layout reads
     only the graph, so nothing here moves unless the record does."""
+    w = words or WORDS["en"]
+
     def jig(k, m, salt=""):
         return int(hashlib.md5((salt + k).encode()).hexdigest(), 16) % m
 
@@ -720,12 +790,13 @@ def tree_svg(ids, jud, E, J, flags):
 
     def lbl(k, n):
         b = jud.get(k)
-        t = (b["body"].get("verdict") or b["body"].get("title") or k.split(".")[-1]) if b \
-            else (E.get(k, {}).get("name") or k.split(".")[-1])
-        t = str(t)
+        t = (J[k].get("verdict") or (label(k) if label else human(k))) if b \
+            else (label(k) if label else E.get(k, {}).get("name") or human(k))
+        t = P.ID.sub(lambda m: (label(m.group(0)) if label else human(m.group(0)))
+                    if m.group(0) in ids else m.group(0), str(t))
         return t if len(t) <= n else t[:n] + "…"
 
-    o = [f'<svg viewBox="0 0 {W} {H}" role="img" aria-label="the record as a tree">']
+    o = [f'<svg viewBox="0 0 {W} {H}" role="img" aria-label="{w["tree_alt"]}">']
     o.append(f'<rect class="tsoil" x="0" y="{G:.0f}" width="{W}" height="{H - G:.0f}"/>')
     o.append(f'<path class="tground" d="M0 {G:.0f} '
              + " ".join(f"Q {gx + 30} {G + (3 if (gx // 60) % 2 else -3):.0f} {gx + 60} {G:.0f}"
@@ -748,10 +819,10 @@ def tree_svg(ids, jud, E, J, flags):
             else:
                 px, py = x[p], y[p]
             cx, cy = x[k], y[k]
-            w = 1.5 + min(2.6, 0.4 * len((E.get(p, {}) or {}).get("used", [])))
+            weight = 1.5 + min(2.6, 0.4 * len((E.get(p, {}) or {}).get("used", [])))
             m2x = cx * 0.55 + tx * 0.45
             o.append(f'<path class="tlimb" data-lf="{html.escape(p)}" data-lt="{html.escape(k)}" '
-                     f'stroke-width="{w:.1f}" d="M{px:.0f} {py:.0f} '
+                     f'stroke-width="{weight:.1f}" d="M{px:.0f} {py:.0f} '
                      f'C{px:.0f} {py - LH * .35:.0f} {m2x:.0f} {cy + LH * .5:.0f} '
                      f'{cx:.0f} {cy:.0f}"/>')
     for k in roots:                              # the root fan spreads from the trunk base
@@ -788,7 +859,7 @@ def tree_svg(ids, jud, E, J, flags):
         o.append("</g>")
     if dropped:
         o.append(f'<text x="{M}" y="{H - 8:.0f}" class="tn root"><tspan>'
-                 f'... and {dropped} more roots below the grass</tspan></text>')
+                 f'{w["tree_more"].format(n=dropped)}</tspan></text>')
     o.append("</svg>")
     return "".join(o)
 
@@ -797,6 +868,9 @@ def build(paths, brief_path=None):
     doc = P.load(paths)
     ids, jud, fields = P.infer(doc)
     meta = doc.get("meta") or {}
+    declared_lang, page_dir = language(doc), direction(doc)
+    lang = declared_lang if declared_lang in WORDS else "en"
+    w = dict(WORDS[lang], dir=page_dir)
     built = P.builtins(doc, ids, jud, fields, P.bodies(doc))
     raw0 = P.bodies(doc)
     raw0.update(built)
@@ -804,7 +878,7 @@ def build(paths, brief_path=None):
     shape = shape_of(ids, jud, flags)
     brief, tabs = {}, []
     if brief_path and os.path.exists(brief_path):
-        brief = yaml.safe_load(io.open(brief_path, encoding="utf-8").read()) or {}
+        brief = yaml.safe_load(pathlib.Path(brief_path).read_text(encoding="utf-8")) or {}
         brief = brief if isinstance(brief, dict) else {}
         tabs = tabs_of(brief)
 
@@ -835,7 +909,7 @@ def build(paths, brief_path=None):
             continue
         b = raw.get(k, {})
         E[k] = {kk: b.get(kk) for kk in ("v", "rule", "from", "at", "of", "read", "quoted", "url",
-                                          "file", "asked")
+                                          "file", "asked", "unverified", "measure")
                 if b.get(kk) is not None}
         if b.get("quoted") and "v" not in E[k]:
             E[k]["v"] = b["quoted"]
@@ -874,6 +948,7 @@ def build(paths, brief_path=None):
                    "verdict": str(b.get("verdict") or b.get("title") or ""),
                    "because": because,
                    "blocked": why, "waiting": keys,
+                   "unverified": b.get("unverified"),
                    "reopened": next((str(b[k]) for k in P.REOPENED if b.get(k)), "")}
 
     labels = (brief.get("labels") or {}) if brief else {}
@@ -896,12 +971,19 @@ def build(paths, brief_path=None):
                 schemes[str(sname)][str(gname)] = members
                 for k in members:
                     index[str(sname)].setdefault(k, []).append(str(gname))
+    component_page = bool(schemes) or any(
+        str(sec.get("as") or "") in set(GROUPED_SHAPES) | {"headline", "timeline", "alerts", "cards", "axis", "links"}
+        for tab in tabs for sec in tab["sections"])
     default_scheme = next(iter(schemes), None)
     reading_by = [default_scheme]        # the scheme the section being drawn reads by
 
     def fx(k, text=None, cls="fx"):
         return (f'<span class="{cls}" data-id="{html.escape(k)}">'
-                f'{html.escape(str(text if text is not None else k))}</span>')
+                f'{html.escape(surface_words(str(text if text is not None else lbl(k))))}</span>')
+
+    def surface_words(text):
+        # Only literal ids are named here; never guess a source for an arbitrary value.
+        return P.ID.sub(lambda m: lbl(m.group(0)) if m.group(0) in ids else m.group(0), text)
 
     def lbl(k):
         """What to call this on a surface that is not about keys. A label is a
@@ -909,7 +991,12 @@ def build(paths, brief_path=None):
         it happens to carry a name of its own."""
         if k in labels:
             return str(labels[k])
-        return named(raw.get(k)) or human(k)
+        name = named(raw.get(k))
+        if name:
+            return name
+        if '.' not in k and k in ids:
+            return w.get('label_' + k, w['unnamed_item'].format(name=human(k)))
+        return human(k)
 
     # The record's own words, references as written, are what the cards draw from; the
     # payload carries them resolved, so a hover reads the same sentence a card shows.
@@ -925,7 +1012,7 @@ def build(paths, brief_path=None):
             if "note" in E[k]:
                 E[k]["note"] = P.resolve_refs(E[k]["note"], raw0, ids, jud, lbl)
 
-    def refs(text):
+    def link_ids(text):
         """Link every entry id the text literally names. No inference: the id is there."""
         out, pos = [], 0
         for m in P.ID.finditer(text):
@@ -933,7 +1020,7 @@ def build(paths, brief_path=None):
                 continue
             out.append(html.escape(text[pos:m.start()]))
             out.append(f'<span class="fx in" data-id="{html.escape(m.group(0))}">'
-                       f'{html.escape(m.group(0))}</span>')
+                       f'{html.escape(lbl(m.group(0)))}</span>')
             pos = m.end()
         out.append(html.escape(text[pos:]))
         return "".join(out)
@@ -942,8 +1029,9 @@ def build(paths, brief_path=None):
         """-> html for this entry's value, with a rule's own references made live."""
         e = E.get(k) or {}
         if e.get("v") is not None:
-            return html.escape(fmt(e["v"]) if pretty else str(e["v"]))[:400]
-        return ("= " + refs(str(e["rule"]))) if e.get("rule") else ""
+            value = ((w["yes"] if e["v"] else w["no"]) if component_page or lang != "en" else str(e["v"])) if isinstance(e["v"], bool) else (fmt(e["v"]) if pretty else str(e["v"]))
+            return link_ids(value)
+        return ("= " + link_ids(str(e["rule"]))) if e.get("rule") else ""
 
     def groups_of(k, scheme=None):
         """The groups this id is under in the scheme being read by - every one of them,
@@ -969,6 +1057,19 @@ def build(paths, brief_path=None):
         gs = groups_of(k)
         return gs[0] if gs else ""
 
+    def hue(k=None, group=None):
+        # Identity is taken from the first declaration even when this section groups by
+        # a different field. No value, sort position or hash of the record picks a hue.
+        names = groups_of(k, default_scheme) if k and default_scheme else []
+        gs = list(schemes.get(default_scheme, {}))
+        chosen = names[0] if names else group
+        if chosen is None:
+            return ""
+        if chosen not in gs:
+            gs = list(schemes.get(reading_by[0], {}))
+        i = gs.index(chosen) if chosen in gs else int(hashlib.md5(chosen.encode()).hexdigest(), 16) % 8
+        return f' style="--group:var(--g{i % 8})"'
+
     def kicker(k, seen_groups):
         """Which groups this row is under - shown only where it is not already obvious."""
         gs = groups_of(k)
@@ -976,8 +1077,8 @@ def build(paths, brief_path=None):
                 if gs and len(seen_groups) > 1 else "")
 
     def note(k):
-        n = (E.get(k) or {}).get("note")
-        return f'<div class="nt" dir="auto">{html.escape(n)}</div>' if n else ""
+        n = (raw.get(k) or {}).get("via") or (raw.get(k) or {}).get("note") or (raw.get(k) or {}).get("why")
+        return f'<div class="nt" data-origin="{html.escape(k)}" dir="auto">{prose(str(n), (E.get(k) or {}).get("par", []))[0]}</div>' if n else ""
 
     def val(k):
         e = E.get(k) or {}
@@ -991,14 +1092,15 @@ def build(paths, brief_path=None):
     # ── renderers ────────────────────────────────────────────────────────────
     anchored = [0, 0]
 
-    def ref(k, shown, moved):
+    def ref(k, shown, moved, signed=False):
         """One reference drawn: hoverable, and marked - with what it was - when it moved
         since the text around it was reviewed."""
+        cls = "fx in" + (" signed" if signed else "")
         if k in moved:
-            return (f'<span class="fx in mv" data-id="{html.escape(k)}" title="was '
-                    f'{html.escape(P.short(moved[k], 60))} when this was reviewed">'
-                    f'{html.escape(str(shown))}</span>')
-        return f'<span class="fx in" data-id="{html.escape(k)}">{html.escape(str(shown))}</span>'
+            return (f'<span class="{cls} mv" data-id="{html.escape(k)}" title="'
+                    f'{html.escape(w["was"].format(v=P.short(moved[k], 60)))}">'
+                    f'{html.escape(surface_words(str(shown)))}</span>')
+        return f'<span class="{cls}" data-id="{html.escape(k)}">{html.escape(surface_words(str(shown)))}</span>'
 
     def moved_note(pairs, what):
         """The line under a tinted text or card: what moved since it was read, by name.
@@ -1009,8 +1111,9 @@ def build(paths, brief_path=None):
         for k, o, n in pairs:
             half, was, now = P.which_moved(o, n)
             said.append(f"{html.escape(lbl(k))}{', ' + html.escape(half) if half else ''} "
-                        f"{html.escape(P.short(was))} &rarr; {html.escape(P.short(now))}")
-        return (f'<div class="mvd" dir="auto">Moved since this was {what}: '
+                        f"{html.escape(P.short(surface_words(str(was))))} &rarr; "
+                        f"{html.escape(P.short(surface_words(str(now))))}")
+        return (f'<div class="mvd" dir="auto">{w["moved_" + what]}'
                 + "; ".join(said) + "</div>")
 
     def moves_of(name):
@@ -1026,7 +1129,7 @@ def build(paths, brief_path=None):
         parts, pos, found = [], 0, set()
         text, moved = text or "", moved or {}
         for m in P.REF.finditer(text):
-            a, h = anchor(text[pos:m.start()], deps, E)
+            a, h = anchor(text[pos:m.start()], deps, E, lbl)
             parts.append(a)
             found |= h
             k = m.group(1)
@@ -1037,10 +1140,28 @@ def build(paths, brief_path=None):
                 found.add(k)
                 parts.append(ref(k, shown, moved))
             pos = m.end()
-        a, h = anchor(text[pos:], deps, E)
+        a, h = anchor(text[pos:], deps, E, lbl)
         parts.append(a)
         found |= h
-        return "".join(parts), found
+        result = "".join(parts)
+        # The source may itself discuss an id outside this judgment's dependencies.
+        # Name it without inventing a value edge. Connective prose never takes this path.
+        result = re.sub(r'(^|>)([^<>]+)(?=<|$)',
+                        lambda m: m.group(1) + html.escape(surface_words(html.unescape(m.group(2)))), result)
+        return result, found
+
+    def status(name):
+        fs = sorted(flags.get(name, ()), key=lambda f: -URGENCY.get(f, (0, ""))[0])
+        parts = [w["says"][f] for f in fs]
+        if J[name].get("unverified"):
+            parts.append(w["unverified"] + ": " + str(J[name]["unverified"]))
+        return "; ".join(parts) or w["holds"]
+
+    def judgment_meta(name):
+        j = jud[name]
+        unread = [k for k in j["deps"] if k in ids and k not in j["seen"]]
+        return (f' data-judgment="{html.escape(name)}"'
+                f' data-review="{"unread" if unread else "moved" if moves_of(name) else "current"}"')
 
     def r_cards(names):
         o = []
@@ -1059,20 +1180,24 @@ def build(paths, brief_path=None):
             # a judgment something moved under since it was reviewed is tinted, and says
             # what moved - in the markup, so the warning shows where scripts do not run
             mv = [(d, o, n) for d, o, n, s in P.moved_deps(j, raw0, ids) if s == "moved"]
-            o.append('<div class="card' + (" moved" if mv else "") + '">'
+            o.append('<div class="card' + (" moved" if mv else "") + '"' + hue(name) + judgment_meta(name) + '>'
+                     f'<div class="cardtop"><span class="judgment-label">{w["judgment"]}</span>'
+                     + kicker(name, set(index.get(default_scheme, {}))) + '</div>'
                      f'<div class="vd fx" data-id="{html.escape(name)}" dir="auto">{verdict}</div>'
                      + (f'<div class="bc" dir="auto">{because}</div>' if because else "")
-                     + (f'<div class="rb" dir="auto"><span class="lbl">reopened by</span>'
+                     + (f'<div class="state" data-warning="true">{html.escape(status(name))}</div>'
+                        if flags.get(name) or b.get("unverified") else "")
+                     + (f'<div class="rb" dir="auto"><span class="lbl">{w["reopened_by"]}</span>'
                         f'{reopened}</div>' if reopened else "")
                      + (moved_note(mv, "reviewed") if mv else "")
                      # what is missing stays visible; what is present is reachable by
                      # hovering the words that already mention it.
                      + ('<div class="deps">' + "".join(
-                         (f'<span class="dep wait" title="declared missing - this judgment '
-                          f'is waiting on it">{html.escape(d)}</span>' if b["blocked"] else
-                          f'<span class="dep dead" title="not an entry in this record">'
+                         (f'<span class="dep wait" title="{w["awaited"]}: '
+                          f'{html.escape(d)}">{html.escape(d)}</span>' if b["blocked"] else
+                          f'<span class="dep dead" title="{w["not_here"]}: {html.escape(d)}">'
                           f'{html.escape(d)}</span>') for d in miss) + "</div>" if miss else "")
-                     + (f'<div class="rest">rests on {len(rest)} more &mdash; hover the line above</div>'
+                     + (f'<div class="rest">{w["rest"].format(n=len(rest))}</div>'
                         if rest else "")
                      + "</div>")
         return "".join(o)
@@ -1086,39 +1211,49 @@ def build(paths, brief_path=None):
             # the dot shows the worst state the judgment is in, whatever order the
             # reasons are listed in
             tones = {URGENCY.get(f, (0, "ok"))[1] for f in fs}
+            if J[name].get("unverified"):
+                tones.add("warn")
             tone = next((t for t in ("stop", "warn", "mut") if t in tones), "ok")
-            v, _ = anchor(J[name]["verdict"], jud[name]["deps"], E)
+            v, _ = prose(RAW[name]["verdict"], jud[name]["deps"], moves_of(name))
             # the key it is waiting on is the whole content of a blocked line - it is
             # what someone has to go and get, so it stays visible here
             miss = J[name]["waiting"] or [d for d in jud[name]["deps"] if d not in E and d not in J]
-            why = J[name]["blocked"] or "; ".join(SAYS.get(f, f) for f in fs) or "holds"
+            why = J[name]["blocked"] or status(name)
+            if J[name].get("unverified"):
+                unverified = str(J[name]["unverified"])
+                why = ((J[name]["blocked"] + "; ") if J[name]["blocked"] and J[name]["blocked"] != unverified else "")
+                why += w["unverified"] + ": " + unverified
             if miss and not J[name]["blocked"]:
                 why += " \u2014 " + ", ".join(lbl(d) for d in miss)
             fr = group_of(name) or next((group_of(d) for d in jud[name]["deps"] if group_of(d)), "")
-            o.append(f'<div class="al"><span class="dot" style="background:var(--{tone})"></span>'
+            icon = {"stop": "!", "warn": "△", "mut": "?", "ok": "✓"}[tone]
+            o.append(f'<div class="al{" moved" if moves_of(name) else ""}"' + (hue(name) or hue(group=fr or None)) + judgment_meta(name) + '>'
+                     f'<span class="ico {tone}" aria-hidden="true">{icon}</span>'
                      f'<span class="at">'
-                     + (f'<span class="grp">{html.escape(fr)}</span>' if fr else "")
                      + f'<span class="fx" data-id="{html.escape(name)}" dir="auto">'
-                     f'{v}</span><div class="aw" dir="auto">{html.escape(why)}</div>'
-                     f'</span></div>')
+                     f'{v}</span><div class="aw" data-warning="true" dir="auto">{html.escape(why)}</div>'
+                     + (f'<div class="aw">{html.escape(status(name))}</div>' if J[name]["blocked"] and fs else "")
+                     + '</span>' + f'<span class="tag {tone}">{w["judgment"]}</span>'
+                     + (f'<span class="grp"><i class="group-dot"></i>{html.escape(fr)}</span>' if fr else "")
+                     + '</div>')
         return "".join(o) + "</div>"
 
-    DERIVED = '<span class="derived">worked out</span>'
-    UNCOUNTED = '<span class="derived">not counted yet</span>'
+    DERIVED = f'<span class="derived">{w["derived"]}</span>'
+    UNCOUNTED = f'<span class="derived">{w["uncounted"]}</span>'
 
     def blank(k):
         """What stands where a value would: a rule's entry was worked out; a page count the
         build could not take - nothing dates what was added - is said so, never left empty."""
         return UNCOUNTED if k in P.PAGE else DERIVED
 
-    def r_table(keys, raw_keys=False):
+    def r_table(keys):
         rows = []
         for k in keys:
             cell = shown(k, True) if has_value(k) else blank(k)
-            head = fx(k) if raw_keys else fx(k, lbl(k))
-            cls = "k" if raw_keys else "kl"
+            head = html.escape(lbl(k))
+            cls = "kl"
             rows.append(f'<tr><td class="{cls}" dir="auto">{head}</td>'
-                        f'<td class="v" dir="auto">{cell}</td></tr>')
+                        f'<td class="v" dir="auto"><span class="fx" data-id="{html.escape(k)}">{cell}</span></td></tr>')
         return "<table>" + "".join(rows) + "</table>"
 
     def r_lines(keys):
@@ -1130,17 +1265,21 @@ def build(paths, brief_path=None):
         today = datetime.date.today()
         seq = sorted(((as_date(val(k)), k) for k in keys), key=lambda t: t[0])
         fs = {g for k in keys for g in groups_of(k)}
-        o, marked = ['<div class="tl">'], False
-        for d, k in seq:
-            if not marked and d >= today:
-                o.append(f'<div class="tlr mark">today &middot; {today.strftime("%d/%m/%Y")}</div>')
-                marked = True
-            o.append(f'<div class="tlr{" past" if d < today else ""}">'
-                     f'<span class="when">{d.strftime("%d/%m/%Y")}</span>'
-                     f'<span class="what" dir="auto">{kicker(k, fs)}{fx(k, lbl(k))}'
-                     f'{note(k)}</span></div>')
-        if not marked:
-            o.append(f'<div class="tlr mark">today &middot; {today.strftime("%d/%m/%Y")}</div>')
+        days = {}
+        for date, k in seq:
+            days.setdefault(date, []).append(k)
+        days.setdefault(today, [])
+        o = ['<div class="tl">']
+        for date, ks in sorted(days.items()):
+            o.append(f'<div class="day{" past" if date < today else " hot" if date == today else ""}" data-day="{date.isoformat()}"'
+                     + (' data-calendar-marker="true"' if not ks else '') + '>'
+                     '<div class="when"' + (' data-clock="today"' if not ks else '') + '>'
+                     + (fx(ks[0], date.strftime('%d/%m/%Y')) if ks else date.strftime('%d/%m/%Y')) + '</div>'
+                     f'<div class="day-label">{w["today"] if date == today else ""}</div>')
+            for k in ks:
+                o.append('<div class="day-item"' + hue(k) + '>' + kicker(k, fs)
+                         + fx(k, lbl(k)) + note(k) + '</div>')
+            o.append('</div>')
         return "".join(o) + "</div>"
 
     def r_grouped(keys):
@@ -1152,20 +1291,35 @@ def build(paths, brief_path=None):
                 g.setdefault(name, []).append(k)
         o = ['<div class="grid">']
         for name, ks in sorted(g.items(), key=lambda kv: (-len(kv[1]), kv[0])):
-            o.append(f'<div class="group"><h3 dir="auto">{html.escape(name)}</h3>' + "".join(
-                (f'<div class="kv"><span class="kl">{fx(k, lbl(k))}</span>'
+            o.append('<div class="group"' + hue(group=name) + f'><h3 dir="auto">{html.escape(name)}</h3>' + "".join(
+                (r_cards([k]) if k in jud else
+                 f'<div class="kv fx" data-id="{html.escape(k)}"><span class="kl">{html.escape(lbl(k))}</span>'
                  f'<span class="kvv">{shown(k, True)}</span></div>'
                  if has_value(k) else
-                 f'<div class="kv"><span class="kl">{fx(k, lbl(k))}</span>'
+                 f'<div class="kv fx" data-id="{html.escape(k)}"><span class="kl">{html.escape(lbl(k))}</span>'
                  f'<span class="kvv">{blank(k)}</span></div>')
                 for k in ks) + "</div>")
         return "".join(o) + "</div>"
 
     def r_headline(keys):
-        return '<div class="heads">' + "".join(
-            f'<div class="head"><div class="big">{fx(k, fmt((E.get(k) or {}).get("v")))}</div>'
-            f'<div class="cap" dir="auto">{kicker(k, {g for x in keys for g in groups_of(x)})}'
-            f'{html.escape(lbl(k))}</div>{note(k)}</div>' for k in keys) + "</div>"
+        out = ['<div class="heads">']
+        for k in keys:
+            date = as_date(E[k].get("v"))
+            attrs = f' data-countdown="{date.isoformat()}"' if date else ''
+            n = (date - datetime.date.today()).days if date else None
+            value = (w["today"] if n == 0 else counted(w, "days_left" if n > 0 else "days_ago", abs(n), lang)) if date else (
+                (w["yes"] if E[k]["v"] else w["no"]) if isinstance(E[k]["v"], bool) else fmt(E[k]["v"]))
+            out.append('<div class="head"' + hue(k) + f'><div class="big"{attrs}>{fx(k, value)}</div>'
+                       f'<div class="cap" dir="auto">{kicker(k, {g for x in keys for g in groups_of(x)})}'
+                       f'{html.escape(lbl(k))}</div>'
+                       + (f'<div class="nt">{fx(k, date.isoformat())}</div>' if date else '')
+                       + note(k) + '</div>')
+        return ''.join(out) + '</div>'
+
+    def r_links(keys):
+        return '<div class="links">' + ''.join(
+            '<a class="lk"' + hue(k) + f' href="{html.escape(link_target(E[k]), quote=True)}">'
+            + fx(k, lbl(k)) + note(k) + '</a>' for k in keys) + '</div>'
 
     page_counts = {}          # filled once the page has counted, before anything is drawn
 
@@ -1194,34 +1348,62 @@ def build(paths, brief_path=None):
         what moved, when something it saw is no longer what the record holds.
         -> (html, the ids it placed)."""
         text, moved = str(sec.get("text") or ""), moved_in(sec)
-        parts, pos, placed = [], 0, set()
-        for m in P.REF.finditer(text):
-            parts.append(html.escape(text[pos:m.start()]))
-            k = m.group(1)
-            if k in J:
-                # a judgment with no reasoning still has a conclusion; the text draws that
-                # rather than a hole, and `--verify` says the sentence is not the author's
-                inner, _ = prose(RAW[k]["because"] or RAW[k]["verdict"], jud[k]["deps"], moves_of(k))
-                cls = "fx in rsn" + (" mv" if moves_of(k) else "")
-                parts.append(f'<span class="{cls}" data-id="{html.escape(k)}">{inner}</span>')
-                placed.add(k)
-            else:
-                shown = P.reference_text(k, raw0, ids, jud, lbl)
-                if shown is None:
-                    parts.append(html.escape(m.group(0)))
-                else:
-                    parts.append(ref(k, shown, {x: o for x, (o, _) in moved.items()}))
+
+        def segment(text):
+            parts, pos, placed = [], 0, set()
+            for m in P.REF.finditer(text):
+                parts.append(html.escape(text[pos:m.start()]))
+                k = m.group(1)
+                if k in J:
+                    # a judgment with no reasoning still has a conclusion; the text draws that
+                    # rather than a hole, and `--verify` says the sentence is not the author's
+                    inner, _ = prose(RAW[k]["because"] or RAW[k]["verdict"], jud[k]["deps"], moves_of(k))
+                    cls = "fx in rsn" + (" mv" if moves_of(k) else "")
+                    parts.append('<span' + judgment_meta(k) + '>'
+                                 f'<span class="judgment-label">{w["judgment"]}</span> '
+                                 f'<span class="{cls}" data-id="{html.escape(k)}">{inner}</span>'
+                                 + (f'<span class="state" data-warning="true"> {html.escape(status(k))}</span>'
+                                    if flags.get(k) or J[k].get("unverified") else '') + '</span>')
                     placed.add(k)
-            pos = m.end()
-        parts.append(html.escape(text[pos:]))
+                else:
+                    shown = P.reference_text(k, raw0, ids, jud, lbl)
+                    if shown is None:
+                        parts.append(html.escape(m.group(0)))
+                    else:
+                        signed = sec.get("as") == "axis" and type((E.get(k) or {}).get("v")) in (int, float)
+                        if signed:
+                            value = E[k]["v"]
+                            shown = ("+" if value > 0 else "") + fmt(value)
+                        parts.append(ref(k, shown, {x: o for x, (o, _) in moved.items()}, signed=signed))
+                        placed.add(k)
+                pos = m.end()
+            parts.append(html.escape(text[pos:]))
+            return "".join(parts), placed
+
+        if sec.get("as") == "axis":
+            rows, placed = [], set()
+            for line in text.splitlines():
+                if not line.strip():
+                    continue
+                inner, refs = segment(line)
+                rows.append('<div class="axis-step">' + inner + '</div>')
+                placed |= refs
+            content = '<div class="axis">' + ''.join(rows) + '</div>'
+        else:
+            content, placed = segment(text)
         out = ('<div class="txt' + (" moved" if moved else "") + '" dir="auto">'
-               + "".join(parts) + "</div>")
+               + content + "</div>")
         if moved:
             out += moved_note([(k, o, n) for k, (o, n) in sorted(moved.items())], "read")
-        return out, placed
+        unread = placed - set(sec.get("seen") or {})
+        if unread:
+            out += f'<div class="state" data-warning="true">{w["review_missing"]}</div>'
+        return ('<div data-prose="connective" data-review="'
+                + ('unread' if unread else 'moved' if moved else 'current') + '">'
+                + out + '</div>'), placed
 
     ENTRY_R = {"table": r_table, "lines": r_lines, "timeline": r_timeline,
-               "grouped": r_grouped, "fronts": r_grouped, "headline": r_headline}
+               "grouped": r_grouped, "fronts": r_grouped, "headline": r_headline, "links": r_links}
     JUD_R = {"cards": r_cards, "alerts": r_alerts}
     cards = r_cards
 
@@ -1230,14 +1412,14 @@ def build(paths, brief_path=None):
     # title, which is presentation and so lives in the brief
     rec_name = named(meta) or str(brief.get("title") or "").strip()
     h1 = (f'<h1 dir="auto">{html.escape(rec_name)}</h1>' if rec_name
-          else '<h1 dir="ltr">What is known here</h1>')
+          else f'<h1 dir="{page_dir}">{w["untitled"]}</h1>')
     # hypotheses beside the record are counted under the heading and drawn nowhere: the page
     # is the base, and what a hypothesis proposes is read with pull until consolidation
     hyps = getattr(doc, "hypotheses", None) or {}
     if hyps:
         n, c = len(hyps), len(P.contested(doc))
-        h1 += (f'<p class="meta" dir="ltr">{n} hypothes{"is waits" if n == 1 else "es wait"} beside '
-               f'this record' + (f', {c} contested' if c else '') + '. The page draws the base.</p>')
+        h1 += (f'<p class="meta" dir="{page_dir}">' + (w["hypothesis_one"] if n == 1 else w["hypotheses"].format(n=n))
+               + (w["contested"].format(n=c) if c else '') + w["base_only"] + '</p>')
     # what the brief declares beyond what the page draws - checked as the tabs are drawn
     contract = {"tabs": len(tabs), "bad": [], "moved": [], "stale": [], "unread": [], "coverage": []}
     # What the arrangement covers, before anything is drawn: the page's own counts have to
@@ -1292,44 +1474,39 @@ def build(paths, brief_path=None):
             if t["intent"]:
                 # the page is named for the record; the intent is the arrangement's aim,
                 # not a title - it is another task on the way, and it reads like one.
-                o.append('<p class="purpose" dir="auto">Everything on this tab was picked '
-                         f'for one purpose — <b dir="auto">{html.escape(str(t["intent"]))}</b></p>'
-                         + '<p class="sub" dir="ltr">'
-                         + f'The Record tab has all {len(ids)} entries and judgments, '
-                         f'arranged by nothing.</p>')
+                o.append(f'<p class="purpose" dir="auto">{w["purpose"]}'
+                         f'<b dir="auto">{html.escape(str(t["intent"]))}</b></p>')
         else:
-            # a tab is a reading occasion: when the reader opens it and for what - and the
-            # intents it serves, each in the requester's own words, one hover from its source
-            o.append('<p class="purpose" dir="auto">This tab is for one occasion &mdash; '
+            o.append(f'<p class="purpose" dir="auto">{w["occasion"]}'
                      f'<b dir="auto">{html.escape(t["occasion"] or t["title"])}</b></p>')
             if t["serves"]:
-                o.append('<p class="sub" dir="auto">It serves: '
+                o.append(f'<p class="sub" dir="auto">{w["serves"]}'
                          + " &middot; ".join(fx(s, asked_of(s)) for s in t["serves"]) + "</p>")
-            o.append(f'<p class="sub" dir="ltr">The Record tab has all {len(ids)} entries and '
-                     'judgments, arranged by nothing.</p>')
+        o.append(f'<p class="sub" dir="{page_dir}">'
+                 + w["purpose_sub"].format(record=w["tab_record"], n=len(ids)) + '</p>')
         # the decision this tab stands on, quietly: when it was decided, how many later
         # sessions the tab served, whose word it was taken on - and what contests it. Drawn
         # here and counted nowhere: a decision drawn on its tab is not a pick.
         mine = [v for v in sorted(arrangements) if t["key"] in arrangements[v]["keys"]]
         for v in mine:
             f = arrangements[v]
-            bits = ["decided " + (fx(v, f["born"].isoformat()) if f["born"] else "as " + fx(v, lbl(v)))]
+            bits = [w["decided"] + (fx(v, f["born"].isoformat()) if f["born"] else w["as"] + fx(v, lbl(v)))]
             if f["stood"]:
-                bits.append(f"stood {f['stood']} session{'' if f['stood'] == 1 else 's'}")
+                bits.append(counted(w, "stood", f["stood"], lang))
             if f["request"] and f["request"] in E:
-                bits.append("on the word of " + fx(f["request"], P.short(asked_of(f["request"]), 80)))
+                request = f["request"]
+                bits.append(w["word"] + f'<span class="fx" data-id="{html.escape(request)}" '
+                            f'data-request="{html.escape(request)}">{html.escape(asked_of(request))}</span>')
             o.append('<p class="sub" dir="auto">' + " &middot; ".join(bits) + "</p>")
             for kind, who, claim in f["contested"]:
-                o.append(f'<p class="sub" dir="auto">A {kind} contests this arrangement &mdash; '
+                o.append(f'<p class="sub" dir="auto">{w["contests"].format(kind=w[kind])}'
                          + (fx(who, P.short(claim, 120)) if who in E or who in J
                             else f'{html.escape(who)}: {html.escape(P.short(claim, 120))}') + "</p>")
         was = t["shape"] or {}
         if not was:
-            o.append('<div class="banner">This arrangement records no shape, so nothing '
-                     'can tell whether it went stale. Add a <code>shape:</code> block '
-                     '(printed on stderr when this page was generated).</div>')
+            o.append('<div class="banner">' + w["no_shape"] + '</div>')
         else:
-            moved = [f"{k}: {was[k]} &rarr; {shape[k]}" for k in shape if k in was and was[k] != shape[k]]
+            moved = [f"{w.get(k + '_count', w.get(k, k))}: {was[k]} &rarr; {shape[k]}" for k in shape if k in was and was[k] != shape[k]]
             if moved:
                 plain = "; ".join(f"{k}: {was[k]} -> {shape[k]}" for k in shape
                                   if k in was and was[k] != shape[k])
@@ -1340,21 +1517,18 @@ def build(paths, brief_path=None):
                 for v in mine:
                     arrangements[v]["moved"][t["title"] or "Now"] = plain
                 p = cov["page"]
-                facts = ("spill " + str(p.get("page.spill", "-")) + f" &middot; {p['page.unserved']} "
-                         "intents no tab serves &middot; drift "
-                         + ("-" if p["page.drift"] is None else f"{p['page.drift']} since {cov['born']}")
-                         + "".join(f" &middot; since {html.escape(v)} was decided {arrangements[v]['drift']}"
+                facts = (w["spill_count"].format(n=p.get("page.spill", "-")) + " &middot; "
+                         + w["unserved_count"].format(n=p["page.unserved"]) + " &middot; "
+                         + w["drift"].format(n="-" if p["page.drift"] is None else p["page.drift"])
+                         + (w["since"].format(d=cov["born"]) if p["page.drift"] is not None else "")
+                         + "".join(" &middot; " + w["since_decided"].format(name=fx(v, lbl(v)), n=arrangements[v]["drift"])
                                    for v in mine if arrangements[v]["drift"] is not None))
                 if mine and not any(arrangements[v]["fired"] for v in mine):
-                    o.append('<div class="banner mut" dir="auto">The record has changed shape since '
-                             'this arrangement was written &mdash; ' + "; ".join(moved)
-                             + ". Its sign has not appeared: " + facts + ".</div>")
+                    o.append('<div class="banner mut" dir="auto">' + w["shape_moved"]
+                             + "; ".join(moved) + w["sign_absent"] + facts + '.</div>')
                 else:
-                    o.append('<div class="banner" dir="auto">The record has changed shape since '
-                             'this arrangement was written &mdash; ' + "; ".join(moved) +
-                             '. The sections below still fill themselves, but the sections '
-                             'themselves may no longer be the right ones.'
-                             + (" " + facts + "." if mine else "") + '</div>')
+                    o.append('<div class="banner" dir="auto">' + w["shape_moved"] + "; ".join(moved)
+                             + w["shape_moved_end"] + (" " + facts + "." if mine else "") + '</div>')
         for sec in t["sections"]:
             picked = sec.get("pick")
             picked = [picked] if isinstance(picked, str) else list(picked or [])
@@ -1369,6 +1543,8 @@ def build(paths, brief_path=None):
             en = sorted(x for x in got if x not in jud)
             title = str(sec.get("title") or ",".join(picked))
             kind = str(sec.get("as") or "").strip()
+            if kind == "axis" and not text:
+                contract["bad"].append(f"section '{title}': axis needs a written sequence in text")
             by = str(sec.get("by") or "")
             reading_by[0] = by if (by in schemes or by == "prefix" or carried(by)) else default_scheme
             wrong = fits(kind, sorted(got), jud, E, groups_of) if kind and got else None
@@ -1377,6 +1553,8 @@ def build(paths, brief_path=None):
                 kind = ""
             if (picked and not got) or not (picked or text):
                 empty_sections.append(where_of(t, title))
+            o.append(f'<div data-component="{html.escape(kind or ("cards" if jn else "table"))}"'
+                     f' data-why="{"present" if sec.get("why") else ""}">')
             o.append(f'<h2 dir="auto">{html.escape(title)}'
                      + (f' <span class="n">{len(got)}</span>' if picked else "") + "</h2>")
             if sec.get("why"):
@@ -1384,15 +1562,17 @@ def build(paths, brief_path=None):
             if text:
                 o.append(r_text(sec)[0])
             if wrong:
-                o.append(f'<div class="bad">{html.escape(wrong)} &mdash; fell back to the '
-                         f'default shape</div>')
+                message = fits(str(sec.get("as") or ""), sorted(got), jud, E, groups_of, w, lbl)
+                o.append('<div class="bad">' + html.escape(message) + w["fell_back"] + '</div>')
             if picked and not got:
-                o.append('<div class="why">Nothing in the record matches this section. '
-                         'It is about something the record no longer holds.</div>')
-            if jn:
+                o.append('<div class="why">' + w["section_empty"] + '</div>')
+            if kind in GROUPED_SHAPES and (jn or en):
+                o.append(r_grouped(sorted(got)))
+            elif jn:
                 o.append((JUD_R.get(kind) or r_cards)(jn))
-            if en:
+            if en and kind not in GROUPED_SHAPES:
                 o.append((ENTRY_R.get(kind) or r_table)(en))
+            o.append('</div>')
         covered |= got_tab
         accounted |= chosen_tab
         panels[t["key"]], counts[t["key"]] = o, len(got_tab)
@@ -1413,18 +1593,13 @@ def build(paths, brief_path=None):
             drawn |= set(ks)
     if spill or loose:
         n = len(drawn)
-        tail = [f'<h2 class="spill" dir="ltr">Not covered by this arrangement '
-                f'<span class="n">{n}</span></h2>'
-                '<div class="why">' + ("Flagged, or written for an intent no tab serves, and no "
-                                       "section above picked it up. " if loose else
-                                       "Flagged, and no section above picked it up. ")
-                + 'This section is written by the page, not by the brief.</div>']
+        tail = [f'<h2 class="spill" dir="{page_dir}">{w["spill"]} <span class="n">{n}</span></h2>'
+                '<div class="why">' + w["spill_loose" if loose else "spill_why"] + '</div>']
         if spill:
             tail.append(r_alerts(spill))
         for r, ks in loose:
-            tail.append(f'<div class="why" dir="auto">Written for <span class="fx" '
-                        f'data-id="{html.escape(r["id"])}">{html.escape(r["asked"])}</span>, '
-                        f'which no tab serves.</div>')
+            tail.append('<div class="why" dir="auto">' + w["written_for"].format(
+                intent=fx(r["id"], r["asked"])) + '</div>')
             jn = [k for k in ks if k in jud]
             en = [k for k in ks if k not in jud]
             if jn:
@@ -1511,10 +1686,10 @@ def build(paths, brief_path=None):
     # ── the record's own tab ─────────────────────────────────────────────────
     rec_html = []
     if jud:
-        rec_html.append(f'<h2>Judgments <span class="n">{len(jud)}</span></h2>')
+        rec_html.append(f'<h2>{w["judgments"]} <span class="n">{len(jud)}</span></h2>')
         rec_html.append(cards(sorted(jud)))
     for g, keys in sorted(prefixes.items(), key=lambda kv: (-len(kv[1]), kv[0])):
-        rec_html.append(f'<h2 id="g-{html.escape(g)}">{html.escape(g)}</h2>' + r_table(keys, True))
+        rec_html.append(f'<h2 id="g-{html.escape(g)}">{html.escape(g)}</h2>' + r_table(keys))
 
     # ── the page ─────────────────────────────────────────────────────────────
     ns = '<nav class="ns" dir="ltr">' + "".join(
@@ -1523,35 +1698,34 @@ def build(paths, brief_path=None):
     head = [h1]
     if meta.get("scope"):
         head.append(f'<p class="scope" dir="auto">{html.escape(str(meta["scope"]).strip())}</p>')
-    head.append(f'<p class="meta" dir="ltr">{shape["entries"]} entries and {shape["judgments"]} '
-                f'judgments'
-                + (f'. {shape["flagged"]} need a person' if shape["flagged"] else "")
-                + (f'. Last updated {html.escape(str(meta["updated"]))}' if meta.get("updated") else "")
+    head.append(f'<p class="meta" dir="{page_dir}">' + w["counts"].format(e=shape["entries"], j=shape["judgments"])
+                + (w["need_person"].format(n=shape["flagged"]) if shape["flagged"] else "")
+                + (w["updated"].format(d=html.escape(str(meta["updated"]))) if meta.get("updated") else "")
                 + "</p>" + ns)
 
-    out = ['<!doctype html><html><head><meta charset="utf-8">',
+    panel_markup = "".join(part for panel in panels.values() for part in panel)
+    has_clocks = 'data-countdown="' in panel_markup or 'data-day="' in panel_markup
+    component_styles = component_page or 'class="alerts"' in panel_markup
+    styles = CSS + (COMPONENT_CSS if component_styles else "")
+    out = [f'<!doctype html><html lang="{html.escape(lang)}" dir="{html.escape(page_dir)}"><head><meta charset="utf-8">',
            '<meta name="viewport" content="width=device-width,initial-scale=1">',
-           f'<title>{html.escape(str(brief.get("title") or rec_name or meta.get("scope") or "record")[:60])}</title>',
-           f'<style>{CSS}</style></head><body><div class="wrap" dir="{direction(doc)}">']
+           f'<title>{html.escape(str(brief.get("title") or rec_name or meta.get("scope") or w["tab_record"])[:60])}</title>',
+           f'<style>{styles}</style></head><body><div class="wrap" dir="{html.escape(page_dir)}">']
 
-    tree = (h1 + '<p class="purpose" dir="ltr">The whole record as one growing thing — '
-            'roots are what was read from the world, the canopy is what was concluded '
-            'from it. Hover anything.</p>'
-            '<div class="treewrap">' + tree_svg(ids, jud, E, J, flags) + '</div>'
-            '<p class="sub" dir="ltr" style="margin-top:8px">roots — read from the world '
-            '&middot; branches — worked out &middot; blossoms — concluded &middot; '
-            'the trunk is where they meet</p>')
+    tree = (h1 + f'<p class="purpose" dir="{page_dir}">{w["tree_lede"]}</p>'
+            '<div class="treewrap">' + tree_svg(ids, jud, E, J, flags, w, lbl) + '</div>'
+            f'<p class="sub" dir="{page_dir}" style="margin-top:8px">{w["tree_legend"]}</p>')
     bar = ['<div class="tabs" role="tablist">']
     for i, t in enumerate(tabs):
         # a tab written as a tab carries its own name; a bare brief is "Now". The first is
         # the default: a brief exists, so the page opens on what the session chose.
         n = counts[t["key"]]
         bar.append(f'<button type="button" data-tab="{t["key"]}" aria-selected='
-                   f'"{"true" if i == 0 else "false"}">' + html.escape(t["title"] or "Now")
+                   f'"{"true" if i == 0 else "false"}">' + html.escape(t["title"] or w["tab_now"])
                    + (f' <span class="n">{n}</span>' if n else "") + "</button>")
     bar.append(f'<button type="button" data-tab="record" aria-selected='
-               f'"{"false" if brief else "true"}">Record <span class="n">{len(ids)}</span></button>')
-    bar.append('<button type="button" data-tab="tree" aria-selected="false">Tree</button></div>')
+               f'"{"false" if brief else "true"}">{w["tab_record"]} <span class="n">{len(ids)}</span></button>')
+    bar.append(f'<button type="button" data-tab="tree" aria-selected="false">{w["tab_tree"]}</button></div>')
     out.append("".join(bar))
     for i, t in enumerate(tabs):
         out.append(f'<section id="panel-{t["key"]}"{"" if i == 0 else " hidden"}>'
@@ -1560,26 +1734,42 @@ def build(paths, brief_path=None):
                + "".join(head + rec_html) + "</section>")
     out.append('<section id="panel-tree" hidden>' + tree + "</section>")
 
-    chosen = ("" if not brief else
-              ' The <b>Now</b> tab is an arrangement someone chose; '
-              '<b>Record</b> is everything, arranged by nothing.' if len(tabs) == 1 and tabs[0]["bare"] else
-              ' The tabs before <b>Record</b> are arrangements someone chose; '
-              '<b>Record</b> is everything, arranged by nothing.')
-    out.append('<footer dir="ltr">Hover any key for where it came from. Click to pin, click a dependency '
-               'to walk to it, Esc to step back. While a card is open, a solid outline marks '
-               'everything that rests on it and a dashed one what it rests on. Generated from '
-               'the record - nothing here was typed twice.' + chosen + "</footer>")
+    chosen = ("" if not brief else w["footer_brief" if len(tabs) == 1 and tabs[0]["bare"] else "footer_tabs"]
+              .format(now=w["tab_now"], record=w["tab_record"]))
+    footer = []
+    for field in ("truth", "elsewhere"):
+        if brief.get(field):
+            keys = brief[field] if isinstance(brief[field], list) else [brief[field]]
+            links = []
+            for key in keys:
+                if isinstance(key, str) and key in ids:
+                    dest = link_target(E.get(key) or {})
+                    label = fx(key, lbl(key))
+                    links.append(f'<a href="{html.escape(dest, quote=True)}">{label}</a>' if dest else label)
+                else:
+                    contract["bad"].append(f'{field}: name a record entry, not unanchored footer prose')
+            footer.append('<div>' + w[field] + ' &middot; '.join(links) + '</div>')
+    out.append(f'<footer dir="{page_dir}">' + "".join(footer) + (w["snapshot"] + " " if has_clocks else "") + w["footer"] + chosen + '</footer>')
     # sorted keys, so two builds of an unchanged record are the same bytes - the one thing
     # a generated page is for is being diffed against the last one
-    out.append("</div><script>window.__E=" + json.dumps(_plain(E), ensure_ascii=False, sort_keys=True)
-               + ";window.__J=" + json.dumps(_plain(J), ensure_ascii=False, sort_keys=True) + ";</script>")
-    out.append(f"<script>{JS}</script></body></html>")
+    script_keys = ("dir", "concludes", "rests_on", "wrong_if", "blocked", "reopened_by", "because", "value",
+                   "rule", "measure", "source", "at", "file", "url", "as_of", "used_by", "back", "tree_btn",
+                   "tree_btn_title", "whole_tree", "asked")
+    if has_clocks:
+        script_keys += tuple(key for key in w if key == "today" or key.startswith(("days_left", "days_ago")))
+    out.append("</div><script>window.__T=" + json.dumps({key: w[key] for key in script_keys}, ensure_ascii=False).replace("<", "\\u003c")
+               + ";window.__E=" + json.dumps(_plain(E), ensure_ascii=False, sort_keys=True).replace("<", "\\u003c")
+               + ";window.__J=" + json.dumps(_plain(J), ensure_ascii=False, sort_keys=True).replace("<", "\\u003c") + ";</script>")
+    out.append(f"<script>{JS}</script>" + (f"<script>{DATE_JS}</script>" if has_clocks else "") + "</body></html>")
     return "\n".join(out), E, J, ids, {"shape": shape, "empty": empty_sections,
                                        "misfit": misfit, "brief": bool(brief), "anchored": tuple(anchored),
                                        "unnamed": sorted(k for k in E if not E[k].get("name")
                                                          and k not in labels),
-                                       "covered": covered, "swollen": swollen, "flags": flags, "contract": contract,
-                                       "tabs": [{"key": t["key"], "title": t["title"], "bare": t["bare"],
+                                       "covered": covered, "swollen": swollen,
+                                       "flags": flags, "contract": contract,
+                                       "language": declared_lang, "direction": page_dir,
+                                       "tabs": [{"key": t["key"], "title": t["title"],
+                                                 "bare": t["bare"], "serves": t["serves"],
                                                  "shape": t["shape"]} for t in tabs],
                                        "coverage": cov, "page": dict(cov["page"]) if cov else {},
                                        "arrangements": arrangements, "earned": earned}
@@ -1588,7 +1778,7 @@ def build(paths, brief_path=None):
 def verify(paths, brief_path=None):
     """Deterministic, no browser. What only looking can catch is a separate job."""
     page, E, J, ids, info = build(paths, brief_path)
-    fail = []
+    fail, note = lint_output(page, E, J, info)
     # what the page SHOWS is markup, not script - the provenance layer's own source
     # mentions the attribute it binds to, and that is not an element.
     dom = re.sub(r"<script>.*?</script>", "", page, flags=re.S)
@@ -1599,7 +1789,6 @@ def verify(paths, brief_path=None):
     for k in E:
         if k not in shown:
             fail.append(f"{k} is in the payload but nothing on the page shows it")
-    note = []
     for name, j in J.items():
         for d in j["deps"]:
             if d not in E and d not in J:
@@ -1625,7 +1814,7 @@ def verify(paths, brief_path=None):
         u = info["unnamed"]
         if u:
             note.append(f"{len(u)} entries carry no human name, so the page has to fall back to "
-                        f"their keys: {', '.join(u[:6])}"
+                        f"generic labels: {', '.join(u[:6])}"
                         + (f" and {len(u) - 6} more" if len(u) > 6 else ""))
         a, t = info["anchored"]
         if t:

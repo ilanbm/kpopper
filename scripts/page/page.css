@@ -24,7 +24,7 @@ h1{font-size:22px;margin:0 0 4px;letter-spacing:-.01em}
 .lede{margin:22px 0 3px;font-size:13px;color:var(--mut)}
 .purpose{margin:18px 0 4px;font-size:15px;color:var(--mut);max-width:none}
 .purpose b{color:var(--ink);font-weight:600;font-size:16.5px}
-.sub{margin:0 0 6px;font-size:12.5px;color:var(--mut)}
+.sub{margin:0 0 6px;font-size:12.5px;color:var(--mut);overflow-wrap:anywhere}
 .banner{margin:12px 0 0;background:var(--sf);border:1px solid var(--warn);border-left-width:3px;
  border-radius:9px;padding:9px 12px;font-size:12.5px;color:var(--warn)}
 .banner.mut{border-color:var(--ln);color:var(--mut)}
@@ -80,7 +80,7 @@ td.v{font-variant-numeric:tabular-nums}
 .tlr .what{flex:1;min-width:0;font-size:13.5px}
 .tlr.mark{background:var(--wash);color:var(--acc);font-size:11px;letter-spacing:.09em;
  text-transform:uppercase;padding:5px 15px}
-.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:13px}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:13px}
 .group{background:var(--sf);border:1px solid var(--ln);border-radius:12px;padding:12px 14px}
 .group h3{margin:0 0 7px;font:600 12px ui-monospace,Menlo,monospace;color:var(--acc)}
 .kv{display:flex;gap:10px;font-size:13px;padding:5px 0;border-top:1px solid var(--ln)}
@@ -160,3 +160,12 @@ svg g.sway{animation:sway .7s ease-out 1;transform-box:fill-box;transform-origin
 .mvd{font-size:12px;color:var(--warn);margin:-6px 0 12px}
 .card .mvd{margin:8px 0 0}
 footer{margin-top:40px;padding-top:14px;border-top:1px solid var(--ln);color:var(--mut);font-size:12.5px}
+
+:root[data-theme=dark]{color-scheme:dark;--pg:#0d0e0e;--sf:#181a19;--ink:#f2f2ef;--ink2:#bdbdb5;--mut:#85857e;--ln:#2a2c2b;--acc:#5b9bf0;--warn:#d9a445;--stop:#f0736b;--ok:#3fbf6c;--wash:rgba(255,255,255,.05);--read:#4fc0c4;--pure:#9096ee;--mind:#dd88b2}
+.cardtop{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:7px}
+.judgment-label{color:var(--mind);font-size:11px;letter-spacing:.03em;font-weight:600}
+.state{color:var(--warn);font-size:12px;margin-top:7px}
+.banner{border-left-width:1px;border-inline-start-width:3px}
+td.kl{white-space:normal;width:42%}
+.tabs{overflow-x:auto}.tabs button{flex-shrink:0}
+.deps .fx.dep{white-space:normal;overflow-wrap:anywhere;max-width:100%;direction:inherit}

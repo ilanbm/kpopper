@@ -61,7 +61,7 @@ tabs:
         why: frozen, in the requester's own words - a tab may claim to serve one of these only by picking what that session wrote
         pick: s.
         as: lines
-    shape: {entries: 116, judgments: 90, flagged: 2, blocked: 0}
+    shape: {entries: 117, judgments: 95, flagged: 2, blocked: 0}
 
   - title: What holds
     occasion: "you are about to write something here and need to know what this project already decided, and on what"
@@ -72,7 +72,8 @@ tabs:
              s.2026_09_04_merge_driver_reason, s.2026_09_04_also_reading,
              s.2026_09_04_signals, s.2026_09_04_measure_recipes,
              s.2026_09_04_hypothesis_claim_name, s.2026_09_04_difference,
-             s.2026_09_04_falsifier_shape, s.2026_09_04_minted_permission]
+             s.2026_09_04_falsifier_shape, s.2026_09_04_minted_permission,
+             s.2026_09_04_components]
     sections:
       - title: How to read what follows
         why: a wall of cards is not an argument until you know what separates them
@@ -116,7 +117,7 @@ tabs:
         why: every one says what would make it wrong - hover any reference in the reasoning to see the value it was decided against
         pick: judgments
         as: cards
-    shape: {entries: 116, judgments: 90, flagged: 2, blocked: 0}
+    shape: {entries: 117, judgments: 95, flagged: 2, blocked: 0}
 
   - title: What this rests on
     occasion: "you are weighing a decision here and want to see the ground under it rather than the reasoning on top"
@@ -136,4 +137,4 @@ tabs:
         why: a prior is the one input with no measurement under it, so resting on one is itself a decision with a sign of its own
         pick: [d.prior_carries_its_own_falsifier, d.intent_is_a_source]
         as: cards
-    shape: {entries: 116, judgments: 90, flagged: 2, blocked: 0}
+    shape: {entries: 117, judgments: 95, flagged: 2, blocked: 0}

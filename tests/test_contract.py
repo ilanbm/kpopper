@@ -624,7 +624,10 @@ class TheWrittenLayer(unittest.TestCase):
             self.assertIn("MOVED     c.boiler_short: heat.boiler_kw moved 24 -> 25 since it was "
                           "reviewed - if it still holds: review c.boiler_short", out)
             dom = dom_of(run(SCRIPTS / "render_page.py", rec)[1])
-            self.assertIn('<div class="card moved"><div class="vd fx" data-id="c.boiler_short"', dom)
+            self.assertRegex(dom, r'<div class="card moved"[^>]*data-judgment="c.boiler_short"'
+                             r'[^>]*data-review="moved"[^>]*><div class="cardtop">.*?'
+                             r'<span class="judgment-label">judgment</span>.*?'
+                             r'<div class="vd fx" data-id="c.boiler_short"')
             self.assertIn('<div class="mvd" dir="auto">Moved since this was reviewed: boiler output '
                           '24 &rarr; 25</div>', dom)
             # the reasoning placed in the section text carries the judgment's tint too
@@ -1286,8 +1289,8 @@ class IntentsTabsCoverage(unittest.TestCase):
             self.assertIn('Written for <span class="fx" data-id="s.2026_09_03_glazing">What would glazing '
                           'the north wall cost, and how much of the shortfall would it close?</span>, '
                           'which no tab serves.', dom)
-            self.assertIn('<span class="fx" data-id="glaze.quote_eur">the quote</span></td>'
-                          '<td class="v" dir="auto">2,400</td>', dom)
+            self.assertIn('<td class="kl" dir="auto">the quote</td><td class="v" dir="auto">'
+                          '<span class="fx" data-id="glaze.quote_eur">2,400</span></td>', dom)
             code, out, _ = run(SCRIPTS / "render_page.py", "--verify", rec)
             self.assertEqual(code, 0, out)
             self.assertIn("coverage: 6 covered · spill 0 · 1 intents no tab serves · 1 recent in a row · "
@@ -1379,8 +1382,10 @@ class IntentsTabsCoverage(unittest.TestCase):
             edit(rec, "rests_on: [s.2026_09_03_glazing, page.unserved]",
                  "rests_on: [s.2026_09_03_glazing, page.unserved, page.drift]")
             dom = dom_of(run(SCRIPTS / "render_page.py", rec)[1])
-            self.assertIn('<td class="k" dir="auto"><span class="fx" data-id="page.drift">page.drift</span>'
-                          '</td><td class="v" dir="auto"><span class="derived">not counted yet</span></td>', dom)
+            self.assertRegex(dom, r'<td class="kl" dir="auto">[^<]+</td><td class="v" dir="auto">'
+                             r'<span class="fx" data-id="page.drift"><span class="derived">'
+                             r'not counted yet</span></span></td>')
+            self.assertNotIn('>page.drift<', dom)
 
     def test_spill_is_drawn_on_every_tab(self):
         with tempfile.TemporaryDirectory() as d:

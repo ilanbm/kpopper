@@ -1,0 +1,56 @@
+schema:
+  deps: rests_on
+  snapshot: seen
+  predicate: wrong_if
+meta:
+  name: תיקון החממה
+  language: he
+  updated: '2026-09-04'
+sources:
+  s.2026_09_04_repairs:
+    name: תכנון תיקון החממה
+    asked: מה צריך להיות מוכן לפני הלילה הקר הראשון?
+    read: '2026-09-04'
+known:
+  repair.deposit:
+    v: -1200
+    name: המקדמה לזגג
+    from: s.2026_09_04_repairs
+    unit: EUR
+  repair.grant:
+    v: 2400
+    name: המענק הזמין לתיקון
+    from: s.2026_09_04_repairs
+    unit: EUR
+  date.deposit:
+    v: '2026-09-01'
+    name: המקדמה שולמה
+    from: s.2026_09_04_repairs
+  date.visit:
+    v: '2026-09-04'
+    name: ביקור הזגג
+    from: s.2026_09_04_repairs
+  date.cold:
+    v: '2027-02-01'
+    name: הלילה הקר הראשון
+    from: s.2026_09_04_repairs
+  doc.guide:
+    name: מדריך התיקון
+    url: https://example.org/greenhouse
+    from: s.2026_09_04_repairs
+    note: יש לקרוא את הוראות ההכנה לפני הביקור.
+judgments:
+  c.ready:
+    rests_on:
+    - repair.grant
+    - repair.deposit
+    - s.2026_09_04_repairs
+    verdict: המענק מכסה את המקדמה הרשומה
+    because: המענק הזמין הוא {{repair.grant}} אירו והמקדמה היא {{repair.deposit}}
+      אירו.
+    wrong_if: repair.grant < 1200
+    unverified: מחיר ההתקנה הסופי ממתין להצעת מחיר.
+    seen:
+      repair.grant: 2400
+      repair.deposit: -1200
+      s.2026_09_04_repairs: read 2026-09-04

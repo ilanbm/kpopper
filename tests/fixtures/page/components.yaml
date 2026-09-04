@@ -1,0 +1,53 @@
+schema:
+  deps: rests_on
+  snapshot: seen
+  predicate: wrong_if
+meta:
+  name: Greenhouse repairs
+  language: en
+  updated: '2026-09-04'
+sources:
+  s.2026_09_04_repairs:
+    name: Price and schedule the greenhouse repairs
+    asked: What must be ready before the first cold night?
+    read: '2026-09-04'
+known:
+  repair.deposit:
+    v: -1200
+    name: The deposit paid to the glazier
+    from: s.2026_09_04_repairs
+    unit: EUR
+  repair.grant:
+    v: 2400
+    name: The grant available for repairs
+    from: s.2026_09_04_repairs
+    unit: EUR
+  date.deposit:
+    v: '2026-09-01'
+    name: The deposit was paid
+    from: s.2026_09_04_repairs
+  date.visit:
+    v: '2026-09-04'
+    name: The glazier visits
+    from: s.2026_09_04_repairs
+  date.cold:
+    v: '2027-02-01'
+    name: The first cold night
+    from: s.2026_09_04_repairs
+  doc.guide:
+    name: The repair guide
+    url: https://example.org/greenhouse
+    from: s.2026_09_04_repairs
+    note: Read the preparation steps before the visit.
+judgments:
+  c.ready:
+    rests_on:
+    - repair.grant
+    - repair.deposit
+    - s.2026_09_04_repairs
+    verdict: The grant covers the recorded deposit
+    because: The available grant is {{repair.grant}} EUR and the deposit is {{repair.deposit}}
+      EUR.
+    wrong_if: repair.grant < 1200
+    unverified: The final installation price is still awaiting a quote.
+    seen: {repair.grant: 2400, repair.deposit: -1200, s.2026_09_04_repairs: "read 2026-09-04"}

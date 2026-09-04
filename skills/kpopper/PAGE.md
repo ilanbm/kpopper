@@ -82,6 +82,8 @@ build failure rather than a page that looks arranged and is not:
 | `cards` | judgments read for their reasoning | — (default for judgments) |
 | `table` | the record's own key/value shape | — (default for entries) |
 | `lines` | a bare set of names | — |
+| `axis` | a written sequence, one step per line of `text` | `text` with references; numeric references show their sign |
+| `links` | pointers to the material behind a section | every pick carries a safe `url` or `file` |
 
 A run of key/value rows is not an arrangement, it is a dump with a heading. If the only shape
 that fits a section is `table`, that is a signal the section is not about anything in
@@ -99,7 +101,7 @@ groups:
   Prague:       [prg., d.prg_out, d.prg_deadline]
 ```
 
-A group then appears as a small tag beside each item wherever a section mixes more than one —
+A group supplies a hue and appears as a small tag beside each item wherever a section mixes more than one —
 on a timeline row, an alert, a headline caption. Without it a reader looking at a list of
 eleven dates has no way to tell which of them are even about the same thing.
 
@@ -142,9 +144,52 @@ or `why` on the entry — which is where "why is *this* the date" gets answered.
 presentation choice, which is exactly why it lives in the brief and not in the record. Without
 one the page falls back to a name the record carries, then to the key's last segment.
 
-The page's own direction follows the record's: a record written in Hebrew or Arabic is laid out
-right to left. Like every other layout decision here, it reads the record's shape and never its
-values, so it cannot flip when a number changes.
+The page reads `meta.language` (or `meta.lang`), otherwise the dominant script in descriptive
+fields. English, Hebrew and Arabic have separate chrome catalogs, shared by the static page
+and popovers. `meta.direction` may explicitly choose `ltr` or `rtl`; otherwise Hebrew and
+Arabic read right to left. Values, URLs, keys and dates never select the language. A declared
+language without a catalog fails verification. Source quotations retain their own wording.
+
+## Components
+
+**Count tiles (`headline`).** One to four picked values, each with its label and note. A date
+becomes a countdown in calendar days, including today and elapsed dates, with its recorded date
+shown beneath. It uses the language’s singular and plural forms and updates while the page is open,
+including after midnight and on returning to the tab. Without scripts the build's reading is still shown beside the original date.
+
+**Alert band (`alerts`).** Judgments are ordered by the reader's existing urgency states. Each
+row has an icon, verdict, explanation, judgment tag and grouping dot. Blocked, unchecked,
+falsified and unverified information is said in place; a moved judgment retains its tint.
+
+**Cards (`cards`).** A top bar takes the grouping hue; the judgment marker, verdict, reasoning,
+re-opener and unresolved checks remain visible. The provenance layer, moved tint and arrangement
+decisions use the same references as the rest of the page.
+
+**Day timeline (`timeline`).** Dates are grouped by calendar day, today is marked even when no
+entry is dated today, and past days fade. Each item keeps its grouping and note. The timeline
+scrolls within its frame on narrow screens and updates the today marker while the page is open.
+
+**Written axis (`axis`).** Each nonempty line of `text` is one step in a sequence. Its references
+resolve through the written layer, and positive numeric values gain a plus sign. Dates, amounts
+and explanations remain in the sentence; no finance-specific computation is inferred. Review
+it with `kpopper review "<section title>"` just like other section text.
+
+**Links (`links`).** Pick entries with `url` or `file`; the name and note form a link card whose
+reference still opens the provenance layer. HTTP, HTTPS, mail and local-file destinations are
+accepted; executable URLs are refused. Relative paths resolve beside the rendered page.
+
+**Grouping hues.** The first declared scheme assigns each group a palette slot in declaration
+order. An entry keeps that identity across components even when a section reads by another
+scheme. Every overlap is drawn under each selected group. Field and prefix schemes remain
+available, and `fronts:` / `as: fronts` remain aliases. Both themes define the same palette at
+token level; grouping hue never replaces a judgment's warning color.
+
+**Honest footer.** `truth:` and `elsewhere:` each name a record entry or list of entries. Their
+names are referenced, and entries carrying destinations become links. The footer identifies the
+page as a snapshot and distinguishes its live date counters. These fields select recorded
+material; unanchored footer prose fails verification. The live-clock sentence and clock code
+appear only on pages with date tiles or a timeline. Component styles are included only when
+a grouping or a component needs them; a plain English record retains its boolean spelling.
 
 ## The tree
 
@@ -185,10 +230,12 @@ namespace line beats a table of contents — it answers *what does this reach*, 
 question people actually have, instead of *what is the shape of the whole thing*, which is the
 question nobody asks.
 
-Two things stay visible as keys, because both are about something the reader has to go and get:
-a dependency that is **missing**, and the key a blocked line is **waiting on**. Everything
-present is reached by hovering the words that mention it, and whatever the prose did not name is
-still one hover away on the judgment itself — `--verify` reports how much of each kind there is.
+Present entries are named on the reading surface, including the Record tab and arrangement
+banners; their ids remain in the hover. Two things retain their full keys: a missing dependency
+and a key a blocked line is waiting on. They have no working popover, so their namespaces stay
+visible and distinguish what a reader must go and get. Values in tables, tiles and
+groups carry their own reference, so moving the pointer from the label to the number does
+not lose the source.
 
 A derived entry has no value in the record, it has a rule; the reader detects that by shape (an
 expression naming other entries) and shows the rule, with the ids inside it live. It never shows
@@ -324,7 +371,9 @@ every source it rests on is earned by some tab. A tab deleted, or gutted with it
 kept, cuts the link the same way.
 
 **What the page draws for it**, under the tab's occasion line and quietly: *decided 2026-09-02 ·
-stood 4 sessions · on the word of …*. `stood` is derived - the sessions read on a later day than
+stood 4 sessions · on the word of …*. A request is quoted in full from its source’s `asked`,
+with wrapping on narrow screens. Its words are not shortened or renamed: the quote is a
+referenced value, and the lint checks it against that source (`d.requested_words_are_quotes`). `stood` is derived - the sessions read on a later day than
 it was born that one of its tabs served; a later session that landed unserved is the sign, not
 evidence, and one that recorded nothing never met it - and it is never stored. The decision drawn
 on its tab is not a pick: a tab that wants the session that decided it to count as served picks
@@ -405,6 +454,24 @@ costs trust on everything else on the page. A dependency that is missing but *de
 by a `blocked_on` is not a failure; it is reported as a note and drawn as awaited rather than
 broken. A reader that cannot tell a declared hole from a mistake makes declaring one pointless.
 
+The element lint reads the generated HTML, including inactive tabs. Source prose is attributed
+to the record entry or judgment that owns it; connective `text` has a separate reviewed view.
+It does not claim to decide whether a sentence is an argument or to translate a quotation.
+Titles, `why` and occasions are presentation metadata: the key check applies there, but the
+literal-value and snapshot checks apply to connective `text`, not those labels. Put factual
+values in referenced text or record entries. Review-state checks are output invariants: they
+catch a renderer or template that drops a marker, not a normal render that keeps it.
+
+- **Keys:** present dotted ids and short ids used as unlabeled reading labels fail; unknown dotted words are not guessed to be keys. Full missing-dependency keys remain visible. An attributed request may contain keys only when its complete text matches the source’s `asked`. Missing human names are noted.
+- **Values:** a displayed component value without a reference, an invented second reference around a value, or a number, date or quotation typed into connective text fails. A recorded sentence may contain its own inline references when the referenced ids occur in the source value.
+- **Context:** a section containing only a table warns, “a dump with a heading.”
+- **Judgments:** missing judgment attribution or visible marking fails; removing an in-place unverified or unresolved warning fails.
+- **Language:** an unsupported declared language, incorrect page language, or connective prose in the wrong supported script fails. Record quotations are preserved.
+- **Review:** absent review metadata or a missing moved/unreviewed marker fails; a visible unread reference warns. Existing record snapshots remain authoritative and are never invented by rendering.
+- **Purpose:** a tab without `serves` or section without `why` warns; an invalid or unearned `serves` fails. `d.purpose_gaps_warn` records this compatibility decision and its reopening condition: gaps must remain visible through diagnostics, coverage and spill, without inventing intent for older briefs.
+- **Arrangement:** an arrangement without a recorded decision warns; cutting a standing decision's link or merging disjoint arrangements still fails.
+- **Unanchored prose:** connective text without a reference warns, “connective, or an unrecorded claim.”
+
 The browser check is a separate job, not a fallback — it catches the popover that vanishes when
 you reach for it, which no assertion about the HTML ever will.
 
@@ -450,7 +517,7 @@ compared with the record's - a tab whose shape moved says so at its top, and `--
 | `replaced:` | on an arrangement | written by `add` when a decision replaces another under the same id, one line each, oldest first: the born of what it replaced, how many sessions it stood, and the sign that ended it - so the sequence of decisions reads from the record alone. |
 | `graph.*`, `page.*` | as a dependency, or inside a falsifier | names the reader computes; see below. |
 | `reopened_by:` | on a judgment | the prose sign that re-opens a judgment decided on a session's prior — a `prior.*` claim whose value is the confidence — or on taste. `blocked_on` keeps its meaning: the predicate cannot be evaluated, and why. Not a hole and not waiting: the judgment needs no person, `check` counts it among the declared, and the card shows it in a row of its own. |
-| `measure:` | on an entry | the name of the recipe that takes the value again from the tree - a bare name, never a command. `PROVENANCE.measure.yaml` beside the record maps it to an argument list, and only `kpopper remeasure --run` - the pull request's step - runs it; what differs is laid over the record as the hypothesis `tree/<commit>` through the same dry run. Stands on a stored scalar reading alone: `check` fails it on a judgment, a rule, a source, a computed name, or a name that is not one; a hypothesis replacing a measured entry carries the line with it. `pull` says *measured by*; the page does not draw it yet. |
+| `measure:` | on an entry | the name of the recipe that takes the value again from the tree - a bare name, never a command. `PROVENANCE.measure.yaml` beside the record maps it to an argument list, and only `kpopper remeasure --run` - the pull request's step - runs it; what differs is laid over the record as the hypothesis `tree/<commit>` through the same dry run. Stands on a stored scalar reading alone: `check` fails it on a judgment, a rule, a source, a computed name, or a name that is not one; a hypothesis replacing a measured entry carries the line with it. `pull` says *measured by*; the page carries the name into the entry payload and displays it in the hover. |
 
 **Computed names**
 

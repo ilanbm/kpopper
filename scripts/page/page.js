@@ -1,5 +1,5 @@
 (function(){
- var E=window.__E||{},J=window.__J||{},pop=null,cur=null,hist=[],now=null,tmr=null,pin=false,
+ var E=window.__E||{},J=window.__J||{},T=window.__T||{},pop=null,cur=null,hist=[],now=null,tmr=null,pin=false,
      drag=null,grown=false,
      SLOW=!!(window.matchMedia&&matchMedia('(prefers-reduced-motion:reduce)').matches);
  function esc(s){var d=document.createElement('div');d.textContent=s==null?'':String(s);return d.innerHTML}
@@ -10,28 +10,29 @@
   return (E[m]||J[m])?'<span class="kref" data-go="'+m+'">'+m+'</span>':m})}
  function row(l,v){return '<div class="r"><span>'+esc(l)+'</span><span>'+v+'</span></div>'}
  function body(id){
-  var h='<div class="hd">'+(hist.length?'<button class="back" type="button">&larr;</button>':'')+
+  var h='<div class="hd">'+(hist.length?'<button class="back" type="button">'+esc(T.back)+'</button>':'')+
         '<span class="kref">'+esc(id)+'</span>'+
         (document.getElementById('panel-tree')
-          ?'<button class="tfoc" type="button" title="prune the tree to what this touches">tree</button>':'')+
+          ?'<button class="tfoc" type="button" title="'+esc(T.tree_btn_title)+'">'+esc(T.tree_btn)+'</button>':'')+
         '</div>';
   if(J[id]){var j=J[id];
-   return h+(j.verdict?row('concludes','<b>'+esc(j.verdict)+'</b>'):'')+
-    row('rests on','<span class="deps">'+(j.deps||[]).map(function(d){
+   return h+(j.verdict?row(T.concludes,'<b>'+esc(j.verdict)+'</b>'):'')+
+    row(T.rests_on,'<span class="deps">'+(j.deps||[]).map(function(d){
       return '<span class="dep" data-go="'+esc(d)+'">'+esc(d)+'</span>'}).join('')+'</span>')+
-    (j.pred?row('wrong if',link(j.pred)):'')+
-    (j.blocked?row('blocked',esc(j.blocked)):'')+
-    (j.reopened?row('reopened by',esc(j.reopened)):'')+
-    (j.because?row('because',esc(j.because)):'')}
+    (j.pred?row(T.wrong_if,link(j.pred)):'')+
+    (j.blocked?row(T.blocked,esc(j.blocked)):'')+
+    (j.reopened?row(T.reopened_by,esc(j.reopened)):'')+
+    (j.because?row(T.because,esc(j.because)):'')}
   var e=E[id]||{};
   return h+(e.name?'<div class="nm">'+esc(e.name)+'</div>':'')+
-   (e.asked?row('asked',esc(e.asked)):'')+
-   (e.v!=null?row('value','<b>'+esc(e.v)+'</b>'):'')+
-   (e.rule?row('rule',link(e.rule)):'')+
-   (e.from?row('from',esc(e.from)):'')+(e.at?row('at',esc(e.at)):'')+
-   (e.file?row('file',esc(e.file)):'')+(e.url?row('url',esc(e.url)):'')+
-   (e.of||e.read?row('as of',esc(e.of||e.read)):'')+
-   (e.used&&e.used.length?row('used by','<span class="deps">'+e.used.map(function(d){
+   (e.asked?row(T.asked,esc(e.asked)):'')+
+   (e.v!=null?row(T.value,'<b>'+esc(e.v)+'</b>'):'')+
+   (e.rule?row(T.rule,link(e.rule)):'')+
+   (e.measure!=null?row(T.measure,esc(e.measure)):'')+
+   (e.from?row(T.source,esc(e.from)):'')+(e.at?row(T.at,esc(e.at)):'')+
+   (e.file?row(T.file,esc(e.file)):'')+(e.url?row(T.url,esc(e.url)):'')+
+   (e.of||e.read?row(T.as_of,esc(e.of||e.read)):'')+
+   (e.used&&e.used.length?row(T.used_by,'<span class="deps">'+e.used.map(function(d){
      return '<span class="dep" data-go="'+esc(d)+'">'+esc(d)+'</span>'}).join('')+'</span>'):'')}
  function place(el){if(!el||!pop)return;var r=el.getBoundingClientRect();
   pop.style.left=Math.min(Math.max(8,r.left+scrollX),scrollX+innerWidth-pop.offsetWidth-8)+'px';
@@ -82,7 +83,7 @@
    chip.type='button';chip.addEventListener('click',unfocus);
    var tw=document.querySelector('#panel-tree .treewrap');
    if(tw)tw.parentNode.insertBefore(chip,tw)}
-  chip.textContent='⟵ the whole tree';
+  chip.textContent=T.whole_tree;
   relate(id)}
  function unfocus(){F=null;
   var q=document.querySelectorAll('#panel-tree .hid');
@@ -226,7 +227,7 @@
  function paint(id){now=id;pop.innerHTML=body(id);relate(id)}
  function open(el,id,p){if(pop)close();if(!E[id]&&!J[id])return;
   cur=el;hist=[];if(p){el.classList.add('on');pin=true}
-  pop=document.createElement('div');pop.className='pop';document.body.appendChild(pop);
+  pop=document.createElement('div');pop.className='pop';pop.dir=T.dir||'ltr';document.body.appendChild(pop);
   paint(id);
   pop.addEventListener('mouseenter',function(){clearTimeout(tmr)});
   pop.addEventListener('mouseleave',function(){if(!pin){clearTimeout(tmr);tmr=setTimeout(close,220)}});
@@ -244,7 +245,7 @@
  document.addEventListener('mouseout',function(e){if(!hit(e)||pin||drag)return;
   clearTimeout(tmr);tmr=setTimeout(function(){if(!pin)close()},260)});
  document.addEventListener('click',function(e){if(e.target.closest('.pop'))return;
-  var el=hit(e);if(el){e.stopPropagation();
+  var el=hit(e);if(el){e.stopPropagation();if(el.closest('a'))e.preventDefault();
    if(pin&&cur===el&&!hist.length)close();else{close();open(el,el.getAttribute('data-id'),true)}}
   else close()});
  document.addEventListener('keydown',function(e){if(e.key!=='Escape')return;

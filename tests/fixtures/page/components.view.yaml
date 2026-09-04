@@ -1,0 +1,52 @@
+title: Greenhouse repairs
+groups:
+  threads:
+    Repairs: [repair., c.ready, doc.guide]
+    Calendar: [date.]
+  responsibilities:
+    The glazier: [repair.deposit, date.visit]
+    The owner: [repair.grant, date.cold, date.visit]
+tabs:
+  - title: Before winter
+    occasion: Open when preparing for the glazier
+    serves: [s.2026_09_04_repairs]
+    sections:
+      - title: Time left
+        why: The first cold night sets the deadline.
+        pick: date.cold
+        as: headline
+      - title: What needs attention
+        why: The current judgment with its warning in place.
+        pick: c.ready
+        as: alerts
+      - title: Why the grant suffices
+        why: The reasoning belongs to the judgment.
+        pick: c.ready
+        as: cards
+      - title: The days ahead
+        why: The visit falls between the deposit and the cold night.
+        pick: date.
+        as: timeline
+      - title: The written sequence
+        why: Each amount says where it enters or leaves the repair budget.
+        as: axis
+        text: |
+          On {{date.deposit}}, the deposit was {{repair.deposit}} EUR.
+          The grant adds {{repair.grant}} EUR before {{date.cold}}.
+        reviewed: "2026-09-04"
+        seen:
+          date.deposit: "2026-09-01"
+          repair.deposit: -1200
+          repair.grant: 2400
+          date.cold: "2027-02-01"
+      - title: What to read
+        why: Preparation instructions stay one click away.
+        pick: doc.guide
+        as: links
+      - title: Who is responsible
+        why: The visit belongs under both people.
+        pick: [repair., date.visit, date.cold]
+        by: responsibilities
+        as: grouped
+truth: doc.guide
+elsewhere: repair.grant

@@ -105,6 +105,15 @@ sources:
          consented to and pinned to a commit, and a bank of local questions whose ground was verified
          before any answer was seen"
     read: "2026-09-04"
+  s.2026_09_04_components:
+    asked: "Port the hub's components as data-driven CSS and JS keyed by the record's shape,
+            give each declared grouping its hue, lint the page's output against the element
+            rules, and put the chrome in the record's language."
+    name: "The session that ports the hub components, draws declared grouping hues, checks the
+           rendered reading surface, and follows the record language"
+    of: "This session, given the page design, the existing renderer, the component contract, and the
+         finance hub reference"
+    read: "2026-09-04"
   s.2026_09_04_consolidate:
     asked: "Make consolidation a test: a dry run that unions the base with its hypotheses and
             re-checks every judgment, a fold that writes a proven hypothesis into the base, a
@@ -410,21 +419,19 @@ known:
     name: "Judgments whose declared hole calls itself an implementation hole - work not done yet -
            rather than an observation nobody has made"
     from: run.blocked_on_reread
-    at: "of 53 - the other 49 open observational; the split is measured on both sides, so neither
+    at: "of 60 - the other 56 open observational; the split is measured on both sides, so neither
          half drifts while the total holds"
     measure: blocked_on_implementation
   m.blocked_on_reopeners:
-    v: 55
-    # set 2026-09-05: measured by blocked_on_reopeners
+    v: 60
+    # reconciled 2026-09-05 after the same-day write rule refused a second reading: this tree adds
+    # five observational declarations to the 55 measured earlier that day
     of: "2026-09-05"
-    # measured by blocked_on_reopeners and re-read by hand, then corrected twice in the same
-    # pull request: the two judgments this change adds declare holes of their own, and two more
-    # arrived with the branch it was rebased onto
     name: "Judgments that declare a hole with blocked_on - the count. Whether each names a sign
            that would re-open the decision, or an input the record lacks, is read by hand and said
            beside it"
     from: run.blocked_on_reread
-    at: "of 53 declared holes - 49 say observational and 4 implementation, the second half
+    at: "of 60 declared holes - 56 say observational and 4 implementation, the second half
          measured beside this one; none is written as what the record is missing, and the one
          that names an entry names one the record holds"
     measure: blocked_on_reopeners
@@ -1017,6 +1024,35 @@ judgments:
                                   orders a list; add says the nearest three and refuses nothing, the
                                   dry run says a handful per arriving id"
       alt.sameness_from_names: rejected
+  d.chrome_follows_language:
+    rests_on: [s.2026_09_04_components, d.author_free_build_guarantees]
+    verdict: "Chrome follows the declared record language, or the dominant script of its descriptive
+              text; Hebrew and Arabic are distinct catalogs, and values do not choose the language"
+    because: "Direction alone cannot choose a language. The page translates its own words and
+              preserves the record wording; an unsupported declared language is reported rather than
+              silently claimed as translated."
+    blocked_on: "observational: re-open when another record language needs a catalog or changing
+                 only a value changes the inferred language"
+    seen:
+      s.2026_09_04_components: "read 2026-09-04"
+      d.author_free_build_guarantees: "the session composes freely and the build enforces the
+                                       element rules on the output"
+  d.components_follow_shape:
+    rests_on: [s.2026_09_04_components, d.groupings_declared, doc.hub_seam]
+    verdict: "The existing shapes carry the hub components; an axis is reviewed text with signed
+              references, links select entries carrying destinations, and grouping hues follow
+              declaration order"
+    because: "The hub provides the visual grammar without prescribing its sections. Dates are
+              calendar days, so countdowns update from the picked date in the browser and retain a
+              dated fallback without scripts. Overlapping groups keep every membership and use the
+              first declared scheme for a stable identity across sections."
+    blocked_on: "observational: re-open if a component requires a finance-specific field or a
+                 grouping changes color when only a value changes"
+    seen:
+      s.2026_09_04_components: "read 2026-09-04"
+      d.groupings_declared: "groupings are declared by the session, any number, under its own names;
+                             the renderer owns none"
+      doc.hub_seam: "read 2026-09-02"
   d.contested_is_a_rival_claim:
     rests_on: [s.2026_09_04_forks_chapter, d.hypotheses_read_beside_the_base, p.contested_meanings]
     verdict: "contested is said of one thing: a rival claim laid against what the record holds,
@@ -1452,6 +1488,25 @@ judgments:
     blocked_on: "observational: falsified by a watcher whose reconstructed dependencies beat
                  the writer's own declarations on a real record; none has been tried"
     seen: {doc.agent_graph: "read 2026-09-01"}
+  d.page_lint_reads_output:
+    rests_on: [s.2026_09_04_components, d.author_free_build_guarantees, d.reasoning_in_record]
+    verdict: "The output lint checks references and visible keys, judgment and review markers,
+              language, and arrangement intent; source prose stays attributed to its record entry and
+              connective prose must carry its own references"
+    because: "The record owns its statements and snapshots. The page can check whether a rendered
+              reference and its warning survived; it cannot decide whether a sentence argues, and a
+              reference beyond a reported card cut is not rendered. Unanchored connective prose is
+              therefore a warning, while a value invented in connective prose or a missing warning
+              fails."
+    blocked_on: "observational: re-open if rendered values evade the reference check, or the lint
+                 requires rewriting a source merely to render it"
+    seen:
+      s.2026_09_04_components: "read 2026-09-04"
+      d.author_free_build_guarantees: "the session composes freely and the build enforces the
+                                       element rules on the output"
+      d.reasoning_in_record: "reasoning is the because of the judgment it belongs to, in the record;
+                              the page's connective text lives in the brief; both resolve references
+                              at build and both carry seen"
   d.predicate_shape_is_one_reading:
     rests_on: [s.2026_09_04_falsifier_shape, p.predicate_shapes, d.arrangement_sign_is_one_comparison]
     verdict: "what shape a predicate must have to be decided is one reading, asked wherever a
@@ -1560,6 +1615,26 @@ judgments:
                                           about one in five, the confidences carry no information and
                                           prior.* is demoted to a note"
       p.prior_count_thresholds: 1
+  d.purpose_gaps_warn:
+    rests_on: [s.2026_09_04_components, d.author_free_build_guarantees, d.intent_is_a_source, d.spill_on_every_tab]
+    verdict: "Missing serves or why warns rather than preventing the page from being read; invalid
+              or unearned serving claims still fail"
+    because: "Existing briefs predate session intents, and a tab of source material can
+              intentionally claim no session outcome. Requiring a claim from those pages would invent
+              intent or suppress their reading surface. The warning names the missing metadata;
+              coverage and the mandatory spill still expose unserved work, while a serving claim that
+              its picks do not earn remains a failure."
+    blocked_on: "observational: re-open if readers overlook missing purpose metadata despite its
+                 warning, or unserved work can disappear without a coverage or spill signal"
+    seen:
+      s.2026_09_04_components: "read 2026-09-04"
+      d.author_free_build_guarantees: "the session composes freely and the build enforces the
+                                       element rules on the output"
+      d.intent_is_a_source: "a session records what it was for as a source; a tab is a reading
+                             occasion that serves intents, and serving is earned by picks"
+      d.spill_on_every_tab: "what fell through the arrangement - flagged judgments nothing picked,
+                             and what a session wrote for an intent no tab serves - is counted once
+                             for the page and drawn on every tab"
   d.record_is_code:
     rests_on: [s.2026_09_01_consolidation, d.register_out_of_tree, d.base_shared_forks_on_contradiction, p.hypothesis_homes]
     verdict: "the record of what is known about the code lives in the tree - committed with the work
@@ -1748,6 +1823,25 @@ judgments:
                                    admitted in place when its sign holds with its tabs intact, or on
                                    a person's request, never twice in a day - and otherwise refused
                                    into a hypothesis that contests it"
+  d.requested_words_are_quotes:
+    rests_on: [s.2026_09_04_components, d.intent_is_a_source, d.page_lint_reads_output]
+    verdict: "The request under an arrangement is a complete quote of its source, including any
+              entry names the person used"
+    because: "On the word of identifies whose asking a decision was taken from. Truncating or
+              renaming words inside that quotation changes the provenance being shown. The quote has
+              its own source reference, and the output lint accepts its text only when it exactly
+              matches that source asked field; ordinary page labels still cannot expose internal
+              keys."
+    blocked_on: "observational: re-open if readers cannot distinguish the attributed request from
+                 assertions made by the page itself"
+    seen:
+      s.2026_09_04_components: "read 2026-09-04"
+      d.intent_is_a_source: "a session records what it was for as a source; a tab is a reading
+                             occasion that serves intents, and serving is earned by picks"
+      d.page_lint_reads_output: "The output lint checks references and visible keys, judgment and
+                                 review markers, language, and arrangement intent; source prose stays
+                                 attributed to its record entry and connective prose must carry its
+                                 own references"
   d.reversal_is_a_redecision:
     rests_on: [s.2026_09_04_minted_permission, s.2026_09_03_arrangements, d.reversal_is_a_question, d.contradiction_by_id_and_day]
     verdict: "a reversal is the arrangement written again under its own id - admitted in place when
