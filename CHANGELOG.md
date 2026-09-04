@@ -1,5 +1,33 @@
 # Changelog
 
+## 0.22.0 — 2026-09-04
+
+- Read a falsifier's shape once, and say when nothing decides it (#34) — minor
+- Show where two readings part, not where they agree (#35) — patch
+- Name a hypothesis for the claim it carries, not only the id it contradicts (#36) — minor
+- Give the record's own counts a recipe (#33) — patch
+- Hold a text to the prose it places, and let prose cover without silencing (#32) — minor
+- Read also: by absence, and say where that reading does not hold (#31) — minor
+- Correct why a merge driver is set aside, and stop hedging the CI step (#30) — patch
+- Let the pull request re-measure the record against the tree (#29) — minor
+- Teach the method its forks: hypotheses, the consolidation walk, how a merge goes (#28) — minor
+- Count the share of high-confidence judgments refuted by consolidation (#25) — minor
+- Score the reach rule against ground, not against itself (#26) — patch
+- Judge sameness: the nearest at add, then same or distinct (#24) — minor
+- Consolidate hypotheses: test the union, fold it, refute it, read a branch's record (#23) — minor
+- Hold the page's arrangements to their signs, and re-decide them in place (#22) — minor
+- Say how much of a record stands on a session's own confidence (#21) — minor
+- Arrange this record by when it is read (#20) — minor
+- Let the record fork on a contradiction (#19) — minor
+- Admit a session's prior as a source, and say what re-opens a judgment (#16) — minor
+- Say that the page can be opened, and where looking still beats checking (#18) — patch
+- Record that both names are published (#17) — patch
+- Say which files the release moves, and the shorter way to run the checks (#14) — patch
+- Draw every tab, and hold the page against what its sessions were for (#11) — minor
+- Record that the npm name is held (#12) — patch
+
+Decisions recorded: d.a_comparison_shows_where_it_parts, d.a_line_is_clipped_by_its_parts, d.also_is_read_by_absence, d.another_branch_reads_as_hypotheses, d.arrangement_link_is_earned, d.arrangement_sign_is_one_comparison, d.candidate_lists_are_a_floor, d.contested_is_a_rival_claim, d.contradiction_by_id_and_day, d.coverage_printed_never_acted, d.distinct_is_a_bare_id, d.drift_from_newest_born, d.dry_run_is_check_on_the_union, d.fold_passes_the_one_door, d.gate_and_opener_against_the_mark, d.gate_by_consequence, d.hypotheses_read_beside_the_base, d.hypothesis_files_meet_on_one_name, d.local_claims_want_a_run, d.measure_names_a_recipe, d.mention_covers_never_silences, d.names_rank_never_decide, d.predicate_shape_is_one_reading, d.prior_carries_its_own_falsifier, d.prior_confidence_survives_refutation, d.priors_counted_at_the_matrix_line, d.record_is_code, d.record_measured_from_its_text, d.refutations_keep_judgment_ids, d.refuted_hypothesis_leaves_one_finding, d.reopened_by_is_not_blocked_on, d.request_is_a_visible_claim, d.reversal_is_a_redecision, d.same_asks_the_one_door, d.serving_earned_by_picks, d.shape_move_read_by_its_sign, d.spill_on_every_tab, d.stood_is_derived, d.text_holds_the_prose_it_places, d.threshold_read_inside_its_function, d.tree_reads_as_a_hypothesis, d.truth_value_is_matched
+
 ## 0.21.0 — 2026-09-03
 
 - Install the browser checks with the command line, and hold the name on npm (#5) — minor
