@@ -466,18 +466,18 @@ with a different value or verdict it is a contradiction: a standing judgment is 
 its own `wrong_if` holds now, or the new body carries `request: s.<date>_<slug>` - a session source
 whose `asked:` is the person's request verbatim, rested on, said *on the word of* on every surface.
 A write resting on what only a hypothesis holds belongs in that hypothesis. Each refusal names the
-exact command that writes the same thing into `PROVENANCE.d/<name>.yaml` beside the record - the
-base untouched - named after the id unless `--hypothesis NAME` on `set`, `add` or `review` names it.
-The first write stamps `born` in the file's head; `claim:`, a head `wrong_if:` and `folds: never`
-are the one thing a hand writes there. Three uses, one file: a concurrent writer whose reading was
-refused; a proposal not yet approved - a branch's record *is* this, and travels with the branch; a
-what-if, `folds: never`, evaluated at every dry run and never written.
+command that writes the same thing into `PROVENANCE.d/<name>.yaml` beside the record - the base
+untouched - named after the id unless `--hypothesis NAME` on `set`, `add` or `review` names it. The
+first write stamps `born` in the head; `claim:`, a head `wrong_if:` and `folds: never` are the one
+thing a hand writes there. Three uses: a concurrent writer whose reading was refused; a proposal not
+yet approved - a branch's record *is* this, and travels with the branch; a what-if, `folds: never`,
+evaluated at every dry run and never written.
 
 Every command reads the hypotheses over the base and evaluates the base alone: `pull` shows what
 each proposes beside the value; `check` and `open` say CONTESTED where two hold one id with
 different claims - a rival claim a person must decide between, and nothing else is ever called
-contested; the opener's count line says how many wait, each with its age and how many judgments rest
-on it, and draws no line - when one has waited too long is your reading of it
+contested; the opener's count line says how many wait, with each one's age and how many judgments
+rest on it, and draws no line - when one has waited too long is your reading
 (`q.hypothesis_lifetime` is open). A hypothesis ends **folded** into the base by `consolidate`, or
 **refuted** by `consolidate --refute NAME "why"` - one negative finding stays, `hyp.<name>:
 refuted`, its claim as the name and the why as its place, and nothing else of it - or it stays
@@ -518,16 +518,18 @@ a hypothesis; or a doubt with no rival value yet, an open question that names th
 stand until a person consolidates or answers. Deleting the file is neither.
 
 **How a merge goes.** git merges the files: additions in id order rarely meet, and hypothesis files
-never conflict. The dry run tests the result - on the pull request and again on `main`, once the CI
-step exists. Fold a hypothesis the dry run proves *before* the pull request, so `main` receives base
-changes; let an unproven one merge as a file, and `main` carries an open hypothesis the opener
-counts. Nothing crosses branches unasked: `pull <seed> --from <ref>` lays what another branch
-committed beside your pull, and `consolidate --from <ref> --dry-run` tests its record as one more
-hypothesis named after the ref - a pull, never a push, and how a dead branch's facts are harvested.
-Every write - `set`, `add`, `review`, `same`, `distinct`, the fold, the refutation - takes an
-exclusive lock on the record's directory, so two sessions on one file take turns instead of the last
-one discarding the first. In the tree each worktree writes its own copy and git merges them; out of
-the tree every worktree writes the one file, and only the lock stands between them.
+meet only when two branches open one under the same name - the id's own, when both were refused on
+it - two writers on one subject: rename one and let the dry run judge them. The dry run tests the
+result - on the pull request and again on `main`, once the CI step exists. Fold a hypothesis the dry
+run proves *before* the pull request, so `main` receives base changes; let an unproven one merge as
+a file, and `main` carries an open hypothesis the opener counts. Nothing crosses branches unasked:
+`pull <seed> --from <ref>` lays what another branch committed beside your pull, and `consolidate
+--from <ref> --dry-run` tests its record as one more hypothesis named after the ref - a pull, never
+a push, and how a dead branch's facts are harvested. Every write - `set`, `add`, `review`, `same`,
+`distinct`, the fold, the refutation - takes an exclusive lock on the record's directory where the
+platform has one - Windows has none - so two sessions on one file take turns instead of the last one
+discarding the first. In the tree each worktree writes its own copy and git merges them; out of the
+tree every worktree writes the one file, and only the lock stands between them.
 
 ## The reader
 
@@ -544,8 +546,7 @@ kpopper set <key> <value> [--why "..."]  # change one value; the reply is the re
 kpopper add <id> field=value ...         # a new entry or judgment, in id order, seen filled
 kpopper review <id | "section title">    # it still holds: seen rewritten from the record
 kpopper consolidate [--dry-run] [NAME ...]   # the union, tested; then folded (--refute NAME "why")
-kpopper same <a> <b>                     # one subject under two ids: b retired into a
-kpopper distinct <a> <b> "why"           # two that only look alike, kept apart for good
+kpopper same <a> <b> | distinct <a> <b> "why"   # one subject under two ids, or two that only look alike
 ```
 
 Where that command is not on the path, the reader still ships inside the plugin — but **do not
@@ -581,8 +582,7 @@ So it reads a record that says `known:`/`judgments:`/`from:` exactly as well as 
 `check` enforces every invariant above and **exits non-zero** when one fails: a dependency that is
 not an entry (unless the judgment declares it missing), a dependency with no snapshot, a predicate
 naming something the judgment does not declare, a predicate field holding prose, and a
-plain-comparison predicate that currently holds — a judgment broken by its own condition. It
-says CONTESTED, and fails nothing, where two hypotheses hold one id with different claims. The
+plain-comparison predicate that currently holds — a judgment broken by its own condition. The
 prose case matters most — prose in a predicate field is worse than an empty field, because it
 reads like a predicate while nothing evaluates it and nobody notices. Say `blocked_on` instead.
 
