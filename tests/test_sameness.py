@@ -756,6 +756,83 @@ class DistinctRetiresThePair(unittest.TestCase):
             self.assertEqual(texts_under(d), before)
 
 
+class AlsoIsReadByAbsence(unittest.TestCase):
+    """`also:` names other identities of a subject: the reader never votes on it, reads it as a
+    retirement only where the named id is absent everywhere, and says so where it is not."""
+
+    def test_a_retirement_that_came_back_is_read_and_reported(self):
+        with tempfile.TemporaryDirectory() as d:
+            rec = pathlib.Path(d) / "PROVENANCE.yaml"
+            # what a merge produces: one branch retired x.two into x.one, the other still holds it
+            rec.write_text('meta:\n  updated: 2026-09-04\nknown:\n  x.one:\n    v: 1\n    name: "one"\n'
+                           '    of: "2026-09-01"\n    also: [x.two]\n  x.two:\n    v: 2\n    name: "two"\n'
+                           '    of: "2026-09-01"\njudgments:\n  c.small:\n    rests_on: [x.one]\n'
+                           '    verdict: "one is small"\n    wrong_if: "x.one > 5"\n    seen: {x.one: 1}\n',
+                           encoding="utf-8")
+            # the field casts no vote, so the record is read at all - one judgment is enough to tie
+            ids, jud, fields = P.infer(P.load([str(rec)]))
+            self.assertEqual(fields["deps"], "rests_on")
+            code, out, err = run(SCRIPTS / "provenance.py", "check", rec)
+            self.assertEqual(code, 0, out + err)
+            self.assertIn('NOTE x.one carries also: x.two, and x.two is an entry - a retirement that came '
+                          'back, or a sibling this record declares; the reader reads it as neither: '
+                          'same x.one x.two folds them, distinct x.one x.two "why" tells them apart\n', out)
+            self.assertTrue(out.endswith("1 judgments, 3 entries, 0 problems, 1 declared\n"), out)
+            # and the two commands the note names do answer it
+            self.assertEqual(run(SCRIPTS / "provenance.py", "distinct", "x.one", "x.two", "two numbers",
+                                 "--as-of", "2026-09-04", rec)[0], 0)
+            code, out, _ = run(SCRIPTS / "provenance.py", "check", rec)
+            self.assertEqual(code, 0, out)
+            self.assertIn("carries also: x.two", out)      # the pair is told apart, the field still says it
+
+    def test_the_healthy_retirement_says_nothing(self):
+        with tempfile.TemporaryDirectory() as d:
+            rec = copy_fixture(pathlib.Path(d))
+            self.assertEqual(run(SCRIPTS / "provenance.py", "same", "heat.boiler_kw", "heat.output_kw",
+                                 "--as-of", "2026-09-04", rec)[0], 0)
+            self.assertIn("    also: [heat.output_kw]\n", rec.read_text(encoding="utf-8"))
+            code, out, err = run(SCRIPTS / "provenance.py", "check", rec)
+            self.assertEqual(code, 0, out + err)
+            self.assertNotIn("carries also:", out)
+            doc = P.load([str(rec)])
+            base, hyps, live = S._every_raw(doc)
+            raws = [base] + [h["raw"] for h in hyps.values()]
+            self.assertEqual(S.retired_into(raws, live), {"heat.output_kw": "heat.boiler_kw"})
+            self.assertEqual(S.also_held(raws, live), [])
+
+    def test_a_record_may_still_keep_its_dependencies_there(self):
+        with tempfile.TemporaryDirectory() as d:
+            rec = pathlib.Path(d) / "PROVENANCE.yaml"
+            rec.write_text('schema:\n  deps: also\nmeta:\n  updated: 2026-09-04\nknown:\n'
+                           '  x.one: {v: 1, name: "one", of: "2026-09-01"}\njudgments:\n  c.small:\n'
+                           '    also: [x.one]\n    verdict: "one is small"\n    wrong_if: "x.one > 5"\n'
+                           '    seen: {x.one: 1}\n', encoding="utf-8")
+            ids, jud, fields = P.infer(P.load([str(rec)]))
+            self.assertEqual(fields["deps"], "also")
+            self.assertEqual(jud["c.small"]["deps"], ["x.one"])
+            code, out, err = run(SCRIPTS / "provenance.py", "check", rec)
+            self.assertEqual(code, 0, out + err)
+            self.assertNotIn("carries also:", out)
+
+    def test_the_other_reading_of_the_field_is_left_alone(self):
+        # a record whose also: names siblings that are not entries - resource ids, say - is
+        # neither a retirement nor a pair: nothing is read into it and nothing is said
+        with tempfile.TemporaryDirectory() as d:
+            rec = pathlib.Path(d) / "PROVENANCE.yaml"
+            rec.write_text('meta:\n  updated: 2026-09-04\nknown:\n  src.table:\n    v: 1\n'
+                           '    name: "the table"\n    of: "2026-09-01"\n'
+                           '    also: ["4e6b9724-4c1e-43f0-909a-154d4cc4e046", "ec8cbc34-72e1"]\n'
+                           'judgments:\n  c.one:\n    rests_on: [src.table]\n    verdict: "it is one"\n'
+                           '    wrong_if: "src.table > 5"\n    seen: {src.table: 1}\n', encoding="utf-8")
+            code, out, err = run(SCRIPTS / "provenance.py", "check", rec)
+            self.assertEqual(code, 0, out + err)
+            self.assertNotIn("carries also:", out)
+            doc = P.load([str(rec)])
+            base, hyps, live = S._every_raw(doc)
+            self.assertEqual(S.retired_into([base], live), {})
+            self.assertEqual(S.also_held([base], live), [])
+
+
 class TheHelpNamesTheCommands(unittest.TestCase):
     def test_the_dispatcher_and_the_reader_list_them(self):
         code, out, _ = run(SCRIPTS / "kpopper")

@@ -79,6 +79,20 @@ sources:
     of: "2026-09-03, given the page design's written-layer section, the page contract at 84af70a, the
          fixture record under tests/, and the finance lab's write tool"
     read: "2026-09-03"
+  s.2026_09_04_also_reading:
+    asked: "Make the call on also: and record it - exclude the field from role voting the way
+            reopened_by is excluded from predicate voting, add the check line, and put the condition
+            that makes \"retired into\" sound into the code rather than only into prose; carry the
+            blind spot the generators cannot close into the same change as a recorded fact."
+    name: "The session that decided how also: is read - what it was asked, and what it was given.
+           Its reading: a field naming other identities of a subject is read by name and never voted
+           on; the retirement reading holds only where the named id is absent everywhere; and where
+           it is held the record says so as a note, because a returned retirement and a declared
+           sibling have one shape and choosing between them is a person work"
+    of: "2026-09-04, given the sameness migration at f13e9eb, the reader role inference and the
+         fields it already reads by name, the three live records this reader serves, and a record
+         built to reproduce the collision"
+    read: "2026-09-04"
   s.2026_09_04_calibration:
     asked: "tests the shape prospectively: a bank of local questions with verifiable ground,
             answered with confidence + reach, run no-tools vs tools-allowed, across models, graded
@@ -360,6 +374,13 @@ known:
     from: "scripts/provenance.py"
     at: "check_lines, opening and the page's build read the record; only set, add and review write
          it"
+    of: "2026-09-04"
+  p.fields_read_by_name:
+    v: 4
+    name: "Field names the reader excludes from role voting, reading them by name instead of by
+           shape"
+    from: "scripts/provenance.py"
+    at: "REOPENED, ARRANGEMENT_PROSE and IDENTITIES - reopened_by, request, replaced, also"
     of: "2026-09-04"
   p.hypothesis_homes:
     v: 1
@@ -674,6 +695,41 @@ judgments:
                                              contradicts the record opens a named hypothesis, and
                                              whatever later rests on the contradiction goes there - a
                                              session is never the unit"
+  d.also_is_read_by_absence:
+    rests_on: [s.2026_09_04_also_reading, d.locate_by_shape, d.sameness_is_judged, p.fields_read_by_name]
+    verdict: "also: names other identities of a subject and never what it rests on: the reader
+              excludes it from role voting by name, reads it as a retirement only where the named id
+              is absent everywhere, and where that id is held says so as a note naming both commands
+              rather than choosing between a retirement that came back and a sibling the record
+              declares"
+    because: "A survivor carries the id retired into it. While that id is absent the field names
+              nothing and votes for nothing; the day a merge brings back the branch it came from -
+              one side having retired the id, the other still holding it, the two touching different
+              lines - the field is a list of ids that are all entries, which is the shape the
+              dependency role is voted on by, and in a record with one judgment it ties with the real
+              one and nothing can be read at all. No write can reach that state, so nothing but shape
+              inference could have seen it coming. Excluding the field by name is the smallest fix
+              and must not be the only one: alone it turns a loud failure into a silent
+              contradiction, and passing quietly over what cannot be read is the one thing this
+              reader refuses. The note is a note and not a failure because the two readings have one
+              shape - a live record already keeps sibling resource ids in this field - and deciding
+              between them is what {{d.sameness_is_judged}} leaves to a person. A record that does
+              keep its dependencies there still says so with schema. {{p.fields_read_by_name}} names
+              are read this way, and the count is what would show the reader retreating from shape
+              inference one field at a time."
+    wrong_if: "p.fields_read_by_name > 4"
+    seen:
+      s.2026_09_04_also_reading: "read 2026-09-04"
+      d.locate_by_shape: "the docs locate a shipped script by matching its name and taking the
+                          highest version, never by a path written against today's layout"
+      d.sameness_is_judged: "the tool never decides that two entries are the same: it shows the
+                             nearest existing entries when one is written and candidates when
+                             hypotheses consolidate; the writer or the merger decides, and the
+                             decision is recorded - same_as as a migration that leaves the build
+                             green, distinct_from as an edge that retires the pair"
+      p.fields_read_by_name: 4
+    distinct_from: d.distinct_is_a_bare_id
+    # distinct 2026-09-04: one says how a field is read, the other how a field is written; they share their premises and not their subject
   d.another_branch_reads_as_hypotheses:
     rests_on: [s.2026_09_04_consolidate, d.no_feed_of_other_branches, d.record_is_code]
     verdict: "another branch's committed record is read as hypotheses and never written: its base as
@@ -755,6 +811,37 @@ judgments:
               the move having happened. Cheap to reverse, so decided on the prior alone."
     wrong_if: "prior.strings_lose_tooling < 0.6"
     seen: {m.page_string_lines: 0, prior.strings_lose_tooling: 0.95}
+  d.candidate_lists_are_a_floor:
+    rests_on: [s.2026_09_04_also_reading, d.sameness_is_judged, d.names_rank_never_decide, alt.sameness_from_names]
+    verdict: "a candidate list is a floor and never a census: two entries about one fact, each with
+              its own source and resting on nothing, share no declared edge, and what is left of them
+              - the value, the name - is a resemblance this record refuses to decide on, so such a
+              pair is closed by a person or by the next write that lands near one of them"
+    because: "The edges the generators read are provenance, derivation and premises: the same source
+              and place, the same rule, the same premises. Two sessions that each read their own
+              document about one number share none of them, which is the ordinary shape of a
+              multi-session record rather than an edge case. What is left is the value and the name,
+              and both are properties of the subject rather than of its identity - two entries hold
+              24 for unrelated reasons - which is the road this record refused when it rejected a
+              tool that infers sameness from names. So a session reading a clean list has learned
+              that nothing declared connects two subjects, never that the record holds no duplicate."
+    blocked_on: "observational: falsified by a signal over declared fields that names such a pair
+                 without deciding on resemblance - an identity a source itself declares, say - or by
+                 a real record in which two sessions reading one fact from two documents never
+                 happens"
+    seen:
+      s.2026_09_04_also_reading: "read 2026-09-04"
+      d.sameness_is_judged: "the tool never decides that two entries are the same: it shows the
+                             nearest existing entries when one is written and candidates when
+                             hypotheses consolidate; the writer or the merger decides, and the
+                             decision is recorded - same_as as a migration that leaves the build
+                             green, distinct_from as an edge that retires the pair"
+      d.names_rank_never_decide: "a candidate pair is named for a declared reason - the same source
+                                  and place, the same source, the same rule read through what was
+                                  retired, the same premises - and the overlap of two names only
+                                  orders a list; add says the nearest three and refuses nothing, the
+                                  dry run says a handful per arriving id"
+      alt.sameness_from_names: rejected
   d.contested_is_a_rival_claim:
     rests_on: [s.2026_09_04_forks_chapter, d.hypotheses_read_beside_the_base, p.contested_meanings]
     verdict: "contested is said of one thing: a rival claim laid against what the record holds,
