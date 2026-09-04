@@ -42,7 +42,7 @@ Where two fields genuinely fit the same role it refuses to guess and asks for a
 one-line `schema:` block. A checker that quietly passes over what it cannot read
 is worse than no checker, so every ambiguity is an error, never a skip.
 """
-import io, os, re, sys, glob, json, shlex, subprocess, datetime, textwrap, tempfile, contextlib, yaml
+import io, os, re, sys, glob, json, shlex, hashlib, subprocess, datetime, textwrap, tempfile, contextlib, yaml
 from decimal import Decimal, InvalidOperation
 
 ID = re.compile(r"[A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z0-9_]+)+")
@@ -277,6 +277,42 @@ def _same_claim(a, b):
     return _same(a, b)
 
 
+def _claim_key(claim):
+    """One claim written the way `_same_claim` reads it: two claims this record calls the same
+    are written the same, no two others are written alike, and every claim is written at all.
+    Each is written by its kind, so that nothing reads as anything else - a structure by its
+    parts in a fixed order, whatever kinds they are, each part with its length in front so a
+    delimiter cannot fall two ways; a number by its value alone, since trailing zeros, a signed
+    zero and an exponent are not the number and no working precision may round it; and any
+    other text by itself, with whitespace collapsed."""
+    if isinstance(claim, dict):
+        parts = sorted((_claim_key(k), _claim_key(v)) for k, v in claim.items())
+        return "{" + "".join(f"{len(p)}:{p}" for kv in parts for p in kv) + "}"
+    if isinstance(claim, (list, tuple)):
+        return "[" + "".join(f"{len(p)}:{p}" for p in map(_claim_key, claim)) + "]"
+    text = " ".join(str(claim).split())
+    try:
+        d = Decimal(text.replace(",", ""))
+    except InvalidOperation:
+        return "t" + text
+    if not d.is_finite():
+        return "n" + str(d)                     # a NaN or an infinity, by the one name for it
+    sign, digits, exp = d.as_tuple()
+    while len(digits) > 1 and digits[-1] == 0:  # by hand: normalize() would round to the context
+        digits, exp = digits[:-1], exp + 1
+    if digits == (0,):
+        return "n0"                             # 0, -0 and 0.00 are the one number
+    return "n" + ("-" if sign else "") + "".join(map(str, digits)) + "e" + str(exp)
+
+
+def _claim_mark(claim, n=6):
+    """Six characters standing for one claim: the same six on every machine and every day,
+    and none of the sentence itself. A digest of the whole claim, never a slug of its opening
+    words - two claims that read alike until their last word are exactly the pair a name has
+    to tell apart."""
+    return hashlib.sha256(_claim_key(claim).encode("utf-8")).hexdigest()[:n]
+
+
 def contested(doc):
     """Ids two or more hypotheses hold with different claims -> {id: [(name, claim), ...]}, in
     name order. Two hypotheses that agree contest nothing; a person is needed only where they
@@ -441,6 +477,8 @@ def infer(doc):
                 continue
             for f, val in body.items():
                 present.add(f)
+                if f in IDENTITIES:
+                    continue  # other identities of this subject, never what it rests on
                 if f == "refutes" and isinstance(nid, str) and nid.startswith("hyp.") \
                         and body.get("v") == "refuted":
                     continue  # a finding's targets are identities, never its premises
@@ -488,7 +526,7 @@ def infer(doc):
             if not isinstance(body, dict) or fields["deps"] not in body:
                 continue
             for f, val in body.items():
-                if f in REOPENED or f in ARRANGEMENT_PROSE:
+                if f in REOPENED or f in PROSE_BY_NAME or f in IDENTITIES:
                     continue           # read by name: it never reads as a predicate or a snapshot
                 if isinstance(val, dict) and val and all(k in ids for k in val):
                     cand["snapshot"][f] = cand["snapshot"].get(f, 0) + 1
@@ -521,11 +559,18 @@ BLOCKED = ("blocked_on", "unverified", "status")
 # decided, and this says when to look again. Beside blocked_on, which keeps its meaning -
 # the predicate cannot be evaluated, and why - so every record written before it still reads.
 REOPENED = ("reopened_by",)
-# An arrangement carries two fields the reader reads by name and never by shape: the person's
-# request it was taken from (`request:`, a session source), and the decisions it replaced
-# (`replaced:`, one line each, naming a count and the sign that ended them - which would
-# otherwise read as a predicate).
-ARRANGEMENT_PROSE = ("request", "replaced")
+# Two fields the reader reads by name and never by shape: whose asking a judgment was taken
+# from (`request:`, a session source - provenance, and nothing a door reads), and the
+# decisions an arrangement replaced (`replaced:`, one line each, naming a count and the sign
+# that ended them - which would otherwise read as a predicate).
+PROSE_BY_NAME = ("request", "replaced")
+# `also:` names other identities of the subject - the ids retired into it, or the siblings a
+# record declares - and never what it rests on. It is read by name for that reason: a retired
+# id written again, by a merge that brings back the branch it came from, turns the field into
+# a list of ids that are all entries, which is the shape the dependency role is voted on by -
+# and in a small record it ties with the real one and nothing can be read at all. A record
+# that does keep its dependencies there says so: `schema: deps: also`.
+IDENTITIES = ("also",)
 OPEN = ("open", "questions")
 # An entry whose value is a fact about the tree names the recipe that takes it again:
 # `measure: <name>`, a bare name that the allowlist beside the record resolves to an argument
@@ -592,6 +637,41 @@ def said(text, raw, ids, jud, width=100):
 
 
 CMP = re.compile(r"^\s*([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z0-9_]+)+)\s*(<=|>=|==|!=|<|>)\s*(.+?)\s*$")
+BOOL = re.compile(r"(?i)^(true|false)$")
+# Quoted text is a literal: whatever it holds, it is one value and none of it is read as an
+# operator. Taken out of a right-hand side before that side is looked at for a second
+# comparison - the thing the comparison shape would otherwise swallow as the value.
+QUOTED = re.compile(r"(['\"]).*?\1", re.S)
+SECOND = re.compile(r"(<=|>=|==|!=|<|>)|\bor\b|\band\b")
+
+
+def why_undecided(pred):
+    """Why this reader cannot decide `pred` as one comparison - '' when it can.
+
+    The comparison shape alone is not enough. It takes everything after the operator as
+    the value, so `a > 0 or b > 0` compares `a` against the text "0 or b > 0" and is false
+    in every state of the record - a falsifier that reads as evaluable and can never fire,
+    which is decoration. One reading of the shape, so what an arrangement refuses when it
+    is written, what check reports and what evaluate declines are the same thing.
+
+    What it asks of the right-hand side is only that it carry no second comparison. Any
+    narrower rule refuses a value the reader can compare perfectly well - a date and a
+    thousands separator both carry characters an expression would use - and refusing a
+    falsifier that works is this same failure from the other side.
+    """
+    m = CMP.match(str(pred or ""))
+    if not m or SECOND.search(QUOTED.sub("", m.group(3).strip())):
+        return "is not one comparison this reader decides (a name, an operator, one value)"
+    name, op, rhs = m.group(1), m.group(2), m.group(3).strip()
+    if BOOL.match(rhs):
+        # a truth value is matched, and only against another truth value. A computed name
+        # is a count whatever the record holds, so this one is decided here and not left
+        # to a reading that would come back None and be taken for green.
+        if op not in ("==", "!="):
+            return f"orders a truth value ({op} {rhs}), which is matched, never ordered"
+        if is_builtin(name):
+            return f"holds a count against a truth value ({name} {op} {rhs}), which never matches"
+    return ""
 
 
 def bodies(doc):
@@ -620,16 +700,26 @@ def value_of(raw, ids, k):
 def evaluate(pred, raw, ids):
     """-> True when the falsifier holds, False when it does not, None when it is not a
     single comparison this reader can decide. Richer predicates are surfaced, never
-    guessed at."""
+    guessed at - a compound would be decided against the text after its first operator,
+    so it is declined here and said where the record is checked.
+
+    A truth value is matched as one: a record writes `false` and the fact holds Python's
+    False, and comparing them as text matches in neither state of the fact.
+    """
     m = CMP.match(str(pred or ""))
-    if not m:
+    if not m or why_undecided(pred):
         return None
     a = value_of(raw, ids, m.group(1))
     if a is None:
         return None
-    rhs = m.group(3).strip()
+    rhs, op = m.group(3).strip(), m.group(2)
+    if BOOL.match(rhs):
+        if not isinstance(a, bool):
+            return None        # a truth value and a value that is not one never compare
+        same = a is (rhs.lower() == "true")
+        return same if op == "==" else not same
     b = value_of(raw, ids, rhs) if ID.fullmatch(rhs) else rhs.strip("\"'")
-    if b is None:
+    if b is None or isinstance(a, bool) != isinstance(b, bool):
         return None
 
     def num(x):
@@ -639,7 +729,6 @@ def evaluate(pred, raw, ids):
             return None
     na, nb = num(a), num(b)
     a, b = (na, nb) if na is not None and nb is not None else (str(a), str(b))
-    op = m.group(2)
     return {"<": a < b, ">": a > b, "<=": a <= b, ">=": a >= b,
             "==": a == b, "!=": a != b}[op]
 
@@ -647,6 +736,32 @@ def evaluate(pred, raw, ids):
 def short(v, n=40):
     s = " ".join(str(v).split())
     return s if len(s) <= n else s[:n - 1] + "…"
+
+
+def apart(a, b, n=40):
+    """Two readings being compared, clipped to where they differ rather than to where they
+    agree -> (a, b). `short` cuts at the head, and when one value is written over another
+    the head is exactly the part that did not change: two long readings that part at the
+    end come back as the same clipped string twice, which tells a reader something moved
+    and shows them nothing to judge it by. So the window opens at the last whole word
+    before the two part, and what is dropped in front of it is marked.
+
+    Where they part early enough for the head to show it, this is `short`."""
+    sa, sb = " ".join(str(a).split()), " ".join(str(b).split())
+    if len(sa) <= n and len(sb) <= n:
+        return sa, sb
+    same = 0
+    while same < min(len(sa), len(sb)) and sa[same] == sb[same]:
+        same += 1
+    if same < n // 2:                  # they part inside what the head would have shown
+        return short(sa, n), short(sb, n)
+    at = sa.rfind(" ", 0, same) + 1    # open on a whole word, not mid-word
+    if at == 0 or same - at > n:
+        # no word to open on, or the nearest one too far back to be worth the room: a url,
+        # a hash, a long number. Cut into the token instead - a window that shows the
+        # difference is worth more here than one that starts where a reader would.
+        at = max(0, same - n // 4)
+    return "…" + short(sa[at:], n - 1), "…" + short(sb[at:], n - 1)
 
 
 def moved_deps(j, raw, ids):
@@ -823,21 +938,33 @@ def _arrangement_shaped(body, fields, raw):
 
 def one_comparison(pred, raw=None, ids=None):
     """An arrangement's sign, as the build can decide it: one comparison - a name, an
-    operator, a number or a text or another entry - that can hold. -> '' when it is, else
-    what is wrong with it. A compound sign reads as evaluable today and is never decided,
-    which is freeze in disguise; a count below zero or a share above one never happens; an
-    entry with no value to compare would leave the sign green forever."""
+    operator, a number or a text or a truth value or another entry - that can hold. -> ''
+    when it is, else what is wrong with it. The shape is the reader's own, so a sign an
+    arrangement may carry is exactly a falsifier the record can decide; on top of that a
+    count below zero or a share above one never happens, and an entry with no value to
+    compare would leave the sign green forever."""
+    bad = why_undecided(pred)
+    if bad:
+        return bad
     m = CMP.match(str(pred or ""))
-    # the right-hand side must be one value too: a number, a quoted text, or an entry - the
-    # comparison shape alone would let "a > 0 or b > 0" through with "0 or b > 0" as its value
-    rhs = m.group(3).strip() if m else ""
-    quoted = len(rhs) > 1 and rhs[0] in "\"'" and rhs[-1] == rhs[0] and not EXPR.search(rhs[1:-1])
-    if not m or not (NUMBER.match(rhs) or ID.fullmatch(rhs) or quoted):
-        return "is not one comparison this reader decides (a name, an operator, one value)"
+    rhs = m.group(3).strip()
     name, op = m.group(1), m.group(2)
+    # On top of the shape, a sign names its value outright. This is the arrangement's own
+    # rule and not a second reading of the shape: what the reader can decide is settled in
+    # why_undecided, and this asks the narrower thing a sign over a count is held to.
+    if not (NUM_VALUE.match(rhs) or ID.fullmatch(rhs) or BOOL.match(rhs)
+            or QUOTED.fullmatch(rhs)):
+        return ("does not name one value a sign carries (a number, a truth value, a text in "
+                "quotes, or another entry)")
     if ID.fullmatch(rhs) and raw is not None and not is_builtin(rhs) \
             and (rhs not in (ids or ()) or value_of(raw, ids, rhs) is None):
         return f"compares against {rhs}, which holds no value the build can compare"
+    # and a count held against a truth value never matches, whether the truth value is
+    # written into the sign or reached through an entry - the shape alone cannot see the
+    # second one, and here the value is in hand
+    if is_builtin(name) and ID.fullmatch(rhs) and raw is not None \
+            and isinstance(value_of(raw, ids, rhs), bool):
+        return f"holds a count against a truth value ({name} {op} {rhs}), which never matches"
     try:
         x = float(rhs.replace(",", ""))
     except ValueError:
@@ -864,7 +991,10 @@ def flags(ids, jud, fields, raw):
                 f.add("blocked" if blocked else "broken")
             elif fields["snapshot"] and d not in j["seen"]:
                 f.add("unchecked")
-        named = [t for t in ID.findall(j["pred"]) if t in ids]
+        # A predicate this reader cannot decide falsifies nothing, whatever it names: it
+        # is counted where an empty field is counted, not passed over as one that holds.
+        named = bool([t for t in ID.findall(j["pred"]) if t in ids]) \
+            and not why_undecided(j["pred"])
         if not named and not blocked and not _decided(j):
             f.add("no_predicate")
         elif named and evaluate(j["pred"], raw, ids) is True:
@@ -1010,14 +1140,22 @@ def check_lines(paths):
                             f"dependency - a change to it would never reach this")
         # A predicate field holding prose is not a predicate. It reads like one,
         # which is worse than an empty field: nothing evaluates it and nobody notices.
-        evaluable = bool([t for t in ID.findall(j["pred"]) if t in ids])
+        # So does one this reader cannot decide - a compound is read to its first operator
+        # and false ever after - and it is said here rather than passed over.
+        undecided = why_undecided(j["pred"]) if j["pred"] else ""
+        evaluable = bool([t for t in ID.findall(j["pred"]) if t in ids]) and not undecided
         misfiled = _misfiled_reopener(j["body"], ids)
         if misfiled:
             fail.append(f"{name}: reopened_by reads as a comparison ({short(misfiled, 60)}) - a "
                         f"predicate belongs in wrong_if, where it is evaluated; a re-opener is the "
                         f"sign a person reads")
-        if not evaluable:
-            what = "prose, not an evaluable predicate" if j["pred"] else "no predicate at all"
+        # An arrangement's sign is held to the same shape a few lines down, and said
+        # there in the terms an arrangement is decided by; it is not said twice.
+        if not evaluable and not (undecided and is_arrangement(j, raw)):
+            what = ("no predicate at all" if not j["pred"] else
+                    "prose, not an evaluable predicate"
+                    if not [t for t in ID.findall(j["pred"]) if t in ids] else
+                    f"wrong_if {undecided}")
             reopened = _reopened_text(j["body"])
             if blocked:
                 note.append(f"{name}: {what} (declared: {blocked[:90]})")
@@ -1038,6 +1176,13 @@ def check_lines(paths):
             named_page = sorted({t for t in ID.findall(j["pred"]) if t in PAGE})
             note.append(f"{name}: wrong_if reads {', '.join(named_page)}, which is counted "
                         f"when the page is built - `page --verify` decides it")
+        elif evaluate(j["pred"], raw, ids) is None:
+            # one comparison, and the reading it needs is not there: a side that holds no
+            # value yet, or a truth value held against something that is not one. The shape
+            # is right and only the reading is missing, so it is noted rather than failed
+            note.append(f"{name}: nothing decides wrong_if ({short(j['pred'], 60)}) - a side "
+                        f"holds no value to compare, or a truth value is held against a "
+                        f"value that is not one")
         # An arrangement's sign is decided by the build - by check for a count of the record,
         # by the page for a count of the page - so it is one comparison that can hold. A
         # re-opener may stand beside it, never in its place: an unevaluable sign on an
@@ -1047,18 +1192,21 @@ def check_lines(paths):
             if bad:
                 fail.append(f"{name}: wrong_if {bad} - an arrangement's sign is decided by the "
                             f"build, or it is decoration")
-            req = j["body"].get("request")
-            if req is not None and not (isinstance(req, str) and is_intent(req, raw)
-                                        and req in j["deps"]):
-                fail.append(f"{name}: request: {req} is not a session source carrying what was "
-                            f"asked, that it rests on - a person's word is a source, or it is nobody's")
+        # Whose asking a judgment was taken from is provenance a reader holds against the
+        # asked: it points at, so it is the same claim wherever it appears.
+        req = j["body"].get("request")
+        if req is not None and not (isinstance(req, str) and is_intent(req, raw)
+                                    and req in j["deps"]):
+            fail.append(f"{name}: request: {req} is not a session source carrying what was "
+                        f"asked, that it rests on - a person's word is a source, or it is nobody's")
         # A dependency that moved since the snapshot puts the judgment in front of a
         # person; it does not fail the build. Movement is a question and a crossed line
         # is the answer, and only the predicate can say which line matters.
         for dep, old, now, state in moved_deps(j, raw, ids):
             if state == "moved":
+                was, is_ = apart(old, now)
                 moved.append(f"{name}: {dep} differs from its snapshot "
-                             f"({short(old)} -> {short(now)}) - re-review, or refresh seen")
+                             f"({was} -> {is_}) - re-review, or refresh seen")
     # What the record stands on: one line, printed and never failed on - the confidences are
     # the record's to defend, and a count of them is not a problem with it.
     priors = priors_line(ids, jud, raw)
@@ -1080,6 +1228,12 @@ def check_lines(paths):
         af, an = R.arrangement_lines(info, page_decides=True)
         fail += af
         note += an
+    # `also:` where the named id is an entry after all: the retirement reading does not hold
+    # there, and the sibling reading is a record's own business - so this is said, and decided
+    # by nobody but a person.
+    sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+    import sameness
+    note += sameness.also_lines(doc, fields["deps"])
     # Hypotheses beside the record: a file the reader cannot read fails; an id two of them hold
     # with different claims needs a person and fails nothing - which of them folds, or neither,
     # is decided at consolidation, where the union is tested.
@@ -1140,7 +1294,8 @@ def opening(paths, budget=25, chars=None):
             if tok in ids and tok not in j["deps"]:
                 items.append((100, name, f"predicate reads {tok}, which it does not declare - "
                                          f"a change to it never reaches this"))
-        evaluable = bool([t for t in ID.findall(j["pred"]) if t in ids])
+        evaluable = bool([t for t in ID.findall(j["pred"]) if t in ids]) \
+            and not why_undecided(j["pred"])
         if _misfiled_reopener(j["body"], ids):
             items.append((100, name, "reopened_by reads as a comparison - a predicate belongs in "
                                      "wrong_if"))
@@ -1151,8 +1306,8 @@ def opening(paths, budget=25, chars=None):
                                     f"condition"))
         for dep, old, now, state in moved_deps(j, raw, ids):
             if state == "moved":
-                items.append((70, name, f"{dep} differs from what it last saw: "
-                                        f"{short(old, 28)} -> {short(now, 28)}"))
+                was, is_ = apart(old, now, 28)
+                items.append((70, name, f"{dep} differs from what it last saw: {was} -> {is_}"))
     # an id two hypotheses disagree on is ranked above everything: nothing decides it but a
     # person, and consolidation will refuse to run over it
     for k, hs in contested(doc).items():
@@ -1544,8 +1699,8 @@ def pull(paths, seeds, budget=40, doc=None):
         reopened = _reopened_text(body)
         if reopened:
             out.append(cut(f"    reopened by: {reopened}", 110))
-        # a decision taken on a person's request says so wherever it is read: the request
-        # is the door that let it past the arrangement's sign
+        # whose asking a decision was taken from is read wherever the decision is: it is
+        # provenance a reader weighs, never what admitted the write
         if body.get("request"):
             out.append(cut(f"    on the word of: {body['request']}", 110))
 
@@ -1553,7 +1708,15 @@ def pull(paths, seeds, budget=40, doc=None):
         # the grounding surface, so here even a muted move is worth a line.
         for dep, old, now, state in sorted(moved_deps(j, raw_, ids_)):
             mark_ = {"muted": " - within wrong_if", "crossed": " - across wrong_if"}.get(state, "")
-            out.append(cut(f"    moved since review: {dep} {old} -> {now}{mark_}", 110))
+            # the two readings are clipped to what the line has left for them, and the
+            # line itself is never cut: a budget spent on the first value would take the
+            # arrow and the second reading with it, which is the whole failure here.
+            head = f"    moved since review: {dep} "
+            room = 110 - len(head) - len(mark_) - len(" -> ")
+            # a floor under each side, so an id long enough to eat the line leaves a
+            # comparison a reader can still use rather than two stubs
+            was, is_ = apart(old, now, max(24, room // 2))
+            out.append(f"{head}{was} -> {is_}{mark_}")
         return out
 
     def dispute(k):
@@ -1621,6 +1784,7 @@ class Refused(SystemExit):
 
 
 NUMBER = re.compile(r"^-?\d+(\.\d+)?$")
+NUM_VALUE = re.compile(r"^-?\d[\d,]*(\.\d+)?$")   # as a record writes one: 1,000 is 1000
 DATE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 BARE = re.compile(r"^[A-Za-z_][A-Za-z0-9_.\-]*$")
 MEMBER = re.compile(r"^( +)([A-Za-z_][A-Za-z0-9_.]*):(?: |$)")
@@ -1910,6 +2074,72 @@ def snapshot_value(dep, raw, ids, jud, page):
     return named(b) or "present"
 
 
+def reasoning_of(body):
+    """The argument a judgment carries, under either of the names the page draws."""
+    return str(body.get("because") or body.get("breaks_if") or "")
+
+
+def shown_value(dep, raw, ids, jud, page):
+    """What a section's text records for a reference it draws. A judgment placed in prose
+    puts both halves of itself on the page - the conclusion the sentence around it was
+    written against, and the argument the sentence actually shows - so the text is held to
+    both, and a rewrite of either is a move under it. They are recorded as two fields rather
+    than as one line, because a delimiter is not a representation: prose contains every
+    separator anyone might pick, and a snapshot that has to be parsed back is a snapshot
+    that can be read wrongly. A judgment's *own* snapshot keeps only the verdict, because
+    what rests on a judgment rests on its conclusion and should survive three rewrites of
+    the prose; a text is the one place that prose is itself on the surface."""
+    if dep in jud:
+        b = jud[dep]["body"]
+        seen = {"verdict": str(b.get("verdict") or b.get("title") or dep)}
+        because = reasoning_of(b)
+        if because:
+            seen["because"] = because
+        return seen
+    return snapshot_value(dep, raw, ids, jud, page)
+
+
+def same_seen(old, now):
+    """Whether a snapshot still holds: text after whitespace, then number - and, for the two
+    fields a placed judgment records, field by field."""
+    if isinstance(old, dict) or isinstance(now, dict):
+        if not (isinstance(old, dict) and isinstance(now, dict)):
+            return False
+        return set(old) == set(now) and all(same_seen(old[k], now[k]) for k in old)
+    if " ".join(str(old).split()) == " ".join(str(now).split()):
+        return True
+    try:
+        return Decimal(str(old).replace(",", "")) == Decimal(str(now).replace(",", ""))
+    except InvalidOperation:
+        return False
+
+
+HALVES = {"because": "the reasoning it places",
+          "verdict": "the verdict over the reasoning it places"}
+
+
+def which_moved(old, now):
+    """-> (what to call it, was, now). A placed judgment records its conclusion and its
+    argument as two fields, so quoting the whole snapshot would print the same clipped
+    verdict twice when only the argument was rewritten. Name the field that moved and quote
+    that; every surface reporting a text's move reads the same reading. Anything that is
+    not a placement is quoted whole, under no name."""
+    if isinstance(old, dict) and isinstance(now, dict):
+        moved = [f for f in ("verdict", "because")
+                 if not same_seen(old.get(f, ""), now.get(f, ""))]
+        if len(moved) == 1:
+            f = moved[0]
+            return HALVES[f], old.get(f, "never read against it"), now.get(f, "")
+        return "", old.get("verdict", ""), now.get("verdict", "")
+    # a text written before a placement was held to its argument saw the verdict alone:
+    # nothing moved under it, it was never read against the sentence it shows
+    if not isinstance(old, dict) and isinstance(now, dict):
+        if same_seen(old, now.get("verdict", "")):
+            return HALVES["because"], "never read against it", now.get("because", "")
+        return HALVES["verdict"], old, now.get("verdict", "")
+    return "", old, now
+
+
 def _state(name, j, raw, ids, fields, touched=()):
     """-> (tag, reason): a judgment's state after a write - the reading `check` gives it,
     said in terms of what just moved."""
@@ -1925,14 +2155,16 @@ def _state(name, j, raw, ids, fields, touched=()):
     moves = [(d, o, n, s) for d, o, n, s in moved_deps(j, raw, ids) if not touched or d in touched]
     if any(s == "moved" for _, _, _, s in moves):
         d, o, n, _ = next(x for x in moves if x[3] == "moved")
-        return "MOVED", (f"{d} moved {short(o)} -> {short(n)} since it was reviewed - "
+        was, is_ = apart(o, n)
+        return "MOVED", (f"{d} moved {was} -> {is_} since it was reviewed - "
                          f"if it still holds: review {name}")
     if unchecked:
         return "UNCHECKED", (f"never checked against {', '.join(unchecked)} - "
                              f"if it holds: review {name}")
     if any(s == "muted" for _, _, _, s in moves):
         d, o, n, _ = next(x for x in moves if x[3] == "muted")
-        return "MUTED", (f"{d} moved {short(o)} -> {short(n)}, inside wrong_if ({j['pred']}) - "
+        was, is_ = apart(o, n)
+        return "MUTED", (f"{d} moved {was} -> {is_}, inside wrong_if ({j['pred']}) - "
                          f"nothing is asked")
     if not named_ and not blocked:
         reopened = _decided(j)
@@ -1943,7 +2175,7 @@ def _state(name, j, raw, ids, fields, touched=()):
         return "HOLDS", "no predicate to evaluate; declared - " + short(blocked, 80)
     pred = short(j["pred"], 80)
     if evaluate(j["pred"], raw, ids) is None:
-        if not CMP.match(j["pred"]):
+        if why_undecided(j["pred"]):
             return "HOLDS", f"wrong_if is not a comparison this reader decides ({pred})"
         if any(t in PAGE for t in ID.findall(j["pred"])):
             return "HOLDS", f"wrong_if is counted when the page is built ({pred}) - page --verify decides it"
@@ -2099,9 +2331,8 @@ def _reopener_is_prose(a, doc, ids, jud, fields, raw):
 
 
 def _arrangement_is_sound(a, doc, ids, jud, fields, raw):
-    """An arrangement's sign is decided by the build, so it is one comparison that can hold;
-    its `born` is the day it is written, stamped by this tool like `seen`; a person's
-    request it was taken from is a session source carrying what was asked, rested on."""
+    """An arrangement's sign is decided by the build, so it is one comparison that can hold,
+    and its `born` is the day it is written, stamped by this tool like `seen`."""
     if a["kind"] != "add" or not isinstance(a["body"], dict):
         return []
     if not _arrangement_shaped(a["body"], fields, raw):
@@ -2123,12 +2354,26 @@ def _arrangement_is_sound(a, doc, ids, jud, fields, raw):
     if bad:
         out.append(f"wrong_if {bad} - an arrangement's sign is decided by the build, or it is "
                    f"decoration")
-    req = body.get("request")
-    if req is not None and not (isinstance(req, str) and is_intent(req, raw)
-                                and req in body[fields["deps"]]):
-        out.append(f"request: {req} is not a session source carrying what was asked, that the "
-                   f"arrangement also rests on")
     return out
+
+
+def _request_names_the_asking(a, doc, ids, jud, fields, raw):
+    """`request:` names whose asking the judgment was taken from - a session source carrying
+    that request verbatim, which the judgment also rests on. It opens no door; it is the
+    claim a reader holds against the `asked:` it points at, so it is asked of every judgment
+    that carries one, and refused before it can look like anyone's word."""
+    if a["kind"] != "add" or not isinstance(a["body"], dict):
+        return []
+    body = a["body"]
+    req = body.get("request")
+    if req is None:
+        return []
+    deps = body.get(fields["deps"]) if fields["deps"] else None
+    deps = deps if isinstance(deps, list) else []
+    if isinstance(req, str) and is_intent(req, raw) and req in deps:
+        return []
+    return [f"request: {req} is not a session source carrying what was asked, that the judgment "
+            f"also rests on"]
 
 
 def _not_born_broken(a, doc, ids, jud, fields, raw):
@@ -2144,6 +2389,22 @@ def _not_born_broken(a, doc, ids, jud, fields, raw):
     if pred and evaluate(pred, raw, ids) is True:
         return [f"wrong_if already holds ({pred}) - the judgment would be born broken"]
     return []
+
+
+def arrangement_renewal(old, ended, stamp, stood=None):
+    """What a build writes when an arrangement is decided again under its own id -> the two
+    fields: `born`, renewed to the day of the decision, and one line appended to `replaced:`
+    keeping the born of what it replaced, how long it stood, and what ended it, so the
+    sequence of decisions reads from the record alone. Written by `add` when the door admits
+    the re-decision in place, and by the fold when a person lays one over it - a re-decision
+    that reached the record either way leaves the same trail."""
+    prior = old.get("replaced") or []
+    prior = [prior] if isinstance(prior, str) else list(prior)
+    return {"born": stamp,
+            "replaced": prior + [f"born {old.get('born') or 'undated'}"
+                                 + (f", stood {stood} session{'' if stood == 1 else 's'}"
+                                    if stood is not None else "")
+                                 + f"; {ended} on {stamp}"]}
 
 
 def _read_on(body, raw):
@@ -2164,57 +2425,50 @@ def _read_on(body, raw):
     return None
 
 
-def may_supersede(nid, existing, new, raw, ids, jud, fields, as_of=None, page=None):
+def may_supersede(nid, existing, new, raw, ids, jud, fields, as_of=None, page=None,
+                  by_hand=False):
     """May a write under an id the base holds replace what it holds? -> (yes, why). The one
     door every same-id write goes through - `set` of a value, `add` of a judgment under a
-    standing id - so the rules that open it live here and nowhere else. An entry: when the
-    new reading is newer than the base's own - its `of:`, else its source's read date; a day
-    is the finest clock the record keeps, and a value nothing dates is superseded by one
-    something does. A judgment: when the standing one's wrong_if holds now - it is broken,
-    and the new verdict is its repair - or when the new body names a person's request with
-    `request: s.<date>_<slug>`, a session source whose asked: is that request verbatim, and
-    rests on it too: a request in a person's words is a root nothing outranks. Resting on a
-    session source alone says nothing - every judgment rests on the session that wrote it.
-    Everything else contradicts, and a contradiction forks. `existing` is the base's body,
-    `new` the value or the body being written.
+    standing id, and the fold of a hypothesis - so the rules that open it live here and
+    nowhere else. An entry: when the new reading is newer than the base's own - its `of:`,
+    else its source's read date; a day is the finest clock the record keeps, and a value
+    nothing dates is superseded by one something does. A judgment: when the standing one's
+    wrong_if holds now - it is broken, and the new verdict is its repair - or when
+    `by_hand`, the fold a person runs. Nothing inside the write itself opens it: every
+    session's first write is a source carrying what it was asked, so a field that read a
+    person's authority off one would hand every session the key to every standing judgment.
+    Everything else contradicts, and a contradiction forks - into a hypothesis a person
+    folds. `existing` is the base's body, `new` the value or the body being written.
 
-    An arrangement - `page` carries what the page holds it to - has three rules of its own
-    before those: never twice in a day, so two sessions cannot flip it and a second writer
-    cannot re-decide it behind the first while the first's repair is still being made (a
-    person's request is the exception, a root nothing outranks); only while the brief still
-    carries what it decided, since a tab deleted or gutted makes the very sign it would
-    cite - so a cut link is refused with "restore, then re-decide"; and its sign read with
-    its tabs intact is what "its wrong_if holds" means for it."""
+    An arrangement - `page` carries what the page holds it to, which only the write path
+    reads - has three rules of its own before those: never twice in a day, so two sessions
+    cannot flip it and a second writer cannot re-decide it behind the first while the
+    first's repair is still being made; only while the brief still carries what it decided,
+    since a tab deleted or gutted makes the very sign it would cite - so a cut link is
+    refused with "restore, then re-decide"; and its sign read with its tabs intact is what
+    "its wrong_if holds" means for it."""
     if nid in jud:
         if not _judgment_shaped(new, fields):
             return False, "what replaces a judgment must rest on something, and this carries no " \
                           + str(fields["deps"] or "dependencies")
         facts = (page or {}).get(nid)
-        req = new.get("request") if isinstance(new, dict) else None
         if facts is not None:
             stamp = _as_day(as_of) or datetime.date.today()
             born = _as_day(jud[nid]["body"].get("born"))
-            if born and born >= stamp and not req:
+            if born and born >= stamp:
                 return False, (f"it was decided on {born} - a second decision on the same day is a "
                                f"contradiction, not a change")
-            if not req and not facts["linked"]:
+            if not facts["linked"]:
                 return False, ("the brief no longer carries what it decided - " + facts["cut"]
                                + " - restore the tab, then re-decide")
-            if not req and facts["fired"]:
+            if facts["fired"]:
                 return True, (f"its sign holds ({short(jud[nid]['pred'], 60)}) with its tab intact"
                               + (f" - {facts['reading']}" if facts.get("reading") else ""))
         if evaluate(jud[nid]["pred"], raw, ids) is True:
             return True, f"its wrong_if holds ({short(jud[nid]['pred'], 60)})"
-        deps = new.get(fields["deps"])
-        req = new.get("request") if isinstance(new, dict) else None
-        if isinstance(req, str) and req:
-            b = raw.get(req)
-            if isinstance(b, dict) and b.get("asked") and req in deps:
-                return True, f"a person asked - it carries request: {req} and rests on it"
-            return False, (f"request: {req} is not a session source carrying what was asked, that "
-                           f"the new judgment also rests on")
-        return False, ("the standing judgment holds, and no request: names a person's asking for "
-                       "the change")
+        if by_hand:
+            return True, "the standing judgment holds, and a person folds this over it"
+        return False, "the standing judgment holds, and its wrong_if has not fired"
     when = _read_on(existing, raw)
     stamp = _as_day(as_of) or datetime.date.today()
     if when is None:
@@ -2299,9 +2553,13 @@ def _command_of(a, name):
 
 
 def _hypothesis_name(doc, k, claim):
-    """A name for the hypothesis a refused write would open: the id's, unless a hypothesis
-    of that name already holds the id with another claim."""
-    base = re.sub(r"[^A-Za-z0-9_\-]", "_", k)
+    """A name for the hypothesis a refused write would open: the id contradicted and a mark
+    of the claim written. Two branches refused on one id open one file only where they claim
+    the same thing - and that meeting is worth having, since the two heads say one thing and
+    whoever merges them keeps either. Two that disagree, which is what the fork exists for,
+    open two files and merge. The count beside the name separates two claims that mark alike
+    in one checkout; it counts only what this checkout holds, so it never crosses a branch."""
+    base = re.sub(r"[^A-Za-z0-9_\-]", "_", k) + "_" + _claim_mark(claim)
     hyps = getattr(doc, "hypotheses", None) or {}
     name, n = base, 1
     while name in hyps and not (k in hyps[name]["ids"]
@@ -2332,7 +2590,8 @@ def _forks_on_contradiction(a, doc, ids, jud, fields, raw):
         d = _disagreement(a, raw.get(k), raw, ids, jud, fields)
         if d and not d[3]:
             _, old, new, _, why, when = d
-            out.append(f"{k} holds {short(old)} as of {when}, and {why} says {short(new)} - the base "
+            was, is_ = apart(old, new)
+            out.append(f"{k} holds {was} as of {when}, and {why} says {is_} - the base "
                        f"keeps what it holds and a hypothesis holds the other: "
                        f"{_command_of(a, _hypothesis_name(doc, k, new))}")
         return out
@@ -2353,8 +2612,9 @@ def _forks_on_contradiction(a, doc, ids, jud, fields, raw):
                            + f" - a newer reading updates it: set {k} {shlex.quote(str(new))}; one "
                            f"that disagrees opens a hypothesis: {_command_of(a, name)}")
             else:
-                out.append(f"{k} is already an entry, holding {short(old)} as of {when}, and {why} "
-                           f"says {short(new)} - the base keeps what it holds and a hypothesis holds "
+                was, is_ = apart(old, new)
+                out.append(f"{k} is already an entry, holding {was} as of {when}, and {why} "
+                           f"says {is_} - the base keeps what it holds and a hypothesis holds "
                            f"the other: {_command_of(a, name)}")
     # the cone: whatever rests on a hypothesis goes into it, so that it folds - or is
     # refuted - together with what it rests on
@@ -2397,8 +2657,8 @@ def _nearest_existing(a, doc, ids, jud, fields, raw):
 # Every refusal a write can meet, in one place. The fork on a contradiction is the last of
 # them; the entries nearest a new one are said just before it.
 VALIDATORS = [_known_key, _sound_dependencies, _sound_references, _reopener_is_prose,
-              _arrangement_is_sound, _not_born_broken, _measure_is_a_name, _nearest_existing,
-              _forks_on_contradiction]
+              _arrangement_is_sound, _request_names_the_asking, _not_born_broken,
+              _measure_is_a_name, _nearest_existing, _forks_on_contradiction]
 
 
 def validate(action, doc, ids, jud, fields, raw):
@@ -2856,7 +3116,7 @@ def _fork(paths, action):
                       else f"what it saw is what the record holds under it ({stamp})"))
         for d in j["deps"]:
             if d in was and d in seen and not _same(was[d], seen[d]):
-                out.append(f"  {d}: {short(was[d])} -> {short(seen[d])}")
+                out.append("  {}: {} -> {}".format(d, *apart(was[d], seen[d])))
             elif d not in was and d in seen:
                 out.append(f"  {d}: {short(seen[d])} (never checked against it before)")
     made_dir = False
@@ -2916,18 +3176,20 @@ def _fork(paths, action):
     return 0
 
 
-def _snapshot(deps, raw, ids, jud, paths, brief, first_born=False):
+def _snapshot(deps, raw, ids, jud, paths, brief, first_born=False, value=None):
     """`seen` for these dependencies, from what each holds now. A page count needs the
     brief beside the record; a dependency declared missing has nothing to snapshot. A
     record's first arrangement may rest on `page.drift` before anything dates it: with
     `first_born` the share is taken as nothing-yet, and settled against its own `born`
-    once it is written."""
+    once it is written. `value` is the reading each is recorded by - what rests on a
+    judgment keeps its verdict, what a text draws keeps the sentence it draws."""
+    value = value or snapshot_value
     page = _page_side(paths)[0] if brief and any(d in PAGE for d in deps) else {}
     seen = {}
     for d in deps:
         if d not in ids and not is_builtin(d):
             continue
-        v = snapshot_value(d, raw, ids, jud, page)
+        v = value(d, raw, ids, jud, page)
         if v is None and d == "page.drift" and first_born and brief:
             v = 0.0
         if v is None:
@@ -2955,14 +3217,16 @@ def _review_section(paths, brief, title, stamp, raw, ids, jud):
                       f"that title carries text")
     refs = [r for r in refs_in(sec["text"]) if r in ids]
     was = dict(sec.get("seen") or {})
-    seen = _snapshot(refs, raw, ids, jud, paths, brief)
+    seen = _snapshot(refs, raw, ids, jud, paths, brief, value=shown_value)
     blines = btext.split("\n")
     _review_section_in(blines, title, seen, stamp)
     _write_text(brief, "\n".join(blines))
     print(f"review text '{title}': reviewed {stamp}")
     for k in refs:
-        if k in was and k in seen and not _same(was[k], seen[k]):
-            print(f"  seen {k}: {short(was[k])} -> {short(seen[k])}")
+        if k in was and k in seen and not same_seen(was[k], seen[k]):
+            half, a, b = which_moved(was[k], seen[k])
+            was, is_ = apart(a, b)
+            print(f"  seen {k}{' - ' + half if half else ''}: {was} -> {is_}")
         elif k not in was and k in seen:
             print(f"  seen {k}: {short(seen[k])} (never read against it before)")
     return 0
@@ -3016,7 +3280,7 @@ def _apply(paths, action):
     if kind == "add":
         body = action["body"]
         # a judgment under a standing judgment's id got past validation only because it may
-        # supersede it - its wrong_if holds, or a person asked - so it replaces it in place
+        # supersede it - it is broken by its own sign - so it replaces it in place
         supersede = nid in jud and isinstance(body, dict)
         arranged = isinstance(body, dict) and _arrangement_shaped(body, fields, raw)
         if isinstance(body, dict) and fields["deps"] in body:
@@ -3030,17 +3294,9 @@ def _apply(paths, action):
             extra = {"born": stamp}
             if supersede and is_arrangement(jud[nid], raw):
                 old = jud[nid]["body"]
-                prior = old.get("replaced") or []
-                prior = [prior] if isinstance(prior, str) else list(prior)
-                f = facts.get(nid) or {}
-                _, why = may_supersede(nid, old, body, raw, ids, jud, fields, action.get("as_of"),
-                                       facts)
-                ended = f"on the word of {body['request']}" if body.get("request") else why
-                stood = f.get("stood")
-                extra["replaced"] = prior + [
-                    f"born {old.get('born') or 'undated'}"
-                    + (f", stood {stood} session{'' if stood == 1 else 's'}" if stood is not None else "")
-                    + f"; {ended} on {stamp}"]
+                _, ended = may_supersede(nid, old, body, raw, ids, jud, fields,
+                                         action.get("as_of"), facts)
+                extra = arrangement_renewal(old, ended, stamp, (facts.get(nid) or {}).get("stood"))
             body = {k: v for k, v in body.items() if k not in extra and k != snapshot_field}
             body.update(extra)
             body[snapshot_field] = seen
@@ -3071,7 +3327,8 @@ def _apply(paths, action):
                                facts)
         was = str(_verdict_of(jud[nid]["body"]) or nid)
         _replace_in(lines, nid, body)
-        out.append(f"supersede {nid}: {short(was, 60)} -> {short(_verdict_of(body), 60)} - {why}")
+        out.append("supersede {}: {} -> {} - {}".format(
+            nid, *apart(was, _verdict_of(body), 60), why))
     elif kind == "add":
         out.append("add " + _add_in(lines, nid, body, collection))
     else:
@@ -3090,7 +3347,7 @@ def _apply(paths, action):
                                         if changed else f"what it saw is what the record holds ({stamp})"))
         for d in j["deps"]:
             if d in was and d in seen and not _same(was[d], seen[d]):
-                out.append(f"  {d}: {short(was[d])} -> {short(seen[d])}")
+                out.append("  {}: {} -> {}".format(d, *apart(was[d], seen[d])))
             elif d not in was and d in seen:
                 out.append(f"  {d}: {short(seen[d])} (never checked against it before)")
     _bump_updated(lines, stamp)
@@ -3325,11 +3582,12 @@ beside the record instead, where its `seen` is taken from the record as it stand
 that hypothesis, and the base is not touched.
 
 An arrangement - a judgment resting on a session source, with a sign over a count the build
-takes - is born when it is written: `born` is stamped like `seen`, its sign is one comparison
-that can hold, and `request: s.<date>_<slug>` names the person's request it was taken from.
-Written again under its own id it is re-decided: admitted when its sign holds with its tabs
-intact, or on a request; refused twice in a day, or once the brief no longer carries what it
-decided; `replaced:` keeps each decision it replaced, one line.""",
+takes - is born when it is written: `born` is stamped like `seen`, and its sign is one
+comparison that can hold. Written again under its own id it is re-decided: admitted when its
+sign holds with its tabs intact; refused twice in a day, once the brief no longer carries
+what it decided, or while the sign has not fired - and a refusal names the hypothesis a
+person folds; `replaced:` keeps each decision it replaced, one line. `request:
+s.<date>_<slug>` names whose asking any judgment was taken from, and admits nothing.""",
     "review": """  review <id> [--as-of YYYY-MM-DD] [--hypothesis NAME] [file]
   review "<section title>"
 

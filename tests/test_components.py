@@ -288,9 +288,11 @@ class Components(unittest.TestCase):
 
     def test_long_reasoning_does_not_cut_a_reference_in_half(self):
         self.change(self.record, lambda d: d['judgments']['c.ready'].update(
-            because='The reason remains in the record. ' * 20 + 'The grant is {{repair.grant}}.'))
+            because='word ' * 79 + '{{repair.grant}}'))
         card = self.elements('card')[0]
-        self.assertIn('The grant is 2,400.', card.text())
+        self.assertIn('…', card.text())
+        self.assertNotIn('{{', card.text())
+        self.assertNotIn('2,400', card.text())
         self.assertFalse(self.lint()[0])
 
     def test_recorded_sentence_can_reference_another_entry(self):

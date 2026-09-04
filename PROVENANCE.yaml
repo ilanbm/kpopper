@@ -1,5 +1,5 @@
 meta:
-  updated: 2026-09-04
+  updated: 2026-09-05
   name: kpopper
   scope: "What this plugin is for and the decisions that shaped it, kept in its own format -
           the tools eat their own cooking, and every session here opens grounded."
@@ -79,6 +79,20 @@ sources:
     of: "2026-09-03, given the page design's written-layer section, the page contract at 84af70a, the
          fixture record under tests/, and the finance lab's write tool"
     read: "2026-09-03"
+  s.2026_09_04_also_reading:
+    asked: "Make the call on also: and record it - exclude the field from role voting the way
+            reopened_by is excluded from predicate voting, add the check line, and put the condition
+            that makes \"retired into\" sound into the code rather than only into prose; carry the
+            blind spot the generators cannot close into the same change as a recorded fact."
+    name: "The session that decided how also: is read - what it was asked, and what it was given.
+           Its reading: a field naming other identities of a subject is read by name and never voted
+           on; the retirement reading holds only where the named id is absent everywhere; and where
+           it is held the record says so as a note, because a returned retirement and a declared
+           sibling have one shape and choosing between them is a person work"
+    of: "2026-09-04, given the sameness migration at f13e9eb, the reader role inference and the
+         fields it already reads by name, the three live records this reader serves, and a record
+         built to reproduce the collision"
+    read: "2026-09-04"
   s.2026_09_04_calibration:
     asked: "tests the shape prospectively: a bank of local questions with verifiable ground,
             answered with confidence + reach, run no-tools vs tools-allowed, across models, graded
@@ -114,6 +128,29 @@ sources:
     of: "2026-09-04, given the hypotheses beside the record at db31e1c - the layer, the door and the
          cone - the fixture record under tests/, and the three live records this reader serves"
     read: "2026-09-04"
+  s.2026_09_04_difference:
+    name: "The session that made a comparison show where two readings part rather than where they
+           agree"
+    asked: "take it as its own pull request once #32 merges ... a second reading beside short(), the
+            difference rather than the head, called by the four; plus a separate decision about
+            pull's line budget"
+    of: "2026-09-04, given the written layer at 0ae2276 and five surfaces reproduced on a scratch
+         record by the arrangement session and this one"
+    read: "2026-09-04"
+  s.2026_09_04_falsifier_shape:
+    asked: "Make a falsifier that cannot fire either fire or say so: a predicate with more than one
+            comparison is read as text, and one compared against a boolean never matches in either
+            state."
+    name: "The session that made a falsifier either fire or say so - what it was asked, and what it
+           was given. Its reading: what shape a predicate must have to be decided is one reading,
+           asked wherever a predicate is written, reported or evaluated - so a compound, which the
+           comparison shape would decide against the text after its first operator, is declined and
+           said rather than answered false; and a truth value is matched as one, since a record
+           writes false where the fact holds False"
+    of: "2026-09-04, given the three live records this reader serves and the compound and
+         truth-value falsifiers standing in one of them, the arrangement rule that already refused a
+         compound sign, and the fixture records under tests/"
+    read: "2026-09-04"
   s.2026_09_04_forks_chapter:
     asked: "Write the method's chapter on forks and hypotheses: a task as a judgment, pull before
             add, the consolidation walk, the out-of-tree lock, how a merge goes, and the reader's new
@@ -127,6 +164,29 @@ sources:
          with the fork, the dry run and sameness at ad4e23f, the three fixture records under tests/,
          and the method as it stood"
     read: "2026-09-04"
+  s.2026_09_04_hypothesis_claim_name:
+    asked: "Name a hypothesis for what it claims as well as for what it contradicts, so two branches
+            that disagree about one decision do not open the same file."
+    name: "The session that let a hypothesis be named for what it claims - what it was asked, and
+           what it was given. Its reading: the suggested name takes the id and a mark of the whole
+           claim, so two branches refused on one id open one file only where they claim the same
+           thing, and that meeting is the one worth keeping"
+    of: "2026-09-04, given the naming in the reader and the judgment beside it that two forks on one
+         id meet, the person's choice that the name come from the id and from the claim, and two
+         branches forked on one id in a throwaway repository"
+    read: "2026-09-04"
+  s.2026_09_04_measure_recipes:
+    asked: "Give the record's own counts a recipe, so a fact about the tree is re-measured by the
+            pull request instead of standing on a number nobody re-read."
+    name: "The session that gave the record's own counts a recipe - what it was asked, and what it
+           was given. Its reading: a line a count draws is counted inside the function the entry's
+           at: names and nowhere else, and a count whose subject is the record is taken from the
+           record's own text rather than through the reader that check runs"
+    of: "2026-09-04, given the remeasure step at 1c715a2 with five entries already named, the count
+         of declared holes standing at 37 while the record held 49, the three threshold entries and
+         the functions their at: scopes them to, and the isolated interpreter every Python recipe
+         runs under"
+    read: "2026-09-04"
   s.2026_09_04_merge_driver_reason:
     asked: "Correct the recorded reason for setting a merge driver aside: hypothesis files do meet,
             when two branches fork on one id. The decision stands; the reason is what changes."
@@ -137,6 +197,15 @@ sources:
     of: "2026-09-04, given the fork and its naming in the reader, the alternatives this record set
          aside on 2026-09-01, an independent review of the method's own chapter on merging, and two
          branches forked on one id in a throwaway repository"
+    read: "2026-09-04"
+  s.2026_09_04_minted_permission:
+    asked: "Close the door a session can open for itself: a rewrite of a standing judgment whose
+            sign has not fired waits as a hypothesis until a person folds it."
+    name: "The session that closed the self-minted door - what it was asked, and what it read into
+           it. The record already required every session's first write to be a source carrying
+           asked:, so a field that opened the door on the word of such a source handed every session
+           the key to every standing judgment. Read as: the door keeps only the signs the build can
+           read, and what a person authorises they authorise by folding it."
     read: "2026-09-04"
   s.2026_09_04_prior_reversal_share:
     asked: "Count the share of high-confidence prior-resting judgments that consolidation refuted,
@@ -186,6 +255,13 @@ sources:
          and the fork at 77dd604, the fixture records under tests/, and the three live records this
          reader serves"
     read: "2026-09-04"
+  s.2026_09_04_signals:
+    name: "The session that closed two ways an author could silence a signal without meaning to"
+    asked: "take both 3 and 4, in one pull request ... snapshot the because alongside the verdict
+            for placed judgments, and separate the spill test's set from covered so a mention still
+            counts for coverage but no longer silences a flagged item"
+    of: "2026-09-04, given the written layer at 2e5f4f3 and what four pieces since then built on it"
+    read: "2026-09-04"
   doc.fact_moves:
     url: "https://claude.ai/code/artifact/ca99e558-60ae-4b22-9221-e3b29d7d7e2b"
     name: "מה קורה כשעובדה זזה - the unified node model"
@@ -199,6 +275,16 @@ sources:
            cannot be evaluated, or the sign that would re-open a decision"
     of: "this record at 45 judgments, read by hand, 2026-09-03"
     read: "2026-09-03"
+  run.blocked_on_reread:
+    name: "Every blocked_on in this record, read again for which meaning it carries - and for
+           whether the field is still where a re-opener lands now that reopened_by exists"
+    of: "this record at 86 judgments, all 53 declarations read by hand, 2026-09-04 - two written
+         by the session that read them, and two more read as they arrived with the branch it was
+         rebased onto. Each names a sign; one names an entry, and the record holds it; none is
+         written as a list of what is missing. None of the thirteen written since reopened_by
+         shipped rests on a prior; of the six judgments that do rest on one, four carry
+         reopened_by and two put their sign in wrong_if alone"
+    read: "2026-09-04"
   run.claims_by_reach:
     from: s.2026_09_04_calibration
     name: "A bank of claims about two projects and about how things usually work, answered twice
@@ -259,6 +345,17 @@ sources:
          then re-measured with seen left as it was, then seen refreshed by hand"
     read: "2026-09-03"
 
+  run.recipes_probed:
+    name: "The five recipes this change names, run against this tree and against copies of it with a
+           second line drawn - and under the interpreter every Python recipe gets"
+    of: "2026-09-04: each of the three threshold counts taken again after a line was added to the
+         function its at: names - as a module-level constant read by name, as one given a type as
+         well, and as a bare comparison - and each rose by one; the record's own two counts taken
+         from its text, with an implementation hole written under either quote; and the
+         reader's own parser found missing under python3 -I, where it is installed for the person and
+         not for the interpreter"
+    read: "2026-09-04"
+
   run.records_read_both_ways:
     name: "Four records written before the reader knew reopened_by, read by the reader before and
            after it learned the field - check, open, pull, affects, verify, and the page with its
@@ -317,12 +414,27 @@ known:
          its own change and written after; and 'no fresh reading' needs a threshold nobody stated,
          which the method forbids inventing. An entry with no recipe is this shape still, so it stays
          the default and a recipe is named per entry"
+  m.blocked_on_implementation:
+    v: 4
+    name: "Judgments whose declared hole calls itself an implementation hole - work not done yet -
+           rather than an observation nobody has made"
+    from: run.blocked_on_reread
+    at: "of 60 - the other 56 open observational; the split is measured on both sides, so neither
+         half drifts while the total holds"
+    measure: blocked_on_implementation
   m.blocked_on_reopeners:
-    v: 37
-    name: "Judgments whose blocked_on names the sign that would re-open them, not an input the
-           record lacks"
-    from: run.blocked_on_read
-    at: "of 37 declared holes - 34 say observational and 3 implementation; none waits on an entry"
+    v: 60
+    # reconciled 2026-09-05 after the same-day write rule refused a second reading: this tree adds
+    # five observational declarations to the 55 measured earlier that day
+    of: "2026-09-05"
+    name: "Judgments that declare a hole with blocked_on - the count. Whether each names a sign
+           that would re-open the decision, or an input the record lacks, is read by hand and said
+           beside it"
+    from: run.blocked_on_reread
+    at: "of 60 declared holes - 56 say observational and 4 implementation, the second half
+         measured beside this one; none is written as what the record is missing, and the one
+         that names an entry names one the record holds"
+    measure: blocked_on_reopeners
   m.claims.general_held:
     v: 3
     name: "Claims about how things usually work that held when scored"
@@ -374,12 +486,20 @@ known:
     at: "coverage and coverage_lines: counts and shares, printed; the only comparison is a
          falsifier's own"
     of: "2026-09-03"
+    measure: coverage_thresholds
   p.fields_a_build_writes:
     v: 0
     name: "Fields of the record a read command - check, open, page - writes"
     from: "scripts/provenance.py"
     at: "check_lines, opening and the page's build read the record; only set, add and review write
          it"
+    of: "2026-09-04"
+  p.fields_read_by_name:
+    v: 4
+    name: "Field names the reader excludes from role voting, reading them by name instead of by
+           shape"
+    from: "scripts/provenance.py"
+    at: "REOPENED, ARRANGEMENT_PROSE and IDENTITIES - reopened_by, request, replaced, also"
     of: "2026-09-04"
   p.hypothesis_homes:
     v: 1
@@ -388,13 +508,13 @@ known:
     at: "hypothesis_dir - PROVENANCE.d beside the file the reader opens first"
     of: "2026-09-04"
   p.hypothesis_name_inputs:
-    v: 1
+    v: 2
     name: "What the name a refused write suggests for its hypothesis file is derived from - the
-           entry id; nothing of the claim, the branch or the session enters it"
+           entry id and the claim being written; nothing of the branch or the session enters it"
     from: "scripts/provenance.py"
-    at: "_hypothesis_name - the id with what a file name cannot hold replaced; the numeric suffix
-         beside it counts only the hypotheses this checkout already holds, so it never fires across
-         branches"
+    at: "_hypothesis_name - the id with what a file name cannot hold replaced, and six characters of
+         a digest of the whole claim; the numeric suffix beside them counts only the hypotheses this
+         checkout already holds, so it never fires across branches"
     of: "2026-09-04"
   p.hypothesis_thresholds:
     v: 0
@@ -403,6 +523,7 @@ known:
     from: "scripts/provenance.py"
     at: "hypothesis_line - age and reach printed as facts; the only comparison is a falsifier's own"
     of: "2026-09-04"
+    measure: hypothesis_thresholds
   p.pointer_home:
     v: "<git common dir>/kpopper-record"
     name: "Where a record the tree cannot hold registers its path"
@@ -505,6 +626,15 @@ known:
     v: 1
     name: "How many times the stop gate blocks before yielding"
     from: "scripts/session_gate.sh"
+  p.predicate_shapes:
+    v: 1
+    name: "Places that decide whether a predicate is one comparison this reader can decide - the
+           shape a falsifier must have to be evaluated at all"
+    from: "scripts/provenance.py"
+    at: "why_undecided, asked by evaluate before it decides anything, by check and the opener before
+         they report a judgment, and by an arrangement's sign when it is written - every surface
+         reads that one answer"
+    measure: predicate_shapes
   p.prior_count_thresholds:
     v: 1
     name: "Lines the count of what rests on priors draws in code - a confidence past which it counts
@@ -513,6 +643,7 @@ known:
     at: "HIGH_CONFIDENCE, read by priors_line - the matrix's own line, printed inside the line the
          count prints"
     of: "2026-09-04"
+    measure: prior_count_thresholds
   p.recipe_runners:
     v: 1
     name: "Places a measurement recipe is executed - files under scripts/ that name the allowlist
@@ -667,6 +798,11 @@ open:
   q.arrangement_falsifiers: "will sessions write arrangement falsifiers a build can evaluate and
                              that say something - to be read as a foreign agent would, after
                              fifteen real arrangements?"
+  q.same_day_rereading: "where does a re-reading go when the session changed the file a premise was
+                         read from, on the day it was read? set refuses it into the base as two
+                         writers, and the hypothesis beside it is a contested reading the dry run
+                         fails, so a hand edit in the pull request is the only door left - the day
+                         may be the wrong grain for a writer that is also the world"
   q.sealed_falsifiers: "is one question - under this decision, can the sign still happen? -
                         enough against falsifiers a decision seals, or does the work on
                         predictions that change what they predict (performative prediction,
@@ -683,6 +819,44 @@ open:
                           by age, by how much rests on it, or only when a person asks?"
 
 judgments:
+  d.a_comparison_shows_where_it_parts:
+    rests_on: [s.2026_09_04_difference, d.moved_is_a_flag]
+    verdict: "where two readings are printed side by side, each is clipped to where they part rather
+              than to where they agree; the head is kept only when they part inside it"
+    because: "Clipping at the head shows the reader the part that did not change. Two long readings
+              that differ at their end came back as one string printed twice - on the line check
+              prints, the one open ranks, the one a write answers with, the one a fork refusal asks a
+              person to choose by, and two more - so {{d.moved_is_a_flag}}'s flag arrived carrying
+              nothing to judge. A window opening at the last whole word before the two diverge says
+              what moved in the space a clip already costs."
+    blocked_on: "observational: falsified if sessions read these lines worse rather than better - a
+                 fragment led by an ellipsis drops the context the head carried, and the sign is a
+                 session that has to open the record to learn what the moved value is about, where
+                 the old line told it"
+    seen:
+      s.2026_09_04_difference: "read 2026-09-04"
+      d.moved_is_a_flag: "a dependency that moved since the snapshot flags the judgment for a
+                          person; only a predicate that holds fails the build"
+    distinct_from: d.text_holds_the_prose_it_places
+    # distinct 2026-09-04: one decides which reading a snapshot records; this decides how any two readings are shown against each other, whatever they are snapshots of
+  d.a_line_is_clipped_by_its_parts:
+    rests_on: [s.2026_09_04_difference, d.a_comparison_shows_where_it_parts]
+    verdict: "a line that shows a comparison is built from parts already clipped, and never cut as a
+              whole - a budget spent on the first value would eat the second and the arrow between
+              them"
+    because: "pull cut its line at its full width, so a long value took the whole budget and the
+              reading it was being compared against never appeared at all: not a clipped comparison
+              but a single value, with nothing to say a second existed. That is the failure
+              {{d.a_comparison_shows_where_it_parts}} does not reach, because no per-side reading
+              helps a side that was never printed. Clipping the parts first also makes the line's own
+              budget a last resort rather than the thing doing the work."
+    blocked_on: "observational: falsified by a surface where the parts are short and the line still
+                 overruns - which would mean the budget belongs on the line after all"
+    seen:
+      s.2026_09_04_difference: "read 2026-09-04"
+      d.a_comparison_shows_where_it_parts: "where two readings are printed side by side, each is
+                                            clipped to where they part rather than to where they
+                                            agree; the head is kept only when they part inside it"
   d.add_places_by_prefix:
     rests_on: [m.multi.record_pairs_conflicting, d.base_shared_forks_on_contradiction]
     verdict: "add inserts a new entry beside the entries it shares the longest dotted prefix with,
@@ -703,6 +877,41 @@ judgments:
                                              contradicts the record opens a named hypothesis, and
                                              whatever later rests on the contradiction goes there - a
                                              session is never the unit"
+  d.also_is_read_by_absence:
+    rests_on: [s.2026_09_04_also_reading, d.locate_by_shape, d.sameness_is_judged, p.fields_read_by_name]
+    verdict: "also: names other identities of a subject and never what it rests on: the reader
+              excludes it from role voting by name, reads it as a retirement only where the named id
+              is absent everywhere, and where that id is held says so as a note naming both commands
+              rather than choosing between a retirement that came back and a sibling the record
+              declares"
+    because: "A survivor carries the id retired into it. While that id is absent the field names
+              nothing and votes for nothing; the day a merge brings back the branch it came from -
+              one side having retired the id, the other still holding it, the two touching different
+              lines - the field is a list of ids that are all entries, which is the shape the
+              dependency role is voted on by, and in a record with one judgment it ties with the real
+              one and nothing can be read at all. No write can reach that state, so nothing but shape
+              inference could have seen it coming. Excluding the field by name is the smallest fix
+              and must not be the only one: alone it turns a loud failure into a silent
+              contradiction, and passing quietly over what cannot be read is the one thing this
+              reader refuses. The note is a note and not a failure because the two readings have one
+              shape - a live record already keeps sibling resource ids in this field - and deciding
+              between them is what {{d.sameness_is_judged}} leaves to a person. A record that does
+              keep its dependencies there still says so with schema. {{p.fields_read_by_name}} names
+              are read this way, and the count is what would show the reader retreating from shape
+              inference one field at a time."
+    wrong_if: "p.fields_read_by_name > 4"
+    seen:
+      s.2026_09_04_also_reading: "read 2026-09-04"
+      d.locate_by_shape: "the docs locate a shipped script by matching its name and taking the
+                          highest version, never by a path written against today's layout"
+      d.sameness_is_judged: "the tool never decides that two entries are the same: it shows the
+                             nearest existing entries when one is written and candidates when
+                             hypotheses consolidate; the writer or the merger decides, and the
+                             decision is recorded - same_as as a migration that leaves the build
+                             green, distinct_from as an edge that retires the pair"
+      p.fields_read_by_name: 4
+    distinct_from: d.distinct_is_a_bare_id
+    # distinct 2026-09-04: one says how a field is read, the other how a field is written; they share their premises and not their subject
   d.another_branch_reads_as_hypotheses:
     rests_on: [s.2026_09_04_consolidate, d.no_feed_of_other_branches, d.record_is_code]
     verdict: "another branch's committed record is read as hypotheses and never written: its base as
@@ -784,6 +993,37 @@ judgments:
               the move having happened. Cheap to reverse, so decided on the prior alone."
     wrong_if: "prior.strings_lose_tooling < 0.6"
     seen: {m.page_string_lines: 0, prior.strings_lose_tooling: 0.95}
+  d.candidate_lists_are_a_floor:
+    rests_on: [s.2026_09_04_also_reading, d.sameness_is_judged, d.names_rank_never_decide, alt.sameness_from_names]
+    verdict: "a candidate list is a floor and never a census: two entries about one fact, each with
+              its own source and resting on nothing, share no declared edge, and what is left of them
+              - the value, the name - is a resemblance this record refuses to decide on, so such a
+              pair is closed by a person or by the next write that lands near one of them"
+    because: "The edges the generators read are provenance, derivation and premises: the same source
+              and place, the same rule, the same premises. Two sessions that each read their own
+              document about one number share none of them, which is the ordinary shape of a
+              multi-session record rather than an edge case. What is left is the value and the name,
+              and both are properties of the subject rather than of its identity - two entries hold
+              24 for unrelated reasons - which is the road this record refused when it rejected a
+              tool that infers sameness from names. So a session reading a clean list has learned
+              that nothing declared connects two subjects, never that the record holds no duplicate."
+    blocked_on: "observational: falsified by a signal over declared fields that names such a pair
+                 without deciding on resemblance - an identity a source itself declares, say - or by
+                 a real record in which two sessions reading one fact from two documents never
+                 happens"
+    seen:
+      s.2026_09_04_also_reading: "read 2026-09-04"
+      d.sameness_is_judged: "the tool never decides that two entries are the same: it shows the
+                             nearest existing entries when one is written and candidates when
+                             hypotheses consolidate; the writer or the merger decides, and the
+                             decision is recorded - same_as as a migration that leaves the build
+                             green, distinct_from as an edge that retires the pair"
+      d.names_rank_never_decide: "a candidate pair is named for a declared reason - the same source
+                                  and place, the same source, the same rule read through what was
+                                  retired, the same premises - and the overlap of two names only
+                                  orders a list; add says the nearest three and refuses nothing, the
+                                  dry run says a handful per arriving id"
+      alt.sameness_from_names: rejected
   d.chrome_follows_language:
     rests_on: [s.2026_09_04_components, d.author_free_build_guarantees]
     verdict: "Chrome follows the declared record language, or the dominant script of its descriptive
@@ -837,28 +1077,29 @@ judgments:
                                           the base"
       p.contested_meanings: 1
   d.contradiction_by_id_and_day:
-    rests_on: [s.2026_09_03_hypotheses, d.base_shared_forks_on_contradiction, d.write_path_returns_reach, p.supersede_doors]
+    rests_on: [s.2026_09_04_minted_permission, s.2026_09_03_hypotheses, d.base_shared_forks_on_contradiction, d.write_path_returns_reach, p.supersede_doors]
     verdict: "a contradiction is told by the id and the day: the same id with a value read no later
               than the base's own reading, or with a different verdict, is refused into the base and
               named a hypothesis; a newer reading supersedes, a standing judgment is superseded only
-              when its wrong_if holds or the request that asked for the change is named; the same
-              premises under different ids are different subjects"
+              when its wrong_if holds; the same premises under different ids are different subjects"
     because: "set is the update path - the world moving, flagged as it always was - so a differing
               value alone cannot be the contradiction, or the reach would have nothing left to reach.
               What the record can tell apart is time: a reading newer than the one the base holds -
               its own date, else its source's - supersedes it; one of the same day or older that
               disagrees is two writers, not the world moving. A value nothing dates is superseded by
               the first dated write, which starts the clock; a concurrent second writer is then
-              same-day and refused - the case the mechanism exists for. Resting on a session source
-              proves nothing, since every judgment rests on the session that wrote it, so a judgment
-              is replaced only when it is already broken by its own condition or when the new one
-              names the request that asked for the change and rests on it. Five judgments here rest
-              on one source with five verdicts, so the same premises under different ids stay
-              different subjects until someone says otherwise - a candidate to judge, never a
+              same-day and refused - the case the mechanism exists for. A judgment has no such clock,
+              and resting on a session source proves nothing, since every judgment rests on the
+              session that wrote it; naming one proves no more, since the session writes it. So a
+              judgment is replaced in the base only when it is already broken by its own condition,
+              and every other rewrite waits beside the record for a person to fold. Five judgments
+              here rest on one source with five verdicts, so the same premises under different ids
+              stay different subjects until someone says otherwise - a candidate to judge, never a
               refusal. One function decides all of it; {{p.supersede_doors}} is the count that would
               show a second one creeping in."
     wrong_if: "p.supersede_doors > 1"
     seen:
+      s.2026_09_04_minted_permission: "read 2026-09-04"
       s.2026_09_03_hypotheses: "read 2026-09-03"
       d.base_shared_forks_on_contradiction: "a consistent addition goes straight to the shared
                                              record from any session or branch; a write that
@@ -958,28 +1199,32 @@ judgments:
                                           the base"
       p.union_tests: 1
   d.fold_passes_the_one_door:
-    rests_on: [s.2026_09_04_consolidate, d.contradiction_by_id_and_day, p.supersede_doors]
-    verdict: "a folded reading passes the same door a written one does: an entry replaces what the
-              base holds when its reading is newer, a judgment when the standing one is broken or
-              names the request - and a reading the door refuses is contested, never overwritten"
-    because: "The fold is a write under ids the base holds, and the record already has one function
-              that says whether such a write may replace what stands -
-              {{d.contradiction_by_id_and_day}} put the rule there so that nothing else decides it. A
-              fold that took sides on a same-day disagreement would be a second door, opened by
-              whoever ran the command; through the one door, a hypothesis born of a same-day
-              contradiction stays beside the record until someone reads again on a later day, which
-              is the act the day rule can tell apart from two writers. {{p.supersede_doors}} is the
-              count that would show a second door."
+    rests_on: [s.2026_09_04_minted_permission, s.2026_09_04_consolidate, d.contradiction_by_id_and_day, p.supersede_doors]
+    verdict: "a folded reading passes the one door a written one does, with a person's hand on it:
+              an entry replaces what the base holds when its reading is newer, a judgment when the
+              standing one is broken or when the fold itself is the person's - and a reading the door
+              refuses is contested, never overwritten"
+    because: "The fold is a write under ids the base holds, and one function still says whether such
+              a write may replace what stands - {{d.contradiction_by_id_and_day}} put the rule there
+              so that nothing else decides it, and the fold passes its hand through that function
+              rather than deciding beside it. Readings keep the day rule whole: a hypothesis born of
+              a same-day contradiction stays beside the record until someone reads again on a later
+              day, which is the act the day rule tells two writers apart by, and no hand makes an
+              older reading newer. A standing judgment has no clock to appeal to, so what could admit
+              its rewrite was a claim written into the write itself - which is what a session mints
+              for free. The fold is the one act here a session cannot write into the record, and it
+              is where the rewrite is read beside what it replaces, with the dry run naming both.
+              {{p.supersede_doors}} is the count that would show a second door."
     wrong_if: "p.supersede_doors > 1"
     seen:
+      s.2026_09_04_minted_permission: "read 2026-09-04"
       s.2026_09_04_consolidate: "read 2026-09-04"
       d.contradiction_by_id_and_day: "a contradiction is told by the id and the day: the same id
                                       with a value read no later than the base's own reading, or with
                                       a different verdict, is refused into the base and named a
                                       hypothesis; a newer reading supersedes, a standing judgment is
-                                      superseded only when its wrong_if holds or the request that
-                                      asked for the change is named; the same premises under
-                                      different ids are different subjects"
+                                      superseded only when its wrong_if holds; the same premises
+                                      under different ids are different subjects"
       p.supersede_doors: 1
   d.gate_and_opener_against_the_mark:
     rests_on: [s.2026_09_03_coverage, d.gate_reminds, d.open_is_a_slot, p.gate_bounces]
@@ -1051,28 +1296,31 @@ judgments:
                                     is pulled by seed or surfaces as a collision on the same id"
       p.hypothesis_thresholds: 0
   d.hypothesis_files_meet_on_one_name:
-    rests_on: [s.2026_09_04_merge_driver_reason, alt.record_merge_driver, p.hypothesis_name_inputs]
-    verdict: "hypothesis files do meet - two branches that fork on one id open the same file, since
-              the suggested name comes from the id alone and each head carries the day it was born,
-              so even one claim written twice collides - and the meeting is two writers on one
-              subject, repaired by a rename and judged by the dry run; a merge driver stays set aside
-              for that, never for an absence of conflicts"
-    because: "The alternative was set aside on the ground that separate files leave no textual
-              conflict to drive. That is false in the one case the fork exists for:
-              {{p.hypothesis_name_inputs}} thing decides the suggested name, the id itself, and the
-              suffix beside it counts only what one checkout holds, so it cannot see the other
-              branch. Two branches forked on one id write one path, and git has an add and an add
-              even where they agree, since each head carries its own day. What a driver would have to
-              settle there is which of two claims about one subject stands, which is the question the
-              dry run puts to a person - and the name is already the writer's to choose, so the
-              repair is a rename and not machinery bolted under a choice. The count is what would
-              show the name learning the branch or the session, which would end the meeting instead
-              of resolving it."
-    wrong_if: "p.hypothesis_name_inputs > 1"
+    rests_on: [s.2026_09_04_hypothesis_claim_name, s.2026_09_04_merge_driver_reason, alt.record_merge_driver, p.hypothesis_name_inputs]
+    request: s.2026_09_04_hypothesis_claim_name
+    verdict: "hypothesis files meet only where two branches claim the same thing under one id: the
+              suggested name carries the id contradicted and a mark of the claim written, so two
+              readings that disagree open two files and merge, and two that agree open one path that
+              git reports as an add and an add, since each head carries the day it was born; a merge
+              driver stays set aside for that meeting - the two heads say one thing, and either is
+              the whole of it - never for an absence of conflicts"
+    because: "This narrows what stood here rather than retiring it. That decision read the fork
+              honestly: the name came from the id alone, so two branches refused on one id wrote one
+              path whatever they claimed, and the meeting was two writers on one subject, repaired by
+              a rename and judged by the dry run. The rename is needed now only where the writers
+              disagree - a mark of the whole claim rides in the name, so different claims are
+              different files that git merges, and which reading stands is put to a person as a
+              contest, the question a driver would have had to answer and cannot. What is left is the
+              agreeing pair, kept on purpose: one claim gets one name wherever it is written, so two
+              branches that read the same thing meet on one path, and that merge asks nothing harder
+              than which day's head to keep. {{p.hypothesis_name_inputs}} is what enters a name now,
+              and a third - the branch, the session - would end even the meeting this keeps."
+    wrong_if: "p.hypothesis_name_inputs > 2"
     seen:
+      s.2026_09_04_hypothesis_claim_name: "read 2026-09-04"
       s.2026_09_04_merge_driver_reason: "read 2026-09-04"
       alt.record_merge_driver: rejected
-      p.hypothesis_name_inputs: 1
+      p.hypothesis_name_inputs: 2
   d.local_claims_want_a_run:
     rests_on: [s.2026_09_04_calibration, prior.local_needs_a_run, m.claims.general_held,
                m.claims.local_checked_held, m.claims.local_assumed_held, m.reach.general_held,
@@ -1148,6 +1396,29 @@ judgments:
                          user-level directory is at most an index of records, never content; a
                          session named as a source is provenance, not process"
       p.recipe_runners: 1
+  d.mention_covers_never_silences:
+    rests_on: [s.2026_09_04_signals, d.falsifier_beyond_reach, d.arrangement_replaced_by_trigger]
+    verdict: "prose covers what it names and never accounts for it: a mention counts for coverage,
+              and a flagged judgment no section picked still falls to spill"
+    because: "An arrangement's sign is drawn against what fell through, so an author who could empty
+              that count by writing well would hold their own falsifier at zero - which is exactly
+              what {{d.falsifier_beyond_reach}} refuses, turned on the mechanism instead of on a
+              judgment. Coverage asks whether the arrangement reached a thing, and a sentence naming
+              it does; the spill section asks whether the arrangement answered for its state, and
+              prose shows an argument while saying nothing about the judgment being broken, unchecked
+              or waiting. So the two sets part: picks account, mentions cover."
+    blocked_on: "observational: falsified if the spill section fills with judgments whose reasoning
+                 already stands a paragraph above it, so that readers learn to skip the section that
+                 exists to be unskippable"
+    seen:
+      s.2026_09_04_signals: "read 2026-09-04"
+      d.falsifier_beyond_reach: "a falsifier names a sign the decision itself cannot suppress; one
+                                 that can only appear when people do what the decision stops offering
+                                 is sealed, not falsifiable"
+      d.arrangement_replaced_by_trigger: "an arrangement is replaced only when its falsifier fires,
+                                          a coverage gap exists, or a person asks"
+    distinct_from: d.minimal_repair
+    # distinct 2026-09-04: minimal repair is how much structural change a fired trigger buys; this is what may fire one at all
   d.names_rank_never_decide:
     rests_on: [s.2026_09_04_sameness, d.sameness_is_judged, alt.sameness_from_names, p.candidate_reasons]
     verdict: "a candidate pair is named for a declared reason - the same source and place, the same
@@ -1222,10 +1493,11 @@ judgments:
     verdict: "The output lint checks references and visible keys, judgment and review markers,
               language, and arrangement intent; source prose stays attributed to its record entry and
               connective prose must carry its own references"
-    because: "The record owns its statements and snapshots. The page can check whether a reference
-              and its warning survived rendering; it cannot decide whether a sentence argues.
-              Unanchored connective prose is therefore a warning, while a value invented in
-              connective prose or a missing warning fails."
+    because: "The record owns its statements and snapshots. The page can check whether a rendered
+              reference and its warning survived; it cannot decide whether a sentence argues, and a
+              reference beyond a reported card cut is not rendered. Unanchored connective prose is
+              therefore a warning, while a value invented in connective prose or a missing warning
+              fails."
     blocked_on: "observational: re-open if rendered values evade the reference check, or the lint
                  requires rewriting a source merely to render it"
     seen:
@@ -1235,6 +1507,33 @@ judgments:
       d.reasoning_in_record: "reasoning is the because of the judgment it belongs to, in the record;
                               the page's connective text lives in the brief; both resolve references
                               at build and both carry seen"
+  d.predicate_shape_is_one_reading:
+    rests_on: [s.2026_09_04_falsifier_shape, p.predicate_shapes, d.arrangement_sign_is_one_comparison]
+    verdict: "what shape a predicate must have to be decided is one reading, asked wherever a
+              predicate is written, reported or evaluated: one comparison, which is a right-hand side
+              carrying no second comparison - text inside quotes is a literal and is not read for one
+              - and a predicate that is not one is declined by the reader and reported where an empty
+              predicate is, never answered false"
+    because: "The comparison shape takes everything after the operator as its value, so a == false,
+              or b == false was decided against the text after the first operator - false in every
+              state of the record, a falsifier that reads as evaluable and can never fire.
+              {{d.arrangement_sign_is_one_comparison}} refused that for an arrangement's sign and
+              named it there; every other judgment inherited it, and check passed over them because a
+              predicate that names an entry was taken as one it could read. {{p.predicate_shapes}}
+              counts the places that decide the shape: a second one drifts from the first, and it
+              drifts both ways. The path that had a shape test read a quoted value by looking inside
+              the quotes for operators, so a date - one value, written with hyphens - was refused
+              there while the path with no test compared it happily; a rule any narrower than
+              'carries no second comparison' refuses values the reader compares perfectly well, and
+              silencing a falsifier that works is this same failure from the other side."
+    wrong_if: "p.predicate_shapes > 1"
+    seen:
+      s.2026_09_04_falsifier_shape: "read 2026-09-04"
+      p.predicate_shapes: 1
+      d.arrangement_sign_is_one_comparison: "an arrangement's sign is one comparison over a count
+                                             that can hold - a name, an operator, one value; a
+                                             compound or an impossible one is refused, and a
+                                             re-opener stands beside it, never in its place"
   d.prior_carries_its_own_falsifier:
     rests_on: [prior.confidence_needs_calibration, m.claims.local_assumed_held, d.hypothesis_is_a_judgment]
     verdict: "the prior kind carries its own falsifier: if judgments resting on priors at 0.8 or
@@ -1365,6 +1664,36 @@ judgments:
                                              whatever later rests on the contradiction goes there - a
                                              session is never the unit"
       p.hypothesis_homes: 1
+  d.record_measured_from_its_text:
+    rests_on: [s.2026_09_04_measure_recipes, run.recipes_probed, d.measure_names_a_recipe, m.blocked_on_reopeners]
+    verdict: "a recipe whose subject is the record counts from the record's own text and imports
+              nothing - not the reader that check runs, and not a parser installed beside it"
+    because: "{{m.blocked_on_reopeners}} declared holes is a fact about the record, and the record
+              is in the tree, so it is measurable like any other. Taken through the reader it would
+              stop being evidence: the number and the thing it is evidence about would come out of
+              one function, and a reading that cannot disagree with what it measures is not a
+              measurement - it is the same claim written twice. The isolation
+              {{d.measure_names_a_recipe}} runs the Python recipes under says the same thing from the
+              other side and adds a second reason: an interpreter that will not let a file in the
+              checkout stand in for a module also will not see a package installed for the person
+              rather than for itself, and the reader's own parser is installed exactly that way here
+              - a recipe importing it runs green on the pull request and fails at a keyboard, which
+              is a hole wearing a measurement's clothes. What is left is the file's own lines, and
+              they are enough: an entry opens at one indent and its fields at the next."
+    blocked_on: "observational: falsified by a shape the record grows that a line scan miscounts
+                 while the reader reads it right - a field written as a block scalar, or a collection
+                 nested a level deeper - or by a count about the record that no scan can take without
+                 reimplementing the reader"
+    seen:
+      s.2026_09_04_measure_recipes: "read 2026-09-04"
+      run.recipes_probed: "read 2026-09-04"
+      d.measure_names_a_recipe: "an entry whose value is a fact about the tree names its recipe with
+                                 measure: - a bare name, never a command; the recipes live beside the
+                                 record as argument lists in one file reviewed as code, and run only
+                                 on the pull request, by one runner, without a shell - so the record
+                                 never carries a command, and no command that reads the record runs
+                                 one"
+      m.blocked_on_reopeners: 53
   d.refutations_keep_judgment_ids:
     from: s.2026_09_04_prior_reversal_share
     rests_on: [d.prior_confidence_survives_refutation, d.refuted_hypothesis_leaves_one_finding]
@@ -1464,24 +1793,31 @@ judgments:
                   an input after all"
     seen:
       prior.field_name_reads_as_gate: 0.7
-      m.blocked_on_reopeners: 37
+      m.blocked_on_reopeners: 53
       m.older_records_changed: 0
       d.declared_hole_is_a_note: "check fails only an undeclared gap; a hole declared with
                                   blocked_on is a note"
   d.request_is_a_visible_claim:
-    rests_on: [s.2026_09_03_arrangements, d.reversal_is_a_redecision]
-    verdict: "a person's request is named explicitly - request: a session source whose asked: is the
-              request verbatim, rested on - and said on every surface that shows the decision"
-    because: "Nothing by shape tells a request from an intent: every entry comes from a session
-              source and every arrangement rests on the session that wrote it, so a door read from
-              from: or rests_on would admit every rewrite by every later session, and with it the
-              flip. An explicit field is a claim under the session's name that a reader can hold
-              against the asked: it points at; the alternative - no door until a person folds a
-              hypothesis - makes the person answer their own question. Chosen at the person's word:
-              execute immediately, with a visible note."
-    blocked_on: "observational: falsified if request: appears on re-decisions whose named asked:
-                 does not ask for them, and no reader catches it"
+    rests_on: [s.2026_09_04_minted_permission, s.2026_09_03_arrangements, d.reversal_is_a_redecision]
+    verdict: "request: names whose asking a judgment was taken from - a session source whose asked:
+              is the request verbatim, rested on - and says it on every surface that shows the
+              judgment; it is provenance a reader weighs at the fold, and it admits nothing"
+    because: "The session writes that source itself, and this method requires it to: every session's
+              first write is a source carrying what it was asked. A door that opened on request: was
+              therefore open to every session by the record's own convention - nothing told a
+              person's asking from a session's claim that a person asked - and since the field was
+              widened from arrangements to every judgment it could pass any standing falsifier in the
+              record. The visibility that was offered for it, on the page and in check, is audit
+              after the fact and not authority. What the field is good for survives: whose asking a
+              change answers is what a person wants in front of them when they fold it, and it
+              travels with the hypothesis to be read there. The alternative the exception lacked when
+              it was opened - a rewrite that waits beside the record until a person folds it - exists
+              now."
+    blocked_on: "observational: falsified if sessions stop naming the asking a change came from once
+                 the field carries no permission, so folds are read without it, or if a reader takes
+                 request: for authority anyway"
     seen:
+      s.2026_09_04_minted_permission: "read 2026-09-04"
       s.2026_09_03_arrangements: "read 2026-09-03"
       d.reversal_is_a_redecision: "a reversal is the arrangement written again under its own id -
                                    admitted in place when its sign holds with its tabs intact, or on
@@ -1491,10 +1827,11 @@ judgments:
     rests_on: [s.2026_09_04_components, d.intent_is_a_source, d.page_lint_reads_output]
     verdict: "The request under an arrangement is a complete quote of its source, including any
               entry names the person used"
-    because: "On the word of identifies whose request authorized a decision. Truncating or renaming
-              words inside that quotation changes the authority being shown. The quote has its own
-              source reference, and the output lint accepts its text only when it exactly matches
-              that source asked field; ordinary page labels still cannot expose internal keys."
+    because: "On the word of identifies whose asking a decision was taken from. Truncating or
+              renaming words inside that quotation changes the provenance being shown. The quote has
+              its own source reference, and the output lint accepts its text only when it exactly
+              matches that source asked field; ordinary page labels still cannot expose internal
+              keys."
     blocked_on: "observational: re-open if readers cannot distinguish the attributed request from
                  assertions made by the page itself"
     seen:
@@ -1506,21 +1843,26 @@ judgments:
                                  attributed to its record entry and connective prose must carry its
                                  own references"
   d.reversal_is_a_redecision:
-    rests_on: [s.2026_09_03_arrangements, d.reversal_is_a_question, d.contradiction_by_id_and_day]
+    rests_on: [s.2026_09_04_minted_permission, s.2026_09_03_arrangements, d.reversal_is_a_question, d.contradiction_by_id_and_day]
     verdict: "a reversal is the arrangement written again under its own id - admitted in place when
-              its sign holds with its tabs intact, or on a person's request, never twice in a day -
-              and otherwise refused into a hypothesis that contests it"
+              its sign holds with its tabs intact, never twice in a day - and otherwise refused into
+              a hypothesis that contests it until a person folds it"
     because: "The brief cannot reverse a decision by being edited - the record's own claims fail it
               - and a new id contradicts nothing, so the same id is where a reversal lives and the
               door every same-id write goes through decides it. The sign is read only from a brief
               that still carries what the decision made: a tab deleted or gutted makes the very sign
               it would cite. One re-decision a day makes one radical change per session mechanical
               rather than remembered, and replaced: keeps each decision's born, how long it stood and
-              what ended it, so a flip reads from the record alone."
+              what ended it, so a flip reads from the record alone. A session's own word that a
+              person asked bought a way past all three at once - the day, the cut link and the sign -
+              and the session writes that word, so it buys nothing now. {{d.reversal_is_a_question}}
+              is answered where it belongs instead: the question waits in the hypothesis until the
+              person answers it by folding."
     blocked_on: "observational: falsified if an arrangement flips across days by sessions each
                  citing a sign the other's repair produced, or if a gradual edit - a pick narrowed
                  until something spills - is used to manufacture the sign"
     seen:
+      s.2026_09_04_minted_permission: "read 2026-09-04"
       s.2026_09_03_arrangements: "read 2026-09-03"
       d.reversal_is_a_question: "undoing an arrangement whose falsifier did not fire is a question
                                  for the person, never a change"
@@ -1528,9 +1870,8 @@ judgments:
                                       with a value read no later than the base's own reading, or with
                                       a different verdict, is refused into the base and named a
                                       hypothesis; a newer reading supersedes, a standing judgment is
-                                      superseded only when its wrong_if holds or the request that
-                                      asked for the change is named; the same premises under
-                                      different ids are different subjects"
+                                      superseded only when its wrong_if holds; the same premises
+                                      under different ids are different subjects"
   d.review_names_what_it_reads:
     rests_on: [d.reasoning_in_record, d.metrics_derived_builtin]
     verdict: "review takes a judgment's id or a section's title; an arrangement's review also
@@ -1657,6 +1998,56 @@ judgments:
       d.minimal_repair: "seniority is evidence, never a threshold; a trigger is cleared by the
                          smallest structural change that suffices"
       p.fields_a_build_writes: 0
+  d.text_holds_the_prose_it_places:
+    rests_on: [s.2026_09_04_signals, d.reasoning_in_record, d.moved_is_a_flag]
+    verdict: "a section's text is held to the sentence it draws - a judgment placed for its
+              reasoning is snapshotted by that reasoning, while what rests on a judgment keeps
+              snapshotting its verdict"
+    because: "A text that places {{d.reasoning_in_record}}'s reasoning puts an argument on the
+              reading surface, and until now it recorded only the verdict above it: the argument
+              could be rewritten to say the opposite with no tint and nothing said by the build. The
+              verdict is still the right snapshot everywhere else, because what rests on a judgment
+              rests on its conclusion and survives three rewrites of the prose - but a text is the
+              one place the prose itself is what a person reads, so it is the one place the prose is
+              what the text is held to."
+    blocked_on: "observational: falsified if sessions start clearing this tint without reading - a
+                 text re-reviewed for wording that did not change the argument is noise, and the sign
+                 is reviews that follow a rewrite too closely to have been read"
+    seen:
+      s.2026_09_04_signals: "read 2026-09-04"
+      d.reasoning_in_record: "reasoning is the because of the judgment it belongs to, in the record;
+                              the page's connective text lives in the brief; both resolve references
+                              at build and both carry seen"
+      d.moved_is_a_flag: "a dependency that moved since the snapshot flags the judgment for a
+                          person; only a predicate that holds fails the build"
+    distinct_from: d.written_layer_drawn_by_build
+    # distinct 2026-09-04: one says where the mark is made - by the build, in the markup, so it survives a host that strips scripts; this one says which reading the snapshot holds, which is what decides whether there is anything to mark
+  d.threshold_read_inside_its_function:
+    rests_on: [s.2026_09_04_measure_recipes, run.recipes_probed, p.prior_count_thresholds, p.coverage_thresholds, p.hypothesis_thresholds]
+    verdict: "a line a count draws is counted inside the function the entry's at: names and nowhere
+              else - a module-level number the function reads by name, or a number other than zero or
+              one it compares against; what a helper it calls draws belongs to that helper's own
+              count"
+    because: "Three entries here say a report draws {{p.prior_count_thresholds}} line or none, and a
+              recipe that grepped the file for numbers would answer a different question. The reader
+              also refuses a falsifier over a share above one - a comparison against 1, over two
+              computed names, in a function none of these entries names - and a count that swept the
+              module would read it as a second line and correct a 1 upward against a judgment that
+              says a second would be wrong. So the at: is the scope and the function is the unit.
+              Inside it a line is named, or it is not zero or one: zero and one are how this code
+              says empty and singular, and a line worth arguing about is given a name the way the
+              matrix's own is. Both halves fire - each of the three counts rose by one when a line
+              was added, once as a named constant and once as a bare comparison - and a function the
+              file no longer has reads as a hole rather than as a zero."
+    blocked_on: "observational: falsified by a line this cannot see - drawn inside a helper the
+                 function calls, or written as a comparison against zero or one that readers treat as
+                 a threshold - or by a name it counts that nobody would argue with"
+    seen:
+      s.2026_09_04_measure_recipes: "read 2026-09-04"
+      run.recipes_probed: "read 2026-09-04"
+      p.prior_count_thresholds: 1
+      p.coverage_thresholds: 0
+      p.hypothesis_thresholds: 0
   d.tree_reads_as_a_hypothesis:
     rests_on: [s.2026_09_04_remeasure, d.dry_run_is_check_on_the_union, d.contradiction_by_id_and_day, d.moved_is_a_flag, p.union_tests]
     verdict: "the tree's readings that differ from the record are laid over it as one more
@@ -1692,6 +2083,30 @@ judgments:
       d.moved_is_a_flag: "a dependency that moved since the snapshot flags the judgment for a
                           person; only a predicate that holds fails the build"
       p.union_tests: 1
+  d.truth_value_is_matched:
+    rests_on: [s.2026_09_04_falsifier_shape, d.predicate_shape_is_one_reading]
+    verdict: "a falsifier compares a truth value by matching it - wrong_if x == false holds when x
+              holds false - and never as text, never ordered, and never against a value that is not
+              one"
+    because: "A record writes false and the fact holds a boolean, so comparing the two as text
+              matched in neither state: the falsifier stood green while the fact was true, and stayed
+              green when it turned false - the one moment it existed for. Matching is the only
+              comparison a truth value has, so under {{d.predicate_shape_is_one_reading}} a truth
+              value is one value a falsifier may name; ordering one decides nothing, and holding one
+              against a value that is not one is two kinds of thing, and both are declined rather
+              than answered."
+    reopened_by: "a record that writes a truth value as something else - yes and no, 1 and 0, a
+                  quoted true - and expects a falsifier to match it: the reading would then be about
+                  what a truth value may be written as, not about matching one"
+    seen:
+      s.2026_09_04_falsifier_shape: "read 2026-09-04"
+      d.predicate_shape_is_one_reading: "what shape a predicate must have to be decided is one
+                                         reading, asked wherever a predicate is written, reported or
+                                         evaluated: one comparison, which is a right-hand side
+                                         carrying no second comparison - text inside quotes is a
+                                         literal and is not read for one - and a predicate that is
+                                         not one is declined by the reader and reported where an
+                                         empty predicate is, never answered false"
   d.whole_shape_surface:
     rests_on: [doc.fact_moves]
     verdict: "the shape of the whole gets one surface of its own - the tree - and the reading

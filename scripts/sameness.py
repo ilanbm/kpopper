@@ -64,9 +64,14 @@ def overlap(a, b):
     return len(ta & tb) / len(ta | tb) if ta and tb else 0.0
 
 
-def retired_into(raws, live):
+def retired_into(raws, live, deps=None):
     """{retired id: the id it was retired into}, from every `also:` a body carries - in the
-    base and in every hypothesis beside it. An id still held anywhere is not retired."""
+    base and in every hypothesis beside it. An id still held anywhere is not retired: absence
+    is the whole condition, and where it fails the field is read as neither reading. A record
+    that declares `also` as its dependency field means something else by it entirely, and this
+    says nothing about such a record - pass `deps` to be told."""
+    if deps == "also":
+        return {}
     out = {}
     for raw in raws:
         for k, b in raw.items():
@@ -78,6 +83,42 @@ def retired_into(raws, live):
                 if isinstance(x, str) and IDISH.match(x) and x not in live and x != k:
                     out.setdefault(x, k)
     return out
+
+
+def also_held(raws, live, deps=None):
+    """Where the retirement reading does not hold -> [(holder, named)], in order: an `also:`
+    that names an id the record still holds somewhere. The two readings of the field have one
+    shape - the ids folded into this one, and the siblings a record declares - so absence is
+    the whole condition that tells them apart, and this is the set it fails on. A write cannot
+    make one: `add` of a retired id is refused. A merge can, and textually - one branch retires
+    an id, another still holds it, the two touch different lines. A record that declares `also`
+    as its dependency field means its premises by it, and holds none of these."""
+    if deps == "also":
+        return []
+    out = []
+    for raw in raws:
+        for k, b in sorted(raw.items()):
+            if not isinstance(b, dict):
+                continue
+            al = b.get("also")
+            al = [al] if isinstance(al, str) else al if isinstance(al, list) else []
+            for x in al:
+                if isinstance(x, str) and IDISH.match(x) and x in live and x != k \
+                        and (k, x) not in out:
+                    out.append((k, x))
+    return out
+
+
+def also_lines(doc, deps=None):
+    """What `check` says about it: one line per pair, naming the two commands that answer it.
+    Never a failure - which of the two readings holds is a person's, the way every other
+    question of sameness here is."""
+    base, hyps, live = _every_raw(doc)
+    raws = [base] + [h["raw"] for h in hyps.values() if not h["error"]]
+    return [f"{k} carries also: {x}, and {x} is an entry - a retirement that came back, or a "
+            f"sibling this record declares; the reader reads it as neither: same {k} {x} folds "
+            f"them, distinct {k} {x} \"why\" tells them apart"
+            for k, x in also_held(raws, live, deps)]
 
 
 def distinct_pairs(raws):
@@ -196,7 +237,7 @@ def nearest_existing(a, doc, ids, jud, fields, raw):
     k = a["id"]
     base, hyps, live = _every_raw(doc)
     raws = [base] + [h["raw"] for h in hyps.values()]
-    retired = retired_into(raws, live)
+    retired = retired_into(raws, live, fields["deps"])
     if k in retired and k not in ids:
         into = retired[k]
         return [f"{k} was retired into {into} - write {into} instead; it carries also: [{k}]"]
@@ -240,7 +281,7 @@ def candidates(doc, hypotheses=None, limit=5):
     raw_all = {}
     for r in reversed(raws):
         raw_all.update(r)
-    retired = retired_into(raws, live)
+    retired = retired_into(raws, live, fields["deps"])
     distinct = distinct_pairs(raws)
     arrivals = [(h["name"], k) for h in chosen for k in sorted(h["ids"]) if k not in ids]
     base_pool = {x: base[x] for x in ids if isinstance(base.get(x), dict)}
@@ -313,7 +354,8 @@ def _merge(S, R, sb, rb, ids, jud, fields, raw, as_of):
                 raise P.Refused(f"refused - {S} concludes {P.short(vs, 60)!r} and {R} "
                                 f"{P.short(vr, 60)!r} - {why}: two verdicts on one subject are a "
                                 f"contradiction, not one subject twice; keep the one that holds, "
-                                f"or supersede it through add with request:")
+                                f"or write the other through add --hypothesis, for a person "
+                                f"to fold")
             body = dict(rb)
             notes.append(f"{S} takes {R}'s verdict - {why}")
         else:
@@ -549,7 +591,7 @@ def same(paths, a, b, keep=None, as_of=None):
     raw = P.with_builtins(doc, ids, jud, fields)
     base, hyps, live = _every_raw(doc)
     raws = [base] + [h["raw"] for h in hyps.values()]
-    retired = retired_into(raws, live)
+    retired = retired_into(raws, live, fields["deps"])
     if a == b:
         raise P.Refused(f"refused - {a} and {b} are one id already")
     if keep is None or keep in ("a", a):
@@ -793,7 +835,7 @@ def distinct(paths, a, b, why, as_of=None):
     ids, jud, fields = P.infer(doc)
     base, hyps, live = _every_raw(doc)
     raws = [base] + [h["raw"] for h in hyps.values()]
-    retired = retired_into(raws, live)
+    retired = retired_into(raws, live, fields["deps"])
     if a == b:
         raise P.Refused(f"refused - {a} and {b} are one id: distinct needs two")
     for k in (a, b):

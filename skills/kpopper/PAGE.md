@@ -241,6 +241,14 @@ A derived entry has no value in the record, it has a rule; the reader detects th
 expression naming other entries) and shows the rule, with the ids inside it live. It never shows
 an empty cell where a number belongs, and it never lets `headline` carry one.
 
+**A card carries 400 characters of reasoning.** A `because` longer than that is drawn to its last
+whole word with an ellipsis — never cut mid-word in silence — and `--verify` names the judgments
+it had to cut, longest first, so reasoning swelling past what a card holds is a number you can
+read rather than something a reader discovers. Write a `because` to fit; what will not fit is
+usually two judgments. A reasoning that fits as written and passes the budget only once its
+references resolve is drawn whole and reported separately: what is long there is what it names,
+so the fix is a shorter `name:` on the entry or a `labels:` line, not a shorter sentence.
+
 A card and a section's text carry the same warning when what they rest on has moved since they
 were reviewed: a tint, the moved value marked in place with what it was, and one line naming
 what moved — a judgment's dependencies against its `seen`, a text's references against its own.
@@ -255,7 +263,13 @@ Two properties keep an opinionated tab honest, and both are mechanical rather th
   trailing section written by the page, which the brief cannot switch off - and so does whatever
   a session wrote for an intent no tab serves. It is counted once for the page and drawn on
   every tab, because a reader opens a tab and not the page. An arrangement that hides what it
-  did not anticipate is worth less than no arrangement.
+  did not anticipate is worth less than no arrangement. **Naming something in prose is not
+  picking it up.** A sentence covers what it names — coverage asks whether the arrangement
+  reached the thing, and it did — but it never accounts for it: prose shows a judgment's argument
+  and says nothing about that judgment being broken, unchecked or waiting. So a flagged judgment
+  your sentence names and no section picks is drawn twice, once in the sentence and once in the
+  spill section, and `page.spill` counts it. Otherwise an arrangement's own sign could be held at
+  zero by writing well.
 - **The arrangement itself can be wrong.** `shape:` is the brief's own `seen` — over the
   record's *shape*, not its values, because a date moving does not make a layout wrong but a
   fourth blocked judgment might. Render with no `shape:` and the command prints the block to
@@ -333,8 +347,8 @@ v.glazing_tab:
 
 **Its sign is one comparison that can hold.** `check` fails an arrangement whose `wrong_if` is not
 `<name> <op> <one value>` - a compound sign reads as evaluable and is never decided, which is
-freeze in disguise - or one that can never hold (a count below zero, a share above one), and `add`
-refuses both. A `reopened_by:` may stand beside the comparison, never in its place. The sign the
+freeze in disguise - or one that can never hold (a count below zero, a share above one, a count
+held against a truth value), and `add` refuses both. A `reopened_by:` may stand beside the comparison, never in its place. The sign the
 build cannot count goes in `because`, in prose, beside the nearest count that can: *the two merge
 the day a judgment on one tab rests on the other's numbers*, beside `page.unserved > 0`. And ask of
 every one the question the record asks of every falsifier: under this arrangement, can the sign
@@ -396,7 +410,7 @@ another tab, which is a merge.
 
 **A reversal is the arrangement written again under its own id.** Editing the brief past a
 standing decision fails; a decision changes only by `add v.x …` with a new verdict, which is a
-contradiction of what the base holds unless one of three things is true, decided by the same door
+contradiction of what the base holds unless one of two things is true, decided by the same door
 every same-id write goes through:
 
 1. **its sign holds, with its tabs intact** - the world moved, and the re-decision is admitted in
@@ -404,18 +418,20 @@ every same-id write goes through:
    what it replaced, how long it stood, and the sign that ended it. A tab already deleted or
    gutted is refused with *restore the tab, then re-decide*: a deletion makes the very sign it
    would cite;
-2. **a person asked** - the new body carries `request: s.<date>_<slug>` and rests on it, a
-   session source whose `asked:` is the person's words verbatim and nothing else; admitted the
-   same way, and *on the word of* that source on every surface;
-3. **neither** - refused, with the exact `--hypothesis` command that writes it beside the record
+2. **it does not** - refused, with the exact `--hypothesis` command that writes it beside the record
    instead; the page then says *a hypothesis contests this arrangement*, and `check` says so, until
    a person consolidates. An open question that names the arrangement contests it the same way.
 
+Nothing the session writes into the body is a third way. A session's own claim that a person asked
+is written by the same session, and the method asks every session for one - so a door that read it
+would be a key every writer already holds. What a person authorises, they authorise by folding the
+hypothesis.
+
 Never twice in a day: a re-decision of an arrangement born today is a contradiction, not a change,
 whatever its sign says - two sessions cannot flip it, and a second writer cannot re-decide it
-behind the first while the first's repair is still being made (a person's request is the one
-exception). A re-decision is exempt from the birth check - it is recorded while the sign that
-ended the old decision still holds - and the next build decides it against the repaired brief. A
+behind the first while the first's repair is still being made. A re-decision is exempt from the
+birth check - it is recorded while the sign that ended the old decision still holds - and the next
+build decides it against the repaired brief. A
 new tab is the other way round: give the tab first, then decide it, since an arrangement whose own
 sign already holds is refused at birth.
 
@@ -483,8 +499,8 @@ record in `tests/fixtures/page` first, so the reader, the page and the tests agr
 | `tabs:` | top level | a list of tabs, each with `title`, `occasion` (when the reader opens it and for what), `serves` (the session sources it answers - a claim its sections earn by picking what they recorded), `sections`, and its own `shape`. Every tab is drawn, the first as the default. |
 | `groups:` | top level | grouping schemes, any number, each a mapping of group name → selectors under the session's own names; a flat mapping is one scheme. `fronts:` still reads as one scheme. |
 | `by:` | on a section | the scheme this section reads by — one the brief declares, or one the record carries by its own shape: `prefix`, or any field the entries carry (`from`, `unit`, `kind`), whose value names the group. |
-| `text:` | on a section | connective prose with `{{id}}` references, drawn where the section stands with every reference resolved — the value, a rule's name, a judgment's verdict — and `{{c.id}}` placing that judgment's reasoning at that spot, marked as a judgment and hoverable as one. A section may be text alone; whatever the text places counts as picked up, so it never lands in spill. Every reference must be an entry. |
-| `reviewed:`, `seen:` | on a section with `text` | when the text was last read against what it references, and the values it saw. `--verify` compares them with the record the way `check` compares a judgment's snapshot; a value that moved tints the text on the page, marks it in place with what it was, and says what moved beneath. `kpopper review "<section title>"` rewrites both from the record. A reference the `seen` does not carry is noted: the text was never read against it. |
+| `text:` | on a section | connective prose with `{{id}}` references, drawn where the section stands with every reference resolved — the value, a rule's name, a judgment's verdict — and `{{c.id}}` placing that judgment's reasoning at that spot, marked as a judgment and hoverable as one. A judgment placed this way that carries no reasoning is drawn as its verdict, and `--verify` says so: the sentence a reader meets is then the record's and not yours. A section may be text alone. What a text names counts as covered and never as accounted for — see **It may order** below. Every reference must be an entry. |
+| `reviewed:`, `seen:` | on a section with `text` | when the text was last read against what it references, and what it saw. A placed judgment is recorded by **both** halves it puts on the page, its verdict and its reasoning, so an argument rewritten under a placement moves the same way a value does — a judgment's own `seen` still keeps the verdict alone, because what rests on a judgment rests on its conclusion. `--verify` compares them with the record and names which half moved; the page tints the text and marks the reference in place. `kpopper review "<section title>"` rewrites both from the record. A reference the `seen` does not carry is noted: the text was never read against it. |
 
 Every tab is checked the same way: its picks must pick something, its shapes must fit what they
 pick, its `serves` must name session sources and be earned by its picks, and its own `shape` is
@@ -497,7 +513,7 @@ compared with the record's - a tab whose shape moved says so at its top, and `--
 | `asked:` | on a session source (`s.*`) | the request verbatim, frozen; `name:` beside it is the session's own reading, which that session may revise until it stops. Entries the session writes carry `from:` it, and a judgment the request is a premise of rests on it. The hover on the source shows it, a tab that serves it quotes it, and it is what makes the source an intent the page is held against. |
 | `{{id}}` | in any text field — `because`, `via`, `note` | a reference, never a retyped value. `check` fails one that names nothing, and one inside a judgment that names something the judgment does not rest on. A card draws it: the value where there is one, the name where there is only a rule, the verdict for a judgment — each hoverable. |
 | `born:` | on an arrangement | the day it was decided - stamped by `add` like `seen`, renewed when it is re-decided, refused when typed. Drift is counted from the newest `born` the record carries; how long an arrangement stood is derived from it and never stored (below). |
-| `request:` | on an arrangement | the person's request it was taken from: a session source whose `asked:` is the request verbatim, which the arrangement also rests on. Nothing by shape can tell a request from a session's intent, so the claim is explicit, and every surface that shows the decision says *on the word of* that source. |
+| `request:` | on a judgment | whose asking it was taken from: a session source whose `asked:` is the request verbatim, which the judgment also rests on. Nothing by shape can tell a request from a session's intent, so the claim is explicit, and every surface that shows the decision says *on the word of* that source. It opens no door - the session writes that source itself - and it travels with a hypothesis so the person folding it reads whose asking it answers. |
 | `replaced:` | on an arrangement | written by `add` when a decision replaces another under the same id, one line each, oldest first: the born of what it replaced, how many sessions it stood, and the sign that ended it - so the sequence of decisions reads from the record alone. |
 | `graph.*`, `page.*` | as a dependency, or inside a falsifier | names the reader computes; see below. |
 | `reopened_by:` | on a judgment | the prose sign that re-opens a judgment decided on a session's prior — a `prior.*` claim whose value is the confidence — or on taste. `blocked_on` keeps its meaning: the predicate cannot be evaluated, and why. Not a hole and not waiting: the judgment needs no person, `check` counts it among the declared, and the card shows it in a row of its own. |

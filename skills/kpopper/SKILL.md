@@ -377,6 +377,14 @@ a silent hole that no amount of reading will reveal.
 Measure thresholds as change since the last review rather than absolute level where you can — it
 keeps a literal out of the predicate and survives the value moving for unrelated reasons.
 
+**One comparison, or it is not evaluated.** `wrong_if` is a name, an operator and one value —
+`acme.seats < 150`, `flue.clear == false`, `signed_on < "2027-01-01"`. A right-hand side carrying a
+second comparison is not richer, it is unread: the shape takes everything after the operator as the
+value, so `a == false, or b == false` is compared against the text after the first operator and is
+false in every state of the record. Two conditions are two judgments, or one judgment whose second
+condition lives in `because` with `blocked_on` saying the reader cannot decide it. A truth value is
+matched (`== false`), never ordered.
+
 **Never invent a threshold to make a predicate evaluable.** A vague quantifier is a signal that the threshold lives in someone's head and was never stated — surface it and ask. If it cannot honestly be made evaluable, say so with `blocked_on` rather than writing prose in the predicate field — and if the judgment is decided and the prose is what would re-open it, say `reopened_by`.
 
 ### An agent's prior as a source
@@ -462,16 +470,20 @@ with it. **A contradiction opens a hypothesis**, and the reader tells one by the
 `set` of a reading no newer than the base's (its `of:`, else its source's read date) that differs is
 refused - two readings of one day that disagree are two writers, not the world moving; a newer
 reading updates the base and flags what rests on it. `add` of an id the base holds is refused, and
-with a different value or verdict it is a contradiction: a standing judgment is replaced only when
-its own `wrong_if` holds now, or the new body carries `request: s.<date>_<slug>` - a session source
-whose `asked:` is the person's request verbatim, rested on, said *on the word of* on every surface.
+with a different value or verdict it is a contradiction: a standing judgment is replaced in the base
+only when its own `wrong_if` holds now, and otherwise the rewrite waits beside the record until a
+person folds it. Nothing written into the body opens that door - every session's first write is a
+source carrying what it was asked, so a field read as a person's authority would be a key every
+session already holds. `request: s.<date>_<slug>` - a session source whose `asked:` is the person's
+request verbatim, rested on - still names whose asking the change was taken from, said *on the word
+of* on every surface: provenance the person weighs at the fold, and permission for nothing.
 A write resting on what only a hypothesis holds belongs in that hypothesis. Each refusal names the
 command that writes the same thing into `PROVENANCE.d/<name>.yaml` beside the record - the base
-untouched - named after the id unless `--hypothesis NAME` on `set`, `add` or `review` names it. The
-first write stamps `born` in the head; `claim:`, a head `wrong_if:` and `folds: never` are the one
-thing a hand writes there. Three uses: a concurrent writer whose reading was refused; a proposal not
-yet approved - a branch's record *is* this, and travels with the branch; a what-if, `folds: never`,
-evaluated at every dry run and never written.
+untouched - named after the id contradicted and a mark of the claim written, unless `--hypothesis
+NAME` on `set`, `add` or `review` names it. The first write stamps `born` in the head; `claim:`, a
+head `wrong_if:` and `folds: never` are the one thing a hand writes there. Three uses: a concurrent
+writer whose reading was refused; a proposal not yet approved - a branch's record *is* this, and
+travels with the branch; a what-if, `folds: never`, evaluated at every dry run and never written.
 
 Every command reads the hypotheses over the base and evaluates the base alone: `pull` shows what
 each proposes beside the value; `check` and `open` say CONTESTED where two hold one id with
@@ -509,8 +521,10 @@ refuted. The run exits non-zero on a contested id, a falsifier that holds, a hol
 the fold, and `review <id> --hypothesis NAME` refreshes the snapshot against the record as it stands
 under the hypothesis. `consolidate` runs the same test and, only when it is clean, writes the union
 through the write path: every replacement passes the one door a `set` passes, so a reading born of a
-same-day refusal waits until someone reads again on a later day; the result is read back and undone
-whole if `check` then says anything new; the folded files go, and what to commit is printed.
+same-day refusal waits until someone reads again on a later day - while a verdict over a standing
+judgment the record's own sign has not broken passes here and nowhere else, because the fold is the
+person's act and says so in the line above it; the result is read back and undone whole if `check`
+then says anything new; the folded files go, and what to commit is printed.
 
 **One rule, two containers.** What stands is contested only by something recorded: a rival claim, in
 a hypothesis; or a doubt with no rival value yet, an open question that names the id. The page says
@@ -518,8 +532,9 @@ a hypothesis; or a doubt with no rival value yet, an open question that names th
 stand until a person consolidates or answers. Deleting the file is neither.
 
 **How a merge goes.** git merges the files: additions in id order rarely meet, and hypothesis files
-meet only when two branches open one under the same name - the id's own, when both were refused on
-it - two writers on one subject: rename one and let the dry run judge them. The dry run tests the
+meet only when two branches claim the same thing under one id, since the name carries both - two
+readings that agree, and either head is the whole of them; two that disagree are two files git
+merges, and which of them stands is the dry run's question for a person. The dry run tests the
 result: the pull request runs it on the merged tree, and the push to `main` runs it again as the
 second net, for two pull requests each consistent alone that contradict together. Fold a hypothesis
 the dry run proves *before* the pull request, so `main` receives base changes; let an unproven one
@@ -595,6 +610,13 @@ false, which moved without crossing the line the judgment drew. Movement is a qu
 crossed line is the answer. That comparison is only as good as the snapshot: `seen` must
 hold the dependency's value as recorded, never a paraphrase of it — the reader cannot tell
 a paraphrase from a move, so it reports both, and a person has to look.
+
+Where the two readings are long and share an opening, each is clipped to **where they part**
+rather than to its first few words, and the dropped opening is marked with an ellipsis — so a
+line reads `…before the first cold night -> …after the first frost` instead of printing the
+same unchanged head twice. Every surface that sets two readings against each other reads them
+that way: `check`, `open`, what a write answers with, what a fork refusal asks you to choose
+by, and what `review` says it rewrote.
 
 `open` is the session opener: how large the record is, and then only what needs a person —
 a dependency that is not an entry, a judgment broken by its own condition, a dependency that

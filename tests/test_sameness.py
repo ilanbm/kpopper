@@ -437,8 +437,8 @@ class SameIsAMigration(unittest.TestCase):
             self.assertEqual(code, 1)
             self.assertIn("refused - c.boiler_short concludes 'the old boiler cannot hold 12°C on the coldest "
                           "February nig…' and c.margin_thin 'even at the rated output the boiler is short by a "
-                          "fifth of …' - the standing judgment holds, and no request: names a person's asking for "
-                          "the change: two verdicts on one subject are a contradiction", out + err)
+                          "fifth of …' - the standing judgment holds, and its wrong_if has not fired: two "
+                          "verdicts on one subject are a contradiction", out + err)
             self.assertEqual(texts_under(d), before)
             # the same verdict: one subject, the survivor's body kept
             run(SCRIPTS / "provenance.py", "add", "c.short_again", "rests_on=[heat.boiler_kw, heat.loss_kw]",
@@ -452,23 +452,36 @@ class SameIsAMigration(unittest.TestCase):
             self.assertIn("    wrong_if: \"heat.loss_kw <= heat.boiler_kw\"\n    seen: {heat.boiler_kw: 24, "
                           "heat.loss_kw: 31,\n           heat.deficit_kw: \"heat.loss_kw - heat.boiler_kw\"}\n"
                           "    also: [c.short_again]\n", base)
-            # a person asked: the other carries request: and rests on it, so it may supersede
+            # naming whose asking the other was taken from does not open the door: the
+            # session wrote that source itself, as the method asks every session to
             run(SCRIPTS / "provenance.py", "add", "s.2026_09_04_ask", "asked=Say it as a margin, not a verdict.",
                 "name=the ask", "read=2026-09-04", "--as-of", "2026-09-04", rec)
             code, out, err = run(SCRIPTS / "provenance.py", "add", "c.as_a_margin",
                                  "rests_on=[heat.boiler_kw, heat.loss_kw, s.2026_09_04_ask]",
-                                 "request=s.2026_09_04_ask", "verdict=the boiler is 7 kW short of the coldest night",
-                                 "wrong_if=heat.loss_kw <= heat.boiler_kw", "--as-of", "2026-09-04", rec)
+                                 "request=s.2026_09_04_ask",
+                                 "verdict=the boiler is short of the coldest night, put as a margin",
+                                 "wrong_if=heat.loss_kw > 90", "--as-of", "2026-09-04", rec)
             self.assertEqual(code, 0, out + err)
+            base = rec.read_text(encoding="utf-8")
+            code, out, err = run(SCRIPTS / "provenance.py", "same", "c.boiler_short", "c.as_a_margin",
+                                 "--as-of", "2026-09-04", rec)
+            self.assertEqual(code, 1)
+            self.assertIn("the standing judgment holds, and its wrong_if has not fired: two verdicts on one "
+                          "subject are a contradiction, not one subject twice; keep the one that holds, or "
+                          "write the other through add --hypothesis, for a person to fold", out + err)
+            self.assertEqual(rec.read_text(encoding="utf-8"), base)
+            # the standing one broken by a newer reading, and the same merge goes through
+            run(SCRIPTS / "provenance.py", "set", "heat.boiler_kw", "40", "--as-of", "2026-09-04", rec)
             code, out, err = run(SCRIPTS / "provenance.py", "same", "c.boiler_short", "c.as_a_margin",
                                  "--as-of", "2026-09-04", rec)
             self.assertEqual(code, 0, out + err)
-            self.assertIn("  c.boiler_short takes c.as_a_margin's verdict - a person asked - it carries request: "
-                          "s.2026_09_04_ask and rests on it\n", out)
+            self.assertIn("  c.boiler_short takes c.as_a_margin's verdict - its wrong_if holds "
+                          "(heat.loss_kw <= heat.boiler_kw)\n", out)
             base = rec.read_text(encoding="utf-8")
             self.assertIn("  c.boiler_short:\n    rests_on: [heat.boiler_kw, heat.loss_kw, s.2026_09_04_ask]\n"
-                          '    verdict: "the boiler is 7 kW short of the coldest night"\n', base)
-            self.assertIn("    also: [c.short_again, c.as_a_margin]\n    request: s.2026_09_04_ask\n", base)
+                          '    verdict: "the boiler is short of the coldest night, put as a margin"\n', base)
+            self.assertIn("    also: [c.short_again, c.as_a_margin]\n", base)
+            self.assertIn("    request: s.2026_09_04_ask\n", base)
             self.assertNotIn("because:", base.split("c.boiler_short:")[1].split("c.margin_thin:")[0])
             self.assertEqual(run(SCRIPTS / "provenance.py", "check", rec)[0], 0)
 
@@ -754,6 +767,83 @@ class DistinctRetiresThePair(unittest.TestCase):
                 self.assertEqual(code, 1, args)
                 self.assertIn(why, out + err, args)
             self.assertEqual(texts_under(d), before)
+
+
+class AlsoIsReadByAbsence(unittest.TestCase):
+    """`also:` names other identities of a subject: the reader never votes on it, reads it as a
+    retirement only where the named id is absent everywhere, and says so where it is not."""
+
+    def test_a_retirement_that_came_back_is_read_and_reported(self):
+        with tempfile.TemporaryDirectory() as d:
+            rec = pathlib.Path(d) / "PROVENANCE.yaml"
+            # what a merge produces: one branch retired x.two into x.one, the other still holds it
+            rec.write_text('meta:\n  updated: 2026-09-04\nknown:\n  x.one:\n    v: 1\n    name: "one"\n'
+                           '    of: "2026-09-01"\n    also: [x.two]\n  x.two:\n    v: 2\n    name: "two"\n'
+                           '    of: "2026-09-01"\njudgments:\n  c.small:\n    rests_on: [x.one]\n'
+                           '    verdict: "one is small"\n    wrong_if: "x.one > 5"\n    seen: {x.one: 1}\n',
+                           encoding="utf-8")
+            # the field casts no vote, so the record is read at all - one judgment is enough to tie
+            ids, jud, fields = P.infer(P.load([str(rec)]))
+            self.assertEqual(fields["deps"], "rests_on")
+            code, out, err = run(SCRIPTS / "provenance.py", "check", rec)
+            self.assertEqual(code, 0, out + err)
+            self.assertIn('NOTE x.one carries also: x.two, and x.two is an entry - a retirement that came '
+                          'back, or a sibling this record declares; the reader reads it as neither: '
+                          'same x.one x.two folds them, distinct x.one x.two "why" tells them apart\n', out)
+            self.assertTrue(out.endswith("1 judgments, 3 entries, 0 problems, 1 declared\n"), out)
+            # and the two commands the note names do answer it
+            self.assertEqual(run(SCRIPTS / "provenance.py", "distinct", "x.one", "x.two", "two numbers",
+                                 "--as-of", "2026-09-04", rec)[0], 0)
+            code, out, _ = run(SCRIPTS / "provenance.py", "check", rec)
+            self.assertEqual(code, 0, out)
+            self.assertIn("carries also: x.two", out)      # the pair is told apart, the field still says it
+
+    def test_the_healthy_retirement_says_nothing(self):
+        with tempfile.TemporaryDirectory() as d:
+            rec = copy_fixture(pathlib.Path(d))
+            self.assertEqual(run(SCRIPTS / "provenance.py", "same", "heat.boiler_kw", "heat.output_kw",
+                                 "--as-of", "2026-09-04", rec)[0], 0)
+            self.assertIn("    also: [heat.output_kw]\n", rec.read_text(encoding="utf-8"))
+            code, out, err = run(SCRIPTS / "provenance.py", "check", rec)
+            self.assertEqual(code, 0, out + err)
+            self.assertNotIn("carries also:", out)
+            doc = P.load([str(rec)])
+            base, hyps, live = S._every_raw(doc)
+            raws = [base] + [h["raw"] for h in hyps.values()]
+            self.assertEqual(S.retired_into(raws, live), {"heat.output_kw": "heat.boiler_kw"})
+            self.assertEqual(S.also_held(raws, live), [])
+
+    def test_a_record_may_still_keep_its_dependencies_there(self):
+        with tempfile.TemporaryDirectory() as d:
+            rec = pathlib.Path(d) / "PROVENANCE.yaml"
+            rec.write_text('schema:\n  deps: also\nmeta:\n  updated: 2026-09-04\nknown:\n'
+                           '  x.one: {v: 1, name: "one", of: "2026-09-01"}\njudgments:\n  c.small:\n'
+                           '    also: [x.one]\n    verdict: "one is small"\n    wrong_if: "x.one > 5"\n'
+                           '    seen: {x.one: 1}\n', encoding="utf-8")
+            ids, jud, fields = P.infer(P.load([str(rec)]))
+            self.assertEqual(fields["deps"], "also")
+            self.assertEqual(jud["c.small"]["deps"], ["x.one"])
+            code, out, err = run(SCRIPTS / "provenance.py", "check", rec)
+            self.assertEqual(code, 0, out + err)
+            self.assertNotIn("carries also:", out)
+
+    def test_the_other_reading_of_the_field_is_left_alone(self):
+        # a record whose also: names siblings that are not entries - resource ids, say - is
+        # neither a retirement nor a pair: nothing is read into it and nothing is said
+        with tempfile.TemporaryDirectory() as d:
+            rec = pathlib.Path(d) / "PROVENANCE.yaml"
+            rec.write_text('meta:\n  updated: 2026-09-04\nknown:\n  src.table:\n    v: 1\n'
+                           '    name: "the table"\n    of: "2026-09-01"\n'
+                           '    also: ["4e6b9724-4c1e-43f0-909a-154d4cc4e046", "ec8cbc34-72e1"]\n'
+                           'judgments:\n  c.one:\n    rests_on: [src.table]\n    verdict: "it is one"\n'
+                           '    wrong_if: "src.table > 5"\n    seen: {src.table: 1}\n', encoding="utf-8")
+            code, out, err = run(SCRIPTS / "provenance.py", "check", rec)
+            self.assertEqual(code, 0, out + err)
+            self.assertNotIn("carries also:", out)
+            doc = P.load([str(rec)])
+            base, hyps, live = S._every_raw(doc)
+            self.assertEqual(S.retired_into([base], live), {})
+            self.assertEqual(S.also_held([base], live), [])
 
 
 class TheHelpNamesTheCommands(unittest.TestCase):

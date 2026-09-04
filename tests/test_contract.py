@@ -42,6 +42,18 @@ TAB_TWO = '''  - title: "The glazing quote"
 '''
 STRAY = ("  c.stray:\n    rests_on: [heat.gone]\n    verdict: \"a judgment on nothing\"\n"
          "    wrong_if: \"\"\n    seen: {}\n")
+# a truth value beside the boiler, and a judgment whose falsifier matches it
+FLUE = ('  heat.flue_clear:\n    v: true\n    name: "the flue is clear"\n'
+        '    from: doc.boiler_sheet\n')
+FLUE_HELD = ('  c.flue_held:\n    rests_on: [heat.flue_clear]\n'
+             '    verdict: "the boiler is burning against an open flue"\n'
+             '    wrong_if: "heat.flue_clear == false"\n'
+             '    seen: {heat.flue_clear: true}\n')
+# one value written with hyphens: a date is not two comparisons
+DATED = ('  c.dated:\n    rests_on: [when.first_cold_night]\n'
+         '    verdict: "the cold comes after the new year"\n'
+         '    wrong_if: "when.first_cold_night < \'2027-01-01\'"\n'
+         '    seen: {when.first_cold_night: "2027-02-01"}\n')
 
 
 def run(*args, cwd=None):
@@ -62,6 +74,13 @@ def edit(path, old, new, count=-1):
     text = path.read_text(encoding="utf-8")
     assert old in text, f"{old!r} is not in {path.name}"
     path.write_text(text.replace(old, new, count), encoding="utf-8")
+
+
+def read(path):
+    """The record as the reader sees it, counts and all."""
+    doc = P.load([str(path)])
+    ids, jud, fields = P.infer(doc)
+    return doc, ids, jud, fields, P.with_builtins(doc, ids, jud, fields)
 
 
 class CheckAcceptsTheContract(unittest.TestCase):
@@ -137,6 +156,137 @@ class CheckAcceptsTheContract(unittest.TestCase):
         code, out, err = run(SCRIPTS / "provenance.py", "check", RECORD)
         self.assertEqual(code, 0, out + err)
         self.assertNotIn("two fields fit", err)
+
+    def test_a_compound_predicate_is_refused_rather_than_decided_false(self):
+        # the comparison shape takes everything after the operator as its value, so this
+        # was compared against the text "0 or graph.blocked > 0" - false in every state
+        with tempfile.TemporaryDirectory() as d:
+            rec = copy_fixture(pathlib.Path(d))
+            edit(rec, "rests_on: [heat.boiler_kw, heat.loss_kw, heat.deficit_kw]",
+                 "rests_on: [heat.boiler_kw, heat.loss_kw, heat.deficit_kw, graph.flagged, "
+                 "graph.blocked]")
+            edit(rec, 'wrong_if: "heat.loss_kw <= heat.boiler_kw"',
+                 'wrong_if: "graph.flagged > 0 or graph.blocked > 0"')
+            edit(rec, "seen: {heat.boiler_kw: 24, heat.loss_kw: 31,",
+                 "seen: {graph.flagged: 0, graph.blocked: 0, heat.boiler_kw: 24, heat.loss_kw: 31,")
+            _, ids, jud, fields, raw = read(rec)
+            self.assertIsNone(P.evaluate(jud["c.boiler_short"]["pred"], raw, ids))
+            self.assertIn("no_predicate", P.flags(ids, jud, fields, raw)["c.boiler_short"])
+            self.assertIn("no_predicate", R.build([str(rec)], None)[4]["flags"]["c.boiler_short"])
+            code, out, _ = run(SCRIPTS / "provenance.py", "check", rec)
+            self.assertEqual(code, 1, out)
+            self.assertIn("FAIL c.boiler_short: wrong_if is not one comparison this reader "
+                          "decides (a name, an operator, one value) - and nothing says why not, "
+                          "so it can never be re-checked", out)
+            _, out, _ = run(SCRIPTS / "provenance.py", "open", rec)
+            self.assertIn("c.boiler_short: nothing evaluable would falsify it", out)
+
+    def test_a_compound_predicate_declared_un_evaluable_is_noted(self):
+        # the door a judgment already has: say the reader cannot decide it, and why
+        with tempfile.TemporaryDirectory() as d:
+            rec = copy_fixture(pathlib.Path(d))
+            edit(rec, 'wrong_if: "heat.loss_kw <= heat.boiler_kw"',
+                 'wrong_if: "heat.loss_kw <= heat.boiler_kw, or the wind turns"\n'
+                 '    blocked_on: "the wind is nobody\'s number yet"')
+            code, out, err = run(SCRIPTS / "provenance.py", "check", rec)
+            self.assertEqual(code, 0, out + err)
+            self.assertIn("NOTE c.boiler_short: wrong_if is not one comparison this reader "
+                          "decides", out)
+
+    def test_a_truth_value_is_matched_in_both_of_its_states(self):
+        # `str(True)` is not the `false` a record writes, so comparing them as text matched
+        # in neither state: the falsifier stood green whichever way the fact went
+        with tempfile.TemporaryDirectory() as d:
+            rec = copy_fixture(pathlib.Path(d))
+            edit(rec, "  when.first_cold_night:", FLUE + "  when.first_cold_night:")
+            edit(rec, "judgments:\n", "judgments:\n" + FLUE_HELD)
+            code, out, err = run(SCRIPTS / "provenance.py", "check", rec)
+            self.assertEqual(code, 0, out + err)          # the fact holds true: it does not
+            _, ids, jud, fields, raw = read(rec)
+            self.assertIs(P.evaluate("heat.flue_clear == false", raw, ids), False)
+            self.assertIs(P.evaluate("heat.flue_clear != false", raw, ids), True)
+            # the flue blocks: the one moment the falsifier existed for
+            edit(rec, "  heat.flue_clear:\n    v: true", "  heat.flue_clear:\n    v: false")
+            _, ids, jud, fields, raw = read(rec)
+            self.assertIs(P.evaluate("heat.flue_clear == false", raw, ids), True)
+            self.assertIn("falsified", P.flags(ids, jud, fields, raw)["c.flue_held"])
+            code, out, _ = run(SCRIPTS / "provenance.py", "check", rec)
+            self.assertEqual(code, 1, out)
+            self.assertIn("FAIL c.flue_held: wrong_if holds (heat.flue_clear == false) - "
+                          "broken by its own condition", out)
+
+    def test_a_truth_value_is_never_ordered_and_never_held_against_another_kind(self):
+        with tempfile.TemporaryDirectory() as d:
+            rec = copy_fixture(pathlib.Path(d))
+            edit(rec, "  when.first_cold_night:", "  heat.flue_clear:\n    v: true\n"
+                      "    name: \"the flue is clear\"\n    from: doc.boiler_sheet\n"
+                      "  when.first_cold_night:")
+            _, ids, _, _, raw = read(rec)
+            # ordering decides nothing about a truth value, and it is refused by shape
+            self.assertIn("orders a truth value (< false), which is matched, never ordered",
+                          P.why_undecided("heat.flue_clear < false"))
+            self.assertIsNone(P.evaluate("heat.flue_clear < false", raw, ids))
+            # a truth value and a value that is not one are two kinds of thing
+            self.assertEqual(P.why_undecided("heat.flue_clear == 1"), "")
+            self.assertIsNone(P.evaluate("heat.flue_clear == 1", raw, ids))
+            self.assertIsNone(P.evaluate("heat.boiler_kw == true", raw, ids))
+
+    def test_one_value_is_anything_that_carries_no_second_comparison(self):
+        # a value is refused for carrying another comparison, never for what it is written
+        # with: refusing one the reader compares perfectly well would silence a falsifier
+        # that works, which is this same failure from the other side
+        for pred in ('when.first_cold_night < "2027-01-01"',            # hyphens: a date
+                     "tool.cli != 'legacy --denominator, cross-event'",  # hyphens and a comma
+                     "heat.loss_kw > 1,000",                            # a thousands separator
+                     'doc.note == "the "best" result"',                  # quotes inside quotes
+                     "heat.deficit_kw != 7"):
+            self.assertEqual(P.why_undecided(pred), "", pred)
+        self.assertEqual(P.one_comparison('when.first_cold_night < "2027-01-01"'), "")
+        self.assertEqual(P.one_comparison("page.spill > 1,000"), "")
+        # and the comparisons those values would have been read as
+        raw = {"x.n": {"v": 2000}, "x.t": {"v": 'the "best" result'}}
+        self.assertIs(P.evaluate("x.n > 1,000", raw, set(raw)), True)
+        self.assertIs(P.evaluate('x.t == "the "best" result"', raw, set(raw)), True)
+        # two quoted values are still two comparisons
+        self.assertIn("is not one comparison",
+                      P.why_undecided('a.b == "x" or c.d == "y"'))
+
+    def test_a_count_is_never_a_truth_value(self):
+        # a computed name is a count whatever the record holds, so `page.spill == false`
+        # would be read as None once the page counts it - and read as green by anything
+        # that only asks whether the sign holds
+        self.assertIn("holds a count against a truth value",
+                      P.why_undecided("page.spill == false"))
+        self.assertIn("holds a count against a truth value",
+                      P.why_undecided("graph.flagged != true"))
+        self.assertEqual(P.why_undecided("heat.flue_clear == false"), "")
+        # reached through an entry it is the same sign, and a sign is decided where the
+        # values are in hand - otherwise the arrangement is born green and never fires
+        raw = {"page.spill": {"v": 0}, "x.flag": {"v": True}, "x.n": {"v": 3}}
+        self.assertIn("holds a count against a truth value",
+                      P.one_comparison("page.spill == x.flag", raw, set(raw)))
+        self.assertEqual(P.one_comparison("page.spill == x.n", raw, set(raw)), "")
+        with tempfile.TemporaryDirectory() as d:
+            rec = copy_fixture(pathlib.Path(d))
+            edit(rec, "judgments:\n", "judgments:\n" + DATED)
+            code, out, err = run(SCRIPTS / "provenance.py", "check", rec)
+            self.assertEqual(code, 0, out + err)
+            _, ids, jud, fields, raw = read(rec)
+            self.assertIs(P.evaluate(jud["c.dated"]["pred"], raw, ids), False)
+
+    def test_the_shape_is_read_in_one_place(self):
+        # what an arrangement's sign is held to and what the reader will decide are the
+        # same question; two readings of it drift, and one of them silently
+        for pred in ("page.spill > 0 or page.unserved > 0", "graph.flagged >",
+                     "page.spill < true", "the wind turns"):
+            self.assertEqual(P.one_comparison(pred), P.why_undecided(pred), pred)
+        # and where an arrangement asks something narrower, it says its own thing: a count
+        # is never a truth value, and a sign names the value it carries
+        self.assertIn("holds a count against a truth value",
+                      P.one_comparison("page.spill == false"))
+        self.assertIn("does not name one value a sign carries",
+                      P.one_comparison("page.spill > lots"))
+        self.assertEqual(P.why_undecided("page.spill > lots"), "")
 
     def test_pull_reads_a_computed_name(self):
         code, out, _ = run(SCRIPTS / "provenance.py", "pull", "graph.flagged", RECORD)
@@ -402,7 +552,12 @@ class TheWrittenLayer(unittest.TestCase):
         with tempfile.TemporaryDirectory() as d:
             rec = copy_fixture(pathlib.Path(d))
             brief = pathlib.Path(d) / "PROVENANCE.view.yaml"
-            edit(brief, '          c.boiler_short: "the old boiler cannot hold 12°C on the coldest February night"\n', "")
+            edit(brief, '          c.boiler_short:\n'
+                        '            verdict: "the old boiler cannot hold 12\u00b0C on the coldest '
+                        'February night"\n'
+                        '            because: "It gives {{heat.boiler_kw}} kW against a loss of '
+                        '{{heat.loss_kw}} kW - a\n                      shortfall of '
+                        '{{heat.deficit_kw}} kW before any wind."\n', "")
             edit(brief, '        seen: {when.first_cold_night: "2027-02-01"}\n', "")
             code, out, _ = run(SCRIPTS / "render_page.py", "--verify", rec)
             self.assertEqual(code, 0, out)
@@ -451,9 +606,11 @@ class TheWrittenLayer(unittest.TestCase):
                  'verdict: "the old boiler cannot hold 12°C on any February night"')
             code, out, _ = run(SCRIPTS / "render_page.py", "--verify", rec)
             self.assertEqual(code, 0, out)
-            self.assertIn("section 'What the numbers say': its text saw c.boiler_short = the old "
-                          "boiler cannot hold 12°C on the coldest February night, now the old boiler "
-                          "cannot hold 12°C on any February night - read it again", out)
+            self.assertIn("section 'What the numbers say': its text saw the verdict over the "
+                          "reasoning it places of c.boiler_short = the old boiler cannot hold "
+                          "12\u00b0C on the coldest February nig\u2026, now the old boiler cannot hold "
+                          '12\u00b0C on any February night - read it again, then: review "What the '
+                          'numbers say"', out)
             self.assertIn('<div class="txt moved" dir="auto">', dom_of(run(SCRIPTS / "render_page.py", rec)[1]))
 
     def test_a_moved_dependency_tints_the_card_and_review_clears_it(self):
@@ -482,6 +639,307 @@ class TheWrittenLayer(unittest.TestCase):
             dom = dom_of(run(SCRIPTS / "render_page.py", rec)[1])
             self.assertNotIn('class="card moved"', dom)
             self.assertNotIn("rsn mv", dom)
+
+
+class ASignalTheAuthorCannotSilence(unittest.TestCase):
+    """Two ways an arrangement could be written that quietly emptied its own warnings."""
+
+    def test_a_rewritten_reasoning_tints_the_text_that_places_it(self):
+        with tempfile.TemporaryDirectory() as d:
+            rec = copy_fixture(pathlib.Path(d))
+            # the verdict above it does not move; only the argument the text puts on the page
+            edit(rec, 'because: "It gives {{heat.boiler_kw}} kW against a loss of {{heat.loss_kw}} kW - a\n'
+                      '              shortfall of {{heat.deficit_kw}} kW before any wind."',
+                 'because: "The glazing is the problem, not the boiler; {{heat.deficit_kw}} is\n'
+                 '              beside the point."')
+            code, out, _ = run(SCRIPTS / "render_page.py", "--verify", rec)
+            self.assertEqual(code, 0, out)
+            self.assertIn("section 'What the numbers say': its text saw the reasoning it places "
+                          "of c.boiler_short = It gives", out)
+            self.assertIn('read it again, then: review "What the numbers say"', out)
+            dom = dom_of(run(SCRIPTS / "render_page.py", rec)[1])
+            self.assertIn('<div class="txt moved" dir="auto">', dom)
+            self.assertIn("Moved since this was read: boiler short", dom)
+            # and the review the note names clears it
+            code, out, _ = run(SCRIPTS / "provenance.py", "review", "What the numbers say",
+                               "--as-of", "2026-09-04", rec)
+            self.assertEqual(code, 0, out)
+            self.assertIn("seen c.boiler_short - the reasoning it places: It gives", out)
+            self.assertNotIn("read it again", run(SCRIPTS / "render_page.py", "--verify", rec)[1])
+            self.assertNotIn('class="txt moved"', dom_of(run(SCRIPTS / "render_page.py", rec)[1]))
+
+    def test_what_rests_on_a_judgment_still_watches_only_its_verdict(self):
+        # the other half of the same rule: three rewrites of the prose must not flag
+        # everything downstream, or the marks stop meaning anything
+        with tempfile.TemporaryDirectory() as d:
+            rec = copy_fixture(pathlib.Path(d))
+            edit(rec, 'because: "It gives {{heat.boiler_kw}} kW against a loss of {{heat.loss_kw}} kW - a\n'
+                      '              shortfall of {{heat.deficit_kw}} kW before any wind."',
+                 'because: "Put another way: {{heat.deficit_kw}} is what the night takes and the\n'
+                 '              boiler does not give."')
+            code, out, _ = run(SCRIPTS / "provenance.py", "check", rec)
+            self.assertEqual(code, 0, out)
+            self.assertNotIn("c.boiler_short", out.replace("3 judgments", ""))
+            doc = P.load([str(rec)])
+            ids, jud, fields = P.infer(doc)
+            raw = P.with_builtins(doc, ids, jud, fields)
+            # what a text is held to, and what a judgment is held to, part here: the text
+            # carries both halves, so a rewritten argument moves under it; the judgment
+            # carries only the conclusion, so it does not
+            verdict = "the old boiler cannot hold 12\u00b0C on the coldest February night"
+            self.assertEqual(P.snapshot_value("c.boiler_short", raw, ids, jud, {}), verdict)
+            shown = P.shown_value("c.boiler_short", raw, ids, jud, {})
+            # two named fields, never one line with a separator: prose contains every
+            # separator anyone might pick
+            self.assertEqual(shown["verdict"], verdict)
+            self.assertIn("Put another way", shown["because"])
+
+    def test_prose_covers_a_flagged_judgment_but_does_not_silence_it(self):
+        with tempfile.TemporaryDirectory() as d:
+            rec = copy_fixture(pathlib.Path(d))
+            brief = pathlib.Path(d) / "PROVENANCE.view.yaml"
+            # flagged: never checked against one of the things it rests on
+            edit(rec, '    seen: {heat.boiler_kw: 24, heat.loss_kw: 31,\n'
+                      '           heat.deficit_kw: "heat.loss_kw - heat.boiler_kw"}',
+                 '    seen: {heat.boiler_kw: 24, heat.loss_kw: 31}')
+            self.assertEqual(run(SCRIPTS / "provenance.py", "check", rec)[0], 1)
+            # no section picks it; one section's prose places its reasoning
+            edit(brief, "        pick: judgments\n", "        pick: [v.heating_tab]\n")
+            page = run(SCRIPTS / "render_page.py", rec)[1]
+            dom = dom_of(page)
+            self.assertIn('<span class="fx in rsn"', dom)                  # still drawn in the prose
+            self.assertIn("Not covered by this arrangement", dom)          # and still in the net
+            self.assertRegex(page, r'"page\.spill":[^}]*"v": 1')
+            # picking it is what accounts for it
+            edit(brief, "        pick: [v.heating_tab]\n", "        pick: judgments\n")
+            page = run(SCRIPTS / "render_page.py", rec)[1]
+            self.assertNotIn("Not covered by this arrangement", dom_of(page))
+            self.assertRegex(page, r'"page\.spill":[^}]*"v": 0')
+
+    def test_a_mention_still_counts_as_covered(self):
+        # the half that does not change: coverage asks whether the arrangement reached it
+        _, out, _ = run(SCRIPTS / "render_page.py", "--verify", RECORD)
+        self.assertIn("tab 'The February night' serves s.2026_09_02_heating: picks 3 of 3 "
+                      "they recorded", out)
+
+    def test_a_placement_with_no_reasoning_is_said(self):
+        with tempfile.TemporaryDirectory() as d:
+            rec = copy_fixture(pathlib.Path(d))
+            text = rec.read_text(encoding="utf-8")
+            i = text.index('    because: "It gives')
+            rec.write_text(text[:i] + text[text.index('    wrong_if: "heat.loss_kw'):],
+                           encoding="utf-8")
+            code, out, _ = run(SCRIPTS / "render_page.py", "--verify", rec)
+            self.assertEqual(code, 0, out)
+            self.assertIn("section 'What the numbers say': places c.boiler_short for its reasoning, "
+                          "which it does not carry - its verdict is drawn in that sentence instead", out)
+            # the sentence still reads: a verdict is drawn rather than a hole
+            self.assertIn('<span class="fx in rsn" data-id="c.boiler_short">the old boiler cannot',
+                          dom_of(run(SCRIPTS / "render_page.py", rec)[1]))
+
+    def test_a_long_reasoning_is_cut_at_a_word_and_marked(self):
+        self.assertEqual(R.clipped("short enough", 40), ("short enough", False))
+        drawn, cut = R.clipped(("word " * 30).strip(), 40)
+        self.assertTrue(cut)
+        self.assertTrue(drawn.endswith("\u2026"), drawn)
+        self.assertLessEqual(len(drawn), 40)
+        self.assertNotIn("wor\u2026", drawn)              # never mid-word
+        with tempfile.TemporaryDirectory() as d:
+            rec = copy_fixture(pathlib.Path(d))
+            long = ("The reasoning runs on and on with clause after clause. " * 10
+                    + "And only here, at the very end, does it say the load-bearing thing.")
+            edit(rec, 'because: "It gives {{heat.boiler_kw}} kW against a loss of {{heat.loss_kw}} kW - a\n'
+                      '              shortfall of {{heat.deficit_kw}} kW before any wind."',
+                 'because: "' + long.strip() + '"')
+            code, out, _ = run(SCRIPTS / "render_page.py", "--verify", rec)
+            self.assertEqual(code, 0, out)
+            self.assertIn("1 reasoning longer than the 400 characters a card carries; each is "
+                          "drawn to its last whole word and marked. Longest first: "
+                          "c.boiler_short (617)", out)
+            dom = dom_of(run(SCRIPTS / "render_page.py", rec)[1])
+            drawn = re.search(r'<div class="bc" dir="auto">(.*?)</div>', dom, re.S).group(1)
+            self.assertTrue(drawn.endswith("\u2026"), drawn[-40:])
+            self.assertLessEqual(len(drawn), R.CARD_CHARS)
+            # what the cut costs is visible: the last sentence is not on the page at all
+            self.assertNotIn("the load-bearing thing", dom)
+
+    def test_a_reasoning_that_only_resolves_long_is_said_and_not_cut(self):
+        with tempfile.TemporaryDirectory() as d:
+            rec = copy_fixture(pathlib.Path(d))
+            # short as written, long once the record reads into it: nothing to cut, and the
+            # fix is the name behind the reference rather than the sentence
+            edit(rec, '    name: "shortfall on the coldest night"',
+                 '    name: "' + ("the shortfall measured against the boiler's rated output and "
+                                  "the glazing as it stands " * 6).strip() + '"')
+            text = rec.read_text(encoding="utf-8")
+            i, j = text.index('    because: "It gives'), text.index('    wrong_if: "heat.loss_kw')
+            rec.write_text(text[:i] + '    because: "In short: {{heat.deficit_kw}}."\n' + text[j:],
+                           encoding="utf-8")
+            code, out, _ = run(SCRIPTS / "render_page.py", "--verify", rec)
+            self.assertEqual(code, 0, out)
+            self.assertIn("1 reasoning within 400 characters as written and past them once their "
+                          "references resolve; what each names is long, so the card is drawn "
+                          "whole. Longest first: c.boiler_short (526)", out)
+            self.assertNotIn("longer than the 400 characters", out)
+            card = re.search(r'<div class="bc" dir="auto">(.*?)</div>',
+                             dom_of(run(SCRIPTS / "render_page.py", rec)[1]), re.S).group(1)
+            self.assertNotIn("\u2026", card)          # nothing was cut; it is drawn whole
+            self.assertGreater(len(re.sub(r"<[^>]+>", "", card)), R.CARD_CHARS)
+
+
+LONG_A = ("the glazier will cover the north wall in toughened double glazing before the "
+          "first cold night")
+LONG_B = ("the glazier will cover the north wall in toughened double glazing after the "
+          "first frost")
+
+
+def glazing(into, predicate=None, key="glaze.terms"):
+    """A record whose judgment rests on one long value - the shape every surface that
+    compares two readings is exercised on. The predicate decides whether a move is muted
+    (it names the moved entry) or moved (it does not); `key` is the id that holds the
+    value, so a long one can be given where the line's own budget is under test."""
+    predicate = predicate or '    wrong_if: "glaze.quote_eur > 9000"'
+    rec = into / "PROVENANCE.yaml"
+    rec.write_text(
+        "meta:\n  updated: 2026-09-04\n  name: Glazing\n"
+        '  scope: "One long value, changed at its end."\n\n'
+        'sources:\n  doc.quote: {name: "the quote", file: "q.pdf", read: "2026-09-04"}\n\n'
+        'known:\n  glaze.quote_eur: {v: 4200, name: "the quote", from: doc.quote}\n'
+        f"  {key}:\n"
+        f'    quoted: "{LONG_A}"\n'
+        '    name: "what the glazier undertook"\n    from: doc.quote\n\n'
+        "judgments:\n  c.terms_hold:\n"
+        f"    rests_on: [{key}, glaze.quote_eur]\n"
+        '    verdict: "the wall is covered in time"\n'
+        f"{predicate}\n"
+        f'    seen: {{glaze.quote_eur: 4200, {key}: "{LONG_A}"}}\n', encoding="utf-8")
+    return rec
+
+
+class AComparisonShowsWhereItParts(unittest.TestCase):
+    """Six surfaces printed two readings side by side and clipped both at the head - which
+    is the half that did not change. Each showed one string twice."""
+
+    def moved(self, rec, later="2026-09-05"):
+        code, out, err = run(SCRIPTS / "provenance.py", "set", "glaze.terms", LONG_B,
+                             "--as-of", later, rec)
+        self.assertEqual(code, 0, out + err)
+        return out
+
+    def test_the_muted_line_says_what_moved(self):
+        # the worst of them: the reader is told nothing is asked of them, and the reason
+        # used to be two identical strings
+        with tempfile.TemporaryDirectory() as d:
+            rec = glazing(pathlib.Path(d), '    wrong_if: "glaze.terms == \'withdrawn\'"')
+            out = self.moved(rec)
+            self.assertIn("MUTED     c.terms_hold: glaze.terms moved …before the first cold "
+                          "night -> …after the first frost, inside wrong_if", out)
+            self.assertIn("nothing is asked", out)
+
+    def test_the_reach_line_says_what_moved(self):
+        with tempfile.TemporaryDirectory() as d:
+            out = self.moved(glazing(pathlib.Path(d)))
+            self.assertIn("MOVED     c.terms_hold: glaze.terms moved …before the first cold "
+                          "night -> …after the first frost since it was reviewed", out)
+
+    def test_check_and_open_say_what_moved(self):
+        with tempfile.TemporaryDirectory() as d:
+            rec = glazing(pathlib.Path(d))
+            self.moved(rec)
+            _, out, _ = run(SCRIPTS / "provenance.py", "check", rec)
+            self.assertIn("MOVED c.terms_hold: glaze.terms differs from its snapshot "
+                          "(…before the first cold night -> …after the first frost)", out)
+            _, out, _ = run(SCRIPTS / "provenance.py", "open", rec)
+            self.assertIn("glaze.terms differs from what it last saw: …before the first cold "
+                          "night -> …after the first frost", out)
+
+    def test_pull_keeps_the_arrow_and_the_second_reading(self):
+        # the one a per-side reading does not reach: the whole line was cut, so a long
+        # value ate the budget and the reading beside it never appeared at all
+        with tempfile.TemporaryDirectory() as d:
+            rec = glazing(pathlib.Path(d))
+            self.moved(rec)
+            _, out, _ = run(SCRIPTS / "provenance.py", "pull", "c.terms_hold", rec)
+            line = next(l for l in out.split("\n") if "moved since review" in l)
+            self.assertIn("->", line)
+            self.assertIn("…after the first frost", line)
+            self.assertLessEqual(len(line), 110)
+
+    def test_pull_keeps_the_comparison_whole_under_a_long_id(self):
+        # the sides are cut to what the line has left, and the line is never cut across
+        # the comparison - so a dependency long enough to eat the budget costs its own
+        # readings room, never the arrow or the second of them
+        with tempfile.TemporaryDirectory() as d:
+            long_id = "glaze.terms_as_the_glazier_set_them_out_in_the_quote_of_september"
+            rec = glazing(pathlib.Path(d), f'    wrong_if: "{long_id} == \'withdrawn\'"',
+                          key=long_id)
+            code, out, err = run(SCRIPTS / "provenance.py", "set", long_id, LONG_B,
+                                 "--as-of", "2026-09-05", rec)
+            self.assertEqual(code, 0, out + err)
+            _, out, _ = run(SCRIPTS / "provenance.py", "pull", "c.terms_hold", rec)
+            line = next(l for l in out.split("\n") if "moved since review" in l)
+            self.assertIn(" -> ", line)
+            self.assertIn("within wrong_if", line)          # the state survives too
+            self.assertIn("…before the first cold", line)
+            self.assertIn("…after the first frost", line)
+
+    def test_a_value_with_no_word_boundary_still_shows_its_difference(self):
+        # urls, hashes, long numbers: there is no word to open the window on, so it opens
+        # inside the token rather than falling back to the head both sides share
+        a = "https://example.org/quotes/north-wall-2026-09-04-v1.pdf"
+        b = "https://example.org/quotes/north-wall-2026-09-04-v2.pdf"
+        wa, wb = P.apart(a, b)
+        self.assertNotEqual(wa, wb)
+        self.assertTrue(wa.endswith("v1.pdf") and wb.endswith("v2.pdf"), (wa, wb))
+        h = "c3f1a9e2b7d4" * 4
+        ha, hb = P.apart(h, h[:38] + "ZZ" + h[40:])
+        self.assertNotEqual(ha, hb)
+
+    def test_the_fork_refusal_says_how_the_two_readings_differ(self):
+        # it asks a person to choose between two readings of one day; it may not show them
+        # the same words twice
+        with tempfile.TemporaryDirectory() as d:
+            rec = glazing(pathlib.Path(d))
+            code, out, err = run(SCRIPTS / "provenance.py", "set", "glaze.terms", LONG_B,
+                                 "--as-of", "2026-09-04", rec)
+            self.assertEqual(code, 1)
+            said = out + err
+            self.assertIn("glaze.terms holds …before the first cold night as of 2026-09-04, "
+                          "and a reading of the same day says …after the first frost", said)
+
+    def test_review_says_what_moved_under_the_judgment(self):
+        with tempfile.TemporaryDirectory() as d:
+            rec = glazing(pathlib.Path(d))
+            self.moved(rec)
+            code, out, _ = run(SCRIPTS / "provenance.py", "review", "c.terms_hold",
+                               "--as-of", "2026-09-05", rec)
+            self.assertEqual(code, 0, out)
+            self.assertIn("  glaze.terms: …before the first cold night -> …after the "
+                          "first frost", out)
+
+    def test_the_head_is_kept_where_the_two_part_inside_it(self):
+        # nothing is bought by dropping a head that already shows the difference
+        self.assertEqual(P.apart("4200", "9100"), ("4200", "9100"))
+        self.assertEqual(P.apart("yes", "no"), ("yes", "no"))
+        a, b = P.apart("a wholly different opening" + " x" * 40, "another opening entirely" + " x" * 40)
+        self.assertTrue(a.startswith("a wholly"), a)
+        self.assertTrue(b.startswith("another"), b)
+
+    def test_the_window_opens_on_a_whole_word(self):
+        a, b = P.apart(LONG_A, LONG_B)
+        self.assertEqual((a, b), ("…before the first cold night", "…after the first frost"))
+        for s in (a, b):
+            self.assertNotIn("…g", s)          # never mid-word, as "…g before" would be
+
+    def test_a_long_tail_past_the_window_is_still_clipped(self):
+        # the window opens at the word the two part on, and what runs past the budget from
+        # there is clipped at the end the way anything else is
+        a, b = P.apart("same head " * 8 + "and then a tail that runs on well past what a line here holds",
+                       "same head " * 8 + "and then a different tail that also runs on and on and on")
+        self.assertTrue(a.startswith("…tail that"), a)
+        self.assertTrue(b.startswith("…different tail"), b)
+        self.assertTrue(a.endswith("…") and b.endswith("…"), (a, b))
+        self.assertLessEqual(max(len(a), len(b)), 40)
 
 
 class TheReasoningReachesAgents(unittest.TestCase):
