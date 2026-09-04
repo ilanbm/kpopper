@@ -79,6 +79,18 @@ sources:
     of: "2026-09-03, given the page design's written-layer section, the page contract at 84af70a, the
          fixture record under tests/, and the finance lab's write tool"
     read: "2026-09-03"
+  s.2026_09_04_calibration:
+    asked: "tests the shape prospectively: a bank of local questions with verifiable ground,
+            answered with confidence + reach, run no-tools vs tools-allowed, across models, graded
+            against ground."
+    name: "The session that scored the reach rule against ground instead of against itself - what it
+           was asked, and what it was given. Its reading: a claim about this project that nobody
+           checked is worth about a third of one that was, and a session asked to price such a claim
+           already prices it low"
+    of: "2026-09-04, given the reach rule and the thirteen claims it rested on, two projects
+         consented to and pinned to a commit, and a bank of local questions whose ground was verified
+         before any answer was seen"
+    read: "2026-09-04"
   s.2026_09_04_consolidate:
     asked: "Make consolidation a test: a dry run that unions the base with its hypotheses and
             re-checks every judgment, a fold that writes a proven hypothesis into the base, a
@@ -141,6 +153,15 @@ sources:
            cannot be evaluated, or the sign that would re-open a decision"
     of: "this record at 45 judgments, read by hand, 2026-09-03"
     read: "2026-09-03"
+  run.claims_by_reach:
+    from: s.2026_09_04_calibration
+    name: "A bank of claims about two projects and about how things usually work, answered twice
+           over - once with nothing but the session's own prior, once with the projects' files
+           readable - and graded against ground authored before any answer was seen"
+    of: "2026-09-04, across three model families and two projects pinned to a commit; 288 answers,
+         each carrying the confidence and the reach the answering session stated for itself; the
+         general questions that are matters of judgment were collected and excluded from every count"
+    read: "2026-09-04"
   run.claims_scored:
     name: "One session's thirteen claims of a day, scored by hand against what held - general, local
            and checked, local and assumed"
@@ -365,6 +386,29 @@ known:
     from: "pyproject.toml"
     at: "tool.setuptools.package-data"
     of: "2026-09-03"
+  m.reach.assumed_at_high_confidence:
+    v: 0
+    name: "Unchecked claims about the project that were asserted at a confidence of 0.8 or above"
+    from: run.claims_by_reach
+    at: "of 75 - the line the consequence matrix draws was never crossed by a claim with no run
+         behind it"
+  m.reach.general_held:
+    v: 84
+    name: "Claims about how things usually work that held, with and without the files, which do not
+           answer them"
+    from: run.claims_by_reach
+    at: "of 84 - the control arm, and it behaved"
+  m.reach.local_assumed_held:
+    v: 25
+    name: "Claims about the project that held - asserted with nothing but the session's own prior"
+    from: run.claims_by_reach
+    at: "of 75 asserted; 9 more were declined outright"
+  m.reach.local_checked_held:
+    v: 83
+    name: "Claims about the project that held - the same questions, with the project's files
+           readable"
+    from: run.claims_by_reach
+    at: "of 83 asserted; one answer was left out of the reply"
   m.record_scale:
     v: 107
     name: "Largest live record, entries"
@@ -875,7 +919,10 @@ judgments:
                                     is pulled by seed or surfaces as a collision on the same id"
       p.hypothesis_thresholds: 0
   d.local_claims_want_a_run:
-    rests_on: [prior.local_needs_a_run, m.claims.general_held, m.claims.local_checked_held, m.claims.local_assumed_held]
+    rests_on: [s.2026_09_04_calibration, prior.local_needs_a_run, m.claims.general_held,
+               m.claims.local_checked_held, m.claims.local_assumed_held, m.reach.general_held,
+               m.reach.local_checked_held, m.reach.local_assumed_held,
+               m.reach.assumed_at_high_confidence]
     verdict: "a claim with reach general may rest on the session's prior; a claim with reach local
               wants a run or a document beside it, usually a five-second one"
     because: "A general claim is about how things usually work anywhere, and the session has seen
@@ -887,15 +934,31 @@ judgments:
               four had felt like 0.85. Sharper than the rule: local checks are fine and cost seconds;
               local assumptions carry no information. Three counts of different sizes, thirteen
               claims in all, are too thin for a comparison between them to be an honest predicate, so
-              the sign that re-opens this is read by a person."
+              the sign that re-opens this is read by a person. A second scoring, on a different
+              instrument, put the same rule against ground written before the answers: unchecked
+              claims about a project held {{m.reach.local_assumed_held}} of 75, the same questions
+              with that project's files readable held {{m.reach.local_checked_held}} of 83, and
+              general claims held {{m.reach.general_held}} of 84 either way, since files do not
+              answer them. The gap is the rule, now over a hundred and fifty-eight claims rather
+              than thirteen. What the larger count shows and the thirteen did not: asked for a
+              number, a session prices an unchecked local claim low -
+              {{m.reach.assumed_at_high_confidence}} of those 75 reached 0.8. So the 0.85 the four
+              assumed claims of that day felt like belongs to claims volunteered while working, not
+              to local claims as such, and the sign below still wants a session scored the way that
+              day was rather than asked a bank of questions."
     wrong_if: "prior.local_needs_a_run < 0.8"
     reopened_by: "a later session scored the same way, on more claims than thirteen, whose assumed
                   local claims held about as often as its checked ones"
     seen:
+      s.2026_09_04_calibration: "read 2026-09-04"
       prior.local_needs_a_run: 0.9
       m.claims.general_held: 3
       m.claims.local_checked_held: 6
       m.claims.local_assumed_held: 0
+      m.reach.general_held: 84
+      m.reach.local_checked_held: 83
+      m.reach.local_assumed_held: 25
+      m.reach.assumed_at_high_confidence: 0
   d.names_rank_never_decide:
     rests_on: [s.2026_09_04_sameness, d.sameness_is_judged, alt.sameness_from_names, p.candidate_reasons]
     verdict: "a candidate pair is named for a declared reason - the same source and place, the same
