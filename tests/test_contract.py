@@ -402,9 +402,11 @@ class TheWrittenLayer(unittest.TestCase):
         with tempfile.TemporaryDirectory() as d:
             rec = copy_fixture(pathlib.Path(d))
             brief = pathlib.Path(d) / "PROVENANCE.view.yaml"
-            edit(brief, '          c.boiler_short: "the old boiler cannot hold 12\u00b0C on the coldest '
-                        'February night \u2014 It gives\n                           {{heat.boiler_kw}} kW '
-                        'against a loss of {{heat.loss_kw}} kW - a shortfall\n                           of '
+            edit(brief, '          c.boiler_short:\n'
+                        '            verdict: "the old boiler cannot hold 12\u00b0C on the coldest '
+                        'February night"\n'
+                        '            because: "It gives {{heat.boiler_kw}} kW against a loss of '
+                        '{{heat.loss_kw}} kW - a\n                      shortfall of '
                         '{{heat.deficit_kw}} kW before any wind."\n', "")
             edit(brief, '        seen: {when.first_cold_night: "2027-02-01"}\n', "")
             code, out, _ = run(SCRIPTS / "render_page.py", "--verify", rec)
@@ -534,8 +536,10 @@ class ASignalTheAuthorCannotSilence(unittest.TestCase):
             verdict = "the old boiler cannot hold 12\u00b0C on the coldest February night"
             self.assertEqual(P.snapshot_value("c.boiler_short", raw, ids, jud, {}), verdict)
             shown = P.shown_value("c.boiler_short", raw, ids, jud, {})
-            self.assertTrue(shown.startswith(verdict + P.PLACED), shown)
-            self.assertIn("Put another way", shown)
+            # two named fields, never one line with a separator: prose contains every
+            # separator anyone might pick
+            self.assertEqual(shown["verdict"], verdict)
+            self.assertIn("Put another way", shown["because"])
 
     def test_prose_covers_a_flagged_judgment_but_does_not_silence_it(self):
         with tempfile.TemporaryDirectory() as d:
@@ -596,14 +600,38 @@ class ASignalTheAuthorCannotSilence(unittest.TestCase):
                  'because: "' + long.strip() + '"')
             code, out, _ = run(SCRIPTS / "render_page.py", "--verify", rec)
             self.assertEqual(code, 0, out)
-            self.assertIn("1 reasonings run past the 400 characters a card carries, longest "
-                          "first: c.boiler_short (617)", out)
+            self.assertIn("1 reasoning longer than the 400 characters a card carries; each is "
+                          "drawn to its last whole word and marked. Longest first: "
+                          "c.boiler_short (617)", out)
             dom = dom_of(run(SCRIPTS / "render_page.py", rec)[1])
             drawn = re.search(r'<div class="bc" dir="auto">(.*?)</div>', dom, re.S).group(1)
             self.assertTrue(drawn.endswith("\u2026"), drawn[-40:])
             self.assertLessEqual(len(drawn), R.CARD_CHARS)
             # what the cut costs is visible: the last sentence is not on the page at all
             self.assertNotIn("the load-bearing thing", dom)
+
+    def test_a_reasoning_that_only_resolves_long_is_said_and_not_cut(self):
+        with tempfile.TemporaryDirectory() as d:
+            rec = copy_fixture(pathlib.Path(d))
+            # short as written, long once the record reads into it: nothing to cut, and the
+            # fix is the name behind the reference rather than the sentence
+            edit(rec, '    name: "shortfall on the coldest night"',
+                 '    name: "' + ("the shortfall measured against the boiler's rated output and "
+                                  "the glazing as it stands " * 6).strip() + '"')
+            text = rec.read_text(encoding="utf-8")
+            i, j = text.index('    because: "It gives'), text.index('    wrong_if: "heat.loss_kw')
+            rec.write_text(text[:i] + '    because: "In short: {{heat.deficit_kw}}."\n' + text[j:],
+                           encoding="utf-8")
+            code, out, _ = run(SCRIPTS / "render_page.py", "--verify", rec)
+            self.assertEqual(code, 0, out)
+            self.assertIn("1 reasoning within 400 characters as written and past them once their "
+                          "references resolve; what each names is long, so the card is drawn "
+                          "whole. Longest first: c.boiler_short (526)", out)
+            self.assertNotIn("longer than the 400 characters", out)
+            card = re.search(r'<div class="bc" dir="auto">(.*?)</div>',
+                             dom_of(run(SCRIPTS / "render_page.py", rec)[1]), re.S).group(1)
+            self.assertNotIn("\u2026", card)          # nothing was cut; it is drawn whole
+            self.assertGreater(len(re.sub(r"<[^>]+>", "", card)), R.CARD_CHARS)
 
 
 class TheReasoningReachesAgents(unittest.TestCase):

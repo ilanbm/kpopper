@@ -1925,41 +1925,69 @@ def snapshot_value(dep, raw, ids, jud, page):
     return named(b) or "present"
 
 
-PLACED = " \u2014 "        # between the two halves a placed judgment puts on the page
+def reasoning_of(body):
+    """The argument a judgment carries, under either of the names the page draws."""
+    return str(body.get("because") or body.get("breaks_if") or "")
 
 
 def shown_value(dep, raw, ids, jud, page):
     """What a section's text records for a reference it draws. A judgment placed in prose
     puts both halves of itself on the page - the conclusion the sentence around it was
     written against, and the argument the sentence actually shows - so the text is held to
-    both, and a rewrite of either is a move under it. A judgment's *own* snapshot keeps only
-    the verdict, because what rests on a judgment rests on its conclusion and should survive
-    three rewrites of the prose; a text is the one place that prose is itself on the
-    surface, which is why it is the one place held to it."""
+    both, and a rewrite of either is a move under it. They are recorded as two fields rather
+    than as one line, because a delimiter is not a representation: prose contains every
+    separator anyone might pick, and a snapshot that has to be parsed back is a snapshot
+    that can be read wrongly. A judgment's *own* snapshot keeps only the verdict, because
+    what rests on a judgment rests on its conclusion and should survive three rewrites of
+    the prose; a text is the one place that prose is itself on the surface."""
     if dep in jud:
         b = jud[dep]["body"]
-        verdict = str(b.get("verdict") or b.get("title") or dep)
-        because = str(b.get("because") or "")
-        return verdict + PLACED + because if because else verdict
+        seen = {"verdict": str(b.get("verdict") or b.get("title") or dep)}
+        because = reasoning_of(b)
+        if because:
+            seen["because"] = because
+        return seen
     return snapshot_value(dep, raw, ids, jud, page)
 
 
+def same_seen(old, now):
+    """Whether a snapshot still holds: text after whitespace, then number - and, for the two
+    fields a placed judgment records, field by field."""
+    if isinstance(old, dict) or isinstance(now, dict):
+        if not (isinstance(old, dict) and isinstance(now, dict)):
+            return False
+        return set(old) == set(now) and all(same_seen(old[k], now[k]) for k in old)
+    if " ".join(str(old).split()) == " ".join(str(now).split()):
+        return True
+    try:
+        return Decimal(str(old).replace(",", "")) == Decimal(str(now).replace(",", ""))
+    except InvalidOperation:
+        return False
+
+
+HALVES = {"because": "the reasoning it places",
+          "verdict": "the verdict over the reasoning it places"}
+
+
 def which_moved(old, now):
-    """-> (what to call it, was, now). A placed judgment carries its conclusion and its
-    argument in one snapshot, so quoting the whole of each would show the same clipped
-    verdict twice when only the argument was rewritten. Say which half moved, and quote
-    that - every surface that reports a text's move reads the same reading."""
-    old, now = str(old), str(now)
-    if PLACED in old and PLACED in now:
-        (ov, ob), (nv, nb) = (x.split(PLACED, 1) for x in (old, now))
-        if ov == nv:
-            return "the reasoning it places", ob, nb
-        if ob == nb:
-            return "the verdict over the reasoning it places", ov, nv
-    # a text written before a placement was held to its reasoning saw the verdict alone;
-    # nothing moved under it, it was simply never read against the argument it shows
-    if PLACED not in old and now.startswith(old + PLACED):
-        return "the reasoning it places", "never read against it", now.split(PLACED, 1)[1]
+    """-> (what to call it, was, now). A placed judgment records its conclusion and its
+    argument as two fields, so quoting the whole snapshot would print the same clipped
+    verdict twice when only the argument was rewritten. Name the field that moved and quote
+    that; every surface reporting a text's move reads the same reading. Anything that is
+    not a placement is quoted whole, under no name."""
+    if isinstance(old, dict) and isinstance(now, dict):
+        moved = [f for f in ("verdict", "because")
+                 if not same_seen(old.get(f, ""), now.get(f, ""))]
+        if len(moved) == 1:
+            f = moved[0]
+            return HALVES[f], old.get(f, "never read against it"), now.get(f, "")
+        return "", old.get("verdict", ""), now.get("verdict", "")
+    # a text written before a placement was held to its argument saw the verdict alone:
+    # nothing moved under it, it was never read against the sentence it shows
+    if not isinstance(old, dict) and isinstance(now, dict):
+        if same_seen(old, now.get("verdict", "")):
+            return HALVES["because"], "never read against it", now.get("because", "")
+        return HALVES["verdict"], old, now.get("verdict", "")
     return "", old, now
 
 
@@ -3016,7 +3044,7 @@ def _review_section(paths, brief, title, stamp, raw, ids, jud):
     _write_text(brief, "\n".join(blines))
     print(f"review text '{title}': reviewed {stamp}")
     for k in refs:
-        if k in was and k in seen and not _same(was[k], seen[k]):
+        if k in was and k in seen and not same_seen(was[k], seen[k]):
             half, a, b = which_moved(was[k], seen[k])
             print(f"  seen {k}{' - ' + half if half else ''}: {short(a)} -> {short(b)}")
         elif k not in was and k in seen:

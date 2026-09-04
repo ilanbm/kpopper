@@ -857,9 +857,17 @@ def build(paths, brief_path=None):
     for name, j in sorted(jud.items()):
         b = j["body"]
         why, keys = blocked_of(b)
-        because, cut = clipped(b.get("because") or b.get("breaks_if") or "")
+        written = P.reasoning_of(b)
+        because, cut = clipped(written)
+        # the budget is over what a card draws, and a reference is drawn as the value or
+        # verdict behind it - which can be longer than the `{{id}}` that stands for it. So
+        # what is counted is the resolved length: prose cut here, and prose that only
+        # overruns once the record is read into it, are the same swelling to a reader.
+        drawn = len(P.resolve_refs(because, raw0, ids, jud))
         if cut:
-            swollen.append((name, len(str(b.get("because") or b.get("breaks_if") or ""))))
+            swollen.append((name, len(written), "cut"))
+        elif drawn > CARD_CHARS:
+            swollen.append((name, drawn, "resolved"))
         J[name] = {"deps": j["deps"], "used": sorted(used.get(name, [])), "pred": j["pred"],
                    "verdict": str(b.get("verdict") or b.get("title") or ""),
                    "because": because,
@@ -1169,9 +1177,11 @@ def build(paths, brief_path=None):
             if k not in E and k not in J:
                 continue
             now = P.shown_value(k, raw0, ids, jud, page_counts)
-            if now is None or isinstance(now, (list, dict)) or isinstance(old, (list, dict)):
+            if now is None or isinstance(now, list) or isinstance(old, list):
                 continue
-            if not same_value(old, now):
+            if k not in J and (isinstance(now, dict) or isinstance(old, dict)):
+                continue          # an entry whose value is a mapping is not comparable
+            if not P.same_seen(old, now):
                 out[k] = (old, now)
         return out
 
@@ -1596,14 +1606,19 @@ def verify(paths, brief_path=None):
                     + (" - declared, so the page shows it as awaited" if j["blocked"] else ""))
     if "window.__E=" not in page or "window.__J=" not in page:
         fail.append("payload missing")
-    sw = sorted(info["swollen"], key=lambda x: -x[1])
-    if sw:
-        worst = ", ".join(f"{n} ({c})" for n, c in sw[:3])
-        note.append(f"{len(sw)} reasonings run past the {CARD_CHARS} characters a card carries, "
-                    f"longest first: {worst}"
-                    + (f" and {len(sw) - 3} more" if len(sw) > 3 else "")
-                    + " - each is drawn to its last whole word and marked; the rest is read in "
-                      "the record")
+    # two ways past the budget, and they ask different things of an author: prose written
+    # long is cut and marked, prose that only overruns once the record resolves into it is
+    # drawn whole - what is long there is what the reasoning names, not what it says.
+    for kind, said in (("cut", f"longer than the {CARD_CHARS} characters a card carries; each "
+                               f"is drawn to its last whole word and marked"),
+                       ("resolved", f"within {CARD_CHARS} characters as written and past them "
+                                    f"once their references resolve; what each names is long, so "
+                                    f"the card is drawn whole")):
+        sw = sorted((x for x in info["swollen"] if x[2] == kind), key=lambda x: -x[1])
+        if sw:
+            note.append(f"{len(sw)} reasoning{'s' if len(sw) != 1 else ''} {said}. Longest first: "
+                        + ", ".join(f"{n} ({c})" for n, c, _ in sw[:3])
+                        + (f" and {len(sw) - 3} more" if len(sw) > 3 else ""))
     if info["brief"]:
         u = info["unnamed"]
         if u:

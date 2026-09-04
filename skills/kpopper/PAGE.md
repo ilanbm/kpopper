@@ -198,7 +198,9 @@ an empty cell where a number belongs, and it never lets `headline` carry one.
 whole word with an ellipsis — never cut mid-word in silence — and `--verify` names the judgments
 it had to cut, longest first, so reasoning swelling past what a card holds is a number you can
 read rather than something a reader discovers. Write a `because` to fit; what will not fit is
-usually two judgments.
+usually two judgments. A reasoning that fits as written and passes the budget only once its
+references resolve is drawn whole and reported separately: what is long there is what it names,
+so the fix is a shorter `name:` on the entry or a `labels:` line, not a shorter sentence.
 
 A card and a section's text carry the same warning when what they rest on has moved since they
 were reviewed: a tint, the moved value marked in place with what it was, and one line naming
