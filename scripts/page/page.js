@@ -255,37 +255,6 @@
  addEventListener('resize',close);
  addEventListener('scroll',function(){if(!pin)close();else place(cur)},{passive:true});
 
- // Dates are calendar days. UTC ordinals avoid DST-length days; the local date is
- // sampled anew each tick, so a page left open over midnight remains a reading.
- function dayNumber(y,m,d){return Date.UTC(y,m-1,d)/86400000}
- function refreshDates(){
-  var nowDate=new Date(),today=dayNumber(nowDate.getFullYear(),nowDate.getMonth()+1,nowDate.getDate());
-  var iso=[nowDate.getFullYear(),String(nowDate.getMonth()+1).padStart(2,'0'),String(nowDate.getDate()).padStart(2,'0')].join('-');
-  document.querySelectorAll('[data-countdown]').forEach(function(el){
-   var date=el.dataset.countdown.split('-').map(Number),n=dayNumber(date[0],date[1],date[2])-today;
-   var value=el.querySelector('[data-id]');
-   if(value)value.textContent=n===0?T.today:(n>0?T.days_left:T.days_ago).replace('{n}',Math.abs(n));
-  });
-  document.querySelectorAll('.tl').forEach(function(tl){
-   tl.querySelectorAll('[data-calendar-marker]').forEach(function(el){if(el.dataset.day!==iso)el.remove()});
-   if(!tl.querySelector('[data-day="'+iso+'"]')){
-    var day=document.createElement('div');day.className='day';day.dataset.day=iso;day.dataset.calendarMarker='true';
-    var when=document.createElement('div');when.className='when';when.dataset.clock='today';
-    when.textContent=iso.split('-').reverse().join('/');day.appendChild(when);
-    var label=document.createElement('div');label.className='day-label';day.appendChild(label);
-    var next=[].slice.call(tl.querySelectorAll('[data-day]')).find(function(el){return el.dataset.day>iso});
-    tl.insertBefore(day,next||null);
-   }
-  });
-  document.querySelectorAll('[data-day]').forEach(function(el){
-   var date=el.dataset.day.split('-').map(Number),n=dayNumber(date[0],date[1],date[2])-today;
-   el.classList.toggle('past',n<0);el.classList.toggle('hot',n===0);
-   el.querySelector('.day-label').textContent=n===0?T.today:'';
-  });
- }
- refreshDates();setInterval(refreshDates,30000);
- document.addEventListener('visibilitychange',refreshDates);
-
  // Tabs. One provenance layer above, both panels below it - the layer binds on
  // document and keys off [data-id], so it does not know a tab exists.
  var bar=document.querySelector('.tabs');

@@ -154,8 +154,8 @@ language without a catalog fails verification. Source quotations retain their ow
 
 **Count tiles (`headline`).** One to four picked values, each with its label and note. A date
 becomes a countdown in calendar days, including today and elapsed dates, with its recorded date
-shown beneath. It updates while the page is open, including after midnight and on returning to
-the tab. Without scripts the build's reading is still shown beside the original date.
+shown beneath. It uses the language’s singular and plural forms and updates while the page is open,
+including after midnight and on returning to the tab. Without scripts the build's reading is still shown beside the original date.
 
 **Alert band (`alerts`).** Judgments are ordered by the reader's existing urgency states. Each
 row has an icon, verdict, explanation, judgment tag and grouping dot. Blocked, unchecked,
@@ -187,7 +187,9 @@ token level; grouping hue never replaces a judgment's warning color.
 **Honest footer.** `truth:` and `elsewhere:` each name a record entry or list of entries. Their
 names are referenced, and entries carrying destinations become links. The footer identifies the
 page as a snapshot and distinguishes its live date counters. These fields select recorded
-material; unanchored footer prose fails verification.
+material; unanchored footer prose fails verification. The live-clock sentence and clock code
+appear only on pages with date tiles or a timeline. Component styles are included only when
+a grouping or a component needs them; a plain English record retains its boolean spelling.
 
 ## The tree
 
@@ -229,8 +231,9 @@ question people actually have, instead of *what is the shape of the whole thing*
 question nobody asks.
 
 Present entries are named on the reading surface, including the Record tab and arrangement
-banners; their ids remain in the hover. A missing dependency is still an explicit awaited or
-broken item, rather than a reference that appears to resolve. Values in tables, tiles and
+banners; their ids remain in the hover. Two things retain their full keys: a missing dependency
+and a key a blocked line is waiting on. They have no working popover, so their namespaces stay
+visible and distinguish what a reader must go and get. Values in tables, tiles and
 groups carry their own reference, so moving the pointer from the label to the number does
 not lose the source.
 
@@ -436,14 +439,18 @@ broken. A reader that cannot tell a declared hole from a mistake makes declaring
 The element lint reads the generated HTML, including inactive tabs. Source prose is attributed
 to the record entry or judgment that owns it; connective `text` has a separate reviewed view.
 It does not claim to decide whether a sentence is an argument or to translate a quotation.
+Titles, `why` and occasions are presentation metadata: the key check applies there, but the
+literal-value and snapshot checks apply to connective `text`, not those labels. Put factual
+values in referenced text or record entries. Review-state checks are output invariants: they
+catch a renderer or template that drops a marker, not a normal render that keeps it.
 
-- **Keys:** a present internal id on the reading surface fails; ids in payloads and hover metadata are allowed. Missing human names are noted.
-- **Values:** a displayed component value without a reference, nested entry references around one value, or a number, date or quotation typed into connective text fails.
+- **Keys:** present dotted ids and short ids used as unlabeled reading labels fail; unknown dotted words are not guessed to be keys. Full missing-dependency keys remain visible. Missing human names are noted.
+- **Values:** a displayed component value without a reference, an invented second reference around a value, or a number, date or quotation typed into connective text fails. A recorded sentence may contain its own inline references when the referenced ids occur in the source value.
 - **Context:** a section containing only a table warns, “a dump with a heading.”
 - **Judgments:** missing judgment attribution or visible marking fails; removing an in-place unverified or unresolved warning fails.
 - **Language:** an unsupported declared language, incorrect page language, or connective prose in the wrong supported script fails. Record quotations are preserved.
 - **Review:** absent review metadata or a missing moved/unreviewed marker fails; a visible unread reference warns. Existing record snapshots remain authoritative and are never invented by rendering.
-- **Purpose:** a tab without `serves` or section without `why` warns; an invalid or unearned `serves` fails.
+- **Purpose:** a tab without `serves` or section without `why` warns; an invalid or unearned `serves` fails. `d.purpose_gaps_warn` records this compatibility decision and its reopening condition: gaps must remain visible through diagnostics, coverage and spill, without inventing intent for older briefs.
 - **Arrangement:** an arrangement without a recorded decision warns; cutting a standing decision's link or merging disjoint arrangements still fails.
 - **Unanchored prose:** connective text without a reference warns, “connective, or an unrecorded claim.”
 

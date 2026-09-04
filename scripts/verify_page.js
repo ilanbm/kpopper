@@ -55,6 +55,10 @@ if (!CHROME) { console.log('no Chrome/Chromium found - set CHROME to a browser b
         () => document.documentElement.scrollWidth <= window.innerWidth + 1));
 
       if (await p.locator('[data-countdown]').count()) {
+        const lang = await p.locator('html').getAttribute('lang');
+        const singular = { en: ['1 day left', 'today', '1 day ago'],
+          he: ['נותר יום אחד', 'היום', 'לפני יום אחד'],
+          ar: ['بقي يوم واحد', 'اليوم', 'منذ يوم واحد'] }[lang];
         const clocks = await p.evaluate(() => {
           const RealDate = window.Date, tile = document.querySelector('[data-countdown]');
           const [y, m, d] = tile.dataset.countdown.split('-').map(Number);
@@ -82,8 +86,7 @@ if (!CHROME) { console.log('no Chrome/Chromium found - set CHROME to a browser b
           return { id, readings };
         });
         chk(`${T} countdown crosses tomorrow, today and yesterday without losing its reference`,
-            clocks.readings.map(r => r.value).join('|') ===
-            [words.days_left.replace('{n}', 1), words.today, words.days_ago.replace('{n}', 1)].join('|')
+            !!singular && clocks.readings.map(r => r.value).join('|') === singular.join('|')
             && clocks.readings.every(r => r.id === clocks.id));
         chk(`${T} the timeline moves its today marker across midnight`, clocks.readings.every(r => r.today));
       }

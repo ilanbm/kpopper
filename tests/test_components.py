@@ -136,7 +136,8 @@ class Components(unittest.TestCase):
         self.assertIn('awaiting a quote', alert.text())
 
     def test_filenames_are_not_mistaken_for_internal_keys(self):
-        self.change(self.record, lambda d: d['known']['repair.grant'].update(note='See annual_report.docx, annual_report.pptx, annual_report.svg and annual_report.sh.'))
+        self.change(self.record, lambda d: d['known']['repair.grant'].update(note='See doc.md and repair.txt beside the record.'))
+        self.change(self.brief, lambda d: d['tabs'][0]['sections'][0].update(why='The steps are in doc.md and repair.txt beside the record.'))
         self.assertFalse(self.lint()[0])
 
     def test_footer_names_truth_and_elsewhere_from_entries(self):
@@ -198,9 +199,11 @@ class Components(unittest.TestCase):
         self.assertFalse(self.lint()[0])
         self.assertIn('repair.grant', self.build()[0])
 
-    def test_unknown_key_cannot_hide_in_connective_prose(self):
+    def test_unknown_dotted_word_warns_as_unanchored_prose(self):
         self.change(self.brief, lambda d: d['tabs'][0]['sections'][4].update(text='Read repair.unrecorded first.'))
-        self.assertTrue(any('bare key' in x for x in self.lint()[0]))
+        failures, warnings = self.lint()
+        self.assertFalse(failures)
+        self.assertTrue(any('unanchored prose' in x for x in warnings))
 
     def test_removed_value_reference_fails_output_lint(self):
         fail, _ = self.lint(lambda p: p.replace('data-id="repair.grant"', 'data-broken="repair.grant"'))
@@ -288,11 +291,83 @@ class Components(unittest.TestCase):
         self.assertIn('The grant is 2,400.', card.text())
         self.assertFalse(self.lint()[0])
 
+    def test_recorded_sentence_can_reference_another_entry(self):
+        self.change(self.record, lambda d: d['known'].update({
+            'repair.status': {'v': 'waiting on repair.grant to clear', 'name': 'Where the budget stands'}}))
+        self.change(self.brief, lambda d: d['tabs'][0]['sections'].append(
+            {'title': 'Budget status', 'why': 'What is still waiting', 'as': 'table', 'pick': 'repair.status'}))
+        self.assertFalse(self.lint()[0])
+        page = self.build()[0]
+        self.assertIn('data-id="repair.status">waiting on <span class="fx in" data-id="repair.grant">', page)
+
+    def test_short_ids_cannot_be_used_as_unlabelled_reading_text(self):
+        for label, key in [('record language', 'language'), ('record name', 'name'), ('last updated', 'updated')]:
+            failures, _ = self.lint(lambda page: page.replace(
+                '<td class="kl" dir="auto">' + label + '</td>', '<td class="kl" dir="auto">' + key + '</td>'))
+            self.assertTrue(any('bare key on the reading surface: ' + key in x for x in failures), failures)
+        self.change(self.record, lambda d: d['known'].update({'approval': {'v': 'waiting'}}))
+        self.change(self.brief, lambda d: d['tabs'][0]['sections'][4].update(text='approval'))
+        self.assertTrue(any('bare key on the reading surface: approval' in x for x in self.lint()[0]))
+
+    def test_awaited_namespaces_remain_distinguishable(self):
+        self.change(self.record, lambda d: d['judgments']['c.ready'].update(
+            rests_on=['glazier.final_quote', 'builder.final_quote'], blocked_on='Waiting for both quotes.'))
+        card = self.elements('card')[0]
+        missing = [n.text() for n in card.walk() if 'wait' in n.classes()]
+        self.assertEqual(missing, ['glazier.final_quote', 'builder.final_quote'])
+        self.assertFalse(any('bare key' in x for x in self.lint()[0]))
+
+    def test_plain_english_record_keeps_boolean_text_and_has_no_clock_assets(self):
+        self.change(self.record, lambda d: d['known'].update({'repair.approved': {'v': True, 'name': 'Approval received'}}))
+        self.brief.unlink()
+        page, _, _, _, _ = self.build()
+        self.assertIn('data-id="repair.approved">True</span>', page)
+        self.assertNotIn('live clocks count from its dates', page)
+        self.assertNotIn('function refreshDates', page)
+        self.assertNotIn('Component color is an identity', page)
+
+    def test_counts_have_singular_and_dual_forms(self):
+        for lang, expected in [('en', '1 day left'), ('he', 'נותר יום אחד'), ('ar', 'بقي يوم واحد')]:
+            self.assertEqual(R.counted(WORDS[lang], 'days_left', 1, lang), expected)
+        self.assertEqual(R.counted(WORDS['he'], 'stood', 1, 'he'), 'עמד במשך סשן אחד')
+        self.assertEqual(R.counted(WORDS['ar'], 'stood', 1, 'ar'), 'صمد جلسة واحدة')
+        self.assertEqual(R.counted(WORDS['ar'], 'days_left', 2, 'ar'), 'بقي يومان')
+        self.assertEqual(R.counted(WORDS['ar'], 'days_left', 14, 'ar'), 'بقي 14 يوماً')
+
+    def test_misfit_banner_is_localized(self):
+        self.change(self.record, lambda d: d['meta'].update(language='he'))
+        self.change(self.brief, lambda d: d['tabs'][0]['sections'][0].update(pick='doc.guide', **{'as': 'timeline'}))
+        banner = self.elements('bad')[0].text()
+        self.assertIn('ציר הזמן דורש תאריכים', banner)
+        self.assertIn('חזרה לצורת ברירת המחדל', banner)
+        self.assertNotIn('fell back', banner)
+        self.assertNotIn('timeline needs', banner)
+
+    def test_purpose_warning_names_the_section_without_its_count(self):
+        self.change(self.brief, lambda d: d['tabs'][0]['sections'][0].pop('why'))
+        self.assertIn('section without why: Time left', self.lint()[1])
+        self.assertNotIn('section without why: Time left 1', self.lint()[1])
+
     def test_record_cannot_close_the_payload_script(self):
         self.change(self.record, lambda d: d['known']['repair.grant'].update(note='</script><script>alert(1)</script>'))
         page = self.build()[0]
         self.assertNotIn('</script><script>alert(1)', page)
         self.assertIn('\\u003c/script>', page)
+
+    def test_review_metadata_guards_detect_a_renderer_regression(self):
+        failures, _ = self.lint(lambda page: page.replace('data-review=', 'data-removed-review='))
+        self.assertIn('connective text carries no review state', failures)
+        self.assertIn('c.ready: text carries no review state', failures)
+
+    def test_committed_hebrew_fixture_verifies(self):
+        record = FIXTURE / 'components-rtl.yaml'
+        brief = FIXTURE / 'components-rtl.view.yaml'
+        with contextlib.redirect_stdout(io.StringIO()) as out:
+            code = R.verify([str(record)], str(brief))
+        self.assertEqual(code, 0, out.getvalue())
+        page = R.build([str(record)], str(brief))[0]
+        self.assertIn('<html lang="he" dir="rtl">', page)
+        self.assertIn('הסדר הכתוב', page)
 
 
 if __name__ == '__main__':

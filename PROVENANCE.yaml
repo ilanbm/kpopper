@@ -1316,6 +1316,26 @@ judgments:
                                           about one in five, the confidences carry no information and
                                           prior.* is demoted to a note"
       p.prior_count_thresholds: 1
+  d.purpose_gaps_warn:
+    rests_on: [s.2026_09_04_components, d.author_free_build_guarantees, d.intent_is_a_source, d.spill_on_every_tab]
+    verdict: "Missing serves or why warns rather than preventing the page from being read; invalid
+              or unearned serving claims still fail"
+    because: "Existing briefs predate session intents, and a tab of source material can
+              intentionally claim no session outcome. Requiring a claim from those pages would invent
+              intent or suppress their reading surface. The warning names the missing metadata;
+              coverage and the mandatory spill still expose unserved work, while a serving claim that
+              its picks do not earn remains a failure."
+    blocked_on: "observational: re-open if readers overlook missing purpose metadata despite its
+                 warning, or unserved work can disappear without a coverage or spill signal"
+    seen:
+      s.2026_09_04_components: "read 2026-09-04"
+      d.author_free_build_guarantees: "the session composes freely and the build enforces the
+                                       element rules on the output"
+      d.intent_is_a_source: "a session records what it was for as a source; a tab is a reading
+                             occasion that serves intents, and serving is earned by picks"
+      d.spill_on_every_tab: "what fell through the arrangement - flagged judgments nothing picked,
+                             and what a session wrote for an intent no tab serves - is counted once
+                             for the page and drawn on every tab"
   d.record_is_code:
     rests_on: [s.2026_09_01_consolidation, d.register_out_of_tree, d.base_shared_forks_on_contradiction, p.hypothesis_homes]
     verdict: "the record of what is known about the code lives in the tree - committed with the work

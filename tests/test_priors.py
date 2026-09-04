@@ -530,11 +530,11 @@ class ThePageShowsTheReopener(unittest.TestCase):
         self.assertIn('<div class="rb" dir="auto"><span class="lbl">reopened by</span>a macro that '
                       'breaks on an export whose column order did not change - the binding would '
                       'then be by name, and <span class="fx in" data-id="export.header_changes">'
-                      'export.header_changes</span> the wrong thing to watch</div>', page)
+                      'header rows that differ across the last three exports</span> the wrong thing to watch</div>', page)
         self.assertNotIn('class="dep wait"', page)
         self.assertTrue(J[DECIDED]["reopened"].startswith("a macro that breaks on an export"))
         self.assertEqual(J[DECIDED]["blocked"], "")
-        self.assertIn("row('reopened by',esc(j.reopened))", page)
+        self.assertIn("row(T.reopened_by,esc(j.reopened))", page)
         # calm on the tree: no warning, no stop, the same blossom as any judgment that holds
         self.assertRegex(page, rf'<g class="tn crown" data-id="{re.escape(DECIDED)}">')
         self.assertEqual(J["c.fourteen_fit"]["reopened"], "")

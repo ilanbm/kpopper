@@ -1,0 +1,67 @@
+title: תיקון החממה
+groups:
+  threads:
+    תיקונים:
+    - repair.
+    - c.ready
+    - doc.guide
+    לוח זמנים:
+    - date.
+  responsibilities:
+    הזגג:
+    - repair.deposit
+    - date.visit
+    בעל החממה:
+    - repair.grant
+    - date.cold
+    - date.visit
+tabs:
+- title: לפני החורף
+  occasion: פותחים בזמן ההכנות לביקור הזגג
+  serves:
+  - s.2026_09_04_repairs
+  sections:
+  - title: הזמן שנותר
+    why: הלילה הקר הראשון קובע את המועד.
+    pick: date.cold
+    as: headline
+  - title: מה דורש תשומת לב
+    why: השיפוט והאזהרה שלו מופיעים יחד.
+    pick: c.ready
+    as: alerts
+  - title: מדוע המענק מספיק
+    why: הנימוק שייך לשיפוט.
+    pick: c.ready
+    as: cards
+  - title: הימים הבאים
+    why: הביקור חל בין המקדמה ללילה הקר.
+    pick: date.
+    as: timeline
+  - title: הסדר הכתוב
+    why: כל סכום מופיע בתוך משפט.
+    as: axis
+    text: 'ביום {{date.deposit}} המקדמה הייתה {{repair.deposit}} אירו.
+
+      המענק מוסיף {{repair.grant}} אירו לפני {{date.cold}}.
+
+      '
+    reviewed: "2026-09-04"
+    seen:
+      date.deposit: "2026-09-01"
+      repair.deposit: -1200
+      repair.grant: 2400
+      date.cold: "2027-02-01"
+  - title: מה לקרוא
+    why: הוראות ההכנה זמינות בקישור.
+    pick: doc.guide
+    as: links
+  - title: מי אחראי
+    why: הביקור מופיע תחת שני האנשים.
+    pick:
+    - repair.
+    - date.visit
+    - date.cold
+    by: responsibilities
+    as: grouped
+truth: doc.guide
+elsewhere: repair.grant

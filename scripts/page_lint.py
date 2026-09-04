@@ -69,7 +69,7 @@ def lint_output(page, entries, judgments, info):
     """Return failures and warnings. Hidden tab panels are reading surfaces too."""
     tree = Surface(page).root
     ids = set(entries) | set(judgments)
-    prefixes = {key.split('.')[0] for key in ids if '.' in key}
+    short_ids = {key for key in ids if '.' not in key}
     fail, warn = [], []
     nodes = list(tree.walk())
     lang = info.get('language', 'en')
@@ -90,18 +90,36 @@ def lint_output(page, entries, judgments, info):
         for child in node.children:
             if not isinstance(child, str):
                 continue
+            # Missing dependencies have no popover to carry their identity. Their full
+            # keys are the explicit reading-surface exception: what someone must fetch.
+            if any(p.classes() & {'wait', 'dead'} for p in chain):
+                continue
             for key in KEY.findall(child):
-                if key in ids or key.split('.')[0] in prefixes:
+                if key in ids:
+                    say(fail, f'bare key on the reading surface: {key} — give it a human label')
+            key = child.strip()
+            if key in short_ids:
+                owner = source(node)
+                is_label = bool(node.classes() & {'kl', 'k'}) or owner == key
+                is_bare_prose = any('txt' in p.classes() and p.text().strip() == key for p in chain)
+                literal_value = owner == key and str(entries.get(key, {}).get('v')) == key
+                if (is_label or is_bare_prose) and not literal_value:
                     say(fail, f'bare key on the reading surface: {key} — give it a human label')
         if 'data-id' in node.attrs:
             key = node.attrs['data-id']
             if key not in ids:
                 say(fail, f'reference {key} does not resolve to an entry')
-            # Nested judgments contain references to their evidence, not two references
-            # to one value. Two entry references around the same text are ambiguous.
+            # A recorded sentence owns its wording while its literal inline references
+            # identify other entries. Allow that composition only when the record itself
+            # contains the nested id; an invented second reference still fails.
             outer = [p for p in chain[1:] if p.attrs.get('data-id') in entries]
             if outer and key in entries:
-                say(fail, f'value has more than one reference: {outer[0].attrs["data-id"]}, {key}')
+                for parent in outer:
+                    owner = parent.attrs['data-id']
+                    recorded = entries[owner].get('v', entries[owner].get('rule', ''))
+                    if not isinstance(recorded, str) or not re.search(
+                            r'(?<![\w.])' + re.escape(key) + r'(?![\w.])', recorded):
+                        say(fail, f'value has more than one reference: {owner}, {key}')
         if node.classes() & {'card', 'al', 'rsn'}:
             if not any(p.attrs.get('data-judgment') for p in chain):
                 say(fail, 'judgment text has no judgment or review attribution')
@@ -158,7 +176,10 @@ def lint_output(page, entries, judgments, info):
                 if (lang == 'he' and he < .3) or (lang == 'ar' and ar < .3) or (lang == 'en' and max(he, ar) > .5):
                     say(fail, 'connective prose does not follow the record language: ' + lang)
         if 'data-component' in node.attrs:
-            title = next((c.text() for c in node.walk() if c.tag == 'h2'), '?')
+            heading = next((c for c in node.walk() if c.tag == 'h2'), None)
+            title = (''.join(c if isinstance(c, str) else c.text()
+                             for c in heading.children if isinstance(c, str) or 'n' not in c.classes()).strip()
+                     if heading else '?')
             if node.attrs['data-component'] == 'table' and not any(c.attrs.get('data-prose') for c in node.walk()):
                 say(warn, 'a dump with a heading: ' + title)
             if not node.attrs.get('data-why'):

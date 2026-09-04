@@ -37,6 +37,8 @@ from page_lint import lint_output
 _PAGE = pathlib.Path(__file__).resolve().parent / "page"
 CSS = "\n" + (_PAGE / "page.css").read_text(encoding="utf-8")
 JS = "\n" + (_PAGE / "page.js").read_text(encoding="utf-8")
+COMPONENT_CSS = "\n" + (_PAGE / "components.css").read_text(encoding="utf-8")
+DATE_JS = "\n" + (_PAGE / "dates.js").read_text(encoding="utf-8")
 
 # ── what the record says about itself ────────────────────────────────────────
 # One reading of state, used by every section selector. The same four conditions
@@ -110,6 +112,13 @@ def language(doc):
 
 
 fmt = P.fmt        # one formatting of a number, shared with every surface that prints one
+
+
+def counted(words, key, n, lang="en"):
+    form = ('one' if n == 1 else 'two' if n == 2 else
+            'many' if lang == 'ar' and 11 <= n % 100 <= 99 else
+            'other' if lang == 'ar' and not 3 <= n % 100 <= 10 else '')
+    return words[key + ('_' + form if form else '')].format(n=n)
 
 
 def shape_of(ids, jud, flags):
@@ -553,39 +562,43 @@ human = P.human
 # Layout is where intent shows. But a renderer that silently accepts data it cannot
 # express produces a page that looks arranged and is not, so each one says what it
 # needs and a mismatch is a failure, not a shrug.
-def fits(kind, keys, jud, E, groups_of=None):
+def fits(kind, keys, jud, E, groups_of=None, words=None, label=None):
+    def problem(code, fallback, **values):
+        return words[code].format(**values) if words else fallback
+
+    def names(ks):
+        return ", ".join(label(k) if label else k for k in ks)
+
     if kind in ("table", "lines", "cards"):
         return None
     if kind == "timeline":
         bad = [k for k in keys if k not in jud and as_date((E.get(k) or {}).get("v")) is None]
-        return (f"timeline needs date values; {len(bad)} of {len(keys)} are not dates "
-                f"({', '.join(bad[:4])})") if bad else None
+        return problem("fit_timeline", f"timeline needs date values; {len(bad)} of {len(keys)} are not dates "
+                       f"({', '.join(bad[:4])})", bad=len(bad), total=len(keys), names=names(bad[:4])) if bad else None
     if kind == "headline":
         n = [k for k in keys if k not in jud]
         if not 1 <= len(n) <= 4:
-            return f"headline carries one to four values, not {len(n)}"
+            return problem("fit_headline_count", f"headline carries one to four values, not {len(n)}", n=len(n))
         blank = [k for k in n if (E.get(k) or {}).get("v") is None]
-        return (f"headline needs values; {', '.join(blank)} "
-                f"{'is derived and this reader does not evaluate rules' if len(blank) == 1 else 'are derived'}"
-                ) if blank else None
+        return problem("fit_headline_values", f"headline needs values; {', '.join(blank)} "
+                       f"{'is derived and this reader does not evaluate rules' if len(blank) == 1 else 'are derived'}",
+                       names=names(blank)) if blank else None
     if kind in GROUPED_SHAPES:
-        g = set()
+        groups = set()
         for k in keys:
-            # An ungrouped entry is drawn under its prefix. Judgments participate in
-            # the same grouping, including overlap, and keep their normal cards.
             gs = groups_of(k) if groups_of else []
-            g |= set(gs) if gs else {k.split(".")[0]}
-        return (f"grouped lays groups side by side; these are all one group "
-                f"({', '.join(sorted(g)) or '-'})") if len(g) < 2 else None
+            groups |= set(gs) if gs else {k.split(".")[0]}
+        return problem("fit_grouped", "grouped lays groups side by side; these are all one group "
+                       f"({', '.join(sorted(groups)) or '-'})", names=', '.join(sorted(groups)) or '-') if len(groups) < 2 else None
     if kind == "alerts":
-        e = [k for k in keys if k not in jud]
-        return f"alerts ranks judgments; {len(e)} of these are entries" if e else None
+        entries = [k for k in keys if k not in jud]
+        return problem("fit_alerts", f"alerts ranks judgments; {len(entries)} of these are entries", n=len(entries)) if entries else None
     if kind == "axis":
         return None
     if kind == "links":
         bad = [k for k in keys if k in jud or not link_target(E.get(k) or {})]
-        return f"links needs a safe url or file: {', '.join(bad)}" if bad else None
-    return f"unknown renderer '{kind}'"
+        return problem("fit_links", f"links needs a safe url or file: {', '.join(bad)}", names=names(bad)) if bad else None
+    return problem("fit_unknown", f"unknown renderer '{kind}'", kind=kind)
 
 
 def link_target(entry):
@@ -753,8 +766,8 @@ def tree_svg(ids, jud, E, J, flags, words=None, label=None):
 
     def lbl(k, n):
         b = jud.get(k)
-        t = (b["body"].get("verdict") or b["body"].get("title") or k.split(".")[-1]) if b \
-            else (E.get(k, {}).get("name") or k.split(".")[-1])
+        t = (J[k].get("verdict") or (label(k) if label else human(k))) if b \
+            else (label(k) if label else E.get(k, {}).get("name") or human(k))
         t = P.ID.sub(lambda m: (label(m.group(0)) if label else human(m.group(0)))
                     if m.group(0) in ids else m.group(0), str(t))
         return t if len(t) <= n else t[:n] + "…"
@@ -921,6 +934,9 @@ def build(paths, brief_path=None):
                 schemes[str(sname)][str(gname)] = members
                 for k in members:
                     index[str(sname)].setdefault(k, []).append(str(gname))
+    component_page = bool(schemes) or any(
+        str(sec.get("as") or "") in set(GROUPED_SHAPES) | {"headline", "timeline", "alerts", "cards", "axis", "links"}
+        for tab in tabs for sec in tab["sections"])
     default_scheme = next(iter(schemes), None)
     reading_by = [default_scheme]        # the scheme the section being drawn reads by
 
@@ -938,7 +954,12 @@ def build(paths, brief_path=None):
         it happens to carry a name of its own."""
         if k in labels:
             return str(labels[k])
-        return named(raw.get(k)) or human(k)
+        name = named(raw.get(k))
+        if name:
+            return name
+        if '.' not in k and k in ids:
+            return w.get('label_' + k, w['unnamed_item'].format(name=human(k)))
+        return human(k)
 
     # The record's own words, references as written, are what the cards draw from; the
     # payload carries them resolved, so a hover reads the same sentence a card shows.
@@ -971,7 +992,7 @@ def build(paths, brief_path=None):
         """-> html for this entry's value, with a rule's own references made live."""
         e = E.get(k) or {}
         if e.get("v") is not None:
-            value = (w["yes"] if e["v"] else w["no"]) if isinstance(e["v"], bool) else (fmt(e["v"]) if pretty else str(e["v"]))
+            value = ((w["yes"] if e["v"] else w["no"]) if component_page or lang != "en" else str(e["v"])) if isinstance(e["v"], bool) else (fmt(e["v"]) if pretty else str(e["v"]))
             return link_ids(value)
         return ("= " + link_ids(str(e["rule"]))) if e.get("rule") else ""
 
@@ -1129,9 +1150,9 @@ def build(paths, brief_path=None):
                      # hovering the words that already mention it.
                      + ('<div class="deps">' + "".join(
                          (f'<span class="dep wait" title="{w["awaited"]}: '
-                          f'{html.escape(d)}">{html.escape(human(d))}</span>' if b["blocked"] else
+                          f'{html.escape(d)}">{html.escape(d)}</span>' if b["blocked"] else
                           f'<span class="dep dead" title="{w["not_here"]}: {html.escape(d)}">'
-                          f'{html.escape(human(d))}</span>') for d in miss) + "</div>" if miss else "")
+                          f'{html.escape(d)}</span>') for d in miss) + "</div>" if miss else "")
                      + (f'<div class="rest">{w["rest"].format(n=len(rest))}</div>'
                         if rest else "")
                      + "</div>")
@@ -1181,7 +1202,7 @@ def build(paths, brief_path=None):
         build could not take - nothing dates what was added - is said so, never left empty."""
         return UNCOUNTED if k in P.PAGE else DERIVED
 
-    def r_table(keys, raw_keys=False):
+    def r_table(keys):
         rows = []
         for k in keys:
             cell = shown(k, True) if has_value(k) else blank(k)
@@ -1242,7 +1263,7 @@ def build(paths, brief_path=None):
             date = as_date(E[k].get("v"))
             attrs = f' data-countdown="{date.isoformat()}"' if date else ''
             n = (date - datetime.date.today()).days if date else None
-            value = (w["today"] if n == 0 else w["days_left" if n > 0 else "days_ago"].format(n=abs(n))) if date else (
+            value = (w["today"] if n == 0 else counted(w, "days_left" if n > 0 else "days_ago", abs(n), lang)) if date else (
                 (w["yes"] if E[k]["v"] else w["no"]) if isinstance(E[k]["v"], bool) else fmt(E[k]["v"]))
             out.append('<div class="head"' + hue(k) + f'><div class="big"{attrs}>{fx(k, value)}</div>'
                        f'<div class="cap" dir="auto">{kicker(k, {g for x in keys for g in groups_of(x)})}'
@@ -1415,7 +1436,7 @@ def build(paths, brief_path=None):
             f = arrangements[v]
             bits = [w["decided"] + (fx(v, f["born"].isoformat()) if f["born"] else w["as"] + fx(v, lbl(v)))]
             if f["stood"]:
-                bits.append(("stood 1 session" if lang == "en" and f["stood"] == 1 else w["stood"].format(n=f["stood"])))
+                bits.append(counted(w, "stood", f["stood"], lang))
             if f["request"] and f["request"] in E:
                 bits.append(w["word"] + fx(f["request"], P.short(asked_of(f["request"]), 80)))
             o.append('<p class="sub" dir="auto">' + " &middot; ".join(bits) + "</p>")
@@ -1482,8 +1503,8 @@ def build(paths, brief_path=None):
             if text:
                 o.append(r_text(sec)[0])
             if wrong:
-                o.append(f'<div class="bad">{html.escape(wrong)} &mdash; fell back to the '
-                         f'default shape</div>')
+                message = fits(str(sec.get("as") or ""), sorted(got), jud, E, groups_of, w, lbl)
+                o.append('<div class="bad">' + html.escape(message) + w["fell_back"] + '</div>')
             if picked and not got:
                 o.append('<div class="why">' + w["section_empty"] + '</div>')
             if kind in GROUPED_SHAPES and (jn or en):
@@ -1598,7 +1619,7 @@ def build(paths, brief_path=None):
         rec_html.append(f'<h2>{w["judgments"]} <span class="n">{len(jud)}</span></h2>')
         rec_html.append(cards(sorted(jud)))
     for g, keys in sorted(prefixes.items(), key=lambda kv: (-len(kv[1]), kv[0])):
-        rec_html.append(f'<h2 id="g-{html.escape(g)}">{html.escape(g)}</h2>' + r_table(keys, True))
+        rec_html.append(f'<h2 id="g-{html.escape(g)}">{html.escape(g)}</h2>' + r_table(keys))
 
     # ── the page ─────────────────────────────────────────────────────────────
     ns = '<nav class="ns" dir="ltr">' + "".join(
@@ -1612,10 +1633,14 @@ def build(paths, brief_path=None):
                 + (w["updated"].format(d=html.escape(str(meta["updated"]))) if meta.get("updated") else "")
                 + "</p>" + ns)
 
+    panel_markup = "".join(part for panel in panels.values() for part in panel)
+    has_clocks = 'data-countdown="' in panel_markup or 'data-day="' in panel_markup
+    component_styles = component_page or 'class="alerts"' in panel_markup
+    styles = CSS + (COMPONENT_CSS if component_styles else "")
     out = [f'<!doctype html><html lang="{html.escape(lang)}" dir="{html.escape(page_dir)}"><head><meta charset="utf-8">',
            '<meta name="viewport" content="width=device-width,initial-scale=1">',
            f'<title>{html.escape(str(brief.get("title") or rec_name or meta.get("scope") or w["tab_record"])[:60])}</title>',
-           f'<style>{CSS}</style></head><body><div class="wrap" dir="{html.escape(page_dir)}">']
+           f'<style>{styles}</style></head><body><div class="wrap" dir="{html.escape(page_dir)}">']
 
     tree = (h1 + f'<p class="purpose" dir="{page_dir}">{w["tree_lede"]}</p>'
             '<div class="treewrap">' + tree_svg(ids, jud, E, J, flags, w, lbl) + '</div>'
@@ -1654,13 +1679,18 @@ def build(paths, brief_path=None):
                 else:
                     contract["bad"].append(f'{field}: name a record entry, not unanchored footer prose')
             footer.append('<div>' + w[field] + ' &middot; '.join(links) + '</div>')
-    out.append(f'<footer dir="{page_dir}">' + "".join(footer) + w["snapshot"] + ' ' + w["footer"] + chosen + '</footer>')
+    out.append(f'<footer dir="{page_dir}">' + "".join(footer) + (w["snapshot"] + " " if has_clocks else "") + w["footer"] + chosen + '</footer>')
     # sorted keys, so two builds of an unchanged record are the same bytes - the one thing
     # a generated page is for is being diffed against the last one
-    out.append("</div><script>window.__T=" + json.dumps({key: w[key] for key in ("dir", "concludes", "rests_on", "wrong_if", "blocked", "reopened_by", "because", "value", "rule", "measure", "source", "at", "file", "url", "as_of", "used_by", "back", "tree_btn", "tree_btn_title", "whole_tree", "asked", "today", "days_left", "days_ago")}, ensure_ascii=False).replace("<", "\\u003c")
+    script_keys = ("dir", "concludes", "rests_on", "wrong_if", "blocked", "reopened_by", "because", "value",
+                   "rule", "measure", "source", "at", "file", "url", "as_of", "used_by", "back", "tree_btn",
+                   "tree_btn_title", "whole_tree", "asked")
+    if has_clocks:
+        script_keys += tuple(key for key in w if key == "today" or key.startswith(("days_left", "days_ago")))
+    out.append("</div><script>window.__T=" + json.dumps({key: w[key] for key in script_keys}, ensure_ascii=False).replace("<", "\\u003c")
                + ";window.__E=" + json.dumps(_plain(E), ensure_ascii=False, sort_keys=True).replace("<", "\\u003c")
                + ";window.__J=" + json.dumps(_plain(J), ensure_ascii=False, sort_keys=True).replace("<", "\\u003c") + ";</script>")
-    out.append(f"<script>{JS}</script></body></html>")
+    out.append(f"<script>{JS}</script>" + (f"<script>{DATE_JS}</script>" if has_clocks else "") + "</body></html>")
     return "\n".join(out), E, J, ids, {"shape": shape, "empty": empty_sections,
                                        "misfit": misfit, "brief": bool(brief), "anchored": tuple(anchored),
                                        "unnamed": sorted(k for k in E if not E[k].get("name")
@@ -1699,7 +1729,7 @@ def verify(paths, brief_path=None):
         u = info["unnamed"]
         if u:
             note.append(f"{len(u)} entries carry no human name, so the page has to fall back to "
-                        f"their keys: {', '.join(u[:6])}"
+                        f"generic labels: {', '.join(u[:6])}"
                         + (f" and {len(u) - 6} more" if len(u) > 6 else ""))
         a, t = info["anchored"]
         if t:

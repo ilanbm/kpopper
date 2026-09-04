@@ -266,7 +266,7 @@ class TheShapeMove(unittest.TestCase):
             self.assertEqual(len(banners), 2)
             self.assertIn("The record has changed shape since this arrangement was written &mdash; entries: "
                           "11 &rarr; 12. Its sign has not appeared: spill 0 &middot; 0 intents no tab serves "
-                          "&middot; drift 0.0 since 2026-09-03 &middot; since v.heating_tab was decided 0.0.",
+                          "&middot; drift 0.0 since 2026-09-03 &middot; since <span class=\"fx\" data-id=\"v.heating_tab\">heating tab</span> was decided 0.0.",
                           banners[0])
             code, out, _ = run(SCRIPTS / "provenance.py", "review", "v.heating_tab", *AS_OF, rec)
             self.assertEqual(code, 0, out)
@@ -286,7 +286,7 @@ class TheShapeMove(unittest.TestCase):
             loud = re.findall(r'<div class="banner"[^>]*>.*?</div>', dom_of(rec))
             self.assertEqual(len(loud), 1)
             self.assertIn("spill 0 &middot; 1 intents no tab serves &middot; drift 0.0 since 2026-09-03 "
-                          "&middot; since v.glazing_tab was decided 0.0.", loud[0])
+                          "&middot; since <span class=\"fx\" data-id=\"v.glazing_tab\">glazing tab</span> was decided 0.0.", loud[0])
             code, out, _ = run(SCRIPTS / "provenance.py", "check", rec)
             self.assertEqual(code, 0, out)
             self.assertIn("NOTE v.glazing_tab: wrong_if holds (page.unserved > 0) - decided by the page, "
@@ -514,7 +514,7 @@ class TheBriefHeldAgainstTheDecisions(unittest.TestCase):
                                  *AS_OF, rec)
             self.assertEqual(code, 0, out + err)
             self.assertIn('<p class="sub" dir="auto">A question contests this arrangement &mdash; <span '
-                          'class="fx" data-id="q.one_tab">one tab for both occasions - contests v.glazing_tab, '
+                          'class="fx" data-id="q.one_tab">one tab for both occasions - contests glazing tab, '
                           "whose sign has not appeared</span></p>", dom_of(rec))
             code, out, _ = run(SCRIPTS / "provenance.py", "check", rec)
             self.assertEqual(code, 0, out)
