@@ -119,6 +119,15 @@ sources:
     of: "2026-09-04, given the hypotheses beside the record at db31e1c - the layer, the door and the
          cone - the fixture record under tests/, and the three live records this reader serves"
     read: "2026-09-04"
+  s.2026_09_04_difference:
+    name: "The session that made a comparison show where two readings part rather than where they
+           agree"
+    asked: "take it as its own pull request once #32 merges ... a second reading beside short(), the
+            difference rather than the head, called by the four; plus a separate decision about
+            pull's line budget"
+    of: "2026-09-04, given the written layer at 0ae2276 and five surfaces reproduced on a scratch
+         record by the arrangement session and this one"
+    read: "2026-09-04"
   s.2026_09_04_forks_chapter:
     asked: "Write the method's chapter on forks and hypotheses: a task as a judgment, pull before
             add, the consolidation walk, the out-of-tree lock, how a merge goes, and the reader's new
@@ -702,6 +711,44 @@ open:
                           by age, by how much rests on it, or only when a person asks?"
 
 judgments:
+  d.a_comparison_shows_where_it_parts:
+    rests_on: [s.2026_09_04_difference, d.moved_is_a_flag]
+    verdict: "where two readings are printed side by side, each is clipped to where they part rather
+              than to where they agree; the head is kept only when they part inside it"
+    because: "Clipping at the head shows the reader the part that did not change. Two long readings
+              that differ at their end came back as one string printed twice - on the line check
+              prints, the one open ranks, the one a write answers with, the one a fork refusal asks a
+              person to choose by, and two more - so {{d.moved_is_a_flag}}'s flag arrived carrying
+              nothing to judge. A window opening at the last whole word before the two diverge says
+              what moved in the space a clip already costs."
+    blocked_on: "observational: falsified if sessions read these lines worse rather than better - a
+                 fragment led by an ellipsis drops the context the head carried, and the sign is a
+                 session that has to open the record to learn what the moved value is about, where
+                 the old line told it"
+    seen:
+      s.2026_09_04_difference: "read 2026-09-04"
+      d.moved_is_a_flag: "a dependency that moved since the snapshot flags the judgment for a
+                          person; only a predicate that holds fails the build"
+    distinct_from: d.text_holds_the_prose_it_places
+    # distinct 2026-09-04: one decides which reading a snapshot records; this decides how any two readings are shown against each other, whatever they are snapshots of
+  d.a_line_is_clipped_by_its_parts:
+    rests_on: [s.2026_09_04_difference, d.a_comparison_shows_where_it_parts]
+    verdict: "a line that shows a comparison is built from parts already clipped, and never cut as a
+              whole - a budget spent on the first value would eat the second and the arrow between
+              them"
+    because: "pull cut its line at its full width, so a long value took the whole budget and the
+              reading it was being compared against never appeared at all: not a clipped comparison
+              but a single value, with nothing to say a second existed. That is the failure
+              {{d.a_comparison_shows_where_it_parts}} does not reach, because no per-side reading
+              helps a side that was never printed. Clipping the parts first also makes the line's own
+              budget a last resort rather than the thing doing the work."
+    blocked_on: "observational: falsified by a surface where the parts are short and the line still
+                 overruns - which would mean the budget belongs on the line after all"
+    seen:
+      s.2026_09_04_difference: "read 2026-09-04"
+      d.a_comparison_shows_where_it_parts: "where two readings are printed side by side, each is
+                                            clipped to where they part rather than to where they
+                                            agree; the head is kept only when they part inside it"
   d.add_places_by_prefix:
     rests_on: [m.multi.record_pairs_conflicting, d.base_shared_forks_on_contradiction]
     verdict: "add inserts a new entry beside the entries it shares the longest dotted prefix with,
