@@ -475,11 +475,11 @@ its own `wrong_if` holds now, or the new body carries `request: s.<date>_<slug>`
 whose `asked:` is the person's request verbatim, rested on, said *on the word of* on every surface.
 A write resting on what only a hypothesis holds belongs in that hypothesis. Each refusal names the
 command that writes the same thing into `PROVENANCE.d/<name>.yaml` beside the record - the base
-untouched - named after the id unless `--hypothesis NAME` on `set`, `add` or `review` names it. The
-first write stamps `born` in the head; `claim:`, a head `wrong_if:` and `folds: never` are the one
-thing a hand writes there. Three uses: a concurrent writer whose reading was refused; a proposal not
-yet approved - a branch's record *is* this, and travels with the branch; a what-if, `folds: never`,
-evaluated at every dry run and never written.
+untouched - named after the id contradicted and a mark of the claim written, unless `--hypothesis
+NAME` on `set`, `add` or `review` names it. The first write stamps `born` in the head; `claim:`, a
+head `wrong_if:` and `folds: never` are the one thing a hand writes there. Three uses: a concurrent
+writer whose reading was refused; a proposal not yet approved - a branch's record *is* this, and
+travels with the branch; a what-if, `folds: never`, evaluated at every dry run and never written.
 
 Every command reads the hypotheses over the base and evaluates the base alone: `pull` shows what
 each proposes beside the value; `check` and `open` say CONTESTED where two hold one id with
@@ -526,8 +526,9 @@ a hypothesis; or a doubt with no rival value yet, an open question that names th
 stand until a person consolidates or answers. Deleting the file is neither.
 
 **How a merge goes.** git merges the files: additions in id order rarely meet, and hypothesis files
-meet only when two branches open one under the same name - the id's own, when both were refused on
-it - two writers on one subject: rename one and let the dry run judge them. The dry run tests the
+meet only when two branches claim the same thing under one id, since the name carries both - two
+readings that agree, and either head is the whole of them; two that disagree are two files git
+merges, and which of them stands is the dry run's question for a person. The dry run tests the
 result: the pull request runs it on the merged tree, and the push to `main` runs it again as the
 second net, for two pull requests each consistent alone that contradict together. Fold a hypothesis
 the dry run proves *before* the pull request, so `main` receives base changes; let an unproven one
@@ -603,6 +604,13 @@ false, which moved without crossing the line the judgment drew. Movement is a qu
 crossed line is the answer. That comparison is only as good as the snapshot: `seen` must
 hold the dependency's value as recorded, never a paraphrase of it — the reader cannot tell
 a paraphrase from a move, so it reports both, and a person has to look.
+
+Where the two readings are long and share an opening, each is clipped to **where they part**
+rather than to its first few words, and the dropped opening is marked with an ellipsis — so a
+line reads `…before the first cold night -> …after the first frost` instead of printing the
+same unchanged head twice. Every surface that sets two readings against each other reads them
+that way: `check`, `open`, what a write answers with, what a fork refusal asks you to choose
+by, and what `review` says it rewrote.
 
 `open` is the session opener: how large the record is, and then only what needs a person —
 a dependency that is not an entry, a judgment broken by its own condition, a dependency that
