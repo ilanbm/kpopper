@@ -361,7 +361,7 @@ another tab, which is a merge.
 
 **A reversal is the arrangement written again under its own id.** Editing the brief past a
 standing decision fails; a decision changes only by `add v.x …` with a new verdict, which is a
-contradiction of what the base holds unless one of three things is true, decided by the same door
+contradiction of what the base holds unless one of two things is true, decided by the same door
 every same-id write goes through:
 
 1. **its sign holds, with its tabs intact** - the world moved, and the re-decision is admitted in
@@ -369,18 +369,20 @@ every same-id write goes through:
    what it replaced, how long it stood, and the sign that ended it. A tab already deleted or
    gutted is refused with *restore the tab, then re-decide*: a deletion makes the very sign it
    would cite;
-2. **a person asked** - the new body carries `request: s.<date>_<slug>` and rests on it, a
-   session source whose `asked:` is the person's words verbatim and nothing else; admitted the
-   same way, and *on the word of* that source on every surface;
-3. **neither** - refused, with the exact `--hypothesis` command that writes it beside the record
+2. **it does not** - refused, with the exact `--hypothesis` command that writes it beside the record
    instead; the page then says *a hypothesis contests this arrangement*, and `check` says so, until
    a person consolidates. An open question that names the arrangement contests it the same way.
 
+Nothing the session writes into the body is a third way. A session's own claim that a person asked
+is written by the same session, and the method asks every session for one - so a door that read it
+would be a key every writer already holds. What a person authorises, they authorise by folding the
+hypothesis.
+
 Never twice in a day: a re-decision of an arrangement born today is a contradiction, not a change,
 whatever its sign says - two sessions cannot flip it, and a second writer cannot re-decide it
-behind the first while the first's repair is still being made (a person's request is the one
-exception). A re-decision is exempt from the birth check - it is recorded while the sign that
-ended the old decision still holds - and the next build decides it against the repaired brief. A
+behind the first while the first's repair is still being made. A re-decision is exempt from the
+birth check - it is recorded while the sign that ended the old decision still holds - and the next
+build decides it against the repaired brief. A
 new tab is the other way round: give the tab first, then decide it, since an arrangement whose own
 sign already holds is refused at birth.
 
@@ -444,7 +446,7 @@ compared with the record's - a tab whose shape moved says so at its top, and `--
 | `asked:` | on a session source (`s.*`) | the request verbatim, frozen; `name:` beside it is the session's own reading, which that session may revise until it stops. Entries the session writes carry `from:` it, and a judgment the request is a premise of rests on it. The hover on the source shows it, a tab that serves it quotes it, and it is what makes the source an intent the page is held against. |
 | `{{id}}` | in any text field — `because`, `via`, `note` | a reference, never a retyped value. `check` fails one that names nothing, and one inside a judgment that names something the judgment does not rest on. A card draws it: the value where there is one, the name where there is only a rule, the verdict for a judgment — each hoverable. |
 | `born:` | on an arrangement | the day it was decided - stamped by `add` like `seen`, renewed when it is re-decided, refused when typed. Drift is counted from the newest `born` the record carries; how long an arrangement stood is derived from it and never stored (below). |
-| `request:` | on an arrangement | the person's request it was taken from: a session source whose `asked:` is the request verbatim, which the arrangement also rests on. Nothing by shape can tell a request from a session's intent, so the claim is explicit, and every surface that shows the decision says *on the word of* that source. |
+| `request:` | on a judgment | whose asking it was taken from: a session source whose `asked:` is the request verbatim, which the judgment also rests on. Nothing by shape can tell a request from a session's intent, so the claim is explicit, and every surface that shows the decision says *on the word of* that source. It opens no door - the session writes that source itself - and it travels with a hypothesis so the person folding it reads whose asking it answers. |
 | `replaced:` | on an arrangement | written by `add` when a decision replaces another under the same id, one line each, oldest first: the born of what it replaced, how many sessions it stood, and the sign that ended it - so the sequence of decisions reads from the record alone. |
 | `graph.*`, `page.*` | as a dependency, or inside a falsifier | names the reader computes; see below. |
 | `reopened_by:` | on a judgment | the prose sign that re-opens a judgment decided on a session's prior — a `prior.*` claim whose value is the confidence — or on taste. `blocked_on` keeps its meaning: the predicate cannot be evaluated, and why. Not a hole and not waiting: the judgment needs no person, `check` counts it among the declared, and the card shows it in a row of its own. |

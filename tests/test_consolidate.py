@@ -256,16 +256,15 @@ class TheDryRunTests(unittest.TestCase):
                                  "verdict=the old boiler holds after all", "wrong_if=heat.loss_kw > 40",
                                  "--as-of", "2026-09-03", "--hypothesis", "c_boiler_short", rec)
             self.assertEqual(code, 0, out + err)
+            # the session's own write was refused; the fold is where it is decided, and the
+            # dry run says so in the one line the person reads before running it
             code, out, err = kp("consolidate", "--dry-run", "c_boiler_short", rec)
-            self.assertEqual(code, 1, out + err)
+            self.assertEqual(code, 0, out + err)
             self.assertIn("  c.boiler_short: the old boiler cannot hold 12°C on … -> the old boiler holds "
                           "after all, from c_boiler_short\n"
-                          "    the standing judgment holds, and no request: names a person's asking for the "
-                          "change - the base keeps what it holds\n", out)
-            self.assertIn("    the base holds + c.boiler_short: the old boiler cannot hold 12°C on the coldest "
-                          "February night\n    c_boiler_short says + c.boiler_short: the old boiler holds after "
-                          "all\n", out)
-            # the standing judgment breaks on a newer reading: its wrong_if holds, the door opens
+                          "    the standing judgment holds, and a person folds this over it\n", out)
+            self.assertIn("clean: c_boiler_short may fold", out)
+            # the standing judgment broken by a newer reading says so instead: the sign fired
             run(SCRIPTS / "provenance.py", "set", "heat.loss_kw", "20", "--as-of", "2026-09-04", rec)
             self.assertEqual(run(SCRIPTS / "provenance.py", "check", rec)[0], 1)
             code, out, err = kp("consolidate", "c_boiler_short", "--as-of", "2026-09-04", rec)

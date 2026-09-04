@@ -9,6 +9,7 @@ import datetime
 import os
 import pathlib
 import re
+import shlex
 import shutil
 import subprocess
 import sys
@@ -330,8 +331,8 @@ class TheWritePathForks(unittest.TestCase):
             self.assertEqual(code, 1)
             self.assertEqual((out + err).strip(),
                              "refused - c.boiler_short is already a judgment, concluding 'the old boiler cannot "
-                             "hold 12°C on the coldest February nig…' - the standing judgment holds, and no "
-                             "request: names a person's asking for the change, so a different verdict under "
+                             "hold 12°C on the coldest February nig…' - the standing judgment holds, and its "
+                             "wrong_if has not fired, so a different verdict under "
                              "the same id contradicts it, and a hypothesis holds the other: add c.boiler_short "
                              "'rests_on=[heat.boiler_kw, heat.loss_kw]' 'verdict=the old boiler holds after "
                              "all' 'wrong_if=heat.loss_kw > 40' --as-of 2026-09-03 --hypothesis c_boiler_short")
@@ -485,29 +486,51 @@ class TheWritePathForks(unittest.TestCase):
                           "    seen: {heat.boiler_kw: 24, heat.loss_kw: 20}\n", text)
             self.assertEqual(text.count("c.boiler_short:"), 1)
             self.assertEqual(run(SCRIPTS / "provenance.py", "check", rec)[0], 0)
+    def test_a_request_a_session_wrote_itself_admits_nothing_and_the_fold_does(self):
         with tempfile.TemporaryDirectory() as d:
             rec = copy_fixture(pathlib.Path(d))
-            # a person asked: the new body names the request and rests on it
+            # the source carrying what was asked is written by the session, and every
+            # session's first write is one, so naming it is a claim and never a key
             run(SCRIPTS / "provenance.py", "add", "s.2026_09_04_ask",
                 "asked=Say the boiler is short by 7 kW, not that it cannot hold - the number is what I need.",
                 "name=the ask", "read=2026-09-04", "--as-of", "2026-09-04", rec)
+            before = rec.read_text(encoding="utf-8")
             args = ["add", "c.boiler_short",
                     "rests_on=[heat.boiler_kw, heat.loss_kw, heat.deficit_kw, s.2026_09_04_ask]",
                     "verdict=the old boiler is short by {{heat.deficit_kw}} kW on the coldest night",
                     "wrong_if=heat.loss_kw <= heat.boiler_kw", "--as-of", "2026-09-04"]
             code, out, err = run(SCRIPTS / "provenance.py", *args, rec)
             self.assertEqual(code, 1)
-            self.assertIn("no request: names a person's asking for the change", out + err)
+            self.assertIn("the standing judgment holds, and its wrong_if has not fired", out + err)
             code, out, err = run(SCRIPTS / "provenance.py", *args[:5], "request=s.2026_09_02_heating",
                                  *args[5:], rec)
             self.assertEqual(code, 1)
             self.assertIn("request: s.2026_09_02_heating is not a session source carrying what was asked, "
-                          "that the new judgment also rests on", out + err)
+                          "that the judgment also rests on", out + err)
             code, out, err = run(SCRIPTS / "provenance.py", *args[:5], "request=s.2026_09_04_ask",
                                  *args[5:], rec)
+            self.assertEqual(code, 1)
+            self.assertIn("the standing judgment holds, and its wrong_if has not fired, so a different "
+                          "verdict under the same id contradicts it, and a hypothesis holds the other: "
+                          "add c.boiler_short", out + err)
+            self.assertEqual(rec.read_text(encoding="utf-8"), before)
+            # the same rewrite, beside the record: it waits there, word and all, until a
+            # person folds it - and the fold is what lays it over the standing judgment
+            command = re.search(r"add c\.boiler_short .*--hypothesis \S+", out + err).group(0)
+            name = shlex.split(command)[-1]
+            code, out, err = run(SCRIPTS / "provenance.py", *shlex.split(command), rec)
             self.assertEqual(code, 0, out + err)
-            self.assertIn(" - a person asked - it carries request: s.2026_09_04_ask and rests on it\n", out)
-            self.assertIn("    request: s.2026_09_04_ask\n", rec.read_text(encoding="utf-8"))
+            self.assertEqual(rec.read_text(encoding="utf-8"), before)
+            self.assertIn("    request: s.2026_09_04_ask\n",
+                          (pathlib.Path(d) / "PROVENANCE.d" / f"{name}.yaml").read_text(encoding="utf-8"))
+            code, out, err = run(SCRIPTS / "consolidate.py", name, "--as-of", "2026-09-04", rec)
+            self.assertEqual(code, 0, out + err)
+            self.assertIn("    the standing judgment holds, and a person folds this over it\n", out)
+            text = rec.read_text(encoding="utf-8")
+            self.assertIn('    verdict: "the old boiler is short by {{heat.deficit_kw}} kW on the coldest '
+                          'night"\n', text)
+            self.assertIn("    request: s.2026_09_04_ask\n", text)
+            self.assertEqual(text.count("c.boiler_short:"), 1)
             self.assertEqual(run(SCRIPTS / "provenance.py", "check", rec)[0], 0)
 
     def test_the_gate_counts_a_hypothesis_write(self):

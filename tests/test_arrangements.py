@@ -304,9 +304,9 @@ class TheReDecision(unittest.TestCase):
             code, out, err = run(SCRIPTS / "provenance.py", "add", *REDECIDE, *AS_OF, rec)
             self.assertEqual(code, 1)
             self.assertIn("v.glazing_tab is already a judgment, concluding 'a second tab, for the day the "
-                          "quote is read' - the standing judgment holds, and no request: names a person's "
-                          "asking for the change, so a different verdict under the same id contradicts it, "
-                          "and a hypothesis holds the other: add v.glazing_tab", out + err)
+                          "quote is read' - the standing judgment holds, and its wrong_if has not fired, "
+                          "so a different verdict under the same id contradicts it, and a hypothesis holds "
+                          "the other: add v.glazing_tab", out + err)
             command = re.search(r"add v\.glazing_tab .*--hypothesis \S+", out + err).group(0)
             base = rec.read_text(encoding="utf-8")
             code, out, err = run(SCRIPTS / "provenance.py", *shlex.split(command), rec)
@@ -378,6 +378,17 @@ class TheReDecision(unittest.TestCase):
                           "  shape of tab 'The glazing quote': entries: 11, judgments: 4, flagged: 0, blocked: 0\n",
                           out)
             self.assertEqual(run(SCRIPTS / "render_page.py", "--verify", rec)[0], 0)
+            # and naming whose asking it was taken from is not a way round the day either
+            run(SCRIPTS / "provenance.py", "add", "s.2026_09_05_merge",
+                "asked=One tab is enough - read the quote on the February night's tab.",
+                "name=the merge, as asked", "read=2026-09-05", *AS_OF, rec)
+            code, out, err = run(SCRIPTS / "provenance.py", "add", "v.glazing_tab",
+                                 "rests_on=[s.2026_09_03_glazing, s.2026_09_02_heating, s.2026_09_05_merge, "
+                                 "page.unserved]", "request=s.2026_09_05_merge", "verdict=changed my mind",
+                                 REDECIDE[3], *AS_OF, rec)
+            self.assertEqual(code, 1)
+            self.assertIn("it was decided on 2026-09-05 - a second decision on the same day is a contradiction, "
+                          "not a change", out + err)
 
     def test_with_the_link_cut_it_is_refused(self):
         with tempfile.TemporaryDirectory() as d:
@@ -398,48 +409,116 @@ class TheReDecision(unittest.TestCase):
             code, out, err = run(SCRIPTS / "provenance.py", "add", *REDECIDE, *AS_OF, rec)
             self.assertEqual(code, 1)
             self.assertIn("restore the tab, then re-decide", out + err)
-
-    def test_on_a_persons_word_it_is_admitted_and_the_word_stays_on_the_surface(self):
-        with tempfile.TemporaryDirectory() as d:
-            rec = copy_fixture(pathlib.Path(d))
-            brief = pathlib.Path(d) / "PROVENANCE.view.yaml"
+            # and a person's word is not a way round a deleted tab: it is restored, then re-decided
             run(SCRIPTS / "provenance.py", "add", "s.2026_09_05_merge",
-                "asked=Read the quote on the February night's tab, one tab is enough.",
+                "asked=One tab is enough - read the quote on the February night's tab.",
                 "name=the merge, as asked", "read=2026-09-05", *AS_OF, rec)
             code, out, err = run(SCRIPTS / "provenance.py", "add", "v.glazing_tab",
                                  "rests_on=[s.2026_09_03_glazing, s.2026_09_02_heating, s.2026_09_05_merge, "
                                  "page.unserved]", "request=s.2026_09_05_merge", REDECIDE[2], REDECIDE[3],
                                  *AS_OF, rec)
+            self.assertEqual(code, 1)
+            self.assertIn("restore the tab, then re-decide", out + err)
+
+    def test_a_hypothesis_flips_an_arrangement_no_more_easily_than_a_write(self):
+        with tempfile.TemporaryDirectory() as d:
+            rec = copy_fixture(pathlib.Path(d))
+            # a sign the record alone decides, so the first re-decision is admitted in place
+            edit(rec, "rests_on: [s.2026_09_03_glazing, page.unserved]",
+                 "rests_on: [s.2026_09_03_glazing, graph.judgments]")
+            edit(rec, 'wrong_if: "page.unserved > 0"', 'wrong_if: "graph.judgments > 3"')
+            edit(rec, 'seen: {s.2026_09_03_glazing: "read 2026-09-03", page.unserved: 0}',
+                 'seen: {s.2026_09_03_glazing: "read 2026-09-03", graph.judgments: 3}')
+            run(SCRIPTS / "provenance.py", "add", "c.wind_matters", "rests_on=[heat.loss_kw]",
+                "verdict=the wind matters", "wrong_if=heat.loss_kw < 20", *AS_OF, rec)
+            run(SCRIPTS / "provenance.py", "add", *REDECIDE, *AS_OF, rec)
+            run(SCRIPTS / "provenance.py", "add", *REDECIDE[:2], "verdict=changed my mind, one tab",
+                REDECIDE[3], *AS_OF, "--hypothesis", "flip", rec)
+            # the same day, the fold is refused where the write was: a hypothesis is not a
+            # way round the rules the arrangement is decided by
+            code, out, err = run(SCRIPTS / "consolidate.py", "--dry-run", "flip", *AS_OF, rec)
+            self.assertEqual(code, 1, out + err)
+            self.assertIn("it was decided on 2026-09-05 - a second decision on the same day is a "
+                          "contradiction, not a change", out)
+            # a day later it folds, and leaves the trail a re-decision in place leaves
+            code, out, err = run(SCRIPTS / "consolidate.py", "flip", "--as-of", "2026-09-06", rec)
             self.assertEqual(code, 0, out + err)
-            self.assertIn("- a person asked - it carries request: s.2026_09_05_merge and rests on it\n", out)
-            self.assertIn('replaced: ["born 2026-09-03, stood 0 sessions; on the word of s.2026_09_05_merge '
-                          'on 2026-09-05"]', entry(rec, "v.glazing_tab"))
-            self.assertIn('decided <span class="fx" data-id="v.glazing_tab">2026-09-05</span> &middot; on the '
-                          'word of <span class="fx" data-id="s.2026_09_05_merge">Read the quote on the February '
-                          "night&#x27;s tab, one tab is enough.</span></p>", decided_lines(rec)[0])
-            # the request itself is an intent: served once the tab declares it, and the page is green
-            edit(brief, "    serves: [s.2026_09_02_heating]\n",
-                 "    serves: [s.2026_09_02_heating, s.2026_09_05_merge]\n")
-            code, out, _ = run(SCRIPTS / "render_page.py", "--verify", rec)
+            self.assertIn("born renewed, and what it replaced kept", out)
+            text = entry(rec, "v.glazing_tab")
+            self.assertIn('born: "2026-09-06"', text)
+            self.assertIn('"born 2026-09-05, stood 0 sessions; the standing judgment holds, and a '
+                          'person folds this over it on 2026-09-06"', text)
+            self.assertEqual(run(SCRIPTS / "provenance.py", "check", rec)[0], 0)
+            self.assertEqual(run(SCRIPTS / "render_page.py", "--verify", rec)[0], 0)
+
+    def test_a_cut_tab_refuses_the_fold_as_it_refuses_the_write(self):
+        with tempfile.TemporaryDirectory() as d:
+            rec = copy_fixture(pathlib.Path(d))
+            brief = pathlib.Path(d) / "PROVENANCE.view.yaml"
+            run(SCRIPTS / "provenance.py", "add", *REDECIDE, *AS_OF, "--hypothesis", "one_tab", rec)
+            text = brief.read_text(encoding="utf-8")
+            brief.write_text(text[:text.index('  - title: "The glazing quote"')] + text[text.index("groups:"):],
+                             encoding="utf-8")
+            code, out, err = run(SCRIPTS / "consolidate.py", "--dry-run", "one_tab", *AS_OF, rec)
+            self.assertEqual(code, 1, out + err)
+            self.assertIn("restore the tab, then re-decide", out)
+
+    def test_a_persons_word_names_the_asking_and_admits_nothing(self):
+        with tempfile.TemporaryDirectory() as d:
+            rec = copy_fixture(pathlib.Path(d))
+            run(SCRIPTS / "provenance.py", "add", "s.2026_09_05_merge",
+                "asked=Read the quote on the February night's tab, one tab is enough.",
+                "name=the merge, as asked", "read=2026-09-05", *AS_OF, rec)
+            base = rec.read_text(encoding="utf-8")
+            # the session writes the source itself, and the method asks every session to, so
+            # naming one is not a person's authority: the sign has not fired, and the
+            # re-decision waits beside the record until a person folds it
+            code, out, err = run(SCRIPTS / "provenance.py", "add", "v.glazing_tab",
+                                 "rests_on=[s.2026_09_03_glazing, s.2026_09_02_heating, s.2026_09_05_merge, "
+                                 "page.unserved]", "request=s.2026_09_05_merge", REDECIDE[2], REDECIDE[3],
+                                 *AS_OF, rec)
+            self.assertEqual(code, 1)
+            self.assertIn("the standing judgment holds, and its wrong_if has not fired", out + err)
+            command = re.search(r"add v\.glazing_tab .*--hypothesis \S+", out + err).group(0)
+            code, out, err = run(SCRIPTS / "provenance.py", *shlex.split(command), rec)
+            self.assertEqual(code, 0, out + err)
+            self.assertEqual(rec.read_text(encoding="utf-8"), base)
+            self.assertIn("A hypothesis contests this arrangement", dom_of(rec))
+            # and the word travels with it: what a person reads at the fold says whose asking
+            # the session took the change from
+            held = pathlib.Path(d) / "PROVENANCE.d" / f"{shlex.split(command)[-1]}.yaml"
+            self.assertIn("    request: s.2026_09_05_merge\n", held.read_text(encoding="utf-8"))
+
+    def test_the_word_on_a_decision_is_read_on_every_surface(self):
+        with tempfile.TemporaryDirectory() as d:
+            rec = copy_fixture(pathlib.Path(d))
+            brief = pathlib.Path(d) / "PROVENANCE.view.yaml"
+            wind_lands(rec)
+            edit(brief, "groups:\n", WIND_TAB + "groups:\n")
+            code, out, err = run(SCRIPTS / "provenance.py", "add", "v.wind_tab",
+                                 "rests_on=[s.2026_09_05_wind, page.unserved]", "request=s.2026_09_05_wind",
+                                 "verdict=a third tab", "wrong_if=page.unserved > 0", *AS_OF, rec)
+            self.assertEqual(code, 0, out + err)
+            self.assertEqual(run(SCRIPTS / "render_page.py", "--verify", rec)[0], 0)
+            self.assertIn("on the word of <span class=\"fx\" data-id=\"s.2026_09_05_wind\">how much does "
+                          "the wind add?</span></p>", "".join(decided_lines(rec)))
+            code, out, _ = run(SCRIPTS / "provenance.py", "pull", "v.wind_tab", rec)
             self.assertEqual(code, 0, out)
-            # the word is on every surface a session reads
-            code, out, _ = run(SCRIPTS / "provenance.py", "pull", "v.glazing_tab", rec)
-            self.assertEqual(code, 0, out)
-            self.assertIn("    on the word of: s.2026_09_05_merge\n", out)
+            self.assertIn("    on the word of: s.2026_09_05_wind\n", out)
             code, out, _ = run(SCRIPTS / "provenance.py", "open", "--chars", "4000", rec)
-            self.assertIn("  = v.glazing_tab (on the word of s.2026_09_05_merge): the quote is read on the", out)
+            self.assertIn("  = v.wind_tab (on the word of s.2026_09_05_wind): a third tab", out)
             # a request that is not a session source, or not rested on, is refused
-            code, out, err = run(SCRIPTS / "provenance.py", "add", "v.heating_tab",
-                                 "rests_on=[s.2026_09_02_heating, page.spill]", "request=doc.boiler_sheet",
+            code, out, err = run(SCRIPTS / "provenance.py", "add", "v.second_wind",
+                                 "rests_on=[s.2026_09_05_wind, page.spill]", "request=doc.boiler_sheet",
                                  "verdict=x", "wrong_if=page.spill > 0", "--as-of", "2026-09-06", rec)
             self.assertEqual(code, 1)
             self.assertIn("request: doc.boiler_sheet is not a session source carrying what was asked, that "
-                          "the arrangement also rests on", out + err)
-            # and one that reached the record another way fails check and is not drawn as anyone's word
-            edit(rec, "    request: s.2026_09_05_merge\n", "    request: doc.boiler_sheet\n")
+                          "the judgment also rests on", out + err)
+            # and one that reached the record another way fails check and is nobody's word
+            edit(rec, "    request: s.2026_09_05_wind\n", "    request: doc.boiler_sheet\n")
             code, out, _ = run(SCRIPTS / "provenance.py", "check", rec)
             self.assertEqual(code, 1, out)
-            self.assertIn("FAIL v.glazing_tab: request: doc.boiler_sheet is not a session source carrying what "
+            self.assertIn("FAIL v.wind_tab: request: doc.boiler_sheet is not a session source carrying what "
                           "was asked, that it rests on", out)
             self.assertNotIn("on the word of", "".join(decided_lines(rec)))
 

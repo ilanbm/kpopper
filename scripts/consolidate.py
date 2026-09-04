@@ -12,8 +12,10 @@ base by id, in name order, and runs the reader's own check on the result: what w
 what a hypothesis replaces and what rests on that, what the union moves or breaks, what is
 contested. It writes nothing. The fold writes the same union into the base with the reader's
 own edits, deletes the folded files, and prints what to commit - only when the dry run is
-clean. Every replacement passes the one door a written value passes, `may_supersede`: a
-reading the door refuses is contested, and the base keeps what it holds.
+clean. Every replacement passes the one door a written value passes, `may_supersede`, with
+a person's hand on it: a reading the door refuses is contested, and the base keeps what it
+holds, while a verdict the standing judgment's own sign has not broken lands here and
+nowhere else - the fold is where a person, and only a person, decides it.
 
 `--refute` writes the hypothesis's claim into the base as a negative finding and deletes the
 file; nothing else of it enters. `--from <ref>` reads another branch's committed record and lays
@@ -145,12 +147,25 @@ def _read_day(body, raw):
     return P._read_on(body, raw)
 
 
-def union_of(doc, hyps, base_check=None):
+def page_of(paths):
+    """What the brief holds every arrangement to, taken once before anything is tested - the
+    same facts the write path asks its door with. Empty without a brief, or when the brief
+    cannot be built: the fold never fails on the page's account."""
+    try:
+        return P._page_side(paths)[2]
+    except (Exception, SystemExit):
+        return {}
+
+
+def union_of(doc, hyps, base_check=None, as_of=None, page=None):
     """The union and its test -> Consolidation. `doc` is the record as `provenance.load` returns
     it; `hyps` the hypotheses to lay over it, in the order given - in name order, as the
     command does, unless the caller has a reason. `base_check` is the base's own (fail, moved)
     from `provenance.check_lines`, taken once by the caller; without it the base is checked
-    here. Nothing is written: a what-if asks this and reads the answer."""
+    here. `as_of` is the day the fold would happen and `page` what the brief holds every
+    arrangement to, both handed to the one door so that a fold is refused where a write of
+    the same body would be - twice in a day, or with the tab it cites cut. Nothing is
+    written: a what-if asks this and reads the answer."""
     c = Consolidation()
     c.hyps = list(hyps)
     bids, bjud, bfields, braw = _view(doc)
@@ -188,7 +203,12 @@ def union_of(doc, hyps, base_check=None):
         if same and old == new:
             continue
         if k in bjud:
-            may, why = P.may_supersede(k, old, new, c.raw, c.ids, bjud, bfields, None)
+            # the fold is the person's act, and it is the only thing that lays a verdict
+            # over a standing judgment the record's own sign has not broken - the day and
+            # the page still bind it, so an arrangement is no easier to flip through a
+            # hypothesis than through a write
+            may, why = P.may_supersede(k, old, new, c.raw, c.ids, bjud, bfields, as_of,
+                                       page=page, by_hand=True)
         else:
             day = _read_day(new, c.raw) if isinstance(new, dict) else None
             base_day = P._read_on(old, braw) if isinstance(old, dict) else None
@@ -392,6 +412,29 @@ def report(c, today=None):
 
 
 # ── the fold ─────────────────────────────────────────────────────────────────
+def _renewed(k, c, h, page, stamp, why):
+    """An arrangement the fold lays over a standing one, as a body -> the hypothesis's own
+    fields with what a build writes for a re-decision put back: `born` renewed to the day of
+    the fold, and one line appended to `replaced:` naming what ended the decision it
+    replaces. None for everything else, which the fold carries over as the text it is - only
+    a decision replacing a decision has a trail to keep, and the trail is the same one `add`
+    leaves when the door admits the re-decision in place."""
+    _, bids, bjud, bfields, braw = c.base
+    if k not in bjud or not P.is_arrangement(bjud[k], braw):
+        return None
+    body = h["raw"].get(k)
+    if not isinstance(body, dict) or not P._arrangement_shaped(body, bfields, braw):
+        return None
+    snap = bfields["snapshot"] or "seen"
+    extra = P.arrangement_renewal(bjud[k]["body"], why, stamp,
+                                  ((page or {}).get(k) or {}).get("stood"))
+    out = {f: v for f, v in body.items() if f not in extra and f != snap}
+    out.update(extra)
+    if snap in body:
+        out[snap] = body[snap]
+    return out
+
+
 def _block_of(h, k, ids, jud, fields, doc):
     """-> (collection, lines): an id's own lines in the hypothesis, whole - comments, style and
     all - and the collection they sit in; rendered from the body when the hypothesis has no
@@ -457,7 +500,8 @@ def fold(paths, names=(), refs=(), stamp=None):
             print("no hypotheses beside the record - nothing to consolidate")
             return 0
         fail_b, _, moved_b, _, _ = P.check_lines(paths)
-        c = union_of(doc, hyps, (fail_b, moved_b))
+        page = page_of(paths)
+        c = union_of(doc, hyps, (fail_b, moved_b), stamp, page)
         for l in report(c):
             print(l)
         print()
@@ -474,14 +518,20 @@ def fold(paths, names=(), refs=(), stamp=None):
         texts = {f: originals[f].split("\n") for f in files}
         writes = [(k, h, False) for k, h in c.arrived] + [(k, h, True) for k, h, _, _, _, _ in c.updates]
         writes.sort(key=lambda w: (w[0] in c.jud, w[0]))
+        whys = {k: why for k, _, _, _, _, why in c.updates}
         out, added, replaced = [], 0, 0
         for k, h, replace in writes:
             collection, block = _block_of(h, k, c.ids, c.jud, c.fields, doc)
             if replace:
                 target = next(f for f in files if P._locate(texts[f], k))
-                _replace_block(texts[target], k, block)
+                renewed = _renewed(k, c, h, page, stamp, whys.get(k, ""))
+                if renewed is None:
+                    _replace_block(texts[target], k, block)
+                else:
+                    P._replace_in(texts[target], k, renewed)
                 replaced += 1
-                out.append(f"replace {k} with what {h['name']} holds, where it stands")
+                out.append(f"replace {k} with what {h['name']} holds, where it stands"
+                           + (" - born renewed, and what it replaced kept" if renewed else ""))
             else:
                 target = next((f for f in files if collection in _collections_of_text(texts[f])),
                               files[0])
@@ -862,7 +912,7 @@ def main(argv=None):
         print("no hypotheses beside the record - nothing to consolidate")
         return 0
     fail_b, _, moved_b, _, _ = P.check_lines(paths)
-    c = union_of(doc, hyps, (fail_b, moved_b))
+    c = union_of(doc, hyps, (fail_b, moved_b), as_of, page_of(paths))
     for l in report(c):
         print(l)
     return 1 if c.red else 0
