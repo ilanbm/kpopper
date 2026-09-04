@@ -83,16 +83,26 @@ def lint_output(page, entries, judgments, info):
                      for p in node.ancestors() if p.attrs.get('data-id') or p.attrs.get('data-origin')
                      or p.attrs.get('data-judgment')), None)
 
+    def request_quote(node):
+        key = node.attrs.get('data-request')
+        asked = entries.get(key, {}).get('asked')
+        return bool(key and node.attrs.get('data-id') == key and isinstance(asked, str)
+                    and node.text() == asked)
+
     for node in nodes:
         chain = list(node.ancestors())
         if any(p.tag in ('script', 'style', 'head') for p in chain):
             continue
+        if 'data-request' in node.attrs and not request_quote(node):
+            say(fail, 'request quote differs from its source: ' + node.attrs['data-request'])
         for child in node.children:
             if not isinstance(child, str):
                 continue
             # Missing dependencies have no popover to carry their identity. Their full
             # keys are the explicit reading-surface exception: what someone must fetch.
             if any(p.classes() & {'wait', 'dead'} for p in chain):
+                continue
+            if any(request_quote(p) for p in chain):
                 continue
             for key in KEY.findall(child):
                 if key in ids:

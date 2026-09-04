@@ -1438,7 +1438,9 @@ def build(paths, brief_path=None):
             if f["stood"]:
                 bits.append(counted(w, "stood", f["stood"], lang))
             if f["request"] and f["request"] in E:
-                bits.append(w["word"] + fx(f["request"], P.short(asked_of(f["request"]), 80)))
+                request = f["request"]
+                bits.append(w["word"] + f'<span class="fx" data-id="{html.escape(request)}" '
+                            f'data-request="{html.escape(request)}">{html.escape(asked_of(request))}</span>')
             o.append('<p class="sub" dir="auto">' + " &middot; ".join(bits) + "</p>")
             for kind, who, claim in f["contested"]:
                 o.append(f'<p class="sub" dir="auto">{w["contests"].format(kind=w[kind])}'

@@ -371,6 +371,24 @@ class Components(unittest.TestCase):
         self.assertIn('<html lang="he" dir="rtl">', page)
         self.assertIn('הסדר הכתוב', page)
 
+    def test_decided_line_preserves_the_complete_request(self):
+        shutil.copy(FIXTURE / 'PROVENANCE.yaml', self.record)
+        shutil.copy(FIXTURE / 'PROVENANCE.view.yaml', self.brief)
+        request = ('Please keep the greenhouse decision attached to the complete request so that '
+                   'the next reader can see which work was authorized, including heat.boiler_kw '
+                   'and heat.loss_kw, before changing anything. Reference: ' + 'A' * 120)
+        source = 's.2026_09_02_heating'
+        self.change(self.record, lambda d: (d['sources'][source].update(asked=request),
+                                            d['judgments']['v.heating_tab'].update(request=source)))
+        page = self.build()[0]
+        quotes = [n for n in Surface(page).root.walk() if n.attrs.get('data-request') == source]
+        self.assertTrue(quotes)
+        self.assertEqual(quotes[0].text(), request)
+        self.assertEqual(quotes[0].attrs.get('data-id'), source)
+        self.assertFalse(self.lint()[0])
+        failures, _ = self.lint(lambda p: p.replace('the next reader can see', 'the next reader cannot see'))
+        self.assertTrue(any('request quote differs from its source' in x for x in failures))
+
 
 if __name__ == '__main__':
     unittest.main()

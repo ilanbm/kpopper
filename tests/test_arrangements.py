@@ -415,7 +415,8 @@ class TheReDecision(unittest.TestCase):
             self.assertIn('replaced: ["born 2026-09-03, stood 0 sessions; on the word of s.2026_09_05_merge '
                           'on 2026-09-05"]', entry(rec, "v.glazing_tab"))
             self.assertIn('decided <span class="fx" data-id="v.glazing_tab">2026-09-05</span> &middot; on the '
-                          'word of <span class="fx" data-id="s.2026_09_05_merge">Read the quote on the February '
+                          'word of <span class="fx" data-id="s.2026_09_05_merge" '
+                          'data-request="s.2026_09_05_merge">Read the quote on the February '
                           "night&#x27;s tab, one tab is enough.</span></p>", decided_lines(rec)[0])
             # the request itself is an intent: served once the tab declares it, and the page is green
             edit(brief, "    serves: [s.2026_09_02_heating]\n",

@@ -357,7 +357,9 @@ every source it rests on is earned by some tab. A tab deleted, or gutted with it
 kept, cuts the link the same way.
 
 **What the page draws for it**, under the tab's occasion line and quietly: *decided 2026-09-02 ·
-stood 4 sessions · on the word of …*. `stood` is derived - the sessions read on a later day than
+stood 4 sessions · on the word of …*. A request is quoted in full from its source’s `asked`,
+with wrapping on narrow screens. Its words are not shortened or renamed: the quote is a
+referenced value, and the lint checks it against that source (`d.requested_words_are_quotes`). `stood` is derived - the sessions read on a later day than
 it was born that one of its tabs served; a later session that landed unserved is the sign, not
 evidence, and one that recorded nothing never met it - and it is never stored. The decision drawn
 on its tab is not a pick: a tab that wants the session that decided it to count as served picks
@@ -444,7 +446,7 @@ literal-value and snapshot checks apply to connective `text`, not those labels. 
 values in referenced text or record entries. Review-state checks are output invariants: they
 catch a renderer or template that drops a marker, not a normal render that keeps it.
 
-- **Keys:** present dotted ids and short ids used as unlabeled reading labels fail; unknown dotted words are not guessed to be keys. Full missing-dependency keys remain visible. Missing human names are noted.
+- **Keys:** present dotted ids and short ids used as unlabeled reading labels fail; unknown dotted words are not guessed to be keys. Full missing-dependency keys remain visible. An attributed request may contain keys only when its complete text matches the source’s `asked`. Missing human names are noted.
 - **Values:** a displayed component value without a reference, an invented second reference around a value, or a number, date or quotation typed into connective text fails. A recorded sentence may contain its own inline references when the referenced ids occur in the source value.
 - **Context:** a section containing only a table warns, “a dump with a heading.”
 - **Judgments:** missing judgment attribution or visible marking fails; removing an in-place unverified or unresolved warning fails.

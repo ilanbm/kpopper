@@ -1487,6 +1487,24 @@ judgments:
                                    admitted in place when its sign holds with its tabs intact, or on
                                    a person's request, never twice in a day - and otherwise refused
                                    into a hypothesis that contests it"
+  d.requested_words_are_quotes:
+    rests_on: [s.2026_09_04_components, d.intent_is_a_source, d.page_lint_reads_output]
+    verdict: "The request under an arrangement is a complete quote of its source, including any
+              entry names the person used"
+    because: "On the word of identifies whose request authorized a decision. Truncating or renaming
+              words inside that quotation changes the authority being shown. The quote has its own
+              source reference, and the output lint accepts its text only when it exactly matches
+              that source asked field; ordinary page labels still cannot expose internal keys."
+    blocked_on: "observational: re-open if readers cannot distinguish the attributed request from
+                 assertions made by the page itself"
+    seen:
+      s.2026_09_04_components: "read 2026-09-04"
+      d.intent_is_a_source: "a session records what it was for as a source; a tab is a reading
+                             occasion that serves intents, and serving is earned by picks"
+      d.page_lint_reads_output: "The output lint checks references and visible keys, judgment and
+                                 review markers, language, and arrangement intent; source prose stays
+                                 attributed to its record entry and connective prose must carry its
+                                 own references"
   d.reversal_is_a_redecision:
     rests_on: [s.2026_09_03_arrangements, d.reversal_is_a_question, d.contradiction_by_id_and_day]
     verdict: "a reversal is the arrangement written again under its own id - admitted in place when
