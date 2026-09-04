@@ -51,6 +51,13 @@ class Components(unittest.TestCase):
             result = R.verify([str(self.record)], str(self.brief))
         self.assertEqual(result, 0, out.getvalue())
 
+    def test_measurement_recipe_is_preserved_in_the_payload(self):
+        for recipe in ('python3 measure.py', {'command': 'python3 measure.py', 'inputs': ['grant.csv']}):
+            with self.subTest(recipe=recipe):
+                self.change(self.record, lambda d: d['known']['repair.grant'].update(measure=recipe))
+                _, entries, _, _, _ = self.build()
+                self.assertEqual(entries['repair.grant'].get('measure'), recipe)
+
     def test_count_tile_keeps_the_picked_date_as_its_source(self):
         big = self.elements('big')[0]
         self.assertEqual(big.attrs['data-countdown'], '2027-02-01')

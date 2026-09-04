@@ -871,7 +871,7 @@ def build(paths, brief_path=None):
             continue
         b = raw.get(k, {})
         E[k] = {kk: b.get(kk) for kk in ("v", "rule", "from", "at", "of", "read", "quoted", "url",
-                                          "file", "asked", "unverified")
+                                          "file", "asked", "unverified", "measure")
                 if b.get(kk) is not None}
         if b.get("quoted") and "v" not in E[k]:
             E[k]["v"] = b["quoted"]
@@ -1657,7 +1657,7 @@ def build(paths, brief_path=None):
     out.append(f'<footer dir="{page_dir}">' + "".join(footer) + w["snapshot"] + ' ' + w["footer"] + chosen + '</footer>')
     # sorted keys, so two builds of an unchanged record are the same bytes - the one thing
     # a generated page is for is being diffed against the last one
-    out.append("</div><script>window.__T=" + json.dumps({key: w[key] for key in ("dir", "concludes", "rests_on", "wrong_if", "blocked", "reopened_by", "because", "value", "rule", "source", "at", "file", "url", "as_of", "used_by", "back", "tree_btn", "tree_btn_title", "whole_tree", "asked", "today", "days_left", "days_ago")}, ensure_ascii=False).replace("<", "\\u003c")
+    out.append("</div><script>window.__T=" + json.dumps({key: w[key] for key in ("dir", "concludes", "rests_on", "wrong_if", "blocked", "reopened_by", "because", "value", "rule", "measure", "source", "at", "file", "url", "as_of", "used_by", "back", "tree_btn", "tree_btn_title", "whole_tree", "asked", "today", "days_left", "days_ago")}, ensure_ascii=False).replace("<", "\\u003c")
                + ";window.__E=" + json.dumps(_plain(E), ensure_ascii=False, sort_keys=True).replace("<", "\\u003c")
                + ";window.__J=" + json.dumps(_plain(J), ensure_ascii=False, sort_keys=True).replace("<", "\\u003c") + ";</script>")
     out.append(f"<script>{JS}</script></body></html>")
