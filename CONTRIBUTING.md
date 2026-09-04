@@ -51,6 +51,14 @@ at your keyboard. Name a recipe only where a command honestly takes the count th
 describes — `python3 -I` for the Python ones, so a file in the checkout cannot stand in for a
 module they import.
 
+Count what the `at:` scopes and no more: a recipe that swept a whole module for numbers
+would answer a different question and correct a value against the judgment that reads it. A
+recipe whose subject is the record reads the record's own text and imports nothing — a count
+taken through the reader would agree with the reader by construction, and the isolation that
+keeps a checkout file from standing in for a module also hides a package installed for you
+rather than for the interpreter, so an importing recipe passes here and fails at your
+keyboard.
+
 Merges are squashed: one commit on `main` per pull request, subject taken from the
 pull request title. The branch is deleted once it lands.
 

@@ -48,3 +48,97 @@ checks_in_the_wheel:
     t = open('pyproject.toml', encoding='utf-8').read()
     m = re.search(r'^kpopper = \[(.*?)\]', t, re.M)
     print(sum(1 for s in re.findall(r'"([^"]*)"', m.group(1)) if s.endswith('verify_page.js')))
+
+# m.blocked_on_reopeners - judgments of this record that declare a hole: an entry carrying both
+# rests_on and blocked_on, counted from the record's own text. Nothing is imported from the
+# checkout: a count taken through the reader would agree with the reader by construction, and
+# the parser the reader uses is not there under -I anyway.
+blocked_on_reopeners:
+  - python3
+  - -I
+  - -c
+  - |
+    import re
+    n, deps, hole = 0, False, False
+    for line in open('PROVENANCE.yaml', encoding='utf-8'):
+        if re.match(r'^(\S|  \S)', line):
+            n += deps and hole
+            deps, hole = False, False
+        deps = deps or bool(re.match(r'^    rests_on:', line))
+        hole = hole or bool(re.match(r'^    blocked_on:', line))
+    print(n + (deps and hole))
+
+# m.blocked_on_implementation - the same judgments, counted where the declaration opens by
+# calling itself an implementation hole rather than an observational one. The other half of the
+# split is this taken from blocked_on_reopeners, so neither half can drift while the total holds.
+blocked_on_implementation:
+  - python3
+  - -I
+  - -c
+  - |
+    import re
+    n, deps, kind = 0, False, ""
+    for line in open('PROVENANCE.yaml', encoding='utf-8'):
+        if re.match(r'^(\S|  \S)', line):
+            n += deps and kind == "implementation"
+            deps, kind = False, ""
+        deps = deps or bool(re.match(r'^    rests_on:', line))
+        m = re.match(r'^    blocked_on: "?([a-z]+)', line)
+        if m:
+            kind = m.group(1)
+    print(n + (deps and kind == "implementation"))
+
+# The lines a count draws, inside the functions the entry's at: names and nowhere else: a
+# module-level number the function reads by name, and any number other than zero or one it
+# compares against - a line worth arguing about is named or is not zero or one, and zero and one
+# are how this code says empty and singular. A function the file no longer has is a hole, not a
+# zero. Serves p.prior_count_thresholds, p.hypothesis_thresholds and p.coverage_thresholds; the
+# module and the functions are the arguments.
+prior_count_thresholds:
+  - python3
+  - -I
+  - -c
+  - &threshold_count |
+    import ast, sys
+    t = ast.parse(open(sys.argv[1], encoding='utf-8').read())
+    named = {g.id for n in t.body if isinstance(n, ast.Assign)
+             and isinstance(n.value, ast.Constant) and type(n.value.value) in (int, float)
+             for g in n.targets if isinstance(g, ast.Name)}
+    have = {n.name for n in t.body if isinstance(n, ast.FunctionDef)}
+    gone = [w for w in sys.argv[2:] if w not in have]
+    if gone:
+        sys.exit(sys.argv[1] + " has no " + ", ".join(gone))
+    drawn = set()
+    for n in t.body:
+        if not isinstance(n, ast.FunctionDef) or n.name not in sys.argv[2:]:
+            continue
+        for x in ast.walk(n):
+            if isinstance(x, ast.Name) and x.id in named:
+                drawn.add(x.id)
+            elif isinstance(x, ast.Compare):
+                for y in [x.left] + list(x.comparators):
+                    if isinstance(y, ast.Constant) and type(y.value) in (int, float) \
+                            and y.value not in (0, 1):
+                        drawn.add(y.value)
+    print(len(drawn))
+  - scripts/provenance.py
+  - priors_line
+
+# p.hypothesis_thresholds - the same count over the line the opener prints about hypotheses.
+hypothesis_thresholds:
+  - python3
+  - -I
+  - -c
+  - *threshold_count
+  - scripts/provenance.py
+  - hypothesis_line
+
+# p.coverage_thresholds - the same count over the coverage report, which computes and prints.
+coverage_thresholds:
+  - python3
+  - -I
+  - -c
+  - *threshold_count
+  - scripts/render_page.py
+  - coverage
+  - coverage_lines
