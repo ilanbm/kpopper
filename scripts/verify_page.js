@@ -47,10 +47,49 @@ if (!CHROME) { console.log('no Chrome/Chromium found - set CHROME to a browser b
       const errs = []; p.on('pageerror', e => errs.push(String(e)));
       await p.goto('file://' + require('path').resolve(FILE));
       await p.locator('[data-id]').first().waitFor();
+      const words = await p.evaluate(() => window.__T || {});
+      const hasLabel = (text, keys) => keys.some(k => words[k] && text.includes(words[k]));
 
       chk(`${T} no page errors`, errs.length === 0);
       chk(`${T} no horizontal overflow`, await p.evaluate(
         () => document.documentElement.scrollWidth <= window.innerWidth + 1));
+
+      if (await p.locator('[data-countdown]').count()) {
+        const clocks = await p.evaluate(() => {
+          const RealDate = window.Date, tile = document.querySelector('[data-countdown]');
+          const [y, m, d] = tile.dataset.countdown.split('-').map(Number);
+          const id = tile.querySelector('[data-id]').dataset.id, readings = [];
+          try {
+            for (const offset of [-1, 0, 1]) {
+              const instant = new RealDate(y, m - 1, d + offset, 12).getTime();
+              window.Date = class extends RealDate {
+                constructor(...args) { super(...(args.length ? args : [instant])); }
+              };
+              document.dispatchEvent(new Event('visibilitychange'));
+              const current = new RealDate(instant);
+              const iso = [current.getFullYear(), String(current.getMonth() + 1).padStart(2, '0'),
+                           String(current.getDate()).padStart(2, '0')].join('-');
+              readings.push({ value: tile.querySelector('[data-id]').textContent,
+                id: tile.querySelector('[data-id]').dataset.id,
+                today: [...document.querySelectorAll('.tl')].every(tl =>
+                  [...tl.querySelectorAll('.day.hot')].length === 1 &&
+                  tl.querySelector('.day.hot').dataset.day === iso) });
+            }
+          } finally {
+            window.Date = RealDate;
+            document.dispatchEvent(new Event('visibilitychange'));
+          }
+          return { id, readings };
+        });
+        chk(`${T} countdown crosses tomorrow, today and yesterday without losing its reference`,
+            clocks.readings.map(r => r.value).join('|') ===
+            [words.days_left.replace('{n}', 1), words.today, words.days_ago.replace('{n}', 1)].join('|')
+            && clocks.readings.every(r => r.id === clocks.id));
+        chk(`${T} the timeline moves its today marker across midnight`, clocks.readings.every(r => r.today));
+      }
+      if (await p.locator('.axis .signed').count())
+        chk(`${T} signed values remain in reading order`, await p.locator('.axis .signed').first()
+            .evaluate(el => getComputedStyle(el).direction === 'ltr' && /^[+\-]/.test(el.textContent)));
 
       // Scroll, plant the cursor, then move onto it. A move dispatched in the same frame
       // as a scroll produces no mouseover in a driven browser - that is the harness, not
@@ -65,7 +104,7 @@ if (!CHROME) { console.log('no Chrome/Chromium found - set CHROME to a browser b
       chk(`${T} hover opens the source`, await seen(p, '.pop'));
       // the fallback above may land on a judgment instead of an entry - its popover has
       // no from/value, but every judgment popover names what it rests on unconditionally
-      chk(`${T} it names where the value came from`, /from|rule|value|file|url|rests on/i.test(await txt(p)));
+      chk(`${T} it names where the value came from`, hasLabel(await txt(p), ['source', 'rule', 'value', 'file', 'url', 'rests_on', 'as_of', 'asked']));
 
       const pb = await p.locator('.pop').boundingBox();
       await p.mouse.move(pb.x + pb.width / 2, pb.y + pb.height / 2);
@@ -96,15 +135,17 @@ if (!CHROME) { console.log('no Chrome/Chromium found - set CHROME to a browser b
         await j.scrollIntoViewIfNeeded(); await j.click();
         chk(`${T} a judgment card opens`, await seen(p, '.pop'));
         chk(`${T} it shows the conclusion and what it rests on`,
-            /concludes|rests on/i.test(await txt(p)));
+            hasLabel(await txt(p), ['concludes', 'rests_on']));
         const d = p.locator('.pop .dep').first();
         if (await d.count()) {
           const key = (await d.innerText()).trim();
           await d.click();
           chk(`${T} clicking a dependency walks to it (${key})`,
               await seen(p, '.pop .back') && (await txt(p)).includes(key));
+          chk(`${T} the history arrow follows the record direction`,
+              (await p.locator('.pop .back').innerText()) === words.back);
           await p.locator('.pop .back').click();
-          chk(`${T} back returns to the judgment`, /rests on/i.test(await txt(p)));
+          chk(`${T} back returns to the judgment`, hasLabel(await txt(p), ['rests_on']));
         }
       }
       if (landed) { await p.locator(`.tabs button[data-tab=${landed}]`).click(); }

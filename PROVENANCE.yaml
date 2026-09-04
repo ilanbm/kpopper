@@ -91,6 +91,15 @@ sources:
          consented to and pinned to a commit, and a bank of local questions whose ground was verified
          before any answer was seen"
     read: "2026-09-04"
+  s.2026_09_04_components:
+    asked: "Port the hub's components as data-driven CSS and JS keyed by the record's shape,
+            give each declared grouping its hue, lint the page's output against the element
+            rules, and put the chrome in the record's language."
+    name: "The session that ports the hub components, draws declared grouping hues, checks the
+           rendered reading surface, and follows the record language"
+    of: "This session, given the page design, the existing renderer, the component contract, and the
+         finance hub reference"
+    read: "2026-09-04"
   s.2026_09_04_consolidate:
     asked: "Make consolidation a test: a dry run that unions the base with its hypotheses and
             re-checks every judgment, a fold that writes a proven hypothesis into the base, a
@@ -775,6 +784,35 @@ judgments:
               the move having happened. Cheap to reverse, so decided on the prior alone."
     wrong_if: "prior.strings_lose_tooling < 0.6"
     seen: {m.page_string_lines: 0, prior.strings_lose_tooling: 0.95}
+  d.chrome_follows_language:
+    rests_on: [s.2026_09_04_components, d.author_free_build_guarantees]
+    verdict: "Chrome follows the declared record language, or the dominant script of its descriptive
+              text; Hebrew and Arabic are distinct catalogs, and values do not choose the language"
+    because: "Direction alone cannot choose a language. The page translates its own words and
+              preserves the record wording; an unsupported declared language is reported rather than
+              silently claimed as translated."
+    blocked_on: "observational: re-open when another record language needs a catalog or changing
+                 only a value changes the inferred language"
+    seen:
+      s.2026_09_04_components: "read 2026-09-04"
+      d.author_free_build_guarantees: "the session composes freely and the build enforces the
+                                       element rules on the output"
+  d.components_follow_shape:
+    rests_on: [s.2026_09_04_components, d.groupings_declared, doc.hub_seam]
+    verdict: "The existing shapes carry the hub components; an axis is reviewed text with signed
+              references, links select entries carrying destinations, and grouping hues follow
+              declaration order"
+    because: "The hub provides the visual grammar without prescribing its sections. Dates are
+              calendar days, so countdowns update from the picked date in the browser and retain a
+              dated fallback without scripts. Overlapping groups keep every membership and use the
+              first declared scheme for a stable identity across sections."
+    blocked_on: "observational: re-open if a component requires a finance-specific field or a
+                 grouping changes color when only a value changes"
+    seen:
+      s.2026_09_04_components: "read 2026-09-04"
+      d.groupings_declared: "groupings are declared by the session, any number, under its own names;
+                             the renderer owns none"
+      doc.hub_seam: "read 2026-09-02"
   d.contested_is_a_rival_claim:
     rests_on: [s.2026_09_04_forks_chapter, d.hypotheses_read_beside_the_base, p.contested_meanings]
     verdict: "contested is said of one thing: a rival claim laid against what the record holds,
@@ -1179,6 +1217,24 @@ judgments:
     blocked_on: "observational: falsified by a watcher whose reconstructed dependencies beat
                  the writer's own declarations on a real record; none has been tried"
     seen: {doc.agent_graph: "read 2026-09-01"}
+  d.page_lint_reads_output:
+    rests_on: [s.2026_09_04_components, d.author_free_build_guarantees, d.reasoning_in_record]
+    verdict: "The output lint checks references and visible keys, judgment and review markers,
+              language, and arrangement intent; source prose stays attributed to its record entry and
+              connective prose must carry its own references"
+    because: "The record owns its statements and snapshots. The page can check whether a reference
+              and its warning survived rendering; it cannot decide whether a sentence argues.
+              Unanchored connective prose is therefore a warning, while a value invented in
+              connective prose or a missing warning fails."
+    blocked_on: "observational: re-open if rendered values evade the reference check, or the lint
+                 requires rewriting a source merely to render it"
+    seen:
+      s.2026_09_04_components: "read 2026-09-04"
+      d.author_free_build_guarantees: "the session composes freely and the build enforces the
+                                       element rules on the output"
+      d.reasoning_in_record: "reasoning is the because of the judgment it belongs to, in the record;
+                              the page's connective text lives in the brief; both resolve references
+                              at build and both carry seen"
   d.prior_carries_its_own_falsifier:
     rests_on: [prior.confidence_needs_calibration, m.claims.local_assumed_held, d.hypothesis_is_a_judgment]
     verdict: "the prior kind carries its own falsifier: if judgments resting on priors at 0.8 or

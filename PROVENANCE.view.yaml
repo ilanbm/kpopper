@@ -65,7 +65,7 @@ tabs:
     serves: [s.2026_09_03_coverage, s.2026_09_03_written_layer, s.2026_09_03_hypotheses,
              s.2026_09_04_priors_count, s.2026_09_03_arrangements,
              s.2026_09_04_consolidate, s.2026_09_04_sameness, s.2026_09_04_calibration,
-             s.2026_09_04_prior_reversal_share, s.2026_09_04_forks_chapter, s.2026_09_04_remeasure, s.2026_09_04_merge_driver_reason]
+             s.2026_09_04_prior_reversal_share, s.2026_09_04_forks_chapter, s.2026_09_04_remeasure, s.2026_09_04_merge_driver_reason, s.2026_09_04_components]
     sections:
       - title: How to read what follows
         why: a wall of cards is not an argument until you know what separates them
