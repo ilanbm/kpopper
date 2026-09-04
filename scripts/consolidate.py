@@ -588,6 +588,12 @@ def refute(paths, name, why, source=None, stamp=None):
         claim = h["head"].get("claim")
         body = {"v": "refuted", "name": str(claim) if claim else f"hypothesis {name}", "from": src,
                 "at": " ".join(why.split()), "of": stamp}
+        # The optional head claim is prose; add --hypothesis need not write one. Keep the
+        # identities of the judgments the file actually held before that file disappears.
+        refutes = sorted(k for k, b in h["raw"].items()
+                         if isinstance(k, str) and P._judgment_shaped(b, fields))
+        if refutes:
+            body["refutes"] = refutes
         action = {"kind": "add", "id": nid, "body": body, "as_of": stamp, "why": None, "into": None,
                   "hypothesis": None}
         files = P._files_of(paths)
@@ -774,6 +780,8 @@ file - nothing else of it enters. The finding is one entry:
                             or the one --as names
     at: <why>               the reason, verbatim
     of: <day>
+    refutes: [<id>, ...]    judgment ids held by the hypothesis, when it held any;
+                            identities, not dependencies of the finding
 
 --from <ref> reads another branch's committed record - `git show <ref>:PROVENANCE.yaml`, the
 files it points at, and its PROVENANCE.d/ - and lays it over this base as hypotheses: the

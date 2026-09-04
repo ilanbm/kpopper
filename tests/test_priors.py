@@ -13,6 +13,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
+from unittest import mock
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 SCRIPTS = ROOT / "scripts"
@@ -22,6 +23,7 @@ RECORD = FIXTURE / "PROVENANCE.yaml"
 sys.path.insert(0, str(SCRIPTS))
 import provenance as P  # noqa: E402
 import render_page as R  # noqa: E402
+import yaml  # noqa: E402
 
 DECIDED = "c.order_is_the_contract"
 PRIOR = "prior.macros_bind_by_position"
@@ -32,6 +34,9 @@ LOW = "prior.regeneration_is_deterministic"
 OWN = ROOT / "PROVENANCE.yaml"                      # this project's own record
 NO_PRIORS = ROOT / "tests" / "fixtures" / "hypotheses" / "PROVENANCE.yaml"
 COUNT = "{} judgments rest on prior.* claims, {} of them on a prior at 0.8 or above"
+RATE = "graph.prior_reversal_rate"
+DEMOTION = "d.prior_confidence_survives_refutation"
+REVERSALS = FIXTURE / "reversals"
 
 
 def run(*args, cwd=None):
@@ -264,6 +269,252 @@ class TheReaderCountsWhatRestsOnPriors(unittest.TestCase):
         code, out, err = run(SCRIPTS / "provenance.py", "check", OWN, cwd=ROOT)
         self.assertEqual(code, 0, out + err)
         self.assertIn("NOTE " + COUNT.format(len(rest), len(high)), out)
+
+
+class TheReaderCountsReversalShare(unittest.TestCase):
+    def copy_reversals(self, into, findings=True):
+        shutil.copytree(REVERSALS, into, dirs_exist_ok=True)
+        rec = into / "PROVENANCE.yaml"
+        if not findings:
+            doc = yaml.safe_load(rec.read_text(encoding="utf-8"))
+            for col in P.collections_of(doc).values():
+                for k in list(col):
+                    if k.startswith("hyp."):
+                        del col[k]
+            rec.write_text(yaml.safe_dump(doc, sort_keys=False), encoding="utf-8")
+        return rec
+
+    def add_rule(self, rec):
+        code, out, err = run(SCRIPTS / "kpopper", "add", DEMOTION,
+                             f"rests_on=[{RATE}]",
+                             "verdict=prior confidence remains useful until more than one in five "
+                             "high-confidence judgments is refuted, then the kind is a note",
+                             f"wrong_if={RATE} > 0.2", "--as-of", "2026-09-04", rec)
+        self.assertEqual(code, 0, out + err)
+
+    def refute(self, rec, name, target):
+        # Only public commands write this hypothesis and its finding. No test-only claim
+        # supplies the identity the product must preserve when it deletes the file.
+        _, _, jud, _, _ = read(rec)
+        targets = [target] if isinstance(target, str) else target
+        for target in targets:
+            body = dict(jud[target]["body"])
+            body.pop("seen", None)
+            code, out, err = run(SCRIPTS / "kpopper", "add", target,
+                                 yaml.safe_dump(body, default_flow_style=True),
+                                 "--hypothesis", name, "--as-of", "2026-09-04", rec)
+            self.assertEqual(code, 0, out + err)
+        hyp = rec.parent / "PROVENANCE.d" / (name + ".yaml")
+        self.assertNotIn("claim", yaml.safe_load(hyp.read_text(encoding="utf-8"))["hypothesis"])
+        code, out, err = run(SCRIPTS / "kpopper", "consolidate", "--refute", name,
+                             "the export check contradicted the claim", "--as-of", "2026-09-04", rec)
+        self.assertEqual(code, 0, out + err)
+        self.assertFalse(hyp.exists())
+        return read(rec)[4]["hyp." + name]
+
+    def test_two_real_refutations_of_five_fire_the_rule(self):
+        with tempfile.TemporaryDirectory() as d:
+            rec = self.copy_reversals(pathlib.Path(d), findings=False)
+            self.add_rule(rec)
+            _, ids, jud, fields, raw = read(rec)
+            self.assertEqual(P.value_of(raw, ids, RATE), 0.0)
+            self.assertEqual(jud[DEMOTION]["body"]["seen"][RATE], 0.0)
+            self.assertIs(P.evaluate(jud[DEMOTION]["pred"], raw, ids), False)
+            self.assertEqual(P.flags(ids, jud, fields, raw)[DEMOTION], set())
+            self.assertEqual(run(SCRIPTS / "kpopper", "check", rec)[0], 0)
+            finding = self.refute(rec, "column_order", DECIDED)
+            self.assertEqual(finding, {
+                "v": "refuted", "name": "hypothesis column_order", "from": "s.2026_09_03_export",
+                "refutes": [DECIDED],
+                "at": "the export check contradicted the claim", "of": "2026-09-04"})
+            _, ids, jud, _, raw = read(rec)
+            self.assertEqual(P.value_of(raw, ids, RATE), 0.2)
+            self.assertIs(P.evaluate(jud[DEMOTION]["pred"], raw, ids), False)
+            self.assertEqual(run(SCRIPTS / "kpopper", "check", rec)[0], 0)
+            self.refute(rec, "stable_names", "c.names_are_stable")
+            _, ids, jud, fields, raw = read(rec)
+            self.assertEqual(P.value_of(raw, ids, RATE), 0.4)
+            self.assertIs(P.evaluate(jud[DEMOTION]["pred"], raw, ids), True)
+            self.assertIn("falsified", P.flags(ids, jud, fields, raw)[DEMOTION])
+            code, out, err = run(SCRIPTS / "kpopper", "check", rec)
+            self.assertEqual(code, 1, out + err)
+            self.assertIn(f"FAIL {DEMOTION}: wrong_if holds ({RATE} > 0.2)", out)
+            brief = rec.parent / "PROVENANCE.view.yaml"
+            brief.write_text("sections:\n  - title: Prior policy\n    pick: " + DEMOTION
+                             + "\n    as: alerts\n", encoding="utf-8")
+            page, _, _, _, info = R.build([str(rec)], str(brief))
+            self.assertIn("falsified", info["flags"][DEMOTION])
+            self.assertIn("its own condition for being wrong now holds", page)
+            self.assertIn(f'data-id="{DEMOTION}"', page)
+            self.assertEqual(jud[DEMOTION]["body"]["seen"][RATE], 0.0)
+
+    def test_committed_findings_read_as_a_share_but_only_when_named(self):
+        doc, ids, jud, fields, raw = read(REVERSALS / "PROVENANCE.yaml")
+        self.assertNotIn(RATE, ids)
+        self.assertNotIn(RATE, raw)
+        self.assertEqual(P.counts(doc, ids, jud, fields, raw)[RATE], 0.4)
+        self.assertEqual(P.priors_line(ids, jud, raw), COUNT.format(6, 5))
+        self.assertEqual(run(SCRIPTS / "kpopper", "check", REVERSALS / "PROVENANCE.yaml")[0], 0)
+
+    def test_the_denominator_and_membership_come_from_priors_line(self):
+        doc, ids, jud, fields, raw = read(REVERSALS / "PROVENANCE.yaml")
+        with mock.patch.object(P, "priors_line", return_value=("counted", {DECIDED})) as line:
+            self.assertEqual(P.counts(doc, ids, jud, fields, raw)[RATE], 1.0)
+        line.assert_called_once_with(ids, jud, raw, with_high=True)
+
+    def test_nonstring_keys_do_not_turn_the_finding_scan_into_a_crash(self):
+        doc = P.load([str(REVERSALS / "PROVENANCE.yaml")])
+        # The reader also sees ordinary metadata and mapping keys, not only ids written
+        # by add. None can name a hyp.* finding, but they still belong in existing counts.
+        doc["known"][17] = {"v": 1}
+        doc["known"][None] = {"v": "refuted", "name": "c.dates_are_values"}
+        ids, jud, fields = P.infer(doc)
+        values = P.counts(doc, ids, jud, fields, P.bodies(doc))
+        self.assertEqual(values[RATE], 0.4)
+        self.assertEqual(values["graph.entries"], len(ids) - len(jud))
+
+    def test_refutations_are_linked_explicitly_and_count_each_judgment_once(self):
+        with tempfile.TemporaryDirectory() as d:
+            rec = self.copy_reversals(pathlib.Path(d), findings=False)
+            self.add_rule(rec)
+            self.refute(rec, "first", DECIDED)
+            self.refute(rec, "again", DECIDED)
+            self.refute(rec, "low", TRIED)
+            self.refute(rec, "measured", "c.fourteen_fit")
+            _, ids, _, _, raw = read(rec)
+            self.assertEqual(P.value_of(raw, ids, RATE), 0.2)
+            doc = P.load([str(rec)])
+            doc["known"]["hyp.not_refuted"] = {"v": "pending", "name": "c.names_are_stable"}
+            doc["known"]["other.refuted"] = {"v": "refuted", "name": "c.names_are_stable"}
+            for i, name in enumerate(("c.names_are_stable_extra", "c.gone", "prior.macros_bind_by_position",
+                                       "do not confuse c.names_are_stable with the claim", [DECIDED], None)):
+                doc["known"]["hyp.ignored_" + str(i)] = {"v": "refuted", "name": name}
+            ids, jud, fields = P.infer(doc)
+            self.assertEqual(P.counts(doc, ids, jud, fields, P.bodies(doc))[RATE], 0.2)
+
+    def test_old_claim_links_still_read_without_a_refutes_field(self):
+        for claim in (DECIDED, "  " + DECIDED + "  ", "the claim {{" + DECIDED + "}} failed"):
+            with self.subTest(claim=claim):
+                doc = P.load([str(RECORD)])
+                doc["known"]["hyp.older"] = {"v": "refuted", "name": claim}
+                ids, jud, fields = P.infer(doc)
+                self.assertEqual(P.counts(doc, ids, jud, fields, P.bodies(doc))[RATE], 1.0)
+
+    def test_one_refutation_preserves_all_its_judgments_but_counts_only_high_priors(self):
+        with tempfile.TemporaryDirectory() as d:
+            rec = self.copy_reversals(pathlib.Path(d), findings=False)
+            self.add_rule(rec)
+            targets = [DECIDED, "c.names_are_stable", TRIED, "c.fourteen_fit"]
+            finding = self.refute(rec, "all_claims", targets)
+            self.assertEqual(finding["refutes"], sorted(targets))
+            _, ids, jud, fields, raw = read(rec)
+            self.assertEqual(P.value_of(raw, ids, RATE), 0.4)
+            self.assertIn("falsified", P.flags(ids, jud, fields, raw)[DEMOTION])
+            self.assertNotIn("hyp.all_claims", jud)
+
+    def test_refutation_uses_the_records_judgment_shape_not_collection_names(self):
+        with tempfile.TemporaryDirectory() as d:
+            rec = copy_fixture(pathlib.Path(d))
+            edit(rec, "judgments:", "claims:")
+            edit(rec, "rests_on:", "depends:")
+            finding = self.refute(rec, "different_shape", DECIDED)
+            self.assertEqual(finding["refutes"], [DECIDED])
+            doc, ids, jud, fields, raw = read(rec)
+            self.assertEqual(fields["deps"], "depends")
+            self.assertEqual(P.counts(doc, ids, jud, fields, raw)[RATE], 1.0)
+
+    def test_rounding_must_not_hide_a_share_above_the_demotion_line(self):
+        doc, ids, jud, fields, raw = read(REVERSALS / "PROVENANCE.yaml")
+        high = {"c.claim_" + str(i) for i in range(99)}
+        raw = dict(raw, **{"hyp.near_boundary": {
+            "v": "refuted", "refutes": sorted(high)[:20]}})
+        with mock.patch.object(P, "priors_line", return_value=("counted", high)):
+            rate = P.counts(doc, ids | {"hyp.near_boundary"}, jud, fields, raw)[RATE]
+        self.assertEqual(rate, 20 / 99)
+        self.assertGreater(rate, 0.2)
+        self.assertEqual(round(rate, 2), 0.2)  # presentation rounding must not decide the predicate
+
+    def test_a_refutes_list_is_identity_not_a_dependency_vote(self):
+        doc = P.load([str(RECORD)])
+        doc["judgments"] = {DECIDED: doc["judgments"][DECIDED]}
+        for i in range(3):
+            doc["known"]["hyp.again_" + str(i)] = {
+                "v": "refuted", "name": "hypothesis again", "refutes": [DECIDED]}
+        ids, jud, fields = P.infer(doc)
+        self.assertEqual(fields["deps"], "rests_on")
+        self.assertEqual(set(jud), {DECIDED})
+        self.assertEqual(P.counts(doc, ids, jud, fields, P.bodies(doc))[RATE], 1.0)
+
+    def test_explicit_targets_are_authoritative_and_malformed_targets_do_not_crash(self):
+        for targets in ([], ["c.gone"], [LOW], [TRIED], [None, 1, {}, []], None, {}, DECIDED):
+            with self.subTest(targets=targets):
+                doc = P.load([str(RECORD)])
+                doc["known"]["hyp.targeted"] = {
+                    "v": "refuted", "name": DECIDED, "refutes": targets}
+                ids, jud, fields = P.infer(doc)
+                self.assertEqual(P.counts(doc, ids, jud, fields, P.bodies(doc))[RATE], 0.0)
+
+    def test_an_impossible_reversal_share_sign_is_refused_at_add_and_failed_at_check(self):
+        for predicate in (RATE + " > 1", RATE + " >= 1.1", RATE + " == 2", RATE + " < 0"):
+            with self.subTest(predicate=predicate), tempfile.TemporaryDirectory() as d:
+                rec = copy_fixture(pathlib.Path(d))
+                before = rec.read_bytes()
+                code, out, err = run(SCRIPTS / "kpopper", "add", "v.prior_policy",
+                                     f"rests_on=[s.2026_09_03_export, {RATE}]", "verdict=a policy tab",
+                                     "wrong_if=" + predicate, "--as-of", "2026-09-04", rec)
+                self.assertEqual(code, 1, out + err)
+                self.assertIn("can never hold", out + err)
+                self.assertEqual(rec.read_bytes(), before)
+                # check must also catch a file written outside the guarded add command.
+                with rec.open("a", encoding="utf-8") as f:
+                    f.write("\n  v.impossible:\n    rests_on: [s.2026_09_03_export, " + RATE
+                            + "]\n    verdict: a policy tab\n    wrong_if: \"" + predicate + "\"\n")
+                code, out, err = run(SCRIPTS / "kpopper", "check", rec)
+                self.assertEqual(code, 1, out + err)
+                self.assertIn("FAIL v.impossible: wrong_if can never hold", out)
+
+    def test_the_shared_line_handles_boundary_multiple_and_nonnumeric_priors(self):
+        doc, ids, jud, fields, raw = read(REVERSALS / "PROVENANCE.yaml")
+        line, high = P.priors_line(ids, jud, raw, with_high=True)
+        self.assertEqual(line, COUNT.format(6, 5))
+        self.assertEqual(len(high), 5)
+        self.assertIn("c.names_are_stable", high)  # exactly HIGH_CONFIDENCE
+        self.assertIn("c.append_is_safe", high)  # two high priors, still one judgment
+        for value in (0.5, "unknown", None, {}, [], float("nan")):
+            with self.subTest(value=value):
+                changed = dict(raw)
+                for k in ids:
+                    if k.startswith("prior."):
+                        changed[k] = {"v": value}
+                self.assertEqual(P.counts(doc, ids, jud, fields, changed)[RATE], 0.0)
+                self.assertEqual(P.priors_line(ids, jud, changed), COUNT.format(6, 0))
+
+    def test_no_priors_has_no_new_entry_or_changed_output(self):
+        doc, ids, jud, fields, raw = read(NO_PRIORS)
+        self.assertNotIn(RATE, ids)
+        self.assertNotIn(RATE, raw)
+        self.assertEqual(P.priors_line(ids, jud, raw, with_high=True), ("", set()))
+        for cmd in ("check", "open"):
+            code, out, err = run(SCRIPTS / "kpopper", cmd, NO_PRIORS)
+            self.assertEqual(code, 0, out + err)
+            self.assertNotIn(RATE, out)
+
+    def test_the_record_keeps_the_old_rule_and_adds_an_evaluable_one(self):
+        _, ids, jud, fields, raw = read(OWN)
+        old = jud["d.prior_carries_its_own_falsifier"]["body"]
+        self.assertIn("reopened_by", old)
+        self.assertEqual(old["wrong_if"], "prior.confidence_needs_calibration < 0.8")
+        rule = jud[DEMOTION]
+        self.assertIn("d.prior_carries_its_own_falsifier", rule["deps"])
+        self.assertEqual(rule["pred"], f"{RATE} > 0.2")
+        self.assertEqual(rule["body"]["seen"][RATE], 0.0)
+        self.assertEqual(P.value_of(raw, ids, RATE), 0.0)
+        self.assertEqual(P.flags(ids, jud, fields, raw)[DEMOTION], set())
+        self.assertFalse(P.is_arrangement(rule, raw))
+        source = "s.2026_09_04_prior_reversal_share"
+        self.assertEqual(rule["body"]["from"], source)
+        self.assertIn(DEMOTION, R.recorded_by(source, ids, jud, raw))
+        self.assertEqual(raw["p.prior_count_thresholds"]["v"], 1)
 
 
 class ThePageShowsTheReopener(unittest.TestCase):

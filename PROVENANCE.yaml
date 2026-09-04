@@ -105,6 +105,16 @@ sources:
     of: "2026-09-04, given the hypotheses beside the record at db31e1c - the layer, the door and the
          cone - the fixture record under tests/, and the three live records this reader serves"
     read: "2026-09-04"
+  s.2026_09_04_prior_reversal_share:
+    asked: "Count the share of high-confidence prior-resting judgments that consolidation refuted,
+            as a computed entry, and make the demotion rule a predicate the build evaluates."
+    name: "The session that made reversals of high-confidence prior-resting judgments a share the
+           build evaluates. Its reading: the count comes from the same confidence line the reader
+           prints, the refuted finding preserves the judgment id in its claim, and the demotion rule
+           is a new judgment rather than a rewrite of the one that still stands."
+    of: "2026-09-04, given the prior counts and consolidation findings at 6330a56, the calibration
+         rule, and the same-id rewrite boundary"
+    read: "2026-09-04"
   s.2026_09_04_priors_count:
     asked: "Count what rests on priors: check notes how many judgments rest on prior claims and how
             many at high confidence, and open carries the line when there are any."
@@ -1041,6 +1051,36 @@ judgments:
                                    truth is pending - its premises in rests_on, its claim in verdict,
                                    what would refute its success in wrong_if - and the merge is its
                                    test"
+  d.prior_confidence_survives_refutation:
+    from: s.2026_09_04_prior_reversal_share
+    rests_on: [d.prior_carries_its_own_falsifier, d.priors_counted_at_the_matrix_line, graph.prior_reversal_rate]
+    verdict: "the prior kind remains a source of confidence while at most one in five
+              high-confidence prior-resting judgments has been refuted; beyond that share, prior.* is
+              demoted to a note"
+    because: "The printed count and this share read the same high-confidence judgment ids from
+              priors_line: each judgment is counted once even when it rests on several priors.
+              Consolidation preserves a hypothesis claim as the negative finding name and deletes the
+              file, so the claim links the refuted judgment by its whole id or an explicit
+              double-braced reference; other prose is not guessed from. Only hyp.* entries whose
+              value is refuted contribute, and repeated findings for one judgment still count once.
+              No qualifying judgments means a share of 0.0, not evidence of calibration. The share
+              becomes an entry only when named, never stored as a fact, and its demotion line belongs
+              to this falsifier, not the counting code. The older judgment still stands with its own
+              sign; this new judgment makes its demotion rule evaluable without rewriting it. The
+              session is attributed through from rather than made a premise: this judges the prior
+              policy, not the page arrangement."
+    wrong_if: "graph.prior_reversal_rate > 0.2"
+    seen:
+      d.prior_carries_its_own_falsifier: "the prior kind carries its own falsifier: if judgments
+                                          resting on priors at 0.8 or above are reversed more than
+                                          about one in five, the confidences carry no information and
+                                          prior.* is demoted to a note"
+      d.priors_counted_at_the_matrix_line: "how much of a record stands on a session's own
+                                            confidence is counted at every check and every open and
+                                            printed as two numbers - the judgments resting on a
+                                            prior.* claim, and how many of those on a prior at 0.8 or
+                                            above - and nothing in the mechanism acts on either"
+      graph.prior_reversal_rate: 0.0
   d.priors_counted_at_the_matrix_line:
     rests_on: [s.2026_09_04_priors_count, d.computed_names_when_named, d.metrics_derived_builtin, d.prior_carries_its_own_falsifier, p.prior_count_thresholds]
     verdict: "how much of a record stands on a session's own confidence is counted at every check
@@ -1098,6 +1138,32 @@ judgments:
                                              whatever later rests on the contradiction goes there - a
                                              session is never the unit"
       p.hypothesis_homes: 1
+  d.refutations_keep_judgment_ids:
+    from: s.2026_09_04_prior_reversal_share
+    rests_on: [d.prior_confidence_survives_refutation, d.refuted_hypothesis_leaves_one_finding]
+    verdict: "a negative finding preserves the judgment ids its hypothesis held in refutes, so
+              refuting a hypothesis written by add changes the reversal share without an authored
+              head claim"
+    because: "The hypothesis file already carries each proposed judgment under its id, while its
+              optional claim is prose and a file written by add carries only a birth date in its
+              head. Consolidation keeps those ids in a sorted refutes list before deleting the file.
+              This list identifies what was refuted, not premises the finding rests on, so it never
+              votes for the dependency field. The reversal share reads this explicit list when
+              present and keeps the older name links only as a fallback for findings that predate it.
+              Each linked judgment counts once, and only while it belongs to the existing
+              high-confidence denominator."
+    blocked_on: "observational: refuting a hypothesis created entirely by the write commands leaves
+                 no link to a judgment it held, or a refutes list is mistaken for a dependency
+                 declaration; the end-to-end refutation tests exercise both signs"
+    seen:
+      d.prior_confidence_survives_refutation: "the prior kind remains a source of confidence while
+                                               at most one in five high-confidence prior-resting
+                                               judgments has been refuted; beyond that share, prior.*
+                                               is demoted to a note"
+      d.refuted_hypothesis_leaves_one_finding: "a refuted hypothesis leaves one entry in the base -
+                                                hyp.<name> with v: refuted, its claim as the name,
+                                                the why as at, from the session that refuted it,
+                                                dated - and nothing else of it enters"
   d.refuted_hypothesis_leaves_one_finding:
     rests_on: [s.2026_09_04_consolidate, d.hypothesis_is_a_judgment]
     verdict: "a refuted hypothesis leaves one entry in the base - hyp.<name> with v: refuted, its
