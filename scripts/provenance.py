@@ -42,7 +42,7 @@ Where two fields genuinely fit the same role it refuses to guess and asks for a
 one-line `schema:` block. A checker that quietly passes over what it cannot read
 is worse than no checker, so every ambiguity is an error, never a skip.
 """
-import io, os, re, sys, glob, json, shlex, subprocess, datetime, textwrap, tempfile, contextlib, yaml
+import io, os, re, sys, glob, json, shlex, hashlib, subprocess, datetime, textwrap, tempfile, contextlib, yaml
 from decimal import Decimal, InvalidOperation
 
 ID = re.compile(r"[A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z0-9_]+)+")
@@ -275,6 +275,42 @@ def _same_claim(a, b):
     if isinstance(a, (dict, list)) or isinstance(b, (dict, list)):
         return a == b
     return _same(a, b)
+
+
+def _claim_key(claim):
+    """One claim written the way `_same_claim` reads it: two claims this record calls the same
+    are written the same, no two others are written alike, and every claim is written at all.
+    Each is written by its kind, so that nothing reads as anything else - a structure by its
+    parts in a fixed order, whatever kinds they are, each part with its length in front so a
+    delimiter cannot fall two ways; a number by its value alone, since trailing zeros, a signed
+    zero and an exponent are not the number and no working precision may round it; and any
+    other text by itself, with whitespace collapsed."""
+    if isinstance(claim, dict):
+        parts = sorted((_claim_key(k), _claim_key(v)) for k, v in claim.items())
+        return "{" + "".join(f"{len(p)}:{p}" for kv in parts for p in kv) + "}"
+    if isinstance(claim, (list, tuple)):
+        return "[" + "".join(f"{len(p)}:{p}" for p in map(_claim_key, claim)) + "]"
+    text = " ".join(str(claim).split())
+    try:
+        d = Decimal(text.replace(",", ""))
+    except InvalidOperation:
+        return "t" + text
+    if not d.is_finite():
+        return "n" + str(d)                     # a NaN or an infinity, by the one name for it
+    sign, digits, exp = d.as_tuple()
+    while len(digits) > 1 and digits[-1] == 0:  # by hand: normalize() would round to the context
+        digits, exp = digits[:-1], exp + 1
+    if digits == (0,):
+        return "n0"                             # 0, -0 and 0.00 are the one number
+    return "n" + ("-" if sign else "") + "".join(map(str, digits)) + "e" + str(exp)
+
+
+def _claim_mark(claim, n=6):
+    """Six characters standing for one claim: the same six on every machine and every day,
+    and none of the sentence itself. A digest of the whole claim, never a slug of its opening
+    words - two claims that read alike until their last word are exactly the pair a name has
+    to tell apart."""
+    return hashlib.sha256(_claim_key(claim).encode("utf-8")).hexdigest()[:n]
 
 
 def contested(doc):
@@ -2380,9 +2416,13 @@ def _command_of(a, name):
 
 
 def _hypothesis_name(doc, k, claim):
-    """A name for the hypothesis a refused write would open: the id's, unless a hypothesis
-    of that name already holds the id with another claim."""
-    base = re.sub(r"[^A-Za-z0-9_\-]", "_", k)
+    """A name for the hypothesis a refused write would open: the id contradicted and a mark
+    of the claim written. Two branches refused on one id open one file only where they claim
+    the same thing - and that meeting is worth having, since the two heads say one thing and
+    whoever merges them keeps either. Two that disagree, which is what the fork exists for,
+    open two files and merge. The count beside the name separates two claims that mark alike
+    in one checkout; it counts only what this checkout holds, so it never crosses a branch."""
+    base = re.sub(r"[^A-Za-z0-9_\-]", "_", k) + "_" + _claim_mark(claim)
     hyps = getattr(doc, "hypotheses", None) or {}
     name, n = base, 1
     while name in hyps and not (k in hyps[name]["ids"]
