@@ -546,6 +546,7 @@ kpopper set <key> <value> [--why "..."]  # change one value; the reply is the re
 kpopper add <id> field=value ...         # a new entry or judgment, in id order, seen filled
 kpopper review <id | "section title">    # it still holds: seen rewritten from the record
 kpopper consolidate [--dry-run] [NAME ...]   # the union, tested; then folded (--refute NAME "why")
+kpopper remeasure [--run]                # the entries that name a recipe, taken again from the tree
 kpopper same <a> <b> | distinct <a> <b> "why"   # one subject under two ids, or two that only look alike
 ```
 
@@ -622,6 +623,23 @@ holds" and rewrites `seen` from the record — a judgment's, or a section text's
 **Never type `seen` by hand once these exist.** The one field the method says no hand writes is
 the one the tool writes, and a hand-typed snapshot is the paraphrase the reader cannot tell from
 a move.
+
+`remeasure` is how the tree answers for the record. `check` compares `seen` against the record's
+own stored value and never against the tree, so a count that is wrong about the tree passes as
+long as it agrees with itself. An entry whose value is a fact about the tree - lines of a file,
+files a package ships, places in the code where something is decided - names the recipe that
+takes it, `measure: <name>`, and `PROVENANCE.measure.yaml` beside the record holds that name's
+argument list. The name is all the record carries: a bare name, refused by `add` and failed by
+`check` when it is not one or stands on anything but a stored scalar reading. `kpopper remeasure`
+prints the plan and runs nothing; `--run` runs each cited recipe once, from the checkout's root,
+without a shell, and lays what differs over the record as one more hypothesis, `tree/<commit>`,
+through the same dry run that tests any hypothesis - red on a falsifier that holds on the measured
+value, a hole, or a reading the tree contests; green, with the `set` command that refreshes it, on
+an older reading that moved without crossing a line. A hypothesis that replaces a measured entry
+carries the line with it, since the fold takes its block over whole. The pull request runs it; nothing that reads
+the record does. Name a recipe only where a command honestly takes the count the entry's `at:`
+describes - a survey, a hand-scored run, a prior has none, and their honest form is the reading
+with its date.
 
 ### The page
 

@@ -50,6 +50,23 @@ jobs:
       - name: The record holds together
         run: kpopper check
 
+      - name: The hypotheses beside the record still test clean on this tree
+        # The dry run: the record with its hypotheses laid over it, checked. Red on a
+        # contested id, a falsifier that holds, or a hole; a premise that moved under a
+        # judgment is green here and blocks only the fold. On a pull request this is the
+        # merged tree; on a push to main it is the second net, for two consistent pull
+        # requests that contradict together.
+        run: kpopper consolidate --dry-run
+
+      - name: The tree still measures what the record says
+        # Every entry that names a recipe is taken again from this tree, by the argument
+        # list PROVENANCE.measure.yaml holds for it - the one place anything from beside
+        # the record runs, and only with --run. What differs is one more hypothesis through
+        # the same dry run: red on a falsifier that holds on the measured value, a hole, or
+        # a reading the tree contests; an older reading that moved is green, with the
+        # command that refreshes it in the log.
+        run: kpopper remeasure --run
+
       - name: The page renders, and says what it rendered
         run: kpopper page --verify
 

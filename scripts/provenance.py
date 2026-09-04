@@ -527,6 +527,13 @@ REOPENED = ("reopened_by",)
 # otherwise read as a predicate).
 ARRANGEMENT_PROSE = ("request", "replaced")
 OPEN = ("open", "questions")
+# An entry whose value is a fact about the tree names the recipe that takes it again:
+# `measure: <name>`, a bare name that the allowlist beside the record resolves to an argument
+# list. The reader reads the name and runs nothing - only `remeasure`, which the pull request
+# runs, does - so the record never carries a command, and a name here is refused when it is
+# not a name, or stands on anything but a stored scalar reading.
+MEASURE = "measure"
+MEASURE_NAME = re.compile(r"^[A-Za-z][A-Za-z0-9_\-]*$")
 
 # The one field this method asks for by name rather than inferring by shape - a sentence
 # has no distinctive shape. render_page.py owns the real version of this; this is the
@@ -717,6 +724,32 @@ def _misfiled_reopener(body, ids):
     r = _reopened_text(body)
     m = COMPARISON.match(r)
     return r if m and m.group(1) in ids else ""
+
+
+def measure_problem(nid, body, ids, jud, fields, raw):
+    """Why `measure:` cannot stand on this body, or '' - a recipe is named by a stored scalar
+    reading alone: an entry holding v: or quoted:, not worked out from a rule, not a judgment,
+    not a name the reader computes; and the name is a bare name, never a command."""
+    if not isinstance(body, dict) or MEASURE not in body:
+        return ""
+    name = body[MEASURE]
+    if not isinstance(name, str) or not MEASURE_NAME.match(name):
+        return (f"measure: {short(name)!r} is not a recipe name - letters, digits, underscores and "
+                f"dashes, opening with a letter; what runs lives in the allowlist beside the record, "
+                f"never here")
+    if nid in jud or (fields.get("deps") and fields["deps"] in body):
+        return f"measure: {name} on a judgment - a judgment is not measured; the entries it rests on are"
+    if is_builtin(nid):
+        return f"measure: {name} on a name the reader computes"
+    v = body.get("v") if body.get("v") is not None else body.get("quoted")
+    if body.get("rule") is not None or (isinstance(v, str) and EXPR.search(v)
+                                        and any(t in ids for t in ID.findall(v))):
+        return f"measure: {name} on an entry worked out from a rule - measure what it is worked out from"
+    if v is None:
+        return f"measure: {name} on an entry with no value of its own - a recipe's line replaces a stored reading"
+    if isinstance(v, (list, dict)):
+        return f"measure: {name} on a value that is a list or a mapping - a recipe prints one scalar"
+    return ""
 
 
 # The line the consequence matrix draws. At or above it a session's confidence in a claim is
@@ -950,6 +983,13 @@ def check_lines(paths):
                 elif nid in jud and r != nid and r not in jud[nid]["deps"]:
                     fail.append(f"{nid}: {f} references {r}, which it does not declare as a "
                                 f"dependency - a change to it would never reach this")
+    # A recipe is named by a stored scalar reading, and the record's own bodies are where that
+    # is read: the reader's world replaces a computed name's body with the count it took, so a
+    # measure hand-written on one would never be seen through it.
+    for nid, body in sorted(bodies(doc).items()):
+        bad = measure_problem(nid, body, ids, jud, fields, raw)
+        if bad:
+            fail.append(f"{nid}: {bad}")
     if not fields["snapshot"]:
         note.append("no snapshot field anywhere: dependencies are declared but never "
                     "captured, so drift can never be detected")
@@ -1461,6 +1501,8 @@ def pull(paths, seeds, budget=40, doc=None):
             shown = ""
         nm = named(b)
         line = f"{k}: {shown}" + (f" ({nm})" if nm else "")
+        if b.get(MEASURE):
+            line += f" measured by {b[MEASURE]}"
         if b.get("from"):
             line += f" <- {b['from']}" + (f", at {b['at']}" if b.get("at") else "")
         of = b.get("of") or b.get("read")
@@ -2334,6 +2376,15 @@ def _forks_on_contradiction(a, doc, ids, jud, fields, raw):
     return out
 
 
+def _measure_is_a_name(a, doc, ids, jud, fields, raw):
+    """A recipe is named by a stored scalar reading, with a bare name: the same rule check
+    holds the record to, asked before the write."""
+    if a["kind"] != "add" or not isinstance(a.get("body"), dict):
+        return []
+    bad = measure_problem(a["id"], a["body"], ids, jud, fields, raw)
+    return [bad] if bad else []
+
+
 def _nearest_existing(a, doc, ids, jud, fields, raw):
     """The entries nearest a new one, said in the reply - a note, never a refusal - and a
     write under an id that was retired into another, refused and pointed at it. Both live in
@@ -2346,7 +2397,8 @@ def _nearest_existing(a, doc, ids, jud, fields, raw):
 # Every refusal a write can meet, in one place. The fork on a contradiction is the last of
 # them; the entries nearest a new one are said just before it.
 VALIDATORS = [_known_key, _sound_dependencies, _sound_references, _reopener_is_prose,
-              _arrangement_is_sound, _not_born_broken, _nearest_existing, _forks_on_contradiction]
+              _arrangement_is_sound, _not_born_broken, _measure_is_a_name, _nearest_existing,
+              _forks_on_contradiction]
 
 
 def validate(action, doc, ids, jud, fields, raw):

@@ -1,0 +1,3 @@
+# The one recipe this fixture names: every field the reader accepts, exercised once. Read by
+# `kpopper remeasure` alone; an argument list, run without a shell from the checkout's root.
+north_wall: [python3, -I, -c, "print(18)"]
