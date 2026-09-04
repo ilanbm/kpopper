@@ -118,6 +118,17 @@ sources:
          with the fork, the dry run and sameness at ad4e23f, the three fixture records under tests/,
          and the method as it stood"
     read: "2026-09-04"
+  s.2026_09_04_merge_driver_reason:
+    asked: "Correct the recorded reason for setting a merge driver aside: hypothesis files do meet,
+            when two branches fork on one id. The decision stands; the reason is what changes."
+    name: "The session that checked a rejected alternative's reason instead of repeating it - what
+           it was asked, and what it was given. Its reading: the reason was false in the one case the
+           fork exists for, the decision it supported is untouched, and what replaces it is the count
+           that would end the meeting"
+    of: "2026-09-04, given the fork and its naming in the reader, the alternatives this record set
+         aside on 2026-09-01, an independent review of the method's own chapter on merging, and two
+         branches forked on one id in a throwaway repository"
+    read: "2026-09-04"
   s.2026_09_04_prior_reversal_share:
     asked: "Count the share of high-confidence prior-resting judgments that consolidation refuted,
             as a computed entry, and make the demotion rule a predicate the build evaluates."
@@ -366,6 +377,15 @@ known:
     name: "Places the reader reads hypothesis files from"
     from: "scripts/provenance.py"
     at: "hypothesis_dir - PROVENANCE.d beside the file the reader opens first"
+    of: "2026-09-04"
+  p.hypothesis_name_inputs:
+    v: 1
+    name: "What the name a refused write suggests for its hypothesis file is derived from - the
+           entry id; nothing of the claim, the branch or the session enters it"
+    from: "scripts/provenance.py"
+    at: "_hypothesis_name - the id with what a file name cannot hold replaced; the numeric suffix
+         beside it counts only the hypotheses this checkout already holds, so it never fires across
+         branches"
     of: "2026-09-04"
   p.hypothesis_thresholds:
     v: 0
@@ -992,6 +1012,29 @@ judgments:
                                     long; nothing another branch claims is pushed into a session, it
                                     is pulled by seed or surfaces as a collision on the same id"
       p.hypothesis_thresholds: 0
+  d.hypothesis_files_meet_on_one_name:
+    rests_on: [s.2026_09_04_merge_driver_reason, alt.record_merge_driver, p.hypothesis_name_inputs]
+    verdict: "hypothesis files do meet - two branches that fork on one id open the same file, since
+              the suggested name comes from the id alone and each head carries the day it was born,
+              so even one claim written twice collides - and the meeting is two writers on one
+              subject, repaired by a rename and judged by the dry run; a merge driver stays set aside
+              for that, never for an absence of conflicts"
+    because: "The alternative was set aside on the ground that separate files leave no textual
+              conflict to drive. That is false in the one case the fork exists for:
+              {{p.hypothesis_name_inputs}} thing decides the suggested name, the id itself, and the
+              suffix beside it counts only what one checkout holds, so it cannot see the other
+              branch. Two branches forked on one id write one path, and git has an add and an add
+              even where they agree, since each head carries its own day. What a driver would have to
+              settle there is which of two claims about one subject stands, which is the question the
+              dry run puts to a person - and the name is already the writer's to choose, so the
+              repair is a rename and not machinery bolted under a choice. The count is what would
+              show the name learning the branch or the session, which would end the meeting instead
+              of resolving it."
+    wrong_if: "p.hypothesis_name_inputs > 1"
+    seen:
+      s.2026_09_04_merge_driver_reason: "read 2026-09-04"
+      alt.record_merge_driver: rejected
+      p.hypothesis_name_inputs: 1
   d.local_claims_want_a_run:
     rests_on: [s.2026_09_04_calibration, prior.local_needs_a_run, m.claims.general_held,
                m.claims.local_checked_held, m.claims.local_assumed_held, m.reach.general_held,

@@ -520,16 +520,18 @@ stand until a person consolidates or answers. Deleting the file is neither.
 **How a merge goes.** git merges the files: additions in id order rarely meet, and hypothesis files
 meet only when two branches open one under the same name - the id's own, when both were refused on
 it - two writers on one subject: rename one and let the dry run judge them. The dry run tests the
-result - on the pull request and again on `main`, once the CI step exists. Fold a hypothesis the dry
-run proves *before* the pull request, so `main` receives base changes; let an unproven one merge as
-a file, and `main` carries an open hypothesis the opener counts. Nothing crosses branches unasked:
-`pull <seed> --from <ref>` lays what another branch committed beside your pull, and `consolidate
---from <ref> --dry-run` tests its record as one more hypothesis named after the ref - a pull, never
-a push, and how a dead branch's facts are harvested. Every write - `set`, `add`, `review`, `same`,
-`distinct`, the fold, the refutation - takes an exclusive lock on the record's directory where the
-platform has one - Windows has none - so two sessions on one file take turns instead of the last one
-discarding the first. In the tree each worktree writes its own copy and git merges them; out of the
-tree every worktree writes the one file, and only the lock stands between them.
+result: the pull request runs it on the merged tree, and the push to `main` runs it again as the
+second net, for two pull requests each consistent alone that contradict together. Fold a hypothesis
+the dry run proves *before* the pull request, so `main` receives base changes; let an unproven one
+merge as a file, and `main` carries an open hypothesis the opener counts. Nothing crosses branches
+unasked: `pull <seed> --from <ref>` lays what another branch committed beside your pull, and
+`consolidate --from <ref> --dry-run` tests its record as one more hypothesis named after the ref - a
+pull, never a push, and how a dead branch's facts are harvested. Every write - `set`, `add`,
+`review`, `same`, `distinct`, the fold, the refutation - takes an exclusive lock on the record's
+directory where the platform has one - Windows has none - so two sessions on one file take turns
+instead of the last one discarding the first. In the tree each worktree writes its own copy and git
+merges them; out of the tree every worktree writes the one file, and only the lock stands between
+them.
 
 ## The reader
 
