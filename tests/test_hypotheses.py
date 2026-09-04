@@ -112,6 +112,15 @@ class HypothesesBesideTheRecord(unittest.TestCase):
         code, out, _ = run(SCRIPTS / "provenance.py", "open", "--chars", "300", RECORD)
         self.assertIn("2 hypotheses wait - bigger_boiler", out)
 
+    def test_the_standing_line_says_who_needs_a_person_and_calls_nothing_else_contested(self):
+        # contested is one thing - an id two hypotheses hold with different claims; what the
+        # opener lists above the standing judgments needs a person, whatever the reason
+        code, out, _ = run(SCRIPTS / "provenance.py", "open", "--chars", "3000", RECORD)
+        self.assertEqual(code, 0, out)
+        self.assertIn("\nstanding:  (1 above needs a person)\n  = c.boiler_short:", out)
+        self.assertEqual(out.count("CONTESTED"), 1)
+        self.assertNotIn("are contested", out)
+
     def test_pull_reads_the_layer(self):
         code, out, _ = run(SCRIPTS / "provenance.py", "pull", "heat", RECORD)
         self.assertEqual(code, 0, out)
