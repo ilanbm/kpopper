@@ -228,9 +228,9 @@ sources:
            whether the field is still where a re-opener lands now that reopened_by exists"
     of: "this record at 84 judgments, all 51 declarations read by hand, 2026-09-04 - the last two
          written by the session that read them. Each names a sign; one names an entry, and the
-         record holds it; none is written as a list of what is missing. The eleven written since
-         reopened_by shipped rest on no prior, and every judgment that does rest on one carries
-         reopened_by instead"
+         record holds it; none is written as a list of what is missing. None of the eleven written
+         since reopened_by shipped rests on a prior; of the six judgments that do rest on one, four
+         carry reopened_by and two put their sign in wrong_if alone"
     read: "2026-09-04"
   run.claims_by_reach:
     from: s.2026_09_04_calibration
@@ -296,8 +296,9 @@ sources:
     name: "The five recipes this change names, run against this tree and against copies of it with a
            second line drawn - and under the interpreter every Python recipe gets"
     of: "2026-09-04: each of the three threshold counts taken again after a line was added to the
-         function its at: names, once as a module-level constant read by name and once as a bare
-         comparison, and each rose by one; the record's own two counts taken from its text; and the
+         function its at: names - as a module-level constant read by name, as one given a type as
+         well, and as a bare comparison - and each rose by one; the record's own two counts taken
+         from its text, with an implementation hole written under either quote; and the
          reader's own parser found missing under python3 -I, where it is installed for the person and
          not for the interpreter"
     read: "2026-09-04"
@@ -373,8 +374,9 @@ known:
     of: "2026-09-04"
     # measured by blocked_on_reopeners and re-read by hand, then corrected in the same pull
     # request: the two judgments this change adds declare holes of their own
-    name: "Judgments whose blocked_on names the sign that would re-open them, not an input the
-           record lacks"
+    name: "Judgments that declare a hole with blocked_on - the count. Whether each names a sign
+           that would re-open the decision, or an input the record lacks, is read by hand and said
+           beside it"
     from: run.blocked_on_reread
     at: "of 51 declared holes - 47 say observational and 4 implementation, the second half
          measured beside this one; none is written as what the record is missing, and the one

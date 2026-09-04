@@ -83,7 +83,7 @@ blocked_on_implementation:
             n += deps and kind == "implementation"
             deps, kind = False, ""
         deps = deps or bool(re.match(r'^    rests_on:', line))
-        m = re.match(r'^    blocked_on: "?([a-z]+)', line)
+        m = re.match(r'^    blocked_on: [\'"]?([a-z]+)', line)
         if m:
             kind = m.group(1)
     print(n + (deps and kind == "implementation"))
@@ -101,9 +101,14 @@ prior_count_thresholds:
   - &threshold_count |
     import ast, sys
     t = ast.parse(open(sys.argv[1], encoding='utf-8').read())
-    named = {g.id for n in t.body if isinstance(n, ast.Assign)
-             and isinstance(n.value, ast.Constant) and type(n.value.value) in (int, float)
-             for g in n.targets if isinstance(g, ast.Name)}
+    named = set()
+    for n in t.body:
+        if not isinstance(n, (ast.Assign, ast.AnnAssign)) or not isinstance(n.value, ast.Constant) \
+                or type(n.value.value) not in (int, float):
+            continue
+        for g in (n.targets if isinstance(n, ast.Assign) else [n.target]):
+            if isinstance(g, ast.Name):
+                named.add(g.id)
     have = {n.name for n in t.body if isinstance(n, ast.FunctionDef)}
     gone = [w for w in sys.argv[2:] if w not in have]
     if gone:
