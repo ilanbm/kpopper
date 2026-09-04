@@ -132,6 +132,17 @@ sources:
          with the fork, the dry run and sameness at ad4e23f, the three fixture records under tests/,
          and the method as it stood"
     read: "2026-09-04"
+  s.2026_09_04_hypothesis_claim_name:
+    asked: "Name a hypothesis for what it claims as well as for what it contradicts, so two branches
+            that disagree about one decision do not open the same file."
+    name: "The session that let a hypothesis be named for what it claims - what it was asked, and
+           what it was given. Its reading: the suggested name takes the id and a mark of the whole
+           claim, so two branches refused on one id open one file only where they claim the same
+           thing, and that meeting is the one worth keeping"
+    of: "2026-09-04, given the naming in the reader and the judgment beside it that two forks on one
+         id meet, the person's choice that the name come from the id and from the claim, and two
+         branches forked on one id in a throwaway repository"
+    read: "2026-09-04"
   s.2026_09_04_measure_recipes:
     asked: "Give the record's own counts a recipe, so a fact about the tree is re-measured by the
             pull request instead of standing on a number nobody re-read."
@@ -457,13 +468,13 @@ known:
     at: "hypothesis_dir - PROVENANCE.d beside the file the reader opens first"
     of: "2026-09-04"
   p.hypothesis_name_inputs:
-    v: 1
+    v: 2
     name: "What the name a refused write suggests for its hypothesis file is derived from - the
-           entry id; nothing of the claim, the branch or the session enters it"
+           entry id and the claim being written; nothing of the branch or the session enters it"
     from: "scripts/provenance.py"
-    at: "_hypothesis_name - the id with what a file name cannot hold replaced; the numeric suffix
-         beside it counts only the hypotheses this checkout already holds, so it never fires across
-         branches"
+    at: "_hypothesis_name - the id with what a file name cannot hold replaced, and six characters of
+         a digest of the whole claim; the numeric suffix beside them counts only the hypotheses this
+         checkout already holds, so it never fires across branches"
     of: "2026-09-04"
   p.hypothesis_thresholds:
     v: 0
@@ -738,6 +749,11 @@ open:
   q.arrangement_falsifiers: "will sessions write arrangement falsifiers a build can evaluate and
                              that say something - to be read as a foreign agent would, after
                              fifteen real arrangements?"
+  q.same_day_rereading: "where does a re-reading go when the session changed the file a premise was
+                         read from, on the day it was read? set refuses it into the base as two
+                         writers, and the hypothesis beside it is a contested reading the dry run
+                         fails, so a hand edit in the pull request is the only door left - the day
+                         may be the wrong grain for a writer that is also the world"
   q.sealed_falsifiers: "is one question - under this decision, can the sign still happen? -
                         enough against falsifiers a decision seals, or does the work on
                         predictions that change what they predict (performative prediction,
@@ -1159,28 +1175,31 @@ judgments:
                                     is pulled by seed or surfaces as a collision on the same id"
       p.hypothesis_thresholds: 0
   d.hypothesis_files_meet_on_one_name:
-    rests_on: [s.2026_09_04_merge_driver_reason, alt.record_merge_driver, p.hypothesis_name_inputs]
-    verdict: "hypothesis files do meet - two branches that fork on one id open the same file, since
-              the suggested name comes from the id alone and each head carries the day it was born,
-              so even one claim written twice collides - and the meeting is two writers on one
-              subject, repaired by a rename and judged by the dry run; a merge driver stays set aside
-              for that, never for an absence of conflicts"
-    because: "The alternative was set aside on the ground that separate files leave no textual
-              conflict to drive. That is false in the one case the fork exists for:
-              {{p.hypothesis_name_inputs}} thing decides the suggested name, the id itself, and the
-              suffix beside it counts only what one checkout holds, so it cannot see the other
-              branch. Two branches forked on one id write one path, and git has an add and an add
-              even where they agree, since each head carries its own day. What a driver would have to
-              settle there is which of two claims about one subject stands, which is the question the
-              dry run puts to a person - and the name is already the writer's to choose, so the
-              repair is a rename and not machinery bolted under a choice. The count is what would
-              show the name learning the branch or the session, which would end the meeting instead
-              of resolving it."
-    wrong_if: "p.hypothesis_name_inputs > 1"
+    rests_on: [s.2026_09_04_hypothesis_claim_name, s.2026_09_04_merge_driver_reason, alt.record_merge_driver, p.hypothesis_name_inputs]
+    request: s.2026_09_04_hypothesis_claim_name
+    verdict: "hypothesis files meet only where two branches claim the same thing under one id: the
+              suggested name carries the id contradicted and a mark of the claim written, so two
+              readings that disagree open two files and merge, and two that agree open one path that
+              git reports as an add and an add, since each head carries the day it was born; a merge
+              driver stays set aside for that meeting - the two heads say one thing, and either is
+              the whole of it - never for an absence of conflicts"
+    because: "This narrows what stood here rather than retiring it. That decision read the fork
+              honestly: the name came from the id alone, so two branches refused on one id wrote one
+              path whatever they claimed, and the meeting was two writers on one subject, repaired by
+              a rename and judged by the dry run. The rename is needed now only where the writers
+              disagree - a mark of the whole claim rides in the name, so different claims are
+              different files that git merges, and which reading stands is put to a person as a
+              contest, the question a driver would have had to answer and cannot. What is left is the
+              agreeing pair, kept on purpose: one claim gets one name wherever it is written, so two
+              branches that read the same thing meet on one path, and that merge asks nothing harder
+              than which day's head to keep. {{p.hypothesis_name_inputs}} is what enters a name now,
+              and a third - the branch, the session - would end even the meeting this keeps."
+    wrong_if: "p.hypothesis_name_inputs > 2"
     seen:
+      s.2026_09_04_hypothesis_claim_name: "read 2026-09-04"
       s.2026_09_04_merge_driver_reason: "read 2026-09-04"
       alt.record_merge_driver: rejected
-      p.hypothesis_name_inputs: 1
+      p.hypothesis_name_inputs: 2
   d.local_claims_want_a_run:
     rests_on: [s.2026_09_04_calibration, prior.local_needs_a_run, m.claims.general_held,
                m.claims.local_checked_held, m.claims.local_assumed_held, m.reach.general_held,

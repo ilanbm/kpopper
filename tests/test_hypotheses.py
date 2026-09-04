@@ -9,6 +9,7 @@ import datetime
 import os
 import pathlib
 import re
+import shlex
 import shutil
 import subprocess
 import sys
@@ -43,6 +44,42 @@ def copy_fixture(into):
 
 def dom_of(page):
     return re.sub(r"<script>.*?</script>", "", page, flags=re.S)
+
+
+def git(d, *args, must=True):
+    p = subprocess.run(["git", "-c", "user.email=t@example.test", "-c", "user.name=t",
+                        "-c", "commit.gpgsign=false"] + list(args), cwd=str(d),
+                       capture_output=True, text=True)
+    if must and p.returncode:
+        raise AssertionError(" ".join(args) + "\n" + p.stdout + p.stderr)
+    return p.returncode, p.stdout + p.stderr
+
+
+def forked_on_one_id(d, left, right):
+    """A throwaway repository holding the base alone, forked in two: each branch reads
+    heat.loss_kw its own way, is refused into the base, and runs the very command the refusal
+    named - so the file each opens is the one the reader chose, not one the test picked.
+    -> (record, the two names)."""
+    d = pathlib.Path(d)
+    rec = d / "PROVENANCE.yaml"
+    shutil.copy(FIXTURE / "PROVENANCE.yaml", rec)
+    git(d, "init", "-q", "-b", "main")
+    git(d, "add", "-A")
+    git(d, "commit", "-qm", "the record")
+    names = []
+    for branch, (value, as_of) in (("left", left), ("right", right)):
+        git(d, "switch", "-q", "-c", branch, "main")
+        code, out, err = run(SCRIPTS / "provenance.py", "set", "heat.loss_kw", value,
+                             "--as-of", as_of, rec)
+        assert code == 1, out + err
+        said = re.search(r"set heat\.loss_kw .*--hypothesis (\S+)", out + err)
+        code, out, err = run(SCRIPTS / "provenance.py", *shlex.split(said.group(0)), rec)
+        assert code == 0, out + err
+        names.append(said.group(1))
+        git(d, "add", "-A")
+        git(d, "commit", "-qm", branch)
+    git(d, "switch", "-q", "main")
+    return rec, names[0], names[1]
 
 
 class HypothesesBesideTheRecord(unittest.TestCase):
@@ -201,7 +238,7 @@ class TheWritePathForks(unittest.TestCase):
                 self.assertEqual((out + err).strip(),
                                  f"refused - heat.loss_kw holds 31 as of 2026-09-02, and {why} says 35 - "
                                  "the base keeps what it holds and a hypothesis holds the other: set "
-                                 f"heat.loss_kw 35 --as-of {as_of} --hypothesis heat_loss_kw")
+                                 f"heat.loss_kw 35 --as-of {as_of} --hypothesis heat_loss_kw_324dbd")
             self.assertEqual(rec.read_text(encoding="utf-8"), before)
             # the same value is no contradiction, and nothing to write
             code, out, _ = run(SCRIPTS / "provenance.py", "set", "heat.loss_kw", "31", rec)
@@ -309,14 +346,14 @@ class TheWritePathForks(unittest.TestCase):
                              "refused - heat.loss_kw is already an entry, holding 31 as of 2026-09-02, and a "
                              "reading of the same day says 35 - the base keeps what it holds and a hypothesis "
                              "holds the other: add heat.loss_kw v=35 name=x --as-of 2026-09-02 --hypothesis "
-                             "heat_loss_kw")
+                             "heat_loss_kw_324dbd")
             # a newer reading is an update, and add says which command that is
             code, out, err = run(SCRIPTS / "provenance.py", "add", "heat.loss_kw", "v=35", "name=x",
                                  "--as-of", "2026-09-04", rec)
             self.assertEqual(code, 1)
             self.assertIn("a newer reading updates it: set heat.loss_kw 35; one that disagrees opens a "
                           "hypothesis: add heat.loss_kw v=35 name=x --as-of 2026-09-04 --hypothesis "
-                          "heat_loss_kw", out + err)
+                          "heat_loss_kw_324dbd", out + err)
             # the same value is what it always was: already an entry
             code, out, err = run(SCRIPTS / "provenance.py", "add", "heat.loss_kw", "v=31", rec)
             self.assertEqual(code, 1)
@@ -334,7 +371,15 @@ class TheWritePathForks(unittest.TestCase):
                              "request: names a person's asking for the change, so a different verdict under "
                              "the same id contradicts it, and a hypothesis holds the other: add c.boiler_short "
                              "'rests_on=[heat.boiler_kw, heat.loss_kw]' 'verdict=the old boiler holds after "
-                             "all' 'wrong_if=heat.loss_kw > 40' --as-of 2026-09-03 --hypothesis c_boiler_short")
+                             "all' 'wrong_if=heat.loss_kw > 40' --as-of 2026-09-03 --hypothesis c_boiler_short_26d205")
+            # a verdict of any shape is still named: the mark is taken over the whole of it, and
+            # a claim it could not read would leave the refusal with no command to offer
+            code, out, err = run(SCRIPTS / "provenance.py", "add", "c.boiler_short",
+                                 "rests_on=[heat.boiler_kw, heat.loss_kw]", "verdict={1: x, a: y}",
+                                 "wrong_if=heat.loss_kw > 40", "--as-of", "2026-09-03", rec)
+            self.assertEqual(code, 1)
+            self.assertNotIn("Traceback", out + err)
+            self.assertIn("--hypothesis c_boiler_short_6bb100", out + err)
             self.assertEqual(rec.read_text(encoding="utf-8"), before)
             # the refusal joins the others, it does not replace them
             code, out, err = run(SCRIPTS / "provenance.py", "add", "c.boiler_short",
@@ -527,6 +572,43 @@ class TheWritePathForks(unittest.TestCase):
             self.assertEqual(run(SCRIPTS / "provenance.py", "gate", state, rec)[0], 0)
 
 
+class TwoBranchesRefusedOnOneId(unittest.TestCase):
+    """What the suggested name has to survive: two branches, each refused on one id, each
+    writing what it read into the file its own refusal named, and then a merge."""
+
+    def test_two_readings_that_disagree_open_two_files_and_merge(self):
+        """The case the fork exists for. The claims differ, so the names differ, so git has
+        two additions and no conflict - and the question of which reading stands, which git
+        could never have answered, is left where it belongs: the dry run, for a person."""
+        with tempfile.TemporaryDirectory() as d:
+            rec, left, right = forked_on_one_id(d, ("28", "2026-09-01"), ("33", "2026-09-02"))
+            self.assertEqual((left, right), ("heat_loss_kw_bc80ee", "heat_loss_kw_df920f"))
+            for branch in ("left", "right"):
+                self.assertEqual(git(d, "merge", "--no-edit", "-q", branch)[0], 0)
+            self.assertEqual(sorted(p.name for p in (pathlib.Path(d) / "PROVENANCE.d").iterdir()),
+                             [f"{left}.yaml", f"{right}.yaml"])
+            self.assertEqual(git(d, "status", "--short")[1], "")
+            code, out, err = run(SCRIPTS / "kpopper", "consolidate", "--dry-run", rec)
+            self.assertEqual(code, 1, out + err)
+            self.assertIn("contested (1): an id two hypotheses hold with different claims", out)
+            self.assertIn(f"{left} says heat.loss_kw: 28 ", out)
+            self.assertIn(f"{right} says heat.loss_kw: 33 ", out)
+
+    def test_two_readings_that_agree_still_meet_on_one_name(self):
+        """And that is the outcome to keep. One claim gets one name wherever it is written,
+        so two branches that read the same thing open one path; each head carries the day it
+        was born, so git has an add and an add. The meeting says two writers reached the same
+        reading, and either head is the whole of it."""
+        with tempfile.TemporaryDirectory() as d:
+            rec, left, right = forked_on_one_id(d, ("28", "2026-09-01"), ("28", "2026-09-02"))
+            self.assertEqual(left, right)
+            self.assertEqual(git(d, "merge", "--no-edit", "-q", "left")[0], 0)
+            code, out = git(d, "merge", "--no-edit", "-q", "right", must=False)
+            self.assertEqual(code, 1, out)
+            self.assertIn(f"CONFLICT (add/add): Merge conflict in PROVENANCE.d/{left}.yaml", out)
+            git(d, "merge", "--abort")
+
+
 class ThePageDrawsTheBase(unittest.TestCase):
     def test_the_page_carries_the_count_and_not_the_proposals(self):
         code, page, err = run(SCRIPTS / "render_page.py", RECORD)
@@ -650,7 +732,7 @@ class TheEdgesHold(unittest.TestCase):
                                  "title=one is large", "wrong_if=x.one > 9", "--as-of", "2026-09-02", rec)
             self.assertEqual(code, 1)
             self.assertIn("c.one is already a judgment, concluding 'one is small'", out + err)
-            self.assertIn("--hypothesis c_one", out + err)
+            self.assertIn("--hypothesis c_one_c3307f", out + err)
             for name, title, seen in (("h1", "one is small", "1"), ("h2", "one is small", "2")):
                 (pathlib.Path(d) / "PROVENANCE.d").mkdir(exist_ok=True)
                 (pathlib.Path(d) / "PROVENANCE.d" / f"{name}.yaml").write_text(
@@ -663,14 +745,41 @@ class TheEdgesHold(unittest.TestCase):
             self.assertEqual(P.contested(P.load([str(rec)])),
                              {"c.one": [("h1", "one is small"), ("h2", "one is large")]})
 
+    def test_the_name_is_the_id_and_a_mark_of_the_claim(self):
+        """The suggested name carries both, so two branches refused on one id open one file
+        only where they claim the same thing. The mark is of the whole claim and is the same
+        six characters everywhere - a name a checkout computed alone still has to meet the
+        one another checkout computed."""
+        doc = P.load([str(RECORD)])
+        self.assertEqual(P._hypothesis_name(doc, "heat.loss_kw", 35), "heat_loss_kw_324dbd")
+        self.assertEqual(P._hypothesis_name(doc, "heat.loss_kw", 33), "heat_loss_kw_df920f")
+        # written the way the record reads a claim: spacing and a number's form are not the claim
+        self.assertEqual(P._claim_mark(" one   is  large "), P._claim_mark("one is large"))
+        self.assertEqual(P._claim_mark(35), P._claim_mark("35.0"))
+        self.assertEqual(P._claim_mark(1000), P._claim_mark("1,000"))
+        self.assertEqual(P._claim_mark("-0"), P._claim_mark("0.00"))
+        self.assertEqual(P._claim_mark([1]), P._claim_mark([1.0]))
+        self.assertEqual(P._claim_mark({"b": 1, "a": 2}), P._claim_mark({"a": 2, "b": 1}))
+        # and no claim reads as another by where a delimiter of the writing happens to fall
+        self.assertNotEqual(P._claim_mark({"a:b": "c"}), P._claim_mark({"a": "b:c"}))
+        self.assertNotEqual(P._claim_mark(["a,b"]), P._claim_mark(["a", "b"]))
+        # two claims that read alike until their last word are the pair a name has to part
+        self.assertNotEqual(P._claim_mark("the boiler holds through February"),
+                            P._claim_mark("the boiler holds through March"))
+        # and two numbers longer than any working precision are still two numbers
+        self.assertNotEqual(P._claim_mark("123456789012345678901234567890"),
+                            P._claim_mark("123456789012345678901234567891"))
+        # every claim gets a name, whatever it is made of: keys of mixed kinds still order
+        self.assertTrue(P._claim_mark({1: "x", "a": "y"}))
+
     def test_an_occupied_name_is_not_reused(self):
         doc = P.load([str(RECORD)])
-        taken = {"name": "a_b", "path": "", "head": {}, "doc": {}, "ids": {"a.b"},
+        base = "a_b_" + P._claim_mark(1)
+        taken = {"name": base, "path": "", "head": {}, "doc": {}, "ids": {"a.b"},
                  "raw": {"a.b": {"v": 1}}, "error": None}
-        doc.hypotheses = {"a_b": taken}
-        self.assertEqual(P._hypothesis_name(doc, "a.b", 1), "a_b")        # the same claim: its own
-        self.assertEqual(P._hypothesis_name(doc, "a.b", 2), "a_b_2")      # another claim on the id
-        self.assertEqual(P._hypothesis_name(doc, "a_b", 5), "a_b_2")      # an unrelated id: not there
+        doc.hypotheses = {base: taken}
+        self.assertEqual(P._hypothesis_name(doc, "a.b", 1), base)          # the same claim: its own
+        self.assertEqual(P._hypothesis_name(doc, "a_b", 1), base + "_2")   # an unrelated id, marked alike
 
 
 if __name__ == "__main__":
