@@ -475,13 +475,13 @@ evaluated at every dry run and never written.
 
 Every command reads the hypotheses over the base and evaluates the base alone: `pull` shows what
 each proposes beside the value; `check` and `open` say CONTESTED where two hold one id with
-different claims - a rival claim a person must decide between, and nothing else is ever called
-contested; the opener's count line says how many wait, with each one's age and how many judgments
-rest on it, and draws no line - when one has waited too long is your reading
-(`q.hypothesis_lifetime` is open). A hypothesis ends **folded** into the base by `consolidate`, or
-**refuted** by `consolidate --refute NAME "why"` - one negative finding stays, `hyp.<name>:
-refuted`, its claim as the name and the why as its place, and nothing else of it - or it stays
-**untested**, counted at every open until someone does one of the two.
+different claims - a rival claim a person must decide between, and nothing else is ever contested;
+the opener's count line says how many wait, with each one's age and how many judgments rest on it,
+and draws no line - when one has waited too long is your reading (`q.hypothesis_lifetime` is open).
+A hypothesis ends **folded** into the base by `consolidate`, or **refuted** by `consolidate --refute
+NAME "why"` - one negative finding stays, `hyp.<name>: refuted`, its claim as the name, the why as
+its place and the judgments it held in `refutes:`, and nothing else of it - or it stays
+**untested**, counted at every open until someone does one.
 
 **A task is a judgment** whose truth is pending, and the fork is where it is written: the problem as
 a judgment about today's state, with its source; `rests_on`, the premises taken as true; `verdict`,
