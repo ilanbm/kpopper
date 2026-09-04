@@ -132,6 +132,18 @@ sources:
          with the fork, the dry run and sameness at ad4e23f, the three fixture records under tests/,
          and the method as it stood"
     read: "2026-09-04"
+  s.2026_09_04_measure_recipes:
+    asked: "Give the record's own counts a recipe, so a fact about the tree is re-measured by the
+            pull request instead of standing on a number nobody re-read."
+    name: "The session that gave the record's own counts a recipe - what it was asked, and what it
+           was given. Its reading: a line a count draws is counted inside the function the entry's
+           at: names and nowhere else, and a count whose subject is the record is taken from the
+           record's own text rather than through the reader that check runs"
+    of: "2026-09-04, given the remeasure step at 1c715a2 with five entries already named, the count
+         of declared holes standing at 37 while the record held 49, the three threshold entries and
+         the functions their at: scopes them to, and the isolated interpreter every Python recipe
+         runs under"
+    read: "2026-09-04"
   s.2026_09_04_merge_driver_reason:
     asked: "Correct the recorded reason for setting a merge driver aside: hypothesis files do meet,
             when two branches fork on one id. The decision stands; the reason is what changes."
@@ -211,6 +223,16 @@ sources:
            cannot be evaluated, or the sign that would re-open a decision"
     of: "this record at 45 judgments, read by hand, 2026-09-03"
     read: "2026-09-03"
+  run.blocked_on_reread:
+    name: "Every blocked_on in this record, read again for which meaning it carries - and for
+           whether the field is still where a re-opener lands now that reopened_by exists"
+    of: "this record at 86 judgments, all 53 declarations read by hand, 2026-09-04 - two written
+         by the session that read them, and two more read as they arrived with the branch it was
+         rebased onto. Each names a sign; one names an entry, and the record holds it; none is
+         written as a list of what is missing. None of the thirteen written since reopened_by
+         shipped rests on a prior; of the six judgments that do rest on one, four carry
+         reopened_by and two put their sign in wrong_if alone"
+    read: "2026-09-04"
   run.claims_by_reach:
     from: s.2026_09_04_calibration
     name: "A bank of claims about two projects and about how things usually work, answered twice
@@ -271,6 +293,17 @@ sources:
          then re-measured with seen left as it was, then seen refreshed by hand"
     read: "2026-09-03"
 
+  run.recipes_probed:
+    name: "The five recipes this change names, run against this tree and against copies of it with a
+           second line drawn - and under the interpreter every Python recipe gets"
+    of: "2026-09-04: each of the three threshold counts taken again after a line was added to the
+         function its at: names - as a module-level constant read by name, as one given a type as
+         well, and as a bare comparison - and each rose by one; the record's own two counts taken
+         from its text, with an implementation hole written under either quote; and the
+         reader's own parser found missing under python3 -I, where it is installed for the person and
+         not for the interpreter"
+    read: "2026-09-04"
+
   run.records_read_both_ways:
     name: "Four records written before the reader knew reopened_by, read by the reader before and
            after it learned the field - check, open, pull, affects, verify, and the page with its
@@ -329,12 +362,28 @@ known:
          its own change and written after; and 'no fresh reading' needs a threshold nobody stated,
          which the method forbids inventing. An entry with no recipe is this shape still, so it stays
          the default and a recipe is named per entry"
+  m.blocked_on_implementation:
+    v: 4
+    name: "Judgments whose declared hole calls itself an implementation hole - work not done yet -
+           rather than an observation nobody has made"
+    from: run.blocked_on_reread
+    at: "of 53 - the other 49 open observational; the split is measured on both sides, so neither
+         half drifts while the total holds"
+    measure: blocked_on_implementation
   m.blocked_on_reopeners:
-    v: 37
-    name: "Judgments whose blocked_on names the sign that would re-open them, not an input the
-           record lacks"
-    from: run.blocked_on_read
-    at: "of 37 declared holes - 34 say observational and 3 implementation; none waits on an entry"
+    v: 53
+    of: "2026-09-04"
+    # measured by blocked_on_reopeners and re-read by hand, then corrected twice in the same
+    # pull request: the two judgments this change adds declare holes of their own, and two more
+    # arrived with the branch it was rebased onto
+    name: "Judgments that declare a hole with blocked_on - the count. Whether each names a sign
+           that would re-open the decision, or an input the record lacks, is read by hand and said
+           beside it"
+    from: run.blocked_on_reread
+    at: "of 53 declared holes - 49 say observational and 4 implementation, the second half
+         measured beside this one; none is written as what the record is missing, and the one
+         that names an entry names one the record holds"
+    measure: blocked_on_reopeners
   m.claims.general_held:
     v: 3
     name: "Claims about how things usually work that held when scored"
@@ -386,6 +435,7 @@ known:
     at: "coverage and coverage_lines: counts and shares, printed; the only comparison is a
          falsifier's own"
     of: "2026-09-03"
+    measure: coverage_thresholds
   p.fields_a_build_writes:
     v: 0
     name: "Fields of the record a read command - check, open, page - writes"
@@ -422,6 +472,7 @@ known:
     from: "scripts/provenance.py"
     at: "hypothesis_line - age and reach printed as facts; the only comparison is a falsifier's own"
     of: "2026-09-04"
+    measure: hypothesis_thresholds
   p.pointer_home:
     v: "<git common dir>/kpopper-record"
     name: "Where a record the tree cannot hold registers its path"
@@ -532,6 +583,7 @@ known:
     at: "HIGH_CONFIDENCE, read by priors_line - the matrix's own line, printed inside the line the
          count prints"
     of: "2026-09-04"
+    measure: prior_count_thresholds
   p.recipe_runners:
     v: 1
     name: "Places a measurement recipe is executed - files under scripts/ that name the allowlist
@@ -1406,6 +1458,36 @@ judgments:
                                              whatever later rests on the contradiction goes there - a
                                              session is never the unit"
       p.hypothesis_homes: 1
+  d.record_measured_from_its_text:
+    rests_on: [s.2026_09_04_measure_recipes, run.recipes_probed, d.measure_names_a_recipe, m.blocked_on_reopeners]
+    verdict: "a recipe whose subject is the record counts from the record's own text and imports
+              nothing - not the reader that check runs, and not a parser installed beside it"
+    because: "{{m.blocked_on_reopeners}} declared holes is a fact about the record, and the record
+              is in the tree, so it is measurable like any other. Taken through the reader it would
+              stop being evidence: the number and the thing it is evidence about would come out of
+              one function, and a reading that cannot disagree with what it measures is not a
+              measurement - it is the same claim written twice. The isolation
+              {{d.measure_names_a_recipe}} runs the Python recipes under says the same thing from the
+              other side and adds a second reason: an interpreter that will not let a file in the
+              checkout stand in for a module also will not see a package installed for the person
+              rather than for itself, and the reader's own parser is installed exactly that way here
+              - a recipe importing it runs green on the pull request and fails at a keyboard, which
+              is a hole wearing a measurement's clothes. What is left is the file's own lines, and
+              they are enough: an entry opens at one indent and its fields at the next."
+    blocked_on: "observational: falsified by a shape the record grows that a line scan miscounts
+                 while the reader reads it right - a field written as a block scalar, or a collection
+                 nested a level deeper - or by a count about the record that no scan can take without
+                 reimplementing the reader"
+    seen:
+      s.2026_09_04_measure_recipes: "read 2026-09-04"
+      run.recipes_probed: "read 2026-09-04"
+      d.measure_names_a_recipe: "an entry whose value is a fact about the tree names its recipe with
+                                 measure: - a bare name, never a command; the recipes live beside the
+                                 record as argument lists in one file reviewed as code, and run only
+                                 on the pull request, by one runner, without a shell - so the record
+                                 never carries a command, and no command that reads the record runs
+                                 one"
+      m.blocked_on_reopeners: 53
   d.refutations_keep_judgment_ids:
     from: s.2026_09_04_prior_reversal_share
     rests_on: [d.prior_confidence_survives_refutation, d.refuted_hypothesis_leaves_one_finding]
@@ -1505,7 +1587,7 @@ judgments:
                   an input after all"
     seen:
       prior.field_name_reads_as_gate: 0.7
-      m.blocked_on_reopeners: 37
+      m.blocked_on_reopeners: 53
       m.older_records_changed: 0
       d.declared_hole_is_a_note: "check fails only an undeclared gap; a hole declared with
                                   blocked_on is a note"
@@ -1704,6 +1786,32 @@ judgments:
                           person; only a predicate that holds fails the build"
     distinct_from: d.written_layer_drawn_by_build
     # distinct 2026-09-04: one says where the mark is made - by the build, in the markup, so it survives a host that strips scripts; this one says which reading the snapshot holds, which is what decides whether there is anything to mark
+  d.threshold_read_inside_its_function:
+    rests_on: [s.2026_09_04_measure_recipes, run.recipes_probed, p.prior_count_thresholds, p.coverage_thresholds, p.hypothesis_thresholds]
+    verdict: "a line a count draws is counted inside the function the entry's at: names and nowhere
+              else - a module-level number the function reads by name, or a number other than zero or
+              one it compares against; what a helper it calls draws belongs to that helper's own
+              count"
+    because: "Three entries here say a report draws {{p.prior_count_thresholds}} line or none, and a
+              recipe that grepped the file for numbers would answer a different question. The reader
+              also refuses a falsifier over a share above one - a comparison against 1, over two
+              computed names, in a function none of these entries names - and a count that swept the
+              module would read it as a second line and correct a 1 upward against a judgment that
+              says a second would be wrong. So the at: is the scope and the function is the unit.
+              Inside it a line is named, or it is not zero or one: zero and one are how this code
+              says empty and singular, and a line worth arguing about is given a name the way the
+              matrix's own is. Both halves fire - each of the three counts rose by one when a line
+              was added, once as a named constant and once as a bare comparison - and a function the
+              file no longer has reads as a hole rather than as a zero."
+    blocked_on: "observational: falsified by a line this cannot see - drawn inside a helper the
+                 function calls, or written as a comparison against zero or one that readers treat as
+                 a threshold - or by a name it counts that nobody would argue with"
+    seen:
+      s.2026_09_04_measure_recipes: "read 2026-09-04"
+      run.recipes_probed: "read 2026-09-04"
+      p.prior_count_thresholds: 1
+      p.coverage_thresholds: 0
+      p.hypothesis_thresholds: 0
   d.tree_reads_as_a_hypothesis:
     rests_on: [s.2026_09_04_remeasure, d.dry_run_is_check_on_the_union, d.contradiction_by_id_and_day, d.moved_is_a_flag, p.union_tests]
     verdict: "the tree's readings that differ from the record are laid over it as one more
