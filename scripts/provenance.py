@@ -1090,6 +1090,10 @@ def check(paths):
     return 1 if fail else 0
 
 
+def _fired_failure(name, judgment):
+    return f"{name}: wrong_if holds ({judgment['pred']}) - broken by its own condition"
+
+
 def check_lines(paths):
     """What check finds -> (fail, note, moved, contested, summary), unprinted: the gate reads
     the same lines the command prints."""
@@ -1171,7 +1175,7 @@ def check_lines(paths):
                 fail.append(f"{name}: {what} - and nothing says why not, so it can never be "
                             f"re-checked")
         elif evaluate(j["pred"], raw, ids) is True:
-            fail.append(f"{name}: wrong_if holds ({j['pred']}) - broken by its own condition")
+            fail.append(_fired_failure(name, j))
         elif [t for t in ID.findall(j["pred"]) if t in PAGE]:
             named_page = sorted({t for t in ID.findall(j["pred"]) if t in PAGE})
             note.append(f"{name}: wrong_if reads {', '.join(named_page)}, which is counted "
@@ -2318,6 +2322,29 @@ def _sound_references(a, doc, ids, jud, fields, raw):
     return out
 
 
+def _sound_citation(a, doc, ids, jud, fields, raw):
+    """An explicit replacement citation names a recorded source and its new location."""
+    if a.get("source") is None and a.get("at") is None:
+        return []
+    if a["kind"] != "set":
+        return ["--source and --at apply to set; add carries from= and at= in its fields"]
+    if not isinstance(a.get("source"), str) or not a["source"].strip() \
+            or not isinstance(a.get("at"), str) or not a["at"].strip():
+        return ["set requires --source and --at together, both nonempty"]
+    src = a["source"]
+    body = raw.get(src)
+    if src not in ids or src == a["id"] or src in jud or is_builtin(src) \
+            or not isinstance(body, dict) or any(f in body for f in ("v", "quoted", "rule")) \
+            or not any(body.get(f) for f in ("asked", "file", "url", "of", "read")):
+        return [f"{src} is not a recorded source; add the source before citing it"]
+    current = raw.get(a["id"])
+    if isinstance(current, dict) and any(f in current for f in ("src", "source")):
+        return ["set --source writes from/at; reconcile the entry's src/source fields first"]
+    if isinstance(current, dict) and any(isinstance(current.get(f), (dict, list)) for f in ("from", "at")):
+        return ["set --source needs scalar from/at fields"]
+    return []
+
+
 def _reopener_is_prose(a, doc, ids, jud, fields, raw):
     """A re-opener is the sign a person reads; one written as a comparison over an entry is
     a predicate in the wrong field, and it is refused before it can look evaluated."""
@@ -2545,7 +2572,8 @@ def _command_of(a, name):
                 parts.append(f"{f}={s}")
         else:
             parts.append(str(body))
-    for opt, key in (("--in", "into"), ("--as-of", "as_of"), ("--why", "why")):
+    for opt, key in (("--in", "into"), ("--as-of", "as_of"), ("--why", "why"),
+                     ("--source", "source"), ("--at", "at")):
         if a.get(key):
             parts += [opt, str(a[key])]
     parts += ["--hypothesis", name]
@@ -2656,7 +2684,7 @@ def _nearest_existing(a, doc, ids, jud, fields, raw):
 
 # Every refusal a write can meet, in one place. The fork on a contradiction is the last of
 # them; the entries nearest a new one are said just before it.
-VALIDATORS = [_known_key, _sound_dependencies, _sound_references, _reopener_is_prose,
+VALIDATORS = [_known_key, _sound_dependencies, _sound_references, _sound_citation, _reopener_is_prose,
               _arrangement_is_sound, _request_names_the_asking, _not_born_broken,
               _measure_is_a_name, _nearest_existing, _forks_on_contradiction]
 
@@ -2669,9 +2697,53 @@ def validate(action, doc, ids, jud, fields, raw):
 
 
 # ── the edits, on text ───────────────────────────────────────────────────────
-def _set_in(lines, key, value, stamp, why):
+def _citation_field_in(lines, key, field, value):
+    """Replace a scalar citation token, preserving other fields, comments and quoting.
+
+    Tokens distinguish a direct from/at field from those words inside a quoted value
+    or a nested mapping. Scanning also works when a citation uses an external alias.
+    """
+    _, ind, s, e = _locate(lines, key)
+    block = "\n".join(lines[s:e])
+    tokens = list(yaml.scan(block))
+    depth = 0
+    for i, token in enumerate(tokens):
+        if isinstance(token, (yaml.BlockMappingStartToken, yaml.FlowMappingStartToken,
+                              yaml.BlockSequenceStartToken, yaml.FlowSequenceStartToken)):
+            depth += 1
+        elif isinstance(token, (yaml.BlockEndToken, yaml.FlowMappingEndToken, yaml.FlowSequenceEndToken)):
+            depth -= 1
+        elif isinstance(token, yaml.KeyToken) and depth == 2 \
+                and isinstance(tokens[i + 1], yaml.ScalarToken) and tokens[i + 1].value == field:
+            colon = tokens[i + 2]
+            old = tokens[i + 3]
+            if isinstance(old, (yaml.ScalarToken, yaml.AliasToken)):
+                start, end = old.start_mark.index, old.end_mark.index
+                replacement = scalar(value, _style(block[start:end]), fold=False)
+            elif isinstance(old, (yaml.KeyToken, yaml.BlockEndToken, yaml.FlowEntryToken, yaml.FlowMappingEndToken)):
+                start = end = colon.end_mark.index
+                replacement = " " + scalar(value, fold=False)
+            else:
+                raise Refused(f"{key}: {field} is not a scalar citation")
+            block = block[:start] + replacement + block[end:]
+            lines[s:e] = block.split("\n")
+            return
+    if _inline(lines[s]).startswith("{"):
+        opening = next(t for t in tokens if isinstance(t, yaml.FlowMappingStartToken))
+        at = opening.end_mark.index
+        block = block[:at] + f"{field}: {scalar(value, fold=False)}, " + block[at:]
+        lines[s:e] = block.split("\n")
+    else:
+        _replace_field(lines, s, e, field,
+                       [" " * (ind + 2) + f"{field}: {scalar(value, fold=False)}"], after="of")
+
+
+def _set_in(lines, key, value, stamp, why, source=None, at=None):
     """-> (old value as written, field). The value field of `key` rewritten in place, in
     the style it already had; `of:` stamped; the reason, if any, as a comment beneath."""
+    if source is not None:
+        _citation_field_in(lines, key, "from", source)
+        _citation_field_in(lines, key, "at", at)
     loc = _locate(lines, key)
     name, ind, s, e = loc
     if _inline(lines[s]).startswith("{"):
@@ -3079,7 +3151,7 @@ def _fork(paths, action):
     if kind == "set":
         now = value_of(raw, ids, nid)
         if nid in hyp["ids"] and now is not None and _same(now, action["value"]) \
-                and not action.get("as_of"):
+                and not action.get("as_of") and action.get("source") is None:
             print(f"{nid} is already {scalar(action['value'], fold=False)} in hypothesis {name}; "
                   f"nothing written")
             return 0
@@ -3089,7 +3161,8 @@ def _fork(paths, action):
                 raise Refused(f"refused - no file of the record holds {nid}")
             collection, block = got
             out.append("carry " + _insert_block(lines, collection, nid, block) + f" of hypothesis {name}")
-        old, field = _set_in(lines, nid, action["value"], stamp, action.get("why"))
+        old, field = _set_in(lines, nid, action["value"], stamp, action.get("why"),
+                             action.get("source"), action.get("at"))
         out.append(f"set {nid} in hypothesis {name}: {old} -> {scalar(action['value'], fold=False)} "
                    f"(as of {stamp})")
     elif kind == "add":
@@ -3139,6 +3212,7 @@ def _fork(paths, action):
             now = value_of(raw2, ids2, nid)
             if now is None or not _same(now, action["value"]):
                 raise ValueError(f"{nid} reads back as {now!r}")
+            _check_citation_readback(action, raw2[nid])
     except (Exception, SystemExit) as e:
         if original is None:
             os.remove(hyp["path"])
@@ -3232,6 +3306,12 @@ def _review_section(paths, brief, title, stamp, raw, ids, jud):
     return 0
 
 
+def _check_citation_readback(action, body):
+    if action.get("source") is not None and (body.get("from") != action["source"]
+                                             or body.get("at") != action["at"]):
+        raise ValueError(f"{action['id']} did not retain the requested from/at citation")
+
+
 def _apply(paths, action):
     doc = load(paths)
     ids, jud, fields = infer(doc)
@@ -3317,11 +3397,15 @@ def _apply(paths, action):
     lines = original.split("\n")
     if kind == "set":
         now = value_of(raw, ids, nid)
-        if now is not None and _same(now, action["value"]) and not action.get("as_of"):
+        if now is not None and _same(now, action["value"]) and not action.get("as_of") \
+                and action.get("source") is None:
             print(f"{nid} is already {scalar(action['value'], fold=False)}; nothing written")
             return 0
-        old, field = _set_in(lines, nid, action["value"], stamp, action.get("why"))
+        old, field = _set_in(lines, nid, action["value"], stamp, action.get("why"),
+                             action.get("source"), action.get("at"))
         out.append(f"set {nid}: {old} -> {scalar(action['value'], fold=False)} (as of {stamp})")
+        if action.get("source") is not None:
+            out.append(f"source: {action['source']}, at {action['at']}")
     elif kind == "add" and supersede:
         _, why = may_supersede(nid, jud[nid]["body"], body, raw, ids, jud, fields, action.get("as_of"),
                                facts)
@@ -3361,6 +3445,7 @@ def _apply(paths, action):
             now = value_of(raw2, ids2, nid)
             if now is None or not _same(now, action["value"]):
                 raise ValueError(f"{nid} reads back as {now!r}")
+            _check_citation_readback(action, raw2[nid])
         elif nid not in ids2 and nid not in (doc2.get("meta") or {}):
             raise ValueError(f"{nid} is not in the record after the write")
         return doc2, ids2, jud2, fields2, raw2
@@ -3468,16 +3553,31 @@ def _report(paths, kind, nid, doc, ids, jud, fields, raw):
 
 # ── the hooks' own two commands ──────────────────────────────────────────────
 # The opener marks where a session began; the stop gate holds the end against that mark.
-# What already failed, or was already unserved, when the session opened is never the
-# session's doing - so the gate reminds about what the session itself left, once.
+# Existing judgments can become false when evidence changes. That is a finding to
+# retain, not a structural error to erase before the session can finish.
+def _gate_judgments(ids, jud, raw):
+    """Mark both the judgment and the readings it was evaluated against, not its seen alone."""
+    return {
+        name: {
+            "shape": hashlib.sha256(yaml.safe_dump({"body": j["body"], "deps": j["deps"],
+                                                     "predicate": j["pred"]}, sort_keys=False).encode()).hexdigest(),
+            "predicate": evaluate(j["pred"], raw, ids),
+            "arrangement": is_arrangement(j, raw),
+            "inputs": {d: yaml.safe_dump(value_of(raw, ids, d), sort_keys=False) for d in j["deps"]
+                       if d in ids and d not in jud and not is_builtin(d)},
+        } for name, j in jud.items()
+    }
+
+
 def mark(state_path, paths):
     """Written at session start: how many problems check finds, which intents no tab of the
     page serves, and the ids the record holds."""
     doc = load(paths)
     ids, jud, fields = infer(doc)
     fail, _, _, _, _ = check_lines(paths)
-    state = {"fails": len(fail), "unserved": _unserved(paths),
-             "ids": sorted(_every_id(doc, ids))}
+    state = {"fails": len(fail), "failures": fail, "unserved": _unserved(paths),
+             "ids": sorted(_every_id(doc, ids)),
+             "judgments": _gate_judgments(ids, jud, with_builtins(doc, ids, jud, fields))}
     with io.open(state_path, "w", encoding="utf-8") as f:
         json.dump(state, f)
     return 0
@@ -3496,7 +3596,8 @@ def _marked(state_path):
         except ValueError:
             state = {"fails": 0}
     return {"fails": int(state.get("fails") or 0), "unserved": list(state.get("unserved") or []),
-            "ids": state.get("ids")}
+            "ids": state.get("ids"), "failures": state.get("failures"),
+            "judgments": state.get("judgments") or {}}
 
 
 def gate(state_path, paths):
@@ -3506,19 +3607,38 @@ def gate(state_path, paths):
     once and yields."""
     base = _marked(state_path)
     fail, _, _, _, _ = check_lines(paths)
+    doc = load(paths)
+    ids, jud, fields = infer(doc)
+    raw = with_builtins(doc, ids, jud, fields)
+    now = _gate_judgments(ids, jud, raw)
+    allowed = {}
+    for name, old in base["judgments"].items():
+        current = now.get(name)
+        if not current or old.get("shape") != current["shape"] \
+                or old.get("arrangement") or current["arrangement"] \
+                or old.get("predicate") is not False or current["predicate"] is not True:
+            continue
+        if any(d in old.get("inputs", {}) and v != old["inputs"][d]
+               for d, v in current["inputs"].items()):
+            allowed[_fired_failure(name, jud[name])] = name
+    if base["failures"] is not None:
+        previous = set(base["failures"])
+        added = [f for f in fail if f not in previous and f not in allowed]
+    else:
+        # An old mark has no evidence about why a judgment changed. Keep its conservative
+        # count-based behavior until the session is opened with a new mark.
+        added = fail if len(fail) > base["fails"] else []
     out = []
-    if len(fail) > base["fails"]:
+    if added:
         out.append(f"{paths[0]} fails check with {len(fail)} problems ({base['fails']} at "
                    f"session start).")
         out.append("Fix the record - or declare the hole with blocked_on - before finishing:")
-        out += ["FAIL " + f for f in fail[:12]]
+        out += ["FAIL " + f for f in added[:12]]
     for s in _unserved(paths):
         if s not in base["unserved"]:
             out.append(f"{s} is served by no tab of the page - serve it in a tab whose sections "
                        f"pick what it wrote, or leave it outside and say why")
     if base["ids"] is not None:
-        doc = load(paths)
-        ids, jud, fields = infer(doc)
         raw = bodies(doc)
         # what a hypothesis holds is the session's writing too, attributed the same way
         rests = {}
@@ -3546,11 +3666,14 @@ def gate(state_path, paths):
                        f"name=\"...\", and from: it on what it wrote")
     for l in out:
         print(l)
+    if allowed:
+        print("Updated readings falsified unchanged judgments: " + ", ".join(sorted(allowed.values()))
+              + ". They remain flagged for review; check still reports their failed conditions.")
     return 2 if out else 0
 
 
 HELP = {
-    "set": """  set <key> <value> [--why "..."] [--as-of YYYY-MM-DD] [--hypothesis NAME] [file]
+    "set": """  set <key> <value> [--source <id> --at "..."] [--why "..."] [--as-of YYYY-MM-DD] [--hypothesis NAME] [file]
 
 Change one value. The entry's `v:` (or `quoted:`) is rewritten where it stands, `of:` is
 stamped with the date, and the reason - if given - is kept as a comment beneath. A number
@@ -3558,6 +3681,15 @@ is written as a number, `true`/`false` as booleans, anything else as text. A wor
 entry is refused: change its rule, not its result. A judgment is refused: review it. The
 reply is the reach: what is worked out from it, every judgment resting on it and its state
 now, and the texts of the brief that saw the old value.
+
+For a reading from a different source, supply --source and --at together. They replace
+the entry's from/at citation in the same write as its value and date; --why remains a
+comment, not a citation. The source must already be recorded (add it first): a mapping
+with asked/file/url/of/read and no v/quoted/rule, not a judgment or computed value. This
+checks the recorded source identity, not the contents or availability of an external source. Omitting
+these options retains the existing citation. A citation-only change is written even
+when the value is unchanged. This option uses from/at; entries with src/source fields
+must reconcile those fields first. Judgment snapshots are never refreshed by set.
 
 A reading newer than the one the base holds - its `of:`, else its source's read date -
 updates it. One of the same day or earlier that differs is a contradiction: refused into
@@ -3609,7 +3741,7 @@ def write_command(cmd, rest):
     i = 0
     while i < len(rest):
         a = rest[i]
-        if a in ("--why", "--as-of", "--in", "--hypothesis"):
+        if a in ("--why", "--as-of", "--in", "--hypothesis", "--source", "--at"):
             if i + 1 >= len(rest):
                 raise Refused(f"{a} needs a value")
             opts[a[2:].replace("-", "_")] = rest[i + 1]
@@ -3629,7 +3761,7 @@ def write_command(cmd, rest):
         raise Refused("--hypothesis takes a name - letters, digits, underscores, dashes - that "
                       f"becomes {HYPOTHESES}/<name>.yaml beside the record")
     action = {"kind": cmd, "id": nid, "as_of": as_of, "why": opts.get("why"), "into": opts.get("in"),
-              "hypothesis": opts.get("hypothesis")}
+              "hypothesis": opts.get("hypothesis"), "source": opts.get("source"), "at": opts.get("at")}
     if cmd == "set":
         if not args:
             raise Refused("set needs a value: set <key> <value>")

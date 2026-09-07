@@ -560,6 +560,7 @@ kpopper check
 kpopper affects <entry> [entry ...]
 kpopper pull <entry> [entry ...] [--from <ref>]   # --from: what another branch proposes, beside
 kpopper set <key> <value> [--why "..."]  # change one value; the reply is the reach
+kpopper set <key> <value> --source <id> --at "..."  # a new reading with its new citation
 kpopper add <id> field=value ...         # a new entry or judgment, in id order, seen filled
 kpopper review <id | "section title">    # it still holds: seen rewritten from the record
 kpopper consolidate [--dry-run] [NAME ...]   # the union, tested; then folded (--refute NAME "why")
@@ -589,6 +590,23 @@ the find turns up anything the plugin is not installed; say so rather than writi
 
 Do not rewrite it, and do not write a second one beside a project that already has its own build
 doing this work.
+
+**A correction from a new source changes the citation with the value.** Add the source first,
+then use `set --source <id> --at "<location>"` with the reading's `--as-of` date. Both citation
+options are required together, so a page or clause from the old source cannot survive by accident.
+`--why` is a comment about the change; `pull` retrieves the `from` / `at` citation. Without the
+new options, `set` retains that citation. A source must be a recorded mapping with
+`asked` / `file` / `url` / `of` / `read`, with no value or rule; this validates the reference,
+not whether an external source can currently be read. The new options use `from` / `at`;
+entries with `src` / `source` fields must reconcile those fields before using them.
+
+**Recording can finish with an old judgment still flagged.** A new session mark records the
+judgments and their current inputs as well as check failures. When updated readings make an
+unchanged, pre-existing judgment's explicit condition fire, the stop gate lets the recording
+finish. It does not refresh `seen`, rewrite the verdict or make `check` green. Review that
+judgment before relying on it. New or edited broken judgments, structural errors and page
+arrangement failures still receive the gate's reminder. Older count-only marks retain their
+conservative behavior until the next session opens.
 
 **It does not know your field names.** Each role has a distinctive *shape*, and the shape is
 enough: dependencies are a list of strings that are all ids of other entries; a snapshot is a
