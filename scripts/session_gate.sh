@@ -1,10 +1,11 @@
 #!/bin/sh
 # The stop gate, run by the plugin's Stop hook: a session that leaves the record
-# failing worse than it found it, leaves an intent no tab of the page serves, or wrote
+# with new failures, leaves an intent no tab of the page serves, or wrote
 # entries and recorded no intent, is bounced once - with the reasons - before it can
 # finish. Everything is compared against the mark taken at session start, so a record
 # that was already red or already unserved never blocks a session that did not touch
-# it - and the gate yields after one bounce, so it reminds rather than imprisons.
+# it. An unchanged existing judgment falsified by updated readings remains flagged but
+# does not block recording. The gate yields after one bounce, so it reminds rather than imprisons.
 IN=$(cat)
 # the record is at the root, or where the checkout registered it - same as the opener
 REC=PROVENANCE.yaml

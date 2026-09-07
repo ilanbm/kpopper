@@ -1,5 +1,5 @@
 meta:
-  updated: 2026-09-05
+  updated: 2026-09-07
   name: kpopper
   scope: "What this plugin is for and the decisions that shaped it, kept in its own format -
           the tools eat their own cooking, and every session here opens grounded."
@@ -320,6 +320,10 @@ sources:
            the agenda is derived, and a block becomes a query once its content is anchored"
     of: "the finance lab's claims file, decision v.hub_is_handwritten"
     read: "2026-09-02"
+  doc.ingestion_contract:
+    name: "The source update and recording gate regression contract"
+    file: "tests/test_ingestion.py"
+    read: "2026-09-07"
   doc.three_briefs:
     name: "The three briefs that exist - a finance hub, a keyboard pilot, an academic review -
            and what they contain"
@@ -1228,8 +1232,8 @@ judgments:
       p.supersede_doors: 1
   d.gate_and_opener_against_the_mark:
     rests_on: [s.2026_09_03_coverage, d.gate_reminds, d.open_is_a_slot, p.gate_bounces]
-    verdict: "the opener marks where a session began - problems, unserved intents, the ids held -
-              and the gate reminds once about what the session itself left: a record failing worse,
+    verdict: "the opener marks where a session began - failures, judgments, readings, unserved
+              intents and the ids held - and the gate reminds once about new unexcused failures,
               an intent left unserved, entries written with no intent recorded; of coverage the
               opener says only the newest unserved intent, in its line about what to do next"
     because: "What was already red or unserved when a session opened is not its doing, and a gate
@@ -1240,8 +1244,10 @@ judgments:
     wrong_if: "p.gate_bounces > 1"
     seen:
       s.2026_09_03_coverage: "read 2026-09-03"
-      d.gate_reminds: "the stop gate compares against the session-start count and yields after one
-                       bounce - it reminds, it does not imprison"
+      d.gate_reminds: "the stop gate compares against the session-start mark and yields after one
+                       bounce; unchanged existing judgments falsified by updated readings can stay
+                       flagged while recording finishes, and check still reports their failed
+                       conditions"
       d.open_is_a_slot: "the session opener fills a fixed character slot, highest value per
                          character first; values never preload"
       p.gate_bounces: 1
@@ -2162,14 +2168,20 @@ judgments:
     seen: {lit.name_risk: "bare-term search is owned by a fandom; the org and handle are taken;
                            every package registry is free; qualified search works"}
   d.gate_reminds:
-    rests_on: [p.gate_bounces]
-    verdict: "the stop gate compares against the session-start count and yields after one
-              bounce - it reminds, it does not imprison"
+    rests_on: [p.gate_bounces, doc.ingestion_contract]
+    verdict: "the stop gate compares against the session-start mark and yields after one bounce;
+              unchanged existing judgments falsified by updated readings can stay flagged while
+              recording finishes, and check still reports their failed conditions"
     because: "A record that was already red must never block a session that did not touch it,
               and a gate that cannot be escaped teaches sessions to fight the gate instead of
-              fixing the record."
+              fixing the record. New failures are compared by identity so repairing one old error
+              cannot hide a new one. A judgment whose body and interpretation are unchanged, whose
+              condition changed from false to true, and whose recorded scalar input changed has
+              encountered new evidence. Retaining that finding is successful recording. Structural
+              errors, new or edited broken judgments and arrangement failures remain gate failures;
+              legacy marks without those observations retain the conservative count comparison."
     wrong_if: "p.gate_bounces > 1"
-    seen: {p.gate_bounces: 1}
+    seen: {p.gate_bounces: 1, doc.ingestion_contract: "read 2026-09-07"}
   d.one_tree_two_channels:
     rests_on: [skill.two_shapes, p.script_copies]
     verdict: "the command line and the plugin ship the same files - packaging maps the script
@@ -2609,16 +2621,21 @@ judgments:
                               character first; values never preload"}
 
   d.write_path_returns_reach:
-    rests_on: [s.2026_09_03_written_layer, d.moved_is_a_flag, d.base_shared_forks_on_contradiction]
+    rests_on: [s.2026_09_03_written_layer, d.moved_is_a_flag, d.base_shared_forks_on_contradiction,
+               doc.ingestion_contract]
     verdict: "the record changes from the command line through set, add and review; each edits the
               file in place, writes seen itself, and answers with the reach - what rests on the
-              write, what is MOVED now, which predicate fired"
+              write, what is MOVED now, which predicate fired; set can replace from and at together
+              with a value using --source and --at, without reviewing dependent judgments"
     because: "A session that edits the record by hand reads the whole file to change one line, types
               the one field the method says no hand writes, and has to remember to run the check
               afterwards. Attaching the report to the write turns discipline into mechanics: the
               reply is what the write reached. One write function with one validation step in front
               of it is the seam the consolidation work needs - a value that contradicts the base, the
-              entries nearest a new one - so those rules land in one place and nowhere else."
+              entries nearest a new one - so those rules land in one place and nowhere else.
+              A reason in a comment does not replace a reading's citation: an explicit source and
+              location travel through validation, the write and readback together, including a
+              hypothesis and a same-value reading. Omitting them keeps the prior citation."
     blocked_on: "observational: falsified if sessions keep editing the record by hand once the
                  commands exist - seen lines changed in commits that ran no command - or if the reach
                  printed at the write goes unread while check finds the same moves later"
@@ -2631,6 +2648,7 @@ judgments:
                                              contradicts the record opens a named hypothesis, and
                                              whatever later rests on the contradiction goes there - a
                                              session is never the unit"
+      doc.ingestion_contract: "read 2026-09-07"
 
   d.written_layer_drawn_by_build:
     rests_on: [d.reasoning_in_record, d.moved_is_a_flag, d.page_reads_only]

@@ -55,7 +55,7 @@ plugin is all of that plus the method and the session hooks:
 | `scripts/verify_page.js` | Browser checks for that page, in both themes and under reduced motion. Playwright. Reached as `kpopper page --checks`. |
 | `tests/` | The contract the reader and the page keep, run as `python3 -m unittest discover -s tests` against the fixture record in `tests/fixtures/page` — every field they accept, exercised once. |
 | `PROVENANCE.measure.yaml` | The recipes the pull request takes this record's tree-facts with again — an argument list per name an entry cites with `measure:`, run by `kpopper remeasure --run` and by nothing else; what differs from the record is one more hypothesis through the dry run. |
-| `hooks/` | A session opener and a stop gate. The opener runs `provenance.py open` when the project keeps a record — at its root, or registered with the checkout — and is silent everywhere else; the gate bounces a session once, with the failures, if it tries to finish having left `check` worse than it found it. |
+| `hooks/` | A session opener and a stop gate. The opener runs `provenance.py open` when the project keeps a record — at its root, or registered with the checkout — and is silent everywhere else. The gate reminds once about new failures; unchanged existing judgments falsified by updated readings can remain flagged for review while recording finishes. `check` still reports them. |
 
 ## The record
 
