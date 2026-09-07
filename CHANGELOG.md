@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.1.0 — 2026-09-07
+
+- Keep update citations accurate and allow flagged judgments at stop (#39) — minor
+
 ## 1.0.0 — 2026-09-04
 
 - Add grouped page components, output lint, and localized chrome (#27) — minor
