@@ -1040,10 +1040,12 @@ judgments:
   d.checked_session_is_optional:
     rests_on: [goal.portable, d.open_is_a_slot, doc.checked_sessions]
     verdict: "Offer the checked session transport alongside the legacy reader, enabled explicitly
-              per project or machine; keep exact raw reads and a reversible hook choice."
+              per project or machine; keep each judgment's source body alongside its computed card,
+              exact raw reads and a reversible hook choice."
     because: "A complete typed view can preserve declared distinctions while the existing opening
               remains the compatibility baseline. Formal field checks do not establish source truth
-              or a general improvement in session performance."
+              or a general improvement in session performance. A computed card can omit source
+              explanations, so the original fields remain in the same read."
     reopened_by: "New records expose an omitted distinction or an unreachable source reference, or
                   fresh comparative session evidence warrants changing the default."
     seen:

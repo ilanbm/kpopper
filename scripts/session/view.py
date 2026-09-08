@@ -261,12 +261,13 @@ class GroundingService(CheckedSessionService):
         if base in graph.nodes and base not in META_REFS: return self.read_value(graph,'node:'+ref)
         if base.startswith('node:') and base[5:] in graph.nodes and graph.nodes[base[5:]]['kind']=='judgment':
             selected=pointer[1:].split('/',1)[0] if pointer.startswith('/') else ''
-            if not separator or selected in {'epistemic_card','checked_bundle_ref','raw_ref','scope','recorded_states_ref'}:
+            if not separator or selected in {'epistemic_card','checked_bundle_ref','raw_ref','scope','state_tags_ref','state_tags_scope'}:
                 value=super().read_value(graph,base)
                 scan=self.core.scan(graph.data)
                 if any(event['kind']=='contested' and event['id']==base[5:] for event in scan['events'].values()):
                     value['epistemic_card']+='\nRECORDED CONFLICT: YES; this flag does not establish or refute the claim.'
-                value['recorded_states_ref']=base+'#/states'
+                value['state_tags_ref']=base+'#/states'
+                value['state_tags_scope']='Derived annotations, not the source status; read body for the recorded status and revision history.'
                 return pointer_value(value,pointer) if separator and pointer else value
         revision=digest({'project':self.project,'graph':graph.snapshot})
         if base=='orientation':

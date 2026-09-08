@@ -18,7 +18,7 @@ def card(bundle):
         lines.append(line)
     falsifier=bundle['falsifier']
     outcome={True:'TRIGGERED',False:'NOT TRIGGERED',None:'UNKNOWN'}[falsifier['holds_on_current_values']]
-    lines.append('EXECUTABLE FALSIFIER: '+falsifier['expression']+' => '+outcome+' ('+falsifier['reason']+')')
+    lines.append('EXECUTABLE FALSIFIER FOR '+bundle['id']+': '+falsifier['expression']+' => '+outcome+' ('+falsifier['reason']+')')
     trigger={True:'YES',False:'NO',None:'UNKNOWN'}[bundle['mechanical_review_trigger']]
     lines.append('MECHANICAL REVIEW TRIGGER: '+trigger+'; human conditions are not evaluated')
     if bundle['human_reopener']['declaration'] is not None:
@@ -44,9 +44,9 @@ class CheckedSessionService(SessionService):
             selected=pointer[1:].split('/',1)[0] if pointer.startswith('/') else ''
             if nid in graph.nodes and graph.nodes[nid]['kind']=='judgment' and (not separator or selected in checked_fields):
                 result=self.core.assess(graph.data,nid)
-                value={'epistemic_card':card(result['bundle']),
+                value={'body':graph.nodes[nid]['body'], 'epistemic_card':card(result['bundle']),
                         'checked_bundle_ref':'checked:'+nid,'raw_ref':base+'#/body',
-                        'scope':'Lean computed these fields from the supplied record; prose/world truth is not verified.'}
+                        'scope':'Checks and source fields belong to this ID. Read a premise itself to establish its fields or their absence. World truth and action authority are not verified.'}
                 return pointer_value(value,pointer) if separator and pointer else value
         if base.startswith('checked:'):
             result=self.core.assess(graph.data,base[8:])['bundle']

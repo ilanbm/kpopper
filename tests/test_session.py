@@ -126,6 +126,17 @@ class CheckedSessionContract(unittest.TestCase):
         card = json.loads(service.reading("d.choice", revision))["value"]["epistemic_card"]
         self.assertIn("RECORDED STATUS (not evaluated)", card)
 
+    def test_default_judgment_read_preserves_all_original_source_fields(self):
+        self.native.write_text(NATIVE + '    because: The reviewer who receives the change decides whether to merge it.\n'
+            + '    broken_by: A later account replaced the former diagnosis.\n')
+        service = self.native_service()
+        graph, revision = service.graph()
+        response = json.loads(service.reading('d.choice', revision, 1600))
+        self.assertTrue(response['complete'])
+        self.assertEqual(response['value']['body'], graph.nodes['d.choice']['body'])
+        self.assertIn('because', response['value']['body'])
+        self.assertIn('broken_by', response['value']['body'])
+
     def test_missing_current_stays_unknown_while_historical_value_survives(self):
         data = self.data()
         data["nodes"]["m.reading"]["body"].pop("v")

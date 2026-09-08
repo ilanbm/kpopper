@@ -32,7 +32,7 @@ References include:
 | Reference | Content |
 |---|---|
 | `/topic/path` | A complete branch view, folded by depth when needed |
-| `node:ID` or `ID` | An entry; judgments default to an assessment card |
+| `node:ID` or `ID` | An entry; judgments include their original body alongside an assessment card |
 | `node:ID#/body/FIELD` | The original source field spelling and value |
 | `checked:ID` | Structured assessment, including declared conflict and recorded status |
 | `links:ID` or `links:/topic` | Directed outgoing links; `rests_on` is not implication |
@@ -42,6 +42,12 @@ References include:
 | `pending`, `native` | Pending session proposals and native hypotheses, respectively |
 
 Large values remain addressable by JSON pointer. Large scalar text can be read with `--offset` using labeled fragments, offsets and a hash. Output never silently stops mid-sentence. A budget too small to carry a complete root is rejected explicitly. Token budgets use a named reference tokenizer; provider overhead and billing can differ.
+
+A judgment's complete source body stays with its computed card so rationale, recorded status
+and revision history remain available. If both exceed the read budget, the response gives
+exact field routes. Checks and field absence apply only to the named ID; a premise's value
+does not disclose all of that premise's fields. Derived state tags are distinct from the
+status text recorded in the source body.
 
 IDs are printable names; `#`, `:` and `/` are reserved for the reference protocol and are
 rejected in IDs instead of emitting unreachable references. Dotted names and Unicode names
