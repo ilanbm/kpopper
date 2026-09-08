@@ -1,5 +1,5 @@
 meta:
-  updated: 2026-09-07
+  updated: 2026-09-09
   name: kpopper
   scope: "What this plugin is for and the decisions that shaped it, kept in its own format -
           the tools eat their own cooking, and every session here opens grounded."
@@ -262,6 +262,12 @@ sources:
             counts for coverage but no longer silences a flagged item"
     of: "2026-09-04, given the written layer at 2e5f4f3 and what four pieces since then built on it"
     read: "2026-09-04"
+  s.background_ingestion:
+    name: "Background capture and selective delivery contract"
+    file: "skills/kpopper/INGESTION.md"
+    read: "2026-09-09"
+    asked: "Retain explicit reports without waiting for graph maintenance, and return only findings
+            that need attention."
   doc.fact_moves:
     url: "https://claude.ai/code/artifact/ca99e558-60ae-4b22-9221-e3b29d7d7e2b"
     name: "מה קורה כשעובדה זזה - the unified node model"
@@ -1028,6 +1034,18 @@ judgments:
                                   orders a list; add says the nearest three and refuses nothing, the
                                   dry run says a handful per arriving id"
       alt.sameness_from_names: rejected
+  d.capture_is_not_clearance:
+    rests_on: [s.background_ingestion]
+    verdict: "A capture receipt means the source was retained; only an applied receipt and the
+              current record justify relying on an update. Incomplete identity, unsupported layouts
+              and conflicts remain explicit questions."
+    because: "Separating durable intake from adjudication lets work continue without promoting
+              unprocessed or ambiguous information into a fact. The record remains authoritative; the
+              private queue contains source evidence and processing state."
+    reopened_by: "An accepted source or its supplied meaning cannot be retrieved later in the same
+                  project; a captured or conflicted report is presented as an applied and checked
+                  fact; or intake creates a competing authoritative record."
+    seen: {s.background_ingestion: "read 2026-09-09"}
   d.chrome_follows_language:
     rests_on: [s.2026_09_04_components, d.author_free_build_guarantees]
     verdict: "Chrome follows the declared record language, or the dominant script of its descriptive
@@ -1327,6 +1345,20 @@ judgments:
       s.2026_09_04_merge_driver_reason: "read 2026-09-04"
       alt.record_merge_driver: rejected
       p.hypothesis_name_inputs: 2
+  d.ingestion_attention_is_selective:
+    rests_on: [s.background_ingestion]
+    verdict: "Background ingestion retains a receipt for every event and notifies only when a
+              declared condition newly fires or a review question becomes actionable. A valid move
+              stays quiet; receiving a notification does not create another capture."
+    because: "The purpose of parallel checking is to surface implications while allowing unrelated
+              work to continue. Requiring approval for every result or turning every reached
+              dependency into an alert would make ordinary maintenance interrupt the work it serves.
+              Host-specific wake behavior must be stated rather than inferred from hook completion."
+    reopened_by: "A routine update with a still-valid condition interrupts or wakes the primary; an
+                  important retained finding disappears on a later startup; a delivered notification
+                  creates another input event; or a host is advertised as waking an idle task without
+                  a verified supported route."
+    seen: {s.background_ingestion: "read 2026-09-09"}
   d.local_claims_want_a_run:
     rests_on: [s.2026_09_04_calibration, prior.local_needs_a_run, m.claims.general_held,
                m.claims.local_checked_held, m.claims.local_assumed_held, m.reach.general_held,

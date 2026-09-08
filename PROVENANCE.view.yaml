@@ -73,7 +73,7 @@ tabs:
              s.2026_09_04_signals, s.2026_09_04_measure_recipes,
              s.2026_09_04_hypothesis_claim_name, s.2026_09_04_difference,
              s.2026_09_04_falsifier_shape, s.2026_09_04_minted_permission,
-             s.2026_09_04_components]
+             s.2026_09_04_components, s.background_ingestion]
     sections:
       - title: How to read what follows
         why: a wall of cards is not an argument until you know what separates them

@@ -1,0 +1,33 @@
+{
+  "name": "kpopper",
+  "version": "1.1.0",
+  "description": "An epistemic record for work that gets revisited: what is known, how each piece is grounded, and what would make each judgment wrong. Self-evolving — judgments re-check against their dependencies and surface what drifted, so staleness is derived rather than remembered. Ships a reader, a checker, and a two-tab HTML page with a provenance layer: the arrangement this session chose, and the record itself.",
+  "author": {
+    "name": "Ilan Bar Magen"
+  },
+  "keywords": [
+    "provenance",
+    "epistemic",
+    "falsifiability",
+    "truth-maintenance",
+    "traceability",
+    "research"
+  ],
+  "license": "MIT",
+  "skills": "./skills/",
+  "hooks": "./adapters/codex/plugin-hooks.json",
+  "interface": {
+    "displayName": "kpopper",
+    "shortDescription": "Keep sources, judgments, and important changes together.",
+    "longDescription": "An epistemic record for work that gets revisited: what is known, how each piece is grounded, and what would make each judgment wrong. Self-evolving — judgments re-check against their dependencies and surface what drifted, so staleness is derived rather than remembered. Ships a reader, a checker, and a two-tab HTML page with a provenance layer: the arrangement this session chose, and the record itself.",
+    "developerName": "Ilan Bar Magen",
+    "category": "Productivity",
+    "capabilities": [
+      "Read",
+      "Write"
+    ],
+    "defaultPrompt": [
+      "Open this project’s record and show what needs attention."
+    ]
+  }
+}

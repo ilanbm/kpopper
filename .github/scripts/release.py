@@ -26,6 +26,7 @@ VERSION_FILES = {
     "pyproject.toml": (re.compile(r'^version = "(\d+\.\d+\.\d+)"', re.M), 'version = "{v}"'),
     "package.json": (re.compile(r'"version": "(\d+\.\d+\.\d+)"'), '"version": "{v}"'),
     ".claude-plugin/plugin.json": (re.compile(r'"version": "(\d+\.\d+\.\d+)"'), '"version": "{v}"'),
+    ".codex-plugin/plugin.json": (re.compile(r'"version": "(\d+\.\d+\.\d+)"'), '"version": "{v}"'),
     ".claude-plugin/marketplace.json": (re.compile(r'"version": "(\d+\.\d+\.\d+)"'), '"version": "{v}"'),
 }
 BUMPS = ("patch", "minor", "major")
