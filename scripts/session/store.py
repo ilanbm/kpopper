@@ -125,8 +125,10 @@ def native_record(path, reader_path):
                 value=body.get(field)
                 if isinstance(value,str) and p.EXPR.search(value):
                     edges.extend({'from':nid,'rel':'rule_reads','to':ref}
-                                 for ref in set(p.ID.findall(value)) if ref in ids and ref!=nid)
-    data={'nodes':nodes,'edges':list({encode(e):e for e in edges}.values()),
+                                 for ref in sorted(set(p.ID.findall(value))) if ref in ids and ref!=nid)
+    # Relations are a set; process-specific hash order must not change a revision.
+    unique_edges={encode(edge):edge for edge in edges}
+    data={'nodes':nodes,'edges':[unique_edges[key] for key in sorted(unique_edges)],
           'topics':{nid:[sections.get(nid,'computed')]+nid.split('.')[:-1] for nid in nodes},
           'scope':(doc.get('meta') or {}).get('scope','Epistemic project record.'),
           'sources':sources,

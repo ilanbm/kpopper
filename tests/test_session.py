@@ -137,6 +137,23 @@ class CheckedSessionContract(unittest.TestCase):
         self.assertIn('because', response['value']['body'])
         self.assertIn('broken_by', response['value']['body'])
 
+    def test_native_snapshot_is_stable_across_process_hash_seeds(self):
+        self.native.write_text(NATIVE.replace('  m.scalar: 0', '''  m.scalar: 0
+  m.a: {v: 1}
+  m.b: {v: 2}
+  m.c: {v: 3}
+  m.d: {v: 4}
+  m.total: {v: "m.a + m.b + m.c + m.d"}'''))
+        command = [sys.executable, '-c',
+            'from pathlib import Path; import sys; from scripts.session.store import native_record, digest; '
+            'print(digest(native_record(Path(sys.argv[1]), Path(sys.argv[2]))))',
+            str(self.native), str(self.reader)]
+        snapshots = []
+        for seed in ('1', '2', '3', '4'):
+            snapshots.append(subprocess.check_output(command, cwd=ROOT,
+                env=dict(os.environ, PYTHONHASHSEED=seed), text=True).strip())
+        self.assertEqual(len(set(snapshots)), 1, snapshots)
+
     def test_missing_current_stays_unknown_while_historical_value_survives(self):
         data = self.data()
         data["nodes"]["m.reading"]["body"].pop("v")
