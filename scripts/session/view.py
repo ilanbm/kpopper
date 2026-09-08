@@ -1,6 +1,6 @@
 """A guarded epistemic view and revision-bound session service."""
 from __future__ import annotations
-from collections import Counter
+from collections import Counter, defaultdict
 import copy
 import json
 from pathlib import Path
@@ -49,16 +49,22 @@ class View:
         self.events=make_events(data,scan)
         self.attention={nid for event in self.events.values() for nid in event['affected']}
         self.conflicts={nid for nid,node in data['nodes'].items() if 'contested' in node['states']}
+        self._cells={}; self._edges_by_source=defaultdict(list)
+        for index,edge in enumerate(data['edges']): self._edges_by_source[edge['from']].append(index)
 
     def cell(self,entry):
+        entry=tuple(entry)
+        if entry in self._cells: return self._cells[entry]
         kind,key=entry; members=sorted(self.graph.members(entry))
-        edge_indices=[i for i,edge in enumerate(self.data['edges']) if edge['from'] in members]
-        return {'kind':kind,'key':key,'topic':self.graph.leaves[key] if kind=='node' else key,
+        edge_indices=sorted(i for nid in members for i in self._edges_by_source[nid])
+        cell={'kind':kind,'key':key,'topic':self.graph.leaves[key] if kind=='node' else key,
             'members':members,'conflicts':sorted(set(members)&self.conflicts),
             'questions':sorted(n for n in members if 'question' in self.data['nodes'][n]['states']),
             'attention':sorted(set(members)&self.attention),'edge_indices':edge_indices,
             'relation_counts':dict(Counter(self.data['edges'][i]['rel'] for i in edge_indices)),
             'links_ref':'links:'+key}
+        self._cells[entry]=cell
+        return cell
 
     def packet(self,frontier):
         return {'schema':'kpopper.epistemic-view.v3','project':self.project,'revision':self.revision,
@@ -69,14 +75,14 @@ class View:
             'native_hypotheses':len(self.data.get('native_hypotheses',{}))}
 
     def relation_counts(self,counts):
-        return ' '.join(({'rests_on':'dep','from':'src'}.get(rel,rel))+'='+str(n)
+        return ' '.join(({'rests_on':'dependency_count','from':'source_count'}.get(rel,rel+'_count'))+'='+str(n)
                         for rel,n in sorted(counts.items()))
 
     def cell_line(self,cell):
         key=cell['key']
         if cell['kind']=='group': line='+ '+key+' ['+str(len(cell['members']))+']'
         else:
-            ref='node:'+key if key in META_REFS or any(char.isspace() for char in key) else key
+            ref='node:'+key
             line='- '+(encode(ref) if any(char.isspace() for char in ref) else ref)
         if cell['conflicts']: line+=' CONTESTED='+str(len(cell['conflicts']))
         if cell['questions']: line+=' questions='+str(len(cell['questions']))
@@ -129,8 +135,34 @@ class View:
             lines.append('LINK MAP — folded endpoints; all links counted; exact links at links:/')
             lines.extend(row['from']+' '+row['rel']+' '+row['to']+' ['+str(len(row['edge_indices']))+']'
                          for row in packet['link_map'])
-        lines.append('dep=rests_on (not implies); src=from. Read <id>, /topic, links:<id|/topic>, or @ref without @; pass revision.')
+        lines.append('Counts describe links: dependency_count=rests_on, source_count=from; not proof. Read node:ID, /topic, links:ID or @ref without @; pass revision.')
         return '\n'.join(lines)+'\n'
+
+    def refine(self,frontier,render,tokens):
+        """Spend remaining room on complete sibling expansions at mixed depths.
+
+        Prefer additional leaf names per token, then additional branches per
+        token. Ties retain the declared tree order. This is a structural greedy
+        heuristic, not semantic relevance or a globally optimal packing claim.
+        Every replacement retains all other cells and all children of its group.
+        """
+        frontier=list(frontier); text=render(frontier)
+        current_tokens=len(self.encoder.encode(text))
+        while True:
+            best=None
+            for index,(kind,key) in enumerate(frontier):
+                if kind!='group': continue
+                children=self.graph.successors(key)
+                if not children or children==[(kind,key)]: continue
+                candidate=frontier[:index]+children+frontier[index+1:]
+                rendered=render(candidate); size=len(self.encoder.encode(rendered))
+                if size>tokens: continue
+                added=max(1,size-current_tokens)
+                score=(sum(k=='node' for k,_ in children)/added,
+                       (len(children)-1)/added,-size,-index)
+                if best is None or score>best[0]: best=(score,candidate,rendered,size)
+            if best is None: return frontier,text
+            _,frontier,text,current_tokens=best
 
     def link_map(self,frontier):
         owner={nid:key for entry in frontier for nid in self.graph.members(entry) for key in [entry[1]]}
@@ -162,6 +194,8 @@ class View:
             candidate=self.packet(level); rendered=self.render_open(candidate,expanded)
             if len(self.encoder.encode(rendered))>tokens: break
             frontier=level; packet=candidate; text=rendered
+        frontier,text=self.refine(frontier,lambda cells:self.render_open(self.packet(cells),expanded),tokens)
+        packet=self.packet(frontier)
         # Use remaining space for complete relation maps at increasing depths.
         # Nothing is selected by edge weight or alphabetic first-fit.
         for level in levels[1:]:
@@ -175,21 +209,25 @@ class View:
             'visible_ids':sum(cell['kind']=='node' for cell in packet['cells'])}
 
     def branch(self,path,tokens):
-        chosen=None
-        for level in self.graph.layers(path):
+        if path not in self.graph.groups:
+            raise ValueError('unknown branch; read / with this revision to list valid branches')
+        def render(level):
             lines=['revision='+self.revision,'MAP '+path]
             lines.extend(self.map_lines([self.cell(entry) for entry in level],path))
-            lines.append('dep=rests_on; src=from; links:<id|/topic> reads directed links. Names are locators.')
-            text='\n'.join(lines)+'\n'
+            lines.append('Counts describe links, not IDs. Read node:ID, /topic or links:ID. Names are locators.')
+            return '\n'.join(lines)+'\n'
+        chosen=None; frontier=None
+        for level in self.graph.layers(path):
+            text=render(level)
             if len(self.encoder.encode(text))>tokens: break
-            chosen=text
+            chosen=text; frontier=level
         if chosen is None: raise BudgetTooSmall('budget cannot carry the complete branch root')
-        return chosen
+        return self.refine(frontier,render,tokens)[1]
 
     def members(self,key):
         if key in self.graph.nodes: return {key}
         if key in self.graph.groups: return self.graph.groups[key]
-        raise ValueError('unknown node or topic')
+        raise ValueError('unknown node or topic; read / with this revision to list valid handles')
 
     def links(self,key):
         members=self.members(key)
@@ -258,6 +296,9 @@ class GroundingService(CheckedSessionService):
 
     def read_value(self,graph,ref):
         base,separator,pointer=ref.partition('#')
+        if (base.startswith('source:') and base[7:] in graph.nodes
+                and base[7:] not in graph.data.get('sources',{})):
+            raise ValueError('this is a record entry; read node:'+base[7:]+' with this revision')
         if base in graph.nodes and base not in META_REFS: return self.read_value(graph,'node:'+ref)
         if base.startswith('node:') and base[5:] in graph.nodes and graph.nodes[base[5:]]['kind']=='judgment':
             selected=pointer[1:].split('/',1)[0] if pointer.startswith('/') else ''
@@ -285,5 +326,10 @@ class GroundingService(CheckedSessionService):
                 members=view.members(base[11:])
                 value={nid:row for nid,row in view.scan['conditions'].items() if nid in members}
             else: value={'counts':view.scan['counts'],'events':list(view.events),'errors':view.scan['errors']}
-        else: return super().read_value(graph,ref)
+        else:
+            try: return super().read_value(graph,ref)
+            except ValueError as error:
+                if str(error) in {'unknown reference','unlisted operation or identifier'}:
+                    raise ValueError(str(error)+'; read / with this revision to list valid handles') from error
+                raise
         return pointer_value(value,pointer) if separator and pointer else value

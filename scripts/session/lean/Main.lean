@@ -156,25 +156,83 @@ structure PredicateResult where
   reason : String
   reads : List String
 
+def predicateSpace (c : Char) : Bool :=
+  c == ' ' || c == '\t' || c == '\r' || c == '\n'
+
+def barePredicateReference (text : String) : Bool :=
+  !text.isEmpty && text.toList.all (fun c =>
+    c.toNat >= 0x20 && !predicateSpace c &&
+    !(['\'', '"', '\\', '[', ']', '{', '}', '<', '>', '=', '!'] : List Char).contains c)
+
+def predicateParts (text : String) : Option (String × String × String) := do
+  -- Split only the reference and operator. Keep the complete RHS, including
+  -- significant spaces inside quotes; ASCII whitespace outside it is ignored.
+  let input := text.toList.dropWhile predicateSpace
+  let left := input.takeWhile (fun c => !predicateSpace c)
+  let afterLeft := (input.dropWhile (fun c => !predicateSpace c)).dropWhile predicateSpace
+  let operator := afterLeft.takeWhile (fun c => !predicateSpace c)
+  let right := ((afterLeft.dropWhile (fun c => !predicateSpace c)).dropWhile predicateSpace).reverse
+  let right := (right.dropWhile predicateSpace).reverse
+  if left.isEmpty || operator.isEmpty || right.isEmpty then none
+  else some (String.ofList left, String.ofList operator, String.ofList right)
+
+def singleQuotedChars : List Char → List Char → Option String
+  | [], _ => none
+  | c :: rest, reversed =>
+      if c == '\'' then
+        if rest.isEmpty then some (String.ofList reversed.reverse) else none
+      else if c == '\\' then
+        match rest with
+        | escaped :: tail =>
+            if escaped == '\\' || escaped == '\'' then singleQuotedChars tail (escaped :: reversed)
+            else none
+        | [] => none
+      else if c.toNat < 0x20 then none
+      else singleQuotedChars rest (c :: reversed)
+
+inductive PredicateOperand where
+  | literal (value : Value)
+  | reference (id : String)
+
+def predicateOperand (text : String) : Except String PredicateOperand :=
+  -- JSON scalar literals keep JSON's escaping rules. Single quotes are a small
+  -- additional syntax: only \\ and \' escapes, no raw U+0000..U+001F or suffix.
+  -- The native reader merely strips quote characters; this checked subset does
+  -- not inherit its permissive handling of malformed quotes or bare prose.
+  match Json.parse text with
+  | .ok literal => match valueOf literal with
+      | some value => .ok (.literal value)
+      | none => .error "unsupported_literal"
+  | .error _ =>
+      match text.toList with
+      | '\'' :: rest => match singleQuotedChars rest [] with
+          | some value => .ok (.literal (.text value))
+          | none => .error "malformed_literal"
+      | _ =>
+          if barePredicateReference text then .ok (.reference text)
+          else .error "unsupported_or_malformed_rhs"
+
 def evaluatePredicate (record : Json) (dependencies : List String) (text : String) : PredicateResult := Id.run do
-  -- A deliberately bounded parser. Anything richer remains unknown, never false.
-  let tokens := (text.splitOn " ").filter (· != "")
-  let [left, operator, right] := tokens
+  -- One whitespace-separated reference, operator, and literal/reference RHS.
+  -- No expression evaluation: richer or malformed syntax remains unknown.
+  let some (left, operator, right) := predicateParts text
     | return ⟨.unknown, if text.isEmpty then "not_declared" else "unsupported_syntax", []⟩
+  if !barePredicateReference left then
+    return ⟨.unknown, "unsupported_syntax", []⟩
   let some op := parseOp operator
     | return ⟨.unknown, "unsupported_operator", []⟩
   if !dependencies.contains left then
     return ⟨.unknown, "undeclared_reference", [left]⟩
-  let rhs := match Json.parse right with
-    | .ok literal => valueOf literal
-    | .error _ => none
-  if let some value := rhs then
-    let answer := compareCurrent op (currentOf record left) { value, role := "literal" }
-    return ⟨answer, if answer == .unknown then "missing_or_incompatible_value" else "evaluated_current_values", [left]⟩
-  if !dependencies.contains right then
-    return ⟨.unknown, "undeclared_or_unsupported_rhs", [left, right]⟩
-  let answer := compareCurrent op (currentOf record left) (currentOf record right)
-  return ⟨answer, if answer == .unknown then "missing_or_incompatible_value" else "evaluated_current_values", [left, right]⟩
+  match predicateOperand right with
+  | .error reason => return ⟨.unknown, reason, [left]⟩
+  | .ok (.literal value) =>
+      let answer := compareCurrent op (currentOf record left) { value, role := "literal" }
+      return ⟨answer, if answer == .unknown then "missing_or_incompatible_value" else "evaluated_current_values", [left]⟩
+  | .ok (.reference id) =>
+      if !dependencies.contains id then
+        return ⟨.unknown, "undeclared_or_unsupported_rhs", [left, id]⟩
+      let answer := compareCurrent op (currentOf record left) (currentOf record id)
+      return ⟨answer, if answer == .unknown then "missing_or_incompatible_value" else "evaluated_current_values", [left, id]⟩
 
 def premiseJson (record judgment : Json) (id : String) : Json :=
   let current := currentOf record id

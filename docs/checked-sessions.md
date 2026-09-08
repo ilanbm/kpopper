@@ -43,6 +43,15 @@ References include:
 
 Large values remain addressable by JSON pointer. Large scalar text can be read with `--offset` using labeled fragments, offsets and a hash. Output never silently stops mid-sentence. A budget too small to carry a complete root is rejected explicitly. Token budgets use a named reference tokenizer; provider overhead and billing can differ.
 
+Opening and branch views may mix depths: a large group can remain folded while smaller
+siblings expand into readable entries. Every group expansion retains all its children
+and all other branches. Remaining space is allocated by a deterministic structural
+heuristic, preferring additional leaf names per token, then additional branches; it
+does not infer which topic answers a future question. Displayed entries use explicit
+`node:ID` handles. `source_count` and `dependency_count` are link counts, not source IDs
+or proof. Unknown node and topic routes point back to `/`; a source entry requested with the file
+prefix points to its actual `node:ID` handle.
+
 A judgment's complete source body stays with its computed card so rationale, recorded status
 and revision history remain available. If both exceed the read budget, the response gives
 exact field routes. Checks and field absence apply only to the named ID; a premise's value
@@ -115,6 +124,24 @@ Bind each stdio server to one project explicitly. This avoids depending on wheth
 An installed console entry can also launch `kpopper session serve` with the same arguments. `serve` uses the explicitly launched Python environment; it does not switch interpreters based on project settings. The server offers `kpopper_open`, `kpopper_read`, `kpopper_propose` and `kpopper_verify_claims`. The verifier checks only listed structured assertions against the supplied snapshot, never accompanying prose, source reliability or action authority. Proposals remain pending and do not overwrite the canonical record.
 
 ## Guarantees and limits
+
+The checked predicate parser accepts one whitespace-separated reference, comparison
+operator (`==`, `!=`, `<`, `<=`, `>`, `>=`) and right-hand operand. The operand can be a
+complete JSON number, Boolean or string, a single-quoted string, or another declared
+reference. For example:
+
+```text
+kbd.gate.prod != 'unset'
+release.state == "awaiting review"
+metrics.failures > 0
+```
+
+JSON strings retain JSON escaping. Single-quoted strings support only `\\` and `\'`
+escapes. Spaces inside quotes are significant; the original expression is retained in
+the assessment. Malformed quotes, trailing expressions, undeclared references, missing
+values and incompatible types remain unknown. Null, arrays, objects and operators
+without surrounding whitespace are outside this predicate subset. Null remains
+readable as source data; comparisons involving null are uncheckable.
 
 The core separates current values from review snapshots, unknown from false, executable conditions from prose, and premise confidence from judgment confidence. The view guard checks complete ID/link accounting, conflict signals, exact recovery references, event values and topic bindings. Native inferred field roles are passed separately from original source spelling; stale normalization is rejected. Unsupported predicates remain uncheckable, and malformed predicate types remain explicit assessment errors.
 
