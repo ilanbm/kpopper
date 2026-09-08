@@ -1,0 +1,49 @@
+name: checked-session
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  session:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    env:
+      ELAN_TOOLCHAIN: leanprover/lean4:v4.33.1
+      KPOPPER_REQUIRE_CORE_TESTS: "1"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - uses: leanprover/lean-action@50fcf42d2e460296f1a34b402e990d1b24f8b596
+        with:
+          lake-package-directory: scripts/session/lean
+          auto-config: "false"
+          build: "false"
+          test: "false"
+          lint: "false"
+          use-mathlib-cache: "false"
+          use-github-cache: "false"
+      - name: Install the session transport
+        run: python -m pip install ".[session]"
+      - name: Build the package's reviewed kernel
+        run: kpopper session setup
+      - name: Check installed runtime and integration contracts
+        run: |
+          kpopper session status
+          python -m unittest discover -s tests -p test_session.py -v
+      - name: Audit the named theorem dependencies
+        shell: bash
+        run: |
+          KPOPPER_PROOF_DIR=$(mktemp -d)
+          lean -o "$KPOPPER_PROOF_DIR/Main.olean" scripts/session/lean/Main.lean
+          LEAN_PATH="$KPOPPER_PROOF_DIR" lean scripts/session/lean/ProofAudit.lean

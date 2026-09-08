@@ -1,5 +1,5 @@
 meta:
-  updated: 2026-09-07
+  updated: 2026-09-08
   name: kpopper
   scope: "What this plugin is for and the decisions that shaped it, kept in its own format -
           the tools eat their own cooking, and every session here opens grounded."
@@ -262,6 +262,11 @@ sources:
             counts for coverage but no longer silences a flagged item"
     of: "2026-09-04, given the written layer at 2e5f4f3 and what four pieces since then built on it"
     read: "2026-09-04"
+  doc.checked_sessions:
+    file: "docs/checked-sessions.md"
+    read: "2026-09-08"
+    note: "The optional checked-session interface, its explicit setup and activation, and the limits
+           of its guarantees."
   doc.fact_moves:
     url: "https://claude.ai/code/artifact/ca99e558-60ae-4b22-9221-e3b29d7d7e2b"
     name: "מה קורה כשעובדה זזה - the unified node model"
@@ -541,6 +546,10 @@ known:
     quoted: "עלות הפתיחה של סשן מספר N"
     from: doc.fact_moves
     name: "The one measurement the method promises"
+  session.checked_transport:
+    v: "Optional Lean-computed views with revision-bound CLI and project-bound MCP reads; runtime
+        builds happen only during explicit setup."
+    from: doc.checked_sessions
   skill.two_shapes:
     quoted: "Two parallel records is the most expensive mistake available here"
     from: "skills/kpopper/SKILL.md"
@@ -1028,6 +1037,20 @@ judgments:
                                   orders a list; add says the nearest three and refuses nothing, the
                                   dry run says a handful per arriving id"
       alt.sameness_from_names: rejected
+  d.checked_session_is_optional:
+    rests_on: [goal.portable, d.open_is_a_slot, doc.checked_sessions]
+    verdict: "Offer the checked session transport alongside the legacy reader, enabled explicitly
+              per project or machine; keep exact raw reads and a reversible hook choice."
+    because: "A complete typed view can preserve declared distinctions while the existing opening
+              remains the compatibility baseline. Formal field checks do not establish source truth
+              or a general improvement in session performance."
+    reopened_by: "New records expose an omitted distinction or an unreachable source reference, or
+                  fresh comparative session evidence warrants changing the default."
+    seen:
+      goal.portable: "usable by any session, in any project, with no author present"
+      d.open_is_a_slot: "the session opener fills a fixed character slot, highest value per
+                         character first; values never preload"
+      doc.checked_sessions: "read 2026-09-08"
   d.chrome_follows_language:
     rests_on: [s.2026_09_04_components, d.author_free_build_guarantees]
     verdict: "Chrome follows the declared record language, or the dominant script of its descriptive

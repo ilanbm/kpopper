@@ -1,0 +1,151 @@
+{
+  "description": "Declared navigation for this record. Topics are navigation hypotheses, never logical implications. Unassigned IDs remain visible under their namespace.",
+  "groups": {
+    "grounding/opening": [
+      "d.open_is_a_slot",
+      "d.a_line_is_clipped_by_its_parts",
+      "goal.measure",
+      "m.open_whole",
+      "m.open_clean",
+      "p.hook_slot",
+      "doc.checked_sessions",
+      "session.checked_transport",
+      "d.checked_session_is_optional"
+    ],
+    "grounding/retrieval": [
+      "d.reasoning_in_record",
+      "d.one_reference_resolver",
+      "d.review_names_what_it_reads",
+      "d.a_comparison_shows_where_it_parts",
+      "d.relevance_stays_declared",
+      "d.mention_covers_never_silences",
+      "q.pull_defaults"
+    ],
+    "record/identity": [
+      "d.sameness_is_judged",
+      "d.same_asks_the_one_door",
+      "d.also_is_read_by_absence",
+      "d.distinct_is_a_bare_id",
+      "d.names_rank_never_decide",
+      "d.name_registered_when_earned",
+      "d.candidate_lists_are_a_floor"
+    ],
+    "record/hypotheses": [
+      "d.base_shared_forks_on_contradiction",
+      "d.hypotheses_read_beside_the_base",
+      "d.hypothesis_is_a_judgment",
+      "d.hypothesis_files_meet_on_one_name",
+      "d.contested_is_a_rival_claim",
+      "d.contradiction_by_id_and_day",
+      "d.consolidation_is_a_test",
+      "d.dry_run_is_check_on_the_union",
+      "d.fold_passes_the_one_door",
+      "d.another_branch_reads_as_hypotheses",
+      "d.no_feed_of_other_branches",
+      "d.refuted_hypothesis_leaves_one_finding",
+      "d.refutations_keep_judgment_ids",
+      "q.contradiction_rule",
+      "q.hypothesis_lifetime"
+    ],
+    "record/validation": [
+      "d.reopened_by_is_not_blocked_on",
+      "d.declared_hole_is_a_note",
+      "d.moved_is_a_flag",
+      "d.predicate_shape_is_one_reading",
+      "d.truth_value_is_matched",
+      "d.falsifier_beyond_reach",
+      "d.gate_and_opener_against_the_mark",
+      "d.gate_reminds",
+      "d.record_measured_from_its_text",
+      "d.measure_names_a_recipe",
+      "d.metrics_derived_builtin",
+      "d.computed_names_when_named",
+      "m.blocked_on_reopeners",
+      "q.sealed_falsifiers",
+      "q.same_day_rereading"
+    ],
+    "record/writing": [
+      "d.add_places_by_prefix",
+      "d.judgments_write_inline",
+      "d.record_before_repair",
+      "d.record_is_code",
+      "d.register_out_of_tree",
+      "d.scale_by_federation",
+      "d.write_path_returns_reach",
+      "d.minimal_repair",
+      "q.unprompted_recording"
+    ],
+    "presentation/arrangements": [
+      "d.arrangement_link_is_earned",
+      "d.arrangement_replaced_by_trigger",
+      "d.arrangement_sign_is_one_comparison",
+      "d.grouping_schemes",
+      "d.groupings_declared",
+      "d.shape_move_read_by_its_sign",
+      "d.stood_is_derived",
+      "d.drift_from_newest_born",
+      "d.reversal_is_a_question",
+      "d.reversal_is_a_redecision",
+      "q.arrangement_falsifiers"
+    ],
+    "presentation/content": [
+      "d.page_is_graph",
+      "d.page_reads_only",
+      "d.page_lint_reads_output",
+      "d.components_follow_shape",
+      "d.chrome_follows_language",
+      "d.coverage_printed_never_acted",
+      "d.serving_earned_by_picks",
+      "d.spill_on_every_tab",
+      "d.purpose_gaps_warn",
+      "d.text_holds_the_prose_it_places",
+      "d.written_layer_drawn_by_build",
+      "d.whole_shape_surface",
+      "d.intent_is_a_source",
+      "d.request_is_a_visible_claim",
+      "d.requested_words_are_quotes"
+    ],
+    "presentation/tree": [
+      "d.tree_springs_back",
+      "d.tree_reads_as_a_hypothesis",
+      "d.what_if_is_reading"
+    ],
+    "distribution/implementation": [
+      "d.browser_code_in_browser_files",
+      "d.checks_ship_with_the_reader",
+      "d.locate_by_shape",
+      "d.npm_holds_the_name",
+      "d.one_source",
+      "d.one_tree_two_channels",
+      "d.release_is_its_own_pull_request",
+      "q.account_copy",
+      "q.language_direction",
+      "q.locator_authority"
+    ],
+    "method/decisions": [
+      "d.author_free_build_guarantees",
+      "d.first_meeting_artifact",
+      "d.gate_by_consequence",
+      "d.local_claims_want_a_run",
+      "d.named_for_popper",
+      "d.prior_carries_its_own_falsifier",
+      "d.prior_confidence_survives_refutation",
+      "d.priors_counted_at_the_matrix_line",
+      "d.proposer_behind_gate",
+      "d.threshold_read_inside_its_function",
+      "d.trust_layer",
+      "goal.portable",
+      "q.first_artifact"
+    ]
+  },
+  "orientation": {
+    "text": "Epistemic memory across projects and sessions: recorded claims, sources, premises and conditions for reopening.",
+    "basis": [
+      "goal.portable",
+      "d.reasoning_in_record",
+      "d.reopened_by_is_not_blocked_on"
+    ],
+    "status": "editorial orientation; basis records remain authoritative"
+  },
+  "opening_depth": 2
+}

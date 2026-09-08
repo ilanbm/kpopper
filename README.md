@@ -100,6 +100,12 @@ grows past a single file is a correct outcome.
 
 ## Opening a session costs what moved, not what exists
 
+An optional [checked session transport](docs/checked-sessions.md) adds Lean-computed
+assessment cards, complete branch folding, exact revision-bound reads and a project-bound
+MCP server. Enable it explicitly with `kpopper session enable` after installing the session
+dependencies and building its local core. The existing `open`, `pull`, `check` and write
+commands remain available.
+
 With the plugin installed, every session in a project that keeps a record opens with the
 record's own head — its name, its namespace, what needs a person, the open questions — inside
 a fixed character budget. Measured on a live record of 107 entries: reading it whole costs

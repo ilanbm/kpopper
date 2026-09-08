@@ -1,0 +1,7 @@
+import Main
+
+#print axioms EpistemicCore.accepted_view_preserves_conflict_signal
+#print axioms EpistemicCore.accepted_view_accounts_for_every_link
+#print axioms EpistemicCore.scan_accounts_for_every_row
+#print axioms EpistemicCore.changed_does_not_falsify
+#print axioms EpistemicCore.unknown_is_not_a_negative_result

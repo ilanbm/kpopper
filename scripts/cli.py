@@ -7,6 +7,7 @@ straight through to provenance.py; page renders the record and can open what it 
   kpopper affects <entry> [entry ...]     what a change reaches
   kpopper pull    <entry|prefix> [...]    values and sources for a subject
   kpopper where                           the record this directory answers for
+  kpopper session <setup|status|open|read|propose|serve>  checked, revision-bound session views
   kpopper set     <key> <value> [--why "..."] [--as-of DATE]   change one value; the reply is the reach
   kpopper add     <id> field=value ...    a new entry or judgment, in id order, its seen filled
   kpopper review  <id | "section title">  it still holds: seen rewritten from what the record holds
@@ -93,6 +94,11 @@ def main():
         print(__doc__.strip("\n"))
         sys.exit(0)
     cmd, rest = argv[0], argv[1:]
+    if cmd == "session":
+        tool = [sys.executable, str(HERE / "session_cli.py")] + rest
+        if os.name == "nt":
+            sys.exit(subprocess.run(tool).returncode)
+        os.execv(sys.executable, tool)
     if cmd == "consolidate" or (cmd == "pull" and "--from" in rest):
         # the union and the fold live beside the reader; pull --from is theirs too, since
         # another branch's record is read the way a hypothesis is

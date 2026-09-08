@@ -1,0 +1,17 @@
+{
+  "name": "kpopper",
+  "version": "1.0.0",
+  "description": "Epistemic records for work across sessions, with optional Lean-checked views and exact source reads.",
+  "author": {"name": "Ilan Bar Magen"},
+  "license": "MIT",
+  "skills": "./skills/",
+  "interface": {
+    "displayName": "kpopper",
+    "shortDescription": "Keep claims, grounds and review conditions together.",
+    "longDescription": "Maintain a traceable project record across sessions. Optional checked views preserve sources, dependencies, conflicts and unknowns without treating them as proof of world truth.",
+    "developerName": "Ilan Bar Magen",
+    "category": "Productivity",
+    "capabilities": ["Read", "Write"],
+    "defaultPrompt": "Open this project's epistemic record and show what needs review."
+  }
+}
