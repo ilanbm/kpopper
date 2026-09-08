@@ -95,6 +95,11 @@ live outside the repository under `$XDG_STATE_HOME/kpopper/ingestion/<record-has
 path has its own private directory. New source entries point to the retained text; these paths are
 local source references and are not a cross-machine source-distribution mechanism.
 
+The command needs write access to both the record and its private state directory. In a
+workspace sandbox, grant the dedicated state path through the host's supported permissions, or
+set an absolute `XDG_STATE_HOME` to an approved location. A permission error is a failed capture;
+do not report that the source was saved.
+
 This writer supports explicit `report` updates to existing stored scalar entries in one record
 file. Pointer/multi-file records, hypotheses, new entries, computed values and judgment rewrites
 remain questions for the primary or the project's own adapter. Capturing their source does not
