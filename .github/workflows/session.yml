@@ -40,7 +40,8 @@ jobs:
       - name: Check installed runtime and integration contracts
         run: |
           kpopper session status
-          python -m unittest discover -s tests -p test_session.py -v
+          python -m unittest discover -s tests -p 'test_session*.py' -v
+          python -m unittest discover -s tests -p test_predicate_literals.py -v
       - name: Audit the named theorem dependencies
         shell: bash
         run: |
