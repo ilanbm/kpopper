@@ -1,5 +1,5 @@
 meta:
-  updated: 2026-09-09
+  updated: 2026-09-10
   name: kpopper
   scope: "What this plugin is for and the decisions that shaped it, kept in its own format -
           the tools eat their own cooking, and every session here opens grounded."
@@ -341,6 +341,10 @@ sources:
            and what they contain"
     of: "each project's PROVENANCE.view.yaml, read 2026-09-02"
     read: "2026-09-02"
+  doc.workspace_operations:
+    name: "Workspace operation and first-use contract"
+    file: "docs/first-use.md"
+    read: "2026-09-10"
   run.design_talk:
     name: "A session that shaped seven page decisions in conversation and wrote none of them to
            this record until the person asked how to document them"
@@ -2691,6 +2695,20 @@ judgments:
                  could not have warned them about"
     seen: {d.open_is_a_slot: "the session opener fills a fixed character slot, highest value per
                               character first; values never preload"}
+
+  d.workspace_operations:
+    rests_on: [doc.workspace_operations]
+    verdict: "The public workspace interface is open, map with an optional deep flag, and config for
+              guidance. Mapping runs through the calling agent and distinguishes a returned task from
+              accepted work and a completed result; a plain terminal without a bound session must
+              fail explicitly."
+    because: "Commands describe user operations while tutorial acknowledgements and task receipts
+              stay in the private agent protocol. A mapping request must not be presented as
+              execution merely because it was saved or printed."
+    reopened_by: "A real user mistakes a ready mapping task for completed work, cannot tell how to
+                  invoke the intended operation from its help, or must learn receipt commands to
+                  perform an ordinary mapping."
+    seen: {doc.workspace_operations: "read 2026-09-10"}
 
   d.write_path_returns_reach:
     rests_on: [s.2026_09_03_written_layer, d.moved_is_a_flag, d.base_shared_forks_on_contradiction,
