@@ -33,7 +33,7 @@ calendars, task systems, files and earlier sessions. In software, they also incl
 commits and pull requests. One project can cross several tools; one source can serve several
 projects.
 
-kpopper keeps a *picture of the project's knowledge* in `PROVENANCE.yaml`: a readable record
+kpopper keeps a *picture of the project's reasoning* in `PROVENANCE.yaml`: a readable record
 that connects claims to sources and decisions to their premises. Your documents and tools
 keep their own content. The record makes the reasoning between them available to the next
 person or agent working on the goal.
@@ -380,15 +380,14 @@ expressed only in prose, or hidden behind unrelated IDs, can still require human
 
 ## Popper: give a conclusion a way to fail
 
-Karl Popper's central distinction was between accumulating agreeable observations and
-exposing a claim to a test that could contradict it. Passing tests does not establish a
-universal theory once and for all. Even an apparent refutation requires scrutiny of the
-observation and its assumptions. [The Stanford Encyclopedia of Philosophy](https://plato.stanford.edu/entries/popper/)
-explains both the logical asymmetry and its practical limits. This is the idea behind the
-name kpopper.
+Karl Popper was a philosopher of science who argued that scientific theories should expose
+themselves to tests that could prove them wrong. Surviving a test does not make a theory
+certain. [The Stanford Encyclopedia of Philosophy](https://plato.stanford.edu/entries/popper/)
+explains the idea and its limits.
 
-kpopper borrows that discipline for everyday decisions: **write down what would make you
-reconsider before the new evidence arrives.**
+kpopper borrows that discipline for agent reasoning: **preserve the evidence, state what
+would undermine a conclusion, and know when to reconsider it.** This is the idea behind
+the name.
 
 `wrong_if: 'venue.status != "confirmed"'` is an executable comparison. If it evaluates
 to true, `check` fails. A green check means no failing condition was found by these checks;

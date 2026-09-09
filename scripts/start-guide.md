@@ -60,6 +60,13 @@ Use `kpopper add` for judgments so the tool fills their `seen` snapshots. Do not
 date, threshold or confidence to make the record look complete. Run `kpopper check` before relying
 on the new entries.
 
+For significant conclusions, make a focused attempt to find a plausible failure that the current
+checks would miss, including one where the recorded premises remain correct. Keep any exposed
+assumption and the observable evidence that would undermine it. Preserve useful existing checks:
+the reader evaluates one comparison per judgment. Record an additional unevaluated condition
+in `because` with `blocked_on` explaining the evaluation gap; a separate judgment needs a distinct
+claim. Scale the effort to the consequences; do not invent thresholds or fill a quota of conditions.
+
 
 ## Execute a returned mapping task
 
@@ -102,6 +109,8 @@ relevant entries first and preserve current judgments when historical accounts d
    date when provided. Distinguish quotations, paraphrases and conclusions. An unopened linked
    source remains unreviewed. Unavailable material is not evidence of absence. Preserve
    disagreements and identify their effects on decisions.
+   Apply the same failure search to significant conclusions drawn from the materials. Preserve
+   additional review conditions without presenting unevaluated prose as an automatic check.
 5. **Return the map and its limits.** Show useful findings, open questions, sources reviewed and
    scope not covered. Link the knowledge view, record and sources where supported. Use the
    shipped page renderer when a page helps, following PAGE.md; keep the outcome accessible in
