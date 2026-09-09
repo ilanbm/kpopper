@@ -1,0 +1,43 @@
+title: Greenhouse winter plan
+intent: Decide what must change before the first cold night.
+sections:
+- title: Winter readiness
+  why: The capacity gap determines whether the current heating plan is sufficient.
+  text: The boiler supplies {{heat.boiler_kw}} kW. Estimated heat loss on the coldest
+    night is {{heat.loss_kw}} kW. Resolve the gap before {{when.first_cold_night}}.
+  pick:
+  - heat.boiler_kw
+  - heat.loss_kw
+  as: headline
+  reviewed: '2026-09-10'
+  seen:
+    heat.boiler_kw: 24
+    heat.loss_kw: 31
+    when.first_cold_night: '2027-02-01'
+- title: The heating decision
+  why: Inspect the reasoning before choosing extra heating or better insulation.
+  pick:
+  - c.boiler_short
+  as: cards
+- title: The glazing option
+  why: Compare the quoted cost with the estimated reduction in heat loss.
+  pick:
+  - glaze.quote_eur
+  - glaze.saving_kw
+  as: headline
+- title: Supporting evidence
+  why: The original source references and remaining question stay available.
+  pick:
+  - s.2026_09_02_heating
+  - s.2026_09_03_glazing
+  - doc.boiler_sheet
+  - heat.deficit_kw
+  - glaze.north_wall_m2
+  - when.first_cold_night
+  - q.second_boiler
+  as: lines
+shape:
+  entries: 14
+  judgments: 1
+  flagged: 0
+  blocked: 0

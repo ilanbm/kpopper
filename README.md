@@ -1,265 +1,528 @@
+<p align="center">
+  <img src="assets/kpopper-hero.png" width="520" alt="Humorous illustration of Karl Popper as a pop star. Slogan: It really whips the lemma's ass! The caption jokes: Karl Popper, the father of K-pop.">
+</p>
+
 # kpopper
 
-*Named for Karl Popper: nothing here is ever verified, only exposed to refutation. Every
-judgment must say what would make it wrong — one that cannot be wrong is an opinion.*
+**A <ins>third brain</ins>\* for agents, built on evidence and falsifiability.**
 
-The stores remember. This remembers **how you know.**
+kpopper helps agents carry a project's reasoning across sessions. It records
+what is known, where the evidence comes from, why decisions were made, and what would call
+them into question. When recorded facts change, it traces the affected decisions and flags
+conditions that no longer hold.
 
-kpopper keeps an epistemic record for work that gets revisited: what was read from the world,
-what was worked out from it, what was concluded — and what every conclusion is still standing
-on. It is not another knowledge store, and it does not model what exists. A fact from
-anywhere — a document, a database, another knowledge system — enters as an entry that says
-where it came from; the record governs its life: who vouches for it, when it was last
-checked, and what falls when it moves.
+Use it for a software project in Codex or Claude Code, financial analysis in Claude Cowork,
+or research an agent develops from an Obsidian vault. Product launches, weekly plans and
+mortgage applications need the same continuity: a new session can pick up the goal, constraints
+and earlier decisions, along with the reasons behind them. kpopper is available as an agent
+plugin and through the command line.
 
-Two mechanics carry the whole method:
+<sub>*<ins>Third brain</ins>: a layer over a second brain's stored knowledge—how claims are
+grounded, why decisions were made, and what would call them into question.</sub>
 
-- **Every judgment states, in advance, what would make it wrong — or declares out loud why
-  it cannot yet.** `wrong_if` is a predicate over the things the judgment declares it rests
-  on. The reader refuses prose in its place, rejects a predicate that reads anything
-  undeclared — and when the predicate is one comparison, evaluates it: a judgment whose own
-  falsifier holds **fails the build**. Anything richer is refused and said, never guessed
-  at: a predicate carrying a second comparison would be read as far as its first operator
-  and answered false ever after, so it is reported as the hole it is until it is split in
-  two or declared with `blocked_on`.
-- **Staleness fires on reality, not on the calendar.** Every judgment carries `seen`, a
-  snapshot of what its dependencies held when it was last reviewed. Nothing stores a stale
-  flag; drift is *derived* by comparison, so it cannot be forgotten, cleared by accident, or
-  survive a revert. What it compares is the value the judgment used — re-reading a source is
-  still a human act, and a value the record never re-read cannot drift.
+[Get started](#get-started) · [See an example](#ready-to-launch-had-a-condition) ·
+[See a document](#regular-html-annotated-with-reasoning) ·
+[The third brain](#a-third-brain-for-work-in-progress) · [How it works](#how-it-works) ·
+[Coding & CI](#coding-check-the-reasoning-behind-a-merge) ·
+[Why Lean](#the-lean-proof-assistant-from-fermat-to-agents) · [Command reference](docs/reference.md)
 
-And one boundary: **invalidation spreads — along what each judgment declared it rests on,
-and through the rules of worked-out values — but a re-derivation never applies itself.** A
-change marks everything downstream of it; deciding what to do about that waits for a person.
-A stale recommendation someone read beats a current one nobody did.
+## Start with the work
 
-A content hash over a source answers a different question than the one a conclusion needs:
-it fires when a file is reformatted and stays silent when the number you relied on moves
-somewhere the hash never covered. Matching bytes prove a file is unchanged — never that what
-you concluded from it still holds. So kpopper snapshots the *value the judgment used*, not
-the bytes it came from, and states the breaking condition in advance instead of waiting for
-a checksum to notice.
+A project is **work around a goal**. Its materials may span documents, conversations,
+calendars, task systems, files and earlier sessions. In software, they also include code,
+commits and pull requests. One project can cross several tools; one source can serve several
+projects.
 
-## What it installs
+kpopper keeps a *picture of the project's knowledge* in `PROVENANCE.yaml`: a readable record
+that connects claims to sources and decisions to their premises. Your documents and tools
+keep their own content. The record makes the reasoning between them available to the next
+person or agent working on the goal.
 
-The package is the command line: `kpopper`, with the reader and the renderer behind it. The
-plugin is all of that plus the method and the session hooks:
-
-| | |
+| When you return to… | The useful thing to recover |
 |---|---|
-| `skills/kpopper` | The method. Loads when work will be revisited, or when resuming such work. |
-| `skills/kpopper/PAGE.md` | The page reference — briefs, renderers, the tree. Read only when building a page. |
-| `scripts/kpopper` | One entry point: `open · session · check · affects · pull · set · add · review · ingest · consolidate · remeasure · same · distinct · page`. The dispatcher itself is `scripts/cli.py` — the same code the installed `kpopper` command runs. |
-| `scripts/ingestion.py` | Durable capture and independent processing through the existing writer. Quiet results stay quiet; important findings remain available for delivery. See [background ingestion](skills/kpopper/INGESTION.md). |
-| `scripts/ingestion_delivery.py` | Native delivery jobs for Codex hosts with background agents and task messaging. The agent sends important findings to the originating task, including after its answer; confirmations do not approve or rewrite the graph. See [native delivery](skills/kpopper/DELIVERY.md). |
-| `scripts/provenance.py` | The reader underneath. Field names are inferred by shape, so it reads records written in any vocabulary. |
-| `scripts/render_page.py` | The record as one self-contained page, three tabs, no dependencies beyond the reader. |
-| `scripts/verify_page.js` | Browser checks for that page, in both themes and under reduced motion. Playwright. Reached as `kpopper page --checks`. |
-| `tests/` | The contract the reader and the page keep, run as `python3 -m unittest discover -s tests` against the fixture record in `tests/fixtures/page` — every field they accept, exercised once. |
-| `PROVENANCE.measure.yaml` | The recipes the pull request takes this record's tree-facts with again — an argument list per name an entry cites with `measure:`, run by `kpopper remeasure --run` and by nothing else; what differs from the record is one more hypothesis through the dry run. |
-| `hooks/` | Claude Code's opener, stop gate and selective ingestion delivery. The opener uses the legacy reader unless checked sessions are explicitly enabled. The Codex manifest selects [its own hooks](adapters/codex/plugin-hooks.json), so Claude's `asyncRewake` does not become a blocking Codex hook. Hooks do not create captures from their own notifications. |
+| A software project in Codex or Claude Code | Why a design was chosen, the code or test supporting it, and the changes that could invalidate it. |
+| Financial analysis in Claude Cowork | Which sources support a forecast's assumptions, when they were checked, and which decisions depend on them. |
+| A product launch | Which commitments support the launch plan, and which assumptions changed. |
+| Your weekly plan | Why a task has priority, the deadline behind it, and the availability it assumes. |
+| Research with an agent and an Obsidian vault | The evidence for an explanation, competing accounts, and the observation that would challenge it. |
+| A mortgage application | Which lender offer and documents support the plan, when the offer expires, and which conditions still need confirmation. |
 
-## The record
+The same five questions orient the work:
 
-One file, one place: `PROVENANCE.yaml` at the project root — or a pointer to wherever the
-content actually sits, including a mapping of several files; the reader follows it. A project
-whose tree cannot hold the file keeps it elsewhere and registers the path with the checkout
-(one line in the git common dir; `kpopper where` prints it), and the opener and every command
-find it from any worktree. It holds three things: what was taken from a source (and where
-within it), what was worked out (the rule, never the result), and what was concluded (with
-what would make it wrong).
+1. **What are we trying to achieve?** Goals, outcomes and priorities.
+2. **What is known now?** Facts, commitments, deadlines and constraints.
+3. **What was decided, and why?** Decisions, assumptions and alternatives.
+4. **Where is the evidence?** Sources and enough detail to find the relevant passage again.
+5. **What needs another look?** Open questions, conflicting reports and changed premises.
+
+These questions guide what to record. Today, the record grows from findings made during
+the work; guided project mapping is [planned](#what-is-available-and-what-is-next).
+Relevant sources come from the user's context and available tools. Access to a file alone
+does not make it part of the project.
+
+## A third brain for work in progress
+
+A second brain helps you capture, organize and use knowledge. Tiago Forte's formulation
+explicitly includes turning that material into work through *Capture, Organize, Distill,
+Express*. [His introduction](https://fortelabs.com/blog/basboverview/) describes the method.
+
+The **third brain** is our metaphor for a further job: keeping track of what your working
+conclusions depend on, and bringing them back into question when those dependencies change.
+
+**Keep the knowledge system already in use.** A folder of Markdown files, an Obsidian vault,
+a project wiki, or memory files used by Claude or Codex can stay where they are. The agent
+reads relevant material through its available tools and records the claims it relies on,
+with links back to those sources, in `PROVENANCE.yaml`. kpopper adds the dependencies,
+review snapshots and conditions for reconsideration. There is no need to migrate the
+existing notes or replace the agent's memory system.
+
+<p align="center">
+  <a href="assets/third-brain-sources.png">
+    <img src="assets/third-brain-sources.png" width="760" alt="Many notes, memory files, documents, research papers, conversations, plans, code files and datasets remain in their existing places. An agent selects relevant evidence, and kpopper connects claims, decisions and review conditions.">
+  </a>
+</p>
+
+| Role | Question it helps answer |
+|---|---|
+| You | What matters, and what should we do? |
+| Your second brain: notes, documents and saved knowledge | What have we learned and kept that can help? |
+| kpopper, working with your agent | What supports this decision, what has changed, and what needs review? |
+
+That distinction is useful when a perfectly retrievable note contains a decision whose
+premises have expired. Finding the note is one job; noticing that its recommendation needs
+another look is another.
+
+There is a loose parallel with human memory: remembering can involve updating what was
+previously learned. In a laboratory study of episodic memory, reminders led participants to
+incorrectly include newly learned items when recalling an earlier list.
+[Hupbach et al., 2007](https://pubmed.ncbi.nlm.nih.gov/17202429/) provide one concrete example.
+This motivates an analogy, not a claim that kpopper models the brain or that neuroscience
+validates the product.
+
+Operationally, the analogy is straightforward: retrieve the relevant context, compare it
+with new information, draw attention to a consequential mismatch, and review the conclusion.
+In kpopper those steps are explicit records and checks. The person or agent supplies the
+interpretation; the software follows the declared connections. You retain the decision.
+
+## “Ready to launch” had a condition
+
+Karl Popper is releasing his debut K-pop single.
+An agent has prepared Friday's launch-party announcement. The venue has confirmed the
+booking. The decision: **the announcement is ready, provided the booking stays confirmed.**
+
+The next day, the venue cancels. A later session picks up the launch plan. The announcement
+copy is unchanged; the reason it was ready to publish has disappeared.
+
+kpopper preserves that connection:
 
 ```yaml
 sources:
-  msa: {file: "contracts/acme-msa-2026.pdf", of: "2026-04-02"}
+  booking:
+    name: "Venue confirmation"
+    quoted: "Your booking for Friday is confirmed."
+    read: "2026-09-09"
 
 known:
-  acme.seat_price: {v: 42, from: msa, at: "Enterprise tier", name: "Acme seat price"}
-  acme.seats:      {v: 180, from: msa, name: "Committed seats"}
-  acme.annual:     {rule: "acme.seat_price * acme.seats * 12", name: "Annual Acme cost"}
-  beta.annual:     {v: 84000, from: msa, name: "Annual Beta cost"}
+  venue.status: {v: confirmed, from: booking, as_of: "2026-09-09"}
 
 judgments:
-  why_acme:
-    rests_on: [acme.annual, beta.annual, acme.seats]
-    verdict:  "prefer Acme above ~150 seats"
-    wrong_if: "acme.seats < 150"
-    seen:     {acme.annual: 90720, beta.annual: 84000, acme.seats: 180}
-  seats_fit:
-    rests_on: [acme.seats]
-    verdict:  "the committed seats fit one contract tier"
-    wrong_if: "acme.seats > 500"
-    seen:     {acme.seats: 180}
+  launch.announcement:
+    rests_on: [venue.status]
+    verdict: "Friday's announcement is ready, provided the venue booking stays confirmed."
+    because: "The announcement names the date and venue confirmed in the booking email."
+    wrong_if: 'venue.status != "confirmed"'
+    seen: {venue.status: confirmed}
 ```
 
-Drop the seat count to 120 and `check` fails with `why_acme: wrong_if holds (acme.seats <
-150) - broken by its own condition`; `affects acme.seat_price` reaches `why_acme` through
-the rule that computes the annual figure. The record does not wait to be asked.
+After the session records the cancellation, the next check reports:
 
-Nothing is created on the first turn. The file appears when there is a first thing to put in
-it, and structure is added only when something observable forces it. A project that never
-grows past a single file is a correct outcome.
-
-## Opening a session costs what moved, not what exists
-
-An optional [checked session transport](docs/checked-sessions.md) adds Lean-computed
-assessment cards, complete branch folding, exact revision-bound reads and a project-bound
-MCP server. Enable it explicitly with `kpopper session enable` after installing the session
-dependencies and building its local core. The existing `open`, `pull`, `check` and write
-commands remain available.
-
-With the plugin installed, every session in a project that keeps a record opens with the
-record's own head — its name, its namespace, what needs a person, the open questions — inside
-a fixed character budget. Measured on a live record of 107 entries: reading it whole costs
-39,777 characters; the opener costs 948 on a clean record. The opener also re-runs after a
-context compaction, which is exactly when a session most needs to be re-grounded.
-
-The rest is pulled, never preloaded:
-
-```bash
-kpopper open                     # what a session reads instead of the whole record
-kpopper check                    # does the record still hold together
-kpopper affects <entry>          # what a change reaches, through intermediate judgments
-kpopper pull <entry|prefix>      # a subject's values with their sources - and what moved
-                                 # since each judgment last looked
-kpopper where                    # the record this directory answers for
-kpopper set | add | review       # change the record; the reply is what the write reached
-                                 # (--hypothesis NAME writes beside the record instead)
-kpopper ingest capture --file report.json  # retain a report and process an explicit update asynchronously
-kpopper ingest capture --file report.json --notify-task "$CODEX_SESSION_ID"  # also return a native delivery job
-kpopper ingest pending           # only important unresolved ingestion findings
-kpopper consolidate [--dry-run]  # the record with its hypotheses laid over it, tested - then folded
-kpopper same <a> <b>             # one subject under two ids: b retired into a
-kpopper distinct <a> <b> "why"   # two that only look alike, kept apart for good
+```text
+launch.announcement: wrong_if holds (venue.status != "confirmed") - broken by its own condition
 ```
 
-Each command reads the record in the current directory, or the files you name. Without the
-command line on your path, the same dispatcher ships inside the plugin — find it once, then run
-`"$K" open`. An installed plugin sits under a version directory and may hold worktrees of its
-own, so the search skips those and takes the highest version rather than the first hit:
+The next agent sees **which decision needs review, which premise changed, and what the
+earlier decision was based on**. It knows to revisit the announcement before reusing
+“ready to launch.”
 
-```bash
-K=$(find ~/.claude -name worktrees -prune -o -path '*kpopper*/scripts/kpopper' -print 2>/dev/null | sort -V | tail -1)
-```
+[Try the example](docs/reference.md#try-it-from-the-command-line) ·
+[See a PR and CI case](#coding-check-the-reasoning-behind-a-merge)
 
-`check` exits non-zero on an undeclared gap: a dependency that is not an entry (unless the
-judgment declares it missing with `blocked_on`), a dependency with no snapshot, a predicate
-naming something undeclared, prose sitting in a predicate field, a predicate this reader
-cannot decide as one comparison, or a one-comparison predicate that currently holds — a
-judgment broken by its own condition. A declared hole is a
-note, not a failure — a build that stays red over an honest declaration teaches records to
-stop declaring. So is a judgment decided on the session's own prior — a `prior.*` claim whose
-value is the confidence — that names in `reopened_by` the sign a person would read to re-open
-it. A dependency that moved since a judgment's snapshot is reported as `MOVED`
-and does not fail the build either: it puts the judgment in front of a person, and it is
-muted when the predicate names it and still evaluates false — moved, not across the line.
+## Get started
 
-Several sessions and branches write the one record, and a write that contradicts what it holds —
-the same id with a reading no newer than the base's, or a different verdict — is refused into a
-**hypothesis**: `PROVENANCE.d/<name>.yaml` beside the record, in the record's own shape, which
-every command reads over the base and nothing applies. `consolidate --dry-run` tests the record
-with its hypotheses laid over it — premises re-checked, falsifiers evaluated, an id two of them
-hold with different claims stopped, near-duplicates named for a person to judge — and
-`consolidate` folds what the test leaves clean, `--refute` keeps a failed one as a negative
-finding, and `--from <ref>` reads another branch's committed record the same way, pulled and
-never pushed. Sameness is judged, not guessed: `add` names the nearest existing entries, and
-`same` or `distinct` records the answer so the pair never returns.
+Project work in **Claude Cowork and ChatGPT Work** is a natural fit for this method:
+tasks share dependencies, decisions constrain later choices, and commitments unfold over
+time. kpopper is designed to keep the reasoning connecting them available across sessions,
+with sources, review snapshots and explicit conditions for reconsideration.
 
-## Capture new details while you keep talking
+Install it in the environment where that work happens. The package includes the
+[method](skills/kpopper/SKILL.md), record tools and host-specific hooks; setup depends on
+the environment.
 
-The same record can also be maintained while a conversation continues. kpopper saves new
-reports and checks supported updates in the background, bringing back only findings that need
-attention.
+### Claude Cowork
 
-<p align="center">
-  <img src="assets/conversation-flow.webp" width="420" alt="The conversation continues from top to bottom. A detail is checked at the side; only an important finding returns to a later message.">
-</p>
+Open **Customize → Plugins → Add marketplace**, enter `ilanbm/kpopper`, then install
+**kpopper** from that marketplace. This uses the same Claude plugin package.
+[Cowork's installation guide](https://claude.com/docs/cowork/guide/plugins) describes the
+repository import and component controls.
 
-See [how background capture works](skills/kpopper/INGESTION.md) for supported updates and host
-behavior.
+### ChatGPT Work
 
-## The page — and the tree
+**Workspace import is supported by the platform; kpopper's full Work runtime is not yet
+validated.** A workspace administrator can open **Admin → Plugins → Add → Import marketplace**,
+enter `https://github.com/ilanbm/kpopper` as the source and leave **Path** empty. Once the
+plugin is available to the workspace, install it from **Plugins** and start a new Work
+conversation. The repository uses a
+[supported marketplace format](https://learn.chatgpt.com/docs/enterprise/plugin-management).
 
-```bash
-kpopper page --open              # the record as one page, in the browser
-kpopper page --open --tree       # landing on the tree
-kpopper page --verify            # deterministic checks, no browser
-```
+The scripts, Python dependencies and persistent project record must also be accessible in
+Work's execution environment. Installing a plugin through the web does not deploy local
+hook scripts. See [Work setup and current limits](docs/chatgpt-work.md) before relying on
+automatic opening or background delivery.
 
-Three tabs. **Now** is the arrangement this session chose, written in a brief the page keeps
-honest: it may order, it cannot drop. **Record** is everything, arranged by nothing. **Tree**
-is the whole record as one growing thing: what was read from the world is the root fan below
-the ground line, worked-out values branch above it, and conclusions blossom in a canopy —
-the three node kinds in their three colors. Everything on every tab is the same live card:
-hover or tap for where a value came from, click a dependency to walk to it, and on the tree,
-opening a node lights the sap — the full chain of evidence feeding it — while its neighbours
-stir like branches in wind. A card's `tree` button prunes the tree to that node's world; one
-chip brings the whole tree back. The tab grows in the first time it is opened, and any node can
-be pulled — it resists like a branch, stretches its limbs, and springs back when you let go,
-because the page keeps nothing.
+### Claude Code
 
-## The part that does not change
+Run in a terminal with Claude Code installed:
 
-1. **Every entry declares what it rests on.** Something with no declaration does not go in.
-2. **Store what produces an output, never the output.**
-3. **Invalidation spreads automatically; re-running a judgment never applies itself.**
-4. **A change to the shape is valid only with a migration that leaves the build green.**
-
-Everything else — field names, sections, renderers — is open to revision. A record that can
-rewrite its own rules will drift unless something in it is not up for revision. These four
-are that floor.
-
-## Installing
-
-The command line on its own, for any project and any editor:
-
-```bash
-pipx install kpopper             # or: pip install kpopper
-```
-
-The browser checks come with it — they are Node, but they install where everything else does:
-
-```bash
-kpopper page --out record.html   # then: kpopper page --checks record.html
-```
-
-The Claude Code plugin — the method as a skill, the session opener, the stop gate, and the
-same commands:
-
-```bash
-/plugin marketplace add /path/to/kpopper
-/plugin install kpopper@kpopper
-```
-
-or non-interactively:
-
-```bash
+```sh
+claude plugin marketplace add ilanbm/kpopper
 claude plugin install kpopper@kpopper --scope user
 ```
 
-`--scope user` makes it available in every project on the machine; `--scope project` commits
-it to the repo you are in. Other editors are wired up from `adapters/`.
+Or run these inside Claude Code:
 
-Where the channels overlap they are the same files rather than copies of them: the packages are
-mapped onto the plugin's `scripts/`, so the reader, the renderer, the dispatcher and the browser
-checks have nothing to keep in step, and one version number covers all of them. There is a third
-package, on npm, and it is that same mapping: it holds the name while an open question in the
-record — whether the renderer, the command line and the checks move to TypeScript — is still open,
-and it carries the browser checks rather than nothing, because they are the part that is already
-Node. This repository is the only place any of it is edited; every installed copy is a read-only
-distribution.
+```text
+/plugin marketplace add ilanbm/kpopper
+/plugin install kpopper@kpopper
+```
 
-## Requirements
+Both install from this repository's marketplace. See
+[Claude's plugin installation guide](https://code.claude.com/docs/en/discover-plugins).
 
-Python 3.9+ and PyYAML — `pipx` brings it along; a plugin-only install wants
-`pip3 install pyyaml`. The browser checks additionally want Node 18+, a Chrome/Chromium
-binary (`CHROME=/path/to/chrome` when it is not on a known path), and `playwright-core` — the
-driver, which none of the packages ship: it is found beside the page when the project already
-uses Playwright, and otherwise `npm i --no-save playwright-core` next to the page is enough.
-Nothing else.
+### Codex
 
-## What would show this was not worth it
+Run in a terminal on the machine where Codex runs:
 
-The method promises exactly one measurable thing: the opening cost of session number N. If
-after five sessions the sixth does not open cheaper, the method did not return what it cost,
-and you can drop it with a clear conscience.
+```sh
+codex plugin marketplace add ilanbm/kpopper
+codex plugin add kpopper@kpopper
+```
+
+Start a new Codex task after installation. Review the plugin's hook definitions when
+prompted; hook trust is separate from installation. The repository includes a native Codex
+manifest and host-specific hooks. See [Codex setup and behavior](adapters/codex/README.md)
+and [OpenAI's plugin guide](https://learn.chatgpt.com/docs/plugins).
+
+### Other agents
+
+Clone the repository to a location where it can remain available:
+
+```sh
+git clone https://github.com/ilanbm/kpopper.git
+```
+
+Then follow the adapter for the host:
+
+| Agent | Install path |
+|---|---|
+| [Cursor](adapters/cursor/README.md#install) | Install the rule and hook wrappers in the project's `.cursor` directory. |
+| [Gemini CLI](adapters/gemini/README.md#install) | Run `gemini extensions link ./kpopper/adapters/gemini` from the directory where the clone was created. |
+| [Windsurf](adapters/windsurf/README.md#install) | Install the Cascade rule and optional write hook. |
+| [GitHub Copilot](adapters/copilot/README.md#install) | Use the instructions and configuration for VS Code or the cloud agent. |
+
+Keep existing host configuration when adding an adapter. Each guide describes its paths
+and limitations; automatic opening and stop behavior differ by host. See the
+[capability matrix](adapters/README.md#capability-matrix) for the comparison.
+
+### Start working
+
+The local scripts need **Python 3.9+ and PyYAML** available in the environment used by the
+host's `python3`. If PyYAML is missing, install it in that environment:
+
+```sh
+python3 -m pip install pyyaml
+```
+
+Lean is optional; the ordinary reader and page work without it. In a new agent session
+with the project open, start with:
+
+> Use kpopper to keep this project's reasoning across sessions. If a record exists, open it
+> and show what needs review. As we work, preserve the useful findings, sources, decisions
+> and conditions that would make those decisions worth reconsidering.
+
+Installation creates no record. Start with the first finding worth carrying into another
+session. A one-off question may need no record at all.
+
+For a standalone CLI installation and a walkthrough of the launch-party example, see
+[Try it from the command line](docs/reference.md#try-it-from-the-command-line).
+
+## Keep the conversation moving
+
+New information often arrives halfway through another task. kpopper can retain an explicit
+report and process a supported update in a separate worker. Routine results stay quiet;
+important unresolved findings are available for delivery back to the conversation.
+
+<p align="center">
+  <a href="assets/conversation-flow-v2.png">
+    <img src="assets/conversation-flow-v2.png" width="720" alt="An agent captures a venue cancellation while the conversation continues. kpopper saves the source, checks the recorded venue-to-announcement dependency, and returns a review notice. Routine updates stay quiet.">
+  </a>
+</p>
+
+Today, that worker can update an **existing stored scalar value in a single record file**,
+using a supplied source quote, target, value and report date. It does not infer what an
+ambiguous message refers to. Unresolved identity or meaning remains a question. Delivery
+after an answer requires the host capabilities described in the
+[background capture guide](skills/kpopper/INGESTION.md) and
+[native delivery guide](skills/kpopper/DELIVERY.md).
+
+**Captured, applied and checked are different states.** If the current answer depends on
+an update, inspect its outcome before relying on it. Background work is useful precisely
+where the conversation can safely continue without that result.
+
+## How it works
+
+The technical term is an **epistemic record**: a record of what is known and how it is
+grounded. The main pieces are ordinary YAML:
+
+| Piece | What it preserves |
+|---|---|
+| Source | The document, conversation, observation or other origin of a claim, with dates and locators. |
+| Reading | A value or quotation taken from that source. |
+| Derivation | The rule relating inputs to a result. The general reader stores rules and follows their references; it does not evaluate arbitrary formulas. |
+| Judgment | A conclusion, its reasoning, declared dependencies and condition for reconsideration. |
+| Review snapshot | What those dependencies held when the judgment was last reviewed: `seen`. |
+| Open question | Something unresolved, retained without inventing an answer. |
+
+**Change is compared with the last review.** When a recorded scalar differs from a judgment's
+`seen` snapshot, the reader identifies the movement. A supported `wrong_if` comparison says
+whether the change crosses the judgment's stated boundary. Movement can call for review
+without refuting the conclusion; a movement inside its declared threshold can stay quiet.
+`affects` traces the wider reach through declared judgments and rule references.
+
+**The record does not observe the world on its own.** A changed document matters only after
+someone or an authorized tool supplies a new reading. Optional measurement recipes can
+re-read selected values when explicitly run. These are [reviewed commands](docs/reference.md#measurement),
+not general source monitoring.
+
+**History and the present belong together, with their dates intact.** An old conversation
+can explain why a deadline was chosen; it does not establish that the deadline still holds.
+A session's proposed action does not establish that anyone performed it. Reusing a
+recommendation requires evidence for its conditions now.
+
+**Competing claims can stay separate.** A conflicting write can become a hypothesis beside
+the base record. Consolidation checks the proposed combination before an explicit fold;
+it can also retain a refuted hypothesis as a negative finding. A signal never grants
+permission to change a decision or act outside the record.
+
+On return, `open` gives a bounded orientation and attention report; `pull` retrieves the
+subject you need. The optional checked session mode below adds a complete, navigable view
+within a token budget. In both cases, the aim is to spend the next session's context on the
+work at hand.
+
+## Coding: check the reasoning behind a merge
+
+**Two branches can be sound on their own and undermine each other's decisions when merged.**
+Git checks whether their text can be combined. kpopper adds a check on the recorded premises
+and conditions behind the work.
+
+Consider two pull requests in an example checkout service:
+
+| Pull request | Change | Its record in isolation |
+|---|---|---|
+| PR A: support longer requests | Raise the request timeout from 5 to 30 seconds. | Passes. |
+| PR B: simplify checkout | Use a blocking call because the current 5-second timeout fits a 10-second request budget. | Passes. |
+
+<p align="center">
+  <a href="assets/ci-merge.png">
+    <img src="assets/ci-merge.png" width="760" alt="Two PR records pass separately. PR A raises a timeout to 30 seconds; PR B relies on the original 5-second timeout fitting a 10-second checkout budget. Git merges cleanly, but kpopper flags the combined decision because 30 seconds exceeds 10 seconds.">
+  </a>
+</p>
+
+PR B records the reason for its choice:
+
+```yaml
+checkout.blocking_call:
+  rests_on: [request.timeout_seconds]
+  verdict: "A blocking call fits the checkout's 10-second request budget."
+  wrong_if: "request.timeout_seconds > 10"
+  seen: {request.timeout_seconds: 5}
+```
+
+Each branch's record passes separately. The YAML can merge without a text conflict. But
+after PR A lands, PR B's proposed merge result has a timeout of 30. CI reports:
+
+```text
+checkout.blocking_call: wrong_if holds (request.timeout_seconds > 10) - broken by its own condition
+```
+
+The failure points to the checkout decision and the premise it used. That is a regression
+in the recorded reasoning, even though the lines merged cleanly.
+
+There are two ways to check the combination:
+
+- **Before merging:** `kpopper consolidate --dry-run --from <branch-or-ref>` reads another
+  branch's committed record as proposed changes and tests it against the current record.
+- **On the proposed merge result in CI:** `kpopper check` checks the combined record;
+  `kpopper consolidate --dry-run` also tests the hypotheses stored beside it.
+
+The checks report fired conditions, structural gaps and conflicting claims. A changed
+premise that needs review can be reported without failing CI; an affected hypothesis still
+needs review before it can be folded. Decisions are revised explicitly.
+
+**This already runs in kpopper's own [CI workflow](.github/workflows/check.yml)** on pull
+requests and pushes to `main`, alongside the test suite, measurement recipes and page checks.
+The merge checks use the Python reader and do not require the optional Lean core.
+See [Add reasoning checks to CI](docs/coding-and-ci.md) for a workflow to copy.
+
+The coverage is what the record declares. These checks do not infer intent from arbitrary
+code or prove that all goals are mutually compatible. Keep relevant readings current;
+reviewed measurement recipes can connect selected code facts to the record. A contradiction
+expressed only in prose, or hidden behind unrelated IDs, can still require human review.
+
+## Popper: give a conclusion a way to fail
+
+Karl Popper's central distinction was between accumulating agreeable observations and
+exposing a claim to a test that could contradict it. Passing tests does not establish a
+universal theory once and for all. Even an apparent refutation requires scrutiny of the
+observation and its assumptions. [The Stanford Encyclopedia of Philosophy](https://plato.stanford.edu/entries/popper/)
+explains both the logical asymmetry and its practical limits. This is the idea behind the
+name kpopper.
+
+kpopper borrows that discipline for everyday decisions: **write down what would make you
+reconsider before the new evidence arrives.**
+
+`wrong_if: 'venue.status != "confirmed"'` is an executable comparison. If it evaluates
+to true, `check` fails. A green check means no failing condition was found by these checks;
+it does not establish that the recommendation is true, wise, complete or authorized.
+
+The predicate language is deliberately small: one supported comparison over declared
+references and values. Free-form reasoning and compound logical expressions are outside
+that evaluator. If a condition cannot yet be checked, `blocked_on` records why. A decision
+that needs a person's judgment can instead carry `reopened_by`, describing the sign that
+would bring it back for review. Preferences and open questions need no invented scientific
+certainty. See [the checking rules](docs/reference.md#what-check-means).
+
+This is a practical use of falsification, not an automated implementation of the scientific
+method. Choosing good evidence and meaningful breaking conditions remains intellectual work.
+
+## The Lean proof assistant: from Fermat to agents
+
+<p>
+  <a href="https://lean-lang.org/">
+    <img src="assets/lean-logo.png" width="220" alt="Lean programming language and proof assistant logo, with its trademark symbol.">
+  </a>
+</p>
+
+In September 2026, Anthropic reported that Claude had formalized a proof of **Fermat's Last
+Theorem** in the Lean programming language, producing a complete computer-checked proof.
+The achievement was formalizing existing mathematics, building on Wiles's proof and
+community work. See [Anthropic's account](https://www.anthropic.com/research/formalizing-fermats-last-theorem)
+and the [published proof](https://github.com/anthropics/fermats-last-theorem).
+
+> “If it's good enough for Claude, it's good enough for you.”
+>
+> — Karl Popper, father of K-pop.
+
+**kpopper's optional, experimental session mode uses the Lean 4 programming language** for
+a smaller, specific job: checking rules about an agent's view of the record. The language
+is also a theorem prover: its kernel checks formal proofs against a precisely defined
+type theory. [The Lean reference](https://lean-lang.org/doc/reference/latest/Elaboration-and-Compilation/)
+explains how proof checking and compiled execution fit together.
+
+In kpopper, Python reads the record and prepares a normalized snapshot. A local compiled
+Lean core computes assessments and checks the proposed session view. Python then exposes
+the result through CLI or MCP. Reads are bound to the revision returned at opening, so a
+changed record rejects a request using the old revision.
+
+The [Lean source](scripts/session/lean/Main.lean) contains formal proofs of specific properties:
+
+| Property | Why it matters |
+|---|---|
+| A changed premise alone does not count as falsification when the falsifier is false. | “Something changed” and “the condition fired” stay distinct. |
+| An unknown falsifier cannot satisfy an assertion that it is false. | Missing knowledge cannot pass as a negative result. |
+| Every scan row contributes to either the success or error count. | An assessment error remains accounted for. |
+| A view accepted by the core's acceptance predicate preserves declared conflict signals and accounts for every link index. | Folding a large record must retain the declared structure and conflicts. |
+
+The [proof audit](scripts/session/lean/ProofAudit.lean) names these theorems and prints their
+axiom dependencies. Other runtime checks cover such details as exact recovery references,
+topic bindings and event values. The [session CI workflow](.github/workflows/session.yml)
+builds the pinned Lean source and runs integration tests on Linux, macOS and Windows.
+
+These are guarantees about **defined data structures and checks**. They do not prove that
+a source is accurate, that `rests_on` logically implies a verdict, that an agent's prose
+follows from the evidence, or that an action is permitted. The Python adapter, router,
+renderer, compiler and runtime are outside an end-to-end formal proof. You do not need to
+write Lean to maintain a record.
+
+To use checked sessions, install `kpopper[session]` with Python 3.10+, make Lean **4.33.1**
+available, then build and enable the local core. The complete instructions, CLI and MCP
+examples, predicate subset and rollback are in [Checked sessions](docs/checked-sessions.md).
+The ordinary commands remain available without it.
+
+[Logo source and trademark information](assets/README.md#lean-logo).
+
+## Regular HTML, annotated with reasoning
+
+A report can still read like a report: paragraphs, figures, tables and dates. In a kpopper
+page, linked details carry another layer—the reasoning and evidence behind them. Read the
+document normally, then follow a reference when something deserves a closer look.
+
+**Hover to see what a conclusion rests on.** Here, the heating recommendation opens into
+its premises, breaking condition and explanation. The related figures are highlighted
+in the document itself.
+
+<p align="center">
+  <a href="assets/document-hover.png">
+    <img src="assets/document-hover.png" width="820" alt="An excerpt from the Greenhouse winter report's Now tab. Hovering over the heating conclusion opens a card with its dependencies, breaking condition and reasoning; the related 24 kW and 31 kW figures are highlighted in the report.">
+  </a>
+</p>
+
+**Click to pin the card, then drill down.** In this example, two clicks follow the heating
+conclusion to the capacity-gap calculation, then to the recorded boiler output. The final
+card shows the value and names the service-sheet source behind it. The back button or
+Escape steps back through that reading path.
+
+<p align="center">
+  <a href="assets/document-drilldown.png">
+    <img src="assets/document-drilldown.png" width="820" alt="The same report after two drilldown steps: heating conclusion to shortfall calculation to boiler-output reading. The open card shows a value of 24 and the named service-sheet source, with a back button for returning through the reading path.">
+  </a>
+</p>
+
+<sub>Actual browser captures from the [example record](examples/greenhouse-report/PROVENANCE.yaml)
+and its [document layout](examples/greenhouse-report/PROVENANCE.view.yaml). Click either image
+to inspect it at full size.</sub>
+
+`kpopper page --open` generates this self-contained HTML from the project's record and a
+chosen layout. **Now** and other project tabs can present reports, plans or comparisons;
+**Record** lists the entries directly, and **Tree** offers an optional graph view. The page
+is a rendered snapshot—regenerate it after the record changes. For layouts, components,
+localization and checks on stale explanatory text, see the [page reference](skills/kpopper/PAGE.md).
+
+## What is available, and what is next
+
+| Status | Capability |
+|---|---|
+| Available | YAML records, source references, judgment checks, dependency tracing, review snapshots, hypotheses and consolidation. |
+| Available | CLI, HTML page and agent integrations, with host-specific setup and limits. |
+| Available | Checks on combined records and hypotheses in CI, including before-merge inspection of another branch's record. |
+| Available within stated limits | Background processing of explicit reports and selective delivery of important findings. |
+| Platform import route documented; runtime not yet validated | ChatGPT Work installation and execution of this plugin. |
+| Experimental, opt-in | Lean-checked session views, revision-bound reads and a project-bound MCP server. |
+| Planned | Guided starting choices: learn during ordinary work, map selected existing materials, or investigate a defined subject and period in depth. |
+| Planned | Conversational onboarding that distinguishes a new user from a new project, explains concepts when first used, offers cards and links, and lets the user skip. |
+
+An agent can help gather and interpret information using its available tools today. The
+planned guided flows are not built-in scanning or connectors. Their scope should begin
+with where the work and decisions actually happen, and which sources the user wants included.
+
+## Make it earn its place
+
+Try it on work you will revisit. After several sessions, ask whether returning takes less
+reconstruction, whether a changed premise surfaced a useful question, and whether the
+record costs less to maintain than it saves. Those are outcomes to measure in your work,
+not established productivity results.
+
+Keep the record as small as the work allows. Its purpose is to help you move the project
+forward with reasons you can inspect and revise.
+
+[Command and storage reference](docs/reference.md) · [Contributing and validation](CONTRIBUTING.md) ·
+[Changelog](CHANGELOG.md) · [MIT license](LICENSE)

@@ -1,0 +1,27 @@
+# Image sources
+
+## Product screenshots
+
+`document-hover.png` and `document-drilldown.png` are browser captures of the actual
+kpopper renderer's **Now** tab, cropped to the report excerpt. They use the included
+[Greenhouse report record](../examples/greenhouse-report/PROVENANCE.yaml) and
+[document layout](../examples/greenhouse-report/PROVENANCE.view.yaml). The example adapts
+the Greenhouse test data into a short report with one heating judgment.
+
+The first capture shows a hover over `c.boiler_short`. The second follows two dependency
+links: `c.boiler_short` → `heat.deficit_kw` → `heat.boiler_kw`. The resulting card shows
+the reading and its source identifier. The screenshots preserve the rendered UI; no live
+personal project data appears in them.
+
+## Lean logo
+
+`lean-logo.png` is the unmodified white-background PNG from the
+[Lean logo downloads](https://lean-lang.org/logos/), including its trademark symbol.
+The [original image](https://lean-lang.org/static/png/lean-logo-official-TM-white-2400x900.png)
+identifies the Lean programming language and proof assistant used by kpopper's optional
+session core.
+
+The Lean name and logo are trademarks of Lean Focused Research Organization (FRO).
+Their use follows the [Lean Trademark Policy](https://lean-lang.org/trademark-policy/)
+and does not imply endorsement of kpopper by Lean FRO. The logo is not covered by this
+repository's MIT license.
