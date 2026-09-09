@@ -3866,7 +3866,7 @@ if __name__ == "__main__":
             (files if rest[i].endswith((".yaml", ".yml")) else seeds).append(rest[i])
             i += 1
         sys.exit(pull(files or default_paths(), seeds, b))
-    files = [x for x in rest if x.endswith((".yaml", ".yml"))] or default_paths()
+    files = [x for x in rest if x.lower().endswith((".yaml", ".yml"))] or default_paths()
     if cmd == "open":
         b = int(rest[rest.index("--budget") + 1]) if "--budget" in rest else 25
         c = int(rest[rest.index("--chars") + 1]) if "--chars" in rest else None

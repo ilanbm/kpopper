@@ -49,7 +49,7 @@ worker contract. Plain hooks alone do not provide that idle delivery.
 ## Step 1 — `PROVENANCE.yaml`
 
 This method owns one known entry point: **`PROVENANCE.yaml` in the project's working directory.**
-Git is optional. Use the location resolved by the opener or `kpopper start status`: it checks
+Git is optional. Use the location resolved by the opener or `kpopper open --json`: it checks
 the current directory and ancestors within the workspace boundary, then Git's registered
 external location. Do not start a duplicate because the file is outside the current directory.
 
@@ -103,8 +103,8 @@ cost that grows with the record and one that grows with what moved — and that 
 the only thing this method promises to measure.
 
 **If it does not exist:** there is no record here yet; knowledge may already live in the
-materials. Run `kpopper start` if the hook did not supply `KPOPPER_START`, and follow
-`kpopper start guide` for the optional first offer, source discovery and contextual explanations.
+materials. Run `kpopper open` if the hook did not supply `KPOPPER_START`, and follow
+`kpopper _agent guide` for the optional first offer, source discovery and contextual explanations.
 An unavailable registered record is a location problem, not a new project.
 
 Default to learning during the user's actual task. Create the record with the first useful
@@ -118,14 +118,17 @@ materials, or a deeper investigation within agreed subjects, sources and dates. 
 mapping request already chooses that work; no extra confirmation is needed. Use the guide
 to locate where decisions happen and to keep historical accounts separate from present
 findings. Do not expand into unrelated private sources or infer permission from silence.
-Remember an actual choice with `kpopper start choose work|map|deep`; mark a finished mapping
-with `kpopper start complete --request REQUEST` so later sessions do not repeat it.
+For an explicit mapping request, call `kpopper map --json` or `kpopper map --deep --json`
+with the host session environment, accept and execute the returned task, and report its actual
+result through the supplied internal protocol. Do not stop after announcing a ready task.
+Learning during ordinary work needs no configuration. Public operations are `open`, `map`,
+and `config --guidance on|off`; request IDs and receipt calls are internal.
 
 **Teach through actual events.** A compact card can explain the first saved finding, linked
 source, grounded decision, conflict, reuse, or changed premise. Show real links where available
-and use the host's native card or a Markdown block. `start status` lists unseen concepts;
-`start shown EVENT` acknowledges an explanation only after displaying it. The introduction
-is remembered per user, the starting offer per project. Respect `start guidance off` and do
+and use the host's native card or a Markdown block. `kpopper _agent status` lists unseen concepts;
+`kpopper _agent shown EVENT` acknowledges an explanation only after displaying it. The introduction
+is remembered per user, the starting offer per project. Respect `kpopper config --guidance off` and do
 not turn an onboarding step into a requirement for finishing the user's task.
 
 **If the project already keeps a record somewhere else** — a `facts.yaml` in a subfolder, a table someone maintains — do not move it and do not duplicate it. Create `PROVENANCE.yaml` as a pointer:
@@ -226,7 +229,7 @@ a source*, under Step 5).
 ## Step 2 — Record what the work calls for
 
 During ordinary work, keep the findings and sources you actually use. A selected mapping or
-investigation makes discovery the task: follow `kpopper start guide`, stay inside the agreed
+investigation makes discovery the task: follow `kpopper _agent guide`, stay inside the agreed
 scope and report its limits. The availability of more material is not a reason to survey it.
 
 ### 1. Something you took from a source

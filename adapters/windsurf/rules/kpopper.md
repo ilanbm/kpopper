@@ -30,13 +30,16 @@ what would re-open it. A write that contradicts what the record holds is refused
 hypothesis beside it (`--hypothesis NAME`), which `consolidate --dry-run` tests against the
 base and `consolidate` folds only when the test is clean.
 
-Reuse an opening the hook already supplied. Otherwise run `kpopper start` for the workspace's
-first-use context, and `provenance.py open` when a record exists. Use `kpopper start guide`
+Reuse an opening the hook already supplied. Otherwise run `kpopper open` for the workspace's
+context, including its first-use options. Use `kpopper _agent guide`
 for the optional choice of learning while working, an initial map, or a deeper investigation.
 Only an explicit choice authorizes mapping; missing files create no obligation to survey or
 write. An unavailable registered record must not trigger a duplicate. The guide records
 user/project choices and explanations actually shown, so sessions do not repeat onboarding.
-Without `kpopper` on PATH, run `<plugin>/scripts/cli.py start` with Python instead.
+Run an explicit mapping with `kpopper map --json` (`--deep` for deeper work), then accept
+and execute the task using its internal protocol. A ready task is not completed work.
+Use `kpopper config --guidance off` to disable explanations. Without `kpopper` on PATH,
+run `<plugin>/scripts/cli.py` with Python and the same arguments.
 Ground a subject with `pull`, trace what a change reaches with `affects`, gate on `check`.
 <!-- /kpopper:method -->
 
@@ -47,11 +50,7 @@ code:
 
 **Opening.** Read the workspace's first-use context with:
 
-    python3 <plugin>/scripts/cli.py start
-
-If a record was found, open it with:
-
-    python3 <plugin>/scripts/provenance.py open --chars 2000
+    python3 <plugin>/scripts/cli.py open
 
 Read that instead of the file whole — it is the record's own head plus only what
 needs a person, ranked and cut to a budget.

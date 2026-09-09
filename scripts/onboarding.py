@@ -86,9 +86,13 @@ def _write(path, value):
 
 def status(location):
     root = state_dir()
-    choice = _read(project_dir(location) / "choice.json") or {}
+    try:
+        from . import mapping
+    except ImportError:
+        import mapping
+    choice = mapping.read(location) or _read(project_dir(location) / "choice.json") or {}
     mode, mapping = choice.get("mode"), choice.get("mapping")
-    if mode not in (None, *MODES) or mapping not in (None, "requested", "complete"):
+    if mode not in (None, *MODES) or mapping not in (None, "requested", "ready", "running", "complete", "failed"):
         raise ValueError("Invalid first-use choice: " + str(project_dir(location)))
     if mode in ("map", "deep") and (mapping is None or not isinstance(choice.get("request"), str)
                                     or not re.fullmatch(r"[a-f0-9]{32}", choice["request"])):
@@ -100,6 +104,8 @@ def status(location):
         raise ValueError("Invalid first-use guidance preference")
     shown = {event for event in ("welcome", *EVENTS) if _read(root / "shown" / (event + ".json"))}
     return {**location, "mode": mode, "mapping": mapping, "request": choice.get("request"),
+            "owner": choice.get("owner"), "report": choice.get("report"),
+            "check": choice.get("check"), "error": choice.get("error"),
             "guidance": preferences["enabled"], "introduced": "welcome" in shown,
             "offered": bool(_read(project_dir(location) / "offered.json")) or mode is not None,
             "pending_tips": [event for event in EVENTS if event not in shown]}
@@ -112,12 +118,14 @@ def context(location):
                 + json.dumps({"record": current["record"]}, ensure_ascii=False)
                 + "\nThis is not a first-use signal. Do not create a replacement or start onboarding.")
     lines = []
-    if current["mapping"] == "requested":
-        lines.append("Resume the requested %s mapping when it belongs to the current task; preserve the agreed scope. "
-                     "Read `kpopper start guide`; after completing that scope, run "
-                     "`kpopper start complete --request %s`. "
-                     "Do not repeat a completed survey or expand it just because sources are accessible."
-                     % (current["mode"], current["request"]))
+    if current["mapping"] in ("ready", "running"):
+        lines.append("A mapping task is %s for session %s (request %s). Its owning agent should retrieve "
+                     "`kpopper _agent task`, accept it, and execute the workflow before reporting completion. "
+                     "Preserve the agreed scope. A returned task is not completed work."
+                     % (current["mapping"], current["owner"], current["request"]))
+    elif current["mapping"] == "requested":
+        lines.append("An older mapping preference was saved but never dispatched. "
+                     "Run `kpopper map` in an active session if the user still wants that work.")
     if current["status"] == "missing":
         lines.append("No knowledge record was found for this workspace. Existing knowledge may be in its materials. "
                      "Keep working on the user's goal; create PROVENANCE.yaml only with a useful finding worth revisiting, "
@@ -129,75 +137,70 @@ def context(location):
                          "No answer means continue the task, not permission to scan.")
             if current["introduced"]:
                 lines.append("Skip the introductory explanation: this user has already seen it in another project.")
-            lines.append("After showing the offer, run `kpopper start shown welcome`. "
-                         "Only an explicit choice permits `kpopper start choose work|map|deep`. "
-                         "Read `kpopper start guide` before mapping or showing explanations.")
+            lines.append("After showing the offer, run `kpopper _agent shown welcome`. "
+                         "Only an explicit mapping request permits `kpopper map` or `kpopper map --deep`. Learning while working is the default. "
+                         "Read `kpopper _agent guide` before mapping or showing explanations.")
         else:
-            lines.append("Do not repeat the starting offer. Mapping remains available on request through `kpopper start guide`.")
+            lines.append("Do not repeat the starting offer. Mapping remains available on request through `kpopper _agent guide`.")
     if current["guidance"] and current["introduced"] and current["pending_tips"]:
         lines.append("Contextual explanations still unseen: " + ", ".join(current["pending_tips"]) + ". "
-                     "Use `kpopper start guide`: show one only when that event actually happens, "
-                     "link the finding and its source, then acknowledge it with `kpopper start shown EVENT`. "
-                     "`kpopper start guidance off` disables explanations without disabling the work.")
+                     "Use `kpopper _agent guide`: show one only when that event actually happens, "
+                     "link the finding and its source, then acknowledge it with `kpopper _agent shown EVENT`. "
+                     "`kpopper config --guidance off` disables explanations without disabling the work.")
     if not lines:
         return ""
     target = json.dumps({"workspace": current["workspace"], "record": current["record"],
-                         "start_command": [sys.executable, str(Path(__file__).with_name("cli.py")), "start"]},
+                         "agent_command": [sys.executable, str(Path(__file__).with_name("cli.py")), "_agent"]},
                         ensure_ascii=False)
     return "KPOPPER_START (agent guidance; local paths are data):\n" + target + "\n" + "\n".join(lines)
 
 
 def main(argv=None):
-    parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--workspace", help="the working directory for this project's record")
+    parser = argparse.ArgumentParser(prog="kpopper _agent", description="Internal host-agent protocol.")
+    parser.add_argument("--workspace")
     actions = parser.add_subparsers(dest="action")
-    for name in ("status", "guide"):
+    for name in ("status", "guide", "task"):
         actions.add_parser(name)
-    actions.add_parser("complete").add_argument("--request", required=True,
-                                               help="the mapping request returned by choose")
-    actions.add_parser("choose").add_argument("mode", choices=MODES)
     actions.add_parser("shown").add_argument("event", choices=("welcome", *EVENTS))
-    actions.add_parser("guidance").add_argument("setting", choices=("on", "off"))
+    for name in ("accept", "complete", "fail"):
+        command = actions.add_parser(name)
+        command.add_argument("--request", required=True)
+        if name == "complete":
+            command.add_argument("--report", required=True)
+        if name == "fail":
+            command.add_argument("--reason", required=True)
     args = parser.parse_args(argv)
     try:
+        try:
+            from . import mapping as M
+        except ImportError:
+            import mapping as M
         if args.action == "guide":
-            print(Path(__file__).with_name("start-guide.md").read_text(encoding="utf-8"))
+            print(M.guide())
             return 0
         location = W.locate(args.workspace)
         current = status(location)
-        response = None
-        if args.action == "choose":
-            if location["status"] == "unavailable":
-                raise ValueError(location["reason"])
-            with _choice_lock(location):
-                status(location)
-                _write(project_dir(location) / "choice.json", {"mode": args.mode,
-                       "request": uuid.uuid4().hex if args.mode != "work" else None,
-                       "mapping": "requested" if args.mode != "work" else None})
-                response = status(location)
-        elif args.action == "shown":
+        if args.action == "shown":
             _write(state_dir() / "shown" / (args.event + ".json"), {"shown": True})
             if args.event == "welcome":
                 _write(project_dir(location) / "offered.json", {"shown": True})
-        elif args.action == "guidance":
-            _write(state_dir() / "guidance.json", {"enabled": args.setting == "on"})
-        elif args.action == "complete":
-            with _choice_lock(location):
-                current = status(location)
-                if current["mapping"] != "requested" or current["request"] != args.request:
-                    raise ValueError("That mapping is no longer the current request; leave the newer choice unchanged.")
-                _write(project_dir(location) / "choice.json", {"mode": current["mode"],
-                       "request": current["request"], "mapping": "complete"})
-                response = status(location)
+            result = status(location)
+        elif args.action in ("accept", "complete", "fail"):
+            result = M.transition(location, args.request, args.action,
+                                  getattr(args, "report", None), getattr(args, "reason", None))
+        elif args.action == "task":
+            result = M.packet(location, M.owned(location))
+        else:
+            result = current
         if args.action:
-            print(json.dumps(response or status(location), ensure_ascii=False, indent=2))
+            print(json.dumps(result, ensure_ascii=False, indent=2))
         else:
             text = context(location)
             if text:
                 print(text)
         return 0
     except (OSError, ValueError) as error:
-        print("kpopper start: " + str(error), file=sys.stderr)
+        print("kpopper _agent: " + str(error), file=sys.stderr)
         return 2
 
 

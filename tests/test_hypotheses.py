@@ -658,7 +658,10 @@ class ThePageDrawsTheBase(unittest.TestCase):
             self.assertEqual(code, 0)
             self.assertIn("--hypothesis NAME", out)
         code, out, _ = run(SCRIPTS / "kpopper")
-        self.assertIn("--hypothesis NAME", out)
+        for cmd in ("set", "add", "review"):
+            self.assertIn("kpopper " + cmd, out)
+            code, details, _ = run(SCRIPTS / "kpopper", cmd, "--help")
+            self.assertIn("--hypothesis NAME", details)
 
 
 class TheEdgesHold(unittest.TestCase):

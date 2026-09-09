@@ -7,7 +7,8 @@ straight through to provenance.py; page renders the record and can open what it 
   kpopper affects <entry> [entry ...]     what a change reaches
   kpopper pull    <entry|prefix> [...]    values and sources for a subject
   kpopper where                           the record this directory answers for
-  kpopper start [status|guide|choose|shown|guidance|complete]  first-use choices and contextual explanations
+  kpopper map [--deep]                  map the work through an available agent
+  kpopper config [--guidance on|off]     inspect or change local preferences
   kpopper session <setup|status|open|read|propose|serve>  checked, revision-bound session views
   kpopper set     <key> <value> [--why "..."] [--as-of DATE]   change one value; the reply is the reach
   kpopper add     <id> field=value ...    a new entry or judgment, in id order, its seen filled
@@ -38,10 +39,43 @@ straight through to provenance.py; page renders the record and can open what it 
 Run from the directory the record sits in, same as the two scripts underneath - or from
 any checkout of a project that registered its record (see `where`).
 """
-import os, shutil, sys, pathlib, subprocess, webbrowser
+import argparse, json, os, shutil, sys, pathlib, subprocess, webbrowser
 
 HERE = pathlib.Path(__file__).resolve().parent
 READ = ("open", "check", "affects", "pull", "where", "set", "add", "review", "same", "distinct")
+COMMANDS = {
+    "open": ("[FILE ...] [--chars N] [--budget N]", "Open the current knowledge context."),
+    "map": ("[--deep]", "Map the work through an available host agent."),
+    "config": ("[--guidance on|off]", "Read or change local user preferences."),
+    "check": ("[FILE ...]", "Check the record's consistency and declared conditions."),
+    "pull": ("SUBJECT [SUBJECT ...] [--from REF]", "Read a subject and the evidence behind it."),
+    "affects": ("SUBJECT [SUBJECT ...]", "Trace what a change reaches."),
+    "add": ("ID FIELD=VALUE ...", "Add a grounded entry or judgment."),
+    "set": ("ID VALUE [--why TEXT] [--as-of DATE]", "Update a reading and see what it affects."),
+    "review": ("ID [--as-of DATE]", "Record a judgment's review against current readings."),
+    "page": ("[--open] [--out PATH] [--verify]", "Render or verify the knowledge page."),
+    "where": ("", "Locate the record for this workspace."),
+    "consolidate": ("[--dry-run] [NAME ...]", "Evaluate and reconcile recorded hypotheses."),
+    "remeasure": ("[--run] [FILE]", "Inspect or run the record's measurement recipes."),
+    "same": ("ID ID [--keep ID]", "Consolidate two identities of the same subject."),
+    "distinct": ("ID ID REASON", "Keep similar subjects distinct."),
+    "session": ("OPERATION [OPTIONS]", "Manage checked session views and their transport."),
+    "ingest": ("OPERATION [OPTIONS]", "Capture source reports and inspect their processing."),
+}
+
+
+def parser():
+    help_text = "Commands:\n" + "\n".join(
+        "  kpopper %-13s %s" % (name, description) for name, (_, description) in COMMANDS.items())
+    help_text += "\n\nUse COMMAND --help for details. --json returns structured output."
+    result = argparse.ArgumentParser(prog="kpopper", usage="kpopper [--workspace PATH] COMMAND [OPTIONS]",
+                                     description="Keep what you know, its grounds, and what needs another look.",
+                                     epilog=help_text, formatter_class=argparse.RawDescriptionHelpFormatter)
+    result.add_argument("--workspace", help="working directory for the operation")
+    result.add_argument("--json", action="store_true", help="return structured output")
+    result.add_argument("command", nargs="?", help="operation to perform")
+    result.add_argument("args", nargs=argparse.REMAINDER, help=argparse.SUPPRESS)
+    return result
 
 
 def do_checks(args):
@@ -93,17 +127,64 @@ def do_page(args):
 
 
 def main():
-    argv = sys.argv[1:]
-    if not argv or argv[0] in ("-h", "--help"):
-        print(__doc__.strip("\n"))
+    root = parser()
+    options = root.parse_args()
+    if options.command is None:
+        root.print_help()
         sys.exit(0)
-    cmd, rest = argv[0], argv[1:]
+    cmd, rest = options.command, options.args
     if cmd == "start":
+        root.error("Use kpopper open, kpopper map, or kpopper config; start is not a public command.")
+    if cmd not in COMMANDS and cmd != "_agent":
+        root.error("unknown command: " + cmd)
+    if cmd not in {"open", "map", "config", "_agent", "session", "ingest"} and rest in (["--help"], ["-h"]):
+        usage, description = COMMANDS[cmd]
+        print("usage: kpopper " + cmd + (" " + usage if usage else "") + " [--json]\n\n" + description)
+        if cmd in {"set", "add", "review", "same", "distinct"}:
+            print()
+            sys.stdout.flush()
+            subprocess.run([sys.executable, str(HERE / "provenance.py"), cmd, "--help"])
+        elif cmd in {"consolidate", "remeasure"}:
+            print()
+            sys.stdout.flush()
+            subprocess.run([sys.executable, str(HERE / (cmd + ".py")), "--help"])
+        sys.exit(0)
+    if options.workspace is not None:
+        try:
+            if not options.workspace.strip():
+                raise ValueError("workspace must be a nonempty path")
+            os.chdir(pathlib.Path(options.workspace).expanduser())
+        except (OSError, ValueError) as error:
+            root.error(str(error))
+    if cmd in {"open", "map", "config"}:
+        try:
+            from . import workspace_cli
+        except ImportError:
+            import workspace_cli
+        if options.json:
+            rest = ["--json", *rest]
+        function = {"open": workspace_cli.open_context, "map": workspace_cli.map_work,
+                    "config": workspace_cli.config}[cmd]
+        sys.exit(function(rest))
+    if cmd == "_agent":
         try:
             from .onboarding import main as start
         except ImportError:
             from onboarding import main as start
         sys.exit(start(rest))
+    # Existing operations retain their exit codes and text. JSON wraps that output
+    # without reparsing it as evidence or changing what the operation does.
+    cutoff = rest.index("--") if "--" in rest else len(rest)
+    json_output = options.json or "--json" in rest[:cutoff]
+    if json_output:
+        forwarded = [value for value in rest[:cutoff] if value != "--json"] + rest[cutoff:]
+        result = subprocess.run([sys.executable, str(HERE / "cli.py"), cmd, *forwarded],
+                                capture_output=True, text=True, encoding="utf-8")
+        print(json.dumps({"command": cmd, "exit_code": result.returncode,
+                          "output": result.stdout, "error": result.stderr}, ensure_ascii=False))
+        sys.exit(result.returncode)
+    if cutoff < len(rest):
+        rest = rest[:cutoff] + rest[cutoff + 1:]
     if cmd in {"session", "ingest"}:
         script = "session_cli.py" if cmd == "session" else "ingestion.py"
         tool = [sys.executable, str(HERE / script)] + rest

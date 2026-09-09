@@ -24,6 +24,16 @@ def _run(script, args, directory):
                           capture_output=True, text=True, encoding="utf-8", timeout=55)
 
 
+def read_view(location, reader_args=None):
+    """The public CLI and hooks use the same checked/legacy opening boundary."""
+    if reader_args is None:
+        result = _run("session_hook.py", [location["record"]], location["workspace"])
+        if result.returncode != 3:
+            return result, True
+        reader_args = ["--chars", str(LEGACY_CHARS), location["record"]]
+    return _run("provenance.py", ["open", *reader_args], location["workspace"]), False
+
+
 def opening(payload):
     if not isinstance(payload, dict) or payload.get("agent_id"):
         return ""
@@ -39,9 +49,7 @@ def opening(payload):
     if location["status"] == "unavailable":
         return "\n".join(output)
     if location["status"] == "found":
-        result = _run("session_hook.py", [record], directory)
-        if result.returncode == 3:
-            result = _run("provenance.py", ["open", "--chars", str(LEGACY_CHARS), record], directory)
+        result, _ = read_view(location)
         if result.stdout:
             output.insert(0, result.stdout.rstrip())
         elif result.returncode:
@@ -51,6 +59,12 @@ def opening(payload):
 
     sid = payload.get("session_id", "")
     if isinstance(sid, str) and re.fullmatch(r"[A-Za-z0-9_-]{1,200}", sid):
+        output.append("KPOPPER_AGENT_CONTEXT " + json.dumps({
+            "environment": {"KPOPPER_AGENT_SESSION": sid},
+            "command": [sys.executable, str(HERE / "cli.py")],
+            "workspace": directory}, ensure_ascii=False)
+            + "\nFor mapping, pass this session environment to the CLI and execute the returned task. "
+              "The identity routes work back to this session; it grants no source access.")
         baseline = Path(tempfile.gettempdir()) / ("kpopper-base-" + sid)
         if not (payload.get("source") in ("compact", "resume") and baseline.exists()):
             if location["status"] == "missing":

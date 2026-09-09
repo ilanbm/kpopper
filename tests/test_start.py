@@ -18,6 +18,7 @@ sys.path.insert(0, str(ROOT / "scripts"))
 import onboarding as O
 import workspace as W
 import session_start as S
+import mapping as M
 
 
 class WorkspaceFixture:
@@ -30,13 +31,27 @@ class WorkspaceFixture:
         self.private = self.root / "private"
         self.env = {**os.environ, "XDG_STATE_HOME": str(self.private),
                     "XDG_CONFIG_HOME": str(self.root / "config"),
-                    "KPOPPER_SESSION_DISABLE": "1", "TMPDIR": str(self.root)}
+                    "KPOPPER_SESSION_DISABLE": "1", "TMPDIR": str(self.root),
+                    "KPOPPER_AGENT_SESSION": "fixture-session"}
         self.addCleanup(patch.stopall)
         patch.dict(os.environ, self.env).start()
 
     def cli(self, *args, cwd=None):
-        return subprocess.run([sys.executable, str(ROOT / "scripts/cli.py"), "start", *args],
+        return subprocess.run([sys.executable, str(ROOT / "scripts/cli.py"), "_agent", *args],
                               cwd=cwd or self.work, capture_output=True, text=True, env=self.env)
+
+    def map(self, deep=False, cwd=None):
+        return subprocess.run([sys.executable, str(ROOT / "scripts/cli.py"), "map", "--json"]
+                              + (["--deep"] if deep else []), cwd=cwd or self.work,
+                              capture_output=True, text=True, env=self.env)
+
+    def finish(self, request):
+        accepted = self.cli("accept", "--request", request)
+        if accepted.returncode:
+            return accepted
+        report = self.work / "mapping-report.md"
+        report.write_text("Reviewed the supplied deadline and its source. No additional sources were in scope.")
+        return self.cli("complete", "--request", request, "--report", str(report))
 
     def hook(self, payload=None, name="session_open.sh", cwd=None):
         return subprocess.run(["sh", str(ROOT / "scripts" / name)], cwd=cwd or self.work,
@@ -71,19 +86,19 @@ class FirstUse(WorkspaceFixture, unittest.TestCase):
         result = self.cli()
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertIn("KPOPPER_START", result.stdout)
-        self.assertIn("choose", result.stdout)
+        self.assertIn("choices", result.stdout)
         self.assertIn("map", result.stdout)
         self.assertIn("deep", result.stdout)
         self.assertFalse(self.private.exists())
         self.assertEqual(list(self.work.iterdir()), [])
 
     def test_choice_survives_sessions_and_does_not_create_a_record(self):
-        self.assertEqual(self.cli("choose", "map").returncode, 0)
+        self.assertEqual(self.map().returncode, 0)
         status = json.loads(self.cli("status").stdout)
-        self.assertEqual((status["mode"], status["mapping"]), ("map", "requested"))
+        self.assertEqual((status["mode"], status["mapping"]), ("map", "ready"))
         self.assertEqual(list(self.work.iterdir()), [])
         self.assertIn("scope", self.cli().stdout.lower())
-        self.assertEqual(self.cli("complete", "--request", status["request"]).returncode, 0)
+        self.assertEqual(self.finish(status["request"]).returncode, 0)
         self.assertEqual(json.loads(self.cli("status").stdout)["mapping"], "complete")
         self.assertNotIn("Resume the requested", self.cli().stdout)
 
@@ -101,7 +116,7 @@ class FirstUse(WorkspaceFixture, unittest.TestCase):
         self.assertIn("Skip the introductory explanation", self.cli(cwd=other).stdout)
 
     def test_guidance_off_persists_but_does_not_authorize_mapping(self):
-        self.assertEqual(self.cli("guidance", "off").returncode, 0)
+        self.assertEqual(subprocess.run([sys.executable, str(ROOT / "scripts/cli.py"), "config", "--guidance", "off"], cwd=self.work, env=self.env, capture_output=True, text=True).returncode, 0)
         status = json.loads(self.cli("status").stdout)
         self.assertFalse(status["guidance"])
         self.assertIsNone(status["mode"])
@@ -115,23 +130,23 @@ class FirstUse(WorkspaceFixture, unittest.TestCase):
         self.assertEqual(json.loads(self.cli("status").stdout)["pending_tips"], [])
 
     def test_completing_an_old_mapping_cannot_erase_a_new_choice(self):
-        first = json.loads(self.cli("choose", "map").stdout)
-        second = json.loads(self.cli("choose", "deep").stdout)
-        result = self.cli("complete", "--request", first["request"])
+        first = json.loads(self.map().stdout)
+        second = json.loads(self.map(True).stdout)
+        result = self.finish(first["request"])
         self.assertEqual(result.returncode, 2)
         current = json.loads(self.cli("status").stdout)
         self.assertEqual((current["mode"], current["mapping"], current["request"]),
-                         ("deep", "requested", second["request"]))
+                         ("deep", "ready", second["request"]))
 
     def test_concurrent_completion_and_choice_preserve_the_new_request(self):
-        first = json.loads(self.cli("choose", "map").stdout)
+        first = json.loads(self.map().stdout)
         with concurrent.futures.ThreadPoolExecutor(max_workers=2) as pool:
-            finished = pool.submit(self.cli, "complete", "--request", first["request"])
-            selected = pool.submit(self.cli, "choose", "deep")
+            finished = pool.submit(self.finish, first["request"])
+            selected = pool.submit(self.map, True)
             finished.result()
             self.assertEqual(selected.result().returncode, 0)
         current = json.loads(self.cli("status").stdout)
-        self.assertEqual((current["mode"], current["mapping"]), ("deep", "requested"))
+        self.assertEqual((current["mode"], current["mapping"]), ("deep", "ready"))
 
     def test_choose_returns_its_own_request_even_if_another_choice_follows_immediately(self):
         original_lock = O._choice_lock
@@ -145,11 +160,11 @@ class FirstUse(WorkspaceFixture, unittest.TestCase):
             if not crossed:
                 crossed = True
                 with contextlib.redirect_stdout(io.StringIO()):
-                    O.main(["--workspace", str(self.work), "choose", "deep"])
+                    M.request(W.locate(self.work), True)
 
         output = io.StringIO()
         with patch.object(O, "_choice_lock", interleave), contextlib.redirect_stdout(output):
-            self.assertEqual(O.main(["--workspace", str(self.work), "choose", "map"]), 0)
+            print(json.dumps(M.request(W.locate(self.work))))
         first = json.loads(output.getvalue())
         latest = json.loads(self.cli("status").stdout)
         self.assertEqual(first["mode"], "map")
@@ -157,10 +172,10 @@ class FirstUse(WorkspaceFixture, unittest.TestCase):
         self.assertNotEqual(first["request"], latest["request"])
 
     def test_bad_state_is_reported_and_never_replaced_by_defaults(self):
-        self.cli("choose", "deep")
-        state = O.project_dir(W.locate(self.work)) / "choice.json"
+        self.map(True)
+        state = O.project_dir(W.locate(self.work)) / "mapping.json"
         state.write_text("{not json", encoding="utf-8")
-        self.assertNotEqual(self.cli("choose", "work").returncode, 0)
+        self.assertNotEqual(self.map().returncode, 0)
         self.assertEqual(state.read_text(), "{not json")
 
     def test_guide_covers_non_code_work_and_history_limits(self):
@@ -356,8 +371,8 @@ class Locations(WorkspaceFixture, unittest.TestCase):
                  "commit", "--allow-empty", "-m", "fixture", "-q")
         linked = self.root / "linked"
         self.git("worktree", "add", "--detach", str(linked))
-        self.cli("choose", "work")
-        self.assertEqual(json.loads(self.cli("status", cwd=linked).stdout)["mode"], "work")
+        self.map()
+        self.assertEqual(json.loads(self.cli("status", cwd=linked).stdout)["mode"], "map")
         record = self.write_record(self.root)
         (self.work / ".git" / "kpopper-record").write_text(str(record))
         self.assertEqual(W.locate(linked)["record"], str(record))
