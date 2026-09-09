@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.2.0 — 2026-09-09
+
+- Add experimental Lean-checked session grounding (#44) — minor
+- Add background ingestion with selective attention delivery (#41) — minor
+
+Decisions recorded: d.checked_session_is_optional, d.capture_is_not_clearance, d.ingestion_attention_is_selective, d.native_delivery_scope
+
 ## 1.1.0 — 2026-09-07
 
 - Keep update citations accurate and allow flagged judgments at stop (#39) — minor

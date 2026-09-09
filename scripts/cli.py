@@ -7,6 +7,7 @@ straight through to provenance.py; page renders the record and can open what it 
   kpopper affects <entry> [entry ...]     what a change reaches
   kpopper pull    <entry|prefix> [...]    values and sources for a subject
   kpopper where                           the record this directory answers for
+  kpopper session <setup|status|open|read|propose|serve>  checked, revision-bound session views
   kpopper set     <key> <value> [--why "..."] [--as-of DATE]   change one value; the reply is the reach
   kpopper add     <id> field=value ...    a new entry or judgment, in id order, its seen filled
   kpopper ingest  capture --file JSON    retain a report and process it in the background
@@ -96,8 +97,9 @@ def main():
         print(__doc__.strip("\n"))
         sys.exit(0)
     cmd, rest = argv[0], argv[1:]
-    if cmd == "ingest":
-        tool = [sys.executable, str(HERE / "ingestion.py")] + rest
+    if cmd in {"session", "ingest"}:
+        script = "session_cli.py" if cmd == "session" else "ingestion.py"
+        tool = [sys.executable, str(HERE / script)] + rest
         if os.name == "nt":
             sys.exit(subprocess.run(tool).returncode)
         os.execv(sys.executable, tool)

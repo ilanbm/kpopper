@@ -1,0 +1,5 @@
+name = "kpopper_epistemic_core"
+defaultTargets = ["Main"]
+
+[[lean_lib]]
+name = "Main"

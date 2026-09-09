@@ -6,7 +6,7 @@ build-backend = "setuptools.build_meta"
 name = "kpopper"
 # The plugin manifest carries the same number: one tree, two distribution channels,
 # released together.
-version = "1.1.0"
+version = "1.2.0"
 description = "An epistemic record for work that gets revisited: what is known, how each piece is grounded, and what would make each judgment wrong."
 readme = "README.md"
 requires-python = ">=3.9"
@@ -32,6 +32,9 @@ classifiers = [
 ]
 dependencies = ["PyYAML>=5.1"]
 
+[project.optional-dependencies]
+session = ["tiktoken>=0.14,<1", "mcp>=2.2,<3"]
+
 [project.urls]
 Homepage = "https://github.com/ilanbm/kpopper"
 Source = "https://github.com/ilanbm/kpopper"
@@ -44,7 +47,7 @@ kpopper = "kpopper.cli:main"
 # The editor plugin reads these files out of scripts/ by path, so the package is mapped
 # onto that directory instead of being copied into one of its own. A second copy would
 # be a second thing to edit.
-packages = ["kpopper"]
+packages = ["kpopper", "kpopper.session"]
 package-dir = { kpopper = "scripts" }
 
 [tool.setuptools.package-data]
@@ -52,3 +55,4 @@ package-dir = { kpopper = "scripts" }
 # with the command line that runs them - `kpopper page --checks` is only as installable as
 # the file it hands to node.
 kpopper = ["page/*.css", "page/*.js", "verify_page.js"]
+"kpopper.session" = ["rules.txt", "bootstrap.txt", "lean/*.lean", "lean/lean-toolchain"]
