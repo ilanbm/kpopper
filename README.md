@@ -40,6 +40,46 @@ you concluded from it still holds. So kpopper snapshots the *value the judgment 
 the bytes it came from, and states the breaking condition in advance instead of waiting for
 a checksum to notice.
 
+## Keep working while the graph checks what changed
+
+New information matters because of what it changes. `kpopper ingest capture` retains a source
+report and starts independent processing, so the primary can continue its task. The processor
+applies supported updates to the existing graph, checks declared dependencies and conditions,
+and keeps a receipt. Routine results stay quiet; contradictions and important unresolved
+questions return to the primary.
+
+```mermaid
+sequenceDiagram
+    participant P as Primary
+    participant I as Durable inbox
+    participant W as Background processing
+    participant G as Existing graph
+
+    P->>I: Capture source and known update
+    I-->>P: Source retained
+    Note over P: Continue the original task
+    I->>W: Process the retained report
+    W->>G: Apply supported update and check dependencies
+    G-->>W: Result and affected judgments
+    W->>I: Keep receipt and any unresolved finding
+    alt No actionable finding
+        Note over W: Finish quietly
+    else Contradiction or important question
+        W-->>P: Deliver finding through the host
+    end
+```
+
+Capture preserves the source before processing; it does not mean the update has been applied
+or checked. If the current answer depends on that update, inspect its result before relying on
+it. This path currently handles explicit reports about existing scalar entries in one record.
+An unknown target or an unsupported update stays as a report with a question; the processor
+does not infer missing relationships or rewrite conclusions.
+
+Claude Code can wake an idle primary through its hooks. Codex hosts with native background
+agents and task messaging use a delivery job to reach the same task after its answer. Plain
+Codex hooks deliver during an active turn or on the next user turn. See the
+[capture contract](skills/kpopper/INGESTION.md) and [Codex delivery setup](skills/kpopper/DELIVERY.md).
+
 ## What it installs
 
 The package is the command line: `kpopper`, with the reader and the renderer behind it. The
