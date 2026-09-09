@@ -172,7 +172,7 @@ reports and checks supported updates in the background, bringing back only findi
 attention.
 
 <p align="center">
-  <img src="assets/conversation-flow.png" width="420" alt="The conversation continues from top to bottom. A detail is checked at the side; only an important finding returns to a later message.">
+  <img src="assets/conversation-flow.webp" width="420" alt="The conversation continues from top to bottom. A detail is checked at the side; only an important finding returns to a later message.">
 </p>
 
 See [how background capture works](skills/kpopper/INGESTION.md) for supported updates and host
