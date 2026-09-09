@@ -165,6 +165,19 @@ finding, and `--from <ref>` reads another branch's committed record the same way
 never pushed. Sameness is judged, not guessed: `add` names the nearest existing entries, and
 `same` or `distinct` records the answer so the pair never returns.
 
+## Capture new details while you keep talking
+
+The same record can also be maintained while a conversation continues. kpopper saves new
+reports and checks supported updates in the background, bringing back only findings that need
+attention.
+
+<p align="center">
+  <img src="assets/conversation-flow.png" width="420" alt="The conversation continues from top to bottom. A detail is checked at the side; only an important finding returns to a later message.">
+</p>
+
+See [how background capture works](skills/kpopper/INGESTION.md) for supported updates and host
+behavior.
+
 ## The page — and the tree
 
 ```bash
