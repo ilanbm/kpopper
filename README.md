@@ -5,7 +5,9 @@ judgment must say what would make it wrong — one that cannot be wrong is an op
 
 The stores remember. This remembers **how you know.**
 
-![The conversation keeps flowing. A small detail branches off to be checked, and only an important finding returns.](assets/conversation-flow.png)
+<p align="center">
+  <img src="assets/conversation-flow.png" width="520" alt="The conversation continues from top to bottom. A detail is checked at the side; only an important finding returns to a later message.">
+</p>
 
 Keep talking. kpopper saves and checks new details on the side, and brings back findings that
 need your attention. [How it works](skills/kpopper/INGESTION.md).
