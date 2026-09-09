@@ -5,11 +5,11 @@
         "hooks": [
           {
             "type": "command",
-            "command": "\"$CLAUDE_PLUGIN_ROOT/scripts/session_open.sh\""
+            "command": "\"$PLUGIN_ROOT/scripts/session_open.sh\""
           },
           {
             "type": "command",
-            "command": "\"$CLAUDE_PLUGIN_ROOT/scripts/ingestion_hook.sh\" claude start",
+            "command": "\"$PLUGIN_ROOT/scripts/ingestion_hook.sh\" codex start",
             "timeout": 10
           }
         ]
@@ -20,7 +20,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "\"$CLAUDE_PLUGIN_ROOT/scripts/session_gate.sh\""
+            "command": "\"$PLUGIN_ROOT/scripts/session_gate.sh\""
           }
         ]
       }
@@ -30,8 +30,8 @@
         "hooks": [
           {
             "type": "command",
-            "command": "\"$CLAUDE_PLUGIN_ROOT/scripts/ingestion_hook.sh\" claude wait",
-            "asyncRewake": true,
+            "command": "\"$PLUGIN_ROOT/scripts/ingestion_hook.sh\" codex wait",
+            "async": true,
             "timeout": 130
           }
         ]
@@ -42,8 +42,8 @@
         "hooks": [
           {
             "type": "command",
-            "command": "\"$CLAUDE_PLUGIN_ROOT/scripts/ingestion_hook.sh\" claude wait",
-            "asyncRewake": true,
+            "command": "\"$PLUGIN_ROOT/scripts/ingestion_hook.sh\" codex wait",
+            "async": true,
             "timeout": 130
           }
         ]

@@ -5,7 +5,12 @@
         "hooks": [
           {
             "type": "command",
-            "command": "../../scripts/session_open.sh"
+            "command": "\"../../scripts/session_open.sh\""
+          },
+          {
+            "type": "command",
+            "command": "\"../../scripts/ingestion_hook.sh\" codex start",
+            "timeout": 10
           }
         ]
       }
@@ -15,7 +20,31 @@
         "hooks": [
           {
             "type": "command",
-            "command": "../../scripts/session_gate.sh"
+            "command": "\"../../scripts/session_gate.sh\""
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"../../scripts/ingestion_hook.sh\" codex wait",
+            "async": true,
+            "timeout": 130
+          }
+        ]
+      }
+    ],
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"../../scripts/ingestion_hook.sh\" codex wait",
+            "async": true,
+            "timeout": 130
           }
         ]
       }
