@@ -35,6 +35,11 @@ ACK. [INGESTION.md](INGESTION.md) gives the small input contract, supported reco
 the different idle-delivery behavior in Claude Code and Codex. Notification content is a result,
 not a new user report: never capture it again as fresh evidence.
 
+In Codex hosts with native background agents and `send_message_to_thread`, use
+`capture --notify-task` and dispatch its returned delivery job so an important finding can also
+reach a primary that has finished answering. [DELIVERY.md](DELIVERY.md) gives the short native
+worker contract. Plain hooks alone do not provide that idle delivery.
+
 ## Step 1 — `PROVENANCE.yaml`
 
 This method owns one file, in one place: **`PROVENANCE.yaml` at the project root.** Do not go hunting for whatever a previous session improvised, and do not invent a new name — a method whose artifact is named differently in every project cannot be picked up by anyone.

@@ -12,8 +12,10 @@ import uuid
 
 try:
     from . import ingestion as I
+    from . import ingestion_delivery as D
 except ImportError:
     import ingestion as I
+    import ingestion_delivery as D
 
 WAIT_SECONDS = 120
 
@@ -42,7 +44,7 @@ def _begin(root, identity, source):
     return current["epoch"]
 
 
-def _offer(root, identity, record, state_dir, epoch):
+def _offer(root, identity, record, state_dir, epoch, recipient=None):
     path = root / "delivery" / (identity + ".json")
     with I._file_lock(root / "delivery.lock"):
         current = I._load(path) or {"epoch": uuid.uuid4().hex, "offered": []}
@@ -50,6 +52,8 @@ def _offer(root, identity, record, state_dir, epoch):
             return []
         offered = set(current["offered"])
         pending = I.pending(record=record, state_dir=state_dir)
+        if recipient is not None:
+            pending = D.hook_visible(root, recipient, pending, epoch)
         notices = [n for n in pending if n["id"] not in offered]
         if not notices:
             return []
@@ -111,27 +115,29 @@ def handle(payload, host, mode, record=None, state_dir=None, wait_seconds=WAIT_S
     event = payload.get("hook_event_name", "SessionStart" if mode == "start" else "PostToolUse")
     epoch = _begin(root, identity, payload.get("source", "startup") if mode == "start" else "compact")
     if mode == "start":
-        notices = _offer(root, identity, record, state_dir, epoch)
+        notices = _offer(root, identity, record, state_dir, epoch,
+                         payload["session_id"] if host == "codex" else None)
         return _output(notices, host, mode, event) if notices else ("", "", 0)
     with _watcher(root, identity, epoch) as acquired:
         if not acquired:
             return "", "", 0
-        return _wait(root, identity, epoch, host, event, record, state_dir, wait_seconds)
+        return _wait(root, identity, epoch, host, event, record, state_dir, wait_seconds,
+                     payload["session_id"] if host == "codex" else None)
 
 
-def _wait(root, identity, epoch, host, event, record, state_dir, wait_seconds):
+def _wait(root, identity, epoch, host, event, record, state_dir, wait_seconds, recipient=None):
     deadline = time.monotonic() + max(0, wait_seconds)
     while True:
         current = I._load(root / "delivery" / (identity + ".json")) or {}
         if current.get("epoch") != epoch:
             return "", "", 0
-        notices = _offer(root, identity, record, state_dir, epoch)
+        notices = _offer(root, identity, record, state_dir, epoch, recipient)
         if notices:
             return _output(notices, host, "wait", event)
         statuses = I.status(record=record, state_dir=state_dir)
         if not any(s and s.get("state") in ("captured", "processing") for s in statuses):
             # A result may have become ready between the first offer and this check.
-            notices = _offer(root, identity, record, state_dir, epoch)
+            notices = _offer(root, identity, record, state_dir, epoch, recipient)
             if not notices:
                 return "", "", 0
             return _output(notices, host, "wait", event)

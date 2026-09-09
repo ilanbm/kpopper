@@ -19,6 +19,7 @@ import json
 import os
 from pathlib import Path
 import re
+import shlex
 import subprocess
 import sys
 import tempfile
@@ -881,6 +882,25 @@ def _read_json_arg(value):
         return json.load(src)
 
 
+def _delivery_module():
+    try:
+        from . import ingestion_delivery
+    except ImportError:
+        import ingestion_delivery
+    return ingestion_delivery
+
+
+def _delivery_commands(answer, record, state_dir):
+    job = answer["delivery_job"]
+    if job.get("dispatch_required"):
+        location = ["--record", str(_record_path(record)),
+                    "--state-dir", str(state_path(record, state_dir))]
+        executable = [sys.executable, str(Path(__file__).resolve())]
+        job["wait_command"] = shlex.join(executable + ["wait-delivery", job["id"]] + location)
+        job["complete_command"] = shlex.join(executable + ["complete-delivery", job["id"]] + location)
+    return answer
+
+
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     sub = parser.add_subparsers(dest="command", required=True)
@@ -889,6 +909,8 @@ def main(argv=None):
     cap.add_argument("--record")
     cap.add_argument("--state-dir")
     cap.add_argument("--no-start", action="store_true")
+    cap.add_argument("--notify-task", metavar="TASK_ID",
+                     help="reserve native-agent delivery to this Codex task; dispatch the returned job")
     for name in ("process", "pending", "status"):
         cmd = sub.add_parser(name)
         cmd.add_argument("--record")
@@ -899,13 +921,32 @@ def main(argv=None):
     ack.add_argument("signal_ids", nargs="+")
     ack.add_argument("--record")
     ack.add_argument("--state-dir")
+    wait = sub.add_parser("wait-delivery", help="bounded wait for a native delivery worker")
+    wait.add_argument("job_id")
+    wait.add_argument("--record")
+    wait.add_argument("--state-dir")
+    wait.add_argument("--timeout", type=float, default=60)
+    complete = sub.add_parser("complete-delivery", help="record the host's message delivery result")
+    complete.add_argument("job_id")
+    complete.add_argument("--record")
+    complete.add_argument("--state-dir")
+    complete.add_argument("--claim-token", required=True)
+    complete.add_argument("--outcome", required=True, choices=("sent", "failed", "unknown"))
     worker = sub.add_parser("_worker")
     worker.add_argument("--record", required=True)
     worker.add_argument("--state-dir", required=True)
     worker.add_argument("--lease-token", required=True)
     args = parser.parse_args(argv)
     if args.command == "capture":
-        answer = capture(_read_json_arg(args.file), args.record, args.state_dir, not args.no_start)
+        if args.notify_task is not None:
+            host_task = os.environ.get("CODEX_SESSION_ID") or os.environ.get("CODEX_THREAD_ID")
+            if not host_task or args.notify_task != host_task:
+                parser.error("--notify-task must match this host's CODEX_SESSION_ID (or CODEX_THREAD_ID)")
+            answer = _delivery_module().capture(_read_json_arg(args.file), args.notify_task,
+                                                args.record, args.state_dir, not args.no_start)
+            answer = _delivery_commands(answer, args.record, args.state_dir)
+        else:
+            answer = capture(_read_json_arg(args.file), args.record, args.state_dir, not args.no_start)
     elif args.command == "process":
         answer = process(args.record, args.state_dir)
     elif args.command == "pending":
@@ -914,6 +955,11 @@ def main(argv=None):
         answer = status(args.event_id, args.record, args.state_dir)
     elif args.command == "acknowledge":
         answer = acknowledge(args.signal_ids, args.record, args.state_dir)
+    elif args.command == "wait-delivery":
+        answer = _delivery_module().wait(args.job_id, args.record, args.state_dir, args.timeout)
+    elif args.command == "complete-delivery":
+        answer = _delivery_module().complete(args.job_id, args.claim_token, args.outcome,
+                                             args.record, args.state_dir)
     else:
         _worker(Path(args.record).resolve(), Path(args.state_dir).resolve(), args.lease_token)
         return 0

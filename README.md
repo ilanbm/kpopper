@@ -51,6 +51,7 @@ plugin is all of that plus the method and the session hooks:
 | `skills/kpopper/PAGE.md` | The page reference — briefs, renderers, the tree. Read only when building a page. |
 | `scripts/kpopper` | One entry point: `open · check · affects · pull · set · add · review · ingest · consolidate · remeasure · same · distinct · page`. The dispatcher itself is `scripts/cli.py` — the same code the installed `kpopper` command runs. |
 | `scripts/ingestion.py` | Durable capture and independent processing through the existing writer. Quiet results stay quiet; important findings remain available for delivery. See [background ingestion](skills/kpopper/INGESTION.md). |
+| `scripts/ingestion_delivery.py` | Native delivery jobs for Codex hosts with background agents and task messaging. The agent sends important findings to the originating task, including after its answer; confirmations do not approve or rewrite the graph. See [native delivery](skills/kpopper/DELIVERY.md). |
 | `scripts/provenance.py` | The reader underneath. Field names are inferred by shape, so it reads records written in any vocabulary. |
 | `scripts/render_page.py` | The record as one self-contained page, three tabs, no dependencies beyond the reader. |
 | `scripts/verify_page.js` | Browser checks for that page, in both themes and under reduced motion. Playwright. Reached as `kpopper page --checks`. |
@@ -119,6 +120,7 @@ kpopper where                    # the record this directory answers for
 kpopper set | add | review       # change the record; the reply is what the write reached
                                  # (--hypothesis NAME writes beside the record instead)
 kpopper ingest capture --file report.json  # retain a report and process an explicit update asynchronously
+kpopper ingest capture --file report.json --notify-task "$CODEX_SESSION_ID"  # also return a native delivery job
 kpopper ingest pending           # only important unresolved ingestion findings
 kpopper consolidate [--dry-run]  # the record with its hypotheses laid over it, tested - then folded
 kpopper same <a> <b>             # one subject under two ids: b retired into a

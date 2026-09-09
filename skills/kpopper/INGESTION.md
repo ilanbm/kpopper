@@ -30,6 +30,11 @@ JSON
 The worker runs independently of the capture command. Continue unrelated work; do not poll or
 wait for routine completion. The plugin's hooks deliver only important findings.
 
+On a Codex host with native background agents and `send_message_to_thread`, add
+`--notify-task "$CODEX_SESSION_ID"` and dispatch the returned delivery job. This gives important
+findings a route back after the primary has finished answering. See [native delivery](DELIVERY.md)
+for the compact handoff and delivery confirmation; no routine receipt needs a primary ACK.
+
 `source_quote` is required. Supply the target, scalar value, report date, and kind when known.
 `reason` can preserve your existing interpretation. Optional `event_id` makes resubmission of the
 same envelope idempotent; reusing it with different content is refused. Otherwise a fresh ID is
@@ -72,7 +77,8 @@ other unrelated files. Normal operation resolves the same record as `kpopper whe
 | Host | While the primary is working | After its answer, while the client remains open |
 |---|---|---|
 | Claude Code | Background findings return through a hook | An important result uses `asyncRewake` and exit 2 to resume Claude; quiet exit 0 does not wake it |
-| Codex | Background context enters the next available model request | Ordinary async hooks queue context until the next user turn; they do not start a new turn |
+| Codex with native delivery jobs | The native worker sends important findings to the originating task | The same host messaging tool starts a follow-up turn; quiet jobs send no message |
+| Codex with ordinary hooks | Background context enters the next available model request | Async hooks queue context until the next user turn; they do not start a new turn |
 
 When a client closes, the worker and durable outbox remain separate from the delivery hook. On
 startup/resume, ready unresolved findings are offered again. Hooks only read and deliver results:
@@ -80,9 +86,11 @@ even when Claude routes a wake notification through `UserPromptSubmit`, it canno
 capture or another worker. Compaction within the same session does not repeatedly offer the same
 batch.
 
-Starting a turn in an idle Codex Desktop task requires a separate host integration. These Python
-hooks have no documented API for that operation. Native agent messaging, where available, is a
-different capability and is not part of this command.
+The native Codex path uses the host-provided agent messaging tool. The Python worker and hook do
+not call that tool themselves. Capture reserves the job; the primary dispatches the native agent
+using [DELIVERY.md](DELIVERY.md). A finite lease preserves hook fallback if dispatch or messaging
+fails. This capability is conditional on the actual host's available tools, rather than inferred
+from the Codex name or from an active-turn hook test.
 
 Host references: [Claude hooks](https://code.claude.com/docs/en/hooks#command-hook-fields),
 [Codex background hooks](https://learn.chatgpt.com/docs/hooks#how-background-hooks-run).

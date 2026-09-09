@@ -1482,6 +1482,19 @@ judgments:
                              green, distinct_from as an edge that retires the pair"
       alt.sameness_from_names: rejected
       p.candidate_reasons: 4
+  d.native_delivery_scope:
+    rests_on: [s.background_ingestion]
+    verdict: "A native delivery job binds to the originating host task separately from report
+              metadata. Host acceptance confirms delivery only; uncertain acceptance does not trigger
+              an automatic retry in the same session epoch."
+    because: "A background finding must reach the task that can interpret it, including after its
+              answer. Keeping the routing outside the source and delivery outside semantic
+              acknowledgement preserves that task boundary and the authority of the record."
+    reopened_by: "A supplied source or inconsistent job redirects a message to another task;
+                  confirming delivery refreshes a judgment or hides its unresolved finding from
+                  pending; an uncertain send causes another automatic offer in the same epoch; or a
+                  quiet native worker completion starts a new primary turn."
+    seen: {s.background_ingestion: "read 2026-09-09"}
   d.one_reference_resolver:
     rests_on: [d.reasoning_in_record, p.reference_resolvers]
     verdict: "a reference resolves the same way on every surface - the value where the entry holds
