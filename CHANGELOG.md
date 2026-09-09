@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.2.1 — 2026-09-09
+
+- Rewrite README around agent reasoning and practical adoption (#48) — patch
+- Reduce the README diagram size by 86% (#46) — patch
+- Document background capture within the README workflow (#43) — patch
+
 ## 1.2.0 — 2026-09-09
 
 - Add experimental Lean-checked session grounding (#44) — minor
