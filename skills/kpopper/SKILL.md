@@ -1,9 +1,15 @@
 ---
 name: kpopper
-description: "Maintain PROVENANCE.yaml — an epistemic record of what is known, how each piece is grounded, and what would falsify each judgment. Self-evolving: judgments re-check themselves against their dependencies and report their own staleness. Use when work will be revisited, and when resuming such work."
+description: "Maintain a grounded knowledge record for work that gets revisited: planning, research, coordination, decisions and software. Use when starting or resuming such work, including when PROVENANCE.yaml is absent, or when the user asks to map existing materials and their history."
 ---
 
 # kpopper
+
+Start with the work the user wants to move forward. A project may span documents,
+conversations, calendars, task systems and earlier sessions; code and repositories are one
+important setting among these. Keep the goals, commitments, constraints, decisions, sources
+and open questions that help later sessions continue. The connection to the user's goal
+determines what belongs, rather than the mere availability of a tool or folder.
 
 *Named for Popper: nothing here is ever verified, only exposed to refutation. Every judgment
 must say what would make it wrong, and one that cannot be wrong is an opinion.*
@@ -42,7 +48,10 @@ worker contract. Plain hooks alone do not provide that idle delivery.
 
 ## Step 1 — `PROVENANCE.yaml`
 
-This method owns one file, in one place: **`PROVENANCE.yaml` at the project root.** Do not go hunting for whatever a previous session improvised, and do not invent a new name — a method whose artifact is named differently in every project cannot be picked up by anyone.
+This method owns one known entry point: **`PROVENANCE.yaml` in the project's working directory.**
+Git is optional. Use the location resolved by the opener or `kpopper open --json`: it checks
+the current directory and ancestors within the workspace boundary, then Git's registered
+external location. Do not start a duplicate because the file is outside the current directory.
 
 **If it exists:** use it as the durable record of claims, grounds and review state. Check each
 claim's source and scope; the record can itself be stale, and newer evidence can overturn it.
@@ -97,7 +106,34 @@ it; this buys nothing. From the moment you would not, it is the difference betwe
 cost that grows with the record and one that grows with what moved — and that difference is
 the only thing this method promises to measure.
 
-**If it does not exist:** the project's reality is currently undescribed, and describing it is now part of your job. Create it the moment you have the first thing to put in it — during your first real piece of work, not as a preliminary survey.
+**If it does not exist:** there is no record here yet; knowledge may already live in the
+materials. Run `kpopper open` if the hook did not supply `KPOPPER_START`, and follow
+`kpopper _agent guide` for the optional first offer, source discovery and contextual explanations.
+An unavailable registered record is a location problem, not a new project.
+
+Default to learning during the user's actual task. Create the record with the first useful
+finding worth revisiting, within the user's write authorization. A record containing only
+`sources`, `known` and `open` is a valid start; add judgments when there are actual conclusions.
+The reader fills `seen` when `add` creates one. Installation alone creates no file. A one-off
+can finish with no record.
+
+**Mapping is available by choice.** Offer learning while working, an initial map of existing
+materials, or a deeper investigation within agreed subjects, sources and dates. An explicit
+mapping request already chooses that work; no extra confirmation is needed. Use the guide
+to locate where decisions happen and to keep historical accounts separate from present
+findings. Do not expand into unrelated private sources or infer permission from silence.
+For an explicit mapping request, call `kpopper map --json` or `kpopper map --deep --json`
+with the host session environment, accept and execute the returned task, and report its actual
+result through the supplied internal protocol. Do not stop after announcing a ready task.
+Learning during ordinary work needs no configuration. Public operations are `open`, `map`,
+and `config --guidance on|off`; request IDs and receipt calls are internal.
+
+**Teach through actual events.** A compact card can explain the first saved finding, linked
+source, grounded decision, conflict, reuse, or changed premise. Show real links where available
+and use the host's native card or a Markdown block. `kpopper _agent status` lists unseen concepts;
+`kpopper _agent shown EVENT` acknowledges an explanation only after displaying it. The introduction
+is remembered per user, the starting offer per project. Respect `kpopper config --guidance off` and do
+not turn an onboarding step into a requirement for finishing the user's task.
 
 **If the project already keeps a record somewhere else** — a `facts.yaml` in a subfolder, a table someone maintains — do not move it and do not duplicate it. Create `PROVENANCE.yaml` as a pointer:
 
@@ -153,7 +189,8 @@ judgments:    # concluded or composed — each says what would make it wrong
                contract.exit: "90 days"}   # the dependency values at the moment it was written
 ```
 
-These field names are a recommendation, not a requirement — a record that already uses others is fine, and the reader below works either way. What is not optional is that each role exists.
+These field names are a recommendation, not a requirement — a record that already uses others
+is fine. Classify each entry honestly; a role with no content yet needs no placeholder.
 
 **`seen` is not optional and not decoration.** It is the snapshot of what every dependency held
 when the judgment was written. Without it there is no before, so nothing can be compared and
@@ -193,9 +230,11 @@ because nothing evaluates it and nobody notices. Say it is blocked instead. A ju
 is a third state, and says `reopened_by`: not a hole, and not waiting (see *An agent's prior as
 a source*, under Step 5).
 
-## Step 2 — Record what you touch, do not survey
+## Step 2 — Record what the work calls for
 
-The file grows at exactly the rate the work meets reality. If you read three documents to answer a question, those three become entries. You do not catalogue the folder and you do not spend a turn mapping the domain before starting — but you also do not read something, use it, and leave no trace of having done so.
+During ordinary work, keep the findings and sources you actually use. A selected mapping or
+investigation makes discovery the task: follow `kpopper _agent guide`, stay inside the agreed
+scope and report its limits. The availability of more material is not a reason to survey it.
 
 ### 1. Something you took from a source
 
@@ -732,10 +771,10 @@ format, the closed set of renderers and what each one requires, and the rules th
 opinionated arrangement honest all live there. It is a reference, not part of the opening
 cost: skip it entirely on a session that never builds a page.
 
-**A record born in this session is met as a page.** When the record did not exist when the
-session began and the surface can publish a page, render it and show it without being asked -
-the first meeting with the record should be the page, alive, not a yaml file. On every later
-session the page is on demand.
+**Make a new record useful to its reader.** Give a short explanation and link to the saved
+finding when the `record` explanation is due. For a mapping or a record that benefits from a
+visual view, render and show the shipped page when the surface supports it. A simple first
+finding can be met in the conversation; creating a page is not an onboarding requirement.
 
 ```bash
 sed -n '1,400p' "$(dirname "$R")/../skills/kpopper/PAGE.md"
@@ -762,7 +801,7 @@ is not up for revision. These four are that floor.
 
 Each is recognizable while you are doing it. If you catch yourself, stop.
 
-- Designing the structure before doing any of the actual work.
+- Designing a structure before meeting the evidence, including during a selected mapping.
 - Starting a second record, or renaming `PROVENANCE.yaml` to something you like better.
 - Creating a category with one member. One is a case, two a coincidence, three a category.
 - Recording things nobody asked about, for completeness. Completeness is not the goal.
@@ -785,7 +824,9 @@ Each is recognizable while you are doing it. If you catch yourself, stop.
 
 ## Check yourself
 
-- **The first turn should feel like any normal session** — no extra questions, no setup, no announcements about record-keeping. If it feels different, you are doing too much.
+- **Keep first use proportionate.** Offer a short optional choice at a suitable moment;
+  preserve progress on the task and never repeat an explanation just because a session restarted.
+  A chosen mapping is work in its own right, with scope and a useful result.
 - Pick three specific claims from what you produced — a figure, a date, a statement about what some document says. Each should trace to a recorded origin, a rule, or a stated judgment. If one cannot, it was invented.
 - Take one thing you presented as quoted and find it in its source. If you cannot, it was a paraphrase wearing quotation marks.
 - Search your output for material that also sits in the record. If it appears as literal text in both places, it will drift — reference it instead.
@@ -799,8 +840,8 @@ The method promises exactly one measurable thing: **the opening cost of session 
 Today that cost is flat — every session re-reads, re-verifies, and sometimes re-invents. If it
 is working, a later session reads only what is marked as moved.
 
-So: if a new agent's first turn becomes longer or more ceremonial than it is today, the briefing
-is wrong, not the implementation. If it takes more than the ladder above to explain when to add
+An optional introduction should earn its small cost through useful work; a selected mapping
+should return the picture the user asked for. If it takes more than the ladder above to explain when to add
 structure, the ladder failed. And if after five sessions the sixth does not open cheaper, the
 method did not return what it cost, and you can drop it with a clear conscience.
 

@@ -142,6 +142,22 @@ class SearchIntegration(unittest.TestCase):
         self.assertEqual(result.returncode,0,result.stderr);self.assertEqual(result.stdout,expected)
         self.assertLessEqual(len(self.service.encoder.encode(result.stdout)),1000)
 
+    def test_workspace_cli_discovers_and_searches_an_ancestor_record_without_git(self):
+        workspace=self.folder/'workspace';child=workspace/'notes'/'nested';child.mkdir(parents=True)
+        record=workspace/'PROVENANCE.yaml'
+        record.write_text('sources:\n  s.note: {name: "Workspace source"}\nknown:\n  task.target: {v: "unique workspace needle", from: s.note}\n')
+        before=record.read_bytes();script=Path(__file__).resolve().parents[1]/'scripts'/'cli.py'
+        base=[sys.executable,str(script),'--workspace',str(child),'session']
+        shared=['--no-settings','--project','nested','--state',str(self.folder/'nested-state')]
+        opened=subprocess.run(base+['open']+shared,text=True,encoding='utf-8',capture_output=True)
+        self.assertEqual(opened.returncode,0,opened.stderr)
+        import re
+        revision=re.search(r'revision=([a-f0-9]{64})',opened.stdout).group(1)
+        searched=subprocess.run(base+['search']+shared+['--revision',revision,'--query','unique workspace needle','--search-mode','lexical'],text=True,encoding='utf-8',capture_output=True)
+        self.assertEqual(searched.returncode,0,searched.stderr)
+        result=json.loads(searched.stdout);self.assertEqual(result['hits'][0]['id'],'task.target')
+        self.assertEqual(record.read_bytes(),before);self.assertFalse((child/'PROVENANCE.yaml').exists())
+
     @unittest.skipUnless(importlib.util.find_spec('mcp'),'install the MCP session dependency')
     def test_real_mcp_search_matches_cli_and_rejects_stale_revision(self):
         from mcp import Client

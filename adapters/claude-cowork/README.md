@@ -7,5 +7,12 @@ plugin's own root files, drifting from them the moment either side changed.
 
 ## Install
 
-Enable kpopper as an account-level plugin; Cowork picks it up the same way Claude
-Code does. There is no separate Cowork-specific install step.
+In Cowork, open **Customize → Plugins → Add marketplace**, enter `ilanbm/kpopper`,
+then install **kpopper** from that marketplace. The full repository URL,
+`https://github.com/ilanbm/kpopper`, also works. Open the installed plugin to review
+its components.
+
+This installs the same package used by Claude Code; it does not require copying
+adapter files into each project. Follow [Cowork's plugin installation guide](https://claude.com/docs/cowork/guide/plugins)
+for repository imports and component controls. Installation in one client should
+not be assumed to configure another client's local environment.

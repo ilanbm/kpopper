@@ -540,7 +540,9 @@ class TheRefutation(unittest.TestCase):
         self.assertIn("--from <ref>", out)
         code, out, _ = kp()
         self.assertIn("kpopper consolidate", out)
-        self.assertIn("pull <seed> --from REF", out)
+        self.assertIn("kpopper pull", out)
+        code, out, _ = kp("pull", "--help")
+        self.assertIn("--from REF", out)
 
 
     @unittest.skipIf(hasattr(os, "geteuid") and os.geteuid() == 0, "root deletes from any directory")
