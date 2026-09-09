@@ -28,6 +28,16 @@ def make_server(service):
         """Read a returned reference at its revision; exact text supports labeled chunks."""
         return run(service.reading, ref, revision, tokens, offset)
 
+    @server.tool(structured_output=False, annotations=ToolAnnotations(readOnlyHint=True))
+    def kpopper_search(query: str, revision: str, ids: Optional[list[str]] = None,
+                       limit: int = 8, tokens: int = 1000, branch: Optional[str] = None,
+                       mode: Literal["lexical","semantic","hybrid"] = "hybrid") -> str:
+        """Find candidate refs; known IDs win and branches never exclude stronger matches.
+
+        Read returned refs for evidence. Local E5 is optional; any lexical fallback is explicit.
+        """
+        return run(service.searching,query,revision,tokens,ids,limit,branch,mode)
+
     @server.tool(structured_output=False, annotations=ToolAnnotations(readOnlyHint=False, destructiveHint=False, idempotentHint=True))
     def kpopper_propose(revision: str, kind: Literal["observed", "inferred", "assumed", "question"],
                         text: str, basis: list[str], revisit: str = "") -> str:
