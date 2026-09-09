@@ -136,11 +136,24 @@ def registered_record():
 
 
 def default_paths():
-    """The record at the project root - else the one the checkout registered."""
+    """Use the same bounded discovery as the opener, including non-Git workspaces."""
     if os.path.exists(DEFAULT[0]):
         return DEFAULT
-    rec = registered_record()
-    return [rec] if rec else DEFAULT
+    try:
+        from .workspace import locate
+    except ImportError:
+        # Configured readers are also loaded by file path (ingestion and checked
+        # sessions), without a package or their directory on sys.path.
+        import importlib.util
+        spec = importlib.util.spec_from_file_location(
+            "_kpopper_workspace", os.path.join(os.path.dirname(__file__), "workspace.py"))
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        locate = module.locate
+    location = locate()
+    if location["status"] == "unavailable":
+        raise SystemExit(location["reason"] + " " + location["record"])
+    return [location["record"]] if location["status"] == "found" else DEFAULT
 
 
 HYPOTHESES = "PROVENANCE.d"      # beside the record: one file per hypothesis, the record's shape
@@ -516,6 +529,18 @@ def infer(doc):
 
     fields = {"deps": pick("deps")}
     if not fields["deps"]:
+        # The checked-session transport already accepts this narrow starting shape.
+        # Let the reader/writer do so too: a first source and finding need not invent
+        # a judgment. Unknown collections or judgment-shaped fields still require
+        # role inference; this must never hide a misspelled dependency declaration.
+        source_collections = {k: v for k, v in collections.items() if k != "meta"}
+        judgment_fields = {"rests_on", "wrong_if", "seen", "verdict", "reopened_by", "blocked_on"}
+        if source_collections and set(source_collections) <= {"known", "sources", "open", "questions"} \
+                and not unresolved and not any(
+                    judgment_fields.intersection(body) for group in source_collections.values()
+                    for body in group.values() if isinstance(body, dict)):
+            return {nid for group in source_collections.values() for nid in group}, {}, \
+                {"deps": "rests_on", "snapshot": "seen", "predicate": "wrong_if"}
         raise SystemExit(_no_deps(unresolved))
     # The snapshot and the predicate are judgment fields, so they are voted on among the
     # bodies that carry the dependency field: a derived entry's rule has a predicate's
@@ -3031,6 +3056,8 @@ def _collection_for(doc, ids, jud, fields, nid, body, explicit):
     if len(homes) == 1:
         return homes[0]
     if isinstance(body, dict) and fields["deps"] in body:
+        if not jud:
+            return "judgments"
         by_jud = sorted(cols, key=lambda c: -sum(1 for k in cols[c] if k in jud))
         return by_jud[0]
     if not isinstance(body, dict):
@@ -3414,6 +3441,8 @@ def _apply(paths, action):
         out.append("supersede {}: {} -> {} - {}".format(
             nid, *apart(was, _verdict_of(body), 60), why))
     elif kind == "add":
+        if collection == "judgments" and not jud and collection not in doc:
+            lines += ["", "judgments:"]
         out.append("add " + _add_in(lines, nid, body, collection))
     else:
         j = jud[nid]

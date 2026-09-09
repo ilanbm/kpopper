@@ -1,8 +1,10 @@
 <!-- kpopper:method -->
 # kpopper — the method, condensed
 
-Keep one file, PROVENANCE.yaml, at the project root, for work that will be revisited.
-Record three things while working, never as a separate step:
+Start with the user's goal: planning, research, coordination, decisions or software.
+Keep one PROVENANCE.yaml entry point in the project's working directory for work that
+will be revisited. Git is optional; sources may span documents, conversations, calendars,
+task systems, files and earlier sessions. Record three things while working:
 
 1. Something taken from a source — record where, precisely enough to go back: the source
    AND the location within it. Say whether it is quoted, a paraphrase, or your reading.
@@ -20,15 +22,25 @@ what would re-open it. A write that contradicts what the record holds is refused
 hypothesis beside it (`--hypothesis NAME`), which `consolidate --dry-run` tests against the
 base and `consolidate` folds only when the test is clean.
 
-Open a session with `provenance.py open` instead of reading the record whole; ground a
-subject with `pull`, trace what a change reaches with `affects`, gate on `check`.
+Reuse an opening the hook already supplied. Otherwise run `kpopper start` for the workspace's
+first-use context, and `provenance.py open` when a record exists. Use `kpopper start guide`
+for the optional choice of learning while working, an initial map, or a deeper investigation.
+Only an explicit choice authorizes mapping; missing files create no obligation to survey or
+write. An unavailable registered record must not trigger a duplicate. The guide records
+user/project choices and explanations actually shown, so sessions do not repeat onboarding.
+Without `kpopper` on PATH, run `<plugin>/scripts/cli.py start` with Python instead.
+Ground a subject with `pull`, trace what a change reaches with `affects`, gate on `check`.
 <!-- /kpopper:method -->
 
-At the start of a session, when `PROVENANCE.yaml` exists at the project root, run:
+If the hook supplied no opening or first-use context, run:
+
+    python3 <plugin>/scripts/cli.py start
+
+If a record was found and no checked view was already supplied, open it with:
 
     python3 <plugin>/scripts/provenance.py open --chars 2000
 
-and read that instead of the file whole. Before treating work as finished, run:
+and read that instead of the file whole. Before finishing work that has a record, run:
 
     python3 <plugin>/scripts/provenance.py check
 

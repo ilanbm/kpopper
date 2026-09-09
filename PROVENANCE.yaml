@@ -641,7 +641,7 @@ known:
   p.hook_slot:
     v: 2000
     name: "The opener's character budget"
-    from: "scripts/session_open.sh"
+    from: "scripts/session_start.py: LEGACY_CHARS"
     measure: hook_slot
   p.gate_bounces:
     v: 1
