@@ -1,0 +1,76 @@
+meta:
+  name: Greenhouse winter plan
+  scope: Prepare the greenhouse for the coldest February night.
+  updated: '2026-09-03'
+sources:
+  s.2026_09_02_heating:
+    asked: Can we keep the greenhouse above 12°C through February on the old boiler?
+    name: 'the heating question, as this session read it: a shortfall in kilowatts,
+      not a yes or no'
+    of: this session
+    read: '2026-09-02'
+  s.2026_09_03_glazing:
+    asked: What would glazing the north wall cost, and how much of the shortfall would
+      it close?
+    name: 'the glazing question, as this session read it: a price and a kilowatt figure,
+      not a yes or no'
+    of: this session
+    read: '2026-09-03'
+  doc.boiler_sheet:
+    name: the boiler's service sheet
+    file: sources/boiler-service.md
+    read: '2026-09-02'
+known:
+  glaze.north_wall_m2:
+    v: 18
+    unit: m2
+    name: north wall, the area a glazier would cover
+    from: s.2026_09_03_glazing
+    at: measured on site during the session
+  glaze.quote_eur:
+    v: 2400
+    unit: EUR
+    name: the glazier's quote for the north wall
+    from: s.2026_09_03_glazing
+    at: the quote of 2026-09-03
+  glaze.saving_kw:
+    v: 4
+    unit: kW
+    name: loss the glazing would stop on the coldest night
+    from: s.2026_09_03_glazing
+    at: the glazier's U-value against the wall's
+  heat.boiler_kw:
+    v: 24
+    unit: kW
+    name: boiler output
+    from: doc.boiler_sheet
+  heat.loss_kw:
+    v: 31
+    unit: kW
+    name: heat loss on a -5°C night
+    from: s.2026_09_02_heating
+    at: worked out from the glazing area during the session
+  heat.deficit_kw:
+    rule: heat.loss_kw - heat.boiler_kw
+    name: shortfall on the coldest night
+  when.first_cold_night:
+    v: '2027-02-01'
+    name: first night that matters
+    from: s.2026_09_02_heating
+open:
+  q.second_boiler: is a second boiler cheaper than glazing the north wall?
+judgments:
+  c.boiler_short:
+    rests_on:
+    - heat.boiler_kw
+    - heat.loss_kw
+    - heat.deficit_kw
+    verdict: the old boiler cannot hold 12°C on the coldest February night
+    because: The existing boiler supplies {{heat.boiler_kw}} kW, below the estimated
+      {{heat.loss_kw}} kW heat loss. The remaining capacity gap must be addressed
+      before winter.
+    wrong_if: heat.loss_kw <= heat.boiler_kw
+    seen:
+      heat.boiler_kw: 24
+      heat.loss_kw: 31
+      heat.deficit_kw: heat.loss_kw - heat.boiler_kw
