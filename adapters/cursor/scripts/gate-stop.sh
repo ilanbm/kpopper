@@ -10,15 +10,6 @@
 # found problems is the normal case this script exists to handle, not a crash to abort on.
 
 IN=$(cat)
-# the record is at the root, or where the checkout registered it - same as session_gate.sh
-REC=PROVENANCE.yaml
-if [ ! -f "$REC" ]; then
-  G=$(git rev-parse --git-common-dir 2>/dev/null) || exit 0
-  [ -f "$G/kpopper-record" ] || exit 0
-  REC=$(head -n 1 "$G/kpopper-record")
-  case "$REC" in "~/"*) REC="$HOME/${REC#"~/"}" ;; esac
-  [ -n "$REC" ] && [ -f "$REC" ] || exit 0
-fi
 
 resolve_self() {
   p=$0
@@ -44,7 +35,8 @@ if [ ! -f "$PROVENANCE_PY" ]; then
   exit 0
 fi
 
-CID=$(printf '%s' "$IN" | python3 -c 'import json,sys; print(json.load(sys.stdin).get("conversation_id",""))' 2>/dev/null || true)
+REC=$(printf '%s' "$IN" | python3 "$ROOT/scripts/workspace.py" --hook --path 2>/dev/null) || exit 0
+CID=$(printf '%s' "$IN" | python3 -c 'import json,re,sys; s=json.load(sys.stdin).get("conversation_id",""); print(s if isinstance(s,str) and re.fullmatch(r"[A-Za-z0-9_-]{1,193}",s) else "")' 2>/dev/null || true)
 BASE_FILE="${TMPDIR:-/tmp}/kpopper-base-cursor-$CID"
 [ -n "$CID" ] && [ -f "$BASE_FILE" ] || exit 0
 
@@ -52,7 +44,7 @@ LOOP=$(printf '%s' "$IN" | python3 -c 'import json,sys; print(json.load(sys.stdi
 
 OUT=$(python3 "$PROVENANCE_PY" check "$REC" 2>/dev/null)
 NOW=$(printf '%s\n' "$OUT" | grep -c '^FAIL')
-BASE=$(cat "$BASE_FILE" 2>/dev/null || echo 0)
+BASE=$(python3 -c 'import json,sys; v=json.load(open(sys.argv[1])); print(v.get("fails",0) if isinstance(v,dict) else int(v))' "$BASE_FILE" 2>/dev/null) || exit 0
 [ "$NOW" -gt "$BASE" ] 2>/dev/null || exit 0
 
 MSG=$(printf '%s\n%s\n%s\n' \
