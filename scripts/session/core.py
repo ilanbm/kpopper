@@ -15,7 +15,7 @@ from .model import encode, digest
 
 SOURCE = Path(__file__).resolve().parent / "lean" / "Main.lean"
 LEAN_VERSION = "4.33.1"
-RULES = (SOURCE.parent.parent / "rules.txt").read_text().strip()
+RULES = (SOURCE.parent.parent / "rules.txt").read_text(encoding="utf-8").strip()
 
 
 def source_hash():
@@ -55,12 +55,12 @@ def setup(lean_root=None, rebuild=False):
     if root is None:
         # Resolve elan's selected toolchain before changing directory for the build.
         # Keep the proxy's invocation name intact when asking for its prefix.
-        prefix = subprocess.check_output([str(Path(lean).absolute()), "--print-prefix"], text=True).strip()
+        prefix = subprocess.check_output([str(Path(lean).absolute()), "--print-prefix"], text=True, encoding="utf-8").strip()
         root = Path(prefix).expanduser().resolve()
         lean = str(root / "bin" / ("lean" + suffix))
     leanc = str(root / "bin" / ("leanc" + suffix))
     lean, leanc = str(Path(lean).absolute()), str(Path(leanc).absolute())
-    version = subprocess.check_output([lean, "--version"], text=True).strip()
+    version = subprocess.check_output([lean, "--version"], text=True, encoding="utf-8").strip()
     if ("version " + LEAN_VERSION + ",") not in version:
         raise ValueError("expected Lean " + LEAN_VERSION + "; found " + version)
     destination.parent.mkdir(parents=True, exist_ok=True)
@@ -74,7 +74,7 @@ def setup(lean_root=None, rebuild=False):
         metadata = {"source_sha256": captured_hash,
                     "binary_sha256": hashlib.sha256((build_dir / binary_name()).read_bytes()).hexdigest(),
                     "lean_version": version, "platform": platform.platform()}
-        (build_dir / "build.json").write_text(encode(metadata) + "\n")
+        (build_dir / "build.json").write_text(encode(metadata) + "\n", encoding="utf-8")
         for name in ["Main.lean", "Main.c", "Main.olean"]:
             (build_dir / name).unlink()
         # A directory rename publishes a matching binary/manifest pair at once.
@@ -100,7 +100,7 @@ class Core:
         self.root = cache_directory()
         self.binary = self.root / binary_name()
         try:
-            self.build = json.loads((self.root / "build.json").read_text())
+            self.build = json.loads((self.root / "build.json").read_text(encoding="utf-8"))
             valid = self.build["source_sha256"] == source_hash() and (
                 hashlib.sha256(self.binary.read_bytes()).hexdigest() == self.build["binary_sha256"])
         except (OSError, KeyError, ValueError) as error:
@@ -121,7 +121,9 @@ class Core:
     def request(self, payload, rejected_assertions=False):
         self.ensure_program()
         text = json.dumps(payload, ensure_ascii=False, allow_nan=False, separators=(",", ":"))
-        run = subprocess.run([str(self.binary)], input=text, text=True, capture_output=True, timeout=20)
+        # Lean's JSON protocol is UTF-8, independently of the host code page.
+        run = subprocess.run([str(self.binary)], input=text, text=True, encoding="utf-8",
+                             capture_output=True, timeout=20)
         self.ensure_program()
         if run.returncode not in ([0, 2] if rejected_assertions else [0]):
             raise ValueError(run.stdout.strip() or run.stderr.strip() or "Lean assessment failed")

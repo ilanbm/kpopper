@@ -89,6 +89,17 @@ class CheckedSessionContract(unittest.TestCase):
     def native_service(self):
         return GroundingService("example", self.native, self.folder / "state", self.reader)
 
+    def read_hint(self, text):
+        prefix = 'Read via MCP kpopper_read, or (POSIX shell): '
+        line = next(line for line in text.splitlines() if line.startswith(prefix))
+        shell_command = line[len(prefix):]
+        command = shlex.split(shell_command)
+        self.assertEqual(Path(command[0]).resolve(), Path(sys.executable).resolve())
+        self.assertEqual(Path(command[1]).resolve(), (ROOT / 'scripts/session_cli.py').resolve())
+        self.assertEqual(command[2], 'read')
+        self.assertIn('--no-settings', command)
+        return shell_command, command
+
     def data(self):
         return native_record(self.native, self.reader)
 
@@ -113,8 +124,28 @@ class CheckedSessionContract(unittest.TestCase):
         premise = next(p for p in bundle["premises"] if p["id"] == "m.reading")
         self.assertEqual((premise["current_recorded_value"], premise["value_at_review"]), (3, 1))
         source = json.loads(service.reading("source:record", revision, 3000))["value"]
-        self.assertEqual(source["text"], NATIVE)
-        self.assertEqual(hashlib.sha256(source["text"].encode()).hexdigest(), source["sha256"])
+        original_bytes = self.native.read_bytes()
+        self.assertEqual(source["text"].encode('utf-8'), original_bytes)
+        self.assertEqual(hashlib.sha256(original_bytes).hexdigest(), source["sha256"])
+
+    def test_utf8_cli_preserves_original_crlf_source_bytes(self):
+        raw = (NATIVE.replace('\n', '\r\n') + '    because: "שלום 世界 😀"\r\n').encode('utf-8')
+        self.native.write_bytes(raw)
+        service = self.native_service()
+        _, revision = service.graph()
+        command = [sys.executable, str(ROOT / 'scripts/session_cli.py'), 'read', '--no-settings',
+                   '--input', str(self.native), '--project', 'example', '--state', str(self.folder / 'state'),
+                   '--revision', revision, '--ref', 'source:record', '--tokens', '3000']
+        # The CLI owns its UTF-8 wire encoding rather than inheriting this codepage.
+        environment = dict(os.environ, PYTHONIOENCODING='cp1252', PYTHONUTF8='0',
+                           PYTHONCOERCECLOCALE='0', LC_ALL='C')
+        result = subprocess.run(command, env=environment, capture_output=True, text=True,
+                                encoding='utf-8', timeout=30)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        source = json.loads(result.stdout)['value']
+        self.assertEqual(source['text'].encode('utf-8'), raw)
+        self.assertEqual(source['sha256'], hashlib.sha256(raw).hexdigest())
+        self.assertEqual(self.native.read_bytes(), raw)
 
     def test_scalar_values_and_recorded_status_remain_visible(self):
         service = self.native_service()
@@ -270,7 +301,7 @@ class CheckedSessionContract(unittest.TestCase):
     def test_cli_checkout_entry_uses_same_revision_and_reader(self):
         command = [sys.executable, str(ROOT / "scripts" / "cli.py"), "session", "open",
                    "--input", str(self.native), "--project", "example", "--state", str(self.folder / "cli-state")]
-        run = subprocess.run(command, text=True, capture_output=True)
+        run = subprocess.run(command, text=True, encoding='utf-8', capture_output=True)
         self.assertEqual(run.returncode, 0, run.stderr)
         self.assertIn("revision=", run.stdout)
         self.assertIn("seen=1 current=3", run.stdout)
@@ -288,22 +319,23 @@ class CheckedSessionContract(unittest.TestCase):
     def test_project_enable_disable_and_hook_budget_are_reversible(self):
         from scripts.session import settings
         base = [sys.executable, str(ROOT / 'scripts' / 'session_cli.py')]
-        enabled = subprocess.run(base + ['enable', '--tokens', '900'], cwd=self.folder, text=True, capture_output=True)
+        enabled = subprocess.run(base + ['enable', '--tokens', '900'], cwd=self.folder, text=True, encoding='utf-8', capture_output=True)
         self.assertEqual(enabled.returncode, 0, enabled.stderr)
         self.assertTrue(settings.current()['enabled'])
         hook = subprocess.run(['sh', str(ROOT / 'scripts' / 'session_open.sh')], input='{}', cwd=self.folder,
-                              text=True, capture_output=True)
+                              text=True, encoding='utf-8', capture_output=True)
         self.assertEqual(hook.returncode, 0, hook.stderr)
         self.assertIn('executable falsifiers:', hook.stdout)
-        self.assertIn('session_cli.py read', hook.stdout)
+        self.read_hint(hook.stdout)
+        self.assertIn('MAP / —', hook.stdout)
         self.assertLessEqual(len(tiktoken.get_encoding('o200k_base').encode(hook.stdout)), 900)
-        disabled = subprocess.run(base + ['disable'], cwd=self.folder, text=True, capture_output=True)
+        disabled = subprocess.run(base + ['disable'], cwd=self.folder, text=True, encoding='utf-8', capture_output=True)
         self.assertEqual(disabled.returncode, 0, disabled.stderr)
         self.assertFalse(settings.current()['enabled'])
-        legacy = subprocess.run(['sh', str(ROOT / 'scripts' / 'session_open.sh')], input='{}', cwd=self.folder,
-                                text=True, capture_output=True)
+        legacy = subprocess.run(['sh', str(ROOT / 'scripts' / 'session_open.sh')], input=b'{}', cwd=self.folder,
+                                capture_output=True)
         self.assertEqual(legacy.returncode, 0, legacy.stderr)
-        self.assertNotIn('Read via MCP', legacy.stdout)
+        self.assertNotIn(b'Read via MCP', legacy.stdout)
 
     def test_explicit_input_uses_target_project_settings_from_another_repository(self):
         target, unrelated = self.folder / 'target', self.folder / 'unrelated'
@@ -324,12 +356,13 @@ class CheckedSessionContract(unittest.TestCase):
         environment.pop('KPOPPER_SESSION_BOOTSTRAPPED', None)
         result = subprocess.run([sys.executable, str(ROOT / 'scripts' / 'session_cli.py'),
             'hook-open', '--input=' + str(record), '--tokens', '1000'],
-            cwd=unrelated, env=environment, text=True, capture_output=True)
+            cwd=unrelated, env=environment, text=True, encoding='utf-8', capture_output=True)
         self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertIn('--project target', result.stdout)
-        self.assertIn('--state ' + str(target / 'pending'), result.stdout)
-        self.assertIn('--profile ' + str(profile), result.stdout)
-        self.assertNotIn(str(unrelated / 'pending'), result.stdout)
+        _, command = self.read_hint(result.stdout)
+        self.assertEqual(command[command.index('--project') + 1], 'target')
+        self.assertEqual(Path(command[command.index('--state') + 1]), target / 'pending')
+        self.assertEqual(Path(command[command.index('--profile') + 1]), profile)
+        self.assertNotIn(str(unrelated / 'pending'), command)
 
     def test_checked_hook_finds_root_record_from_repository_subdirectory(self):
         repository = self.folder / 'repository'
@@ -343,11 +376,12 @@ class CheckedSessionContract(unittest.TestCase):
         environment = dict(os.environ)
         environment.pop('KPOPPER_SESSION_CONFIG', None)
         hook = subprocess.run(['sh', str(ROOT / 'scripts' / 'session_open.sh')], input='{}',
-            cwd=child, env=environment, text=True, capture_output=True)
+            cwd=child, env=environment, text=True, encoding='utf-8', capture_output=True)
         self.assertEqual(hook.returncode, 0, hook.stderr)
         self.assertIn('revision=', hook.stdout, hook.stderr)
-        self.assertIn('--project nested-project', hook.stdout)
-        self.assertIn('--state ' + str(repository / 'pending'), hook.stdout)
+        _, command = self.read_hint(hook.stdout)
+        self.assertEqual(command[command.index('--project') + 1], 'nested-project')
+        self.assertEqual(Path(command[command.index('--state') + 1]), repository / 'pending')
 
         external = self.folder / 'external'
         external.mkdir()
@@ -364,17 +398,18 @@ class CheckedSessionContract(unittest.TestCase):
             'tokens': 1000, 'project': 'wrong-project', 'state': str(external / 'pending'),
             'profile': str(external / 'missing-profile.json')}))
         hook = subprocess.run(['sh', str(ROOT / 'scripts' / 'session_open.sh')], input='{}',
-            cwd=child, env=environment, text=True, capture_output=True)
+            cwd=child, env=environment, text=True, encoding='utf-8', capture_output=True)
         self.assertEqual(hook.returncode, 0, hook.stderr)
         self.assertIn('revision=', hook.stdout, hook.stderr)
-        self.assertIn('--project nested-project', hook.stdout)
-        self.assertIn('--state ' + str(repository / 'registered-pending'), hook.stdout)
-        self.assertNotIn('--project wrong-project', hook.stdout)
-        hint = next(line for line in hook.stdout.splitlines() if line.startswith('Read via MCP'))
-        command = shlex.split(hint.split(', or: ', 1)[1])
-        command[command.index('REF')] = 'checked:d.choice'
-        command[command.index('REV_FROM_ABOVE')] = re.search(r'revision=([a-f0-9]{64})', hook.stdout).group(1)
-        replay = subprocess.run(command, cwd=self.folder, env=environment, text=True, capture_output=True)
+        hint, command = self.read_hint(hook.stdout)
+        self.assertEqual(command[command.index('--project') + 1], 'nested-project')
+        self.assertEqual(Path(command[command.index('--state') + 1]), repository / 'registered-pending')
+        self.assertNotIn('wrong-project', command)
+        revision = re.search(r'revision=([a-f0-9]{64})', hook.stdout).group(1)
+        hint = hint.replace(' --ref REF --revision REV_FROM_ABOVE',
+                            ' --ref checked:d.choice --revision ' + revision)
+        replay = subprocess.run(['sh', '-c', hint], cwd=self.folder, env=environment,
+                                text=True, encoding='utf-8', capture_output=True)
         self.assertEqual(replay.returncode, 0, replay.stderr)
         self.assertTrue(json.loads(replay.stdout)['value']['premise_changed'])
 

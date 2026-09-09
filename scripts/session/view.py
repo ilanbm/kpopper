@@ -263,7 +263,7 @@ class GroundingService(CheckedSessionService):
 
     def graph(self):
         self.core.ensure_program(); graph,_=super().graph()
-        profile=json.loads(self.profile.read_text()) if self.profile else None
+        profile=json.loads(self.profile.read_text(encoding='utf-8')) if self.profile else None
         data=apply_profile(graph.data,profile)
         data['project_context']=self.project
         data['epistemic_core_source']=self.core.build['source_sha256']

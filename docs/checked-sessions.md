@@ -95,6 +95,11 @@ kpopper session disable
 
 Enable stores the current Python executable in a project-scoped settings file outside the record, so the hook and later CLI reads use the environment containing the session dependencies. Optional `--profile`, `--project` and `--state` values are project-scoped. `--global` enables or disables the default for this machine without binding all projects to one profile or proposal store. A project setting overrides the global default. `KPOPPER_SESSION_DISABLE=1` temporarily selects the legacy hook.
 
+Checked CLI output, hook transport and the Lean JSON protocol use UTF-8 independently
+of the host code page. Captured source text retains its original line endings and
+content hash. The printed command hint targets a POSIX shell, including Git Bash on
+Windows; it is labeled accordingly. MCP requests do not require that shell syntax.
+
 The checked hook includes an executable read hint and budgets that hint together with the view. That command carries its resolved project, input, state and profile with `--no-settings`, so replaying it from another directory cannot pick a different interpreter or project configuration. If enabled checked mode cannot run, the hook reports that limitation and points to the record; it does not silently substitute a truncated result while claiming a checked view. Disabling does not delete the record, proposals or core cache. The Stop gate retains its existing baseline behavior.
 
 Codex also reviews and trusts plugin hook definitions separately from installation. If the

@@ -10,6 +10,7 @@ run `kpopper session setup` explicitly for this checkout before integration test
 import json
 import os
 from pathlib import Path
+import subprocess
 import sys
 import tempfile
 import unittest
@@ -170,6 +171,33 @@ class PredicateLiteralContract(unittest.TestCase):
     def test_insignificant_ascii_whitespace_does_not_rewrite_reporting(self):
         expression = " \t" + VALUE + "\t ==  '  still  pending  ' \r\n"
         self.assert_result(expression, '  still  pending  ', True)
+
+    def test_unicode_core_pipe_does_not_depend_on_the_host_text_codec(self):
+        # Construct Unicode inside an ASCII-only child program. Disable Python's
+        # locale coercion/UTF-8 mode only in this child: the real Core pipe, not a
+        # test-wide UTF-8 switch, must deliver the exact value to/from Lean.
+        script = '''
+import json, locale
+from scripts.session.core import Core
+value = ''.join(chr(n) for n in [0x05e9, 0x05dc, 0x05d5, 0x05dd, 0x20, 0x4e16, 0x754c, 0x1f600])
+expression = 'value.text == ' + json.dumps(value, ensure_ascii=False)
+record = {'nodes': {
+    'value.text': {'kind': 'known', 'states': [], 'body': {'v': value}},
+    'claim.same': {'kind': 'judgment', 'states': [], 'body': {
+        'verdict': 'The stored text matches.', 'rests_on': ['value.text'],
+        'seen': {'value.text': value}, 'wrong_if': expression}}
+}}
+bundle = Core().assess(record, 'claim.same')['bundle']
+print(json.dumps({'host_codec': locale.getpreferredencoding(False), 'bundle': bundle}, ensure_ascii=True))
+'''
+        environment = dict(os.environ, PYTHONUTF8='0', PYTHONCOERCECLOCALE='0', LC_ALL='C')
+        result = subprocess.run([sys.executable, '-c', script], cwd=ROOT, env=environment,
+                                capture_output=True, text=True, encoding='utf-8', timeout=30)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        response = json.loads(result.stdout)
+        value = 'שלום 世界😀'
+        self.assertEqual(response['bundle']['premises'][0]['current_recorded_value'], value)
+        self.assertIs(response['bundle']['falsifier']['holds_on_current_values'], True)
 
 
 if __name__ == '__main__':

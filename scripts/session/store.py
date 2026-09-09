@@ -14,8 +14,8 @@ import tiktoken
 from .model import RecordMap, BudgetTooSmall, encode, digest
 
 ROOT=Path(__file__).resolve().parent
-RULES=(ROOT/'rules.txt').read_text().strip()
-BOOTSTRAP=(ROOT/'bootstrap.txt').read_text().strip()
+RULES=(ROOT/'rules.txt').read_text(encoding='utf-8').strip()
+BOOTSTRAP=(ROOT/'bootstrap.txt').read_text(encoding='utf-8').strip()
 
 
 class TextEncoder:
@@ -36,7 +36,7 @@ def atomic_create(path, value):
         except FileExistsError: pass
     finally:
         os.unlink(temporary)
-    return json.loads(path.read_text())
+    return json.loads(path.read_text(encoding='utf-8'))
 
 
 def normalize(value):
@@ -151,7 +151,7 @@ class SessionService:
         if held!=identity: raise ValueError('state directory belongs to another project/input')
 
     def graph(self):
-        data=native_record(self.input_path,self.reader) if self.reader else json.loads(self.input_path.read_text())
+        data=native_record(self.input_path,self.reader) if self.reader else json.loads(self.input_path.read_text(encoding='utf-8'))
         graph=RecordMap(data)
         revision=digest({'project':self.project,'graph':graph.snapshot})
         return graph,revision
@@ -159,7 +159,7 @@ class SessionService:
     def proposals(self):
         result={}
         for path in sorted(self.state_dir.glob('proposal-*.json')):
-            proposal=json.loads(path.read_text())
+            proposal=json.loads(path.read_text(encoding='utf-8'))
             core={k:proposal[k] for k in ['project','base_revision','kind','text','basis','revisit']}
             key=digest(core)
             if (proposal.get('project')!=self.project or path.name!='proposal-'+key+'.json' or proposal.get('id')!=key

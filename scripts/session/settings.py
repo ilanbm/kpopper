@@ -17,7 +17,8 @@ def project_path(directory=None):
         return Path(override).expanduser().absolute()
     directory = Path(directory or Path.cwd()).expanduser().resolve()
     try:
-        result = subprocess.run(["git", "rev-parse", "--git-common-dir"], cwd=directory, text=True, capture_output=True)
+        result = subprocess.run(["git", "rev-parse", "--git-common-dir"], cwd=directory,
+                                text=True, encoding="utf-8", capture_output=True)
     except OSError:
         result = None
     if result is not None and result.returncode == 0:
@@ -30,7 +31,7 @@ def project_path(directory=None):
 def read(path):
     if not path.exists():
         return {}
-    value = json.loads(path.read_text())
+    value = json.loads(path.read_text(encoding="utf-8"))
     if not isinstance(value, dict) or value.get("schema") != 1 or type(value.get("enabled")) is not bool:
         raise ValueError("invalid checked-session settings: " + str(path))
     if value["enabled"]:

@@ -263,8 +263,9 @@ sources:
     of: "2026-09-04, given the written layer at 2e5f4f3 and what four pieces since then built on it"
     read: "2026-09-04"
   doc.checked_sessions:
+    name: "Optional checked-session interface and guarantee limits"
     file: "docs/checked-sessions.md"
-    read: "2026-09-08"
+    read: "2026-09-09"
     note: "The optional checked-session interface, its explicit setup and activation, and the limits
            of its guarantees."
   s.background_ingestion:
@@ -553,6 +554,7 @@ known:
     from: doc.fact_moves
     name: "The one measurement the method promises"
   session.checked_transport:
+    name: "Opt-in checked-session transport"
     v: "Optional Lean-computed views with revision-bound CLI and project-bound MCP reads; runtime
         builds happen only during explicit setup."
     from: doc.checked_sessions
@@ -1058,7 +1060,7 @@ judgments:
       goal.portable: "usable by any session, in any project, with no author present"
       d.open_is_a_slot: "the session opener fills a fixed character slot, highest value per
                          character first; values never preload"
-      doc.checked_sessions: "read 2026-09-08"
+      doc.checked_sessions: "read 2026-09-09"
   d.capture_is_not_clearance:
     rests_on: [s.background_ingestion]
     verdict: "A capture receipt means the source was retained; only an applied receipt and the

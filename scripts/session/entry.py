@@ -45,7 +45,8 @@ def resolve(args):
     path = (args.input or Path(provenance.default_paths()[0])).expanduser().resolve()
     if not args.input and not path.exists():
         try:
-            top = subprocess.run(["git", "rev-parse", "--show-toplevel"], text=True, capture_output=True)
+            top = subprocess.run(["git", "rev-parse", "--show-toplevel"], text=True,
+                                 encoding="utf-8", capture_output=True)
         except OSError:
             top = None
         if top is not None and top.returncode == 0 and (Path(top.stdout.strip()) / "PROVENANCE.yaml").is_file():
@@ -68,6 +69,10 @@ def resolve(args):
 
 
 def main(argv=None):
+    # Checked-session output is a UTF-8 protocol even when redirected on Windows.
+    for stream in (sys.stdout, sys.stderr):
+        if hasattr(stream, "reconfigure"):
+            stream.reconfigure(encoding="utf-8", newline="\n")
     args = parser().parse_args(argv)
     try:
         if args.operation == "setup":
@@ -88,7 +93,7 @@ def main(argv=None):
                     raise ValueError("tokens must be 64..65536")
                 if args.profile:
                     from .view import apply_profile
-                    profile = json.loads(args.profile.read_text())
+                    profile = json.loads(args.profile.read_text(encoding="utf-8"))
                     if not isinstance(profile, dict) or not isinstance(profile.get("groups"), dict):
                         raise ValueError("profile must contain declared groups")
                     value["profile"] = str(args.profile.resolve())
@@ -123,7 +128,7 @@ def main(argv=None):
             if profile:
                 command += ["--profile", str(Path(profile).resolve())]
             prefix = shlex.join(command)
-            hint = "Read via MCP kpopper_read, or: " + prefix + " --ref REF --revision REV_FROM_ABOVE\n"
+            hint = "Read via MCP kpopper_read, or (POSIX shell): " + prefix + " --ref REF --revision REV_FROM_ABOVE\n"
             available = budget - len(service.encoder.encode(hint)) - 1
             for _ in range(3):
                 result = service.opening(available) + hint

@@ -12,6 +12,9 @@ settings = importlib.import_module(package.name + ".session.settings")
 
 
 def main():
+    for stream in (sys.stdout, sys.stderr):
+        if hasattr(stream, "reconfigure"):
+            stream.reconfigure(encoding="utf-8", newline="\n")
     record = sys.argv[1]
     try:
         config = settings.current()
@@ -24,7 +27,7 @@ def main():
                 command += ["--" + field, str(config[field])]
         # The hook has already selected the project's interpreter. An out-of-tree
         # registered record must not redirect execution through another config.
-        result = subprocess.run(command, text=True, capture_output=True, timeout=45)
+        result = subprocess.run(command, text=True, encoding="utf-8", capture_output=True, timeout=45)
         if result.returncode:
             print("Checked session view unavailable. Read the record before relying on it: " + record)
             print(result.stderr.strip(), file=sys.stderr)
