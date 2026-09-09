@@ -30,7 +30,7 @@ classifiers = [
   "Topic :: Software Development :: Documentation",
   "Topic :: Software Development :: Quality Assurance",
 ]
-dependencies = ["PyYAML>=5.1"]
+dependencies = ["PyYAML>=5.1", "html5lib>=1.1,<2", "tinycss2>=1.2,<2"]
 
 [project.optional-dependencies]
 session = ["tiktoken>=0.14,<1", "mcp>=2.2,<3"]
@@ -54,5 +54,5 @@ package-dir = { kpopper = "scripts" }
 # The page's own files ship with the renderer that reads them, and the browser checks ship
 # with the command line that runs them - `kpopper page --checks` is only as installable as
 # the file it hands to node.
-kpopper = ["page/*.css", "page/*.js", "verify_page.js", "start-guide.md"]
+kpopper = ["page/*.css", "page/*.js", "verify_page.js", "start-guide.md", "document-guide.md", "document/*.css", "document/*.js"]
 "kpopper.session" = ["rules.txt", "bootstrap.txt", "lean/*.lean", "lean/lean-toolchain"]
