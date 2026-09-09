@@ -10,6 +10,9 @@ straight through to provenance.py; page renders the record and can open what it 
   kpopper session <setup|status|open|read|propose|serve>  checked, revision-bound session views
   kpopper set     <key> <value> [--why "..."] [--as-of DATE]   change one value; the reply is the reach
   kpopper add     <id> field=value ...    a new entry or judgment, in id order, its seen filled
+  kpopper ingest  capture --file JSON    retain a report and process it in the background
+                  add --notify-task TASK_ID to return a native Codex delivery job
+  kpopper ingest  pending                important findings still needing attention
   kpopper review  <id | "section title">  it still holds: seen rewritten from what the record holds
                   add --hypothesis NAME to any of the three: the write lands in
                   PROVENANCE.d/NAME.yaml beside the record and the base is not touched - where a
@@ -94,8 +97,9 @@ def main():
         print(__doc__.strip("\n"))
         sys.exit(0)
     cmd, rest = argv[0], argv[1:]
-    if cmd == "session":
-        tool = [sys.executable, str(HERE / "session_cli.py")] + rest
+    if cmd in {"session", "ingest"}:
+        script = "session_cli.py" if cmd == "session" else "ingestion.py"
+        tool = [sys.executable, str(HERE / script)] + rest
         if os.name == "nt":
             sys.exit(subprocess.run(tool).returncode)
         os.execv(sys.executable, tool)

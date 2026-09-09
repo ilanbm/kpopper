@@ -1,68 +1,62 @@
-# kpopper for Codex CLI
+# kpopper for Codex
 
-## What this installs
+The native `.codex-plugin/plugin.json` selects `plugin-hooks.json` from this directory.
+Its commands use `$PLUGIN_ROOT`; the manifest override replaces default discovery of
+`hooks/hooks.json`, which belongs to Claude Code. This keeps Claude's `asyncRewake` configuration
+out of the Codex path.
 
-| file | does |
+## Native plugin
+
+The Codex package loads the shared skill and these hooks:
+
+| Event | Behavior |
 |---|---|
-| `AGENTS.md.snippet` | the condensed method + session-open instruction + skills placement note. Append to the project's `AGENTS.md`. |
-| `hooks.json` | SessionStart/Stop wired to the existing `scripts/session_open.sh` / `scripts/session_gate.sh` — unmodified, same two files Claude Code's plugin uses. |
+| `SessionStart` | The existing record opener and ready important ingestion findings |
+| `PostToolUse`, `UserPromptSubmit` | Asynchronous delivery of newly actionable ingestion results |
+| `Stop` | The existing record gate; no new ingestion wait or approval gate |
 
-## Verified against docs
+The hooks only read the queue. `kpopper ingest capture` retains an explicit report and starts the
+independent processor. Routine completion emits no hook output. Important results enter the next
+available model request while a turn is active. If the task is idle, Codex queues ordinary async
+hook output until the next user turn; the hook does not start one. See the
+[ingestion contract](../../skills/kpopper/INGESTION.md).
 
-Source: `https://developers.openai.com/codex/hooks` (redirects to
-`https://learn.chatgpt.com/docs/hooks`), fetched 2026-09-01.
+When the host exposes native background agents and `send_message_to_thread`, the skill uses
+`capture --notify-task "$CODEX_SESSION_ID"` and dispatches its returned job to a native agent.
+That agent sends only important findings through the ordinary host tool, which can start a turn
+after the primary has finished answering. A live job reserves the event for its recipient so
+the hook does not duplicate the message. Delivery confirmation leaves the graph and durable
+outbox intact; expired or failed jobs retain hook fallback. The
+[native worker contract](../../skills/kpopper/DELIVERY.md) describes the handoff.
 
-- **Schema matches Claude's.** `hooks.<EventName>` is an array of `{ "matcher"?, "hooks": [{ "type": "command", "command", "timeout"?, "statusMessage"? }] }` — matcher is optional and omitting it matches everything, same as the plugin's own `hooks/hooks.json`. So this file is structurally the same document, just at a different path.
-- **Payload field names match what the two scripts already read.** The Stop payload includes `session_id`, `stop_hook_active`, `cwd`, `transcript_path`, `last_assistant_message` — the exact fields `session_gate.sh` parses. SessionStart carries `session_id` too. Plain stdout text (not just the `hookSpecificOutput.additionalContext` JSON form) is accepted for SessionStart, matching what `session_open.sh` already does. Net: **`session_open.sh` and `session_gate.sh` are reused as-is, no wrapper needed** — unlike Cursor (different payload shape) or Gemini (session-level hooks can't block).
-- **Exit code 2 blocks Stop**, feeding stderr back, same contract `session_gate.sh` already implements.
-- **Project hooks need a one-time trust step.** Codex requires reviewing and trusting a project's `.codex/hooks.json` before it runs — `/hooks` in the CLI, or the equivalent trust prompt on first load. Nothing this adapter can do about that; it's a one-time manual step per machine.
-- **Skills.** Codex scans `.agents/skills` from cwd up to the repo root, plus a user-level `~/.agents/skills` (`~/.codex/skills` is treated the same). It follows symlinks when scanning, so linking rather than copying `skills/kpopper` keeps it live.
+Codex requires review and trust of the current hook definitions. Use `/hooks` or the equivalent
+client prompt. Installing the plugin does not bypass that review.
 
-## One real gotcha — relative paths in `command`
+References: [plugin-bundled hooks](https://learn.chatgpt.com/docs/hooks#plugin-bundled-hooks),
+[background delivery](https://learn.chatgpt.com/docs/hooks#how-background-hooks-run).
 
-`hooks.json` above uses `../../scripts/session_open.sh`, matching this file's own
-position two directories below the kpopper checkout root (`adapters/codex/` →
-`../..` → checkout root → `scripts/...`). That is **not** portable to an arbitrary
-project layout: Codex runs hook commands with the **session's working directory** as
-cwd — not the directory `hooks.json` itself lives in. This is documented behavior
-(same fetch, "commands run with the session cwd as their working directory") and
-there is a live upstream report of exactly this surprising anyone who assumed
-plugin-relative resolution: `openai/codex` issue #26675, "Plugin PostToolUse hook
-relative command resolves from workspace cwd."
+## Plain project configuration
 
-So the shipped relative path is correct in exactly one shape: `.codex/hooks.json`
-sitting two directories above a `scripts/` that is actually this kpopper checkout's
-`scripts/` — e.g. dogfooding kpopper on itself. For any other project, **do not
-symlink this file verbatim** — copy it and replace both `command` values with an
-absolute path to this checkout's `scripts/`:
+`hooks.json` is also provided for installations using project-level hooks rather than a native
+plugin. Codex resolves command paths against the session's working directory, not against the
+hook file. Replace **every** relative script path with an absolute path to the kpopper checkout
+before copying this configuration to another project:
 
-    "command": "/absolute/path/to/kpopper/scripts/session_open.sh"
+```json
+{"command": "\"/absolute/path/to/kpopper/scripts/ingestion_hook.sh\" codex wait"}
+```
 
-Codex does expose a stable anchor for hooks that ship inside a genuine Codex
-*plugin* bundle — `PLUGIN_ROOT`, set for plugin-bundled hook commands (same doc).
-This adapter is a plain project-level `.codex/hooks.json`, not a packaged plugin, so
-`PLUGIN_ROOT` isn't available here; if kpopper is ever packaged as a Codex plugin,
-`$PLUGIN_ROOT/scripts/session_open.sh` would be the portable form instead of an
-absolute path.
+Then install the project configuration and skill:
 
-## Install
+```sh
+mkdir -p .codex .agents/skills
+cp <kpopper>/adapters/codex/hooks.json .codex/hooks.json
+# Replace script paths in the copied file.
+cat <kpopper>/adapters/codex/AGENTS.md.snippet >> AGENTS.md
+ln -s <kpopper>/skills/kpopper .agents/skills/kpopper
+```
 
-    mkdir -p .codex
-    cp <plugin>/adapters/codex/hooks.json .codex/hooks.json
-    # then edit the two "command" paths per the gotcha above, unless this project IS
-    # the kpopper checkout itself
-    cat <plugin>/adapters/codex/AGENTS.md.snippet >> AGENTS.md
-    mkdir -p .agents/skills
-    ln -s <plugin>/skills/kpopper .agents/skills/kpopper
-
-Then, in Codex, run `/hooks` once to review and trust the new project hooks.
-
-## Not verified
-
-- Whether Codex's SessionStart truly renders plain stdout as context in every client
-  (desktop vs CLI vs IDE extension) the same way — the fetch found one summary
-  statement to that effect and no worked example. If it silently drops plain text in
-  some surface, the fallback in `AGENTS.md.snippet` (the explicit `python3 ... open`
-  instruction) still covers it.
-- The exact wording Codex's trust prompt / `/hooks` UI shows for a new hook — not
-  screenshotted, only described in prose by the docs.
+A plain project hook does not receive `$PLUGIN_ROOT`. Keep the existing record or registered
+record pointer in place; do not migrate it for this adapter. Desktop/IDE client behavior should
+be validated in the actual client. Native task messaging is a host capability; a host without
+that messaging tool does not gain it by installing these Python scripts.
