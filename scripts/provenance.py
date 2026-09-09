@@ -1519,16 +1519,24 @@ def reach_of(ids, jud, raw, changed):
                 for t in set(ID.findall(s)):
                     if t in ids and t != k:
                         feeds.setdefault(t, []).append(k)
+    # Index judgment readers once, in the same order used by the reach report. Rebuild
+    # for this record so edits and hypothesis worlds never share stale dependencies.
+    judgment_feeds = {}
+    for name, j in sorted(jud.items()):
+        for dep in set(j["deps"]):
+            judgment_feeds.setdefault(dep, []).append(name)
+    for readers in feeds.values():
+        readers.sort()
     hit, seen_e, frontier, derived = {}, set(changed), list(changed), []
     while frontier:
         m = frontier.pop()
-        for e in sorted(feeds.get(m, [])):
+        for e in feeds.get(m, ()):
             if e not in seen_e:
                 seen_e.add(e)
                 derived.append(e)
                 frontier.append(e)
-        for name, j in sorted(jud.items()):
-            if m in j["deps"] and name not in hit:
+        for name in judgment_feeds.get(m, ()):
+            if name not in hit:
                 hit[name] = m
                 frontier.append(name)
     return hit, seen_e | set(hit), derived
