@@ -262,6 +262,12 @@ sources:
             counts for coverage but no longer silences a flagged item"
     of: "2026-09-04, given the written layer at 2e5f4f3 and what four pieces since then built on it"
     read: "2026-09-04"
+  doc.checked_sessions:
+    name: "Optional checked-session interface and guarantee limits"
+    file: "docs/checked-sessions.md"
+    read: "2026-09-09"
+    note: "The optional checked-session interface, its explicit setup and activation, and the limits
+           of its guarantees."
   s.background_ingestion:
     name: "Background capture and selective delivery contract"
     file: "skills/kpopper/INGESTION.md"
@@ -547,6 +553,11 @@ known:
     quoted: "עלות הפתיחה של סשן מספר N"
     from: doc.fact_moves
     name: "The one measurement the method promises"
+  session.checked_transport:
+    name: "Opt-in checked-session transport"
+    v: "Optional Lean-computed views with revision-bound CLI and project-bound MCP reads; runtime
+        builds happen only during explicit setup."
+    from: doc.checked_sessions
   skill.two_shapes:
     quoted: "Two parallel records is the most expensive mistake available here"
     from: "skills/kpopper/SKILL.md"
@@ -1034,6 +1045,22 @@ judgments:
                                   orders a list; add says the nearest three and refuses nothing, the
                                   dry run says a handful per arriving id"
       alt.sameness_from_names: rejected
+  d.checked_session_is_optional:
+    rests_on: [goal.portable, d.open_is_a_slot, doc.checked_sessions]
+    verdict: "Offer the checked session transport alongside the legacy reader, enabled explicitly
+              per project or machine; keep each judgment's source body alongside its computed card,
+              exact raw reads and a reversible hook choice."
+    because: "A complete typed view can preserve declared distinctions while the existing opening
+              remains the compatibility baseline. Formal field checks do not establish source truth
+              or a general improvement in session performance. A computed card can omit source
+              explanations, so the original fields remain in the same read."
+    reopened_by: "New records expose an omitted distinction or an unreachable source reference, or
+                  fresh comparative session evidence warrants changing the default."
+    seen:
+      goal.portable: "usable by any session, in any project, with no author present"
+      d.open_is_a_slot: "the session opener fills a fixed character slot, highest value per
+                         character first; values never preload"
+      doc.checked_sessions: "read 2026-09-09"
   d.capture_is_not_clearance:
     rests_on: [s.background_ingestion]
     verdict: "A capture receipt means the source was retained; only an applied receipt and the

@@ -44,7 +44,9 @@ worker contract. Plain hooks alone do not provide that idle delivery.
 
 This method owns one file, in one place: **`PROVENANCE.yaml` at the project root.** Do not go hunting for whatever a previous session improvised, and do not invent a new name — a method whose artifact is named differently in every project cannot be picked up by anyone.
 
-**If it exists:** it is more authoritative than the same material restated in prose elsewhere, because prose goes stale and this is what gets updated. Add to it in the shape it already uses.
+**If it exists:** use it as the durable record of claims, grounds and review state. Check each
+claim's source and scope; the record can itself be stale, and newer evidence can overturn it.
+Add to it in the shape it already uses.
 
 **Ask it what moved; do not read it whole.** Reading the record whole costs its full size on
 every session, and almost none of it moved since the last one.
@@ -54,6 +56,14 @@ what this project is, where the record actually lives if this file is a pointer 
 only what needs a person: ranked, cut to a budget, and honest about how many it left out.
 On a clean record that is a few lines. The plugin runs this by itself at session start; if
 a project with a record shows no such report, run it by hand.
+
+**When the hook already supplied a checked view with `revision=...`, reuse it.** Expand the
+relevant branch and read the claim through `kpopper_read` or the `session read` command named
+by the hook. Do not replace that view with a second legacy opening. Keep current recorded
+values separate from `seen`, preserve declared conflicts, and distinguish an executable
+condition from unevaluated prose. A checked record field is not a proof of world truth or
+permission to act. The optional transport is described in `docs/checked-sessions.md` at the
+plugin root.
 
 **What opening shows about the project is not the record's work.** Opening can surface a
 branch behind its base, a red build, a stale environment. Say so in one line and write the
@@ -72,9 +82,11 @@ where the seed is the prefix or entry the question maps to. Their first message 
 which is why this cannot be folded into the first command — it does not exist yet when the
 session opens. If they only said hello, it never runs at all.
 
-**If the question maps to nothing in the namespace, that is an answer too.** It means the
-subject is not in the record, so there is nothing to retrieve and the work is discovery —
-and what that discovery produces is new entries. Say so rather than guessing at a neighbour.
+**If a question does not map to a name, the lookup is incomplete.** Names and topic labels
+do not establish that the subject is absent. Expand relevant branches or inspect source
+content before claiming that the record does not cover it. A missing exact ID establishes
+only that the ID is absent. If relevant evidence remains unfound, say so and continue the
+discovery without inventing a matching claim.
 
 While the record is small enough that you would happily re-read it every session, just read
 it; this buys nothing. From the moment you would not, it is the difference between an opening
