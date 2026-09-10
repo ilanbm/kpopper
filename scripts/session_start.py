@@ -57,6 +57,17 @@ def opening(payload):
         if result.stderr:
             print(result.stderr.rstrip(), file=sys.stderr)
 
+    try:
+        try:
+            from .followups import summary
+        except ImportError:
+            from followups import summary
+        followups = summary(location, counts_only=True)
+        if followups:
+            output.append(followups)
+    except (ImportError, OSError, ValueError, KeyError, TypeError) as error:
+        output.append("Followups unavailable: " + str(error))
+
     sid = payload.get("session_id", "")
     if isinstance(sid, str) and re.fullmatch(r"[A-Za-z0-9_-]{1,200}", sid):
         output.append("KPOPPER_AGENT_CONTEXT " + json.dumps({

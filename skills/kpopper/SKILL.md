@@ -48,6 +48,14 @@ worker contract. Plain hooks alone do not provide that idle delivery.
 
 ## Step 1 — `PROVENANCE.yaml`
 
+**Keep deferred work connected.** When a later check or action is authorized, use
+`kpopper followups` to link it to the relevant knowledge and explicit activation conditions.
+Prefer the user's existing task destination; a private fallback is available. Strongly recommend
+a short daily review when this first becomes useful, alongside event checks, and respect the
+user's scheduling choice. [FOLLOWUPS.md](FOLLOWUPS.md) covers capture, external owners, claims,
+evidenced outcomes and connecting a real host schedule. A completed check can rearm a followup;
+it does not by itself complete the work or refresh a judgment's `seen`.
+
 This method owns one known entry point: **`PROVENANCE.yaml` in the project's working directory.**
 Git is optional. Use the location resolved by the opener or `kpopper open --json`: it checks
 the current directory and ancestors within the workspace boundary, then Git's registered

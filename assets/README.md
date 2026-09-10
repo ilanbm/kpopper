@@ -1,5 +1,13 @@
 # Image sources
 
+## Work across time
+
+`work-across-time.png` is a conceptual illustration for the README's Past, Present and
+Future overview. It shows sources and earlier reasoning, current dependency checks, and
+deferred work. The return arrow describes the agent's separate evidence-recording step;
+it does not represent automatic rewriting of the graph. The diagram is not a product
+screenshot or a release roadmap, and its document icons contain no research citations.
+
 ## Product screenshots
 
 `document-hover.png` and `document-drilldown.png` are browser captures of the actual

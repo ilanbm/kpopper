@@ -61,6 +61,7 @@ COMMANDS = {
     "distinct": ("ID ID REASON", "Keep similar subjects distinct."),
     "session": ("OPERATION [OPTIONS]", "Manage checked session views and their transport."),
     "ingest": ("OPERATION [OPTIONS]", "Capture source reports and inspect their processing."),
+    "followups": ("OPERATION [OPTIONS]", "Capture deferred work, inspect triggers and coordinate daily review."),
 }
 
 
@@ -137,7 +138,7 @@ def main():
         root.error("Use kpopper open, kpopper map, or kpopper config; start is not a public command.")
     if cmd not in COMMANDS and cmd != "_agent":
         root.error("unknown command: " + cmd)
-    if cmd not in {"open", "map", "config", "_agent", "session", "ingest"} and rest in (["--help"], ["-h"]):
+    if cmd not in {"open", "map", "config", "_agent", "session", "ingest", "followups"} and rest in (["--help"], ["-h"]):
         usage, description = COMMANDS[cmd]
         print("usage: kpopper " + cmd + (" " + usage if usage else "") + " [--json]\n\n" + description)
         if cmd in {"set", "add", "review", "same", "distinct"}:
@@ -156,6 +157,14 @@ def main():
             os.chdir(pathlib.Path(options.workspace).expanduser())
         except (OSError, ValueError) as error:
             root.error(str(error))
+    if cmd == "followups":
+        try:
+            from .followups_cli import main as followups_main
+        except ImportError:
+            from followups_cli import main as followups_main
+        # The group returns structured data directly, without the legacy text wrapper.
+        rest = [arg for arg in rest if arg != "--json"]
+        sys.exit(followups_main(rest))
     if cmd in {"open", "map", "config"}:
         try:
             from . import workspace_cli
