@@ -321,7 +321,8 @@ the branches. Each needs a source, date and environment. Branch experiments rema
 conflicting observations are retained for review. See [background watch and shared facts](skills/watch/references/compatibility.md).
 
 Run **`/kpopper:watch`** in Claude Code, or **`$watch`** in Codex, to check and set
-up the daily review. The command inspects existing schedules, creates or repairs one when
+up local branch checks and the daily review. For live checks alone, ask watch to enable
+only local compatibility. The command inspects existing schedules, creates or repairs one when
 needed, and reads it back before confirming installation. Add `check` for inspection only,
 or `resume` to enable a paused review. Existing schedule times are preserved unless you ask
 to change them. The host performs scheduling within your authorization; a saved plan alone
