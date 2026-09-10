@@ -39,7 +39,7 @@ check, not a silent fork. Run it after touching any embed:
 | harness | opener (session start) | gate (session end) | skill / rule placement | page viewing |
 |---|---|---|---|---|
 | Claude Code *(baseline, unchanged)* | `SessionStart` hook, blocking-capable | `Stop` hook, exit 2 blocks, bounces once | `skills/kpopper/` loaded natively by the plugin engine | `kpopper page` writes `record.html`; open in any browser |
-| **Codex CLI** | `SessionStart` hook — reuses `session_open.sh` as-is | `Stop` hook — reuses `session_gate.sh` as-is, exit 2 blocks | `AGENTS.md` snippet + `skills/kpopper` and `skills/daily-review` symlinked into `.agents/skills` | same `record.html`, opened by hand |
+| **Codex CLI** | `SessionStart` hook — reuses `session_open.sh` as-is | `Stop` hook — reuses `session_gate.sh` as-is, exit 2 blocks | `AGENTS.md` snippet + `skills/kpopper` and `skills/watch` symlinked into `.agents/skills` | same `record.html`, opened by hand |
 | **Cursor** | `sessionStart` hook, translating wrapper (fire-and-forget by design) | `stop` hook, translating wrapper — no true block; `followup_message` bounces once, then yields | `rules/kpopper.mdc` — agent-requested + auto-attached on `PROVENANCE.yaml` | same, opened by hand |
 | **Gemini CLI** | `SessionStart` hook (extension-bundled) — reuses `session_open.sh` as-is | `SessionEnd` hook — advisory only, cannot block by design | `GEMINI.md`, the extension's context file | same, opened by hand |
 | **Windsurf / Cascade** | none — no session-level hook exists here at all | none — `post_write_code` nudge is UI-only, never reaches the agent and can't block | `rules/kpopper.md` — carries open *and* close duties in prose, since nothing else will | same, opened by hand |

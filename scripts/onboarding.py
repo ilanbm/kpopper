@@ -163,8 +163,8 @@ def context(location):
     if has_followups:
         lines.append("When deferred work first arises, strongly recommend a short daily review, alongside event checks. "
                      "Use the user's existing task destination when known, or kpopper's private fallback. "
-                     "Offer the daily-review plugin command to check and install it: /kpopper:daily-review in Claude, "
-                     "or $daily-review in Codex. The command inspects existing schedules before creating one. "
+                     "Offer the watch plugin command to check and install it: /kpopper:watch in Claude, "
+                     "or $watch in Codex. The command inspects existing schedules before creating one. "
                      "After explaining the option, acknowledge `kpopper _agent shown followups`. "
                      "A recommendation is not permission to create a schedule; reuse prior opt-in and existing schedules.")
     if not lines:

@@ -1,16 +1,16 @@
 ---
-name: daily-review
+name: watch
 description: Check, install or repair the current project's daily kpopper review through the host's scheduling tools. Use for requests to set up daily review, configure a kpopper routine, or check its installation. Ordinary followup capture only recommends this command; it does not authorize scheduling.
 ---
 
-# Daily review
+# Watch
 
-Check whether this workspace already has a working daily-review configuration, then
+Check whether this workspace already has a working scheduled-review configuration, then
 install or repair it when requested. Complete the host operation and verify its readback.
 The user should finish with an actual schedule, a confirmed existing schedule, or a clear
 blocker. A local plan or installation packet is an intermediate step.
 
-Invocation: `/kpopper:daily-review` in Claude Code, or select/invoke `$daily-review` in Codex.
+Invocation: `/kpopper:watch` in Claude Code, or select/invoke `$watch` in Codex.
 Natural-language requests to set up the project's daily kpopper review use the same flow.
 
 - Default: check and install as needed. A user's explicit invocation authorizes this setup;

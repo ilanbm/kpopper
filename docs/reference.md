@@ -62,7 +62,7 @@ For deferred work, `kpopper followups` links tasks to graph entries and explicit
 outcomes and coordinate execution. `daily plan` prepares a recommended daily review and
 `daily bind` records a schedule actually created or inspected through the host's tools.
 `daily install` coordinates inspection, installation and independent readback with the calling
-host agent. Users can invoke the [daily-review plugin command](../skills/daily-review/SKILL.md)
+host agent. Users can invoke the [watch plugin command](../skills/watch/SKILL.md)
 to complete that flow without operating the individual protocol steps.
 See [the followups guide](../skills/kpopper/FOLLOWUPS.md) for the full input contract,
 task-system routing, recovery and daily workflow. Scheduling metadata is kept outside
@@ -174,6 +174,17 @@ The dry run reports changed premises, fired falsifiers, structural gaps, contest
 possible duplicates. A clean structural check is not enough to fold a hypothesis whose
 premises still need review. Refutation retains a negative finding. `--from` reads another
 branch's committed record; it never pushes to that branch.
+
+These checks can run during work; they do not require a pull request or merge. The receiving
+record is the base, and `--from` overlays the named ref's committed differences. Importing
+`main` into a worktree therefore asks a different question from applying that worktree's
+changes to current main. Refs come from local Git objects; the command does not fetch them.
+
+The callable `union_of(base, hypotheses)` also accepts an in-memory hypothesis for a read-only
+what-if. That is a building block for previewing a captured working-copy delta on main. There
+is currently no automatic cross-branch trigger or live notification loop wired to this check.
+The existing background ingestion path processes an explicit report for one record; it is
+not a worktree-versus-main monitor.
 
 See [the method](../skills/kpopper/SKILL.md) for the full write and consolidation discipline.
 

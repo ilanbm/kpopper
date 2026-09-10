@@ -50,7 +50,7 @@ readings and source locations for the claims actually used in the project; a dea
 the record does not create a calendar reminder or synchronize a task system.
 
 The [followups capability](../skills/kpopper/FOLLOWUPS.md) can link deferred work to those
-readings and produce a daily-review prompt. Actual task-system access and persistent
+readings and produce a daily review prompt. Actual task-system access and persistent
 scheduling still come from the current host's tools after user opt-in. Confirm that the
 scheduled environment can reach the same record, private followups ledger and canonical
 tasks; a laptop-local setup is not automatically available in a cloud Work environment.

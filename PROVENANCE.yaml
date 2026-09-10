@@ -274,6 +274,11 @@ sources:
     read: "2026-09-09"
     asked: "Retain explicit reports without waiting for graph maintenance, and return only findings
             that need attention."
+  s.branch_comparison_core:
+    name: "Cross-branch and in-memory consolidation checks"
+    file: "scripts/consolidate.py"
+    read: "2026-09-10"
+    revision: d17225095c856b147d03522981f2c639e57f73e1
   s.followups_contract:
     name: "Followup task and authority contract"
     file: "skills/kpopper/FOLLOWUPS.md"
@@ -294,6 +299,10 @@ sources:
     file: "scripts/followups.py"
     read: "2026-09-10"
     revision: "7bbd2fcd134bf6d34c1e18465eaa230b18d69cb3"
+  s.watch_command:
+    name: "Watch plugin command"
+    file: "skills/watch/SKILL.md"
+    read: "2026-09-10"
   doc.fact_moves:
     url: "https://claude.ai/code/artifact/ca99e558-60ae-4b22-9221-e3b29d7d7e2b"
     name: "מה קורה כשעובדה זזה - the unified node model"
@@ -454,6 +463,34 @@ known:
          its own change and written after; and 'no fresh reading' needs a threshold nobody stated,
          which the method forbids inventing. An entry with no recipe is this shape still, so it stays
          the default and a recipe is named per entry"
+  branches.comparison_direction:
+    name: "Which side receives the proposed change"
+    v: "The receiving record is the base; the named ref is an overlay. Main plus a worktree change
+        is a different preview from a worktree with main imported over it."
+    from: s.branch_comparison_core
+    at: "from_ref pruning relative to doc, followed by union_of layering"
+    of: "2026-09-10"
+  branches.premerge_check:
+    name: "Checking another branch without merging"
+    v: "consolidate --dry-run --from can evaluate a committed branch at any time without merging
+        code or writing the receiving record. It reads local Git refs and does not fetch them."
+    from: s.branch_comparison_core
+    at: "read, from_ref and main; public HELP for --dry-run and --from"
+    of: "2026-09-10"
+  branches.virtual_overlay:
+    name: "Read-only working-change preview primitive"
+    v: "union_of accepts a chosen base and in-memory hypotheses, checks their union and returns
+        findings without writing either source record. Automatic worktree/main monitoring is not part
+        of this callable."
+    from: s.branch_comparison_core
+    at: "hypothesis and union_of"
+    of: "2026-09-10"
+  followups.command:
+    name: "User-facing ongoing review command"
+    v: watch
+    from: s.watch_command
+    at: "name and invocation; the current scheduled cadence remains daily"
+    of: "2026-09-10"
   followups.execution:
     name: "Who performs a ready followup"
     v: "The scheduled host agent performs authorized work in its own review run. The coordinator
@@ -874,9 +911,10 @@ open:
   q.followups_dispatch: "Which followups should stay in the daily session and which should receive
                          a dedicated execution session? No per-item dispatch policy is currently
                          implemented."
-  q.followups_graph_scope: "Should daily review use one durable canonical project record plus
-                            explicit proposals from active worktree graphs? Current behavior is one
-                            pinned record, with no automatic worktree sweep."
+  q.followups_graph_scope: "The existing policy keeps code knowledge with its branch. Should watch
+                            add a separate read-only compatibility view of the worktree's changes
+                            against a configured main ref, with selective live findings? Which ref
+                            and freshness policy should that view use?"
   q.followups_outcomes_to_graph: "Which nontrivial followup outcomes should be recorded as new
                                   project evidence, by which authorized writer, so that knowledge
                                   does not remain only in execution history?"

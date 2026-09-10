@@ -124,11 +124,11 @@ share the queue but never silently replace its pinned record with their branch's
 
 ## Recommend and connect daily review
 
-The user-facing setup command is **`/kpopper:daily-review`** in Claude Code, or **`$daily-review`**
+The user-facing setup command is **`/kpopper:watch`** in Claude Code, or **`$watch`**
 in Codex. It checks the host, adopts a matching schedule, installs or repairs it when requested,
 and independently reads the result back. `check` inspects only; `resume` permits enabling a
 paused review. The underlying `kpopper followups daily install` returns the host-agent work
-packet and validates inspection/readback receipts. Follow [the daily-review skill](../daily-review/SKILL.md)
+packet and validates inspection/readback receipts. Follow [the watch skill](../watch/SKILL.md)
 through completion; do not hand the user a packet and call it installed.
 
 Strongly recommend a short daily review for ongoing work, in addition to event checks. Explain it

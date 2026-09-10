@@ -309,12 +309,12 @@ budget and notifications for meaningful results. During active Claude Code and C
 sessions, event hooks also surface changed readiness. The daily schedule catches elapsed
 dates and missed events.
 
-Run **`/kpopper:daily-review`** in Claude Code, or **`$daily-review`** in Codex, to check and set
+Run **`/kpopper:watch`** in Claude Code, or **`$watch`** in Codex, to check and set
 up the daily review. The command inspects existing schedules, creates or repairs one when
 needed, and reads it back before confirming installation. Add `check` for inspection only,
 or `resume` to enable a paused review. Existing schedule times are preserved unless you ask
 to change them. The host performs scheduling within your authorization; a saved plan alone
-is not an active automation. See [the setup command](skills/daily-review/SKILL.md).
+is not an active automation. See [the setup command](skills/watch/SKILL.md).
 Claims prevent duplicate work, and a check deferred until more evidence arrives stays open
 with its history intact. Followup scans and outcomes never silently rewrite the knowledge
 graph or mark its judgments reviewed. See the [followups guide](skills/kpopper/FOLLOWUPS.md)
@@ -412,7 +412,7 @@ in the recorded reasoning, even though the lines merged cleanly.
 
 There are two ways to check the combination:
 
-- **Before merging:** `kpopper consolidate --dry-run --from <branch-or-ref>` reads another
+- **During work or before merging:** `kpopper consolidate --dry-run --from <branch-or-ref>` reads another
   branch's committed record as proposed changes and tests it against the current record.
 - **On the proposed merge result in CI:** `kpopper check` checks the combined record;
   `kpopper consolidate --dry-run` also tests the hypotheses stored beside it.
