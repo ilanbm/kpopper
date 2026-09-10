@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.4.0 — 2026-09-10
+
+- Split the method into skills per occasion and pass every session through the record (#56) — minor
+
+Decisions recorded: d.first_add_is_the_birth, d.gate_asks_once_after_work, d.hooks_carry_pointers, d.named_until_read, d.no_record_opener_is_two_lines, d.skill_is_an_occasion
+
 ## 1.3.0 — 2026-09-10
 
 - Add resumable search and evidence context to checked sessions (#50) — minor
