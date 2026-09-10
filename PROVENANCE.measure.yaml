@@ -28,6 +28,21 @@ recipe_runners:
     import glob
     print(sum('PROVENANCE.measure' in open(f, encoding='utf-8').read() for f in glob.glob('scripts/*.py')))
 
+# p.skills_shipped - skill directories the plugin ships: each is one occasion, with its SKILL.md
+skills_shipped:
+  - python3
+  - -I
+  - -c
+  - "import glob; print(len(glob.glob('skills/*/SKILL.md')))"
+
+# m.skill_bytes_largest - bytes of the largest skill body a session can be handed: the ceiling
+# the split holds, where one body used to be the whole method
+skill_bytes_largest:
+  - python3
+  - -I
+  - -c
+  - "import glob, os; print(max(os.path.getsize(f) for f in glob.glob('skills/*/SKILL.md')))"
+
 # p.hook_slot - the character budget the opener hands to `open --chars`
 hook_slot:
   - python3

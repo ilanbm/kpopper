@@ -90,7 +90,7 @@ Git. Use `where` to confirm what a directory resolves before writing to it.
 The recommended fields are `from`, `rests_on`, `wrong_if` and `seen`. The reader infers
 dependency, predicate and snapshot roles by shape, so existing vocabularies can work.
 Ambiguous roles require an explicit `schema` declaration; the reader refuses to guess.
-The [method's record examples](../skills/kpopper/SKILL.md#the-shape) cover the full shape.
+The [method's record examples](../skills/kpopper/references/shape.md#the-shape) cover the full shape.
 
 Source locations and dates preserve traceability. They do not cause the reader to fetch
 documents, query calendars or inspect every linked file. The person or agent records the
@@ -142,7 +142,7 @@ and confirming the underlying evidence remain part of review.
 | Command | Purpose |
 |---|---|
 | `kpopper set <id> <value> --why "reason" --as-of YYYY-MM-DD` | Record a scalar reading with its explanation and date. |
-| `kpopper add <id> field=value ...` | Add an entry or judgment. Judgment snapshots are filled from the record. |
+| `kpopper add <id> field=value ...` | Add an entry or judgment. Judgment snapshots are filled from the record. Where no record resolves for the workspace, the first `add` creates `PROVENANCE.yaml` at its root with that entry. |
 | `kpopper review <id>` | Refresh a judgment's snapshot after reviewing it against the current record. |
 | `kpopper review "section title"` | Refresh the page section's review snapshot. |
 | `kpopper same <a> <b>` | Record that two IDs describe one subject; by default, retire `b` into `a`. |
@@ -184,7 +184,7 @@ The callable `union_of(base, hypotheses)` also accepts an in-memory hypothesis f
 what-if. That is a building block for previewing a captured working-copy delta on main. The opt-in `watch` runner uses this core for asynchronous worktree-versus-main previews.
 The existing background ingestion path continues to process explicit reports for one record.
 
-See [the method](../skills/kpopper/SKILL.md) for the full write and consolidation discipline.
+See the [record](../skills/record/SKILL.md) and [consolidate](../skills/consolidate/SKILL.md) skills for the full write and consolidation discipline.
 
 ## Background branch watch and shared facts
 
@@ -300,7 +300,7 @@ See [the user flow](documents.md) and run `kpopper document guide` for the autho
 
 | Part | Source |
 |---|---|
-| Method and agent guidance | [skills/kpopper](../skills/kpopper/SKILL.md) |
+| Method and agent guidance | [skills/kpopper](../skills/kpopper/SKILL.md), one skill per occasion beside it: [ground](../skills/ground/SKILL.md), [record](../skills/record/SKILL.md), [map](../skills/map/SKILL.md), [document](../skills/document/SKILL.md), [page](../skills/page/SKILL.md), [consolidate](../skills/consolidate/SKILL.md), [watch](../skills/watch/SKILL.md) |
 | CLI dispatcher | [scripts/cli.py](../scripts/cli.py), also exposed by `scripts/kpopper` |
 | YAML reader, checks and writer | [scripts/provenance.py](../scripts/provenance.py) |
 | Background report processing | [scripts/ingestion.py](../scripts/ingestion.py) |
@@ -313,11 +313,22 @@ PyPI installs the Python CLI and page tools. Agent plugins add the method and ho
 hooks. The npm package provides the Node browser checker, not the Python CLI. Shared code
 comes from the same source files, with one version across distribution manifests.
 
-The plugin's session opener is quiet in projects without a record. Its stop gate compares
-with a session-start baseline and reminds once about new failures. An unchanged judgment
-whose falsifier fires after a new scalar reading can remain flagged while recording
-finishes; `check` still reports it. Adapters differ in their ability to block, remind or
-deliver asynchronously—consult the [capability matrix](../adapters/README.md#capability-matrix).
+The plugin's hooks are the layer every session gets without choosing it, and they carry
+pointers, never values. The session opener prints the record's head and what needs a person,
+and names the next move as the host invokes a skill (`/kpopper:ground` in Claude Code,
+`$ground` in Codex); in a project without a record it says so in two lines. At every prompt
+a grounding line names at most three entries whose ids, names or verdicts the prompt's words
+touch, with the skill that reads them; an entry is named until it is read, then again only
+when its recorded body changes or the session compacts, and an unread one repeats after a
+cooldown of ten prompts. Before a file is edited, the entries whose source it is, or whose
+reading a recipe takes from it, are said once. The stop gate compares with a session-start
+baseline and reminds once about new failures, intents no tab serves and entries with no intent;
+a session that changed files of the tree, or ran eight prompts, with the record untouched is
+asked once whether there was nothing to keep - as a stop, on the turn after the same
+question rode a prompt unanswered. An unchanged judgment whose falsifier fires after a new
+scalar reading can remain flagged while recording finishes; `check` still reports it.
+Adapters differ in their ability to block, remind or deliver asynchronously—consult the
+[capability matrix](../adapters/README.md#capability-matrix).
 
 From a source checkout, run `python3 scripts/cli.py <command>` or `scripts/kpopper <command>`.
 When using an installed plugin without a `kpopper` command on `PATH`, use the same dispatcher
