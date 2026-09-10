@@ -531,6 +531,17 @@ its explanation; click to keep it open. The card focuses on that passage, with a
 in ordinary language and technical details collapsed. Click outside or use the close button
 to return to the document.
 
+<p align="center">
+  <a href="assets/standalone-document-reasoning.png">
+    <img src="assets/standalone-document-reasoning.png" width="820" alt="The Autumn Garden Workshop report with its 16-day registration-window passage and a focused explanation visible together. The card marks the author's interpretation as Not checked, explains how it was derived from two dates, and links to the project notes offered as context.">
+  </a>
+</p>
+
+<sub>The card distinguishes the author's interpretation from a fact stated in the source:
+the notes give two dates, but do not define a registration window. Its reasoning,
+**Not checked** status and source link remain visible alongside the document.
+Click the image to inspect it at full size.</sub>
+
 **Follow the source, then come back.** An internal source link opens only the relevant
 reading in the same card. Back returns to the explanation without losing your place.
 The card keeps its position while longer content scrolls inside it.
@@ -554,33 +565,10 @@ See [HTML documents with evidence](docs/documents.md) for the workflow and its l
 ## Explore the project's knowledge record
 
 The project record also has its own HTML page. Its views bring together recorded facts,
-decisions and open questions, and can arrange them as a report. The Greenhouse example
-below shows this record-page workflow.
-
-**Hover to see what a conclusion rests on.** Here, the heating recommendation opens into
-its premises, breaking condition and explanation. The related figures are highlighted
-in the document itself.
-
-<p align="center">
-  <a href="assets/document-hover.png">
-    <img src="assets/document-hover.png" width="820" alt="An excerpt from the Greenhouse winter report's Now tab. Hovering over the heating conclusion opens a card with its dependencies, breaking condition and reasoning; the related 24 kW and 31 kW figures are highlighted in the report.">
-  </a>
-</p>
-
-**Click to pin the card, then drill down.** In this example, two clicks follow the heating
-conclusion to the capacity-gap calculation, then to the recorded boiler output. The final
-card shows the value and names the service-sheet source behind it. The back button or
-Escape steps back through that reading path.
-
-<p align="center">
-  <a href="assets/document-drilldown.png">
-    <img src="assets/document-drilldown.png" width="820" alt="The same report after two drilldown steps: heating conclusion to shortfall calculation to boiler-output reading. The open card shows a value of 24 and the named service-sheet source, with a back button for returning through the reading path.">
-  </a>
-</p>
-
-<sub>Actual browser captures from the [example record](examples/greenhouse-report/PROVENANCE.yaml)
-and its [document layout](examples/greenhouse-report/PROVENANCE.view.yaml). Click either image
-to inspect it at full size.</sub>
+decisions and open questions, and can arrange them as a report. See the
+[Greenhouse example record](examples/greenhouse-report/PROVENANCE.yaml) and its
+[document layout](examples/greenhouse-report/PROVENANCE.view.yaml) for a report built from
+recorded readings and a heating judgment.
 
 `kpopper page --open` generates this self-contained HTML from the project's record and a
 chosen layout. **Now** and other project tabs can present reports, plans or comparisons;
