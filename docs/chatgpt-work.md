@@ -49,6 +49,12 @@ sources depend on the tools and permissions available to the conversation. Recor
 readings and source locations for the claims actually used in the project; a deadline in
 the record does not create a calendar reminder or synchronize a task system.
 
+The [followups capability](../skills/kpopper/FOLLOWUPS.md) can link deferred work to those
+readings and produce a daily-review prompt. Actual task-system access and persistent
+scheduling still come from the current host's tools after user opt-in. Confirm that the
+scheduled environment can reach the same record, private followups ledger and canonical
+tasks; a laptop-local setup is not automatically available in a cloud Work environment.
+
 Keep the canonical record in a location shared by the sessions doing the work. A file left
 only in one temporary session is not persistent project memory. Use existing project
 storage and access arrangements rather than assuming a local Codex path exists in Work.

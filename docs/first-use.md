@@ -17,7 +17,10 @@ something to conclude, and their snapshots are filled by the existing writer.
 
 ## Commands
 
-The public interface has three operations:
+The first-use interface has three operations. When deferred work first arises, the agent
+also recommends a short daily review once per workspace. This recommendation is optional
+and respects the guidance preference; it does not activate a schedule. The separate
+[followups guide](../skills/kpopper/FOLLOWUPS.md) covers capture and host scheduling.
 
 ```bash
 kpopper open

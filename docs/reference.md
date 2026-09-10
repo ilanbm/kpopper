@@ -57,6 +57,14 @@ field references and reads bound to a record revision under a token budget.
 
 ## Record location and shape
 
+For deferred work, `kpopper followups` links tasks to graph entries and explicit triggers.
+`status`, `list`, `show` and `scan` inspect the queue; capture and lifecycle commands preserve
+outcomes and coordinate execution. `daily plan` prepares a recommended daily review and
+`daily bind` records a schedule actually created or inspected through the host's tools.
+See [the followups guide](../skills/kpopper/FOLLOWUPS.md) for the full input contract,
+task-system routing, recovery and daily workflow. Scheduling metadata is kept outside
+`PROVENANCE.yaml`; scanning and finishing tasks do not rewrite knowledge or `seen`.
+
 `PROVENANCE.yaml` lives in the project's working directory. Git is optional. The file can
 also point to existing material, including multiple record files:
 

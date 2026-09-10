@@ -280,6 +280,29 @@ where the conversation can safely continue without that result.
 
 ## How it works
 
+### Return to work when it is ready
+
+Followups connect deferred work to the knowledge behind it. A check can become ready on a
+date, after a recorded value changes, when a threshold is crossed, or after another task
+finishes. Missing evidence remains an open question. Keep the task in your existing system
+or directory; kpopper has a private local fallback when you need one.
+
+**A short daily review is strongly recommended for ongoing work.** It checks what is due,
+what changed and which relevant piece of knowledge needs another look, with a small work
+budget and notifications for meaningful results. During active Claude Code and Codex
+sessions, event hooks also surface changed readiness. The daily schedule catches elapsed
+dates and missed events.
+
+Ask your agent to set up followups and daily review, or inspect `kpopper followups --help`.
+`kpopper followups daily plan` produces a complete review prompt for your host's scheduler.
+The host creates the actual schedule after opt-in; a saved plan is not an active automation.
+Claims prevent duplicate work, and a check deferred until more evidence arrives stays open
+with its history intact. Followup scans and outcomes never silently rewrite the knowledge
+graph or mark its judgments reviewed. See the [followups guide](skills/kpopper/FOLLOWUPS.md)
+for routing, supported conditions, daily setup and platform limits.
+
+### The knowledge record
+
 The technical term is an **epistemic record**: a record of what is known and how it is
 grounded. The main pieces are ordinary YAML:
 
