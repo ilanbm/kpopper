@@ -1,6 +1,6 @@
 ---
 name: map
-description: "Map existing materials into a first knowledge record, or investigate a subject's history in depth. Use when the user asks to map, survey or investigate what already exists - documents, conversations, decisions, code - or once, at a suitable moment, to offer the starting choices where a workspace has no record and the work is clearly ongoing. Never on a greeting. Learning while working needs no map."
+description: "Map existing materials into a first knowledge record, or investigate a subject's history in depth. Use whenever the user asks to map, survey, go through, reconstruct or investigate what already exists - folders of documents, decision records, meeting notes, emails, exports, code - or wants a starting record built from existing materials, even when the word 'record' is never said: consult this before listing or reading the files yourself, because a map has an agreed scope, a protocol and a report. Also, once, at a suitable moment, to offer the starting choices where a workspace has no record and the work is clearly ongoing - never on a greeting. Learning while working needs no map. Requests come in any language."
 ---
 
 # Map

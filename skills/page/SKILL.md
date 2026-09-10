@@ -1,6 +1,6 @@
 ---
 name: page
-description: "Render, arrange or verify the knowledge record's page: the two-tab HTML view with its provenance layer. Use when the user wants to see or show the record, build or check the page, or write or change a brief, tab or arrangement (the Now tab). Not for ordinary HTML documents - that is the document skill."
+description: "Render, arrange or verify the knowledge record's page: the two-tab HTML view with its provenance layer. Use whenever the user wants to see, show, open, look at or click around the record or what is known - 'show me the record' is this skill, not a read of the file - and whenever they build or check the page, or write or change a brief, tab, section or arrangement (the Now tab). Not for ordinary HTML documents (the document skill) and not for answering a question from the record (the ground skill). Requests come in any language."
 ---
 
 # Page

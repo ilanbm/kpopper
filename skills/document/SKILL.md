@@ -1,6 +1,6 @@
 ---
 name: document
-description: "Create or refresh a standalone HTML document - a report, brief, update or summary - that carries its own evidence and check layer. Use whenever the requested output is an HTML document, and when a saved one must be refreshed against new sources. One self-contained file; the user asks for the document as usual and never prepares a mapping."
+description: "Create or refresh a standalone HTML document - a report, update, brief, summary, status write-up or results page - that carries its own evidence and check layer. Use whenever the requested output is an HTML file a person will read, even when the user says nothing about evidence, sources or checks and just asks for 'an HTML report from these notes': consult this before writing any HTML yourself, because the document is built by kpopper document build, not typed. Also when a saved document must be refreshed against new sources. Not for the record's own page (the page skill) and not for a web page with no claims to check, such as a landing page or a form. Requests come in any language."
 ---
 
 # Document
