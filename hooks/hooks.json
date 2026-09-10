@@ -22,6 +22,15 @@
             "timeout": 10
           }
         ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"$CLAUDE_PLUGIN_ROOT/scripts/ground_hook.py\" claude start",
+            "timeout": 10
+          }
+        ]
       }
     ],
     "Stop": [
@@ -63,6 +72,16 @@
             "asyncRewake": true
           }
         ]
+      },
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"$CLAUDE_PLUGIN_ROOT/scripts/ground_hook.py\" claude read",
+            "timeout": 10
+          }
+        ]
       }
     ],
     "UserPromptSubmit": [
@@ -83,6 +102,27 @@
             "command": "python3 \"$CLAUDE_PLUGIN_ROOT/scripts/watch_hook.py\" claude wait",
             "timeout": 130,
             "asyncRewake": true
+          }
+        ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"$CLAUDE_PLUGIN_ROOT/scripts/ground_hook.py\" claude prompt",
+            "timeout": 15
+          }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "Edit|Write|MultiEdit|NotebookEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"$CLAUDE_PLUGIN_ROOT/scripts/edit_hook.py\" claude",
+            "timeout": 10
           }
         ]
       }
