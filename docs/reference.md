@@ -181,12 +181,46 @@ record is the base, and `--from` overlays the named ref's committed differences.
 changes to current main. Refs come from local Git objects; the command does not fetch them.
 
 The callable `union_of(base, hypotheses)` also accepts an in-memory hypothesis for a read-only
-what-if. That is a building block for previewing a captured working-copy delta on main. There
-is currently no automatic cross-branch trigger or live notification loop wired to this check.
-The existing background ingestion path processes an explicit report for one record; it is
-not a worktree-versus-main monitor.
+what-if. That is a building block for previewing a captured working-copy delta on main. The opt-in `watch` runner uses this core for asynchronous worktree-versus-main previews.
+The existing background ingestion path continues to process explicit reports for one record.
 
 See [the method](../skills/kpopper/SKILL.md) for the full write and consolidation discipline.
+
+## Background branch watch and shared facts
+
+```sh
+kpopper watch setup                         # local checks, no host schedule
+kpopper watch setup --base-ref origin/main # preserve a deliberate base
+kpopper watch scan                          # queue and return immediately
+kpopper watch status                        # current versions and findings
+kpopper watch scan --all                    # include registered worktrees
+kpopper watch pause                         # pause local checks and shared writes
+```
+
+Watch applies only the worktree's authored changes since its merge base to the selected
+main snapshot. It includes uncommitted graph changes, coalesces events and suppresses stale
+or unchanged findings. Session hooks and daily review start queue checks without waiting for
+analysis. No graph, hypothesis or review snapshot is written by comparison. Local Git refs
+are not proof of remote freshness; the runner never fetches automatically.
+
+To capture observations independent of branch code, configure an existing external record
+with `watch setup --shared-record /absolute/PROVENANCE.yaml`, or explicitly select
+`--shared-private`. `watch share --file REPORT.json` requires an external environment scope,
+source location, quotation, date and scalar value. The background writer preserves evidence,
+uses the canonical writer, serializes commits and retains conflicts for review. `watch shared`
+reads the same facts and report states from main or any worktree. `watch resolve EVENT_ID
+--evidence TEXT` closes a reconciled report without applying it. It never promotes arbitrary
+branch content or silently changes a shared observation's scope.
+
+Shared facts participate in watch's read-only compatibility view. Existing branch-only
+readers/CI are unchanged; keep committed evidence self-contained. Shared destinations with
+pointers, multiple files or hypotheses remain readable, while automatic writes require review.
+
+Claude async hooks can wake their session. Ordinary Codex hooks deliver on the next model
+opportunity; `watch scan --notify-task HOST_TASK_ID` returns an optional native-agent delivery
+job for hosts supporting background agents and task messaging. A job must actually be dispatched;
+Python alone cannot call host tools. Persistent writes require POSIX locking. See the
+[watch protocol](../skills/watch/references/compatibility.md) for scope, delivery and recovery.
 
 ## Background capture
 

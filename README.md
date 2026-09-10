@@ -323,8 +323,20 @@ budget and notifications for meaningful results. During active Claude Code and C
 sessions, event hooks also surface changed readiness. The daily schedule catches elapsed
 dates and missed events.
 
+**Catch branch conflicts while work is still in progress.** With local watch enabled,
+changes to a worktree's graph are checked in the background against the selected main ref.
+Only the changes authored on that branch are overlaid; neither graph is rewritten. New
+contradictions return to the working session, and the daily review checks registered
+worktrees as a fallback. Results name their exact versions; remote refs are not fetched
+automatically.
+
+External observations can also be shared immediately through one canonical record outside
+the branches. Each needs a source, date and environment. Branch experiments remain local;
+conflicting observations are retained for review. See [background watch and shared facts](skills/watch/references/compatibility.md).
+
 Run **`/kpopper:watch`** in Claude Code, or **`$watch`** in Codex, to check and set
-up the daily review. The command inspects existing schedules, creates or repairs one when
+up local branch checks and the daily review. For live checks alone, ask watch to enable
+only local compatibility. The command inspects existing schedules, creates or repairs one when
 needed, and reads it back before confirming installation. Add `check` for inspection only,
 or `resume` to enable a paused review. Existing schedule times are preserved unless you ask
 to change them. The host performs scheduling within your authorization; a saved plan alone

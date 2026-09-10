@@ -46,6 +46,13 @@ In Codex hosts with native background agents and `send_message_to_thread`, use
 reach a primary that has finished answering. [DELIVERY.md](DELIVERY.md) gives the short native
 worker contract. Plain hooks alone do not provide that idle delivery.
 
+For opted-in worktree compatibility and shared external facts, use
+[watch](../watch/SKILL.md). Keep code observations on their branch. An external observation
+needs an explicit environment, source and date before shared capture; confidence alone
+never selects its destination. Continue unrelated work while checks run, and inspect the
+current result before relying on it. Shared facts can be read from any branch with
+`kpopper watch shared`; comparison never changes main or a judgment's `seen`.
+
 ## When the requested output is an HTML document
 
 For an ordinary HTML report, summary, brief or other document, use the standalone
