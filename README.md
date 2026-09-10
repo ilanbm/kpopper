@@ -25,26 +25,64 @@ file you can keep or share.
 grounded, why decisions were made, and what would call them into question.</sub>
 
 [Get started](#get-started) · [See an example](#ready-to-launch-had-a-condition) ·
-[Past, present, future](#past-present-future) ·
+[The third brain](#a-third-brain-for-work-in-progress) ·
 [See a document](#share-a-document-with-its-reasons) ·
-[The third brain](#a-third-brain-for-work-in-progress) · [How it works](#how-it-works) ·
+[Past, present, future](#past-present-future) · [How it works](#how-it-works) ·
 [Coding & CI](#coding-check-the-reasoning-behind-a-merge) ·
 [Why Lean](#the-lean-proof-assistant-from-fermat-to-agents) · [Command reference](docs/reference.md)
 
-## Past, present, future
+## A third brain for work in progress
 
-Keep the work connected across time: the sources and decisions behind it, what needs
-attention now, and the checks or actions to return to later.
+The excitement around building an organizational **second brain** is well deserved. A team's
+knowledge already lives across notes and agent memory, documents and research, conversations,
+plans and commitments, code and data. An agent can connect the relevant pieces into a shared,
+evolving picture of the work.
+
+Andrej Karpathy's [LLM Wiki](https://gist.github.com/karpathy/442a6bf555914893e9891c11519de94f)
+describes how an agent can maintain that picture as a persistent wiki: synthesizing sources,
+surfacing contradictions and revisiting stale claims.
+
+As that knowledge becomes a basis for action, its reasoning deserves an explicit record: why
+a conclusion was accepted, which sources and assumptions support it, and what would call for
+reconsideration.
+
+kpopper gives that record structure. It connects conclusions to their grounds, preserves what
+they were reviewed against, and checks declared conditions as recorded facts change. We call
+this reasoning and review layer a **third brain**; the agent supplies the interpretation.
+
+**Keep the knowledge system already in use.** A folder of Markdown files, an Obsidian vault,
+a project wiki, or memory files used by Claude or Codex can stay where they are. The agent
+reads relevant material through its available tools and records the claims it relies on,
+with links back to those sources, in `PROVENANCE.yaml`. There is no need to migrate the
+existing notes or replace the agent's memory system.
 
 <p align="center">
-  <a href="assets/work-across-time.png">
-    <img src="assets/work-across-time.png" width="820" alt="Three connected parts of kpopper: Past holds sources, decision reasons and review snapshots. Present connects claims, changed premises and new information. Future holds followups, daily reviews and time or event triggers. A return arrow asks the agent to bring outcomes back to the record.">
+  <a href="assets/third-brain-sources.png">
+    <img src="assets/third-brain-sources.png" width="760" alt="Many notes, memory files, documents, research papers, conversations, plans, code files and datasets remain in their existing places. An agent selects relevant evidence, and kpopper connects claims, decisions and review conditions.">
   </a>
 </p>
 
-The Future panel shows deferred work tracked by followups. The return arrow is the agent's
-step of recording useful outcomes as evidence; marking a followup complete is a separate
-operation and does not automatically rewrite the knowledge record.
+| Role | Question it helps answer |
+|---|---|
+| You | What matters, and what should we do? |
+| Your second brain: notes, documents and saved knowledge | What have we learned and kept that can help? |
+| kpopper, working with your agent | What supports this decision, what has changed, and what needs review? |
+
+That distinction is useful when a perfectly retrievable note contains a decision whose
+premises have expired. Finding the note is one job; noticing that its recommendation needs
+another look is another.
+
+There is a loose parallel with human memory: remembering can involve updating what was
+previously learned. In a laboratory study of episodic memory, reminders led participants to
+incorrectly include newly learned items when recalling an earlier list.
+[Hupbach et al., 2007](https://pubmed.ncbi.nlm.nih.gov/17202429/) provide one concrete example.
+This motivates an analogy, not a claim that kpopper models the brain or that neuroscience
+validates the product.
+
+Operationally, the analogy is straightforward: retrieve the relevant context, compare it
+with new information, draw attention to a consequential mismatch, and review the conclusion.
+In kpopper those steps are explicit records and checks. The person or agent supplies the
+interpretation; the software follows the declared connections. You retain the decision.
 
 ## Start with the work
 
@@ -80,49 +118,20 @@ for an [initial map or deeper investigation](docs/first-use.md) of selected mate
 The agent uses the sources available in your context; access to a file alone does not
 make it part of the project.
 
-## A third brain for work in progress
+## Past, present, future
 
-A second brain helps you capture, organize and use knowledge. Tiago Forte's formulation
-explicitly includes turning that material into work through *Capture, Organize, Distill,
-Express*. [His introduction](https://fortelabs.com/blog/basboverview/) describes the method.
-
-The **third brain** is our metaphor for a further job: keeping track of what your working
-conclusions depend on, and bringing them back into question when those dependencies change.
-
-**Keep the knowledge system already in use.** A folder of Markdown files, an Obsidian vault,
-a project wiki, or memory files used by Claude or Codex can stay where they are. The agent
-reads relevant material through its available tools and records the claims it relies on,
-with links back to those sources, in `PROVENANCE.yaml`. kpopper adds the dependencies,
-review snapshots and conditions for reconsideration. There is no need to migrate the
-existing notes or replace the agent's memory system.
+Keep the work connected across time: the sources and decisions behind it, what needs
+attention now, and the checks or actions to return to later.
 
 <p align="center">
-  <a href="assets/third-brain-sources.png">
-    <img src="assets/third-brain-sources.png" width="760" alt="Many notes, memory files, documents, research papers, conversations, plans, code files and datasets remain in their existing places. An agent selects relevant evidence, and kpopper connects claims, decisions and review conditions.">
+  <a href="assets/work-across-time.png">
+    <img src="assets/work-across-time.png" width="820" alt="Three connected parts of kpopper: Past holds sources, decision reasons and review snapshots. Present connects claims, changed premises and new information. Future holds followups, daily reviews and time or event triggers. A return arrow asks the agent to bring outcomes back to the record.">
   </a>
 </p>
 
-| Role | Question it helps answer |
-|---|---|
-| You | What matters, and what should we do? |
-| Your second brain: notes, documents and saved knowledge | What have we learned and kept that can help? |
-| kpopper, working with your agent | What supports this decision, what has changed, and what needs review? |
-
-That distinction is useful when a perfectly retrievable note contains a decision whose
-premises have expired. Finding the note is one job; noticing that its recommendation needs
-another look is another.
-
-There is a loose parallel with human memory: remembering can involve updating what was
-previously learned. In a laboratory study of episodic memory, reminders led participants to
-incorrectly include newly learned items when recalling an earlier list.
-[Hupbach et al., 2007](https://pubmed.ncbi.nlm.nih.gov/17202429/) provide one concrete example.
-This motivates an analogy, not a claim that kpopper models the brain or that neuroscience
-validates the product.
-
-Operationally, the analogy is straightforward: retrieve the relevant context, compare it
-with new information, draw attention to a consequential mismatch, and review the conclusion.
-In kpopper those steps are explicit records and checks. The person or agent supplies the
-interpretation; the software follows the declared connections. You retain the decision.
+The Future panel shows deferred work tracked by followups. The return arrow is the agent's
+step of recording useful outcomes as evidence; marking a followup complete is a separate
+operation and does not automatically rewrite the knowledge record.
 
 ## “Ready to launch” had a condition
 
