@@ -405,7 +405,8 @@ test('English and Hebrew panel controls support keyboard open, Escape close and 
     anchor.dispatchEvent(key);
     assert.equal(key.defaultPrevented, true);
     assert.equal(host.panel.hidden, false);
-    assert.equal(host.document.activeElement.parentElement.dataset.claim, 'rate');
+    assert.equal(host.document.activeElement.id, 'kp-panel-title');
+    assert.equal(host.document.activeElement.textContent, host.payload().claims.find(claim => claim.id === 'rate').label);
     host.panel.querySelector('[data-kp-close]').click();
     assert.equal(host.frame.document.activeElement, anchor);
     assert.equal(host.document.activeElement, host.iframe);
@@ -629,4 +630,97 @@ test('large escaped source values are applied as exact joined segments', () => {
   assert.equal(host.group('cap').decision, 'accepted');
   assert.equal(host.anchor('cap').textContent, '&'.repeat(20000));
   assert.equal(host.selectedSource(), fixture.layouts.large.selected);
+});
+
+test('a marked passage opens only its own explanation and selected source fields', () => {
+  const host = openArtifact();
+  host.anchor('registered').click();
+  assert.equal(host.panel.hidden, false);
+  assert.deepEqual([...host.panel.querySelectorAll('[data-claim]')].map(n => n.dataset.claim), ['registered']);
+  assert.equal(host.panel.querySelector('h1').textContent, host.payload().claims.find(c => c.id === 'registered').label);
+  assert.equal(host.panel.querySelector('.kp-counts'), null);
+  assert.equal(host.panel.dataset.view, 'claim');
+  const source = host.panel.querySelector('[id^="kp-source-"]');
+  assert.equal(source.querySelectorAll('.kp-selection').length, 1);
+  assert.ok(source.textContent.includes('/registered'));
+  assert.ok(!source.textContent.includes('/finished'));
+  assert.equal(host.panel.querySelectorAll('[data-group]').length, 1);
+  assert.equal(host.panel.querySelector('[data-group]').dataset.group, host.group('registered').id);
+  host.anchor('books').click();
+  assert.deepEqual([...host.panel.querySelectorAll('[data-claim]')].map(n => n.dataset.claim), ['books']);
+  assert.equal(host.panel.querySelector('#' + source.id), null);
+});
+
+test('all evidence is an explicit choice after opening one marked passage', () => {
+  const host = openArtifact();
+  host.anchor('rate').click();
+  host.panel.querySelector('[data-action="overview"]').click();
+  assert.equal(host.panel.hidden, false);
+  assert.equal(host.panel.dataset.view, 'overview');
+  assert.equal(host.panel.querySelectorAll('[data-claim]').length, host.payload().claims.length);
+  assert.ok(host.panel.querySelector('.kp-counts'));
+  host.panel.querySelector('[data-kp-close]').click();
+  host.opener.click();
+  assert.equal(host.panel.querySelectorAll('[data-claim]').length, host.payload().claims.length);
+});
+
+test('clicking outside closes without stealing focus or preventing authored interaction', () => {
+  const host = openArtifact();
+  const before = host.payload();
+  host.anchor('rate').click();
+  const control = host.frame.document.getElementById('author-control');
+  control.focus();
+  control.click();
+  assert.equal(host.panel.hidden, true);
+  assert.equal(host.frame.sandbox.authorCount, 1);
+  assert.equal(host.frame.document.activeElement, control);
+  assert.deepEqual(host.payload(), before);
+  host.opener.click();
+  host.panel.querySelector('h1').click();
+  assert.equal(host.panel.hidden, false);
+  host.document.body.click();
+  assert.equal(host.panel.hidden, true);
+});
+
+test('outside dismissal accepts only the current authored frame and nonce', () => {
+  const host = openArtifact();
+  host.anchor('rate').click();
+  const message = {type: 'kp:dismiss', nonce: host.nonce()};
+  host.receive(message, {});
+  assert.equal(host.panel.hidden, false);
+  host.emit({...message, nonce: 'wrong'});
+  assert.equal(host.panel.hidden, false);
+  host.emit(message);
+  assert.equal(host.panel.hidden, true);
+});
+
+test('close control stays in a fixed header outside the panel scrolling region', () => {
+  const host = openArtifact();
+  host.anchor('rate').click();
+  const close = host.panel.querySelector('[data-kp-close]');
+  const scroller = host.panel.querySelector('.kp-panel-content');
+  assert.ok(scroller);
+  assert.equal(close.closest('.kp-header').parentElement, host.panel);
+  assert.equal(scroller.contains(close), false);
+  scroller.scrollTop = 400;
+  close.click();
+  assert.equal(host.panel.hidden, true);
+  assert.equal(host.frame.document.activeElement, host.anchor('rate'));
+});
+
+test('focused review keeps its context across decisions and exports the full intact snapshot', async () => {
+  const host = openArtifact();
+  host.anchor('rate').click();
+  host.choose('rate', 'accept');
+  assert.deepEqual([...host.panel.querySelectorAll('[data-claim]')].map(n => n.dataset.claim), ['rate']);
+  assert.equal(host.panel.querySelector('[data-claim="rate"]').textContent.includes('60%'), true);
+  host.panel.querySelector('[data-action="download"]').click();
+  assert.equal(host.panel.hidden, false);
+  const exported = await host.blobs[0].text();
+  const reopened = openArtifact(exported);
+  assert.deepEqual(reopened.payload(), host.payload());
+  assert.equal(reopened.panel.hidden, true);
+  assert.equal(reopened.anchor('rate').textContent, '60%');
+  host.choose('rate', 'reset');
+  assert.deepEqual([...host.panel.querySelectorAll('[data-claim]')].map(n => n.dataset.claim), ['rate']);
 });

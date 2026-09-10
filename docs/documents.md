@@ -10,7 +10,9 @@ assets, selected evidence snapshots and review state. Open it in a browser with
 JavaScript enabled. It needs no server, network connection or neighboring files to
 show the document, inspect its evidence or choose a prepared update.
 
-The Evidence button explains marked claims. A match means the displayed value or exact
+Click a marked passage to open its own explanation and selected source excerpts. The
+card names the passage, closes when you click outside it, and keeps its close control
+visible while its content scrolls. The Evidence button opens the full document overview. A match means the displayed value or exact
 quotation agrees with a captured reading, or that a supported calculation agrees at the
 stated precision. Missing sources remain unavailable. Interpretations remain unchecked,
 even when their inputs are available. Unmarked text is not checked; the layer reports

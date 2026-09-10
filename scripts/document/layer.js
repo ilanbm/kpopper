@@ -17,6 +17,9 @@
   const hebrew = /^he(?:-|$)/i.test(data.language);
   const words = {
     evidence: ['Evidence', 'מקורות ובדיקות'], close: ['Close evidence', 'סגירת המקורות והבדיקות'],
+    selected: ['About this passage', 'על הפרט שבחרת'],
+    overview: ['All document evidence', 'כל המקורות והבדיקות של המסמך'],
+    related: ['Related correction', 'תיקון קשור'],
     heading: ['Behind this document', 'מאחורי המסמך'], snapshot: ['Saved evidence', 'מקורות שמורים'],
     snapshotNote: ['These offline snapshots do not update by themselves. Opening this file does not reread live sources.', 'המקורות השמורים אינם מתעדכנים מעצמם. פתיחת הקובץ אינה קוראת את המקורות מחדש.'],
     summary: ['Checks in this copy', 'בדיקות בעותק הזה'], match: ['Matches snapshot', 'תואם למקור השמור'],
@@ -68,6 +71,7 @@
   let frameReady = false;
   let pending = null;
   let focusClaim = null;
+  let selectedClaim = null;
   let serial = 0;
 
   function element(tag, text, className) {
@@ -175,29 +179,33 @@
 
   function announce(text) { notice.textContent = text; }
 
-  function closePanel() {
+  function closePanel(restoreFocus = true) {
+    if (panel.hidden) return;
+    const returnClaim = focusClaim;
     panel.hidden = true;
     opener.hidden = false;
     opener.setAttribute('aria-expanded', 'false');
-    if (focusClaim && frameReady) {
-      iframe.contentWindow.postMessage({ type: 'kp:focus', nonce, id: focusClaim }, '*');
+    focusClaim = null;
+    selectedClaim = null;
+    renderPanel();
+    // Click-away must leave focus with the control the reader just clicked.
+    if (!restoreFocus) return;
+    if (returnClaim && frameReady) {
+      iframe.contentWindow.postMessage({ type: 'kp:focus', nonce, id: returnClaim }, '*');
       iframe.focus();
     } else opener.focus();
-    focusClaim = null;
   }
 
   function openPanel(id) {
     focusClaim = typeof id === 'string' && claims.has(id) ? id : null;
+    selectedClaim = focusClaim;
     panel.hidden = false;
     opener.hidden = true;
     opener.setAttribute('aria-expanded', 'true');
-    const target = focusClaim ? claimNodes.get(focusClaim) : panel.querySelector('[data-kp-close]');
-    if (target) {
-      if (focusClaim) target.open = true;
-      const focus = focusClaim ? target.querySelector('summary') : target;
-      focus.focus();
-      if (focusClaim) target.scrollIntoView({ block: 'nearest' });
-    }
+    renderPanel();
+    panel.querySelector('.kp-panel-content').scrollTop = 0;
+    const target = panel.querySelector(selectedClaim ? '#kp-panel-title' : '[data-kp-close]');
+    if (target) target.focus({ preventScroll: true });
   }
 
   function probeState(message, operation) {
@@ -293,8 +301,12 @@
     card.append(actions);
   }
 
-  function renderClaim(parent, claim, check) {
-    const card = detail(parent, claim.label);
+  function renderClaim(parent, claim, check, focused = false) {
+    const card = focused ? element('article', null, 'kp-claim-card') : detail(parent, claim.label);
+    if (focused) {
+      card.setAttribute('aria-labelledby', 'kp-panel-title');
+      parent.append(card);
+    }
     card.dataset.claim = claim.id;
     claimNodes.set(claim.id, card);
     card.append(badge(check.status));
@@ -304,6 +316,10 @@
     if (claim.kind === 'inference') paragraph(card, t('inference'), 'kp-muted');
     if (check.status === 'unchecked' || check.status === 'unavailable') paragraph(card, check.detail);
     for (const id of new Set(claim.inputs.map(input => input.source))) {
+      if (focused) {
+        renderSource(card, id, sourceIds.indexOf(id), claim.inputs);
+        continue;
+      }
       const link = element('a', data.sources[id].name);
       link.href = '#kp-source-' + sourceIds.indexOf(id);
       link.addEventListener('click', () => { document.getElementById('kp-source-' + sourceIds.indexOf(id)).open = true; });
@@ -329,10 +345,11 @@
     } catch (_) { /* A citation is optional, never executable evidence. */ }
   }
 
-  function renderSource(parent, id, index) {
+  function renderSource(parent, id, index, inputs = null) {
     const source = data.sources[id];
     const card = detail(parent, source.name);
     card.id = 'kp-source-' + index;
+    if (inputs) card.open = true;
     if (source.status === 'available') {
       paragraph(card, t(source.representation === 'extraction' ? 'extracted' : source.format === 'record' ? 'record' : 'file'), 'kp-muted');
     }
@@ -341,7 +358,15 @@
       card.append(badge('unavailable'));
       paragraph(card, source.reason);
     }
-    for (const selection of Object.values(source.selections)) {
+    let selections = Object.values(source.selections);
+    if (inputs) {
+      // Retain operand order and show only the excerpts used by this passage, even
+      // when many unrelated claims share the same captured file.
+      const wanted = [...new Set(inputs.filter(input => input.source === id).map(input =>
+        JSON.stringify(Object.fromEntries(Object.entries(input).filter(([key]) => key !== 'source')))))];
+      selections = wanted.map(key => selections.find(selection => JSON.stringify(selection.selector) === key)).filter(Boolean);
+    }
+    for (const selection of selections) {
       const selected = element('div', null, 'kp-selection');
       if (selection.status === 'available' && selection.value) paragraph(selected, selection.value.value, 'kp-excerpt');
       else paragraph(selected, selection.status === 'available' ? t('identityOnly') : selection.reason || t('unavailable'), 'kp-muted');
@@ -363,72 +388,102 @@
   }
 
   function renderPanel() {
-    const scroll = panel.scrollTop;
+    const previousContent = panel.querySelector('.kp-panel-content');
+    const scroll = previousContent ? previousContent.scrollTop : 0;
     const openClaims = new Set(Array.from(claimNodes.entries()).filter(([, node]) => node.open).map(([id]) => id));
     const active = document.activeElement;
     const activeGroup = active && active.closest ? active.closest('[data-group]') : null;
     const activeGroupId = activeGroup ? activeGroup.dataset.group : null;
+    const focused = selectedClaim ? claims.get(selectedClaim) : null;
+    const checks = currentChecks();
     panel.replaceChildren();
     claimNodes.clear();
     const header = element('header', null, 'kp-header');
     const heading = element('div');
-    heading.append(element('p', t('snapshot'), 'kp-eyebrow'), element('h1', t('heading')));
-    const close = button('×', closePanel, 'kp-close');
+    const title = element('h1', focused ? focused.label : t('heading'));
+    title.id = 'kp-panel-title';
+    title.tabIndex = -1;
+    heading.append(element('p', t(focused ? 'selected' : 'snapshot'), 'kp-eyebrow'), title);
+    const close = button('×', () => closePanel(), 'kp-close');
     close.setAttribute('aria-label', t('close'));
     close.dataset.kpClose = '';
     header.append(heading, close);
-    panel.append(header);
-    paragraph(panel, t('snapshotNote'), 'kp-intro');
-    const summary = element('section', null, 'kp-section');
-    summary.append(element('h2', t('summary')));
-    const checks = currentChecks();
-    const counts = element('div', null, 'kp-counts');
-    for (const status of ['match', 'mismatch', 'unavailable', 'unchecked']) {
-      const count = Object.values(checks).filter(check => check.status === status).length;
-      const item = element('div', null, 'kp-count');
-      item.append(element('strong', count), element('span', t(status)));
-      counts.append(item);
+    // Only the content scrolls. The title and close control remain in the viewport.
+    const content = element('div', null, 'kp-panel-content');
+    panel.append(header, content);
+    panel.setAttribute('aria-labelledby', title.id);
+    panel.dataset.view = focused ? 'claim' : 'overview';
+    const relevantGroups = focused ? data.groups.filter(group => group.members.includes(focused.id)) : data.groups;
+    if (focused) {
+      renderClaim(content, focused, checks[focused.id], true);
+      if (relevantGroups.length) {
+        const related = element('section', null, 'kp-section');
+        related.append(element('h2', t('related')));
+        paragraph(related, t('reviewNote'), 'kp-muted');
+        relevantGroups.forEach(group => renderGroup(related, group));
+        content.append(related);
+      }
+    } else {
+      paragraph(content, t('snapshotNote'), 'kp-intro');
+      const summary = element('section', null, 'kp-section');
+      summary.append(element('h2', t('summary')));
+      const counts = element('div', null, 'kp-counts');
+      for (const status of ['match', 'mismatch', 'unavailable', 'unchecked']) {
+        const count = Object.values(checks).filter(check => check.status === status).length;
+        const item = element('div', null, 'kp-count');
+        item.append(element('strong', count), element('span', t(status)));
+        counts.append(item);
+      }
+      summary.append(counts);
+      paragraph(summary, t('checkNote'), 'kp-muted');
+      const coverage = detail(summary, t('scope'));
+      coverage.open = true;
+      paragraph(coverage, t('unmarked'), 'kp-scope-note');
+      for (const [key, label] of [['anchored_claims', 'anchored'], ['unmarked_blocks', 'blocks'], ['unmarked_values', 'values']]) {
+        paragraph(coverage, String(data.coverage[key]) + ' · ' + t(label), 'kp-stat');
+      }
+      if (data.coverage.excerpts.length) {
+        const excerpts = detail(coverage, t('excerpts'));
+        data.coverage.excerpts.forEach(text => paragraph(excerpts, text, 'kp-excerpt'));
+      }
+      content.append(summary);
+      if (data.groups.length) {
+        const groups = element('section', null, 'kp-section');
+        groups.append(element('h2', t('proposals')));
+        paragraph(groups, t('reviewNote'), 'kp-muted');
+        data.groups.forEach(group => renderGroup(groups, group));
+        content.append(groups);
+      }
+      const checked = element('section', null, 'kp-section');
+      checked.append(element('h2', t('claims')));
+      data.claims.forEach(claim => renderClaim(checked, claim, checks[claim.id]));
+      content.append(checked);
+      const sources = element('section', null, 'kp-section');
+      sources.append(element('h2', t('sources')));
+      paragraph(sources, t('selectedOnly'), 'kp-muted');
+      sourceIds.forEach((id, index) => renderSource(sources, id, index));
+      content.append(sources);
     }
-    summary.append(counts);
-    paragraph(summary, t('checkNote'), 'kp-muted');
-    const coverage = detail(summary, t('scope'));
-    coverage.open = true;
-    paragraph(coverage, t('unmarked'), 'kp-scope-note');
-    for (const [key, label] of [['anchored_claims', 'anchored'], ['unmarked_blocks', 'blocks'], ['unmarked_values', 'values']]) {
-      paragraph(coverage, String(data.coverage[key]) + ' · ' + t(label), 'kp-stat');
-    }
-    if (data.coverage.excerpts.length) {
-      const excerpts = detail(coverage, t('excerpts'));
-      data.coverage.excerpts.forEach(text => paragraph(excerpts, text, 'kp-excerpt'));
-    }
-    panel.append(summary);
-    if (data.groups.length) {
-      const groups = element('section', null, 'kp-section');
-      groups.append(element('h2', t('proposals')));
-      paragraph(groups, t('reviewNote'), 'kp-muted');
-      data.groups.forEach(group => renderGroup(groups, group));
-      panel.append(groups);
-    }
-    const checked = element('section', null, 'kp-section');
-    checked.append(element('h2', t('claims')));
-    data.claims.forEach(claim => renderClaim(checked, claim, checks[claim.id]));
-    panel.append(checked);
-    const sources = element('section', null, 'kp-section');
-    sources.append(element('h2', t('sources')));
-    paragraph(sources, t('selectedOnly'), 'kp-muted');
-    sourceIds.forEach((id, index) => renderSource(sources, id, index));
-    panel.append(sources);
     const footer = element('footer', null, 'kp-footer');
-    const download = button(t('download'), downloadCopy, 'kp-button kp-primary kp-download');
-    download.dataset.action = 'download';
-    download.disabled = !!pending;
-    footer.append(download);
-    paragraph(footer, t('saveNote'), 'kp-muted');
-    const technical = detail(footer, t('details'));
-    field(technical, t('generated'), data.generated_at);
-    panel.append(footer);
-    for (const id of openClaims) if (claimNodes.has(id)) claimNodes.get(id).open = true;
-    panel.scrollTop = scroll;
+    if (focused) {
+      const all = button(t('overview'), () => openPanel());
+      all.dataset.action = 'overview';
+      footer.append(all);
+    }
+    if (!focused || relevantGroups.length) {
+      const download = button(t('download'), downloadCopy, 'kp-button kp-primary kp-download');
+      download.dataset.action = 'download';
+      download.disabled = !!pending;
+      footer.append(download);
+      paragraph(footer, t('saveNote'), 'kp-muted');
+    }
+    if (!focused) {
+      const technical = detail(footer, t('details'));
+      field(technical, t('generated'), data.generated_at);
+    }
+    content.append(footer);
+    for (const id of openClaims) if (claimNodes.has(id) && claimNodes.get(id).localName === 'details') claimNodes.get(id).open = true;
+    content.scrollTop = scroll;
     if (!panel.hidden && activeGroupId) {
       const card = Array.from(panel.querySelectorAll('[data-group]')).find(node => node.dataset.group === activeGroupId);
       if (card) card.querySelector('summary').focus();
@@ -445,6 +500,8 @@
       clone.querySelector('#kp-document').removeAttribute('srcdoc');
       const savedPanel = clone.querySelector('#kp-panel');
       savedPanel.replaceChildren();
+      savedPanel.removeAttribute('data-view');
+      savedPanel.removeAttribute('aria-labelledby');
       savedPanel.hidden = true;
       clone.querySelector('#kp-notice').textContent = '';
       const savedOpener = clone.querySelector('#kp-open');
@@ -453,6 +510,7 @@
       const html = '<!doctype html>\n' + clone.outerHTML + '\n';
       const url = URL.createObjectURL(new Blob([html], { type: 'text/html;charset=utf-8' }));
       const link = element('a');
+      link.dataset.kpDownload = '';
       link.href = url;
       link.download = (data.title.replace(/[\\/:*?"<>|\u0000-\u001f]/g, '-').slice(0, 100) || 'document') + '-reviewed.html';
       document.body.append(link);
@@ -470,6 +528,8 @@
     if (message.type === 'kp:ready') {
       frameReady = true;
       renderPanel();
+    } else if (message.type === 'kp:dismiss') {
+      closePanel(false);
     } else if (message.type === 'kp:open' && typeof message.id === 'string' && claims.has(message.id)) {
       openPanel(message.id);
     } else if (message.type === 'kp:probe-result' && pending && message.request === pending.request && nonce === pending.nonce) {
@@ -488,6 +548,15 @@
   panel.setAttribute('aria-modal', 'false');
   panel.setAttribute('aria-label', t('evidence'));
   opener.addEventListener('click', () => openPanel());
+  document.addEventListener('click', event => {
+    // The clicked control may have been replaced by its action. Use the original
+    // event path as well as containment, so an internal action is not click-away.
+    const path = event.composedPath();
+    if (panel.hidden || path.includes(panel) || path.includes(opener) ||
+        panel.contains(event.target) || opener.contains(event.target) ||
+        event.target.closest && event.target.closest('[data-kp-download]')) return;
+    closePanel(false);
+  });
   panel.addEventListener('keydown', event => { if (event.key === 'Escape') { event.preventDefault(); closePanel(); } });
   try { loadFrame(selectedHTML()); renderPanel(); } catch (_) { announce(t('invalid')); }
 }());

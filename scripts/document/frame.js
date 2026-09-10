@@ -108,7 +108,8 @@
     document.addEventListener('click', event => {
       const target = markedTarget(event);
       if (target) openEvidence(target);
-    });
+      else send('kp:dismiss', {});
+    }, true);
     document.addEventListener('keydown', event => {
       const target = markedTarget(event);
       if (target && (event.key === 'Enter' || event.key === ' ')) {
