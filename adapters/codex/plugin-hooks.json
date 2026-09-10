@@ -13,6 +13,15 @@
             "timeout": 10
           }
         ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"$PLUGIN_ROOT/scripts/watch_hook.py\" codex start",
+            "timeout": 10
+          }
+        ]
       }
     ],
     "Stop": [
@@ -44,6 +53,16 @@
             "timeout": 10
           }
         ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"$PLUGIN_ROOT/scripts/watch_hook.py\" codex wait",
+            "timeout": 130,
+            "async": true
+          }
+        ]
       }
     ],
     "UserPromptSubmit": [
@@ -54,6 +73,16 @@
             "command": "\"$PLUGIN_ROOT/scripts/ingestion_hook.sh\" codex wait",
             "async": true,
             "timeout": 130
+          }
+        ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"$PLUGIN_ROOT/scripts/watch_hook.py\" codex wait",
+            "timeout": 130,
+            "async": true
           }
         ]
       }
