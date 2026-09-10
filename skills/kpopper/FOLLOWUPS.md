@@ -173,6 +173,36 @@ additional host trigger after checking ownership, and still uses the same item c
 
 ## Storage and rollback
 
+### Record scope and retention
+
+The daily review uses one explicitly configured record. Setup pins `--record` when supplied,
+otherwise the record located from the selected workspace. It does not automatically select
+the main checkout, enumerate sibling worktree graphs, or merge their findings. The queue's
+identity is shared across related worktrees, while its record path remains pinned.
+
+The scheduled host starts or resumes an agent session, whose prompt instructs it to perform
+ready authorized work. The Python coordinator selects and claims work; it does not execute
+task instructions or spawn an independent session per followup. An external executor is
+preserved as an owner, not automatically awakened. A blocked or undecided item is reported
+for the user instead of being treated as completed.
+
+Maintenance selection is currently limited to one flagged judgment from the configured
+record. The agent may perform one useful authorized source refresh or open-question check,
+but broad discovery of ageing sources and branch-specific knowledge is not implemented.
+Completed attempts remain in followup history. Material knowledge belongs in the project
+record through the ordinary source/reading writer; `finish` itself never inserts it there
+or refreshes a judgment's review snapshot.
+
+Use a durable workspace/record and an installed runtime for a production schedule. Removing
+a worktree does not remove the private followup ledger, but a record or runtime pinned inside
+that tree becomes unavailable. Preserve record changes in commits or the shared knowledge
+store before cleanup. Then relocate the record explicitly and recheck installation if needed.
+An explicit relocation changes the pointer; it does not recover uncommitted deleted content.
+
+This repository's tracked record additions travel with their commits and merge into the main
+record through the usual review process. Private execution logs outside the repository survive
+worktree removal, but they are not automatically part of the project's knowledge graph.
+
 The versioned `followups.yaml` ledger lives outside the product repository at
 `$XDG_STATE_HOME/kpopper/followups/<workspace-key>` (absolute XDG path), otherwise under
 `~/.local/state/kpopper/followups`. Its identity is shared across Git worktrees and separates

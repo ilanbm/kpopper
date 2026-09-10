@@ -21,10 +21,26 @@ plugin and through the command line.
 grounded, why decisions were made, and what would call them into question.</sub>
 
 [Get started](#get-started) · [See an example](#ready-to-launch-had-a-condition) ·
+[Past, present, future](#past-present-future) ·
 [See a document](#regular-html-annotated-with-reasoning) ·
 [The third brain](#a-third-brain-for-work-in-progress) · [How it works](#how-it-works) ·
 [Coding & CI](#coding-check-the-reasoning-behind-a-merge) ·
 [Why Lean](#the-lean-proof-assistant-from-fermat-to-agents) · [Command reference](docs/reference.md)
+
+## Past, present, future
+
+Keep the work connected across time: the sources and decisions behind it, what needs
+attention now, and the checks or actions to return to later.
+
+<p align="center">
+  <a href="assets/work-across-time.png">
+    <img src="assets/work-across-time.png" width="820" alt="Three connected parts of kpopper: Past holds sources, decision reasons and review snapshots. Present connects claims, changed premises and new information. Future holds followups, daily reviews and time or event triggers. A return arrow asks the agent to bring outcomes back to the record.">
+  </a>
+</p>
+
+The Future panel shows deferred work tracked by followups. The return arrow is the agent's
+step of recording useful outcomes as evidence; marking a followup complete is a separate
+operation and does not automatically rewrite the knowledge record.
 
 ## Start with the work
 
@@ -303,6 +319,17 @@ Claims prevent duplicate work, and a check deferred until more evidence arrives 
 with its history intact. Followup scans and outcomes never silently rewrite the knowledge
 graph or mark its judgments reviewed. See the [followups guide](skills/kpopper/FOLLOWUPS.md)
 for routing, supported conditions, daily setup and platform limits.
+
+The scheduled host starts or resumes an agent session. That agent is instructed to claim
+and perform up to three ready followups within the user's existing authorization, record
+their outcomes, and surface decisions or blockers. There is no automatic dispatcher that
+opens a separate session for every item. Work assigned to an external owner stays with it.
+
+The review packet currently offers at most one flagged judgment as a graph-maintenance
+candidate. The prompt also allows a relevant source refresh or open-question check, but
+there is no general source-age scanner or sweep of every worktree graph. One review is
+bound to the record selected at setup; that can be a worktree copy. Choose a durable record
+and runtime for an ongoing schedule. See [record scope and retention](skills/kpopper/FOLLOWUPS.md#record-scope-and-retention).
 
 ### The knowledge record
 

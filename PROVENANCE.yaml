@@ -274,6 +274,26 @@ sources:
     read: "2026-09-09"
     asked: "Retain explicit reports without waiting for graph maintenance, and return only findings
             that need attention."
+  s.followups_contract:
+    name: "Followup task and authority contract"
+    file: "skills/kpopper/FOLLOWUPS.md"
+    read: "2026-09-10"
+    revision: "7bbd2fcd134bf6d34c1e18465eaa230b18d69cb3"
+  s.followups_daily:
+    name: "Daily review prompt, work budget and receipts"
+    file: "scripts/followup_daily.py"
+    read: "2026-09-10"
+    revision: "7bbd2fcd134bf6d34c1e18465eaa230b18d69cb3"
+  s.followups_install:
+    name: "Daily installation inspection and readback protocol"
+    file: "scripts/followup_install.py"
+    read: "2026-09-10"
+    revision: "7bbd2fcd134bf6d34c1e18465eaa230b18d69cb3"
+  s.followups_state:
+    name: "Followup storage, claims and retained outcomes"
+    file: "scripts/followups.py"
+    read: "2026-09-10"
+    revision: "7bbd2fcd134bf6d34c1e18465eaa230b18d69cb3"
   doc.fact_moves:
     url: "https://claude.ai/code/artifact/ca99e558-60ae-4b22-9221-e3b29d7d7e2b"
     name: "מה קורה כשעובדה זזה - the unified node model"
@@ -434,6 +454,48 @@ known:
          its own change and written after; and 'no fresh reading' needs a threshold nobody stated,
          which the method forbids inventing. An entry with no recipe is this shape still, so it stays
          the default and a recipe is named per entry"
+  followups.execution:
+    name: "Who performs a ready followup"
+    v: "The scheduled host agent performs authorized work in its own review run. The coordinator
+        does not automatically dispatch a separate session per item."
+    from: s.followups_daily
+    at: "plan; compare Store.claim in scripts/followups.py"
+    of: "2026-09-10"
+  followups.installation_evidence:
+    name: "What installation confirmation proves"
+    v: "Matching host configuration readback confirms installation. The installer explicitly leaves
+        first-run verification false; a real scheduled wake needs separate runtime evidence."
+    from: s.followups_install
+    at: "inspect_host and finish"
+    of: "2026-09-10"
+  followups.maintenance_scope:
+    name: "What graph maintenance currently selects"
+    v: "The packet returns at most one flagged judgment. Source refresh and open-question work are
+        permitted by the agent prompt, without a general source-age or worktree-graph sweep."
+    from: s.followups_state
+    at: "graph and Store.scan; maintenance instruction in scripts/followup_daily.py::plan"
+    of: "2026-09-10"
+  followups.outcome_retention:
+    name: "What completion preserves"
+    v: "Attempt outcomes and evidence remain in the private followup ledger. Finishing a task does
+        not write new knowledge into the project record or refresh its review snapshots."
+    from: s.followups_state
+    at: "Store.finish, Store.resolve and Store.restore"
+    of: "2026-09-10"
+  followups.record_scope:
+    name: "Which graph daily review reads"
+    v: "One record path is pinned at setup. By default it is the record located from the selected
+        workspace, including a worktree copy; sibling worktree graphs are not enumerated."
+    from: s.followups_state
+    at: "Store.setup, Store.scan and graph"
+    of: "2026-09-10"
+  followups.state_storage:
+    name: "Where followup state lives"
+    v: "Private workspace-keyed state is shared across related worktrees; task content stays in the
+        selected external system or Markdown destination."
+    from: s.followups_state
+    at: "Store.__init__, Store.setup and Store._register"
+    of: "2026-09-10"
   m.blocked_on_implementation:
     v: 4
     name: "Judgments whose declared hole calls itself an implementation hole - work not done yet -
@@ -809,6 +871,15 @@ known:
          problems; MOVED only once a hand set the value to 0"
 
 open:
+  q.followups_dispatch: "Which followups should stay in the daily session and which should receive
+                         a dedicated execution session? No per-item dispatch policy is currently
+                         implemented."
+  q.followups_graph_scope: "Should daily review use one durable canonical project record plus
+                            explicit proposals from active worktree graphs? Current behavior is one
+                            pinned record, with no automatic worktree sweep."
+  q.followups_outcomes_to_graph: "Which nontrivial followup outcomes should be recorded as new
+                                  project evidence, by which authorized writer, so that knowledge
+                                  does not remain only in execution history?"
   q.pull_defaults: "does a session that ran pull still open the record file for values - and if
                     so, what was missing from the line it got?"
   q.account_copy: "does the hosted copy of this plugin get refreshed from here, or retired?"
@@ -1279,6 +1350,39 @@ judgments:
                                       superseded only when its wrong_if holds; the same premises
                                       under different ids are different subjects"
       p.supersede_doors: 1
+  d.followups_installation_is_not_execution:
+    rests_on: [followups.installation_evidence, s.followups_install]
+    verdict: "Report configured scheduling separately from evidence that a scheduled run actually
+              fired."
+    because: "A retained local request or matching host configuration cannot demonstrate a later
+              wake, filesystem access at that time, or completion of the intended work."
+    reopened_by: "The installation flow reports a successful scheduled execution using only
+                  configuration readback or a simulated dispatch."
+    seen:
+      followups.installation_evidence: "Matching host configuration readback confirms installation.
+                                        The installer explicitly leaves first-run verification false;
+                                        a real scheduled wake needs separate runtime evidence."
+      s.followups_install: "read 2026-09-10"
+  d.followups_readiness_is_not_authority:
+    rests_on: [followups.execution, followups.outcome_retention, d.moved_is_a_flag, s.followups_contract]
+    verdict: "A due trigger and a claim select work to consider or perform within existing
+              authorization; they do not authorize additional effects or silently review
+              conclusions."
+    because: "Readiness describes timing and evidence. Claims coordinate actors. The user still
+              determines the scope of authorized work, and task completion is separate from checking
+              the conclusions that used its evidence."
+    reopened_by: "A runner treats a due trigger or claim token as permission for an unapproved
+                  action, or clears a judgment warning merely because the task completed."
+    seen:
+      followups.execution: "The scheduled host agent performs authorized work in its own review run.
+                            The coordinator does not automatically dispatch a separate session per
+                            item."
+      followups.outcome_retention: "Attempt outcomes and evidence remain in the private followup
+                                    ledger. Finishing a task does not write new knowledge into the
+                                    project record or refresh its review snapshots."
+      d.moved_is_a_flag: "a dependency that moved since the snapshot flags the judgment for a
+                          person; only a predicate that holds fails the build"
+      s.followups_contract: "read 2026-09-10"
   d.gate_and_opener_against_the_mark:
     rests_on: [s.2026_09_03_coverage, d.gate_reminds, d.open_is_a_slot, p.gate_bounces]
     verdict: "the opener marks where a session began - failures, judgments, readings, unserved
