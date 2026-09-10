@@ -1,5 +1,20 @@
 # Changelog
 
+## 1.3.0 — 2026-09-10
+
+- Add resumable search and evidence context to checked sessions (#50) — minor
+- Add asynchronous branch watch and scoped shared facts (#55) — minor
+- Lead with the third brain and show standalone document reasoning (#54) — patch
+- Add standalone HTML documents with offline evidence and review (#51) — minor
+- Add graph-linked followups and daily review (#53) — minor
+- Strengthen falsification guidance and speed up dependency reach (#52) — patch
+- Add optional first-use guidance and workspace mapping (#47) — minor
+- Rewrite README around agent reasoning and practical adoption (#48) — patch
+- Reduce the README diagram size by 86% (#46) — patch
+- Document background capture within the README workflow (#43) — patch
+
+Decisions recorded: d.context_is_an_explicit_read, d.followups_installation_is_not_execution, d.followups_readiness_is_not_authority, d.standalone_html_is_a_copy, d.watch_async_compatibility, d.watch_shared_scope, d.workspace_operations
+
 ## 1.2.0 — 2026-09-09
 
 - Add experimental Lean-checked session grounding (#44) — minor
