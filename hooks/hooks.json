@@ -38,7 +38,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "\"$CLAUDE_PLUGIN_ROOT/scripts/session_gate.sh\""
+            "command": "\"$CLAUDE_PLUGIN_ROOT/scripts/session_gate.sh\" --host claude"
           }
         ]
       }

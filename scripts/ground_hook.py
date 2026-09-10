@@ -178,8 +178,33 @@ def prompt_context(payload, host, path):
         if state["digests"].get(k) != d:
             state["read"].pop(k)
     named = choose(hits(prompt[:4000], index), state, turn)
+    soft = reminder(location["record"], payload.get("session_id"), state, turn, host)
     save_state(path, state)
-    return line(named, host) if named else ""
+    parts = [line(named, host)] if named else []
+    if soft:
+        parts.append(soft)
+    return "\n".join(parts)
+
+
+def reminder(record, sid, state, turn, host):
+    """The soft form of the gate's one question, on the prompt after real work left the
+    record untouched, repeated only after a cooldown: a line, never a stop."""
+    import provenance as P
+    mark = Path(tempfile.gettempdir()) / ("kpopper-base-" + sid)
+    try:
+        base = json.loads(mark.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return ""
+    if not isinstance(base, dict) or not base.get("digest"):
+        return ""
+    last = max(int(state.get("nudged_turn", -P.NUDGE_COOLDOWN)), int(base.get("nudged_turn", -P.NUDGE_COOLDOWN)))
+    if turn - last < P.NUDGE_COOLDOWN:
+        return ""
+    asked = P.untouched(dict(base, nudged=False), [record], turn, host)
+    if not asked:
+        return ""
+    state["nudged_turn"] = turn
+    return asked
 
 
 def read_context(payload, path):

@@ -535,7 +535,10 @@ def infer(doc):
         # role inference; this must never hide a misspelled dependency declaration.
         source_collections = {k: v for k, v in collections.items() if k != "meta"}
         judgment_fields = {"rests_on", "wrong_if", "seen", "verdict", "reopened_by", "blocked_on"}
-        if source_collections and set(source_collections) <= {"known", "sources", "open", "questions"} \
+        # A record born with only its head - meta, and nothing yet - is the moment before
+        # the first entry, not a record that lost its graph.
+        newborn = bool(doc) and set(doc) <= {"meta"}
+        if (newborn or source_collections and set(source_collections) <= {"known", "sources", "open", "questions"}) \
                 and not unresolved and not any(
                     judgment_fields.intersection(body) for group in source_collections.values()
                     for body in group.values() if isinstance(body, dict)):
@@ -3086,6 +3089,16 @@ def _collection_for(doc, ids, jud, fields, nid, body, explicit):
         if explicit not in cols and explicit not in doc:
             raise Refused(f"no collection {explicit} in this record")
         return explicit
+    if not cols:
+        # a newborn record: the three sections, named as the method recommends, by shape
+        if isinstance(body, dict) and fields["deps"] in body:
+            return "judgments"
+        if not isinstance(body, dict):
+            return OPEN[0]
+        if not any(k in body for k in ("v", "rule", "quoted")) and \
+                any(k in body for k in ("asked", "url", "file", "read")):
+            return "sources"
+        return "known"
     head = nid.split(".")[0]
     homes = [c for c, m in cols.items() if any(k.split(".")[0] == head for k in m)]
     if len(homes) == 1:
@@ -3097,7 +3110,7 @@ def _collection_for(doc, ids, jud, fields, nid, body, explicit):
         return by_jud[0]
     if not isinstance(body, dict):
         opens = [c for c in cols if c in OPEN]
-        return opens[0] if opens else sorted(cols)[0]
+        return opens[0] if opens else OPEN[0]
     sourceish = not any(k in body for k in ("v", "rule", "quoted")) and \
         any(k in body for k in ("asked", "url", "file", "read"))
     cited = {}
@@ -3109,10 +3122,18 @@ def _collection_for(doc, ids, jud, fields, nid, body, explicit):
                         cited[c2] = cited.get(c2, 0) + 1
     if sourceish and cited:
         return sorted(cited, key=lambda c: -cited[c])[0]
-    valued = sorted(cols, key=lambda c: -sum(1 for k, b in cols[c].items()
-                                             if isinstance(b, dict) and k not in jud
-                                             and ("v" in b or "rule" in b or "quoted" in b)))
-    return valued[0]
+
+    def counted(c):
+        return sum(1 for k, b in cols[c].items() if isinstance(b, dict) and k not in jud
+                   and ("v" in b or "rule" in b or "quoted" in b))
+    if sourceish:
+        # nothing cites a source yet: the section holding no values is the sources', and a
+        # young record without one opens it under the method's own name
+        unvalued = [c for c in sorted(cols) if c not in OPEN and c != "judgments" and not counted(c)]
+        return unvalued[0] if unvalued else "sources"
+    valued = sorted(cols, key=lambda c: -counted(c))
+    # a value lands where values are; a young record holding none yet opens the section
+    return valued[0] if counted(valued[0]) else "known"
 
 
 def apply(paths, action):
@@ -3476,8 +3497,9 @@ def _apply(paths, action):
         out.append("supersede {}: {} -> {} - {}".format(
             nid, *apart(was, _verdict_of(body), 60), why))
     elif kind == "add":
-        if collection == "judgments" and not jud and collection not in doc:
-            lines += ["", "judgments:"]
+        # a collection the file lacks - the first judgment, a newborn record's first
+        # section - is opened at the end, and the entry is its first member
+        _ensure_collection(lines, collection)
         out.append("add " + _add_in(lines, nid, body, collection))
     else:
         j = jud[nid]
@@ -3633,15 +3655,76 @@ def _gate_judgments(ids, jud, raw):
     }
 
 
+NUDGE_TURNS = 8      # prompts a session may run with the record untouched before it is asked once
+TREE_FILES = 500     # working files the mark keeps, so a dirty tree cannot bloat it
+
+
+def tree_state(paths):
+    """What a session's end is held against beyond the record's own checks: a digest of the
+    record with its hypotheses - any write moves it - and the git tree's state, HEAD and the
+    working files that differ from it, or None outside git."""
+    h = hashlib.sha1()
+    for f in list(_files_of(paths)) + sorted(glob.glob(os.path.join(hypothesis_dir(paths), "*.yaml"))):
+        with io.open(f, "rb") as fh:
+            h.update(fh.read())
+    tree = None
+    cwd = os.path.dirname(os.path.abspath(paths[0]))
+    try:
+        head = subprocess.run(["git", "rev-parse", "HEAD"], cwd=cwd, capture_output=True,
+                              text=True, timeout=5)
+        status = subprocess.run(["git", "status", "--porcelain"], cwd=cwd, capture_output=True,
+                                text=True, timeout=10)
+        if head.returncode == 0 and status.returncode == 0:
+            files = sorted(l for l in status.stdout.splitlines() if l.strip())
+            tree = {"head": head.stdout.strip(), "files": files[:TREE_FILES], "n": len(files)}
+    except (OSError, subprocess.SubprocessError):
+        pass
+    return {"digest": h.hexdigest(), "tree": tree}
+
+
+NUDGE_COOLDOWN = 10  # prompts between two askings, in either form
+
+
+def untouched(base, paths, turns, host=None, nudged_at=None):
+    """The one thing the gate asks of a session that never wrote: after real work - files
+    of the tree changed since the mark, or enough prompts went by - was there nothing to
+    keep? Asked once, and only while the record is exactly as the session found it. Not on
+    the turn whose prompt already carried the softer form of the question: the turn after,
+    when a line went unanswered, is when a stop is earned."""
+    if not base.get("digest") or base.get("nudged"):
+        return None
+    if nudged_at is not None and turns <= nudged_at:
+        return None
+    now = tree_state(paths)
+    if now["digest"] != base["digest"]:
+        return None
+    was, is_ = base.get("tree"), now["tree"]
+    changed = 0
+    if was and is_:
+        changed = len(set(was.get("files") or []) ^ set(is_.get("files") or []))
+        if was.get("head") != is_.get("head"):
+            changed = max(changed, 1)
+    if not changed and turns < NUDGE_TURNS:
+        return None
+    form = SKILL_FORMS.get(host or "")
+    record = form.format("record") if form else "`kpopper add`"
+    what = (f"{changed} file{'' if changed == 1 else 's'} of the tree changed" if changed
+            else f"{turns} prompts in")
+    return (f"kpopper: {what}, the record untouched. If a finding, decision or measurement came "
+            f"out of this session, {record} keeps it now; if nothing will be revisited, finish.")
+
+
 def mark(state_path, paths):
     """Written at session start: how many problems check finds, which intents no tab of the
-    page serves, and the ids the record holds."""
+    page serves, the ids the record holds, and the record and tree as the session found
+    them."""
     doc = load(paths)
     ids, jud, fields = infer(doc)
     fail, _, _, _, _ = check_lines(paths)
     state = {"fails": len(fail), "failures": fail, "unserved": _unserved(paths),
              "ids": sorted(_every_id(doc, ids)),
-             "judgments": _gate_judgments(ids, jud, with_builtins(doc, ids, jud, fields))}
+             "judgments": _gate_judgments(ids, jud, with_builtins(doc, ids, jud, fields)),
+             "nudged": False, **tree_state(paths)}
     with io.open(state_path, "w", encoding="utf-8") as f:
         json.dump(state, f)
     return 0
@@ -3661,14 +3744,15 @@ def _marked(state_path):
             state = {"fails": 0}
     return {"fails": int(state.get("fails") or 0), "unserved": list(state.get("unserved") or []),
             "ids": state.get("ids"), "failures": state.get("failures"),
-            "judgments": state.get("judgments") or {}}
+            "judgments": state.get("judgments") or {}, "digest": state.get("digest"),
+            "tree": state.get("tree"), "nudged": bool(state.get("nudged"))}
 
 
-def gate(state_path, paths):
+def gate(state_path, paths, turns=0, host=None, nudged_at=None):
     """What a session hears before it can finish, against the mark its opener left: the
     record failing worse than it found it; an intent the session left unserved; entries it
-    wrote with no intent recorded. Printed, and 2 when there is anything - the hook bounces
-    once and yields."""
+    wrote with no intent recorded; and, once, real work that left the record untouched.
+    Printed, and 2 when there is anything - the hook bounces once and yields."""
     base = _marked(state_path)
     fail, _, _, _, _ = check_lines(paths)
     doc = load(paths)
@@ -3728,6 +3812,19 @@ def gate(state_path, paths):
             out.append(f"this session wrote {len(new)} {'entry' if len(new) == 1 else 'entries'} "
                        f"({named_}) and recorded no intent: add s.<date>_<slug> asked=\"...\" "
                        f"name=\"...\", and from: it on what it wrote")
+    if not out:
+        nudge = untouched(base, paths, turns, host, nudged_at)
+        if nudge:
+            out.append(nudge)
+            # once: the mark remembers that the question was asked, and at which prompt
+            try:
+                raw_state = json.loads(io.open(state_path, encoding="utf-8").read())
+                if isinstance(raw_state, dict):
+                    raw_state["nudged"], raw_state["nudged_turn"] = True, turns
+                    with io.open(state_path, "w", encoding="utf-8") as f:
+                        json.dump(raw_state, f)
+            except (OSError, ValueError):
+                pass
     for l in out:
         print(l)
     if allowed:
@@ -3769,7 +3866,10 @@ never at the tail - in the style of the entry it lands beside; meta.updated move
 is written as `rests_on='[a, b]'`; a judgment's `seen` is filled by this tool from what its
 dependencies hold now and must not be given. Refused: an id already in the record, a
 dependency that is not an entry (add it first, or declare it with blocked_on), a reference
-to nothing, a judgment whose wrong_if already holds. The reply is the reach.
+to nothing, a judgment whose wrong_if already holds. The reply is the reach. Where no record
+resolves for the workspace, the first add creates PROVENANCE.yaml at its root - a checkout's
+root, or the working directory outside git - with that entry; a registered record that is
+unavailable is a location problem, refused rather than replaced.
 
 A contradiction is refused into the base and named a hypothesis: the same id with a
 different value or verdict, or a judgment resting on what only a hypothesis holds - the
@@ -3863,7 +3963,46 @@ def write_command(cmd, rest):
         action["body"] = body
     else:
         files = [x for x in args if x.endswith((".yaml", ".yml"))]
-    return apply(files or default_paths(), action)
+    born = []
+    if cmd == "add" and not files:
+        files = born = _newborn(action)
+    try:
+        return apply(files or default_paths(), action)
+    except BaseException:
+        # a first entry that was refused leaves no empty record behind
+        for f in born:
+            if os.path.exists(f) and os.path.getsize(f) < 64:
+                os.remove(f)
+        raise
+
+
+def _newborn(action):
+    """Where no record resolves for the workspace, the first `add` creates one: a file with
+    today's date in its head, at the workspace root - a git checkout's root, or the working
+    directory outside git - and the entry lands in the section its shape calls for. Nothing
+    is created for any other command, and a registered record that is unavailable is a
+    location problem `default_paths` refuses rather than a place for another. -> [path], or
+    [] when a record already resolves."""
+    paths = default_paths()
+    if os.path.exists(paths[0]):
+        return []
+    try:
+        from .workspace import locate
+    except ImportError:
+        import importlib.util
+        spec = importlib.util.spec_from_file_location(
+            "_kpopper_workspace", os.path.join(os.path.dirname(__file__), "workspace.py"))
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        locate = module.locate
+    location = locate()
+    if location["status"] != "missing":
+        return []
+    path = location["record"]
+    stamp = action.get("as_of") or datetime.date.today().isoformat()
+    _write_text(path, f"meta:\n  updated: {stamp}\n")
+    print(f"created {path} - this workspace's record, born with its first entry")
+    return [path]
 
 
 if __name__ == "__main__":
@@ -3878,11 +4017,17 @@ if __name__ == "__main__":
             sys.exit(0)
         sys.exit(1)
     if cmd in ("mark", "gate"):
-        # the hooks' own: the state file the opener writes, then the record
+        # the hooks' own: the state file the opener writes, then the record; the gate also
+        # hears how many prompts the session ran and which host asks, for its one question
         if not rest:
             sys.exit(f"{cmd} needs the state file the opener writes")
         files = [x for x in rest[1:] if x.endswith((".yaml", ".yml"))] or default_paths()
-        sys.exit((mark if cmd == "mark" else gate)(rest[0], files))
+        if cmd == "mark":
+            sys.exit(mark(rest[0], files))
+        turns = int(rest[rest.index("--turns") + 1]) if "--turns" in rest else 0
+        host = rest[rest.index("--host") + 1] if "--host" in rest else None
+        at = int(rest[rest.index("--nudged-at") + 1]) if "--nudged-at" in rest else None
+        sys.exit(gate(rest[0], files, turns, host, at))
     if cmd in ("set", "add", "review"):
         sys.exit(write_command(cmd, rest))
     if cmd in ("same", "distinct"):

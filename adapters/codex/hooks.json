@@ -29,7 +29,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "\"../../scripts/session_gate.sh\""
+            "command": "\"../../scripts/session_gate.sh\" --host codex"
           }
         ]
       }

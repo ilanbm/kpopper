@@ -142,7 +142,7 @@ and confirming the underlying evidence remain part of review.
 | Command | Purpose |
 |---|---|
 | `kpopper set <id> <value> --why "reason" --as-of YYYY-MM-DD` | Record a scalar reading with its explanation and date. |
-| `kpopper add <id> field=value ...` | Add an entry or judgment. Judgment snapshots are filled from the record. |
+| `kpopper add <id> field=value ...` | Add an entry or judgment. Judgment snapshots are filled from the record. Where no record resolves for the workspace, the first `add` creates `PROVENANCE.yaml` at its root with that entry. |
 | `kpopper review <id>` | Refresh a judgment's snapshot after reviewing it against the current record. |
 | `kpopper review "section title"` | Refresh the page section's review snapshot. |
 | `kpopper same <a> <b>` | Record that two IDs describe one subject; by default, retire `b` into `a`. |
@@ -313,11 +313,22 @@ PyPI installs the Python CLI and page tools. Agent plugins add the method and ho
 hooks. The npm package provides the Node browser checker, not the Python CLI. Shared code
 comes from the same source files, with one version across distribution manifests.
 
-The plugin's session opener is quiet in projects without a record. Its stop gate compares
-with a session-start baseline and reminds once about new failures. An unchanged judgment
-whose falsifier fires after a new scalar reading can remain flagged while recording
-finishes; `check` still reports it. Adapters differ in their ability to block, remind or
-deliver asynchronously—consult the [capability matrix](../adapters/README.md#capability-matrix).
+The plugin's hooks are the layer every session gets without choosing it, and they carry
+pointers, never values. The session opener prints the record's head and what needs a person,
+and names the next move as the host invokes a skill (`/kpopper:ground` in Claude Code,
+`$ground` in Codex); in a project without a record it says so in two lines. At every prompt
+a grounding line names at most three entries whose ids, names or verdicts the prompt's words
+touch, with the skill that reads them; an entry is named until it is read, then again only
+when its recorded body changes or the session compacts, and an unread one repeats after a
+cooldown of ten prompts. Before a file is edited, the entries whose source it is, or whose
+reading a recipe takes from it, are said once. The stop gate compares with a session-start
+baseline and reminds once about new failures, intents no tab serves and entries with no intent;
+a session that changed files of the tree, or ran eight prompts, with the record untouched is
+asked once whether there was nothing to keep - as a stop, on the turn after the same
+question rode a prompt unanswered. An unchanged judgment whose falsifier fires after a new
+scalar reading can remain flagged while recording finishes; `check` still reports it.
+Adapters differ in their ability to block, remind or deliver asynchronously—consult the
+[capability matrix](../adapters/README.md#capability-matrix).
 
 From a source checkout, run `python3 scripts/cli.py <command>` or `scripts/kpopper <command>`.
 When using an installed plugin without a `kpopper` command on `PATH`, use the same dispatcher

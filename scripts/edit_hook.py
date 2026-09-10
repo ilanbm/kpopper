@@ -21,7 +21,6 @@ SKILL_FORMS = {"claude": "/kpopper:{}", "codex": "${}"}
 
 def cited(record, rel):
     """-> (sources whose file: is this path, [(entry, recipe)] measured from it)"""
-    import yaml
     import provenance as P
     doc = P.load([record])
     ids, jud, fields = P.infer(doc)
@@ -31,17 +30,19 @@ def cited(record, rel):
     sources = sorted(k for k in P._every_id(doc, ids)
                      if isinstance(raw.get(k), dict) and isinstance(raw[k].get("file"), str)
                      and os.path.normpath(os.path.join(base, raw[k]["file"])) == target)
+    # the recipes are the remeasure module's to read: it owns the allowlist, its name and its
+    # refusals, and this hook only asks which recipes read the file
+    import remeasure as R
     measured = []
-    recipes = os.path.join(base, "PROVENANCE.measure.yaml")
-    if os.path.isfile(recipes):
+    allowlist = R.allowlist_path([record])
+    if os.path.isfile(allowlist):
         try:
-            table = yaml.safe_load(open(recipes, encoding="utf-8")) or {}
-        except (OSError, yaml.YAMLError):
+            table = R.read_allowlist(allowlist)
+        except (OSError, SystemExit):
             table = {}
-        reading = {name for name, args in table.items()
-                   if isinstance(args, list) and any(isinstance(a, str) and rel in a for a in args)}
-        measured = sorted((k, raw[k]["measure"]) for k in P._every_id(doc, ids)
-                          if isinstance(raw.get(k), dict) and raw[k].get("measure") in reading)
+        reading = {name for name, args in table.items() if any(rel in a for a in args)}
+        measured = sorted((k, raw[k][P.MEASURE]) for k in P._every_id(doc, ids)
+                          if isinstance(raw.get(k), dict) and raw[k].get(P.MEASURE) in reading)
     return sources, measured
 
 
