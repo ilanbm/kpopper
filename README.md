@@ -549,6 +549,19 @@ chosen layout. **Now** and other project tabs can present reports, plans or comp
 is a rendered snapshot—regenerate it after the record changes. For layouts, components,
 localization and checks on stale explanatory text, see the [page reference](skills/kpopper/PAGE.md).
 
+## Share a document with its reasons
+
+Ask for an HTML report, summary or brief as usual. With kpopper active, the agent writes
+the document and its evidence mapping together, preserving the chosen content and design.
+The result is one HTML file with inline source snapshots, check explanations and review
+controls. It opens offline in a browser with JavaScript enabled.
+
+Provide a changed source later and the agent can prepare a new copy with precise,
+grouped corrections. Accept or reject a proposal and download the chosen copy; reopening
+it retains the evidence and decision. Missing sources and unchecked interpretations stay
+explicit. Opening the file does not contact sources or detect new changes by itself.
+See [standalone HTML documents](docs/documents.md).
+
 ## What is available, and what is next
 
 | Status | Capability |

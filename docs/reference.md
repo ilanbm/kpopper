@@ -253,6 +253,15 @@ interactive page; a preview that strips JavaScript will show only part of its be
 See [PAGE.md](../skills/kpopper/PAGE.md) for arrangements, components, reference cards,
 localization, coverage and prose-drift checks.
 
+## Authored HTML documents
+
+`kpopper document build` packages an authored document with its selected evidence,
+`document inspect` validates and reads a saved copy without running its scripts, and
+`document refresh` prepares a new copy against explicitly supplied sources. The authoring
+agent creates anchors and mapping during ordinary document work. The final HTML contains
+all display resources and review state; only source refresh needs the agent and inputs.
+See [the user flow](documents.md) and run `kpopper document guide` for the author contract.
+
 ## Distribution and implementation
 
 | Part | Source |

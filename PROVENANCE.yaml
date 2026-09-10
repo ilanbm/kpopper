@@ -268,6 +268,14 @@ sources:
     read: "2026-09-09"
     note: "The optional checked-session interface, its explicit setup and activation, and the limits
            of its guarantees."
+  s.2026_09_10_standalone_html:
+    asked: "כן הסתכלתי עליו.\n\nבקופסאות אין צורך לחזור על מה שנלחץ לא צריך את ה״במסמך כתוב X\", זה
+            ממש יותר וגורם לא לקרוא את ההסבר האמיתי\n\nאחרי התיקון הזה נראה לי שהעבודה מספיקה כבר לא?
+            מקסימום נשנה דברים בעתיד\n\nתיצור PR? ואגב היוזר אמור פשוט לבקש ליצור מסמך וזהו זה לבד
+            יוסיף את כל השכבה שלנו?"
+    name: "Finish standalone HTML documents with concise evidence explanations and ordinary-request
+           authoring"
+    read: "2026-09-10"
   s.background_ingestion:
     name: "Background capture and selective delivery contract"
     file: "skills/kpopper/INGESTION.md"
@@ -365,6 +373,11 @@ sources:
     name: "The source update and recording gate regression contract"
     file: "tests/test_ingestion.py"
     read: "2026-09-07"
+  doc.standalone_html:
+    name: "Standalone authored HTML contract"
+    from: s.2026_09_10_standalone_html
+    file: "docs/documents.md"
+    read: "2026-09-10"
   doc.three_briefs:
     name: "The three briefs that exist - a finance hub, a keyboard pilot, an academic review -
            and what they contain"
@@ -2203,6 +2216,19 @@ judgments:
       s.2026_09_03_coverage: "read 2026-09-03"
       d.author_free_build_guarantees: "the session composes freely and the build enforces the
                                        element rules on the output"
+  d.standalone_html_is_a_copy:
+    from: s.2026_09_10_standalone_html
+    rests_on: [doc.standalone_html]
+    verdict: "Keep authored HTML and finite evidence in one portable file; refresh prepares atomic
+              text corrections on a copy while preserving unmarked, unavailable and unchecked
+              states."
+    because: "Readers need to inspect sources and choose related corrections offline without a
+              renderer replacing the author's document or promoting unreviewed prose to checked
+              fact."
+    reopened_by: "A saved copy loses its selected content or evidence, a partial related edit is
+                  applied, evidence runs in the document shell, or an unmarked statement is presented
+                  as checked."
+    seen: {doc.standalone_html: "read 2026-09-10"}
   d.stood_is_derived:
     rests_on: [s.2026_09_03_arrangements, d.metrics_derived_builtin, d.minimal_repair, p.fields_a_build_writes]
     verdict: "how long an arrangement stood is derived - the sessions read on a later day than it

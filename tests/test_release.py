@@ -70,6 +70,15 @@ class WhatShips(unittest.TestCase):
         globs = re.findall(r'"([^"]+)"', block.group(1))
         self.assertTrue(any(fnmatch.fnmatch("verify_page.js", g) for g in globs), globs)
 
+    def test_standalone_document_assets_and_guide_ship_with_the_python_runtime(self):
+        toml = (ROOT / "pyproject.toml").read_text(encoding="utf-8")
+        block = re.search(r"\[tool\.setuptools\.package-data\](.*?)(?:\n\[|\Z)", toml, re.S)
+        self.assertIsNotNone(block)
+        globs = re.findall(r'"([^"]+)"', block.group(1))
+        for name in ("document/layer.js", "document/frame.js", "document/layer.css", "document-guide.md"):
+            self.assertTrue((ROOT / "scripts" / name).is_file(), name)
+            self.assertTrue(any(fnmatch.fnmatch(name, pattern) for pattern in globs), name)
+
 
 class TheChangelog(unittest.TestCase):
     def test_an_entry_lists_what_merged_and_what_the_record_gained(self):

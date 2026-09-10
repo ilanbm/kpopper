@@ -1,6 +1,6 @@
 ---
 name: kpopper
-description: "Maintain a grounded knowledge record for work that gets revisited: planning, research, coordination, decisions and software. Use when starting or resuming such work, including when PROVENANCE.yaml is absent, or when the user asks to map existing materials and their history."
+description: "Maintain a grounded knowledge record for work that gets revisited: planning, research, coordination, decisions and software. Use when starting or resuming such work, including when PROVENANCE.yaml is absent, or when the user asks to map existing materials and their history. Also use when creating or refreshing an HTML document, so the document carries its source and check layer."
 ---
 
 # kpopper
@@ -45,6 +45,17 @@ In Codex hosts with native background agents and `send_message_to_thread`, use
 `capture --notify-task` and dispatch its returned delivery job so an important finding can also
 reach a primary that has finished answering. [DELIVERY.md](DELIVERY.md) gives the short native
 worker contract. Plain hooks alone do not provide that idle delivery.
+
+## When the requested output is an HTML document
+
+For an ordinary HTML report, summary, brief or other document, use the standalone
+[document authoring workflow](DOCUMENTS.md). Create the user's content and design,
+and create the source/check mapping while writing it; the user does not prepare that
+mapping or ask for a separate evidence step. Deliver the single HTML produced by
+`kpopper document build`, with its inline evidence and review controls. Read the short
+author guide before authoring, use actual available sources, and keep missing evidence
+and inferred prose explicit. A one-off document does not require a new PROVENANCE.yaml,
+a workspace map, or unrelated record setup. Existing record-page requests still use PAGE.md.
 
 ## Step 1 — `PROVENANCE.yaml`
 

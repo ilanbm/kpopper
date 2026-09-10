@@ -74,3 +74,24 @@ jobs:
         # Rendering rewrites PROVENANCE.view.yaml. If that leaves a diff, the record
         # moved and the view it renders to was never regenerated alongside it.
         run: git diff --exit-code
+
+  document-ui:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: tests/document-support/package-lock.json
+      - name: Install the document runtime and pinned DOM test dependency
+        run: |
+          pip install .
+          npm ci --prefix tests/document-support --ignore-scripts --no-audit --no-fund
+      - name: Check offline evidence, copy choices and export recovery
+        run: npm run test:documents
+      - name: Test setup leaves the source tree unchanged
+        run: git diff --exit-code
