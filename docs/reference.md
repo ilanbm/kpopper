@@ -100,14 +100,14 @@ Derived entries store their rules:
 ```yaml
 known:
   workshop.spare_packs:
-    rule: "stock.packages - workshop.guests"
+    rule: {op: sub, args: [{ref: stock.packages}, {ref: workshop.guests}]}
 ```
 
 Here the two inputs refer to the [workshop example](../examples/workshop/PROVENANCE.yaml).
-The reader follows those references for dependency reach and displays the rule. It does
-not evaluate arbitrary arithmetic formulas into current values. A predicate over an
-unevaluated derived value cannot be treated as a successful check. The core also has
-specific built-in counts; those do not make it a general formula engine.
+The reader derives dependency links from the structure and uses the packaged Lean core
+to compute the value. A missing core or unavailable input is explicit. Legacy text rules
+remain unevaluated until an explicit conversion. See [structured expressions](../skills/kpopper/EXPRESSIONS.md)
+for supported operators, exact fractions, snapshots and checked migration commands.
 
 ## What check means
 

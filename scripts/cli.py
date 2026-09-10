@@ -45,6 +45,7 @@ import argparse, json, os, shutil, sys, pathlib, subprocess, webbrowser
 HERE = pathlib.Path(__file__).resolve().parent
 READ = ("open", "check", "affects", "pull", "where", "set", "add", "review", "same", "distinct")
 COMMANDS = {
+    "expressions": ('convert TEXT [--predicate] | migrate [--record FILE] [--apply]', "Convert explicit formulas to structured data; preview checked record migration."),
     "search": ('"QUERY" [--record FILE] [--limit N] [--chars N]', "Find local source evidence; read a hit with --read REF --revision REV."),
     "open": ("[FILE ...] [--chars N] [--budget N]", "Open the current knowledge context."),
     "map": ("[--deep]", "Map the work through an available host agent."),
@@ -174,6 +175,14 @@ def main():
         except ImportError:
             from onboarding import main as start
         sys.exit(start(rest))
+    if cmd == "expressions":
+        try:
+            from . import expression_cli
+        except ImportError:
+            import expression_cli
+        # Expressions already return structured data; a global JSON option needs
+        # no legacy-output wrapper or second subprocess.
+        sys.exit(expression_cli.main(rest))
     if cmd == "search":
         try:
             from . import search

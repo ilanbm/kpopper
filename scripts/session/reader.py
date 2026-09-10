@@ -2,6 +2,7 @@
 from __future__ import annotations
 from .store import SessionService, encode
 from .core import Core
+from ..expressions import text as expression_text
 
 def card(bundle):
     """Format only facts computed by Lean; no status/value inference in this layer."""
@@ -14,11 +15,12 @@ def card(bundle):
         current='UNKNOWN' if premise['current_recorded_value'] is None else encode(premise['current_recorded_value'])
         old='same' if premise['changed'] is False else ('UNKNOWN' if premise['value_at_review'] is None else encode(premise['value_at_review']))
         line=premise['id']+': '+current+' / '+old+' ['+state+']'
+        if premise.get('rule_changed') is True: line+='; formula changed'
         if premise['role']=='prior_premise': line+='; confidence belongs to this premise only'
         lines.append(line)
     falsifier=bundle['falsifier']
     outcome={True:'TRIGGERED',False:'NOT TRIGGERED',None:'UNKNOWN'}[falsifier['holds_on_current_values']]
-    lines.append('EXECUTABLE FALSIFIER FOR '+bundle['id']+': '+falsifier['expression']+' => '+outcome+' ('+falsifier['reason']+')')
+    lines.append('EXECUTABLE FALSIFIER FOR '+bundle['id']+': '+expression_text(falsifier['expression'])+' => '+outcome+' ('+falsifier['reason']+')')
     trigger={True:'YES',False:'NO',None:'UNKNOWN'}[bundle['mechanical_review_trigger']]
     lines.append('MECHANICAL REVIEW TRIGGER: '+trigger+'; human conditions are not evaluated')
     if bundle['human_reopener']['declaration'] is not None:

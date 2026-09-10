@@ -142,6 +142,8 @@ def _rule_of(b):
     if not isinstance(b, dict):
         return None
     r = b.get("rule")
+    if isinstance(r, dict):
+        return P.predicate_text(r)
     if isinstance(r, str) and r.strip():
         return r
     v = b.get("v")
@@ -492,9 +494,42 @@ def _remove_block(lines, nid):
     return name, block
 
 
-def _rewrite_text(text, R, S):
+def _rewrite_text(text, R, S, predicate_field="wrong_if", snapshot_field="seen"):
     """Every whole-token mention of R now names S -> (text, how many)."""
-    return _token(R).subn(S, text)
+    # Tagged expression literals are data, even when they spell an entry ID.
+    spans = []
+    seen = set()
+    def visit(node, expression=False, snapshot=False):
+        if id(node) in seen:
+            return
+        seen.add(id(node))
+        if isinstance(node, yaml.MappingNode):
+            if expression and len(node.value) == 1 and node.value[0][0].value in {"text", "num", "bool"}:
+                value = node.value[0][1]
+                spans.append((value.start_mark.index, value.end_mark.index))
+            else:
+                for key, value in node.value:
+                    if snapshot and key.value == "computed" and isinstance(value, yaml.MappingNode):
+                        for part, payload in value.value:
+                            if part.value == "value":
+                                spans.append((payload.start_mark.index, payload.end_mark.index))
+                            elif part.value == "rule":
+                                visit(payload, True, False)
+                    else:
+                        visit(value, expression or key.value in {"rule", predicate_field}, snapshot or key.value == snapshot_field)
+        elif isinstance(node, yaml.SequenceNode):
+            for value in node.value:
+                visit(value, expression, snapshot)
+    try:
+        visit(yaml.compose(text))
+    except yaml.YAMLError:
+        pass  # Also called on diagnostic prose, not just YAML.
+    count, start, parts = 0, 0, []
+    for left, right in sorted(spans):
+        changed, n = _token(R).subn(S, text[start:left])
+        parts.extend((changed, text[left:right])); count += n; start = right
+    changed, n = _token(R).subn(S, text[start:])
+    return "".join(parts) + changed, count + n
 
 
 def _dedupe_flow_lists(text, S):
@@ -732,7 +767,7 @@ def same(paths, a, b, keep=None, as_of=None):
         texts[brief] = "\n".join(lines)
     counts = {}
     for f in list(texts):
-        texts[f], n = _rewrite_text(texts[f], R, S)
+        texts[f], n = _rewrite_text(texts[f], R, S, fields["predicate"], fields["snapshot"])
         if n:
             counts[f] = n
         texts[f] = _dedupe_distinct(_dedupe_flow_lists(texts[f], S), S)

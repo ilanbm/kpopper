@@ -114,8 +114,9 @@ its hash; changing its content under an existing ID is refused.
 
 Existing judgments cannot be replaced or reviewed in a batch. New judgments about the
 reader's own `graph.*`/page counts also require ordinary primary authoring, as those counts
-can change during the batch itself. Rule dependencies are preserved, but this reader does
-not evaluate their arithmetic. Multi-file, pointer and hypothesis-backed records retain the
+can change during the batch itself. Structured rules are computed by the local Lean core;
+legacy textual rules retain their unevaluated status. See [expressions](EXPRESSIONS.md).
+Multi-file, pointer and hypothesis-backed records retain the
 existing review requirement. No routine user confirmation or second agent review is added.
 
 ## Status and attention

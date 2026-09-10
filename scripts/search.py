@@ -33,9 +33,7 @@ def digest(text):
 def _rule_ids(nid, body, ids):
     if not isinstance(body, dict):
         return []
-    return sorted({key for field in ("rule", "v")
-                   if isinstance(body.get(field), str) and P.EXPR.search(body[field])
-                   for key in P.ID.findall(body[field]) if key in ids and key != nid})
+    return [key for key in P.rule_refs(body, ids) if key in ids and key != nid]
 
 
 def _source_ids(nid, raw, judgments, ids):
@@ -131,6 +129,9 @@ def corpus(record=None, state_dir=None):
                    "content": P.yaml.safe_dump(body, allow_unicode=True, sort_keys=False)}
             if judgment:
                 row.update(assessment=tag, falsifier_holds=P.evaluate(judgment["pred"], raw, ids))
+            elif isinstance(body, dict) and isinstance(body.get("rule"), dict):
+                row["calculation"] = P.E.current(raw, ids, nid)
+                row["formula"] = P.predicate_text(body["rule"])
             rows.append(row)
             if not isinstance(body, dict) or nid not in sources:
                 continue
@@ -206,7 +207,9 @@ def search(query, record=None, state_dir=None, limit=5, chars=6000):
         try:
             connection.execute("CREATE VIRTUAL TABLE evidence USING fts5(identity, name, content, tokenize='unicode61')")
             connection.executemany("INSERT INTO evidence(rowid, identity, name, content) VALUES (?, ?, ?, ?)",
-                                   [(i + 1, row["id"], row["name"], row["content"]) for i, row in enumerate(rows)])
+                                   [(i + 1, row["id"], row["name"], row["content"] +
+                                     ("\n" + P.E.display_value(row["calculation"]["value"]) if row.get("calculation", {}).get("value") is not None else ""))
+                                    for i, row in enumerate(rows)])
             expression = " OR ".join('"' + term.replace('"', '""') + '"' for term in terms)
             hits = connection.execute("SELECT rowid FROM evidence WHERE evidence MATCH ? ORDER BY bm25(evidence, 8, 4, 1), rowid", (expression,))
             matches = [rows[index - 1] for (index,) in hits]
@@ -243,10 +246,13 @@ def read(ref, revision, record=None, state_dir=None, offset=0, length=4000):
     if not 0 <= offset <= len(content) or not 1 <= length <= 100000:
         raise ValueError("offset must address this text; length must be 1..100000")
     end = min(len(content), offset + length)
-    return {"ref": ref, "revision": revision, "scope": row["scope"], "status": row["status"],
+    result = {"ref": ref, "revision": revision, "scope": row["scope"], "status": row["status"],
             "content": content[offset:end], "offset": offset, "next_offset": end if end < len(content) else None,
             "complete": offset == 0 and end == len(content), "total_characters": len(content),
             "sha256": digest(content)}
+    if "calculation" in row:
+        result["calculation"] = row["calculation"]
+    return result
 
 
 def main(argv=None):

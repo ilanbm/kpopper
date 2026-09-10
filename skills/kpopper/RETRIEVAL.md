@@ -44,7 +44,8 @@ the search-corpus revision used for exact source reads.
 Hypotheses remain labeled hypotheses. Captured reports retain their processing state,
 including `needs_primary`, and do not become facts merely by matching a query. A canonical
 claim's state comes from the existing reader; unevaluated falsifiers remain unknown.
-Rules are followed as dependencies but their arithmetic is not calculated by search.
+Rule references are followed as dependencies. Structured rules are computed by the shared
+Lean core; legacy textual rules remain unevaluated. Search does not infer formulas from prose.
 
 The SQLite FTS5 index exists only in the command's memory and is rebuilt from authoritative
 inputs. Search performs no record or private-state writes and makes no network/model calls.

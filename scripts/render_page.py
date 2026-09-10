@@ -62,7 +62,7 @@ def flags_of(ids, jud, fields, raw):
         # a judgment decided with a re-opener and an empty predicate field is in front of
         # nobody: a person reads the sign. Prose in the predicate field is still prose,
         # and so is a predicate this reader cannot decide - the page counts what check does.
-        if not ([t for t in P.ID.findall(j["pred"]) if t in ids]
+        if not ([t for t in P.predicate_refs(j["pred"]) if t in ids]
                 and not P.why_undecided(j["pred"])) and not blocked \
                 and not (reopened and not j["pred"]):
             f.add("no_predicate")
@@ -417,11 +417,11 @@ def arrangements_of(ids, jud, raw, tabs, picks, cov, flags, doc):
         for q, text in sorted(questions.items()):
             if v in P.ID.findall(text):
                 contested.append(("question", q, text))
-        m = P.CMP.match(j["pred"])
+        m = P.CMP.match(P.predicate_text(j["pred"]))
         counted = P.value_of(raw, ids, m.group(1)) if m else None
         out[v] = {"sources": srcs, "tabs": titles, "keys": keys, "own": [title_of[k] for k in own],
                   "linked": not cut, "cut": cut,
-                  "fired": "falsified" in flags.get(v, ()), "pred": j["pred"],
+                  "fired": "falsified" in flags.get(v, ()), "pred": P.predicate_text(j["pred"]),
                   "reading": (f"{m.group(1)} is {counted}" if m and counted is not None else ""),
                   "born": born, "stood": stood, "drift": drift,
                   # the request is drawn only as the record accepts it: a session source
@@ -712,7 +712,7 @@ def tree_svg(ids, jud, E, J, flags, words=None, label=None):
             parents[k] = [d for d in jud[k]["deps"] if d in ids]
         else:
             e = E.get(k) or {}
-            ps = [t for t in P.ID.findall(str(e.get("rule") or "")) if t in ids]
+            ps = [t for t in P.rule_refs(e, ids) if t in ids]
             frm = e.get("from")
             if isinstance(frm, str) and frm in ids and frm != k:
                 ps.append(frm)
@@ -917,8 +917,15 @@ def build(paths, brief_path=None):
         if isinstance(v, str) and P.EXPR.search(v) and [t for t in P.ID.findall(v) if t in ids]:
             E[k].setdefault("rule", v)
             del E[k]["v"]
+        if isinstance(b.get("rule"), dict):
+            E[k]["rule_text"] = P.predicate_text(b["rule"])
+            result = P.E.current(raw, ids, k)
+            if result["value"] is not None:
+                E[k]["v"] = P.E.display_value(result["value"])
+            else:
+                E[k]["calculation_error"] = result["reason"]
         E[k]["used"] = sorted(used.get(k, []))
-        ps = [t for t in P.ID.findall(str(E[k].get("rule") or "")) if t in ids and t != k]
+        ps = [t for t in P.rule_refs(E[k], ids) if t in ids and t != k]
         frm = b.get("from")
         if isinstance(frm, str) and frm in ids and frm != k:
             ps.append(frm)
@@ -944,7 +951,7 @@ def build(paths, brief_path=None):
             swollen.append((name, len(written), "cut"))
         elif drawn > CARD_CHARS:
             swollen.append((name, drawn, "resolved"))
-        J[name] = {"deps": j["deps"], "used": sorted(used.get(name, [])), "pred": j["pred"],
+        J[name] = {"deps": j["deps"], "used": sorted(used.get(name, [])), "pred": P.predicate_text(j["pred"]),
                    "verdict": str(b.get("verdict") or b.get("title") or ""),
                    "because": because,
                    "blocked": why, "waiting": keys,
@@ -1031,7 +1038,7 @@ def build(paths, brief_path=None):
         if e.get("v") is not None:
             value = ((w["yes"] if e["v"] else w["no"]) if component_page or lang != "en" else str(e["v"])) if isinstance(e["v"], bool) else (fmt(e["v"]) if pretty else str(e["v"]))
             return link_ids(value)
-        return ("= " + link_ids(str(e["rule"]))) if e.get("rule") else ""
+        return ("= " + link_ids(P.predicate_text(e["rule"]))) if e.get("rule") else ""
 
     def groups_of(k, scheme=None):
         """The groups this id is under in the scheme being read by - every one of them,
@@ -1084,7 +1091,7 @@ def build(paths, brief_path=None):
         e = E.get(k) or {}
         if e.get("v") is not None:
             return str(e["v"])
-        return ("= " + str(e["rule"])) if e.get("rule") else ""
+        return ("= " + P.predicate_text(e["rule"])) if e.get("rule") else ""
 
     def has_value(k):
         return (E.get(k) or {}).get("v") is not None
@@ -1830,7 +1837,7 @@ def verify(paths, brief_path=None):
         # it fails
         for name, j in sorted(J.items()):
             if "falsified" in info["flags"].get(name, ()) and \
-                    any(t in P.PAGE for t in P.ID.findall(j["pred"])):
+                    any(t in P.PAGE for t in P.predicate_refs(j["pred"])):
                 fail.append(f"{name}: wrong_if holds ({j['pred']}) - decided by the page")
         # the arrangements held against the brief: a reversal made by editing the brief
         # fails, a tab no decision records is said, a muted move is said - and an arrangement

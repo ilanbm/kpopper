@@ -27,7 +27,7 @@
   return h+(e.name?'<div class="nm">'+esc(e.name)+'</div>':'')+
    (e.asked?row(T.asked,esc(e.asked)):'')+
    (e.v!=null?row(T.value,'<b>'+esc(e.v)+'</b>'):'')+
-   (e.rule?row(T.rule,link(e.rule)):'')+
+   (e.rule?row(T.rule,link(e.rule_text||e.rule)):'')+
    (e.measure!=null?row(T.measure,esc(e.measure)):'')+
    (e.from?row(T.source,esc(e.from)):'')+(e.at?row(T.at,esc(e.at)):'')+
    (e.file?row(T.file,esc(e.file)):'')+(e.url?row(T.url,esc(e.url)):'')+

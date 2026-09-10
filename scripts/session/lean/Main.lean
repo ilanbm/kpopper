@@ -1,4 +1,5 @@
 import Lean
+import Init.Data.Rat
 
 open Lean
 
@@ -17,22 +18,48 @@ def truthJson : Truth → Json
 
 inductive Value where
   | number (value : JsonNumber)
+  | rational (value : Rat)
   | text (value : String)
   | boolean (value : Bool)
 
 def Value.toJson : Value → Json
   | .number n => .num n | .text s => .str s | .boolean b => .bool b
+  | .rational r => if r.den == 1 then .num (JsonNumber.fromInt r.num)
+      else Json.mkObj [("rational", Json.arr #[.str (toString r.num), .str (toString r.den)])]
+
+def rationalOfJson (j : Json) : Option Rat := do
+  let fields ← j.getObj?.toOption
+  if fields.size != 1 then none else do
+    let pair ← (← j.getObjVal? "rational" |>.toOption).getArr?.toOption
+    if pair.size != 2 then none else do
+      let ns ← pair[0]!.getStr?.toOption
+      let ds ← pair[1]!.getStr?.toOption
+      if ns.length > 1024 || ds.length > 1024 then none else do
+      let n ← ns.toInt?
+      let d ← ds.toNat?
+      if d == 0 then none
+      else some (mkRat n d)
 
 def valueOf : Json → Option Value
   | .num n => some (.number n)
   | .str s => some (.text s)
   | .bool b => some (.boolean b)
+  | j@(.obj _) => (rationalOfJson j).map Value.rational
   | _ => none
 
 def valueJson : Option Value → Json
   | some value => value.toJson | none => .null
 
-def equalValue : Value → Value → Option Bool
+def numericValue : Value → Option Rat
+  | .rational r => some r
+  | .number n => if n.exponent > 256 || (toString n.mantissa).length > 1024 then none
+      else some (mkRat n.mantissa (10 ^ n.exponent))
+  | _ => none
+
+def equalValue (a b : Value) : Option Bool :=
+  match numericValue a, numericValue b with
+  | some x, some y => some (x == y)
+  | _, _ => match a, b with
   | .number a, .number b => some (compare a b == .eq)
   | .text a, .text b => some (a == b)
   | .boolean a, .boolean b => some (a == b)
@@ -66,9 +93,11 @@ def compareCurrent (op : Op) (a b : Current) : Truth :=
   let result : Option Bool := match a.value, b.value with
     | some (.number x), some (.number y) => some (applyOp op (compare x y))
     | some x, some y =>
-        if op == .eq then equalValue x y
-        else if op == .ne then (equalValue x y).map (! ·)
-        else none
+        match numericValue x, numericValue y with
+        | some u, some v => some (applyOp op (if u < v then .lt else if v < u then .gt else .eq))
+        | _, _ => if op == .eq then equalValue x y
+                  else if op == .ne then (equalValue x y).map (! ·)
+                  else none
     | _, _ => none
   match result with
   | some true => .yes | some false => .no | none => .unknown
@@ -123,7 +152,7 @@ def ambiguousValue (record : Json) : Json → Bool
   | .str text => refersToRecord record text
   | _ => false
 
-def currentOf (record : Json) (id : String) : Current := Id.run do
+def recordedCurrent (record : Json) (id : String) : Current := Id.run do
   let node := nodeOf record id
   let body := bodyOf record id
   if field body "rule" != .null then
@@ -144,8 +173,107 @@ def currentOf (record : Json) (id : String) : Current := Id.run do
     return { value := some (.text ("read " ++ stamp)), role := "source_read_stamp" }
   return { value := none, role := "unavailable" }
 
+inductive Arithmetic where
+  | add | sub | mul | div
+
+inductive Expr where
+  | literal (value : Value)
+  | reference (id : String)
+  | binary (op : Arithmetic) (left right : Expr)
+
+def exactKeys (j : Json) (keys : List String) : Bool :=
+  match j with
+  | .obj fields => fields.size == keys.length && fields.all (fun key _ => keys.contains key)
+  | _ => false
+
+def arithmeticOp : String → Option Arithmetic
+  | "add" => some .add | "sub" => some .sub | "mul" => some .mul | "div" => some .div | _ => none
+
+def boundedNumberToken (text : String) : Bool :=
+  if text.isEmpty || text.length > 512 ||
+      !text.toList.all (fun c => c.isDigit || ['-', '+', '.', 'e', 'E'].contains c) then false
+  else
+    let parts := (text.replace "E" "e").splitOn "e"
+    if parts.length > 2 then false
+    else if parts.length == 2 then
+      match (parts[1]!.replace "+" "").toInt? with | some e => e.natAbs ≤ 256 | none => false
+    else true
+
+def parseExpr : Nat → Json → Except String Expr
+  | 0, _ => .error "expression_depth_limit"
+  | fuel + 1, j => do
+    if exactKeys j ["ref"] then
+      let id ← (field j "ref").getStr?
+      if id.isEmpty || id.length > 500 then throw "invalid_reference"
+      return .reference id
+    if exactKeys j ["num"] then
+      let text ← (field j "num").getStr?
+      if !boundedNumberToken text then throw "invalid_number"
+      let .num n ← Json.parse text | throw "invalid_number"
+      let some exact := numericValue (.number n) | throw "number_limit"
+      return .literal (.rational exact)
+    if exactKeys j ["text"] then return .literal (.text (← (field j "text").getStr?))
+    if exactKeys j ["bool"] then return .literal (.boolean (← (field j "bool").getBool?))
+    if !exactKeys j ["op", "args"] then throw "invalid_expression_fields"
+    let some operation := arithmeticOp (stringField j "op") | throw "unsupported_operator"
+    let args ← (field j "args").getArr?
+    if args.size != 2 then throw "binary_operator_requires_two_arguments"
+    return .binary operation (← parseExpr fuel args[0]!) (← parseExpr fuel args[1]!)
+
+def exprRefs : Expr → List String
+  | .reference id => [id] | .literal _ => []
+  | .binary _ a b => (exprRefs a ++ exprRefs b).eraseDups
+
+def boundedRat (r : Rat) : Except String Value :=
+  if (toString r.num).length > 1024 || (toString r.den).length > 1024 then .error "number_limit"
+  else .ok (.rational r)
+
+abbrev EvalM := ExceptT String (StateM (Std.HashMap String Value))
+
+mutual
+def evalExpr : Nat → Json → List String → Expr → EvalM Value
+  | 0, _, _, _ => throw "evaluation_depth_limit"
+  | fuel + 1, record, visiting, expression => do
+    match expression with
+    | .literal value => return value
+    | .reference id => evalNode fuel record visiting id
+    | .binary operation left right =>
+      let a ← evalExpr fuel record visiting left
+      let b ← evalExpr fuel record visiting right
+      let some x := numericValue a | throw "numeric_operands_required"
+      let some y := numericValue b | throw "numeric_operands_required"
+      let result ← match operation with
+        | .add => pure (x + y) | .sub => pure (x - y) | .mul => pure (x * y)
+        | .div => if y.num == 0 then throw "division_by_zero" else pure (x / y)
+      match boundedRat result with | .ok value => return value | .error why => throw why
+
+def evalNode : Nat → Json → List String → String → EvalM Value
+  | 0, _, _, _ => throw "evaluation_depth_limit"
+  | fuel + 1, record, visiting, id => do
+    if visiting.contains id then throw "cyclic_reference"
+    if let some value := (← get)[id]? then return value
+    if nodeOf record id == .null then throw "missing_reference"
+    let rule := field (bodyOf record id) "rule"
+    let value ← if rule != .null then do
+      let expression ← match parseExpr 64 rule with
+        | .ok e => pure e | .error reason => throw (if rule.getStr?.isOk then "unevaluated_rule" else reason)
+      evalExpr fuel record (id :: visiting) expression
+    else
+      match (recordedCurrent record id).value with
+      | some value => pure value | none => throw (recordedCurrent record id).role
+    modify (fun cache => cache.insert id value)
+    return value
+end
+
+def currentOf (record : Json) (id : String) : Current :=
+  if field (bodyOf record id) "rule" == .null then recordedCurrent record id
+  else match ((evalNode 256 record [] id).run).run' {} with
+    | .ok value => { value := some value, role := "derived_value" }
+    | .error reason => { value := none, role := reason }
+
 def reviewedOf (judgment : Json) (id : String) : AtReview :=
-  { value := valueOf (field (field judgment "seen") id) }
+  let snapshot := field (field judgment "seen") id
+  { value := valueOf (if field snapshot "computed" != .null then field (field snapshot "computed") "value" else snapshot) }
 
 def parseOp : String → Option Op
   | "==" => some .eq | "!=" => some .ne | "<" => some .lt
@@ -212,7 +340,7 @@ def predicateOperand (text : String) : Except String PredicateOperand :=
           if barePredicateReference text then .ok (.reference text)
           else .error "unsupported_or_malformed_rhs"
 
-def evaluatePredicate (record : Json) (dependencies : List String) (text : String) : PredicateResult := Id.run do
+def evaluateLegacyPredicate (record : Json) (dependencies : List String) (text : String) : PredicateResult := Id.run do
   -- One whitespace-separated reference, operator, and literal/reference RHS.
   -- No expression evaluation: richer or malformed syntax remains unknown.
   let some (left, operator, right) := predicateParts text
@@ -234,6 +362,46 @@ def evaluatePredicate (record : Json) (dependencies : List String) (text : Strin
       let answer := compareCurrent op (currentOf record left) (currentOf record id)
       return ⟨answer, if answer == .unknown then "missing_or_incompatible_value" else "evaluated_current_values", [left, id]⟩
 
+def structuredCompareOp : String → Option Op
+  | "eq" => some .eq | "ne" => some .ne | "lt" => some .lt
+  | "le" => some .le | "gt" => some .gt | "ge" => some .ge | _ => none
+
+def structuredPredicate (record : Json) (dependencies : List String) (j : Json) : Except String PredicateResult := do
+  if !exactKeys j ["op", "args"] then throw "invalid_predicate_fields"
+  let some operation := structuredCompareOp (stringField j "op") | throw "unsupported_comparison"
+  let args ← (field j "args").getArr?
+  if args.size != 2 then throw "comparison_requires_two_arguments"
+  let left ← parseExpr 64 args[0]!
+  let right ← parseExpr 64 args[1]!
+  let refs := (exprRefs left ++ exprRefs right).eraseDups
+  if refs.isEmpty then return ⟨.unknown, "predicate_needs_a_reference", []⟩
+  if !(refs.all dependencies.contains) then return ⟨.unknown, "undeclared_reference", refs⟩
+  let action : EvalM (Value × Value) := do
+    let a ← evalExpr 256 record [] left
+    let b ← evalExpr 256 record [] right
+    return (a, b)
+  match action.run.run' {} with
+  | .error reason => return ⟨.unknown, reason, refs⟩
+  | .ok (a, b) =>
+    let answer := compareCurrent operation ⟨some a, "expression"⟩ ⟨some b, "expression"⟩
+    return ⟨answer, if answer == .unknown then "incompatible_values" else "evaluated_structured_expression", refs⟩
+
+def evaluatePredicate (record : Json) (dependencies : List String) (expression : Json) : PredicateResult :=
+  match expression with
+  | .null => evaluateLegacyPredicate record dependencies ""
+  | .str text => evaluateLegacyPredicate record dependencies text
+  | .obj _ => match structuredPredicate record dependencies expression with
+    | .ok result => result | .error why => ⟨.unknown, why, []⟩
+  | _ => ⟨.unknown, "unsupported_predicate_type", []⟩
+
+def ruleChanged (record judgment : Json) (id : String) : Option Bool :=
+  let snapshot := field (field (field judgment "seen") id) "computed"
+  if snapshot == .null then none else some (field snapshot "rule" != field (bodyOf record id) "rule")
+
+def premiseMovement (record judgment : Json) (id : String) : Truth :=
+  if ruleChanged record judgment id == some true then .yes
+  else changed (currentOf record id) (reviewedOf judgment id)
+
 def premiseJson (record judgment : Json) (id : String) : Json :=
   let current := currentOf record id
   let reviewed := reviewedOf judgment id
@@ -241,7 +409,8 @@ def premiseJson (record judgment : Json) (id : String) : Json :=
     ("id", toJson id), ("role", toJson current.role),
     ("current_recorded_value", valueJson current.value),
     ("value_at_review", valueJson reviewed.value),
-    ("changed", truthJson (changed current reviewed)),
+    ("changed", truthJson (premiseMovement record judgment id)),
+    ("rule_changed", match ruleChanged record judgment id with | some b => toJson b | none => .null),
     ("confidence_owner", if current.role == "prior_premise" then toJson id else .null),
     ("source_ref", toJson ("node:" ++ id))]
 
@@ -253,10 +422,10 @@ def dependenciesOf (body : Json) : Except String (List String) := do
 
 def movementOf (record body : Json) (dependencies : List String) : Truth :=
   dependencies.foldl
-    (fun prior dep => triOr prior (changed (currentOf record dep) (reviewedOf body dep))) .no
+    (fun prior dep => triOr prior (premiseMovement record body dep)) .no
 
-def predicateJson (text : String) (result : PredicateResult) : Json :=
-  Json.mkObj [("expression", toJson text), ("holds_on_current_values", truthJson result.evaluation),
+def predicateJson (expression : Json) (result : PredicateResult) : Json :=
+  Json.mkObj [("expression", expression), ("holds_on_current_values", truthJson result.evaluation),
     ("reason", toJson result.reason), ("reads", toJson result.reads)]
 
 def bundle (record : Json) (id : String) : Except String Json := do
@@ -267,9 +436,9 @@ def bundle (record : Json) (id : String) : Except String Json := do
   if claim.isEmpty then throw "missing_claim_body; an ID is not a claim"
   let dependencies ← dependenciesOf body
   match field body "wrong_if" with
-  | .null | .str _ => pure ()
-  | _ => throw "unsupported_predicate_type; wrong_if must be text"
-  let predicate := stringField body "wrong_if"
+  | .null | .str _ | .obj _ => pure ()
+  | _ => throw "unsupported_predicate_type; wrong_if must be text or a structured comparison"
+  let predicate := field body "wrong_if"
   let result := evaluatePredicate record dependencies predicate
   let movement := movementOf record body dependencies
   let assessment : Assessment := ⟨movement, result.evaluation⟩
@@ -322,7 +491,7 @@ def checkAssertion (record assertion : Json) : Json := Id.run do
     reason := "checked_against_historical_review_snapshot"
   else if kind == "falsifier_holds" then
     if let .ok dependencies := dependenciesOf body then
-      let result := evaluatePredicate record dependencies (stringField body "wrong_if")
+      let result := evaluatePredicate record dependencies (field body "wrong_if")
       actual := truthJson result.evaluation
       let assessment : Assessment := ⟨movementOf record body dependencies, result.evaluation⟩
       if let .bool value := expected then
@@ -590,6 +759,16 @@ def guardView (record view : Json) : Except String Json := do
 
 def handle (request : Json) : Except String Json := do
   let record := field request "record"
+  if stringField request "operation" == "compute" then
+    let nodes ← (field record "nodes").getObj?
+    let values := nodes.foldl (init := []) fun out id _ =>
+      let current := currentOf record id
+      out ++ [(id, Json.mkObj [("value", valueJson current.value), ("role", toJson current.role),
+                               ("reason", toJson current.role)])]
+    let dependencies := (((field request "dependencies").getArr?).toOption.getD #[]).toList.filterMap (fun j => j.getStr?.toOption)
+    let predicate := field request "predicate"
+    return Json.mkObj [("values", Json.mkObj values),
+      ("predicate", predicateJson predicate (evaluatePredicate record dependencies predicate))]
   if stringField request "operation" == "scan" then return ← scanRecord record
   if stringField request "operation" == "guard_view" then return ← guardView record (field request "view")
   let id := stringField request "id"

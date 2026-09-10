@@ -54,6 +54,14 @@ A batch that adds entries carries `record_sha256` from the primary's prior `open
 or `search` result. If the recorded premises changed, reread them before constructing a
 new report; do not just obtain a fresh hash for an old conclusion.
 
+**Write calculations as structured expressions.** Use `{op, args}` with tagged `ref`,
+`num`, `text` and `bool` leaves for new rules and executable falsifiers. The same structure
+supplies calculation dependencies and Lean computation. Keep a judgment's `rests_on`
+explicit, including premises beyond its falsifier. Unknown computations stay unknown;
+do not replace a rule with its result or silently refresh a judgment's historical snapshot.
+[EXPRESSIONS.md](EXPRESSIONS.md) defines the grammar, exact numbers, core setup and explicit
+migration. Existing textual expressions are never converted implicitly.
+
 In Codex hosts with native background agents and `send_message_to_thread`, use
 `capture --notify-task` and dispatch its returned delivery job so an important finding can also
 reach a primary that has finished answering. [DELIVERY.md](DELIVERY.md) gives the short native
