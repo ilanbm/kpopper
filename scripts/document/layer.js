@@ -18,6 +18,21 @@
   const words = {
     evidence: ['Evidence', 'מקורות ובדיקות'], close: ['Close evidence', 'סגירת המקורות והבדיקות'],
     selected: ['About this passage', 'על הפרט שבחרת'],
+    back: ['Back', 'חזרה'],
+    readingFrom: ['Saved readings from ', 'נתונים שנשמרו מתוך '],
+    comparedFrom: ['This passage was compared with the saved reading from ', 'הקטע הושווה לנתון שנשמר מתוך '],
+    quotedFrom: ['This passage was compared with the selected quotation from ', 'הקטע הושווה לציטוט שנבחר מתוך '],
+    calculationFrom: ['The saved calculation uses readings from ', 'החישוב השמור משתמש בנתונים מתוך '],
+    matchesReading: ['It matches the captured result.', 'הוא תואם לתוצאה השמורה.'],
+    differsReading: ['It differs from the captured result.', 'הוא שונה מהתוצאה השמורה.'],
+    says: ['The document says', 'במסמך כתוב'],
+    savedResult: ['The saved result is', 'התוצאה השמורה היא'],
+    calculation: ['Saved calculation', 'החישוב השמור'],
+    rounding: ['Displayed decimal places', 'מספר הספרות אחרי הנקודה בתצוגה'],
+    contextSources: ['Sources offered as context: ', 'מקורות שניתנו כרקע: '],
+    unavailableNote: ['There is not enough captured evidence to check this passage.', 'אין מספיק מידע שמור כדי לבדוק את הקטע הזה.'],
+    sourceScope: ['These are the selected readings used by the passage you came from.', 'אלה הנתונים שנבחרו לשימוש בקטע שממנו הגעת.'],
+    and: [' and ', ' ו־'],
     overview: ['All document evidence', 'כל המקורות והבדיקות של המסמך'],
     related: ['Related correction', 'תיקון קשור'],
     heading: ['Behind this document', 'מאחורי המסמך'], snapshot: ['Saved evidence', 'מקורות שמורים'],
@@ -72,6 +87,15 @@
   let pending = null;
   let focusClaim = null;
   let selectedClaim = null;
+  let sourceView = null;
+  let sourceReturn = null;
+  let placement = null;
+  let pinned = false;
+  let pointerInside = false;
+  let hoverTimer = null;
+  let leaveTimer = null;
+  let hoverCandidate = null;
+  let dismissedClaim = null;
   let serial = 0;
 
   function element(tag, text, className) {
@@ -179,7 +203,61 @@
 
   function announce(text) { notice.textContent = text; }
 
+  function validGeometry(value) {
+    if (!value || typeof value.pointer !== 'boolean' || !value.anchor || !value.viewport) return false;
+    const values = [value.x, value.y, value.anchor.left, value.anchor.top, value.anchor.right, value.anchor.bottom,
+      value.viewport.width, value.viewport.height];
+    return values.every(number => typeof number === 'number' && Number.isFinite(number) && Math.abs(number) <= 10000000) &&
+      value.viewport.width > 0 && value.viewport.height > 0 && value.anchor.right >= value.anchor.left && value.anchor.bottom >= value.anchor.top;
+  }
+
+  function placePanel() {
+    if (panel.hidden || !placement || panel.dataset.view === 'overview') return;
+    const width = window.innerWidth;
+    const height = window.innerHeight;
+    if (!Number.isFinite(width) || !Number.isFinite(height) || width <= 24 || height <= 24) return;
+    const geometry = placement.geometry;
+    let x = geometry.x, y = geometry.y, left = geometry.anchor.left, top = geometry.anchor.top, bottom = geometry.anchor.bottom;
+    if (placement.frame) {
+      const frame = iframe.getBoundingClientRect();
+      const sx = frame.width / geometry.viewport.width, sy = frame.height / geometry.viewport.height;
+      x = frame.left + x * sx; y = frame.top + y * sy;
+      left = frame.left + left * sx; top = frame.top + top * sy; bottom = frame.top + bottom * sy;
+    }
+    if (![x, y, left, top, bottom].every(Number.isFinite)) return;
+    panel.style.maxHeight = (height - 24) + 'px';
+    panel.style.right = 'auto'; panel.style.bottom = 'auto';
+    const box = panel.getBoundingClientRect();
+    const pw = Math.min(box.width, width - 24), ph = Math.min(box.height, height - 24);
+    let px = geometry.pointer ? x + 12 : left;
+    let py = geometry.pointer ? y + 12 : bottom + 8;
+    if (px + pw > width - 12 && geometry.pointer) px = x - pw - 12;
+    if (py + ph > height - 12) py = (geometry.pointer ? y - 12 : top - 8) - ph;
+    panel.style.left = Math.max(12, Math.min(px, width - pw - 12)) + 'px';
+    panel.style.top = Math.max(12, Math.min(py, height - ph - 12)) + 'px';
+  }
+
+  function clearHover() {
+    clearTimeout(hoverTimer); clearTimeout(leaveTimer);
+    hoverTimer = null; leaveTimer = null; hoverCandidate = null;
+  }
+
+  function pinPanel() {
+    pinned = true;
+    clearHover();
+    panel.dataset.pinned = 'true';
+  }
+
+  function scheduleLeave() {
+    clearTimeout(leaveTimer);
+    if (pinned) return;
+    leaveTimer = setTimeout(() => {
+      if (!pinned && !pointerInside && !panel.contains(document.activeElement)) closePanel(false);
+    }, 360);
+  }
+
   function closePanel(restoreFocus = true) {
+    clearHover();
     if (panel.hidden) return;
     const returnClaim = focusClaim;
     panel.hidden = true;
@@ -187,6 +265,9 @@
     opener.setAttribute('aria-expanded', 'false');
     focusClaim = null;
     selectedClaim = null;
+    sourceView = null; sourceReturn = null; placement = null;
+    dismissedClaim = restoreFocus ? returnClaim : null;
+    pinned = false; pointerInside = false;
     renderPanel();
     // Click-away must leave focus with the control the reader just clicked.
     if (!restoreFocus) return;
@@ -196,16 +277,49 @@
     } else opener.focus();
   }
 
-  function openPanel(id) {
+  function openPanel(id, geometry = null, preview = false) {
+    clearHover();
     focusClaim = typeof id === 'string' && claims.has(id) ? id : null;
     selectedClaim = focusClaim;
+    sourceView = null; sourceReturn = null;
+    placement = geometry ? { frame: true, geometry } : null;
+    pinned = !preview;
     panel.hidden = false;
     opener.hidden = true;
     opener.setAttribute('aria-expanded', 'true');
     renderPanel();
     panel.querySelector('.kp-panel-content').scrollTop = 0;
     const target = panel.querySelector(selectedClaim ? '#kp-panel-title' : '[data-kp-close]');
-    if (target) target.focus({ preventScroll: true });
+    if (target && !preview) target.focus({ preventScroll: true });
+    placePanel();
+  }
+
+  function openSource(id, inputs, event, originClaim) {
+    sourceReturn = { claim: selectedClaim, placement, originClaim, scroll: panel.querySelector('.kp-panel-content').scrollTop };
+    sourceView = { id, inputs };
+    if (!placement) {
+      const rect = event.currentTarget.getBoundingClientRect();
+      placement = { frame: false, geometry: { pointer: false, x: rect.left, y: rect.bottom,
+        anchor: rect, viewport: { width: window.innerWidth, height: window.innerHeight } } };
+    }
+    pinPanel();
+    renderPanel();
+    panel.querySelector('.kp-panel-content').scrollTop = 0;
+    panel.querySelector('#kp-panel-title').focus({ preventScroll: true });
+    placePanel();
+  }
+
+  function backToEvidence() {
+    const previous = sourceReturn;
+    const source = sourceView.id;
+    selectedClaim = previous.claim; placement = previous.placement;
+    sourceView = null; sourceReturn = null;
+    pinPanel(); renderPanel();
+    panel.querySelector('.kp-panel-content').scrollTop = previous.scroll;
+    const link = Array.from(panel.querySelectorAll('[data-source]')).find(node => node.dataset.source === source &&
+      (node.dataset.sourceClaim || null) === previous.originClaim);
+    (link || panel.querySelector('#kp-panel-title')).focus({ preventScroll: true });
+    placePanel();
   }
 
   function probeState(message, operation) {
@@ -276,7 +390,9 @@
       field(comparison, t('after'), context.after);
       card.append(comparison);
     }
-    const edits = detail(card, t('edits'));
+    const edits = element('div', null, 'kp-edit-list');
+    paragraph(edits, t('edits'), 'kp-label');
+    card.append(edits);
     for (const edit of group.edits) {
       paragraph(edits, claims.get(edit.id).label, 'kp-edit-title');
       field(edits, t('before'), edit.before);
@@ -311,26 +427,63 @@
     claimNodes.set(claim.id, card);
     card.append(badge(check.status));
     if (check.source_changed) paragraph(card, t('changed'), 'kp-changed');
-    field(card, t('actual'), check.actual);
-    if (check.expected !== null) field(card, t('expected'), check.expected);
-    if (claim.kind === 'inference') paragraph(card, t('inference'), 'kp-muted');
-    if (check.status === 'unchecked' || check.status === 'unavailable') paragraph(card, check.detail);
-    for (const id of new Set(claim.inputs.map(input => input.source))) {
-      if (focused) {
-        renderSource(card, id, sourceIds.indexOf(id), claim.inputs);
-        continue;
-      }
-      const link = element('a', data.sources[id].name);
-      link.href = '#kp-source-' + sourceIds.indexOf(id);
-      link.addEventListener('click', () => { document.getElementById('kp-source-' + sourceIds.indexOf(id)).open = true; });
-      const row = element('p', null, 'kp-source-link');
-      row.append(element('span', t('source') + ': '), link);
-      card.append(row);
+    paragraph(card, t('says') + ' “' + check.actual + '”.', 'kp-reading');
+    const arithmetic = ['sum', 'difference', 'product', 'ratio'].includes(claim.kind);
+    if (claim.kind === 'inference') {
+      paragraph(card, claim.reason || check.detail);
+      paragraph(card, t('inference'), 'kp-muted');
+    } else if (check.status === 'unavailable') {
+      paragraph(card, t('unavailableNote'));
+    }
+    if (claim.inputs.length) {
+      const row = paragraph(card, t(claim.kind === 'inference' || check.status === 'unavailable' ? 'contextSources' :
+        arithmetic ? 'calculationFrom' : claim.kind === 'quote' ? 'quotedFrom' : 'comparedFrom'), 'kp-explanation');
+      const ids = Array.from(new Set(claim.inputs.map(input => input.source)));
+      ids.forEach((id, index) => {
+        if (index) row.append(document.createTextNode(index === ids.length - 1 ? t('and') : ', '));
+        row.append(sourceButton(id, claim.inputs, claim.id));
+      });
+      row.append(document.createTextNode('.'));
+    }
+    if (check.status === 'match' || check.status === 'mismatch') {
+      paragraph(card, t(check.status === 'match' ? 'matchesReading' : 'differsReading'));
+      const readings = claim.inputs.map(input => selectedReadings(input.source, [input])[0]);
+      if (arithmetic && readings.every(reading => reading && reading.status === 'available' && reading.value && reading.value.type === 'number')) {
+        const operator = { sum: ' + ', difference: ' − ', product: ' × ', ratio: ' ÷ ' }[claim.kind];
+        let expression = readings.map(reading => String(reading.value.value)).join(operator);
+        if (claim.format && Object.hasOwn(claim.format, 'scale')) expression = '(' + expression + ') × ' + String(claim.format.scale);
+        paragraph(card, t('calculation') + ': ' + expression + ' → ' + check.expected, 'kp-expression');
+        if (claim.format) paragraph(card, t('rounding') + ': ' + String(claim.format.decimals || 0) + '.', 'kp-muted');
+      } else paragraph(card, t('savedResult') + ' “' + check.expected + '”.', 'kp-reading');
+      paragraph(card, t('checkNote'), 'kp-muted');
     }
     const technical = detail(card, t('details'));
+    technical.dataset.technical = '';
+    technical.open = false;
     field(technical, t('claimId'), claim.id);
     field(technical, t('checkKind'), claim.kind);
+    if (check.status === 'unavailable') paragraph(technical, check.detail);
     field(technical, t('captured'), check.checked_at);
+    for (const input of claim.inputs) field(technical, t('location'), selectorKey(input));
+    if (claim.format) field(technical, t('details'), JSON.stringify(claim.format));
+  }
+
+  function selectorKey(input) {
+    return JSON.stringify(Object.fromEntries(Object.entries(input).filter(([key]) => key !== 'source').sort(([a], [b]) => a.localeCompare(b))));
+  }
+
+  function selectedReadings(id, inputs) {
+    const selections = Object.values(data.sources[id].selections);
+    if (!inputs) return selections;
+    const wanted = Array.from(new Set(inputs.filter(input => input.source === id).map(selectorKey)));
+    return wanted.map(key => selections.find(selection => selectorKey(selection.selector) === key)).filter(Boolean);
+  }
+
+  function sourceButton(id, inputs = null, originClaim = null) {
+    const link = button(data.sources[id].name, event => openSource(id, inputs, event, originClaim), 'kp-dependency');
+    link.dataset.source = id;
+    if (originClaim) link.dataset.sourceClaim = originClaim;
+    return link;
   }
 
   function citationLink(parent, uri) {
@@ -347,9 +500,12 @@
 
   function renderSource(parent, id, index, inputs = null) {
     const source = data.sources[id];
-    const card = detail(parent, source.name);
+    const card = element('article', null, 'kp-source-view');
+    card.dataset.sourceView = id;
+    card.setAttribute('aria-labelledby', 'kp-panel-title');
     card.id = 'kp-source-' + index;
-    if (inputs) card.open = true;
+    parent.append(card);
+    paragraph(card, t(inputs ? 'sourceScope' : 'selectedOnly'), 'kp-muted');
     if (source.status === 'available') {
       paragraph(card, t(source.representation === 'extraction' ? 'extracted' : source.format === 'record' ? 'record' : 'file'), 'kp-muted');
     }
@@ -358,20 +514,12 @@
       card.append(badge('unavailable'));
       paragraph(card, source.reason);
     }
-    let selections = Object.values(source.selections);
-    if (inputs) {
-      // Retain operand order and show only the excerpts used by this passage, even
-      // when many unrelated claims share the same captured file.
-      const wanted = [...new Set(inputs.filter(input => input.source === id).map(input =>
-        JSON.stringify(Object.fromEntries(Object.entries(input).filter(([key]) => key !== 'source')))))];
-      selections = wanted.map(key => selections.find(selection => JSON.stringify(selection.selector) === key)).filter(Boolean);
-    }
+    const selections = selectedReadings(id, inputs);
     for (const selection of selections) {
       const selected = element('div', null, 'kp-selection');
       if (selection.status === 'available' && selection.value) paragraph(selected, selection.value.value, 'kp-excerpt');
       else paragraph(selected, selection.status === 'available' ? t('identityOnly') : selection.reason || t('unavailable'), 'kp-muted');
       if (selection.location) field(selected, t('location'), selection.location);
-      else if (selection.selector && Object.hasOwn(selection.selector, 'pointer')) field(selected, t('location'), selection.selector.pointer || '/');
       if (selection.citation) {
         field(selected, t('source'), selection.citation.name);
         field(selected, t('location'), selection.citation.at);
@@ -380,11 +528,15 @@
       card.append(selected);
     }
     if (source.uri) citationLink(card, source.uri);
+    paragraph(card, t('snapshotNote'), 'kp-muted');
     const technical = detail(card, t('details'));
+    technical.dataset.technical = '';
+    technical.open = false;
     field(technical, t('sourceId'), id);
     field(technical, t('captured'), source.read_at);
     field(technical, t('attempted'), source.attempted_at);
     field(technical, t('revision'), source.sha256);
+    for (const selection of selections) field(technical, t('location'), selectorKey(selection.selector));
   }
 
   function renderPanel() {
@@ -400,10 +552,15 @@
     claimNodes.clear();
     const header = element('header', null, 'kp-header');
     const heading = element('div');
-    const title = element('h1', focused ? focused.label : t('heading'));
+    const title = element('h1', sourceView ? data.sources[sourceView.id].name : focused ? focused.label : t('heading'));
     title.id = 'kp-panel-title';
     title.tabIndex = -1;
-    heading.append(element('p', t(focused ? 'selected' : 'snapshot'), 'kp-eyebrow'), title);
+    if (sourceView) {
+      const back = button(t('back'), backToEvidence, 'kp-back');
+      back.dataset.action = 'back';
+      heading.append(back);
+    }
+    heading.append(element('p', t(sourceView ? 'source' : focused ? 'selected' : 'snapshot'), 'kp-eyebrow'), title);
     const close = button('×', () => closePanel(), 'kp-close');
     close.setAttribute('aria-label', t('close'));
     close.dataset.kpClose = '';
@@ -412,9 +569,13 @@
     const content = element('div', null, 'kp-panel-content');
     panel.append(header, content);
     panel.setAttribute('aria-labelledby', title.id);
-    panel.dataset.view = focused ? 'claim' : 'overview';
+    panel.dataset.view = sourceView ? 'source' : focused ? 'claim' : 'overview';
+    panel.dataset.pinned = String(pinned);
+    if (!placement) panel.removeAttribute('style');
     const relevantGroups = focused ? data.groups.filter(group => group.members.includes(focused.id)) : data.groups;
-    if (focused) {
+    if (sourceView) {
+      renderSource(content, sourceView.id, sourceIds.indexOf(sourceView.id), sourceView.inputs);
+    } else if (focused) {
       renderClaim(content, focused, checks[focused.id], true);
       if (relevantGroups.length) {
         const related = element('section', null, 'kp-section');
@@ -461,23 +622,29 @@
       const sources = element('section', null, 'kp-section');
       sources.append(element('h2', t('sources')));
       paragraph(sources, t('selectedOnly'), 'kp-muted');
-      sourceIds.forEach((id, index) => renderSource(sources, id, index));
+      sourceIds.forEach(id => {
+        const row = element('div', null, 'kp-source-row');
+        row.append(sourceButton(id));
+        if (data.sources[id].representation === 'extraction') paragraph(row, t('extracted'), 'kp-muted');
+        if (data.sources[id].reread === false) paragraph(row, t('notReread'), 'kp-changed');
+        sources.append(row);
+      });
       content.append(sources);
     }
     const footer = element('footer', null, 'kp-footer');
-    if (focused) {
+    if (focused && !sourceView) {
       const all = button(t('overview'), () => openPanel());
       all.dataset.action = 'overview';
       footer.append(all);
     }
-    if (!focused || relevantGroups.length) {
+    if (!focused || relevantGroups.length || sourceView) {
       const download = button(t('download'), downloadCopy, 'kp-button kp-primary kp-download');
       download.dataset.action = 'download';
       download.disabled = !!pending;
       footer.append(download);
       paragraph(footer, t('saveNote'), 'kp-muted');
     }
-    if (!focused) {
+    if (!focused && !sourceView) {
       const technical = detail(footer, t('details'));
       field(technical, t('generated'), data.generated_at);
     }
@@ -488,6 +655,7 @@
       const card = Array.from(panel.querySelectorAll('[data-group]')).find(node => node.dataset.group === activeGroupId);
       if (card) card.querySelector('summary').focus();
     }
+    placePanel();
   }
 
   function downloadCopy() {
@@ -501,6 +669,8 @@
       const savedPanel = clone.querySelector('#kp-panel');
       savedPanel.replaceChildren();
       savedPanel.removeAttribute('data-view');
+      savedPanel.removeAttribute('data-pinned');
+      savedPanel.removeAttribute('style');
       savedPanel.removeAttribute('aria-labelledby');
       savedPanel.hidden = true;
       clone.querySelector('#kp-notice').textContent = '';
@@ -528,10 +698,30 @@
     if (message.type === 'kp:ready') {
       frameReady = true;
       renderPanel();
+      if (!panel.hidden && focusClaim && placement) iframe.contentWindow.postMessage({ type: 'kp:locate', nonce, id: focusClaim }, '*');
     } else if (message.type === 'kp:dismiss') {
       closePanel(false);
-    } else if (message.type === 'kp:open' && typeof message.id === 'string' && claims.has(message.id)) {
-      openPanel(message.id);
+    } else if (['kp:open', 'kp:hover', 'kp:position'].includes(message.type) && typeof message.id === 'string' && claims.has(message.id) && validGeometry(message.geometry)) {
+      if (message.type === 'kp:open') {
+        dismissedClaim = null;
+        openPanel(message.id, message.geometry);
+      } else if (message.type === 'kp:position') {
+        if (!panel.hidden && focusClaim === message.id && placement && placement.frame) {
+          placement = { frame: true, geometry: message.geometry };
+          placePanel();
+        }
+      } else if (!pinned && dismissedClaim !== message.id) {
+        clearHover();
+        const candidate = { id: message.id, geometry: message.geometry, nonce };
+        hoverCandidate = candidate;
+        hoverTimer = setTimeout(() => {
+          if (hoverCandidate === candidate && !pinned && nonce === candidate.nonce) openPanel(candidate.id, candidate.geometry, true);
+        }, 180);
+      } else if (pinned && focusClaim) iframe.contentWindow.postMessage({ type: 'kp:locate', nonce, id: focusClaim }, '*');
+    } else if (message.type === 'kp:leave' && typeof message.id === 'string' && claims.has(message.id)) {
+      if (dismissedClaim === message.id) dismissedClaim = null;
+      if (hoverCandidate && hoverCandidate.id === message.id) { clearTimeout(hoverTimer); hoverCandidate = null; }
+      if (focusClaim === message.id) scheduleLeave();
     } else if (message.type === 'kp:probe-result' && pending && message.request === pending.request && nonce === pending.nonce) {
       const operation = pending;
       clearTimeout(operation.timeout);
@@ -548,6 +738,17 @@
   panel.setAttribute('aria-modal', 'false');
   panel.setAttribute('aria-label', t('evidence'));
   opener.addEventListener('click', () => openPanel());
+  panel.addEventListener('pointerenter', () => { pointerInside = true; clearTimeout(leaveTimer); });
+  panel.addEventListener('pointerleave', () => { pointerInside = false; scheduleLeave(); });
+  panel.addEventListener('click', pinPanel, true);
+  panel.addEventListener('focusin', pinPanel);
+  panel.addEventListener('toggle', placePanel, true);
+  if (typeof ResizeObserver === 'function') new ResizeObserver(placePanel).observe(panel);
+  window.addEventListener('resize', () => {
+    placePanel();
+    if (!panel.hidden && focusClaim && placement) iframe.contentWindow.postMessage({ type: 'kp:locate', nonce, id: focusClaim }, '*');
+  });
+  window.addEventListener('scroll', placePanel, true);
   document.addEventListener('click', event => {
     // The clicked control may have been replaced by its action. Use the original
     // event path as well as containment, so an internal action is not click-away.
@@ -558,5 +759,8 @@
     closePanel(false);
   });
   panel.addEventListener('keydown', event => { if (event.key === 'Escape') { event.preventDefault(); closePanel(); } });
+  document.addEventListener('keydown', event => {
+    if (event.key === 'Escape' && !panel.hidden) { event.preventDefault(); closePanel(panel.contains(document.activeElement)); }
+  });
   try { loadFrame(selectedHTML()); renderPanel(); } catch (_) { announce(t('invalid')); }
 }());

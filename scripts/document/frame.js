@@ -4,6 +4,8 @@
   const claims = new Map(config.claims.map(claim => [claim.id, claim]));
   const original = new Map();
   let initialized = false;
+  let tracking = null;
+  const locations = new Map();
 
   function send(type, fields) {
     parent.postMessage(Object.assign({ type, nonce: config.nonce }, fields), '*');
@@ -62,8 +64,29 @@
     return target && claims.has(target.getAttribute('data-kpopper-claim')) ? target : null;
   }
 
-  function openEvidence(element) {
-    send('kp:open', { id: element.getAttribute('data-kpopper-claim') });
+  function geometry(element, event) {
+    const rect = element.getBoundingClientRect();
+    const pointer = !!event && event.type !== 'keydown' && (event.type !== 'click' || event.detail > 0) &&
+      Number.isFinite(event.clientX) && Number.isFinite(event.clientY);
+    tracking = { element, pointer, dx: pointer ? event.clientX - rect.left : 0, dy: pointer ? event.clientY - rect.top : 0 };
+    locations.set(element.getAttribute('data-kpopper-claim'), tracking);
+    return trackedGeometry();
+  }
+
+  function trackedGeometry() {
+    const rect = tracking.element.getBoundingClientRect();
+    return { x: tracking.pointer ? rect.left + tracking.dx : rect.left, y: tracking.pointer ? rect.top + tracking.dy : rect.bottom,
+      pointer: tracking.pointer, anchor: { left: rect.left, top: rect.top, right: rect.right, bottom: rect.bottom },
+      viewport: { width: window.innerWidth, height: window.innerHeight } };
+  }
+
+  function openEvidence(element, event) {
+    send('kp:open', { id: element.getAttribute('data-kpopper-claim'), geometry: geometry(element, event) });
+  }
+
+  function updatePosition() {
+    if (!tracking || !tracking.element.isConnected) return;
+    send('kp:position', { id: tracking.element.getAttribute('data-kpopper-claim'), geometry: trackedGeometry() });
   }
 
   function scrollFragment(event) {
@@ -107,18 +130,31 @@
     }
     document.addEventListener('click', event => {
       const target = markedTarget(event);
-      if (target) openEvidence(target);
+      if (target) openEvidence(target, event);
       else send('kp:dismiss', {});
     }, true);
+    document.addEventListener('pointerover', event => {
+      const target = markedTarget(event);
+      if (event.pointerType !== 'mouse' || !target || target.contains(event.relatedTarget)) return;
+      send('kp:hover', { id: target.getAttribute('data-kpopper-claim'), geometry: geometry(target, event) });
+    });
+    document.addEventListener('pointerout', event => {
+      const target = markedTarget(event);
+      if (event.pointerType !== 'mouse' || !target || target.contains(event.relatedTarget)) return;
+      send('kp:leave', { id: target.getAttribute('data-kpopper-claim') });
+    });
     document.addEventListener('keydown', event => {
+      if (event.key === 'Escape') { send('kp:dismiss', {}); return; }
       const target = markedTarget(event);
       if (target && (event.key === 'Enter' || event.key === ' ')) {
         event.preventDefault();
-        openEvidence(target);
+        openEvidence(target, event);
       }
     });
     // Bubble after the author's element/document handlers so cancelled clicks win.
     window.addEventListener('click', scrollFragment);
+    window.addEventListener('scroll', updatePosition, true);
+    window.addEventListener('resize', updatePosition);
     const observations = observe(Array.from(claims.keys()));
     send('kp:ready', { observations });
   }
@@ -126,6 +162,15 @@
   window.addEventListener('message', event => {
     if (event.source !== parent || !event.data || event.data.nonce !== config.nonce) return;
     const message = event.data;
+    if (message.type === 'kp:locate' && typeof message.id === 'string' && claims.has(message.id)) {
+      const matches = anchors(message.id);
+      if (matches.length === 1 && original.get(message.id) === matches[0]) {
+        if (locations.has(message.id)) tracking = locations.get(message.id);
+        else geometry(matches[0]);
+        updatePosition();
+      }
+      return;
+    }
     if (message.type === 'kp:focus' && typeof message.id === 'string' && claims.has(message.id)) {
       const matches = anchors(message.id);
       if (matches.length === 1 && original.get(message.id) === matches[0] && visible(matches[0])) matches[0].focus();

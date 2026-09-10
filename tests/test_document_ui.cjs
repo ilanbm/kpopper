@@ -30,6 +30,14 @@ function domEnvironment(html) {
   Object.defineProperty(document, 'activeElement', { get() { return document._testFocused || document.body; }, configurable: true });
   window.HTMLElement.prototype.focus = function () { this.ownerDocument._testFocused = this; };
   window.HTMLElement.prototype.scrollIntoView = function () { this._testScrolled = true; };
+  window.HTMLElement.prototype.getBoundingClientRect = function () {
+    const viewport = this.ownerDocument._testViewport;
+    const box = this._testBounds || (this.id === 'kp-document' ? { left: 0, top: 0, width: viewport.innerWidth, height: viewport.innerHeight } :
+      this.id === 'kp-panel' ? { left: Number.parseFloat(this.style.left) || 0, top: Number.parseFloat(this.style.top) || 0,
+        width: Math.min(440, viewport.innerWidth - 24), height: Math.min(this._testHeight || 320, Number.parseFloat(this.style.maxHeight) || Infinity) } :
+      { left: 140, top: 200, width: 120, height: 24 });
+    return { ...box, right: box.left + box.width, bottom: box.top + box.height };
+  };
   function computedStyle(element) {
     const result = { display: 'block', visibility: 'visible', opacity: '1', contentVisibility: 'visible', fontSize: '14px' };
     const properties = { display: 'display', visibility: 'visibility', opacity: 'opacity', 'content-visibility': 'contentVisibility', 'font-size': 'fontSize' };
@@ -70,7 +78,12 @@ function domEnvironment(html) {
   };
   const sandbox = {
     document, console, crypto: webcrypto, Uint8Array, Blob, URL, Date,
-    setTimeout, clearTimeout,
+    setTimeout, clearTimeout, innerWidth: 1200, innerHeight: 800,
+    ResizeObserver: class {
+      constructor(callback) { this.callback = callback; }
+      observe(node) { node._testResize = this.callback; }
+      disconnect() {}
+    },
     getComputedStyle: computedStyle,
     addEventListener(type, handler) {
       if (!listeners.has(type)) listeners.set(type, []);
@@ -82,6 +95,7 @@ function domEnvironment(html) {
     }
   };
   sandbox.window = sandbox;
+  document._testViewport = sandbox;
   const context = vm.createContext(sandbox);
   return {
     document, sandbox, context, listeners,
@@ -91,6 +105,7 @@ function domEnvironment(html) {
       return event;
     },
     receive(message, source) { for (const handler of listeners.get('message') || []) handler({ data: structuredClone(message), source }); },
+    fireWindow(type, extra = {}) { for (const handler of listeners.get(type) || []) handler({ type, ...extra }); },
     execute(script) { return vm.runInContext(script, context, { timeout: 1000 }); },
     ready() {
       Object.defineProperty(document, 'readyState', { value: 'complete', configurable: true });
@@ -164,6 +179,8 @@ function openArtifact(html = fixture.html, options = {}) {
   host.ready();
   host.nonce = () => host.messages.filter(record => record.direction === 'from-frame' && record.message.type === 'kp:ready').at(-1).message.nonce;
   host.anchor = id => Array.from(host.frame.document.querySelectorAll('[data-kpopper-claim]')).find(node => node.getAttribute('data-kpopper-claim') === id);
+  host.pointer = (id, type, x = 180, y = 210, extra = {}) => host.anchor(id).dispatchEvent(host.frame.event(type,
+    { pointerType: 'mouse', clientX: x, clientY: y, button: 0, detail: type === 'click' ? 1 : 0, ...extra }));
   host.selectedSource = () => {
     const text = host.currentSrcdoc;
     const start = text.indexOf('<meta http-equiv="Content-Security-Policy"');
@@ -415,11 +432,15 @@ test('English and Hebrew panel controls support keyboard open, Escape close and 
 
 test('citation links accept only HTTP(S) and isolate their opener', () => {
   const good = openArtifact();
+  good.opener.click();
+  good.panel.querySelector('[data-source="words"]').click();
   const citation = good.panel.querySelector('a[target="_blank"]');
   assert.equal(citation.href, 'https://example.test/citation');
   assert.equal(citation.rel, 'noopener noreferrer');
   for (const uri of ['javascript:window.evidenceExecuted=true', 'data:text/html,<script>alert(1)</script>', 'file:///private.txt']) {
     const host = openArtifact(withPayload(data => { data.sources.words.uri = uri; }));
+    host.opener.click();
+    host.panel.querySelector('[data-source="words"]').click();
     assert.equal(host.panel.querySelector('a[target="_blank"]'), null);
   }
 });
@@ -593,7 +614,7 @@ test('frame preparation failure preserves the active channel and permits retry',
   assert.deepEqual(host.payload(), before);
   assert.equal(host.frame, frame);
   assert.equal(host.control('registered', 'accept').disabled, false);
-  host.emit({ type: 'kp:open', nonce, id: 'rate' });
+  host.anchor('rate').click();
   assert.equal(host.panel.hidden, false);
   host.choose('registered', 'accept');
   assert.equal(host.group('registered').decision, 'accepted');
@@ -613,7 +634,7 @@ test('srcdoc assignment failure rolls back decisions and retains the prior frame
     assert.equal(host.frame, frame);
     assert.equal(host.frame.sandbox.authorCount, count);
     assert.equal(host.control('registered', action).disabled, false);
-    host.emit({ type: 'kp:open', nonce, id: 'rate' });
+    host.anchor('rate').click();
     assert.equal(host.panel.hidden, false);
     host.panel.querySelector('[data-kp-close]').click();
     assert.equal(host.frame.document.activeElement, host.anchor('rate'));
@@ -632,7 +653,7 @@ test('large escaped source values are applied as exact joined segments', () => {
   assert.equal(host.selectedSource(), fixture.layouts.large.selected);
 });
 
-test('a marked passage opens only its own explanation and selected source fields', () => {
+test('a marked passage opens only its own explanation and links to the relevant source', () => {
   const host = openArtifact();
   host.anchor('registered').click();
   assert.equal(host.panel.hidden, false);
@@ -640,15 +661,14 @@ test('a marked passage opens only its own explanation and selected source fields
   assert.equal(host.panel.querySelector('h1').textContent, host.payload().claims.find(c => c.id === 'registered').label);
   assert.equal(host.panel.querySelector('.kp-counts'), null);
   assert.equal(host.panel.dataset.view, 'claim');
-  const source = host.panel.querySelector('[id^="kp-source-"]');
-  assert.equal(source.querySelectorAll('.kp-selection').length, 1);
-  assert.ok(source.textContent.includes('/registered'));
-  assert.ok(!source.textContent.includes('/finished'));
+  assert.equal(host.panel.querySelector('[data-source-view]'), null);
+  assert.equal(host.panel.querySelectorAll('[data-source]').length, 1);
+  assert.equal(host.panel.querySelector('[data-source]').dataset.source, 'counts');
   assert.equal(host.panel.querySelectorAll('[data-group]').length, 1);
   assert.equal(host.panel.querySelector('[data-group]').dataset.group, host.group('registered').id);
   host.anchor('books').click();
   assert.deepEqual([...host.panel.querySelectorAll('[data-claim]')].map(n => n.dataset.claim), ['books']);
-  assert.equal(host.panel.querySelector('#' + source.id), null);
+  assert.equal(host.panel.querySelector('[data-source="counts"]'), null);
 });
 
 test('all evidence is an explicit choice after opening one marked passage', () => {
@@ -723,4 +743,180 @@ test('focused review keeps its context across decisions and exports the full int
   assert.equal(reopened.anchor('rate').textContent, '60%');
   host.choose('rate', 'reset');
   assert.deepEqual([...host.panel.querySelectorAll('[data-claim]')].map(n => n.dataset.claim), ['rate']);
+});
+
+test('contextual evidence follows pointer coordinates, flips at corners and translates iframe offset/scale', () => {
+  const host = openArtifact();
+  for (const [x, y] of [[20, 20], [1180, 20], [20, 780], [1180, 780]]) {
+    host.pointer('rate', 'click', x, y);
+    const rect = host.panel.getBoundingClientRect();
+    assert.ok(rect.left >= 12 && rect.right <= 1188);
+    assert.ok(rect.top >= 12 && rect.bottom <= 788);
+    assert.ok(Math.min(Math.abs(rect.left - x), Math.abs(rect.right - x)) <= 12);
+    assert.ok(Math.min(Math.abs(rect.top - y), Math.abs(rect.bottom - y)) <= 12);
+  }
+  host.iframe._testBounds = { left: 80, top: 50, width: 600, height: 400 };
+  host.pointer('rate', 'click', 200, 240);
+  assert.equal(Number.parseFloat(host.panel.style.left), 192);
+  assert.equal(Number.parseFloat(host.panel.style.top), 182);
+});
+
+test('keyboard placement follows the anchor and updates on frame scroll, resize and content growth', () => {
+  const host = openArtifact();
+  host.anchor('rate')._testBounds = { left: 500, top: 500, width: 100, height: 20 };
+  host.anchor('rate').dispatchEvent(host.frame.event('keydown', { key: 'Enter' }));
+  assert.equal(Number.parseFloat(host.panel.style.left), 500);
+  assert.equal(Number.parseFloat(host.panel.style.top), 172);
+  host.anchor('rate')._testBounds.top = 80;
+  host.frame.fireWindow('scroll');
+  assert.equal(Number.parseFloat(host.panel.style.top), 108);
+  host.panel._testHeight = 740;
+  host.panel.querySelector('[data-technical]').dispatchEvent(host.event('toggle'));
+  assert.ok(host.panel.getBoundingClientRect().bottom <= 788);
+  host.sandbox.innerWidth = 700;
+  host.sandbox.innerHeight = 500;
+  host.frame.sandbox.innerWidth = 700;
+  host.frame.sandbox.innerHeight = 500;
+  host.fireWindow('resize');
+  assert.ok(host.panel.getBoundingClientRect().right <= 688);
+  assert.ok(host.panel.getBoundingClientRect().bottom <= 488);
+  host.panel._testHeight = 200;
+  host.panel._testResize();
+  assert.equal(Number.parseFloat(host.panel.style.top), 108);
+});
+
+test('hover previews delay without stealing focus, permit pointer travel and click pins the same view', () => {
+  const host = openArtifact();
+  host.opener.focus();
+  host.pointer('rate', 'pointerover');
+  assert.equal(host.panel.hidden, true);
+  host.fireTimers(250);
+  assert.equal(host.panel.hidden, false);
+  assert.equal(host.panel.dataset.pinned, 'false');
+  assert.equal(host.document.activeElement, host.opener);
+  host.pointer('rate', 'pointerout');
+  host.panel.dispatchEvent(host.event('pointerenter'));
+  host.fireTimers(450);
+  assert.equal(host.panel.hidden, false);
+  host.panel.dispatchEvent(host.event('pointerleave'));
+  host.fireTimers(450);
+  assert.equal(host.panel.hidden, true);
+  host.pointer('rate', 'pointerover');
+  host.fireTimers(250);
+  host.pointer('rate', 'click');
+  assert.equal(host.panel.dataset.pinned, 'true');
+  host.pointer('rate', 'pointerout');
+  host.pointer('books', 'pointerover');
+  host.fireTimers(450);
+  assert.equal(host.panel.dataset.view, 'claim');
+  assert.equal(host.panel.querySelector('[data-claim]').dataset.claim, 'rate');
+  assert.equal(host.panel.hidden, false);
+  host.frame.document.body.dispatchEvent(host.frame.event('keydown', { key: 'Escape' }));
+  assert.equal(host.panel.hidden, true);
+});
+
+test('touch and cancelled hover do not create transient previews', () => {
+  const host = openArtifact();
+  host.pointer('rate', 'pointerover', 180, 210, { pointerType: 'touch' });
+  host.fireTimers(450);
+  assert.equal(host.panel.hidden, true);
+  host.pointer('rate', 'pointerover');
+  host.pointer('rate', 'pointerout');
+  host.fireTimers(450);
+  assert.equal(host.panel.hidden, true);
+  host.pointer('rate', 'click', 180, 210, { pointerType: 'touch' });
+  assert.equal(host.panel.hidden, false);
+  assert.equal(host.panel.dataset.pinned, 'true');
+});
+
+test('a source opens separately with only this claim’s readings, Back and fresh collapsed technical details', () => {
+  const host = openArtifact();
+  host.pointer('registered', 'pointerover');
+  host.fireTimers(250);
+  assert.equal(host.panel.querySelector('[data-source-view]'), null);
+  assert.equal(host.panel.querySelectorAll('[data-technical]').length, 1);
+  host.panel.querySelector('[data-technical]').open = true;
+  host.panel.querySelector('[data-source="counts"]').click();
+  assert.equal(host.panel.dataset.view, 'source');
+  assert.equal(host.panel.dataset.pinned, 'true');
+  assert.equal(host.panel.querySelector('[data-claim]'), null);
+  assert.equal(host.panel.querySelectorAll('.kp-selection').length, 1);
+  assert.ok(host.panel.textContent.includes('100'));
+  assert.ok(!host.panel.textContent.includes('/finished'));
+  assert.equal(host.panel.querySelector('[data-technical]').open, false);
+  assert.equal(host.panel.querySelectorAll('details details').length, 0);
+  host.panel.querySelector('[data-action="back"]').click();
+  assert.equal(host.panel.dataset.view, 'claim');
+  assert.equal(host.panel.querySelector('[data-claim]').dataset.claim, 'registered');
+  assert.equal(host.panel.querySelector('[data-technical]').open, false);
+  host.panel.querySelector('[data-action="overview"]').click();
+  host.panel.querySelector('[data-source="words"]').click();
+  assert.equal(host.panel.dataset.view, 'source');
+  host.panel.querySelector('[data-action="back"]').click();
+  assert.equal(host.panel.dataset.view, 'overview');
+  assert.equal(host.panel.style.left || '', '');
+});
+
+test('claim prose explains the saved comparison/calculation before technical identifiers', () => {
+  const host = openArtifact();
+  host.pointer('rate', 'click');
+  const claim = host.panel.querySelector('[data-claim]');
+  const technical = claim.querySelector('[data-technical]');
+  assert.ok(technical);
+  assert.equal(technical.open, false);
+  const plain = claim.cloneNode(true);
+  plain.querySelector('[data-technical]').remove();
+  assert.match(plain.textContent, /saved calculation/i);
+  assert.ok(plain.textContent.includes('60 ÷ 100'));
+  assert.ok(plain.textContent.includes('60%'));
+  assert.ok(plain.textContent.includes('75%'));
+  assert.ok(!plain.textContent.includes('/registered'));
+  assert.ok(!plain.textContent.includes('ratio'));
+  assert.equal(claim.querySelector('[data-source-view]'), null);
+  assert.equal(claim.querySelectorAll('article article,details details').length, 0);
+});
+
+test('geometry and hover messages require the active source/nonce and finite dimensions', () => {
+  const host = openArtifact();
+  host.pointer('rate', 'click');
+  const valid = host.messages.filter(record => record.message.type === 'kp:open').at(-1).message;
+  host.panel.querySelector('[data-kp-close]').click();
+  host.receive(valid, {});
+  host.emit({ ...valid, nonce: 'wrong' });
+  host.emit({ ...valid, geometry: { ...valid.geometry, x: Infinity } });
+  host.emit({ ...valid, geometry: { ...valid.geometry, viewport: { width: 0, height: 800 } } });
+  assert.equal(host.panel.hidden, true);
+  host.emit({ ...valid, type: 'kp:hover', nonce: 'wrong' });
+  host.fireTimers(450);
+  assert.equal(host.panel.hidden, true);
+});
+
+test('contextual route, pin and position are absent from the exported shell', async () => {
+  const host = openArtifact();
+  host.pointer('rate', 'click', 600, 300);
+  host.panel.querySelector('[data-source="counts"]').click();
+  const before = host.payload();
+  host.panel.querySelector('[data-action="download"]').click();
+  const html = await host.blobs[0].text();
+  const { document } = parseHTML(html);
+  const saved = document.getElementById('kp-panel');
+  for (const attribute of ['style', 'data-pinned', 'data-view']) assert.equal(saved.getAttribute(attribute), null);
+  assert.equal(saved.textContent, '');
+  const reopened = openArtifact(html);
+  assert.deepEqual(reopened.payload(), before);
+  assert.equal(reopened.panel.hidden, true);
+  assert.equal(reopened.panel.dataset.view, 'overview');
+});
+
+test('raw unavailable-check diagnostics stay under the closed technical disclosure', () => {
+  const host = openArtifact();
+  host.anchor('missing').click();
+  const card = host.panel.querySelector('[data-claim="missing"]');
+  const technical = card.querySelector('[data-technical]');
+  const diagnostic = host.payload().checks.missing.detail;
+  assert.equal(technical.open, false);
+  assert.ok(technical.textContent.includes(diagnostic));
+  const visible = card.cloneNode(true);
+  visible.querySelector('[data-technical]').remove();
+  assert.ok(!visible.textContent.includes(diagnostic));
 });
