@@ -6,6 +6,7 @@ straight through to provenance.py; page renders the record and can open what it 
   kpopper check   [file ...]              does the record still hold together
   kpopper affects <entry> [entry ...]     what a change reaches
   kpopper pull    <entry|prefix> [...]    values and sources for a subject
+  kpopper search  "query"               find claims and source passages with their status
   kpopper where                           the record this directory answers for
   kpopper map [--deep]                  map the work through an available agent
   kpopper config [--guidance on|off]     inspect or change local preferences
@@ -44,6 +45,7 @@ import argparse, json, os, shutil, sys, pathlib, subprocess, webbrowser
 HERE = pathlib.Path(__file__).resolve().parent
 READ = ("open", "check", "affects", "pull", "where", "set", "add", "review", "same", "distinct")
 COMMANDS = {
+    "search": ('"QUERY" [--record FILE] [--limit N] [--chars N]', "Find local source evidence; read a hit with --read REF --revision REV."),
     "open": ("[FILE ...] [--chars N] [--budget N]", "Open the current knowledge context."),
     "map": ("[--deep]", "Map the work through an available host agent."),
     "config": ("[--guidance on|off]", "Read or change local user preferences."),
@@ -172,6 +174,12 @@ def main():
         except ImportError:
             from onboarding import main as start
         sys.exit(start(rest))
+    if cmd == "search":
+        try:
+            from . import search
+        except ImportError:
+            import search
+        sys.exit(search.main((["--json"] if options.json else []) + rest))
     # Existing operations retain their exit codes and text. JSON wraps that output
     # without reparsing it as evidence or changing what the operation does.
     cutoff = rest.index("--") if "--" in rest else len(rest)

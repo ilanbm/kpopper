@@ -41,6 +41,19 @@ ACK. [INGESTION.md](INGESTION.md) gives the small input contract, supported reco
 the different idle-delivery behavior in Claude Code and Codex. Notification content is a result,
 not a new user report: never capture it again as fresh evidence.
 
+**Interpret once, in the current conversation.** Use the understanding already available
+to the primary agent. For related changes from one report, send one `updates` batch through
+the existing capture command. It can update readings and add grounded facts, rules and
+new judgments; it checks and publishes the final graph together. Preserve the original
+source quotation separately from your reasoning. A new judgment is your conclusion from
+its declared premises, not something the source necessarily said. Do not launch a second
+model pass over the conversation just to repeat this interpretation. Empty learning is a
+valid result. See [INGESTION.md](INGESTION.md) for the batch contract.
+
+A batch that adds entries carries `record_sha256` from the primary's prior `open --json`
+or `search` result. If the recorded premises changed, reread them before constructing a
+new report; do not just obtain a fresh hash for an old conclusion.
+
 In Codex hosts with native background agents and `send_message_to_thread`, use
 `capture --notify-task` and dispatch its returned delivery job so an important finding can also
 reach a primary that has finished answering. [DELIVERY.md](DELIVERY.md) gives the short native
@@ -82,8 +95,13 @@ cannot tell bookkeeping from a change to their project, and the repair's minutes
 the method's cost.
 
 `open` also prints **what the record holds** — the namespace, not the values: `mtg (11) ·
-pay (4) · c50 (9) · …`. That one line is the whole link between a question in plain language
-and the graph. "What is happening with the mortgage" has no meaning to a file; `mtg` does.
+pay (4) · c50 (9) · …`. Use a known namespace directly. When the question does not map
+to a known ID, `kpopper search "terms" --chars 4000` finds matching entries and local source
+passages with their scope, status and exact read references. Choose useful terms in the
+source's language; add another query for a synonym or translation when needed. The local
+search does not translate or infer links. [RETRIEVAL.md](RETRIEVAL.md) explains source reads,
+omitted results and search revisions. When using checked sessions, use search to discover
+IDs, then keep the checked reader for assessments; its revision is a different protocol.
 
 **A second command runs when the work starts, not before:** `provenance.py affects <seed>` for
 what a change reaches, or `provenance.py pull <seed>` to ground yourself on the subject itself —

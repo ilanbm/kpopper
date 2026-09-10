@@ -52,6 +52,72 @@ When the target or meaning is unresolved, preserve the quote without inventing a
 This stays as a captured report needing a decision. No fact is guessed or overwritten. This
 version does not invoke a language model to infer missing identity, intent, time, or relationships.
 
+## Several related changes from one source
+
+The primary agent can supply `updates` instead of `target`/`value`, using the same capture
+command and delivery path. One source quotation and date ground the whole batch:
+
+For a batch with new entries, first read the relevant record with `open --json` or
+`search`, and copy its `record_sha256` into the envelope below. Use the hash returned
+with the context you actually interpreted; computing a fresh hash just before submission
+would hide a stale interpretation. Replace the placeholder before submitting.
+
+```json
+{
+  "event_id": "cedar-delivery-1",
+  "record_sha256": "RECORD_SHA256_FROM_PRIOR_READ",
+  "source_quote": "Cedar has five packages. The van capacity is ten packages.",
+  "date": "2026-09-10",
+  "updates": [
+    {"kind": "add", "id": "cedar.packages", "body": {"v": 5, "name": "Cedar packages"}},
+    {"kind": "add", "id": "cedar.capacity", "body": {"v": 10, "name": "Van capacity"}},
+    {"kind": "add", "id": "c.cedar", "body": {
+      "rests_on": ["cedar.packages", "cedar.capacity"],
+      "verdict": "Cedar fits one van",
+      "because": "The reported package count is within the reported capacity.",
+      "wrong_if": "cedar.packages > cedar.capacity"
+    }}
+  ]
+}
+```
+
+An existing reading uses `{"kind":"set","id":"cedar.packages","value":6}`. Each
+operation may specify `at` for its location within the retained quotation. There are at
+most 32 operations and one operation per ID. `add` accepts a new scalar reading (`v` or
+`quoted`), a `rule`, or a new judgment in the record's existing vocabulary. `into` can name
+an existing collection. Stored readings receive the captured source citation and date;
+judgment snapshots are filled by the canonical writer. Do not supply `from`, `at`, `of`,
+`src`, `source` or snapshot fields inside `body`.
+
+The agent supplies interpretation and declared links; the worker runs no model and adds no
+inferred relationships. Keep source speech in `source_quote` and the agent's conclusion in
+the judgment body. Search candidates are not proof that two IDs describe the same subject;
+use the existing `same`/`distinct` process for identity decisions.
+
+Existing readings are staged first; additions follow in their supplied dependency order.
+Add premises and rules before judgments. The existing writer and final gate validate the
+whole staged record, which is then replaced once. Failed operations leave the canonical
+record untouched and retain the report for review. Attention is derived from the final
+graph, so intermediate states do not produce notifications. A reading that really falsifies
+an existing judgment is preserved; ingestion never refreshes that judgment's snapshot.
+
+New entries require and bind to the record hash from the primary's read, checked both at
+capture and before commit. This binds recorded premises, not external source-file contents.
+If the hash is missing or the record changes before
+commit, the batch stays pending for primary review; it cannot silently give a conclusion
+new premises the agent never read. Reading-only batches protect all touched targets;
+conflicting queued batches require primary review. An applied batch is not reapplied after
+a recorded commit is later changed or reverted.
+
+A revised report uses a new `event_id`. Exact retries reuse the original envelope, including
+its hash; changing its content under an existing ID is refused.
+
+Existing judgments cannot be replaced or reviewed in a batch. New judgments about the
+reader's own `graph.*`/page counts also require ordinary primary authoring, as those counts
+can change during the batch itself. Rule dependencies are preserved, but this reader does
+not evaluate their arithmetic. Multi-file, pointer and hypothesis-backed records retain the
+existing review requirement. No routine user confirmation or second agent review is added.
+
 ## Status and attention
 
 ```sh
@@ -108,9 +174,10 @@ workspace sandbox, grant the dedicated state path through the host's supported p
 set an absolute `XDG_STATE_HOME` to an approved location. A permission error is a failed capture;
 do not report that the source was saved.
 
-This writer supports explicit `report` updates to existing stored scalar entries in one record
-file. Pointer/multi-file records, hypotheses, new entries, computed values and judgment rewrites
-remain questions for the primary or the project's own adapter. Capturing their source does not
+This writer supports explicit `report` updates to existing stored scalar entries and batches
+of readings/new grounded entries in one record file. Pointer/multi-file records, hypotheses,
+computed-value rewrites and existing judgment rewrites remain questions for the primary or
+the project's own adapter. Capturing their source does not
 silently change those layouts. Preserve a custom project's reader/writer; do not migrate or
 duplicate its record to enable this command.
 

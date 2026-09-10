@@ -47,6 +47,7 @@ limited to numerical thresholds.
 | `kpopper where` | Locate the record for this directory. |
 | `kpopper open` | Read a bounded project orientation, namespace and attention report. |
 | `kpopper pull <entry-or-prefix>` | Retrieve a subject's entries, sources and changed premises. |
+| `kpopper search "terms"` | Find matching claims, native hypotheses and local source passages with their status. |
 | `kpopper affects <entry>` | Follow the downstream reach of an entry through judgments and rule references. |
 | `kpopper check` | Report structural problems, declared gaps, movement and fired conditions. |
 
@@ -54,6 +55,15 @@ The legacy opener uses line and character budgets; its output reports omitted at
 items. It is not a complete read of every entry. The optional
 [checked session mode](checked-sessions.md) provides complete branch accounting, exact
 field references and reads bound to a record revision under a token budget.
+
+Search uses a temporary local FTS5 index and calls no model. Results include source anchors,
+scope, status, explicit omission counts and a `search-corpus` revision for exact source
+reads. Use `--limit` and `--chars` to bound output; `--read REF --revision REV` reads a hit,
+with `--offset`/`--length` for long text. It supports local UTF-8 text sources up to 1 MiB,
+reports unindexed sources and never fetches remote material. See [retrieval](../skills/kpopper/RETRIEVAL.md).
+
+Both search and `open --json` return `record_sha256`, which binds additions to the primary
+record bytes the agent read. It is distinct from checked-session and search-corpus revisions.
 
 ## Record location and shape
 
@@ -178,10 +188,14 @@ Capture retains the supplied report and normally starts a separate worker. Suppo
 updates pass through the canonical writer. Raw reports, journals and receipts live in a
 private state directory outside the repository, keyed by the canonical record path.
 
-Automatic writes currently require explicit reports targeting existing scalar entries in
-a single file. New entries, computed values, judgment rewrites, pointer records and
-ambiguous messages require further handling. Delivery acknowledgment does not approve
-a change or clear a failed condition.
+Automatic writes require explicit reports in a single file. An `updates` list can combine
+existing scalar updates with new grounded facts, rules and judgments in one atomic write.
+The primary agent supplies their meaning; the worker preserves citations and checks the
+final graph. New entries and judgments require `record_sha256` from the primary's prior
+read; they cannot silently adopt changed premises. Existing judgment rewrites,
+reader/page-count judgments, pointer records and ambiguous messages
+require further handling. Delivery acknowledgment does not approve a change or clear a
+failed condition.
 
 Use the [capture guide](../skills/kpopper/INGESTION.md) for report envelopes, state paths,
 permissions and host behavior, and [native delivery](../skills/kpopper/DELIVERY.md) for
