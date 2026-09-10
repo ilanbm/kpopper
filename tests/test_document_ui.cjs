@@ -871,12 +871,32 @@ test('claim prose explains the saved comparison/calculation before technical ide
   assert.match(plain.textContent, /saved calculation/i);
   assert.ok(plain.textContent.includes('60 ÷ 100'));
   assert.ok(plain.textContent.includes('60%'));
-  assert.ok(plain.textContent.includes('75%'));
+  assert.ok(!plain.textContent.includes('75%'));
   assert.ok(!plain.textContent.includes('/registered'));
   assert.ok(!plain.textContent.includes('ratio'));
   assert.equal(claim.querySelector('[data-source-view]'), null);
   assert.equal(claim.querySelectorAll('article article,details details').length, 0);
 });
+
+for (const language of ['en', 'he']) {
+  test('claim explanations omit the clicked text and matching value repetition (' + language + ')', () => {
+    const host = openArtifact(language === 'he' ? fixture.hebrew : fixture.html);
+    for (const id of ['stable', 'registered', 'rate', 'interpretation', 'missing']) {
+      host.pointer(id, 'click');
+      const card = host.panel.querySelector('[data-claim]');
+      assert.doesNotMatch(card.textContent, /The document says|במסמך כתוב/);
+      if (id === 'stable') {
+        assert.equal(card.querySelectorAll('.kp-reading').length, 0);
+        assert.ok(card.querySelector('[data-source="stable"]'));
+      } else if (id === 'registered') {
+        assert.ok(card.querySelector('.kp-reading').textContent.includes('100'));
+      } else if (id === 'interpretation') {
+        assert.ok(card.textContent.includes('Participation alone does not establish satisfaction.'));
+        assert.ok(!card.textContent.includes('build a reading habit'));
+      }
+    }
+  });
+}
 
 test('geometry and hover messages require the active source/nonce and finite dimensions', () => {
   const host = openArtifact();

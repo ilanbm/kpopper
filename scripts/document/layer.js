@@ -25,7 +25,6 @@
     calculationFrom: ['The saved calculation uses readings from ', 'החישוב השמור משתמש בנתונים מתוך '],
     matchesReading: ['It matches the captured result.', 'הוא תואם לתוצאה השמורה.'],
     differsReading: ['It differs from the captured result.', 'הוא שונה מהתוצאה השמורה.'],
-    says: ['The document says', 'במסמך כתוב'],
     savedResult: ['The saved result is', 'התוצאה השמורה היא'],
     calculation: ['Saved calculation', 'החישוב השמור'],
     rounding: ['Displayed decimal places', 'מספר הספרות אחרי הנקודה בתצוגה'],
@@ -451,7 +450,6 @@
     claimNodes.set(claim.id, card);
     card.append(badge(check.status));
     if (check.source_changed) paragraph(card, t('changed'), 'kp-changed');
-    paragraph(card, t('says') + ' “' + check.actual + '”.', 'kp-reading');
     const arithmetic = ['sum', 'difference', 'product', 'ratio'].includes(claim.kind);
     if (claim.kind === 'inference') {
       paragraph(card, claim.reason || check.detail);
@@ -478,7 +476,9 @@
         if (claim.format && Object.hasOwn(claim.format, 'scale')) expression = '(' + expression + ') × ' + String(claim.format.scale);
         paragraph(card, t('calculation') + ': ' + expression + ' → ' + check.expected, 'kp-expression');
         if (claim.format) paragraph(card, t('rounding') + ': ' + String(claim.format.decimals || 0) + '.', 'kp-muted');
-      } else paragraph(card, t('savedResult') + ' “' + check.expected + '”.', 'kp-reading');
+      } else if (check.status === 'mismatch') {
+        paragraph(card, t('savedResult') + ' “' + check.expected + '”.', 'kp-reading');
+      }
       paragraph(card, t('checkNote'), 'kp-muted');
     }
     const technical = detail(card, t('details'));
