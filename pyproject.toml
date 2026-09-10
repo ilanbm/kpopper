@@ -30,7 +30,7 @@ classifiers = [
   "Topic :: Software Development :: Documentation",
   "Topic :: Software Development :: Quality Assurance",
 ]
-dependencies = ["PyYAML>=5.1", "html5lib>=1.1,<2", "tinycss2>=1.2,<2"]
+dependencies = ["PyYAML>=5.1", "html5lib>=1.1,<2", "tinycss2>=1.2,<2", "tzdata"]
 
 [project.optional-dependencies]
 session = ["tiktoken>=0.14,<1", "mcp>=2.2,<3"]

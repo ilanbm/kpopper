@@ -27,7 +27,8 @@
       "Write"
     ],
     "defaultPrompt": [
-      "Open this project’s record and show what needs attention."
+      "Open this project’s record and show what needs attention.",
+      "Check and set up this project's daily kpopper review."
     ]
   }
 }

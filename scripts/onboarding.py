@@ -107,6 +107,7 @@ def status(location):
             "owner": choice.get("owner"), "report": choice.get("report"),
             "check": choice.get("check"), "error": choice.get("error"),
             "guidance": preferences["enabled"], "introduced": "welcome" in shown,
+            "followups_offered": bool(_read(project_dir(location) / "followups-offered.json")),
             "offered": bool(_read(project_dir(location) / "offered.json")) or mode is not None,
             "pending_tips": [event for event in EVENTS if event not in shown]}
 
@@ -147,6 +148,25 @@ def context(location):
                      "Use `kpopper _agent guide`: show one only when that event actually happens, "
                      "link the finding and its source, then acknowledge it with `kpopper _agent shown EVENT`. "
                      "`kpopper config --guidance off` disables explanations without disabling the work.")
+    has_followups = False
+    if current["guidance"] and not current["followups_offered"]:
+        try:
+            try:
+                from .followups import Store
+            except ImportError:
+                from followups import Store
+            deferred = Store(location["workspace"]).load(required=False)
+            has_followups = bool(deferred and (not deferred["daily"]["binding"] or deferred["daily"]["binding"]["state"] == "missing") and
+                                 any(item["state"] not in {"done", "cancelled"} for item in deferred["items"].values()))
+        except (ImportError, OSError, ValueError, KeyError):
+            pass  # The followup opening reports unavailable state separately.
+    if has_followups:
+        lines.append("When deferred work first arises, strongly recommend a short daily review, alongside event checks. "
+                     "Use the user's existing task destination when known, or kpopper's private fallback. "
+                     "Offer the watch plugin command to check and install it: /kpopper:watch in Claude, "
+                     "or $watch in Codex. The command inspects existing schedules before creating one. "
+                     "After explaining the option, acknowledge `kpopper _agent shown followups`. "
+                     "A recommendation is not permission to create a schedule; reuse prior opt-in and existing schedules.")
     if not lines:
         return ""
     target = json.dumps({"workspace": current["workspace"], "record": current["record"],
@@ -161,7 +181,7 @@ def main(argv=None):
     actions = parser.add_subparsers(dest="action")
     for name in ("status", "guide", "task"):
         actions.add_parser(name)
-    actions.add_parser("shown").add_argument("event", choices=("welcome", *EVENTS))
+    actions.add_parser("shown").add_argument("event", choices=("welcome", "followups", *EVENTS))
     for name in ("accept", "complete", "fail"):
         command = actions.add_parser(name)
         command.add_argument("--request", required=True)
@@ -181,7 +201,10 @@ def main(argv=None):
         location = W.locate(args.workspace)
         current = status(location)
         if args.action == "shown":
-            _write(state_dir() / "shown" / (args.event + ".json"), {"shown": True})
+            if args.event == "followups":
+                _write(project_dir(location) / "followups-offered.json", {"shown": True})
+            else:
+                _write(state_dir() / "shown" / (args.event + ".json"), {"shown": True})
             if args.event == "welcome":
                 _write(project_dir(location) / "offered.json", {"shown": True})
             result = status(location)

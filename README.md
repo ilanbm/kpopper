@@ -21,10 +21,26 @@ plugin and through the command line.
 grounded, why decisions were made, and what would call them into question.</sub>
 
 [Get started](#get-started) · [See an example](#ready-to-launch-had-a-condition) ·
+[Past, present, future](#past-present-future) ·
 [See a document](#regular-html-annotated-with-reasoning) ·
 [The third brain](#a-third-brain-for-work-in-progress) · [How it works](#how-it-works) ·
 [Coding & CI](#coding-check-the-reasoning-behind-a-merge) ·
 [Why Lean](#the-lean-proof-assistant-from-fermat-to-agents) · [Command reference](docs/reference.md)
+
+## Past, present, future
+
+Keep the work connected across time: the sources and decisions behind it, what needs
+attention now, and the checks or actions to return to later.
+
+<p align="center">
+  <a href="assets/work-across-time.png">
+    <img src="assets/work-across-time.png" width="820" alt="Three connected parts of kpopper: Past holds sources, decision reasons and review snapshots. Present connects claims, changed premises and new information. Future holds followups, daily reviews and time or event triggers. A return arrow asks the agent to bring outcomes back to the record.">
+  </a>
+</p>
+
+The Future panel shows deferred work tracked by followups. The return arrow is the agent's
+step of recording useful outcomes as evidence; marking a followup complete is a separate
+operation and does not automatically rewrite the knowledge record.
 
 ## Start with the work
 
@@ -33,7 +49,7 @@ calendars, task systems, files and earlier sessions. In software, they also incl
 commits and pull requests. One project can cross several tools; one source can serve several
 projects.
 
-kpopper keeps a *picture of the project's knowledge* in `PROVENANCE.yaml`: a readable record
+kpopper keeps a *picture of the project's reasoning* in `PROVENANCE.yaml`: a readable record
 that connects claims to sources and decisions to their premises. Your documents and tools
 keep their own content. The record makes the reasoning between them available to the next
 person or agent working on the goal.
@@ -280,6 +296,43 @@ where the conversation can safely continue without that result.
 
 ## How it works
 
+### Return to work when it is ready
+
+Followups connect deferred work to the knowledge behind it. A check can become ready on a
+date, after a recorded value changes, when a threshold is crossed, or after another task
+finishes. Missing evidence remains an open question. Keep the task in your existing system
+or directory; kpopper has a private local fallback when you need one.
+
+**A short daily review is strongly recommended for ongoing work.** It checks what is due,
+what changed and which relevant piece of knowledge needs another look, with a small work
+budget and notifications for meaningful results. During active Claude Code and Codex
+sessions, event hooks also surface changed readiness. The daily schedule catches elapsed
+dates and missed events.
+
+Run **`/kpopper:watch`** in Claude Code, or **`$watch`** in Codex, to check and set
+up the daily review. The command inspects existing schedules, creates or repairs one when
+needed, and reads it back before confirming installation. Add `check` for inspection only,
+or `resume` to enable a paused review. Existing schedule times are preserved unless you ask
+to change them. The host performs scheduling within your authorization; a saved plan alone
+is not an active automation. See [the setup command](skills/watch/SKILL.md).
+Claims prevent duplicate work, and a check deferred until more evidence arrives stays open
+with its history intact. Followup scans and outcomes never silently rewrite the knowledge
+graph or mark its judgments reviewed. See the [followups guide](skills/kpopper/FOLLOWUPS.md)
+for routing, supported conditions, daily setup and platform limits.
+
+The scheduled host starts or resumes an agent session. That agent is instructed to claim
+and perform up to three ready followups within the user's existing authorization, record
+their outcomes, and surface decisions or blockers. There is no automatic dispatcher that
+opens a separate session for every item. Work assigned to an external owner stays with it.
+
+The review packet currently offers at most one flagged judgment as a graph-maintenance
+candidate. The prompt also allows a relevant source refresh or open-question check, but
+there is no general source-age scanner or sweep of every worktree graph. One review is
+bound to the record selected at setup; that can be a worktree copy. Choose a durable record
+and runtime for an ongoing schedule. See [record scope and retention](skills/kpopper/FOLLOWUPS.md#record-scope-and-retention).
+
+### The knowledge record
+
 The technical term is an **epistemic record**: a record of what is known and how it is
 grounded. The main pieces are ordinary YAML:
 
@@ -359,7 +412,7 @@ in the recorded reasoning, even though the lines merged cleanly.
 
 There are two ways to check the combination:
 
-- **Before merging:** `kpopper consolidate --dry-run --from <branch-or-ref>` reads another
+- **During work or before merging:** `kpopper consolidate --dry-run --from <branch-or-ref>` reads another
   branch's committed record as proposed changes and tests it against the current record.
 - **On the proposed merge result in CI:** `kpopper check` checks the combined record;
   `kpopper consolidate --dry-run` also tests the hypotheses stored beside it.
@@ -380,15 +433,14 @@ expressed only in prose, or hidden behind unrelated IDs, can still require human
 
 ## Popper: give a conclusion a way to fail
 
-Karl Popper's central distinction was between accumulating agreeable observations and
-exposing a claim to a test that could contradict it. Passing tests does not establish a
-universal theory once and for all. Even an apparent refutation requires scrutiny of the
-observation and its assumptions. [The Stanford Encyclopedia of Philosophy](https://plato.stanford.edu/entries/popper/)
-explains both the logical asymmetry and its practical limits. This is the idea behind the
-name kpopper.
+Karl Popper was a philosopher of science who argued that scientific theories should expose
+themselves to tests that could prove them wrong. Surviving a test does not make a theory
+certain. [The Stanford Encyclopedia of Philosophy](https://plato.stanford.edu/entries/popper/)
+explains the idea and its limits.
 
-kpopper borrows that discipline for everyday decisions: **write down what would make you
-reconsider before the new evidence arrives.**
+kpopper borrows that discipline for agent reasoning: **preserve the evidence, state what
+would undermine a conclusion, and know when to reconsider it.** This is the idea behind
+the name.
 
 `wrong_if: 'venue.status != "confirmed"'` is an executable comparison. If it evaluates
 to true, `check` fails. A green check means no failing condition was found by these checks;
