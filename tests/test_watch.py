@@ -267,3 +267,10 @@ class WatchTests(WatchFixture, unittest.TestCase):
                 self.watch.setup(shared_private=True)
         self.assertEqual(self.watch.config_path.read_bytes(),before)
         self.assertFalse((self.watch.project_state/'shared/PROVENANCE.yaml').exists())
+
+
+class SnapshotPathTests(unittest.TestCase):
+    def test_git_paths_cannot_escape_when_materialized_on_another_platform(self):
+        for name in ('../outside.yaml','/absolute.yaml',r'..\outside.yaml',r'C:\outside.yaml','C:/outside.yaml',r'\\server\share\outside.yaml'):
+            with self.subTest(name=name),self.assertRaises(ValueError):W._safe_path(name)
+        self.assertEqual(W._safe_path('records/known.yaml'),'records/known.yaml')

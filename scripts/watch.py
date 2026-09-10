@@ -9,7 +9,7 @@ import copy
 import io
 import json
 import os
-from pathlib import Path, PurePosixPath
+from pathlib import Path, PurePosixPath, PureWindowsPath
 import subprocess
 import sys
 import tempfile
@@ -41,8 +41,9 @@ def digest(value):
 
 def _safe_path(name):
     path = PurePosixPath(name)
-    if path.is_absolute() or '..' in path.parts or not path.parts:
-        raise ValueError('record pointer must remain inside its checkout: ' + name)
+    if path.is_absolute() or '..' in path.parts or not path.parts or \
+            PureWindowsPath(name).drive or '\\' in name:
+        raise ValueError('record pointer must use a portable path inside its checkout: ' + name)
     return path.as_posix()
 
 
@@ -93,6 +94,7 @@ def _records(root, entry, sha=None):
     with tempfile.TemporaryDirectory() as directory:
         for name, text in files.items():
             path = Path(directory) / name
+            path.resolve().relative_to(Path(directory).resolve())
             path.parent.mkdir(parents=True, exist_ok=True)
             path.write_text(text, encoding='utf-8')
         doc = P.load([str(Path(directory) / entry)])
