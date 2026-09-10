@@ -5,7 +5,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "\"../../scripts/session_open.sh\""
+            "command": "\"../../scripts/session_open.sh\" --host codex"
           },
           {
             "type": "command",

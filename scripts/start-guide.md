@@ -19,7 +19,7 @@ the project. Use the user's language and their names for the work.
 An absent file does not mean an empty body of knowledge or a new user. Respect the opener's
 record location, including a record elsewhere or in a parent directory. An unavailable
 registered record needs its location restored; it must not trigger a replacement. If existing
-materials already maintain a compatible record, use the pointer mechanism in SKILL.md.
+materials already maintain a compatible record, use the pointer mechanism in the method's shape reference (skills/kpopper/references/shape.md).
 
 At the first suitable moment in meaningful work, offer three choices in a short conversational
 card. Skip the introductory explanation if `introduced` is true. Defer the offer during urgent

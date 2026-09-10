@@ -90,7 +90,7 @@ Git. Use `where` to confirm what a directory resolves before writing to it.
 The recommended fields are `from`, `rests_on`, `wrong_if` and `seen`. The reader infers
 dependency, predicate and snapshot roles by shape, so existing vocabularies can work.
 Ambiguous roles require an explicit `schema` declaration; the reader refuses to guess.
-The [method's record examples](../skills/kpopper/SKILL.md#the-shape) cover the full shape.
+The [method's record examples](../skills/kpopper/references/shape.md#the-shape) cover the full shape.
 
 Source locations and dates preserve traceability. They do not cause the reader to fetch
 documents, query calendars or inspect every linked file. The person or agent records the
@@ -184,7 +184,7 @@ The callable `union_of(base, hypotheses)` also accepts an in-memory hypothesis f
 what-if. That is a building block for previewing a captured working-copy delta on main. The opt-in `watch` runner uses this core for asynchronous worktree-versus-main previews.
 The existing background ingestion path continues to process explicit reports for one record.
 
-See [the method](../skills/kpopper/SKILL.md) for the full write and consolidation discipline.
+See the [record](../skills/record/SKILL.md) and [consolidate](../skills/consolidate/SKILL.md) skills for the full write and consolidation discipline.
 
 ## Background branch watch and shared facts
 
@@ -300,7 +300,7 @@ See [the user flow](documents.md) and run `kpopper document guide` for the autho
 
 | Part | Source |
 |---|---|
-| Method and agent guidance | [skills/kpopper](../skills/kpopper/SKILL.md) |
+| Method and agent guidance | [skills/kpopper](../skills/kpopper/SKILL.md), one skill per occasion beside it: [ground](../skills/ground/SKILL.md), [record](../skills/record/SKILL.md), [map](../skills/map/SKILL.md), [document](../skills/document/SKILL.md), [page](../skills/page/SKILL.md), [consolidate](../skills/consolidate/SKILL.md), [watch](../skills/watch/SKILL.md) |
 | CLI dispatcher | [scripts/cli.py](../scripts/cli.py), also exposed by `scripts/kpopper` |
 | YAML reader, checks and writer | [scripts/provenance.py](../scripts/provenance.py) |
 | Background report processing | [scripts/ingestion.py](../scripts/ingestion.py) |

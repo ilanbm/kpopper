@@ -24,24 +24,27 @@ def _run(script, args, directory):
                           capture_output=True, text=True, encoding="utf-8", timeout=55)
 
 
-def read_view(location, reader_args=None):
-    """The public CLI and hooks use the same checked/legacy opening boundary."""
+def read_view(location, reader_args=None, host=None):
+    """The public CLI and hooks use the same checked/legacy opening boundary. `host` names
+    the agent host so the opener's next moves read as that host invokes a skill."""
     if reader_args is None:
         result = _run("session_hook.py", [location["record"]], location["workspace"])
         if result.returncode != 3:
             return result, True
         reader_args = ["--chars", str(LEGACY_CHARS), location["record"]]
+    if host:
+        reader_args = [*reader_args, "--host", host]
     return _run("provenance.py", ["open", *reader_args], location["workspace"]), False
 
 
-def opening(payload):
+def opening(payload, host=None):
     if not isinstance(payload, dict) or payload.get("agent_id"):
         return ""
     location = W.locate(payload.get("cwd"))
     directory, record = location["workspace"], location["record"]
     output = []
     try:
-        first_use = O.context(location)
+        first_use = O.context(location, host)
         if first_use:
             output.append(first_use)
     except (OSError, ValueError) as error:
@@ -49,7 +52,7 @@ def opening(payload):
     if location["status"] == "unavailable":
         return "\n".join(output)
     if location["status"] == "found":
-        result, _ = read_view(location)
+        result, _ = read_view(location, host=host)
         if result.stdout:
             output.insert(0, result.stdout.rstrip())
         elif result.returncode:
@@ -88,14 +91,17 @@ def opening(payload):
 
 
 def main():
-    cursor = "--cursor" in sys.argv[1:]
+    args = sys.argv[1:]
+    cursor = "--cursor" in args
+    # the host, when the hook names it: a host with skills is told the skill for each move
+    host = args[args.index("--host") + 1] if "--host" in args and args.index("--host") + 1 < len(args) else None
     try:
         raw = sys.stdin.read()
         payload = json.loads(raw) if raw.strip() else {}
         if cursor and isinstance(payload, dict):
             identity = payload.get("conversation_id")
             payload["session_id"] = "cursor-" + identity if isinstance(identity, str) and identity else ""
-        text = opening(payload)
+        text = opening(payload, host)
         if cursor:
             print(json.dumps({"additional_context": text}, ensure_ascii=False))
         elif text:

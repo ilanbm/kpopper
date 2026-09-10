@@ -1,8 +1,11 @@
 # Starting a knowledge record
 
 kpopper can begin in a workspace with no record, including one without Git. The session
-opener gives the agent a short instruction to continue your task and offer a starting choice
-at a suitable moment. It creates no record and scans no materials by itself.
+opener says in two lines that no record exists, which skill keeps findings as they arise and
+which one maps existing materials on request, and whether the starting choices were already
+offered here. The timing of that offer - once, at a suitable moment in real work, never on a
+greeting - is the [map skill](../skills/map/SKILL.md)'s. The opener creates no record and
+scans no materials by itself.
 
 Choose **Learn while working**, **Initial map**, or **Deeper investigation** in the conversation.
 An initial map covers your goals, current situation, commitments, decisions, evidence and

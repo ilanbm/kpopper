@@ -86,11 +86,15 @@ class FirstUse(WorkspaceFixture, unittest.TestCase):
         result = self.cli()
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertIn("KPOPPER_START", result.stdout)
-        self.assertIn("choices", result.stdout)
-        self.assertIn("map", result.stdout)
-        self.assertIn("deep", result.stdout)
+        self.assertIn("kpopper add", result.stdout)
+        self.assertIn("kpopper map", result.stdout)
+        self.assertIn("one-off needs nothing", result.stdout)
+        self.assertIn("never offered", result.stdout)
         self.assertFalse(self.private.exists())
         self.assertEqual(list(self.work.iterdir()), [])
+        # a host with skills is told the skill for each move, in its own syntax
+        self.assertIn("/kpopper:record", O.context(W.locate(self.work), "claude"))
+        self.assertIn("$map", O.context(W.locate(self.work), "codex"))
 
     def test_choice_survives_sessions_and_does_not_create_a_record(self):
         self.assertEqual(self.map().returncode, 0)
@@ -113,7 +117,9 @@ class FirstUse(WorkspaceFixture, unittest.TestCase):
         status = json.loads(self.cli("status", cwd=other).stdout)
         self.assertTrue(status["introduced"])
         self.assertFalse(status["offered"])
-        self.assertIn("Skip the introductory explanation", self.cli(cwd=other).stdout)
+        # the offer's timing lives in the map skill; the hook says only whether it was made
+        self.assertIn("never offered", self.cli(cwd=other).stdout)
+        self.assertIn("already offered", self.cli().stdout)
 
     def test_guidance_off_persists_but_does_not_authorize_mapping(self):
         self.assertEqual(subprocess.run([sys.executable, str(ROOT / "scripts/cli.py"), "config", "--guidance", "off"], cwd=self.work, env=self.env, capture_output=True, text=True).returncode, 0)

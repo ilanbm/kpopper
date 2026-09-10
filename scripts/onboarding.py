@@ -112,7 +112,19 @@ def status(location):
             "pending_tips": [event for event in EVENTS if event not in shown]}
 
 
-def context(location):
+SKILL_FORMS = {"claude": "/kpopper:{}", "codex": "${}"}
+
+
+def moves(host):
+    """How the host names the record's write and the map: its skills where it has them
+    (`/kpopper:record` in Claude Code, `$record` in Codex), the command line elsewhere."""
+    form = SKILL_FORMS.get(host or "")
+    if form:
+        return form.format("record"), form.format("map")
+    return "`kpopper add`", "`kpopper map`"
+
+
+def context(location, host=None):
     current = status(location)
     if current["status"] == "unavailable":
         return ("KPOPPER_START: record unavailable. " + current["reason"] + "\n"
@@ -128,26 +140,23 @@ def context(location):
         lines.append("An older mapping preference was saved but never dispatched. "
                      "Run `kpopper map` in an active session if the user still wants that work.")
     if current["status"] == "missing":
-        lines.append("No knowledge record was found for this workspace. Existing knowledge may be in its materials. "
-                     "Keep working on the user's goal; create PROVENANCE.yaml only with a useful finding worth revisiting, "
-                     "within the user's write authorization. A one-off may need no record.")
-        if not current["offered"] and current["guidance"]:
-            lines.append("Offer the three starting choices once, briefly, at the first suitable moment in real work: "
-                         "learn while working (default), map existing materials, or investigate more deeply. "
-                         "Allow skipping. Do not interrupt urgent work or ask on a greeting. "
-                         "No answer means continue the task, not permission to scan.")
-            if current["introduced"]:
-                lines.append("Skip the introductory explanation: this user has already seen it in another project.")
-            lines.append("After showing the offer, run `kpopper _agent shown welcome`. "
-                         "Only an explicit mapping request permits `kpopper map` or `kpopper map --deep`. Learning while working is the default. "
-                         "Read `kpopper _agent guide` before mapping or showing explanations.")
+        # Two lines, and no script: the starting offer and its timing live in the map skill,
+        # the first write in the record skill. A hook that carries the offer carries it onto
+        # greetings too.
+        record, mapping = moves(host)
+        lines.append("No knowledge record in this workspace. For work that will be revisited, "
+                     + record + " keeps findings as they arise - the first write creates PROVENANCE.yaml; "
+                     + mapping + " builds an initial map of existing materials on request. "
+                     "A one-off needs nothing. Never offer any of this on a greeting.")
+        if current["offered"] or not current["guidance"]:
+            lines.append("The starting choices were already offered here; do not repeat them. "
+                         "Mapping remains available on request.")
         else:
-            lines.append("Do not repeat the starting offer. Mapping remains available on request through `kpopper _agent guide`.")
+            lines.append("The starting choices (learn while working, map, investigate) were never offered "
+                         "in this workspace; the map skill says when, and `kpopper _agent shown welcome` records it.")
     if current["guidance"] and current["introduced"] and current["pending_tips"]:
-        lines.append("Contextual explanations still unseen: " + ", ".join(current["pending_tips"]) + ". "
-                     "Use `kpopper _agent guide`: show one only when that event actually happens, "
-                     "link the finding and its source, then acknowledge it with `kpopper _agent shown EVENT`. "
-                     "`kpopper config --guidance off` disables explanations without disabling the work.")
+        lines.append("Explanations still unseen: " + ", ".join(current["pending_tips"]) + " - "
+                     "`kpopper _agent guide` shows one only when that event happens, then `kpopper _agent shown EVENT`.")
     has_followups = False
     if current["guidance"] and not current["followups_offered"]:
         try:

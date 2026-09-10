@@ -184,7 +184,7 @@ time. kpopper is designed to keep the reasoning connecting them available across
 with sources, review snapshots and explicit conditions for reconsideration.
 
 Install it in the environment where that work happens. The package includes the
-[method](skills/kpopper/SKILL.md), record tools and host-specific hooks; setup depends on
+[method](skills/kpopper/SKILL.md) with one skill per occasion beside it, record tools and host-specific hooks; setup depends on
 the environment.
 
 ### Claude Cowork

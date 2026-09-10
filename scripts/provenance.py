@@ -1285,7 +1285,21 @@ def check_lines(paths):
     return fail, note, moved, cont, summary
 
 
-def opening(paths, budget=25, chars=None):
+SKILL_FORMS = {"claude": "/kpopper:{}", "codex": "${}"}
+
+
+def next_moves(host):
+    """The session's next moves, named the way the host invokes a skill - `/kpopper:ground`
+    in Claude Code, `$ground` in Codex - or nothing, for a host that runs the reader's verbs
+    directly and is told those instead."""
+    form = SKILL_FORMS.get(host or "")
+    if not form:
+        return None
+    return {"ground": form.format("ground") + " <entry|prefix>", "record": form.format("record"),
+            "consolidate": form.format("consolidate")}
+
+
+def opening(paths, budget=25, chars=None, host=None):
     """
     What a session should read instead of the whole record.
 
@@ -1425,8 +1439,19 @@ def opening(paths, budget=25, chars=None):
         line = f"  ? {qid}: {text}"
         quests.append(line if len(line) < 100 else line[:100] + " ...")
 
-    footer = ("next: pull <entry|prefix> (values with sources) · affects <entry> "
-             "(what a change reaches) · check")
+    # The next moves are named as the host invokes them: a skill where the host has skills
+    # (`/kpopper:ground` in Claude Code, `$ground` in Codex), the reader's own verbs elsewhere.
+    moves = next_moves(host)
+    if moves:
+        footer = (f"next: {moves['ground']} (values with sources, what a change reaches) · "
+                  f"{moves['record']} (what this session found) · check")
+        rest = (f" · {moves['ground']} (values with sources, what a change reaches) · "
+                f"{moves['record']}")
+    else:
+        footer = ("next: pull <entry|prefix> (values with sources) · affects <entry> "
+                  "(what a change reaches) · check")
+        rest = (" · pull <entry|prefix> (values with sources) · affects <entry> "
+                "(what a change reaches)")
     # An intent no tab of the page serves is said at every open, in the one line that is
     # already about what to do next: the newest first and how many more, never the list -
     # the slot is for what needs a person, and check names the rest with a hint each. An
@@ -1436,14 +1461,16 @@ def opening(paths, budget=25, chars=None):
     fired = sorted(k for k, f in facts.items() if f["fired"])
     cov = info.get("coverage") if info and "error" not in info else None
     unserved = [r["id"] for r in cov["rows"] if r["unserved"]] if cov else []
-    rest = (" · pull <entry|prefix> (values with sources) · affects <entry> "
-            "(what a change reaches)")
     if fired:
         footer = (f"next: check - {fired[0]} fired ({short(jud[fired[0]]['pred'], 40)})"
                   + (f" (and {len(fired) - 1} more)" if len(fired) > 1 else "") + rest)
     elif unserved:
         footer = (f"next: check - {unserved[0]} is served by no tab"
                   + (f" (and {len(unserved) - 1} more)" if len(unserved) > 1 else "") + rest)
+    if moves and doc.hypotheses:
+        # hypotheses beside the record are a move of their own on a host that has the skill
+        n = len(doc.hypotheses)
+        footer += f" · {moves['consolidate']} ({n} hypothes{'is waits' if n == 1 else 'es wait'})"
 
     for l in head:
         print(l)
@@ -3878,5 +3905,6 @@ if __name__ == "__main__":
     if cmd == "open":
         b = int(rest[rest.index("--budget") + 1]) if "--budget" in rest else 25
         c = int(rest[rest.index("--chars") + 1]) if "--chars" in rest else None
-        sys.exit(opening(files, b, c))
+        h = rest[rest.index("--host") + 1] if "--host" in rest else None
+        sys.exit(opening(files, b, c, h))
     sys.exit(check(files))
