@@ -34,7 +34,7 @@ function domEnvironment(html) {
     const viewport = this.ownerDocument._testViewport;
     const box = this._testBounds || (this.id === 'kp-document' ? { left: 0, top: 0, width: viewport.innerWidth, height: viewport.innerHeight } :
       this.id === 'kp-panel' ? { left: Number.parseFloat(this.style.left) || 0, top: Number.parseFloat(this.style.top) || 0,
-        width: Math.min(440, viewport.innerWidth - 24), height: Math.min(this._testHeight || 320, Number.parseFloat(this.style.maxHeight) || Infinity) } :
+        width: Math.min(Number.parseFloat(this.style.width) || 440, viewport.innerWidth - 24), height: Math.min(Number.parseFloat(this.style.height) || this._testHeight || 320, Number.parseFloat(this.style.maxHeight) || Infinity) } :
       { left: 140, top: 200, width: 120, height: 24 });
     return { ...box, right: box.left + box.width, bottom: box.top + box.height };
   };
@@ -921,4 +921,48 @@ test('raw unavailable-check diagnostics stay under the closed technical disclosu
   const visible = card.cloneNode(true);
   visible.querySelector('[data-technical]').remove();
   assert.ok(!visible.textContent.includes(diagnostic));
+});
+
+test('programmatically focused titles have no outline while keyboard controls retain one', () => {
+  const host = openArtifact();
+  host.pointer('rate', 'click');
+  assert.equal(host.document.activeElement.id, 'kp-panel-title');
+  const rules = [...host.document.querySelectorAll('style')].flatMap(style => [...style.sheet.cssRules]);
+  assert.equal(rules.find(rule => rule.selectorText === '#kp-panel-title:focus')?.style.getPropertyValue('outline'), 'none');
+  assert.ok(rules.some(rule => rule.selectorText?.includes('button:focus-visible') && rule.style.getPropertyValue('outline') !== 'none'));
+});
+
+test('source navigation and Back retain the same outer box while content grows or shrinks', () => {
+  const host = openArtifact();
+  host.pointer('rate', 'click', 620, 460);
+  const box = host.panel.getBoundingClientRect();
+  host.panel.querySelector('[data-source="counts"]').click();
+  host.panel._testHeight = 700;
+  host.panel._testResize();
+  assert.deepEqual(host.panel.getBoundingClientRect(), box);
+  assert.equal(host.panel.dataset.view, 'source');
+  host.panel.querySelector('[data-action="back"]').click();
+  host.panel._testHeight = 180;
+  host.panel._testResize();
+  assert.deepEqual(host.panel.getBoundingClientRect(), box);
+  assert.equal(host.panel.dataset.view, 'claim');
+});
+
+test('internal disclosures retain the box, viewport shrink clamps it, and a new passage resets it', () => {
+  const host = openArtifact();
+  host.pointer('rate', 'click', 160, 210);
+  const box = host.panel.getBoundingClientRect();
+  host.panel.querySelector('[data-technical] summary').click();
+  host.panel._testHeight = 700;
+  host.panel.querySelector('[data-technical]').dispatchEvent(host.event('toggle'));
+  assert.deepEqual(host.panel.getBoundingClientRect(), box);
+  host.sandbox.innerWidth = 350; host.sandbox.innerHeight = 250;
+  host.fireWindow('resize');
+  assert.ok(host.panel.getBoundingClientRect().right <= 338);
+  assert.ok(host.panel.getBoundingClientRect().bottom <= 238);
+  host.sandbox.innerWidth = 1200; host.sandbox.innerHeight = 800;
+  host.panel._testHeight = 220;
+  host.pointer('books', 'click', 170, 150);
+  assert.equal(host.panel.style.height || '', '');
+  assert.equal(host.panel.getBoundingClientRect().height, 220);
 });

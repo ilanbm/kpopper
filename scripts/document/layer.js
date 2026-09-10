@@ -90,6 +90,7 @@
   let sourceView = null;
   let sourceReturn = null;
   let placement = null;
+  let panelBounds = null;
   let pinned = false;
   let pointerInside = false;
   let hoverTimer = null;
@@ -211,11 +212,30 @@
       value.viewport.width > 0 && value.viewport.height > 0 && value.anchor.right >= value.anchor.left && value.anchor.bottom >= value.anchor.top;
   }
 
+  function holdPanelBounds() {
+    if (!panel.hidden && !panelBounds) {
+      const box = panel.getBoundingClientRect();
+      panelBounds = { left: box.left, top: box.top, width: box.width, height: box.height };
+    }
+  }
+
   function placePanel() {
-    if (panel.hidden || !placement || panel.dataset.view === 'overview') return;
+    if (panel.hidden || !panelBounds && (!placement || panel.dataset.view === 'overview')) return;
     const width = window.innerWidth;
     const height = window.innerHeight;
     if (!Number.isFinite(width) || !Number.isFinite(height) || width <= 24 || height <= 24) return;
+    if (panelBounds) {
+      // Internal navigation changes the content, not the surrounding window. Only
+      // a smaller viewport may constrain the saved box; the body scrolls inside it.
+      const pw = Math.min(panelBounds.width, width - 24);
+      const ph = Math.min(panelBounds.height, height - 24);
+      panel.style.width = pw + 'px'; panel.style.height = ph + 'px';
+      panel.style.maxHeight = ph + 'px';
+      panel.style.right = 'auto'; panel.style.bottom = 'auto';
+      panel.style.left = Math.max(12, Math.min(panelBounds.left, width - pw - 12)) + 'px';
+      panel.style.top = Math.max(12, Math.min(panelBounds.top, height - ph - 12)) + 'px';
+      return;
+    }
     const geometry = placement.geometry;
     let x = geometry.x, y = geometry.y, left = geometry.anchor.left, top = geometry.anchor.top, bottom = geometry.anchor.bottom;
     if (placement.frame) {
@@ -265,7 +285,7 @@
     opener.setAttribute('aria-expanded', 'false');
     focusClaim = null;
     selectedClaim = null;
-    sourceView = null; sourceReturn = null; placement = null;
+    sourceView = null; sourceReturn = null; placement = null; panelBounds = null;
     dismissedClaim = restoreFocus ? returnClaim : null;
     pinned = false; pointerInside = false;
     renderPanel();
@@ -279,6 +299,8 @@
 
   function openPanel(id, geometry = null, preview = false) {
     clearHover();
+    panelBounds = null;
+    panel.removeAttribute('style');
     focusClaim = typeof id === 'string' && claims.has(id) ? id : null;
     selectedClaim = focusClaim;
     sourceView = null; sourceReturn = null;
@@ -295,6 +317,7 @@
   }
 
   function openSource(id, inputs, event, originClaim) {
+    holdPanelBounds();
     sourceReturn = { claim: selectedClaim, placement, originClaim, scroll: panel.querySelector('.kp-panel-content').scrollTop };
     sourceView = { id, inputs };
     if (!placement) {
@@ -313,6 +336,7 @@
     const previous = sourceReturn;
     const source = sourceView.id;
     selectedClaim = previous.claim; placement = previous.placement;
+    if (!selectedClaim) panelBounds = null;
     sourceView = null; sourceReturn = null;
     pinPanel(); renderPanel();
     panel.querySelector('.kp-panel-content').scrollTop = previous.scroll;
@@ -740,7 +764,7 @@
   opener.addEventListener('click', () => openPanel());
   panel.addEventListener('pointerenter', () => { pointerInside = true; clearTimeout(leaveTimer); });
   panel.addEventListener('pointerleave', () => { pointerInside = false; scheduleLeave(); });
-  panel.addEventListener('click', pinPanel, true);
+  panel.addEventListener('click', () => { holdPanelBounds(); pinPanel(); }, true);
   panel.addEventListener('focusin', pinPanel);
   panel.addEventListener('toggle', placePanel, true);
   if (typeof ResizeObserver === 'function') new ResizeObserver(placePanel).observe(panel);

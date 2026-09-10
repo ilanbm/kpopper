@@ -14,7 +14,8 @@ A marked passage opens a floating explanation beside the pointer; hover gives a 
 and clicking keeps it open. The card explains the result in ordinary language, with
 technical identifiers, locations and raw check details collapsed by default. Source
 links open a source view in the same panel, with Back to the preceding explanation.
-Only one view appears at a time. Click outside to close it; the close control remains
+Only one view appears at a time. Internal source navigation and Back keep the same
+outer frame; longer content scrolls inside it. Click outside to close it; the close control remains
 visible while its content scrolls. The Evidence button opens the full document overview. A match means the displayed value or exact
 quotation agrees with a captured reading, or that a supported calculation agrees at the
 stated precision. Missing sources remain unavailable. Interpretations remain unchecked,
