@@ -48,7 +48,9 @@ function domEnvironment(html) {
     // simple rules in these fixtures, followed by their inline styles.
     for (const sheet of document.querySelectorAll('style')) {
       for (const rule of sheet.sheet.cssRules) {
-        if (rule.selectorText && Object.keys(properties).some(name => rule.style.getPropertyValue(name)) &&
+        // Pseudo-elements are not the element itself. css-select cannot match
+        // these selectors; this bounded model excludes their separate box styles.
+        if (rule.selectorText && !rule.selectorText.includes('::') && Object.keys(properties).some(name => rule.style.getPropertyValue(name)) &&
             element.matches(rule.selectorText)) apply(rule.style);
       }
     }
