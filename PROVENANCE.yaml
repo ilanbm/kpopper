@@ -262,6 +262,10 @@ sources:
             counts for coverage but no longer silences a flagged item"
     of: "2026-09-04, given the written layer at 2e5f4f3 and what four pieces since then built on it"
     read: "2026-09-04"
+  doc.checked_retrieval:
+    name: "Checked-session search continuation and explicit context contract"
+    file: "docs/retrieval.md"
+    read: "2026-09-10"
   doc.checked_sessions:
     name: "Optional checked-session interface and guarantee limits"
     file: "docs/checked-sessions.md"
@@ -1129,6 +1133,24 @@ judgments:
                                           the union is tested by consolidation, and the page draws
                                           the base"
       p.contested_meanings: 1
+  d.context_is_an_explicit_read:
+    rests_on: [doc.checked_retrieval, d.checked_session_is_optional]
+    verdict: "Search continues from a revision-bound ranked position; graph context is explicitly
+              requested around known IDs for support or impact, keeps exact source reads and unread
+              boundaries, and leaves global search available."
+    because: "A needed source can occur later in a ranking or outside declared links. Declared paths
+              can recover additional source records, but a path or search score does not establish a
+              claim, and a bounded neighborhood cannot establish full coverage."
+    reopened_by: "An unchanged search skips an unread match when it resumes; an
+                  old returned cursor is silently applied to a changed ranking; a context read loses
+                  source qualifications or hides unread boundaries; or task evidence justifies a
+                  different retrieval contract."
+    seen:
+      doc.checked_retrieval: "read 2026-09-10"
+      d.checked_session_is_optional: "Offer the checked session transport alongside the legacy
+                                      reader, enabled explicitly per project or machine; keep each
+                                      judgment's source body alongside its computed card, exact raw
+                                      reads and a reversible hook choice."
   d.contradiction_by_id_and_day:
     rests_on: [s.2026_09_04_minted_permission, s.2026_09_03_hypotheses, d.base_shared_forks_on_contradiction, d.write_path_returns_reach, p.supersede_doors]
     verdict: "a contradiction is told by the id and the day: the same id with a value read no later
