@@ -17,12 +17,16 @@ mortgage applications need the same continuity: a new session can pick up the go
 and earlier decisions, along with the reasons behind them. kpopper is available as an agent
 plugin and through the command line.
 
+It can also create an ordinary HTML report with its evidence built in. Read the document,
+open an explanation beside a marked passage, and follow it back to the source—all in one
+file you can keep or share.
+
 <sub>*<ins>Third brain</ins>: a layer over a second brain's stored knowledge—how claims are
 grounded, why decisions were made, and what would call them into question.</sub>
 
 [Get started](#get-started) · [See an example](#ready-to-launch-had-a-condition) ·
 [Past, present, future](#past-present-future) ·
-[See a document](#regular-html-annotated-with-reasoning) ·
+[See a document](#share-a-document-with-its-reasons) ·
 [The third brain](#a-third-brain-for-work-in-progress) · [How it works](#how-it-works) ·
 [Coding & CI](#coding-check-the-reasoning-behind-a-merge) ·
 [Why Lean](#the-lean-proof-assistant-from-fermat-to-agents) · [Command reference](docs/reference.md)
@@ -71,10 +75,10 @@ The same five questions orient the work:
 4. **Where is the evidence?** Sources and enough detail to find the relevant passage again.
 5. **What needs another look?** Open questions, conflicting reports and changed premises.
 
-These questions guide what to record. Today, the record grows from findings made during
-the work; guided project mapping is [planned](#what-is-available-and-what-is-next).
-Relevant sources come from the user's context and available tools. Access to a file alone
-does not make it part of the project.
+These questions guide what to record. Learn from findings during ordinary work, or ask
+for an [initial map or deeper investigation](docs/first-use.md) of selected materials.
+The agent uses the sources available in your context; access to a file alone does not
+make it part of the project.
 
 ## A third brain for work in progress
 
@@ -251,11 +255,12 @@ and limitations; automatic opening and stop behavior differ by host. See the
 
 ### Start working
 
-The local scripts need **Python 3.9+ and PyYAML** available in the environment used by the
-host's `python3`. If PyYAML is missing, install it in that environment:
+The local scripts need **Python 3.9+** and the [package dependencies](pyproject.toml)
+available in the environment used by the host's `python3`. A Python package installation
+includes them. For a plugin-only installation, install them in that environment:
 
 ```sh
-python3 -m pip install pyyaml
+python3 -m pip install 'PyYAML>=5.1' 'html5lib>=1.1,<2' 'tinycss2>=1.2,<2' tzdata
 ```
 
 Lean is optional; the ordinary reader and page work without it. In a new agent session
@@ -512,11 +517,45 @@ The ordinary commands remain available without it.
 
 [Logo source and trademark information](assets/README.md#lean-logo).
 
-## Regular HTML, annotated with reasoning
+## Share a document with its reasons
 
-A report can still read like a report: paragraphs, figures, tables and dates. In a kpopper
-page, linked details carry another layer—the reasoning and evidence behind them. Read the
-document normally, then follow a reference when something deserves a closer look.
+Ask for the document you want:
+
+> Create an HTML project update from these notes, with a recommendation and a checklist.
+
+With kpopper active, the agent writes the content, design and evidence mapping together.
+You do not need to ask for the layer separately or prepare a knowledge record first.
+
+**Open the explanation where you are reading.** Hover over a dotted passage to preview
+its explanation; click to keep it open. The card focuses on that passage, with an explanation
+in ordinary language and technical details collapsed. Click outside or use the close button
+to return to the document.
+
+**Follow the source, then come back.** An internal source link opens only the relevant
+reading in the same card. Back returns to the explanation without losing your place.
+The card keeps its position while longer content scrolls inside it.
+
+**Keep or share one file.** The HTML contains the document, selected source snapshots and
+review choices. Open it offline in a browser with JavaScript enabled; no account, server
+or neighboring files are needed to read the document and inspect its evidence.
+
+Give the agent a changed source later and it can prepare a new copy with grouped
+before-and-after corrections. A changed count and the percentage calculated from it stay
+one decision. Accept or keep the original, then choose **Save document copy** to retain
+your choice and the evidence behind it.
+
+A match covers the stated comparison or calculation against a saved reading. Missing
+evidence and unchecked interpretations remain explicit; unmarked text is not checked.
+Opening an old file does not reread sources or discover later changes.
+See [HTML documents with evidence](docs/documents.md) for the workflow and its limits.
+
+<a id="regular-html-annotated-with-reasoning"></a>
+
+## Explore the project's knowledge record
+
+The project record also has its own HTML page. Its views bring together recorded facts,
+decisions and open questions, and can arrange them as a report. The Greenhouse example
+below shows this record-page workflow.
 
 **Hover to see what a conclusion rests on.** Here, the heating recommendation opens into
 its premises, breaking condition and explanation. The related figures are highlighted
@@ -549,35 +588,26 @@ chosen layout. **Now** and other project tabs can present reports, plans or comp
 is a rendered snapshot—regenerate it after the record changes. For layouts, components,
 localization and checks on stale explanatory text, see the [page reference](skills/kpopper/PAGE.md).
 
-## Share a document with its reasons
-
-Ask for an HTML report, summary or brief as usual. With kpopper active, the agent writes
-the document and its evidence mapping together, preserving the chosen content and design.
-The result is one HTML file with inline source snapshots, check explanations and review
-controls. It opens offline in a browser with JavaScript enabled.
-
-Provide a changed source later and the agent can prepare a new copy with precise,
-grouped corrections. Accept or reject a proposal and download the chosen copy; reopening
-it retains the evidence and decision. Missing sources and unchecked interpretations stay
-explicit. Opening the file does not contact sources or detect new changes by itself.
-See [standalone HTML documents](docs/documents.md).
-
 ## What is available, and what is next
+
+This table describes the current repository. Check the [changelog](CHANGELOG.md) when
+updating an older installation; a merged feature may still be awaiting a release.
 
 | Status | Capability |
 |---|---|
 | Available | YAML records, source references, judgment checks, dependency tracing, review snapshots, hypotheses and consolidation. |
-| Available | CLI, HTML page and agent integrations, with host-specific setup and limits. |
+| Available | CLI, HTML record page and agent integrations, with host-specific setup and limits. |
+| Available | Standalone HTML authoring with contextual explanations, selected source snapshots and grouped corrections saved in the document copy. |
 | Available | Checks on combined records and hypotheses in CI, including before-merge inspection of another branch's record. |
 | Available within stated limits | Background processing of explicit reports and selective delivery of important findings. |
 | Platform import route documented; runtime not yet validated | ChatGPT Work installation and execution of this plugin. |
 | Experimental, opt-in | Lean-checked session views, revision-bound reads and a project-bound MCP server. |
-| Planned | Guided starting choices: learn during ordinary work, map selected existing materials, or investigate a defined subject and period in depth. |
-| Planned | Conversational onboarding that distinguishes a new user from a new project, explains concepts when first used, offers cards and links, and lets the user skip. |
+| Available through the agent | Guided starting choices: learn during ordinary work, map selected existing materials, or investigate a defined subject and period in depth. |
+| Available within host limits | Optional first-use explanations, workspace guidance and the ability to skip or turn guidance off. |
 
-An agent can help gather and interpret information using its available tools today. The
-planned guided flows are not built-in scanning or connectors. Their scope should begin
-with where the work and decisions actually happen, and which sources the user wants included.
+Mapping runs in the calling agent session, using its available tools and the sources you
+authorize. It does not install connectors or scan accounts by itself. See
+[starting a knowledge record](docs/first-use.md) for the workflow and host requirements.
 
 ## Make it earn its place
 
