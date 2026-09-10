@@ -19,6 +19,19 @@ from — the record moved, the view did not. The tests run against the fixture r
 `tests/fixtures/page`, which exercises every field the reader and the page accept; a new field
 goes there first.
 
+Standalone-document changes also run the offline UI suite with Node 22 or later:
+
+```sh
+pip install .
+npm ci --prefix tests/document-support --ignore-scripts --no-audit --no-fund
+npm run test:documents
+```
+
+Set `PYTHON` to the Python interpreter with the package dependencies when it is not
+`python3`. These tests build real synthetic artifacts and execute their scripts in a
+DOM model. They cover review/export behavior; native browser layout, sandbox/CSP
+behavior and downloads require a separate permitted browser check.
+
 The dry run lays the hypotheses beside the record over it and checks the result: red on a
 contested id, a falsifier that holds, or a hole; a premise that moved under a judgment is green
 and blocks only the fold. On a pull request the tree it runs on is the merge commit — the merged

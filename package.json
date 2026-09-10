@@ -36,5 +36,8 @@
     "playwright-core": {
       "optional": true
     }
+  },
+  "scripts": {
+    "test:documents": "node tests/test_document_ui.cjs"
   }
 }

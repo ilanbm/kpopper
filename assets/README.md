@@ -1,6 +1,23 @@
 # Image sources
 
+## Work across time
+
+`work-across-time.png` is a conceptual illustration for the README's Past, Present and
+Future overview. It shows sources and earlier reasoning, current dependency checks, and
+deferred work. The return arrow describes the agent's separate evidence-recording step;
+it does not represent automatic rewriting of the graph. The diagram is not a product
+screenshot or a release roadmap, and its document icons contain no research citations.
+
 ## Product screenshots
+
+`standalone-document-reasoning.png` is an unaltered browser capture of **The Autumn Garden
+Workshop**, an HTML report produced by the standalone document workflow. The document and
+the focused explanation for its 16-day registration window appear together. The card marks
+that interpretation as **Not checked**, explains its basis in two dates, and links to the
+project notes offered as context. It does not present the interpretation as an automatically
+verified source fact.
+
+### Earlier record-page captures
 
 `document-hover.png` and `document-drilldown.png` are browser captures of the actual
 kpopper renderer's **Now** tab, cropped to the report excerpt. They use the included

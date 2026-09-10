@@ -53,6 +53,7 @@ COMMANDS = {
     "add": ("ID FIELD=VALUE ...", "Add a grounded entry or judgment."),
     "set": ("ID VALUE [--why TEXT] [--as-of DATE]", "Update a reading and see what it affects."),
     "review": ("ID [--as-of DATE]", "Record a judgment's review against current readings."),
+    "document": ("OPERATION [OPTIONS]", "Create or refresh a standalone authored HTML document with evidence."),
     "page": ("[--open] [--out PATH] [--verify]", "Render or verify the knowledge page."),
     "where": ("", "Locate the record for this workspace."),
     "consolidate": ("[--dry-run] [NAME ...]", "Evaluate and reconcile recorded hypotheses."),
@@ -61,6 +62,8 @@ COMMANDS = {
     "distinct": ("ID ID REASON", "Keep similar subjects distinct."),
     "session": ("OPERATION [OPTIONS]", "Manage checked session views and their transport."),
     "ingest": ("OPERATION [OPTIONS]", "Capture source reports and inspect their processing."),
+    "followups": ("OPERATION [OPTIONS]", "Capture deferred work, inspect triggers and coordinate daily review."),
+    "watch": ("OPERATION [OPTIONS]", "Check branch compatibility asynchronously and share scoped external facts."),
 }
 
 
@@ -137,7 +140,7 @@ def main():
         root.error("Use kpopper open, kpopper map, or kpopper config; start is not a public command.")
     if cmd not in COMMANDS and cmd != "_agent":
         root.error("unknown command: " + cmd)
-    if cmd not in {"open", "map", "config", "_agent", "session", "ingest"} and rest in (["--help"], ["-h"]):
+    if cmd not in {"open", "map", "config", "_agent", "session", "ingest", "document", "followups", "watch"} and rest in (["--help"], ["-h"]):
         usage, description = COMMANDS[cmd]
         print("usage: kpopper " + cmd + (" " + usage if usage else "") + " [--json]\n\n" + description)
         if cmd in {"set", "add", "review", "same", "distinct"}:
@@ -156,6 +159,20 @@ def main():
             os.chdir(pathlib.Path(options.workspace).expanduser())
         except (OSError, ValueError) as error:
             root.error(str(error))
+    if cmd == "watch":
+        try:
+            from .watch import main as watch_main
+        except ImportError:
+            from watch import main as watch_main
+        sys.exit(watch_main([arg for arg in rest if arg != "--json"]))
+    if cmd == "followups":
+        try:
+            from .followups_cli import main as followups_main
+        except ImportError:
+            from followups_cli import main as followups_main
+        # The group returns structured data directly, without the legacy text wrapper.
+        rest = [arg for arg in rest if arg != "--json"]
+        sys.exit(followups_main(rest))
     if cmd in {"open", "map", "config"}:
         try:
             from . import workspace_cli
@@ -185,8 +202,8 @@ def main():
         sys.exit(result.returncode)
     if cutoff < len(rest):
         rest = rest[:cutoff] + rest[cutoff + 1:]
-    if cmd in {"session", "ingest"}:
-        script = "session_cli.py" if cmd == "session" else "ingestion.py"
+    if cmd in {"session", "ingest", "document"}:
+        script = {"session": "session_cli.py", "ingest": "ingestion.py", "document": "document_cli.py"}[cmd]
         tool = [sys.executable, str(HERE / script)] + rest
         if os.name == "nt":
             sys.exit(subprocess.run(tool).returncode)

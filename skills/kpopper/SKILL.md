@@ -1,6 +1,6 @@
 ---
 name: kpopper
-description: "Maintain a grounded knowledge record for work that gets revisited: planning, research, coordination, decisions and software. Use when starting or resuming such work, including when PROVENANCE.yaml is absent, or when the user asks to map existing materials and their history."
+description: "Maintain a grounded knowledge record for work that gets revisited: planning, research, coordination, decisions and software. Use when starting or resuming such work, including when PROVENANCE.yaml is absent, or when the user asks to map existing materials and their history. Also use when creating or refreshing an HTML document, so the document carries its source and check layer."
 ---
 
 # kpopper
@@ -46,7 +46,33 @@ In Codex hosts with native background agents and `send_message_to_thread`, use
 reach a primary that has finished answering. [DELIVERY.md](DELIVERY.md) gives the short native
 worker contract. Plain hooks alone do not provide that idle delivery.
 
+For opted-in worktree compatibility and shared external facts, use
+[watch](../watch/SKILL.md). Keep code observations on their branch. An external observation
+needs an explicit environment, source and date before shared capture; confidence alone
+never selects its destination. Continue unrelated work while checks run, and inspect the
+current result before relying on it. Shared facts can be read from any branch with
+`kpopper watch shared`; comparison never changes main or a judgment's `seen`.
+
+## When the requested output is an HTML document
+
+For an ordinary HTML report, summary, brief or other document, use the standalone
+[document authoring workflow](DOCUMENTS.md). Create the user's content and design,
+and create the source/check mapping while writing it; the user does not prepare that
+mapping or ask for a separate evidence step. Deliver the single HTML produced by
+`kpopper document build`, with its inline evidence and review controls. Read the short
+author guide before authoring, use actual available sources, and keep missing evidence
+and inferred prose explicit. A one-off document does not require a new PROVENANCE.yaml,
+a workspace map, or unrelated record setup. Existing record-page requests still use PAGE.md.
+
 ## Step 1 — `PROVENANCE.yaml`
+
+**Keep deferred work connected.** When a later check or action is authorized, use
+`kpopper followups` to link it to the relevant knowledge and explicit activation conditions.
+Prefer the user's existing task destination; a private fallback is available. Strongly recommend
+a short daily review when this first becomes useful, alongside event checks, and respect the
+user's scheduling choice. [FOLLOWUPS.md](FOLLOWUPS.md) covers capture, external owners, claims,
+evidenced outcomes and connecting a real host schedule. A completed check can rearm a followup;
+it does not by itself complete the work or refresh a judgment's `seen`.
 
 This method owns one known entry point: **`PROVENANCE.yaml` in the project's working directory.**
 Git is optional. Use the location resolved by the opener or `kpopper open --json`: it checks
@@ -302,6 +328,10 @@ Recommendations, assessments, comparisons — **and summaries, overviews, and an
 
 "The annual cost is $90,720" is not — check the arithmetic and you are done. "Acme is the better choice" is, and no amount of checking settles it. "The agreement is restrictive about early termination" is one too, even though it sounds like a report of what a document says — which is exactly the trap.
 
+Before recording a significant judgment, [look for a failure the current check would miss](#look-for-a-failure-the-current-check-would-miss).
+Ask whether its recorded premises could all be correct while the conclusion still fails.
+Give more attention to decisions with costly consequences or many dependent conclusions.
+
 ### The trap worth naming
 
 **A characterization of a source drifts into being treated as a reading of it.** Someone writes "the contract restricts resale", a later reader takes it as quoted fact, and by the third session it has hardened into something nobody traces and nobody re-checks — while the clause it came from may say something much narrower. If you are describing what a source *means* rather than reproducing what it *says*, that is a judgment and it needs `wrong_if` like any other.
@@ -392,6 +422,10 @@ with a budget, and a new session does not "read the project", it runs one.
 
 Say so — in your reply, or as a marker in the record: *"seat count moved 180 → 140; the Acme recommendation rests on it."* Then let a person decide, or re-examine it deliberately and say what you changed.
 
+During review, ask whether the new evidence exposes a hidden assumption or a way the existing
+check could miss a failure. Revisit the affected reasoning before refreshing `seen`; a false
+`wrong_if` does not settle a new objection to the conclusion.
+
 Do not silently regenerate the wording. Rephrasing produces a different text even when the reasoning is unchanged, so nobody can tell what actually moved; judgments that survived review get quietly replaced by fresh ones nobody read; and where judgments build on each other, the damage compounds. A stale recommendation someone read beats a current one nobody did.
 
 **Re-running is allowed. Applying is not.** The re-run should usually write nothing at all — it
@@ -419,6 +453,28 @@ Write each judgment's **verdict** — a short line stating what it concludes —
 
 Without this, re-examining any judgment marks everything beneath it as needing review, including the many cases where the reasoning did not change and only the wording did. Within days the marks mean nothing and people stop reading them. `verdict: "prefer Acme above ~150 seats"` can stay fixed through three rewrites of the paragraph explaining it — and while it stays fixed, nothing downstream needs a second look.
 
+### Look for a failure the current check would miss
+
+For a significant judgment, make a focused attempt to find a plausible failure that its current
+checks would leave unflagged. Consider an assumption about a source, a gap between the premises
+and the conclusion, or an interaction with another decision. For example, passing tests may
+leave a migration's effect on existing data untested.
+
+When you find an independent failure mode, record the assumption it exposes and the observation
+that would reveal it: a source correction, test result, measurement or other concrete evidence.
+Say whether that observation contradicts the conclusion, removes its support, or blocks the
+proposed action. Add relevant dependencies and snapshots so later changes can reach the judgment.
+An imagined scenario is a reason to investigate, not evidence that the failure occurred.
+
+Preserve useful existing checks. Follow the encoding rules below for additional conditions;
+do not imply that a condition recorded in prose runs automatically. Use `reopened_by` for the
+prior or taste decisions described below when the additional sign calls for interpretation.
+
+Keep the search proportionate to the consequences. Do not invent thresholds, duplicate a check
+in different words, or fill a quota of conditions. If no credible additional failure emerges,
+keep the existing conditions without claiming they cover every possible failure. New evidence
+can still reopen the judgment even when none of its declared predicates fires.
+
 ### A falsifier your own decision can suppress is no falsifier
 
 Before you keep a `wrong_if`, ask one question of it: *under this decision, could that still
@@ -440,7 +496,7 @@ fire.
 
 `wrong_if: "acme.seats < 150"` can be evaluated; `wrong_if: "if the numbers move materially"` cannot. When it is a predicate:
 
-- **false** ⇒ drift in the values the predicate references is **muted** — they moved but did not cross the threshold, so the judgment still holds and nothing needs re-reading. Values the predicate does *not* reference still flag, so a sloppy predicate cannot silently silence what it never covered.
+- **false** ⇒ drift in the values the predicate references is **muted** — they moved but did not cross the declared threshold. This reports no violation of that condition; separate evidence or an uncovered failure still needs review. Values the predicate does *not* reference still flag when comparable values have moved.
 - **true** ⇒ the judgment is **broken**, not merely flagged.
 - **references something with no anchor** ⇒ report it as un-evaluable. That is a feature: it turns "we should verify that number someday" into something blocking.
 
@@ -455,9 +511,10 @@ keeps a literal out of the predicate and survives the value moving for unrelated
 `acme.seats < 150`, `flue.clear == false`, `signed_on < "2027-01-01"`. A right-hand side carrying a
 second comparison is not richer, it is unread: the shape takes everything after the operator as the
 value, so `a == false, or b == false` is compared against the text after the first operator and is
-false in every state of the record. Two conditions are two judgments, or one judgment whose second
-condition lives in `because` with `blocked_on` saying the reader cannot decide it. A truth value is
-matched (`== false`), never ordered.
+false in every state of the record. Use separate judgments for distinct claims. An additional
+condition on the same judgment lives in `because` with `blocked_on` saying the reader cannot
+decide it; keep the existing executable condition. A truth value is matched (`== false`), never
+ordered.
 
 **Never invent a threshold to make a predicate evaluable.** A vague quantifier is a signal that the threshold lives in someone's head and was never stated — surface it and ask. If it cannot honestly be made evaluable, say so with `blocked_on` rather than writing prose in the predicate field — and if the judgment is decided and the prose is what would re-open it, say `reopened_by`.
 
@@ -599,6 +656,12 @@ same-day refusal waits until someone reads again on a later day - while a verdic
 judgment the record's own sign has not broken passes here and nowhere else, because the fold is the
 person's act and says so in the line above it; the result is read back and undone whole if `check`
 then says anything new; the folded files go, and what to commit is printed.
+
+Before accepting a material consolidation, examine affected judgments for a failure that arises
+only when the changes are combined, even if each change passes separately. Use the same
+[failure search](#look-for-a-failure-the-current-check-would-miss) to expose shared assumptions
+or newly incompatible decisions. Record any resulting objection or additional condition, and
+repeat the dry run after changing the record; a passing dry run covers the declared checks.
 
 **One rule, two containers.** What stands is contested only by something recorded: a rival claim, in
 a hypothesis; or a doubt with no rival value yet, an open question that names the id. The page says

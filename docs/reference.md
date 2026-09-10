@@ -57,6 +57,17 @@ field references and reads bound to a record revision under a token budget.
 
 ## Record location and shape
 
+For deferred work, `kpopper followups` links tasks to graph entries and explicit triggers.
+`status`, `list`, `show` and `scan` inspect the queue; capture and lifecycle commands preserve
+outcomes and coordinate execution. `daily plan` prepares a recommended daily review and
+`daily bind` records a schedule actually created or inspected through the host's tools.
+`daily install` coordinates inspection, installation and independent readback with the calling
+host agent. Users can invoke the [watch plugin command](../skills/watch/SKILL.md)
+to complete that flow without operating the individual protocol steps.
+See [the followups guide](../skills/kpopper/FOLLOWUPS.md) for the full input contract,
+task-system routing, recovery and daily workflow. Scheduling metadata is kept outside
+`PROVENANCE.yaml`; scanning and finishing tasks do not rewrite knowledge or `seen`.
+
 `PROVENANCE.yaml` lives in the project's working directory. Git is optional. The file can
 also point to existing material, including multiple record files:
 
@@ -164,7 +175,52 @@ possible duplicates. A clean structural check is not enough to fold a hypothesis
 premises still need review. Refutation retains a negative finding. `--from` reads another
 branch's committed record; it never pushes to that branch.
 
+These checks can run during work; they do not require a pull request or merge. The receiving
+record is the base, and `--from` overlays the named ref's committed differences. Importing
+`main` into a worktree therefore asks a different question from applying that worktree's
+changes to current main. Refs come from local Git objects; the command does not fetch them.
+
+The callable `union_of(base, hypotheses)` also accepts an in-memory hypothesis for a read-only
+what-if. That is a building block for previewing a captured working-copy delta on main. The opt-in `watch` runner uses this core for asynchronous worktree-versus-main previews.
+The existing background ingestion path continues to process explicit reports for one record.
+
 See [the method](../skills/kpopper/SKILL.md) for the full write and consolidation discipline.
+
+## Background branch watch and shared facts
+
+```sh
+kpopper watch setup                         # local checks, no host schedule
+kpopper watch setup --base-ref origin/main # preserve a deliberate base
+kpopper watch scan                          # queue and return immediately
+kpopper watch status                        # current versions and findings
+kpopper watch scan --all                    # include registered worktrees
+kpopper watch pause                         # pause local checks and shared writes
+```
+
+Watch applies only the worktree's authored changes since its merge base to the selected
+main snapshot. It includes uncommitted graph changes, coalesces events and suppresses stale
+or unchanged findings. Session hooks and daily review start queue checks without waiting for
+analysis. No graph, hypothesis or review snapshot is written by comparison. Local Git refs
+are not proof of remote freshness; the runner never fetches automatically.
+
+To capture observations independent of branch code, configure an existing external record
+with `watch setup --shared-record /absolute/PROVENANCE.yaml`, or explicitly select
+`--shared-private`. `watch share --file REPORT.json` requires an external environment scope,
+source location, quotation, date and scalar value. The background writer preserves evidence,
+uses the canonical writer, serializes commits and retains conflicts for review. `watch shared`
+reads the same facts and report states from main or any worktree. `watch resolve EVENT_ID
+--evidence TEXT` closes a reconciled report without applying it. It never promotes arbitrary
+branch content or silently changes a shared observation's scope.
+
+Shared facts participate in watch's read-only compatibility view. Existing branch-only
+readers/CI are unchanged; keep committed evidence self-contained. Shared destinations with
+pointers, multiple files or hypotheses remain readable, while automatic writes require review.
+
+Claude async hooks can wake their session. Ordinary Codex hooks deliver on the next model
+opportunity; `watch scan --notify-task HOST_TASK_ID` returns an optional native-agent delivery
+job for hosts supporting background agents and task messaging. A job must actually be dispatched;
+Python alone cannot call host tools. Persistent writes require POSIX locking. See the
+[watch protocol](../skills/watch/references/compatibility.md) for scope, delivery and recovery.
 
 ## Background capture
 
@@ -230,6 +286,15 @@ interactive page; a preview that strips JavaScript will show only part of its be
 
 See [PAGE.md](../skills/kpopper/PAGE.md) for arrangements, components, reference cards,
 localization, coverage and prose-drift checks.
+
+## Authored HTML documents
+
+`kpopper document build` packages an authored document with its selected evidence,
+`document inspect` validates and reads a saved copy without running its scripts, and
+`document refresh` prepares a new copy against explicitly supplied sources. The authoring
+agent creates anchors and mapping during ordinary document work. The final HTML contains
+all display resources and review state; only source refresh needs the agent and inputs.
+See [the user flow](documents.md) and run `kpopper document guide` for the author contract.
 
 ## Distribution and implementation
 
