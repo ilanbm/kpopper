@@ -16,7 +16,7 @@ HERE = Path(__file__).resolve().parent
 
 def parser():
     p = argparse.ArgumentParser(description=__doc__)
-    p.add_argument("operation", choices=["setup", "status", "open", "read", "search", "propose", "serve", "enable", "disable", "hook-open"])
+    p.add_argument("operation", choices=["setup", "status", "open", "read", "search", "context", "propose", "serve", "enable", "disable", "hook-open"])
     p.add_argument("--input", type=Path, help="native record; defaults to the project's registered record")
     p.add_argument("--normalized", action="store_true", help="input is a normalized JSON snapshot")
     p.add_argument("--no-settings", action="store_true", help="use explicit arguments and record-local defaults without user settings")
@@ -31,6 +31,10 @@ def parser():
     p.add_argument("--query", default="", help="search text; use the original question or a faithful project-aware query")
     p.add_argument("--id", dest="ids", action="append", default=[], help="exact known node ID; repeat for multiple candidates")
     p.add_argument("--limit", type=int, default=8, help="search candidate limit,1..32")
+    p.add_argument("--cursor", help="returned search continuation; repeat the same query/IDs/branch/mode")
+    p.add_argument("--direction", choices=["support","impact"], help="explicit context traversal direction")
+    p.add_argument("--depth", type=int, default=1, help="context depth,0..4; zero reads only seeds")
+    p.add_argument("--max-nodes", type=int, default=16, help="context candidate cap including seeds,1..64")
     p.add_argument("--branch", help="declared branch hint; only breaks ranking ties")
     p.add_argument("--search-mode", choices=["lexical","semantic","hybrid"], default="hybrid")
     p.add_argument("--embedding-dir", type=Path, help="optional local pinned E5 assets; search/serve only, never downloaded")
@@ -154,7 +158,12 @@ def main(argv=None):
             if args.revision is None:
                 raise ValueError("search requires --revision from open")
             result=service.searching(args.query,args.revision,args.tokens if args.tokens is not None else 1000,
-                                     args.ids,args.limit,args.branch,args.search_mode)
+                                     args.ids,args.limit,args.branch,args.search_mode,args.cursor)
+        elif args.operation == "context":
+            if args.revision is None or args.direction is None:
+                raise ValueError("context requires --revision and --direction support|impact")
+            result=service.contextualizing(args.ids,args.revision,args.direction,
+                                           args.tokens if args.tokens is not None else 2000,args.depth,args.max_nodes)
         else:
             if args.revision is None or args.kind is None or args.text is None:
                 raise ValueError("propose requires --revision, --kind and --text")

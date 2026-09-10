@@ -1,6 +1,8 @@
 """Rank candidate references. Matching never establishes support or changes a record."""
 from __future__ import annotations
 from collections import Counter
+import base64
+import binascii
 import hashlib
 import json
 import math
@@ -10,6 +12,32 @@ import threading
 
 def encode(value):
     return json.dumps(value,ensure_ascii=False,sort_keys=True,separators=(',',':'))
+
+
+def continuation(offset,binding):
+    """A search-bound read position, not an authenticated permission token."""
+    return base64.urlsafe_b64encode(encode({'version':1,'offset':offset,'binding':binding}).encode()).decode().rstrip('=')
+
+
+def read_continuation(cursor):
+    if not isinstance(cursor,str) or not 1<=len(cursor)<=512:raise ValueError('invalid search cursor')
+    try:
+        def unique(pairs):
+            result={}
+            for key,value in pairs:
+                if key in result:raise ValueError('duplicate cursor field')
+                result[key]=value
+            return result
+        raw=base64.b64decode(cursor+'='*((-len(cursor))%4),altchars=b'-_',validate=True)
+        value=json.loads(raw,object_pairs_hook=unique)
+    except (ValueError,UnicodeError,binascii.Error) as error:
+        raise ValueError('invalid search cursor') from error
+    if (not isinstance(value,dict) or set(value)!={'version','offset','binding'}
+            or type(value['version']) is not int or value['version']!=1
+            or type(value['offset']) is not int or not 0<=value['offset']<=2**31-1
+            or not isinstance(value['binding'],str) or not re.fullmatch('[a-f0-9]{64}',value['binding'])):
+        raise ValueError('invalid search cursor')
+    return value
 
 
 def terms(text):
@@ -60,16 +88,17 @@ class SearchIndex:
             scores[key]=score
         return scores
 
-    def search(self,nodes,query,ids=None,limit=8,branch_members=(),mode='hybrid'):
+    def search(self,nodes,query,ids=None,limit=8,branch_members=(),mode='hybrid',offset=0):
         with self._lock:
-            return self._search(nodes,query,ids,limit,branch_members,mode)
+            return self._search(nodes,query,ids,limit,branch_members,mode,offset)
 
-    def _search(self,nodes,query,ids,limit,branch_members,mode):
+    def _search(self,nodes,query,ids,limit,branch_members,mode,offset):
         if not isinstance(query,str) or len(query)>8000:raise ValueError('query must be at most8000 characters')
         if ids is None:ids=[]
         if not isinstance(ids,list) or len(ids)>64 or any(not isinstance(k,str) or not k or len(k)>500 for k in ids):
             raise ValueError('ids must contain at most64 nonempty identifier strings of at most500 characters')
         if type(limit) is not int or not 1<=limit<=32:raise ValueError('limit must be1..32')
+        if type(offset) is not int or not 0<=offset<=len(nodes):raise ValueError('invalid search cursor offset')
         if mode not in {'lexical','semantic','hybrid'}:raise ValueError('unknown search mode')
         if not query.strip() and not ids:raise ValueError('supply a query or exact IDs')
         self.prepare(nodes);known=set(nodes);requested=list(dict.fromkeys(ids))
@@ -101,10 +130,14 @@ class SearchIndex:
             for ranking in [order(dense),lexical_order]:
                 for position,key in enumerate(ranking,1):scores[key]=scores.get(key,0)+1/(60+position)
         ranking=list(dict.fromkeys(exact+order(scores)))
+        if offset>len(ranking):raise ValueError('search cursor offset exceeds ranked matches')
+        ranking_fingerprint=hashlib.sha256(encode({'version':1,'backend':backend,
+            'model':metadata.get('model') if metadata else None,
+            'ranking':[(key,scores.get(key,0.0)) for key in ranking]}).encode()).hexdigest()
         hits=[]
-        for key in ranking[:limit]:
+        for key in ranking[offset:offset+limit]:
             match='explicit_id' if key in explicit else 'literal_id' if key in mentions else backend
             hits.append({'id':key,'ref':'node:'+key,'links_ref':'edges:'+key,'match':match,'score':scores.get(key,0.0)})
         return {'hits':hits,'matched_candidates':len(ranking),'record_nodes':len(nodes),'unresolved_ids':unknown,
                 'requested_mode':mode,'backend':backend,'fallback':fallback,'semantic_index':metadata,
-                'index_fingerprint':self.fingerprint}
+                'index_fingerprint':self.fingerprint,'ranking_fingerprint':ranking_fingerprint,'offset':offset}

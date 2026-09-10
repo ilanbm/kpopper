@@ -18,7 +18,39 @@ kpopper session read --revision REV_FROM_OPEN --ref edges:p.script_copies
 
 Use IDs actually supplied by the project; `--id` also accepts a returned `node:ID` reference. Source handles and field selectors remain read operations. An exact ID selects a record, not a guarantee of relevance: prefer the original question or a faithful translation when its source is not yet known. An unresolved ID means only that the ID was not found; a question may still be covered under a different name. `--branch /known/p` is an optional hint from the current map. `--limit` accepts1–32 candidates (default8); `--tokens` budgets the returned text, including metadata and its final newline (default1,000 reference tokens). Results identify the candidate subset, any omitted whole hits and the root recovery route. If the budget cannot fit a complete response, raise it; records and identifiers are never clipped to fit.
 
+When more candidates are needed, pass the returned `next_cursor` and repeat the same query, ordered IDs, branch and mode:
+
+```sh
+kpopper session search --revision REV_FROM_OPEN --query 'recorded performance limits' --limit 8
+kpopper session search --revision REV_FROM_OPEN --query 'recorded performance limits' --limit 16 --cursor CURSOR_FROM_SEARCH
+```
+
+Page size and token budget may change. `offset` is the page's starting position; `matched_candidates` counts the entire ranked result, and `next_offset`/`next_cursor` describe the next page. Continuation advances past emitted whole hits only, so a smaller text budget does not skip candidates. If even the next whole hit cannot fit, the search fails explicitly instead of skipping it. Pagination metadata consumes part of the same budget.
+
+The cursor is a validated, search-bound read position, not an authenticated credential. Treat it as opaque. A fresh process can continue the same ranking. Changing the revision, search arguments, actual backend or ranked result rejects it; restart search in that case. Keep the optional embedding configuration available on later pages. A null cursor means this ranking is exhausted. In lexical mode that covers positive matches for this query, not every potentially relevant record; reformulate or inspect the map if evidence remains missing.
+
 Search results contain references, not evidence excerpts. Existing reads preserve complete original fields, source handles, current values and review snapshots; oversized reads return field routes or explicitly labeled exact-text fragments. A changed record or navigation profile invalidates the revision. Reopen before another search or read.
+
+## Read a declared neighborhood
+
+Use explicit context reads when a relevant record's premises or dependents would help the task:
+
+```sh
+kpopper session context --revision REV_FROM_OPEN --id d.choice --direction support --depth 2 --tokens 2000
+kpopper session context --revision REV_FROM_OPEN --id m.reading --direction impact --depth 1 --max-nodes 16
+```
+
+Replace these example IDs with IDs from the project. Supply1–8 known IDs or exact `node:ID` references. `support` follows declared `rests_on`, `from` and `rule_reads` links; `impact` follows those links in reverse to recorded dependents. The displayed edges retain their original orientation. Names, hierarchy, similarity and prose mentions do not create new relationships.
+
+Depth defaults to1 and accepts0–4; zero reads seeds only. `--max-nodes` defaults to16 and accepts1–64 candidates, including the unique requested seeds. A cap smaller than the seed count is rejected. Candidates are visited breadth first with deterministic edge ordering, one original body per ID and the first exact path to each neighbor. Cycles are deduplicated.
+
+The response contains selected complete original reads and existing Lean cards, their `via` paths, and `omitted_for_budget` node references. `unread_seed_refs` identifies requested bodies that did not fit. `candidates` counts the bounded schedule, while `candidate_limit_reached` identifies traversal stopped by that cap. These counts do not describe all relevant evidence.
+
+`frontier` gives exact incident-edge routes for seeds and returned reads with unread endpoints in the requested direction. `unread_edges` includes unresolved endpoints; `missing_targets` separately counts distinct IDs absent from the record. Read `edges:ID` to see their exact names, including incoming edges for impact. Depth, candidate and token limits can all leave known bodies unread. Further branches remain accessible through the full map.
+
+The default budget is2,000 reference tokens for the entire response, including cards, paths, omissions, frontier metadata and newline. Whole bodies are skipped when they do not fit; read `node:ID` or its exact `#/body` fields for them. If even the required boundaries cannot fit, raise the budget or reduce depth/candidate count. Read errors remain errors and do not establish absence.
+
+Context reads are opt-in; ordinary search never expands automatically. Continue global search for lower-ranked evidence and unlinked qualifications. A declared path is not logical entailment, and reading a source locator does not fetch its external document. Lean continues to check the existing structured record assertions and current-versus-reviewed values; traversal and packing do not add a new formal proof or evaluate hypothetical updates.
 
 ## Optional local E5
 
@@ -51,7 +83,8 @@ The derived index is cached in memory by document IDs and content. A persistent 
 The same bound server exposes:
 
 ```text
-kpopper_search(query, revision, ids=[], limit=8, tokens=1000, branch=null, mode="hybrid")
+kpopper_search(query, revision, ids=[], limit=8, tokens=1000, branch=null, mode="hybrid", cursor=null)
+kpopper_context(ids, revision, direction, tokens=2000, depth=1, max_nodes=16)
 kpopper_read(ref, revision, tokens=1600)
 ```
 

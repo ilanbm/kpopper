@@ -2,6 +2,7 @@
 from __future__ import annotations
 import json
 from typing import Literal, Optional
+from pydantic import StrictInt
 
 
 def make_server(service):
@@ -30,13 +31,25 @@ def make_server(service):
 
     @server.tool(structured_output=False, annotations=ToolAnnotations(readOnlyHint=True))
     def kpopper_search(query: str, revision: str, ids: Optional[list[str]] = None,
-                       limit: int = 8, tokens: int = 1000, branch: Optional[str] = None,
-                       mode: Literal["lexical","semantic","hybrid"] = "hybrid") -> str:
+                       limit: StrictInt = 8, tokens: StrictInt = 1000, branch: Optional[str] = None,
+                       mode: Literal["lexical","semantic","hybrid"] = "hybrid", cursor: Optional[str] = None) -> str:
         """Find candidate refs; known IDs win and branches never exclude stronger matches.
 
-        Read returned refs for evidence. Local E5 is optional; any lexical fallback is explicit.
+        Read returned refs for evidence. Continue next_cursor with the same search arguments
+        when more candidates are needed. Local E5 is optional; any lexical fallback is explicit.
         """
-        return run(service.searching,query,revision,tokens,ids,limit,branch,mode)
+        return run(service.searching,query,revision,tokens,ids,limit,branch,mode,cursor)
+
+    @server.tool(structured_output=False, annotations=ToolAnnotations(readOnlyHint=True))
+    def kpopper_context(ids: list[str], revision: str, direction: Literal["support","impact"],
+                        tokens: StrictInt = 2000, depth: StrictInt = 1, max_nodes: StrictInt = 16) -> str:
+        """Read exact selected nodes and declared neighbors within a token budget.
+
+        Use support for recorded premises/sources, impact for recorded dependents.
+        Paths do not prove claims. Unread boundaries remain explicit; global search
+        is still needed for unlinked qualifications. No automatic graph expansion.
+        """
+        return run(service.contextualizing,ids,revision,direction,tokens,depth,max_nodes)
 
     @server.tool(structured_output=False, annotations=ToolAnnotations(readOnlyHint=False, destructiveHint=False, idempotentHint=True))
     def kpopper_propose(revision: str, kind: Literal["observed", "inferred", "assumed", "question"],

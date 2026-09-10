@@ -9,7 +9,7 @@ straight through to provenance.py; page renders the record and can open what it 
   kpopper where                           the record this directory answers for
   kpopper map [--deep]                  map the work through an available agent
   kpopper config [--guidance on|off]     inspect or change local preferences
-  kpopper session <setup|status|open|read|search|propose|serve>  checked, revision-bound session views
+  kpopper session <setup|status|open|read|search|context|propose|serve>  checked, revision-bound session views
   kpopper set     <key> <value> [--why "..."] [--as-of DATE]   change one value; the reply is the reach
   kpopper add     <id> field=value ...    a new entry or judgment, in id order, its seen filled
   kpopper ingest  capture --file JSON    retain a report and process it in the background
