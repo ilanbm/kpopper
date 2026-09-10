@@ -133,15 +133,18 @@ class Wiring(unittest.TestCase):
         claude = json.load(open(ROOT / "hooks" / "hooks.json", encoding="utf-8"))["hooks"]
         text = json.dumps(claude)
         for leg in ("ground_hook.py\\\" claude start", "ground_hook.py\\\" claude prompt", "ground_hook.py\\\" claude read",
-                    "edit_hook.py\\\" claude", "session_open.sh\\\" --host claude"):
+                    "edit_hook.py\\\" claude", "session_open.sh\\\" --host claude", "session_gate.sh\\\" --host claude"):
             self.assertIn(leg, text)
-        self.assertTrue(any(h.get("matcher") == "Bash" for h in claude["PostToolUse"]))
+        # the read leg listens to every tool: a shell, a file read, the checked-session tools
+        read = [h for h in claude["PostToolUse"] if "ground_hook.py" in json.dumps(h)]
+        self.assertEqual(len(read), 1)
+        self.assertNotIn("matcher", read[0])
         self.assertTrue(any("Edit" in h.get("matcher", "") for h in claude["PreToolUse"]))
-        codex = json.dumps(json.load(open(ROOT / "adapters" / "codex" / "plugin-hooks.json", encoding="utf-8")))
-        for leg in ("ground_hook.py\\\" codex start", "ground_hook.py\\\" codex prompt", "ground_hook.py\\\" codex read",
-                    "session_open.sh\\\" --host codex"):
-            self.assertIn(leg, codex)
-
+        for name in ("plugin-hooks.json", "hooks.json"):
+            codex = json.dumps(json.load(open(ROOT / "adapters" / "codex" / name, encoding="utf-8")))
+            for leg in ("ground_hook.py\\\" codex start", "ground_hook.py\\\" codex prompt", "ground_hook.py\\\" codex read",
+                        "session_open.sh\\\" --host codex", "session_gate.sh\\\" --host codex"):
+                self.assertIn(leg, codex, name)
 
 if __name__ == "__main__":
     unittest.main()

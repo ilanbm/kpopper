@@ -58,8 +58,10 @@ def load_state(path):
 
 
 def save_state(path, state):
-    tmp = path.with_name(path.name + ".tmp")
-    tmp.write_text(json.dumps(state, ensure_ascii=False), encoding="utf-8")
+    # a private temporary name: two hooks of one session can write at once
+    fd, tmp = tempfile.mkstemp(prefix=path.name + ".", dir=str(path.parent))
+    with os.fdopen(fd, "w", encoding="utf-8") as f:
+        f.write(json.dumps(state, ensure_ascii=False))
     os.replace(tmp, path)
 
 
@@ -178,7 +180,7 @@ def prompt_context(payload, host, path):
         if state["digests"].get(k) != d:
             state["read"].pop(k)
     named = choose(hits(prompt[:4000], index), state, turn)
-    soft = reminder(location["record"], payload.get("session_id"), state, turn, host)
+    soft = reminder(location["record"], payload.get("session_id"), state, turn, host, location["workspace"])
     save_state(path, state)
     parts = [line(named, host)] if named else []
     if soft:
@@ -186,7 +188,7 @@ def prompt_context(payload, host, path):
     return "\n".join(parts)
 
 
-def reminder(record, sid, state, turn, host):
+def reminder(record, sid, state, turn, host, workspace=None):
     """The soft form of the gate's one question, on the prompt after real work left the
     record untouched, repeated only after a cooldown: a line, never a stop."""
     import provenance as P
@@ -200,7 +202,7 @@ def reminder(record, sid, state, turn, host):
     last = max(int(state.get("nudged_turn", -P.NUDGE_COOLDOWN)), int(base.get("nudged_turn", -P.NUDGE_COOLDOWN)))
     if turn - last < P.NUDGE_COOLDOWN:
         return ""
-    asked = P.untouched(dict(base, nudged=False), [record], turn, host)
+    asked = P.untouched(dict(base, nudged=False), [record], turn, host, workspace=workspace)
     if not asked:
         return ""
     state["nudged_turn"] = turn
@@ -215,12 +217,10 @@ def read_context(payload, path):
     if not digests:
         return
     response = payload.get("tool_response")
-    if isinstance(response, dict):
-        text = " ".join(str(v) for v in response.values() if isinstance(v, str))
-    elif isinstance(response, list):
-        text = " ".join(str(v) for v in response)
-    else:
-        text = str(response or "")
+    if response is None:
+        response = payload.get("tool_output")
+    # whatever shape the host gives a tool's result, the ids in it are what count
+    text = response if isinstance(response, str) else json.dumps(response, ensure_ascii=False, default=str)
     seen = {m for m in ID.findall(text.lower()) if m in digests}
     if not seen:
         return
@@ -263,9 +263,10 @@ def main():
     host, mode = (sys.argv[1:3] + [None, None])[:2]
     try:
         text = handle(json.load(sys.stdin), host, mode)
-    except (OSError, ValueError, ImportError, SystemExit) as error:
-        # a line that cannot be produced must never hold the prompt
-        print("kpopper grounding unavailable: " + str(error), file=sys.stderr)
+    except (Exception, SystemExit) as error:
+        # a line that cannot be produced must never hold the prompt - a record that does not
+        # parse, a state file that does not read, a host field of the wrong shape
+        print("kpopper grounding unavailable: " + " ".join(str(error).split())[:200], file=sys.stderr)
         return 0
     if text:
         event = "UserPromptSubmit"

@@ -148,8 +148,11 @@ def context(location, host=None):
                      + record + " keeps findings as they arise - the first write creates PROVENANCE.yaml; "
                      + mapping + " builds an initial map of existing materials on request. "
                      "A one-off needs nothing. Never offer any of this on a greeting.")
-        if current["offered"] or not current["guidance"]:
+        if current["offered"]:
             lines.append("The starting choices were already offered here; do not repeat them. "
+                         "Mapping remains available on request.")
+        elif not current["guidance"]:
+            lines.append("Explanations are turned off for this user; make no starting offer. "
                          "Mapping remains available on request.")
         else:
             lines.append("The starting choices (learn while working, map, investigate) were never offered "

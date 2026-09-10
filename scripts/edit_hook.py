@@ -93,8 +93,9 @@ def main():
     host = sys.argv[1] if len(sys.argv) > 1 else None
     try:
         text = context(json.load(sys.stdin), host)
-    except (OSError, ValueError, ImportError, SystemExit) as error:
-        print("kpopper citation check unavailable: " + str(error), file=sys.stderr)
+    except (Exception, SystemExit) as error:
+        # never hold an edit: a record that does not parse is the writer's problem, not the editor's
+        print("kpopper citation check unavailable: " + " ".join(str(error).split())[:200], file=sys.stderr)
         return 0
     if text:
         print(json.dumps({"hookSpecificOutput": {"hookEventName": "PreToolUse", "additionalContext": text}},

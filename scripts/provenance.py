@@ -3089,6 +3089,9 @@ def _collection_for(doc, ids, jud, fields, nid, body, explicit):
         if explicit not in cols and explicit not in doc:
             raise Refused(f"no collection {explicit} in this record")
         return explicit
+    # the head is never a home: meta reads as a collection when every value in it is a
+    # plain scalar, and an entry filed there is one no reader can see
+    cols = {c: m for c, m in cols.items() if c != "meta"}
     if not cols:
         # a newborn record: the three sections, named as the method recommends, by shape
         if isinstance(body, dict) and fields["deps"] in body:
@@ -3127,10 +3130,17 @@ def _collection_for(doc, ids, jud, fields, nid, body, explicit):
         return sum(1 for k, b in cols[c].items() if isinstance(b, dict) and k not in jud
                    and ("v" in b or "rule" in b or "quoted" in b))
     if sourceish:
-        # nothing cites a source yet: the section holding no values is the sources', and a
-        # young record without one opens it under the method's own name
-        unvalued = [c for c in sorted(cols) if c not in OPEN and c != "judgments" and not counted(c)]
-        return unvalued[0] if unvalued else "sources"
+        # nothing cites a source yet: a section whose every member is source-shaped is the
+        # sources', whatever it is called; a young record without one opens it under the
+        # method's own name
+        def source_shaped(b):
+            return isinstance(b, dict) and not any(k in b for k in ("v", "rule", "quoted")) \
+                and any(k in b for k in ("asked", "url", "file", "read"))
+        homes = [c for c in cols if c not in OPEN and c != "judgments" and cols[c]
+                 and all(source_shaped(b) for b in cols[c].values())]
+        if "sources" in cols:
+            return "sources"
+        return sorted(homes)[0] if homes else "sources"
     valued = sorted(cols, key=lambda c: -counted(c))
     # a value lands where values are; a young record holding none yet opens the section
     return valued[0] if counted(valued[0]) else "known"
@@ -3659,23 +3669,40 @@ NUDGE_TURNS = 8      # prompts a session may run with the record untouched befor
 TREE_FILES = 500     # working files the mark keeps, so a dirty tree cannot bloat it
 
 
-def tree_state(paths):
+def tree_state(paths, workspace=None):
     """What a session's end is held against beyond the record's own checks: a digest of the
-    record with its hypotheses - any write moves it - and the git tree's state, HEAD and the
-    working files that differ from it, or None outside git."""
+    record with its hypotheses - any write moves it - and the git tree's state of the
+    workspace the session works in (the current directory unless named): HEAD, each tracked
+    file's changed line counts against it, and each untracked file with a digest of its
+    content - so a file that was already dirty at the mark still counts when it changes
+    again. None outside git."""
     h = hashlib.sha1()
     for f in list(_files_of(paths)) + sorted(glob.glob(os.path.join(hypothesis_dir(paths), "*.yaml"))):
         with io.open(f, "rb") as fh:
             h.update(fh.read())
     tree = None
-    cwd = os.path.dirname(os.path.abspath(paths[0]))
+    cwd = workspace or os.getcwd()
+
+    def git(*args, timeout=5):
+        return subprocess.run(["git", *args], cwd=cwd, capture_output=True, text=True, timeout=timeout)
     try:
-        head = subprocess.run(["git", "rev-parse", "HEAD"], cwd=cwd, capture_output=True,
-                              text=True, timeout=5)
-        status = subprocess.run(["git", "status", "--porcelain"], cwd=cwd, capture_output=True,
-                                text=True, timeout=10)
-        if head.returncode == 0 and status.returncode == 0:
-            files = sorted(l for l in status.stdout.splitlines() if l.strip())
+        head = git("rev-parse", "HEAD")
+        changed = git("diff", "HEAD", "--numstat")
+        untracked = git("ls-files", "--others", "--exclude-standard")
+        if head.returncode == 0 and changed.returncode == 0 and untracked.returncode == 0:
+            files = sorted(l.strip() for l in changed.stdout.splitlines() if l.strip())
+            for rel in sorted(l for l in untracked.stdout.splitlines() if l.strip())[:TREE_FILES]:
+                full = os.path.join(cwd, rel)
+                try:
+                    size = os.path.getsize(full)
+                    if size <= 1 << 20:
+                        with io.open(full, "rb") as fh:
+                            stamp = hashlib.sha1(fh.read()).hexdigest()[:12]
+                    else:
+                        stamp = f"size {size}"
+                except OSError:
+                    stamp = "unreadable"
+                files.append(f"?? {rel} {stamp}")
             tree = {"head": head.stdout.strip(), "files": files[:TREE_FILES], "n": len(files)}
     except (OSError, subprocess.SubprocessError):
         pass
@@ -3685,7 +3712,7 @@ def tree_state(paths):
 NUDGE_COOLDOWN = 10  # prompts between two askings, in either form
 
 
-def untouched(base, paths, turns, host=None, nudged_at=None):
+def untouched(base, paths, turns, host=None, nudged_at=None, workspace=None):
     """The one thing the gate asks of a session that never wrote: after real work - files
     of the tree changed since the mark, or enough prompts went by - was there nothing to
     keep? Asked once, and only while the record is exactly as the session found it. Not on
@@ -3695,7 +3722,7 @@ def untouched(base, paths, turns, host=None, nudged_at=None):
         return None
     if nudged_at is not None and turns <= nudged_at:
         return None
-    now = tree_state(paths)
+    now = tree_state(paths, workspace)
     if now["digest"] != base["digest"]:
         return None
     was, is_ = base.get("tree"), now["tree"]
@@ -3964,16 +3991,19 @@ def write_command(cmd, rest):
     else:
         files = [x for x in args if x.endswith((".yaml", ".yml"))]
     born = []
-    if cmd == "add" and not files:
-        files = born = _newborn(action)
     try:
-        return apply(files or default_paths(), action)
+        if cmd == "add" and not files:
+            files = born = _newborn(action)
+        code = apply(files or default_paths(), action)
     except BaseException:
         # a first entry that was refused leaves no empty record behind
         for f in born:
             if os.path.exists(f) and os.path.getsize(f) < 64:
                 os.remove(f)
         raise
+    for f in born:
+        print(f"created {f} - this workspace's record, born with its first entry")
+    return code
 
 
 def _newborn(action):
@@ -4000,8 +4030,10 @@ def _newborn(action):
         return []
     path = location["record"]
     stamp = action.get("as_of") or datetime.date.today().isoformat()
-    _write_text(path, f"meta:\n  updated: {stamp}\n")
-    print(f"created {path} - this workspace's record, born with its first entry")
+    try:
+        _write_text(path, f"meta:\n  updated: {stamp}\n")
+    except OSError as e:
+        raise Refused(f"refused - no record here, and none could be created at {path}: {e}")
     return [path]
 
 

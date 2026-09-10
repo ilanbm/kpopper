@@ -16,6 +16,15 @@ except ImportError:
 
 HERE = Path(__file__).resolve().parent
 LEGACY_CHARS = 2000
+SKILL_FORMS = {"claude": "/kpopper:{}", "codex": "${}"}
+
+
+def next_moves(host):
+    """The line the legacy opener ends with, for a checked view that has none: the next moves
+    as the host invokes a skill."""
+    form = SKILL_FORMS[host]
+    return ("next: %s <entry|prefix> (values with sources, what a change reaches) · %s (what this "
+            "session found) · check" % (form.format("ground"), form.format("record")))
 EMPTY_MARK = {"fails": 0, "failures": [], "unserved": [], "ids": [], "judgments": {}}
 
 
@@ -52,9 +61,12 @@ def opening(payload, host=None):
     if location["status"] == "unavailable":
         return "\n".join(output)
     if location["status"] == "found":
-        result, _ = read_view(location, host=host)
+        result, checked = read_view(location, host=host)
         if result.stdout:
             output.insert(0, result.stdout.rstrip())
+            if checked and host and not result.returncode:
+                # the checked view has no footer of its own; the next moves are still the host's
+                output.insert(1, next_moves(host))
         elif result.returncode:
             output.insert(0, "The knowledge record could not be opened. Read it before relying on it: " + record)
         if result.stderr:
