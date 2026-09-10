@@ -898,6 +898,7 @@ test('contextual route, pin and position are absent from the exported shell', as
   host.pointer('rate', 'click', 600, 300);
   host.panel.querySelector('[data-source="counts"]').click();
   const before = host.payload();
+  host.panel.querySelector('[data-action="back"]').click();
   host.panel.querySelector('[data-action="download"]').click();
   const html = await host.blobs[0].text();
   const { document } = parseHTML(html);
@@ -965,4 +966,28 @@ test('internal disclosures retain the box, viewport shrink clamps it, and a new 
   host.pointer('books', 'click', 170, 150);
   assert.equal(host.panel.style.height || '', '');
   assert.equal(host.panel.getBoundingClientRect().height, 220);
+});
+
+test('source views explain evidence without document-saving controls or an empty footer', () => {
+  const host = openArtifact();
+  host.pointer('rate', 'click');
+  host.panel.querySelector('[data-source="counts"]').click();
+  assert.equal(!!host.panel.querySelector('[data-action="download"]'), false);
+  assert.equal(!!host.panel.querySelector('.kp-footer'), false);
+  const source = host.panel.querySelector('[data-source-view]');
+  assert.ok(source.querySelector('.kp-badge'));
+  assert.equal(source.querySelector('[data-technical]').open, false);
+  host.panel.querySelector('[data-action="back"]').click();
+  assert.ok(host.panel.querySelector('[data-action="download"]'));
+  host.panel.querySelector('[data-action="overview"]').click();
+  host.panel.querySelector('[data-source="words"]').click();
+  assert.equal(!!host.panel.querySelector('[data-action="download"]'), false);
+});
+
+test('document saving uses a neutral label rather than implying the document was checked', () => {
+  for (const [html,label] of [[fixture.html,'Save document copy'],[fixture.hebrew,'שמירת עותק המסמך']]) {
+    const host = openArtifact(html);
+    host.opener.click();
+    assert.equal(host.panel.querySelector('[data-action="download"]').textContent,label);
+  }
 });

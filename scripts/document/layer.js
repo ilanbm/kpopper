@@ -72,9 +72,9 @@
     details: ['Technical details', 'פרטים טכניים'], revision: ['Captured revision (SHA-256)', 'גרסה שמורה (SHA-256)'],
     claimId: ['Claim ID', 'מזהה הטענה'], sourceId: ['Source ID', 'מזהה המקור'], checkKind: ['Check', 'סוג הבדיקה'],
     generated: ['Snapshot prepared on', 'המקור השמור הוכן בתאריך'], decisionDate: ['Decision saved on', 'ההחלטה נשמרה בתאריך'],
-    download: ['Download reviewed copy', 'הורדת העותק שנבדק'],
+    download: ['Save document copy', 'שמירת עותק המסמך'],
     saveNote: ['Download saves this document, its evidence and your decisions. Reloading the original discards unsaved choices. Temporary activity inside the document is not saved.', 'ההורדה שומרת את המסמך, המקורות וההחלטות שלך. טעינת המקור מחדש מוחקת בחירות שלא נשמרו. פעילות זמנית בתוך המסמך אינה נשמרת.'],
-    downloaded: ['Reviewed copy prepared for download.', 'העותק שנבדק מוכן להורדה.'],
+    downloaded: ['Document copy prepared for download.', 'עותק המסמך מוכן להורדה.'],
     exportFailed: ['The copy could not be prepared. Your decisions are still available in this window.', 'לא ניתן להכין את העותק. ההחלטות שלך עדיין זמינות בחלון הזה.'],
     invalid: ['The saved document could not be reconstructed safely. Use an intact saved copy.', 'לא ניתן לשחזר את המסמך השמור בבטחה. יש להשתמש בעותק שמור תקין.']
   };
@@ -529,26 +529,18 @@
     card.setAttribute('aria-labelledby', 'kp-panel-title');
     card.id = 'kp-source-' + index;
     parent.append(card);
-    paragraph(card, t(inputs ? 'sourceScope' : 'selectedOnly'), 'kp-muted');
+    card.append(badge(source.status === 'unavailable' ? 'unavailable' : source.format === 'record' ? 'record' : 'file'));
     if (source.status === 'available') {
-      paragraph(card, t(source.representation === 'extraction' ? 'extracted' : source.format === 'record' ? 'record' : 'file'), 'kp-muted');
+      paragraph(card, t(inputs ? 'sourceScope' : 'selectedOnly'));
+      if (source.representation === 'extraction') paragraph(card, t('extracted'));
     }
     if (source.reread === false) paragraph(card, t('notReread'), 'kp-changed');
-    if (source.status === 'unavailable') {
-      card.append(badge('unavailable'));
-      paragraph(card, source.reason);
-    }
+    if (source.status === 'unavailable') paragraph(card, source.reason);
     const selections = selectedReadings(id, inputs);
     for (const selection of selections) {
       const selected = element('div', null, 'kp-selection');
       if (selection.status === 'available' && selection.value) paragraph(selected, selection.value.value, 'kp-excerpt');
       else paragraph(selected, selection.status === 'available' ? t('identityOnly') : selection.reason || t('unavailable'), 'kp-muted');
-      if (selection.location) field(selected, t('location'), selection.location);
-      if (selection.citation) {
-        field(selected, t('source'), selection.citation.name);
-        field(selected, t('location'), selection.citation.at);
-        field(selected, t('captured'), selection.citation.date);
-      }
       card.append(selected);
     }
     if (source.uri) citationLink(card, source.uri);
@@ -560,7 +552,15 @@
     field(technical, t('captured'), source.read_at);
     field(technical, t('attempted'), source.attempted_at);
     field(technical, t('revision'), source.sha256);
-    for (const selection of selections) field(technical, t('location'), selectorKey(selection.selector));
+    for (const selection of selections) {
+      field(technical, t('location'), selectorKey(selection.selector));
+      if (selection.location) field(technical, t('location'), selection.location);
+      if (selection.citation) {
+        field(technical, t('source'), selection.citation.name);
+        field(technical, t('location'), selection.citation.at);
+        field(technical, t('captured'), selection.citation.date);
+      }
+    }
   }
 
   function renderPanel() {
@@ -661,7 +661,7 @@
       all.dataset.action = 'overview';
       footer.append(all);
     }
-    if (!focused || relevantGroups.length || sourceView) {
+    if (!sourceView && (!focused || relevantGroups.length)) {
       const download = button(t('download'), downloadCopy, 'kp-button kp-primary kp-download');
       download.dataset.action = 'download';
       download.disabled = !!pending;
@@ -672,7 +672,7 @@
       const technical = detail(footer, t('details'));
       field(technical, t('generated'), data.generated_at);
     }
-    content.append(footer);
+    if (footer.childElementCount) content.append(footer);
     for (const id of openClaims) if (claimNodes.has(id) && claimNodes.get(id).localName === 'details') claimNodes.get(id).open = true;
     content.scrollTop = scroll;
     if (!panel.hidden && activeGroupId) {
@@ -706,7 +706,7 @@
       const link = element('a');
       link.dataset.kpDownload = '';
       link.href = url;
-      link.download = (data.title.replace(/[\\/:*?"<>|\u0000-\u001f]/g, '-').slice(0, 100) || 'document') + '-reviewed.html';
+      link.download = (data.title.replace(/[\\/:*?"<>|\u0000-\u001f]/g, '-').slice(0, 100) || 'document') + '-copy.html';
       document.body.append(link);
       link.click();
       link.remove();

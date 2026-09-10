@@ -31,7 +31,9 @@ inputs are reviewed together, so a changed denominator and its percentage are on
 Other sources retain their older snapshot and are labeled as not reread. A changed
 source can flag an interpretation for review without pretending to verify or rewrite it.
 
-Accept or reject a proposed group, then download the copy to save the decision. The
+Accept or reject a proposed group, then use Save document copy to save the decision.
+This control is in the overview and correction views, not inside a source reading.
+It saves the HTML and its current evidence/choices; it does not certify the whole document. The
 saved file retains its chosen content, evidence and decision when reopened. Reloading
 the original file discards unsaved choices. Acceptance changes the copy only: it does
 not update the source, contact a service or certify unsupported reasoning.

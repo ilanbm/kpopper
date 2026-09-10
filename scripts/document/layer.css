@@ -78,3 +78,5 @@ a{color:#3c6b48;text-underline-offset:3px;overflow-wrap:anywhere}
 
 /* The heading receives reading focus; interactive controls keep focus-visible rings. */
 #kp-panel-title:focus{outline:none}
+
+.kp-source-view .kp-excerpt{font-size:15px;line-height:1.75;color:#2d4033}
