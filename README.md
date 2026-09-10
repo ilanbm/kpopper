@@ -293,9 +293,12 @@ budget and notifications for meaningful results. During active Claude Code and C
 sessions, event hooks also surface changed readiness. The daily schedule catches elapsed
 dates and missed events.
 
-Ask your agent to set up followups and daily review, or inspect `kpopper followups --help`.
-`kpopper followups daily plan` produces a complete review prompt for your host's scheduler.
-The host creates the actual schedule after opt-in; a saved plan is not an active automation.
+Run **`/kpopper:daily-review`** in Claude Code, or **`$daily-review`** in Codex, to check and set
+up the daily review. The command inspects existing schedules, creates or repairs one when
+needed, and reads it back before confirming installation. Add `check` for inspection only,
+or `resume` to enable a paused review. Existing schedule times are preserved unless you ask
+to change them. The host performs scheduling within your authorization; a saved plan alone
+is not an active automation. See [the setup command](skills/daily-review/SKILL.md).
 Claims prevent duplicate work, and a check deferred until more evidence arrives stays open
 with its history intact. Followup scans and outcomes never silently rewrite the knowledge
 graph or mark its judgments reviewed. See the [followups guide](skills/kpopper/FOLLOWUPS.md)

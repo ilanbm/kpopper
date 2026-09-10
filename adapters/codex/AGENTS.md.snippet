@@ -51,10 +51,12 @@ a harness build that has not wired hooks.json yet).
 Codex scans `.agents/skills` from cwd up to the repo root, plus `~/.agents/skills` and
 `~/.codex/skills` (the two are equivalent — Codex checks both). This plugin's skill
 lives at `skills/kpopper` in the kpopper checkout; make it visible to Codex with a
-symlink, not a copy, so it never drifts from the source:
+symlink, not a copy, so it never drifts from the source. Link the daily-review command
+alongside it. Use the absolute checkout path for `<plugin>` in these symlink commands:
 
     mkdir -p .agents/skills
     ln -s <plugin>/skills/kpopper .agents/skills/kpopper
+    ln -s <plugin>/skills/daily-review .agents/skills/daily-review
 
 Codex follows symlinked skill directories when scanning, so this is enough — no
 config file needed.

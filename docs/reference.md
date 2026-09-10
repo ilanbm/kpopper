@@ -61,6 +61,9 @@ For deferred work, `kpopper followups` links tasks to graph entries and explicit
 `status`, `list`, `show` and `scan` inspect the queue; capture and lifecycle commands preserve
 outcomes and coordinate execution. `daily plan` prepares a recommended daily review and
 `daily bind` records a schedule actually created or inspected through the host's tools.
+`daily install` coordinates inspection, installation and independent readback with the calling
+host agent. Users can invoke the [daily-review plugin command](../skills/daily-review/SKILL.md)
+to complete that flow without operating the individual protocol steps.
 See [the followups guide](../skills/kpopper/FOLLOWUPS.md) for the full input contract,
 task-system routing, recovery and daily workflow. Scheduling metadata is kept outside
 `PROVENANCE.yaml`; scanning and finishing tasks do not rewrite knowledge or `seen`.

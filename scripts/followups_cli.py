@@ -6,10 +6,11 @@ import sys
 import yaml
 
 try:
-    from . import followups as F, followup_daily as D
+    from . import followups as F, followup_daily as D, followup_install as Install
 except ImportError:
     import followups as F
     import followup_daily as D
+    import followup_install as Install
 
 
 def main(argv=None):
@@ -68,6 +69,21 @@ def main(argv=None):
     daily_commands = daily.add_subparsers(dest="operation", required=True)
     plan = daily_commands.add_parser("plan")
     plan.add_argument("--time", default="09:00")
+    install = daily_commands.add_parser("install", help="check and install daily review through the calling host agent")
+    install.add_argument("--owner")
+    install.add_argument("--time")
+    install.add_argument("--timezone")
+    install.add_argument("--store")
+    install.add_argument("--private", action="store_true")
+    install.add_argument("--check", action="store_true", help="inspect only; no installation reservation")
+    install.add_argument("--resume", action="store_true", help="explicitly permit enabling a paused review")
+    install.add_argument("--token")
+    install.add_argument("--unchanged", action="store_true", help="with --fail: the host explicitly rejected before making any change")
+    receipt = install.add_mutually_exclusive_group()
+    receipt.add_argument("--inspect", metavar="FILE", help="submit an actual host inventory")
+    receipt.add_argument("--result", metavar="FILE", help="submit an independent host readback")
+    receipt.add_argument("--reconcile", metavar="FILE", help="retire an inspected host attempt after its pending effects are resolved")
+    receipt.add_argument("--fail", metavar="REASON")
     daily_commands.add_parser("status")
     bind = daily_commands.add_parser("bind", help="record the actual host schedule after creation or inspection")
     bind.add_argument("--file", required=True)
@@ -82,6 +98,21 @@ def main(argv=None):
     args = parser.parse_args(argv)
     try:
         store = F.Store()
+        if args.command == "daily" and args.operation == "install":
+            if args.unchanged and not args.fail:
+                raise F.Refused("--unchanged is valid only with --fail and a definite no-change host result")
+            if args.inspect or args.result or args.reconcile or args.fail:
+                if not args.token or args.check:
+                    raise F.Refused("Submitting an installation receipt needs its token and cannot be check-only")
+                path = args.inspect or args.result or args.reconcile
+                report = (yaml.load(sys.stdin.read(F.MAX_BYTES + 1), Loader=F.StrictLoader) if path == "-" else F.read_yaml(path)) if path else None
+                result = Install.inspect_host(store, args.token, report) if args.inspect else \
+                    Install.finish(store, args.token, report) if args.result else \
+                    Install.reconcile(store, args.token, report) if args.reconcile else Install.fail(store, args.token, args.fail, args.unchanged)
+            else:
+                result = Install.begin(store, args.owner, args.time, args.timezone, args.store, args.private, args.check, args.resume)
+            print(json.dumps(F.T.normalize(result), ensure_ascii=False, indent=2))
+            return 0
         supplied = None
         if hasattr(args, "file"):
             supplied = yaml.load(sys.stdin.read(F.MAX_BYTES + 1), Loader=F.StrictLoader) if args.file == "-" else F.read_yaml(args.file)

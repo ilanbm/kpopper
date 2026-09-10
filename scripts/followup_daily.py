@@ -3,6 +3,8 @@ import datetime as dt
 import json
 import re
 import uuid
+import sys
+from pathlib import Path
 from zoneinfo import ZoneInfo
 
 try:
@@ -17,8 +19,11 @@ def plan(store, time="09:00"):
     data = store.load()
     config = data["config"]
     prompt = (
+        "KPOPPER_DAILY_WORKSPACE=" + data["workspace_key"] + "\n"
         "Run the daily kpopper review for the workspace specified below. The workspace and record "
         "are pinned; if either is unavailable report that and do not create replacements. "
+        "Use the runtime command array and environment in the payload for every kpopper invocation; "
+        "do not assume the scheduler inherits the interactive shell's PATH or XDG_STATE_HOME. "
         "Use `kpopper --workspace WORKSPACE followups daily start --owner UNIQUE_SESSION_ID` "
         "with the actual workspace string and a unique host/session identity. A completed occurrence "
         "or live/interrupted competing review is not permission to start a second one. "
@@ -40,7 +45,9 @@ def plan(store, time="09:00"):
         "Notify only for meaningful new findings, completion, failure or required user action; unchanged "
         "holds and repeated unchanged warnings remain quiet. Do not create more schedules from this run.\n"
         + json.dumps({"workspace": config["workspace"], "record": config["record"],
-                      "ledger": str(store.path), "timezone": config["timezone"]}, ensure_ascii=False)
+                      "ledger": str(store.path), "timezone": config["timezone"],
+                      "runtime": {"command": [sys.executable, str(Path(__file__).with_name("cli.py").resolve())],
+                                  "environment": {"XDG_STATE_HOME": str(store.base.parent.parent)}}}, ensure_ascii=False)
     )
     return {"recommendation": "Daily review is strongly recommended for ongoing work.",
             "cadence": "daily", "time": time, "timezone": config["timezone"], "prompt": prompt,
@@ -62,7 +69,9 @@ def binding(store, report):
             if old["state"] != "missing" or store.now() - F.T.parse_time(old["observed_at"]) > dt.timedelta(hours=24):
                 raise F.Refused("A schedule is already bound; verify its deletion before registering a replacement")
             data["daily"].setdefault("binding_history", []).append(old)
-        data["daily"]["binding"] = {**report, "observed_at": F.stamp(store.now())}
+        ownership = {key: old[key] for key in ("managed_prompt", "prompt_hash") if old and key in old} \
+            if old and (old["host"], old["id"]) == (report["host"], report["id"]) else {}
+        data["daily"]["binding"] = {**ownership, **report, "observed_at": F.stamp(store.now())}
         return data["daily"]["binding"]
 
 
