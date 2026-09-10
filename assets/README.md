@@ -10,6 +10,15 @@ screenshot or a release roadmap, and its document icons contain no research cita
 
 ## Product screenshots
 
+`standalone-document-reasoning.png` is an unaltered browser capture of **The Autumn Garden
+Workshop**, an HTML report produced by the standalone document workflow. The document and
+the focused explanation for its 16-day registration window appear together. The card marks
+that interpretation as **Not checked**, explains its basis in two dates, and links to the
+project notes offered as context. It does not present the interpretation as an automatically
+verified source fact.
+
+### Earlier record-page captures
+
 `document-hover.png` and `document-drilldown.png` are browser captures of the actual
 kpopper renderer's **Now** tab, cropped to the report excerpt. They use the included
 [Greenhouse report record](../examples/greenhouse-report/PROVENANCE.yaml) and
