@@ -151,3 +151,7 @@ readable as source data; comparisons involving null are uncheckable.
 The core separates current values from review snapshots, unknown from false, executable conditions from prose, and premise confidence from judgment confidence. The view guard checks complete ID/link accounting, conflict signals, exact recovery references, event values and topic bindings. Native inferred field roles are passed separately from original source spelling; stale normalization is rejected. Unsupported predicates remain uncheckable, and malformed predicate types remain explicit assessment errors.
 
 The Python router, native adapter and text renderer are tested but not formally proved end to end. The compiler and locally managed cache are part of the trusted runtime. Source-world truth, human re-openers and arbitrary logical languages remain outside the checks. Platform CI builds the pinned source on Linux, macOS and Windows; local validation alone does not establish that every host integration behaves identically.
+
+## Finding a record from a question
+
+Use [checked-session search](retrieval.md) for exact IDs, whole-record lexical search, and optional pinned local E5 ranking. Results are candidate references at the current revision; read them for evidence. The complete opening and Lean assertion checks retain their existing boundaries.

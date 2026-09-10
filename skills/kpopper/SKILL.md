@@ -118,7 +118,15 @@ which is why this cannot be folded into the first command — it does not exist 
 session opens. If they only said hello, it never runs at all.
 
 **If a question does not map to a name, the lookup is incomplete.** Names and topic labels
-do not establish that the subject is absent. Expand relevant branches or inspect source
+do not establish that the subject is absent. When checked sessions are configured, use
+`kpopper_search` at the opening revision to find candidate references, then read their original
+fields and declared premises. Search is discovery, not evidence or permission. Optional local
+embeddings and the CLI equivalent are described in `docs/retrieval.md` at the plugin root.
+When evidence is still missing, continue a returned `next_cursor` with the same search arguments;
+one page is not a coverage boundary. Use `kpopper_context` for explicit support or impact reads
+around relevant IDs. Read its omitted values and incident-edge frontier as needed, and keep
+global search available for unlinked qualifications. Declared paths do not prove claims.
+Expand relevant branches or inspect source
 content before claiming that the record does not cover it. A missing exact ID establishes
 only that the ID is absent. If relevant evidence remains unfound, say so and continue the
 discovery without inventing a matching claim.
