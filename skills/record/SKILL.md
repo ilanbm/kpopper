@@ -1,6 +1,6 @@
 ---
 name: record
-description: "Write what the work found into the project's knowledge record, so the next session inherits it instead of re-deriving it. Use the moment something worth keeping exists: a fact taken from a source, a rule worked out, a decision or conclusion, a measurement, a correction to a recorded value, or a question left open - and before finishing a session that produced any of these. The first write creates PROVENANCE.yaml. Covers add, set, review, same and distinct, judgments with a falsifier, and background capture."
+description: "Write what the work found into the project's knowledge record, so the next session inherits it instead of re-deriving it. Use the moment something worth keeping exists: a fact taken from a source, a rule worked out, a decision or conclusion, a measurement, a correction to a recorded value, or a question left open - and before finishing a session that produced any of these. The first write creates GROUNDING.yaml. Covers add, set, review, same and distinct, judgments with a falsifier, and background capture."
 ---
 
 # Record
@@ -15,7 +15,7 @@ finding worth revisiting, within the user's write authorization. A record contai
 The reader fills `seen` when `add` creates one. Installation alone creates no file. A one-off
 can finish with no record.
 
-Where no record resolves for the workspace, `kpopper add` creates `PROVENANCE.yaml` at the repository root (the working directory outside git) with that first entry, and a later `add` extends it. A registered record that is unavailable is a location problem: restore it rather than starting another. The [shape reference](../kpopper/references/shape.md) shows the sections, pointer records and how a record lives outside a tree that cannot hold it.
+Where no record resolves for the workspace, `kpopper add` creates `GROUNDING.yaml` at the repository root (the working directory outside git) with that first entry, and a later `add` extends it. A registered record that is unavailable is a location problem: restore it rather than starting another. The [shape reference](../kpopper/references/shape.md) shows the sections, pointer records and how a record lives outside a tree that cannot hold it.
 
 **Make a new record useful to its reader.** Give a short explanation and link to the saved
 finding when the `record` explanation is due. For a mapping or a record that benefits from a
@@ -183,7 +183,7 @@ holds for its subject, so a record kept under letters keeps them - a rename reac
 reference on every branch - and says once in its head what they stand for, `meta.prefixes:
 {d: decision, s: session}`, which the opener and the page print beside the namespace.
 
-A write that contradicts what the base holds - the same id with a different value or verdict, a reading no newer than the base's that differs, a judgment resting on what only a hypothesis holds - is refused into the base and named a hypothesis: the refusal prints the `--hypothesis NAME` command that writes the same thing into `PROVENANCE.d/NAME.yaml` beside the record. Nothing written into the body opens that door. Testing, folding and refuting hypotheses is the [consolidate skill](../consolidate/SKILL.md).
+A write that contradicts what the base holds - the same id with a different value or verdict, a reading no newer than the base's that differs, a judgment resting on what only a hypothesis holds - is refused into the base and named a hypothesis: the refusal prints the `--hypothesis NAME` command that writes the same thing into `.kpopper/hypotheses/NAME.yaml` beside the record. Nothing written into the body opens that door. Testing, folding and refuting hypotheses is the [consolidate skill](../consolidate/SKILL.md).
 
 ## The write commands
 

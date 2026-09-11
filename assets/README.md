@@ -21,8 +21,8 @@ verified source fact.
 
 `document-hover.png` and `document-drilldown.png` are browser captures of the actual
 kpopper renderer's **Now** tab, cropped to the report excerpt. They use the included
-[Greenhouse report record](../examples/greenhouse-report/PROVENANCE.yaml) and
-[document layout](../examples/greenhouse-report/PROVENANCE.view.yaml). The example adapts
+[Greenhouse report record](../examples/greenhouse-report/GROUNDING.yaml) and
+[document layout](../examples/greenhouse-report/.kpopper/view.yaml). The example adapts
 the Greenhouse test data into a short report with one heating judgment.
 
 The first capture shows a hover over `c.boiler_short`. The second follows two dependency

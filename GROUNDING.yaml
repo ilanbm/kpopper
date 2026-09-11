@@ -1,5 +1,5 @@
 meta:
-  updated: 2026-09-12
+  updated: 2026-09-11
   name: kpopper
   scope: "What this plugin is for and the decisions that shaped it, kept in its own format -
           the tools eat their own cooking, and every session here opens grounded."
@@ -368,6 +368,23 @@ sources:
          documents' derived index that is never written into a project; and two records of 260 and
          511 entries each opening in well under a second"
     read: "2026-09-11"
+  s.2026_09_12_layout:
+    asked: "לא כדאי שכל הקבצים שלנו בפרויקט או בכלל יהיו תחת ספרייה בשם ״.kpopper\" ולא בroot של
+            הפרויקט? וגם הקונבנציה של השמות של קבצי aux לא עדיף שיהיו בספרייה פנמית תחת איזושהי
+            קובנציה של שמות? וגם השם provanance.yaml, האם הוא מוצלח או כדאי שם אחר? … ומה לגבי
+            החשיבות של לקדם את השם kpopper כמותג פה? וגם הקונבנציה הקיימת של claude וcodex וgithub של
+            קובץ עם נקודה בהתחלה בתוך הריפו? … GROUNDING.yaml זה שם מצויין, אבל אני תוהה גם על
+            REASONING.yaml … אם יהיו עוד קבצים שיצטרכו להיות לא gitignored … איפה הקבצים האלה יהיו?"
+    name: "The session that put the record's files in their places and gave the entry file its name
+           - what it was asked, and what it was given. Its reading: the dot-directory convention the
+           hosts use holds configuration and automation and keeps the one file meant to be read at
+           the root; the brand goes on the directory, the verbs, the check and the head line, the
+           concept on the file's name; grounding is what the file does for a session, reasoning is
+           one field of one kind of entry"
+    of: "2026-09-12, given this record at 60f4a8b, the three live records outside this repository,
+         the six host adapters, the root layouts of .github, .claude and .codex, the README's own
+         word use, and a dry run of a judgment rewrite through the door"
+    read: "2026-09-12"
   s.background_ingestion:
     name: "Background capture and selective delivery contract"
     file: "skills/kpopper/INGESTION.md"
@@ -743,6 +760,13 @@ known:
          falsifier's own"
     of: "2026-09-03"
     measure: coverage_thresholds
+  p.entry_names:
+    v: 2
+    name: "Names the locator recognizes for the record's entry file"
+    from: "scripts/workspace.py"
+    at: NAMES
+    of: "2026-09-12"
+    measure: entry_names
   p.fields_a_build_writes:
     v: 0
     name: "Fields of the record a read command - check, open, page - writes"
@@ -761,7 +785,8 @@ known:
     v: 1
     name: "Places the reader reads hypothesis files from"
     from: "scripts/provenance.py"
-    at: "hypothesis_dir - PROVENANCE.d beside the file the reader opens first"
+    at: "hypothesis_dir - .kpopper/hypotheses beside the file the reader opens first, PROVENANCE.d
+         beside a record kept under the old name"
     of: "2026-09-04"
   p.hypothesis_name_inputs:
     v: 2
@@ -1113,12 +1138,13 @@ known:
     of: "2026-09-10"
 
   m.skill_bytes_largest:
-    v: 19998
+    v: 20003
+    # set 2026-09-12: measured by skill_bytes_largest after the skills learned the entry file and the directory beside it
     # set 2026-09-11: measured by skill_bytes_largest at a51bc75 with the working tree changed
     name: "The largest skill body a session can be handed now, bytes"
     from: "skills/*/SKILL.md"
     at: "bytes of the largest body"
-    of: "2026-09-11"
+    of: "2026-09-12"
     measure: skill_bytes_largest
 
   m.unasked.question_filler:
@@ -1394,6 +1420,32 @@ judgments:
       d.metrics_derived_builtin: "graph.* and page.* are derived entries the reader computes itself
                                   - counts and shares, never stored, thresholds only inside
                                   falsifiers"
+  d.brand_on_the_directory:
+    verdict: "the brand goes on the directory, the verbs, the check's name and the head line of a
+              born record; the concept goes on the entry file's name"
+    because: "A file named for a tool becomes a standard when the tool already dominates its niche;
+              a file named for the concept becomes one when many vendors are the aim from the first
+              day, which {{goal.portable}} says this is - and this tool renamed itself twice while
+              the file's name survived both. The brand is still an asset: {{lit.name_risk}} says
+              qualified search works, both registries hold the name, and it shows to an adopter where
+              the hosts show theirs - the directory in every repository that adopts, visible and
+              searchable; the check on every pull request; the first line of a record someone finds,
+              which said nothing before; the commands and the skill namespace, which already carry
+              it. The file's name is {{d.entry_file_is_grounding}}."
+    reopened_by: "a person who met a record in a tree and could not find the tool that keeps it from
+                  the tree alone, or an adopter who took the directory's name for the format's"
+    rests_on: [s.2026_09_12_layout, goal.portable, lit.name_risk, d.entry_file_is_grounding]
+    seen:
+      s.2026_09_12_layout: "read 2026-09-12"
+      goal.portable: "usable by any session, in any project, with no author present"
+      lit.name_risk: "bare-term search is owned by a fandom; the org and handle are taken; every
+                      package registry is free; qualified search works"
+      d.entry_file_is_grounding: "the record's entry file is GROUNDING.yaml: the first add creates
+                                  it at the workspace root, the locator finds it first and a record
+                                  kept under the earlier name after it, wherever that record already
+                                  is, and no command creates the earlier name again"
+    distinct_from: d.named_for_popper
+    # distinct 2026-09-12: one is where the brand shows in an adopter's tree, the other is what the tool is called; both read the name's cost
   d.browser_code_in_browser_files:
     rests_on: [m.page_string_lines, prior.strings_lose_tooling]
     verdict: "the page's CSS and JS live in their own files under scripts/page/, read whole at
@@ -1656,21 +1708,61 @@ judgments:
                                           the union is tested by consolidation, and the page draws
                                           the base"
       p.union_tests: 1
+  d.entry_file_is_grounding:
+    verdict: "the record's entry file is GROUNDING.yaml: the first add creates it at the workspace
+              root, the locator finds it first and a record kept under the earlier name after it,
+              wherever that record already is, and no command creates the earlier name again"
+    because: "The name is the one thing a session with no author present reads before anything else,
+              and {{goal.portable}} is the bar: a file named for what it does for the session - what
+              its answers stand on - carries its own instruction, where provenance named the half of
+              the content that is sources and readings and reads, in software now, as a supply-chain
+              attestation. Grounding is the word the method already uses in its skill, its opener and
+              its grounding line, and {{d.prefix_is_a_word}} is the same rule one level up: a name is
+              the link a question takes into the record. Reasoning, the pitch word, names a process
+              and one field, {{d.reasoning_in_record}}, not the state the file holds. The earlier
+              name stays read so that no record has to move, and {{p.entry_names}} counts the names
+              the locator knows - a third would be a second convention."
+    wrong_if: "p.entry_names > 2"
+    reopened_by: "a session with no author present that found the file and did not read it before
+                  answering from memory, or an adopter who asked what the file is, or a live record
+                  the locator stopped finding under its earlier name"
+    rests_on: [s.2026_09_12_layout, goal.portable, d.prefix_is_a_word, d.reasoning_in_record, p.entry_names]
+    seen:
+      s.2026_09_12_layout: "read 2026-09-12"
+      goal.portable: "usable by any session, in any project, with no author present"
+      d.prefix_is_a_word: "a prefix born from now is a word - the subject a question would name, or
+                           the kind spelled out where a record is about one thing - never a letter;
+                           an entry joins the prefix its record already holds for its subject, so a
+                           record kept under letters keeps them and declares what they stand for in
+                           meta.prefixes, which the opener and the page print beside the namespace;
+                           check does not fail a letter"
+      d.reasoning_in_record: "reasoning is the because of the judgment it belongs to, in the record;
+                              the page's connective text lives in the brief; both resolve references
+                              at build and both carry seen"
+      p.entry_names: 2
   d.first_add_is_the_birth:
-    rests_on: [s.2026_09_10_skills_split, d.first_meeting_artifact]
-    verdict: "where no record resolves, the first add creates PROVENANCE.yaml at the workspace root
-              with that entry; no other command creates one, and an unavailable registered record is
-              refused, never replaced"
+    verdict: "where no record resolves, the first add creates GROUNDING.yaml at the workspace root
+              with that entry, under one line that says what keeps it; no other command creates one,
+              and an unavailable registered record is refused, never replaced"
     because: "The write occasion had no mechanical first step: add refused where no record existed,
               so every first record was a hand-written file. Installation alone still creates
               nothing; the first finding does, and on a surface that can publish the record is met as
-              its page ({{d.first_meeting_artifact}})."
+              its page ({{d.first_meeting_artifact}}). The file it creates carries the name
+              {{d.entry_file_is_grounding}} gives it, and one line saying what keeps it, so a record
+              found without its author leads back to the tool."
     reopened_by: "a record born by a first add where a registered one was meant; or a session that
-                  writes the file by hand rather than through add once this exists"
+                  writes the file by hand rather than through add once this exists; or a first add
+                  that created the earlier name"
+    rests_on: [s.2026_09_10_skills_split, s.2026_09_12_layout, d.first_meeting_artifact, d.entry_file_is_grounding]
     seen:
       s.2026_09_10_skills_split: "read 2026-09-10"
+      s.2026_09_12_layout: "read 2026-09-12"
       d.first_meeting_artifact: "a record born in this session, on a surface that can publish, is
                                  rendered and shown as a live artifact without asking"
+      d.entry_file_is_grounding: "the record's entry file is GROUNDING.yaml: the first add creates
+                                  it at the workspace root, the locator finds it first and a record
+                                  kept under the earlier name after it, wherever that record already
+                                  is, and no command creates the earlier name again"
   d.fold_passes_the_one_door:
     rests_on: [s.2026_09_04_minted_permission, s.2026_09_04_consolidate, d.contradiction_by_id_and_day, p.supersede_doors]
     verdict: "a folded reading passes the one door a written one does, with a person's hand on it:
@@ -1798,6 +1890,45 @@ judgments:
                                    truth is pending - its premises in rests_on, its claim in verdict,
                                    what would refute its success in wrong_if - and the merge is its
                                    test"
+  d.home_beside_the_entry:
+    verdict: "everything a record keeps beside itself lives in one directory, .kpopper, beside the
+              file the reader opens first - hypotheses/, view.yaml, measure.yaml, session.json,
+              records/<head>.yaml when the record divides, build/ for what is rebuilt - and a record
+              found under the earlier name keeps the earlier names beside it; the reader looks in one
+              of the two, never both"
+    because: "The hosts this method adapts to keep one file meant to be read at the root and
+              everything else in a directory named for the tool that owns it - .github, .claude,
+              .codex - and that split answers two questions at once: the root holds the one file a
+              person or a session must find by eye, and the directory carries the namespace, so a
+              file inside needs only its role for a name. The directory follows the entry file, as
+              {{d.record_is_code}} and {{d.register_out_of_tree}} already place hypotheses, so a
+              pointer record and a registered one keep theirs beside the file the reader opens; a
+              divided record's shards go there too, because at that size the reading goes through
+              open, pull and the page ({{d.scale_by_federation}}) and the write already knows its
+              shard ({{d.a_write_joins_its_own_shard}}). {{p.hypothesis_homes}} stays the count of
+              places hypotheses are read from - a record under either name has one."
+    wrong_if: "p.hypothesis_homes > 1"
+    reopened_by: "a reviewer who missed a change under .kpopper in a pull request, a person on a
+                  surface without git who could not find the page or the brief, or a second file
+                  convention appearing beside the entry file"
+    rests_on: [s.2026_09_12_layout, d.record_is_code, d.register_out_of_tree, d.scale_by_federation, d.a_write_joins_its_own_shard, p.hypothesis_homes]
+    seen:
+      s.2026_09_12_layout: "read 2026-09-12"
+      d.record_is_code: "the record of what is known about the code lives in the tree - committed
+                         with the work it describes, reviewed in the same pull request, checked by
+                         the same CI - and a hypothesis travels with its branch; an out-of-tree
+                         record holds only what the tree cannot hold, the world outside the code; a
+                         user-level directory is at most an index of records, never content; a
+                         session named as a source is provenance, not process"
+      d.register_out_of_tree: "a record the tree cannot hold registers its path in the git common
+                               dir, so every worktree finds it and nothing enters the tree"
+      d.scale_by_federation: "a record scales by sharding into domain records under a pointer index,
+                              never by growing one file"
+      d.a_write_joins_its_own_shard: "a new entry goes into the file whose collection already holds
+                                      its neighbours - the entries whose ids share its head - and a
+                                      write to an entry goes into the file that holds it; a record in
+                                      one file answers that file to all of it"
+      p.hypothesis_homes: 1
   d.hooks_carry_pointers:
     rests_on: [s.2026_09_10_skills_split, d.open_is_a_slot]
     verdict: "the hooks are the one layer every session gets without choosing; they name the entries
@@ -1865,6 +1996,35 @@ judgments:
       s.2026_09_04_merge_driver_reason: "read 2026-09-04"
       alt.record_merge_driver: rejected
       p.hypothesis_name_inputs: 2
+  d.in_the_tree_only_what_is_reviewed:
+    verdict: "in the tree only what is reviewed; ignored only what is rebuilt, in the one directory
+              .kpopper/build, with a .gitignore the build writes there; state never in the tree"
+    because: "{{d.record_is_code}} already says why the record and its hypotheses are committed - an
+              untracked file dies with its worktree, the honest fate of a claim nobody committed -
+              and the same reasoning sorts everything else: the brief, the recipes and the session
+              profile are reviewed, so they are tracked; the page is rebuilt from them, so it is not;
+              the parse cache, the gate's mark and the pointer to a record outside the tree are
+              state, and state already lives under the user's state directory and the git common
+              directory ({{d.home_beside_the_entry}}). One ignored directory that ignores itself
+              leaves the project's own .gitignore untouched and rules out ignore rules per file, the
+              shape that rots."
+    reopened_by: "an ignore rule for the record's files anywhere but .kpopper/build/.gitignore, a
+                  state file written into the tree, or a reviewed file a session found ignored"
+    rests_on: [s.2026_09_12_layout, d.record_is_code, d.home_beside_the_entry]
+    seen:
+      s.2026_09_12_layout: "read 2026-09-12"
+      d.record_is_code: "the record of what is known about the code lives in the tree - committed
+                         with the work it describes, reviewed in the same pull request, checked by
+                         the same CI - and a hypothesis travels with its branch; an out-of-tree
+                         record holds only what the tree cannot hold, the world outside the code; a
+                         user-level directory is at most an index of records, never content; a
+                         session named as a source is provenance, not process"
+      d.home_beside_the_entry: "everything a record keeps beside itself lives in one directory,
+                                .kpopper, beside the file the reader opens first - hypotheses/,
+                                view.yaml, measure.yaml, session.json, records/<head>.yaml when the
+                                record divides, build/ for what is rebuilt - and a record found under
+                                the earlier name keeps the earlier names beside it; the reader looks
+                                in one of the two, never both"
   d.ingestion_attention_is_selective:
     rests_on: [s.background_ingestion]
     verdict: "Background ingestion retains a receipt for every event and notifies only when a
@@ -2771,7 +2931,7 @@ judgments:
               {{d.record_is_code}} for a directory of records - and the layer's pieces are landing as
               bounded changes to the reader, each bought by a measurement
               ({{d.a_write_joins_its_own_shard}}). A project's own facts file kept in another shape,
-              or any knowledge store that is not a PROVENANCE record, is what would count."
+              or any knowledge store that is not a record of this shape, is what would count."
     reopened_by: "a second and a third consumer of the pointer index, the placement rule or the
                   derived stores that is not a record this reader reads - a knowledge store of
                   another shape asking for them"

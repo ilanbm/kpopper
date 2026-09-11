@@ -44,7 +44,7 @@ agent, and an async Python processor cannot call a host messaging tool itself.
 ## Share external observations
 
 Use one existing canonical external record where the project already stores these facts:
-`kpopper watch setup --shared-record /absolute/existing/PROVENANCE.yaml`. If none exists and
+`kpopper watch setup --shared-record /absolute/existing/GROUNDING.yaml`. If none exists and
 shared capture is requested, `--shared-private` creates one private destination. This is
 separate from the tracked code record; never copy the whole branch graph into it. Its path
 is pinned, shared across worktrees, and remains readable after a worktree is removed.

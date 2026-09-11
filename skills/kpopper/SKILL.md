@@ -1,6 +1,6 @@
 ---
 name: kpopper
-description: "The kpopper method: a knowledge record (PROVENANCE.yaml) for work that gets revisited - what is known, where each piece came from, and what would make each conclusion wrong. Use when asked what kpopper is or how to keep a record, when choosing which kpopper skill fits a moment, or when no narrower one does. The occasions have their own skills: ground (read the record before answering), record (write what the work found), map (map existing materials), document (an HTML document with its evidence), page (the record's page), consolidate (hypotheses and merges), watch (background checks)."
+description: "The kpopper method: a knowledge record (GROUNDING.yaml) for work that gets revisited - what is known, where each piece came from, and what would make each conclusion wrong. Use when asked what kpopper is or how to keep a record, when choosing which kpopper skill fits a moment, or when no narrower one does. The occasions have their own skills: ground (read the record before answering), record (write what the work found), map (map existing materials), document (an HTML document with its evidence), page (the record's page), consolidate (hypotheses and merges), watch (background checks)."
 ---
 
 # kpopper
@@ -85,7 +85,7 @@ is not up for revision. These four are that floor.
 Each is recognizable while you are doing it. If you catch yourself, stop.
 
 - Designing a structure before meeting the evidence, including during a selected mapping.
-- Starting a second record, or renaming `PROVENANCE.yaml` to something you like better.
+- Starting a second record, or renaming `GROUNDING.yaml` to something you like better.
 - Creating a category with one member. One is a case, two a coincidence, three a category.
 - Recording things nobody asked about, for completeness. Completeness is not the goal.
 - Renaming or reorganizing because it would be tidier, with no question behind it.

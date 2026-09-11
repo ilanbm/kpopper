@@ -20,8 +20,8 @@ Setup compiles only the Lean source shipped with the package. It does not downlo
 ## Open and read
 
 ```sh
-kpopper session open --input PROVENANCE.yaml --project example
-kpopper session read --input PROVENANCE.yaml --project example \
+kpopper session open --input GROUNDING.yaml --project example
+kpopper session read --input GROUNDING.yaml --project example \
   --revision REVISION_FROM_OPEN --ref node:some.claim
 ```
 
@@ -65,7 +65,7 @@ reference; bare `orientation` reads the view's editorial orientation.
 
 ## Declared navigation
 
-Without a profile, navigation follows the record's sections and dotted ID namespaces. Names and grouping do not establish claims. An optional `PROVENANCE.session.json` beside the record can declare more useful topic routes:
+Without a profile, navigation follows the record's sections and dotted ID namespaces. Names and grouping do not establish claims. An optional `.kpopper/session.json` beside the record can declare more useful topic routes:
 
 ```json
 {
@@ -118,7 +118,7 @@ Bind each stdio server to one project explicitly. This avoids depending on wheth
       "command": "/path/to/session-python",
       "args": [
         "/path/to/kpopper/scripts/session_cli.py", "serve",
-        "--input", "/path/to/project/PROVENANCE.yaml",
+        "--input", "/path/to/project/GROUNDING.yaml",
         "--project", "example"
       ]
     }

@@ -61,7 +61,8 @@ def context(payload, host):
     record = location["record"]
     base = os.path.dirname(os.path.abspath(record))
     path = os.path.abspath(os.path.join(payload.get("cwd") or os.getcwd(), file))
-    if os.path.basename(path).startswith("PROVENANCE."):
+    if os.path.basename(path) in W.NAMES or os.path.basename(path).startswith("PROVENANCE.") \
+            or path.startswith(os.path.join(base, ".kpopper") + os.sep):
         return ""              # the record and the files beside it are the writer's business
     rel = os.path.relpath(path, base)
     if rel.startswith(".."):

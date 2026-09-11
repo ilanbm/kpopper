@@ -51,9 +51,10 @@ class FirstWrite(Scratch):
         self.assertEqual(code, 0, err)
         self.assertIn("created", out)
         self.assertIn("born with its first entry", out)
-        record = self.dir / "PROVENANCE.yaml"
+        record = self.dir / "GROUNDING.yaml"
         self.assertTrue(record.exists())
         text = record.read_text(encoding="utf-8")
+        self.assertTrue(text.startswith("# Kept with kpopper"), text[:80])
         self.assertIn("meta:\n  updated: 2026-08-30", text)
         self.assertIn("sources:", text)
         self.assertIn("  pricing:", text)
@@ -75,19 +76,20 @@ class FirstWrite(Scratch):
         sub.mkdir(parents=True)
         code, out, err = self.cli("add", "brief", "name=the brief", "file=notes/brief.md", "read=2026-09-01", cwd=sub)
         self.assertEqual(code, 0, err)
-        self.assertTrue((self.dir / "PROVENANCE.yaml").exists())
-        self.assertFalse((sub / "PROVENANCE.yaml").exists())
+        self.assertTrue((self.dir / "GROUNDING.yaml").exists())
+        self.assertFalse((sub / "GROUNDING.yaml").exists())
+        self.assertFalse((self.dir / "PROVENANCE.yaml").exists())
 
     def test_no_other_command_creates_a_record_and_a_dangling_registration_is_refused(self):
         code, _, err = self.cli("set", "acme.seat_price", "43")
         self.assertNotEqual(code, 0)
-        self.assertFalse((self.dir / "PROVENANCE.yaml").exists())
+        self.assertFalse((self.dir / "GROUNDING.yaml").exists())
         self.git("init", "-q")
         (self.dir / ".git" / "kpopper-record").write_text(str(self.dir / "gone.yaml"), encoding="utf-8")
         code, _, err = self.cli("add", "pricing", "name=x", "url=https://x", "read=2026-08-30")
         self.assertNotEqual(code, 0)
         self.assertIn("unavailable", err + _)
-        self.assertFalse((self.dir / "PROVENANCE.yaml").exists())
+        self.assertFalse((self.dir / "GROUNDING.yaml").exists())
 
 
 class Gate(Scratch):

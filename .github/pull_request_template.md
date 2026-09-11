@@ -18,4 +18,4 @@ Bump: minor
 
 ---
 
-- [ ] A decision this change makes is written into `PROVENANCE.yaml`, with what would make it wrong — a sign the change itself cannot suppress — or it makes none
+- [ ] A decision this change makes is written into `GROUNDING.yaml`, with what would make it wrong — a sign the change itself cannot suppress — or it makes none

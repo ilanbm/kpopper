@@ -159,7 +159,9 @@ def declared_bump(m):
 
 
 def decisions_added(rev):
-    diff = sh("git", "diff", f"{rev}..HEAD", "--", "PROVENANCE.yaml")
+    # The record's entry file is GROUNDING.yaml; a release spanning its rename from
+    # PROVENANCE.yaml reads the diff across both names, so the rename adds no decisions.
+    diff = sh("git", "diff", "-M", f"{rev}..HEAD", "--", "GROUNDING.yaml", "PROVENANCE.yaml")
     seen, out = set(), []
     for d in DECISION_ADDED.findall(diff):
         if d not in seen:

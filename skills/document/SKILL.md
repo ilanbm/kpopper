@@ -11,7 +11,7 @@ and create the source/check mapping while writing it; the user does not prepare 
 mapping or ask for a separate evidence step. Deliver the single HTML produced by
 `kpopper document build`, with its inline evidence and review controls. Read the short
 author guide before authoring, use actual available sources, and keep missing evidence
-and inferred prose explicit. A one-off document does not require a new PROVENANCE.yaml,
+and inferred prose explicit. A one-off document does not require a new GROUNDING.yaml,
 a workspace map, or unrelated record setup. Requests for the record's own page use the [page skill](../page/SKILL.md).
 
 ## Author the requested HTML document with its evidence

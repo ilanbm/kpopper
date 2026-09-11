@@ -4,7 +4,9 @@ One file, three sections, and the two ways a record lives somewhere other than t
 
 ## Where the record lives
 
-**If the project already keeps a record somewhere else** — a `facts.yaml` in a subfolder, a table someone maintains — do not move it and do not duplicate it. Create `PROVENANCE.yaml` as a pointer:
+The entry point is `GROUNDING.yaml` in the project's working directory, born by the first `kpopper add`. Everything the record keeps beside itself lives in `.kpopper/` next to it - `hypotheses/`, `view.yaml`, `measure.yaml`, `session.json`, and `build/` for what is rebuilt from it, which ignores itself. A record born under the earlier name, `PROVENANCE.yaml`, is read as it is, with `PROVENANCE.d/`, `PROVENANCE.view.yaml`, `PROVENANCE.measure.yaml` and `PROVENANCE.session.json` beside it; to bring one over, rename the file and move those four into `.kpopper/` in the same commit.
+
+**If the project already keeps a record somewhere else** — a `facts.yaml` in a subfolder, a table someone maintains — do not move it and do not duplicate it. Create `GROUNDING.yaml` as a pointer:
 
 ```yaml
 record: analysis/facts.yaml     # the real record lives here
@@ -18,7 +20,7 @@ the checkout is disposable and untracked files die with it — keep the record w
 project keeps its untracked material, and register the path with the checkout:
 
 ```bash
-echo "/abs/path/to/PROVENANCE.yaml" > "$(git rev-parse --git-common-dir)/kpopper-record"
+echo "/abs/path/to/GROUNDING.yaml" > "$(git rev-parse --git-common-dir)/kpopper-record"
 ```
 
 The opener and every command below then find it from any checkout or worktree of that

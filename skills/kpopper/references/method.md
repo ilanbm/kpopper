@@ -8,7 +8,7 @@ Structure is bought with an observed trigger, never because it would be tidier.
 
 | what appears | only once this has happened |
 |---|---|
-| `PROVENANCE.yaml` | the work will be revisited |
+| `GROUNDING.yaml` | the work will be revisited |
 | references instead of restated material, and something that assembles the output from them | the same thing is needed twice |
 | checks that **fail the build** — a broken reference, a literal where a reference belongs, a source that does not exist | there is too much for a person to eyeball |
 | a named type with required fields | the same shape has appeared a **third** time |

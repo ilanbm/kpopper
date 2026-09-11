@@ -20,7 +20,7 @@ session already holds. `request: s.<date>_<slug>` - a session source whose `aske
 request verbatim, rested on - still names whose asking the change was taken from, said *on the word
 of* on every surface: provenance the person weighs at the fold, and permission for nothing.
 A write resting on what only a hypothesis holds belongs in that hypothesis. Each refusal names the
-command that writes the same thing into `PROVENANCE.d/<name>.yaml` beside the record - the base
+command that writes the same thing into `.kpopper/hypotheses/<name>.yaml` beside the record - the base
 untouched - named after the id contradicted and a mark of the claim written, unless `--hypothesis
 NAME` on `set`, `add` or `review` names it. The first write stamps `born` in the head; `claim:`, a
 head `wrong_if:` and `folds: never` are the one thing a hand writes there. Three uses: a concurrent
@@ -79,7 +79,7 @@ them.
 own stored value and never against the tree, so a count that is wrong about the tree passes as
 long as it agrees with itself. An entry whose value is a fact about the tree - lines of a file,
 files a package ships, places in the code where something is decided - names the recipe that
-takes it, `measure: <name>`, and `PROVENANCE.measure.yaml` beside the record holds that name's
+takes it, `measure: <name>`, and `.kpopper/measure.yaml` beside the record holds that name's
 argument list. The name is all the record carries: a bare name, refused by `add` and failed by
 `check` when it is not one or stands on anything but a stored scalar reading. `kpopper remeasure`
 prints the plan and runs nothing; `--run` runs each cited recipe once, from the checkout's root,

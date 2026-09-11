@@ -81,7 +81,7 @@ Preferences live under `$XDG_STATE_HOME/kpopper/first-use`, or
 `~/.local/state/kpopper/first-use`. Choices are stored per workspace, shared across worktrees
 of the same repository. Introduction and explanation acknowledgements are stored for the
 local user so a new project does not repeat the tutorial. These files contain preferences
-and acknowledgements, not copies of source material. They are separate from `PROVENANCE.yaml`
+and acknowledgements, not copies of source material. They are separate from `GROUNDING.yaml`
 and are not synced between devices by kpopper.
 
 The existing record opener still supplies the current view, including an enabled checked
