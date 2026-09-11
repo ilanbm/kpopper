@@ -22,6 +22,9 @@ names the entries nearest a new one, and `same` or `distinct` records the answer
 
 Without a file argument the record is PROVENANCE.yaml here, else the path this checkout
 registered in `<git common dir>/kpopper-record` - for a project whose tree cannot hold it.
+A file is parsed when it changes, not at every command: its parsed form is kept under the
+user's state directory, keyed by what the file is. `--no-cache`, or KPOPPER_NO_CACHE=1,
+parses every time.
 
 The record forks on a contradiction, never on a session: a write that contradicts the base
 is refused into it and goes into a hypothesis - `PROVENANCE.d/<name>.yaml` beside the record,
@@ -42,7 +45,8 @@ Where two fields genuinely fit the same role it refuses to guess and asks for a
 one-line `schema:` block. A checker that quietly passes over what it cannot read
 is worse than no checker, so every ambiguity is an error, never a skip.
 """
-import io, os, re, sys, glob, json, shlex, hashlib, subprocess, datetime, textwrap, tempfile, contextlib, yaml
+import io, os, re, sys, glob, json, time, shlex, stat, pickle, hashlib, subprocess, datetime, \
+    textwrap, tempfile, contextlib, yaml
 from decimal import Decimal, InvalidOperation
 
 ID = re.compile(r"[A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z0-9_]+)+")
@@ -195,6 +199,219 @@ def _as_day(v):
         return None
 
 
+# ── reading a file of the record ─────────────────────────────────────────────
+# Every command reads the whole record, and the hooks read it at every prompt and every edit.
+# Reading the bytes is a millisecond and parsing them is the whole cost, so a file's parsed
+# document is kept under the user's own state directory, keyed by the file's absolute path, its
+# size, the nanosecond it was last written, and the digest of the bytes that were parsed. Any of
+# the four differing is a parse. The digest is what makes the key honest: a length and a
+# nanosecond cannot tell apart a rewrite of the same length inside one tick, and a tick is a
+# whole second on filesystems that keep timestamps coarsely. It costs a thousandth of the parse.
+#
+# The files are the record; the cache is only a copy of what one of them said. An entry that is
+# missing, truncated, foreign, stale or of the wrong shape is a parse, never an error, and every
+# write drops the entry for the file it wrote. Set KPOPPER_NO_CACHE=1 to parse every time - for
+# a test, or to tell the cache out of a problem.
+NO_CACHE = "KPOPPER_NO_CACHE"
+CACHE_FORM = 1              # the entry's own shape: a newer reader ignores what an older wrote
+CACHE_DAYS = 14             # an entry no read has renewed for this long is nobody's
+CACHE_ENTRIES = 64          # and this many, newest kept: more records than anyone reads at once
+SWEEP = ".swept"            # in the directory: when it was last looked over
+_PARSED = {}                # this process's own: absolute path -> (identity, the entry's bytes)
+_SWEPT = False              # the directory is looked over once in a run, and once in a day
+# What a parsed record can hold beyond mappings, lists and scalars, which carry themselves
+VALUES = {("datetime", "date"), ("datetime", "datetime"), ("datetime", "time"),
+          ("datetime", "timedelta"), ("datetime", "timezone"), ("builtins", "set"),
+          ("builtins", "frozenset"), ("builtins", "complex")}
+
+
+class _OnlyValues(pickle.Unpickler):
+    """A cache entry holds what the parser returned - mappings, lists, scalars, dates - and
+    nothing else is built from it, so a file under the state directory can never become code
+    this process runs."""
+
+    def find_class(self, module, name):
+        if (module, name) not in VALUES:
+            raise pickle.UnpicklingError(f"{module}.{name} is not a value a record holds")
+        return super().find_class(module, name)
+
+
+def cache_dir():
+    """Where the parsed documents are kept: the user's state directory, where this tool keeps
+    what belongs to a person rather than to a project."""
+    configured = os.environ.get("XDG_STATE_HOME", "")
+    base = configured if configured and os.path.isabs(configured) else \
+        os.path.join(os.path.expanduser("~"), ".local", "state")
+    return os.path.join(base, "kpopper", "cache")
+
+
+def _cache_file(path):
+    """One entry per file, named for the whole absolute path: two records never share an entry -
+    two checkouts of one project, or two hypotheses of the same name beside different records."""
+    return os.path.join(cache_dir(), hashlib.sha256(path.encode("utf-8")).hexdigest() + ".parse")
+
+
+def _cache_ready():
+    """The directory, private to this user. Nothing is read from or written to one that anybody
+    else can write to, and a directory that cannot be made leaves the cache out of this run."""
+    d = cache_dir()
+    try:
+        os.makedirs(d, mode=0o700, exist_ok=True)
+        if os.path.islink(d):
+            return None       # a link is somebody else's directory wearing this one's name
+        st = os.stat(d)
+        uid = getattr(os, "getuid", None)
+        if not stat.S_ISDIR(st.st_mode):
+            return None
+        # the mode bits are read where the platform keeps them; where it does not, they are
+        # made up, and a made-up answer is no reason to refuse the directory
+        if uid and (stat.S_IMODE(st.st_mode) & 0o022 or st.st_uid != uid()):
+            return None
+    except OSError:
+        return None
+    if not _SWEPT:
+        _sweep(d)
+    return d
+
+
+def _sweep(d):
+    """A record that was moved, renamed or deleted - a throwaway checkout, a test's own file -
+    leaves behind an entry nobody will ask for again. So the directory is looked over once a
+    day: what a parse has not rewritten for a fortnight goes, and so does everything past the
+    newest few dozen. A record still in use is read from an entry that outlives that or parsed
+    once more, and either way the directory stays the size of what is actually read."""
+    global _SWEPT
+    _SWEPT = True
+    now = time.time()
+    try:
+        names = [n for n in os.listdir(d) if n.endswith(".parse")]
+    except OSError:
+        return
+    if len(names) <= CACHE_ENTRIES:
+        try:                  # within its bounds and looked over today: nothing to do
+            if now - os.stat(os.path.join(d, SWEEP)).st_mtime < 86400:
+                return
+        except OSError:
+            pass
+    aged = []
+    for name in names:
+        entry = os.path.join(d, name)
+        try:
+            aged.append((os.stat(entry).st_mtime, entry))
+        except OSError:
+            continue          # somebody else's sweep got there first
+    aged.sort(reverse=True)
+    for i, (when, entry) in enumerate(aged):
+        if i < CACHE_ENTRIES and now - when <= CACHE_DAYS * 86400:
+            continue
+        try:
+            os.remove(entry)
+        except OSError:
+            pass              # one entry that will not go is no reason to leave the rest
+    try:                      # the mark of a sweep is written when there has been one
+        fd = os.open(os.path.join(d, SWEEP), os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+        os.close(fd)
+    except OSError:
+        pass
+
+
+def _identity(path, data):
+    """What tells one state of a file from another: how long it is, when it was written, and
+    what it holds - the last of which is the one of the three nothing can fake by accident."""
+    st = os.stat(path)
+    return [st.st_size, st.st_mtime_ns, hashlib.sha256(data).hexdigest()]
+
+
+def _cached(path, identity):
+    """What this file parsed to last time, if the file is still the one that parsed. Anything
+    unreadable, of another shape, or about another file reads as nothing at all."""
+    raw, memo = None, _PARSED.get(path)
+    if memo is not None and memo[0] == identity:
+        raw = memo[1]
+    elif _cache_ready():
+        try:
+            with io.open(_cache_file(path), "rb") as f:
+                raw = f.read()
+        except OSError:
+            return None
+    if raw is None:
+        return None
+    try:
+        entry = _OnlyValues(io.BytesIO(raw)).load()
+    except Exception:
+        return None
+    if not isinstance(entry, dict) or entry.get("form") != CACHE_FORM \
+            or entry.get("path") != path or entry.get("identity") != identity \
+            or not isinstance(entry.get("doc"), dict):
+        return None
+    _PARSED[path] = (identity, raw)
+    return entry["doc"]
+
+
+def _keep(path, identity, doc):
+    """The parse kept for the next reader: in this process, and in a file of its own - written
+    where only this user can read it, and put in place in one step, so nobody meets half an
+    entry. A cache that cannot be written changes nothing about the answer. Only a document of
+    the shape a record has is kept, so nothing that reads one has to ask what it got."""
+    if not isinstance(doc, dict):
+        return
+    try:
+        raw = pickle.dumps({"form": CACHE_FORM, "path": path, "identity": identity, "doc": doc},
+                           protocol=pickle.HIGHEST_PROTOCOL)
+    except Exception:
+        return                       # a document that will not pickle is simply not kept
+    _PARSED[path] = (identity, raw)
+    if not _cache_ready():
+        return
+    tmp = None
+    try:
+        # the temporary name ends in .parse too, so one left by a killed writer is swept
+        fd, tmp = tempfile.mkstemp(prefix=".writing.", suffix=".parse", dir=cache_dir())
+        with io.open(fd, "wb") as f:
+            f.write(raw)
+        os.replace(tmp, _cache_file(path))
+    except OSError:
+        if tmp and os.path.exists(tmp):
+            try:
+                os.remove(tmp)
+            except OSError:
+                pass
+
+
+def forget(path):
+    """What a write leaves behind: the entry for the file it wrote, gone from this process and
+    from the state directory. The key would catch the change anyway; dropping the entry is what
+    keeps the directory one entry per file rather than one per version of one."""
+    p = os.path.abspath(path)
+    _PARSED.pop(p, None)
+    try:
+        os.remove(_cache_file(p))
+    except OSError:
+        pass
+
+
+def parse(path):
+    """One file of the record, as the parser reads it - the record, a file a pointer names, a
+    hypothesis beside it. Every reader of a record file comes through here, so none of them can
+    be served the parse of a file as it no longer is: what comes back is the parse of the bytes
+    that are there now, or those bytes parsed again."""
+    path = os.path.abspath(path)
+    with io.open(path, "rb") as f:
+        data = f.read()
+    if os.environ.get(NO_CACHE, "") not in ("", "0"):
+        return yaml.safe_load(data.decode("utf-8"))
+    try:
+        identity = _identity(path, data)
+    except OSError:
+        return yaml.safe_load(data.decode("utf-8"))
+    got = _cached(path, identity)
+    if got is not None:
+        return got
+    doc = yaml.safe_load(data.decode("utf-8"))
+    _keep(path, identity, doc)
+    return doc
+
+
 def _hypothesis(name, path):
     return {"name": name, "path": path, "head": {}, "doc": {}, "ids": set(), "raw": {}, "error": None}
 
@@ -213,8 +430,7 @@ def load_hypotheses(paths):
         name = re.sub(r"\.ya?ml$", "", os.path.basename(f))
         hyp = _hypothesis(name, f)
         try:
-            with io.open(f, encoding="utf-8") as fh:
-                body = yaml.safe_load(fh.read()) or {}
+            body = parse(f) or {}
             if not isinstance(body, dict):
                 raise ValueError("not a mapping of collections")
             head = body.pop("hypothesis", None)
@@ -412,14 +628,14 @@ def load(paths):
                 cf = os.path.join(os.path.dirname(f), c)
                 if os.path.abspath(cf) in seen or not os.path.exists(cf):
                     continue
-                merge(cf, yaml.safe_load(io.open(cf, encoding="utf-8").read()) or {})
+                merge(cf, parse(cf) or {})
 
     for p in paths:
         for f in sorted(glob.glob(p)) or [p]:
             if not os.path.exists(f):
                 sys.exit(f"{f}: no record here. Run this from the directory the record sits "
                          "in, or name the record file as an argument.")
-            merge(f, yaml.safe_load(io.open(f, encoding="utf-8").read()) or {})
+            merge(f, parse(f) or {})
     doc.hypotheses = load_hypotheses(paths)
     return doc
 
@@ -2260,7 +2476,7 @@ def _texts_that_saw(paths, keys):
     brief = _brief_beside(paths[0])
     if not brief:
         return []
-    b = yaml.safe_load(io.open(brief, encoding="utf-8").read()) or {}
+    b = parse(brief) or {}
     secs = [s for s in (b.get("sections") or []) if isinstance(s, dict)]
     for tab in (b.get("tabs") or []):
         if isinstance(tab, dict):
@@ -3034,6 +3250,7 @@ def _write_text(path, text):
     if os.path.exists(path):
         os.chmod(tmp, os.stat(path).st_mode & 0o7777)
     os.replace(tmp, path)
+    forget(path)
 
 
 @contextlib.contextmanager
@@ -3066,7 +3283,7 @@ def _files_of(paths):
             return
         seen.add(os.path.abspath(f))
         out.append(f)
-        d = yaml.safe_load(io.open(f, encoding="utf-8").read()) or {}
+        d = parse(f) or {}
         for key in ("record", "also"):
             v = d.get(key)
             v = [v] if isinstance(v, str) else v if isinstance(v, list) else \
@@ -3078,6 +3295,52 @@ def _files_of(paths):
         for f in sorted(glob.glob(p)) or [p]:
             follow(f)
     return out
+
+
+def _file_for(files, nid, collection=None, texts=None):
+    """Which file of the record a write lands in. A record is one file until it outgrows one,
+    and then a pointer index over a file per domain - so the choice has to keep a subject
+    together instead of piling every new entry into whichever file comes first:
+
+      the file that already holds the entry - what a set, a review and a superseded judgment
+        are looking for;
+      else the file whose collection already holds the entry's neighbours: the ids sharing the
+        head of its id, which is what a record is divided by when it is divided at all;
+      else the file that is that subject's own, everything in it sharing the head - which opens
+        the collection there, rather than filing a room's first source among the meetings;
+      else the first file that holds the collection;
+      else the first file that holds anything at all, a pointer index being a list of files and
+        not a place to keep entries.
+
+    A record in one file answers that file to all of it, as it always did. `texts` gives the
+    files' lines where the caller is already holding them."""
+    head, opened, own, held = nid.split(".")[0], None, None, None
+    for f in files:
+        if texts is not None and f in texts:
+            lines = texts[f]
+        else:
+            with io.open(f, encoding="utf-8") as fh:
+                lines = fh.read().split("\n")
+        if _locate(lines, nid):
+            return f
+        if collection is None:
+            continue
+        cols, members = {}, {}
+        for name, s, e in _collections_in(lines):
+            cols[name] = (s, e)
+            if name != "meta":          # the head of the file is not a collection of entries
+                members[name] = [m for m, _ in _members_of(lines, s, e)[1] if "." in m]
+        theirs = [m for ms in members.values() for m in ms]
+        if held is None and theirs:
+            held = f
+        if collection in cols:
+            if any(m.split(".")[0] == head for m in members.get(collection, [])):
+                return f
+            if opened is None:
+                opened = f
+        if own is None and theirs and all(m.split(".")[0] == head for m in theirs):
+            own = f
+    return own or opened or held or files[0]
 
 
 def _collection_for(doc, ids, jud, fields, nid, body, explicit):
@@ -3373,7 +3636,7 @@ def _review_section(paths, brief, title, stamp, raw, ids, jud):
     """A section of the brief reviewed by its title: the references of its text
     snapshotted into `seen`, and `reviewed` moved. The record is not touched."""
     btext = io.open(brief, encoding="utf-8").read()
-    b = yaml.safe_load(btext) or {}
+    b = parse(brief) or {}
     secs = [s for s in (b.get("sections") or []) if isinstance(s, dict)]
     for tab in (b.get("tabs") or []):
         if isinstance(tab, dict):
@@ -3441,14 +3704,9 @@ def _apply(paths, action):
         return _review_section(paths, brief, nid, stamp, raw, ids, jud)
 
     snapshot_field = fields["snapshot"] or "seen"
-    # which file holds the entry: the one it is found in; a new one goes where its
-    # collection is, else into the first file
-    target = files[0]
-    if kind in ("set", "review"):
-        for f in files:
-            if _locate(io.open(f, encoding="utf-8").read().split("\n"), nid):
-                target = f
-                break
+    # which file of the record holds the write: the one that holds the entry, and for a new
+    # one the file its neighbours are in (_file_for)
+    target = files[0] if kind == "add" else _file_for(files, nid)
     out, seen, arrangement, supersede, arranged = [], {}, False, False, False
     if kind == "add":
         body = action["body"]
@@ -3475,17 +3733,10 @@ def _apply(paths, action):
             body[snapshot_field] = seen
             action["body"] = body
         if supersede:
-            for f in files:
-                if _locate(io.open(f, encoding="utf-8").read().split("\n"), nid):
-                    target = f
-                    break
+            target = _file_for(files, nid)
         else:
             collection = _collection_for(doc, ids, jud, fields, nid, body, action.get("into"))
-            for f in files:
-                if collection in {n for n, _, _ in
-                                  _collections_in(io.open(f, encoding="utf-8").read().split("\n"))}:
-                    target = f
-                    break
+            target = _file_for(files, nid, collection)
     original = io.open(target, encoding="utf-8").read()
     lines = original.split("\n")
     if kind == "set":
@@ -3585,7 +3836,7 @@ def _apply(paths, action):
     # an arrangement's review also rewrites the shape it stood on - every tab it governs -
     # once the record is safely written, so a failed write leaves the brief as it was
     if kind == "review" and arrangement and shape is not None:
-        b = yaml.safe_load(io.open(brief, encoding="utf-8").read()) or {}
+        b = parse(brief) or {}
         wheres = _tabs_for(b, nid, facts2)
         if not wheres:
             out.append("  no tab's sections earn a session source this rests on - no shape "
@@ -4038,7 +4289,12 @@ def _newborn(action):
 
 
 if __name__ == "__main__":
-    a = sys.argv[1:] or ["check"]
+    a = [x for x in sys.argv[1:] if x != "--no-cache"]
+    if len(a) != len(sys.argv[1:]):
+        # the same switch as KPOPPER_NO_CACHE=1, set here so anything this run starts
+        # parses the record too, and nothing reads a kept parse
+        os.environ[NO_CACHE] = "1"
+    a = a or ["check"]
     cmd, rest = a[0], a[1:]
     if cmd == "where":
         # the record this directory answers for: at the root, or registered with the

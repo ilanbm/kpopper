@@ -1,0 +1,22 @@
+title: "Two domains"
+tabs:
+  - title: "The standup"
+    occasion: "opened when someone asks whether the standup still fits where it is"
+    sections:
+      - title: "What the numbers say"
+        why: "the room is decided on two numbers, and on the difference between them"
+        pick: [mtg.attendees, room.seats]
+        as: headline
+      - title: "What is left over"
+        why: "the difference, worked out rather than read"
+        pick: room.spare
+        as: table
+      - title: "What stands"
+        why: "each verdict says what would make it wrong, or what would re-open it"
+        pick: judgments
+        as: cards
+      - title: "What is still open"
+        why: "the question that picks the next move"
+        pick: mtg.slot
+        as: lines
+    shape: {entries: 6, judgments: 2, flagged: 0, blocked: 0}

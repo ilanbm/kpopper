@@ -79,10 +79,27 @@ def words(text):
     return out
 
 
+def kind_and_value(x):
+    """A value the record holds that JSON has no form for - a date, most often - written with
+    its kind beside it, so a date and the same day written as a string are not one thing."""
+    return [type(x).__name__, str(x)]
+
+
+def digest(body):
+    """A short fingerprint of an entry as the record holds it: it changes when the record
+    changes the entry, and not when the same fields are written in another order. Taken for
+    every entry at every prompt, so it is taken the cheapest way that says that."""
+    try:
+        text = json.dumps(body, sort_keys=True, default=kind_and_value, ensure_ascii=False)
+    except (TypeError, ValueError):
+        import yaml                      # a body with keys of mixed kinds: the parser's own way
+        text = yaml.safe_dump(body, sort_keys=True, allow_unicode=True)
+    return hashlib.sha1(text.encode("utf-8")).hexdigest()[:12]
+
+
 def entries(record):
     """-> {id: (words, digest)} over sources, known, judgments and open questions: the id's own
     segments, its name and its verdict - never its value."""
-    import yaml
     import provenance as P
     doc = P.load([record])
     ids, _, _ = P.infer(doc)
@@ -98,8 +115,7 @@ def entries(record):
         else:
             text = str(body)
         key = " ".join(re.split(r"[._]", k))
-        digest = hashlib.sha1(yaml.safe_dump(body, sort_keys=True, allow_unicode=True).encode("utf-8")).hexdigest()[:12]
-        out[k] = (words(key + " " + text), digest)
+        out[k] = (words(key + " " + text), digest(body))
     return out
 
 

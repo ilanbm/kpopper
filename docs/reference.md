@@ -87,6 +87,12 @@ kpopper where
 This registration is shared by the repository's worktrees. It does not add the record to
 Git. Use `where` to confirm what a directory resolves before writing to it.
 
+A record of several files is read as one, and written where its subject already is. `set`,
+`review` and a superseding judgment go into the file that holds the entry. A new entry goes
+into the file whose collection already holds the entries its id shares a head with - `mtg.x`
+joins the file that holds the other `mtg.` entries - and a head the record has not met yet
+goes into the first file that holds the collection. A record in one file is unaffected.
+
 The recommended fields are `from`, `rests_on`, `wrong_if` and `seen`. The reader infers
 dependency, predicate and snapshot roles by shape, so existing vocabularies can work.
 Ambiguous roles require an explicit `schema` declaration; the reader refuses to guess.
@@ -312,6 +318,13 @@ See [the user flow](documents.md) and run `kpopper document guide` for the autho
 PyPI installs the Python CLI and page tools. Agent plugins add the method and host-specific
 hooks. The npm package provides the Node browser checker, not the Python CLI. Shared code
 comes from the same source files, with one version across distribution manifests.
+
+Every command reads the whole record, so a file's parsed form is kept under
+`$XDG_STATE_HOME/kpopper/cache`, or `~/.local/state/kpopper/cache`, one private entry per
+file, and taken again whenever the file's path, length, last write or content differs. The
+files are the authority: an entry that cannot be read, or holds anything but a document, is
+simply a parse, and every write drops the entry for the file it wrote. `kpopper --no-cache
+<command>`, or `KPOPPER_NO_CACHE=1`, parses every time.
 
 The plugin's hooks are the layer every session gets without choosing it, and they carry
 pointers, never values. The session opener prints the record's head and what needs a person,

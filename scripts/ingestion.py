@@ -557,6 +557,7 @@ def _replace_record(record, data):
             out.flush()
             os.fsync(out.fileno())
         os.replace(name, str(record))
+        P.forget(record)
         try:
             dfd = os.open(str(record.parent), os.O_RDONLY)
             try:
