@@ -3,8 +3,9 @@ record and the hooks read it at every prompt and every edit, so a file's parsed 
 kept under the user's own state directory and taken again the moment the file differs.
 
 What these hold the cache to: it is a copy of what a file said, never an authority over it.
-A file that changed is parsed again, an entry that cannot be read is parsed again, an entry
-about another file is not this file's, and nothing in an entry is ever built into an object.
+A file that changed is parsed again - in its length, in its last write, or in its bytes alone -
+an entry that cannot be read is parsed again, an entry about another file is not this file's,
+and nothing in an entry is ever built into an object.
 
     python3 -m unittest discover -s tests
 """
@@ -86,6 +87,11 @@ class TheParseIsKept(unittest.TestCase):
     def entry(self, path=None):
         return pathlib.Path(P._cache_file(os.path.abspath(str(path or self.record))))
 
+    def identity(self, path=None):
+        path = os.path.abspath(str(path or self.record))
+        with io.open(path, "rb") as f:
+            return P._identity(path, f.read())
+
     def read(self):
         """The record as a fresh process would read it: nothing remembered in this one."""
         P._PARSED.clear()
@@ -124,35 +130,39 @@ class TheParseIsKept(unittest.TestCase):
 
     def test_a_file_written_again_with_the_same_bytes_is_parsed_again(self):
         self.read()
-        identity = P._identity(str(self.record))
+        identity = self.identity()
         self.record.write_text(RECORD, encoding="utf-8")
-        self.assertNotEqual(P._identity(str(self.record)), identity, "the file was not rewritten")
+        self.assertNotEqual(self.identity(), identity, "the file was not rewritten")
         with Counted() as c:
             self.read()
         self.assertEqual(c.n, 1, "a file of the same length was taken for the file that parsed")
 
     def test_other_content_of_the_same_length_is_parsed_again(self):
         self.read()
-        was = P._identity(str(self.record))
+        was = self.identity()
         self.record.write_text(RECORD.replace("v: 12", "v: 21"), encoding="utf-8")
-        self.assertEqual(P._identity(str(self.record))[0], was[0], "the test did not keep the length")
+        self.assertEqual(self.identity()[0], was[0], "the test did not keep the length")
         with Counted() as c:
             doc = self.read()
         self.assertEqual(c.n, 1)
         self.assertEqual(doc["known"]["room.seats"]["v"], 21)
 
-    def test_a_file_of_the_same_length_written_in_the_same_nanosecond_is_still_the_file_it_was(self):
-        """The one thing a length and a nanosecond cannot tell apart, said out loud: a write
-        this tool does not make, of the same length, stamped back to the nanosecond the parse
-        was taken at. Every write this tool makes drops the entry instead of relying on it."""
+    def test_other_content_of_the_same_length_in_the_same_nanosecond_is_parsed_again(self):
+        """What a length and a nanosecond alone cannot tell apart: a write this tool did not
+        make, of the same length, stamped back to the nanosecond the parse was taken at - which
+        is a whole second's worth of writes where a filesystem keeps its timestamps coarsely.
+        The bytes are in the key, so the file is read as what it now says."""
         self.read()
-        was = P._identity(str(self.record))
+        was = self.identity()
         self.record.write_text(RECORD.replace("v: 12", "v: 21"), encoding="utf-8")
         os.utime(self.record, ns=(was[1], was[1]))
-        self.assertEqual(P._identity(str(self.record)), was)
-        self.assertEqual(self.read()["known"]["room.seats"]["v"], 12)
-        P.forget(str(self.record))
-        self.assertEqual(self.read()["known"]["room.seats"]["v"], 21)
+        stat = self.identity()
+        self.assertEqual((stat[0], stat[1]), (was[0], was[1]), "the test did not keep length and time")
+        self.assertNotEqual(stat[2], was[2])
+        with Counted() as c:
+            doc = self.read()
+        self.assertEqual(c.n, 1)
+        self.assertEqual(doc["known"]["room.seats"]["v"], 21)
 
     def test_an_entry_that_cannot_be_read_is_parsed_instead(self):
         self.read()
@@ -180,15 +190,31 @@ class TheParseIsKept(unittest.TestCase):
         """An entry holds what the parser returned and nothing else, so a file under the state
         directory can never become something this process runs."""
         self.read()
-        identity = P._identity(str(self.record))
-        self.entry().write_bytes(pickle.dumps(
-            {"form": P.CACHE_FORM, "path": os.path.abspath(str(self.record)),
-             "identity": identity, "doc": subprocess.run}))
+        self.forge(subprocess.run)
         P._PARSED.clear()
         with Counted() as c:
             doc = P.load([str(self.record)])
         self.assertEqual(c.n, 1)
         self.assertEqual(doc["known"]["room.seats"]["v"], 12)
+
+    def forge(self, doc):
+        """An entry this reader did not write, about this file, with this file's own key."""
+        self.entry().write_bytes(pickle.dumps(
+            {"form": P.CACHE_FORM, "path": os.path.abspath(str(self.record)),
+             "identity": self.identity(), "doc": doc}))
+
+    def test_an_entry_that_holds_anything_but_a_document_is_parsed_instead(self):
+        """A record is a mapping of collections. An entry holding a list, a number or a line
+        would be read as one by whatever asked for it, so it is not read at all."""
+        self.read()
+        for doc in ([], "a line", 7, None):
+            with self.subTest(doc=doc):
+                self.forge(doc)
+                P._PARSED.clear()
+                with Counted() as c:
+                    got = P.load([str(self.record)])
+                self.assertEqual(c.n, 1)
+                self.assertEqual(got["known"]["room.seats"]["v"], 12)
 
     def test_a_date_the_record_holds_survives_the_keeping(self):
         self.record.write_text(RECORD + "  born: 2026-09-11\n", encoding="utf-8")

@@ -201,14 +201,17 @@ def _as_day(v):
 
 # ── reading a file of the record ─────────────────────────────────────────────
 # Every command reads the whole record, and the hooks read it at every prompt and every edit.
-# Parsing costs far more than reading the bytes, so a file's parsed document is kept under the
-# user's own state directory, keyed by the file's absolute path, its size and the nanosecond it
-# was last written. When any of the three differs the file is parsed again.
+# Reading the bytes is a millisecond and parsing them is the whole cost, so a file's parsed
+# document is kept under the user's own state directory, keyed by the file's absolute path, its
+# size, the nanosecond it was last written, and the digest of the bytes that were parsed. Any of
+# the four differing is a parse. The digest is what makes the key honest: a length and a
+# nanosecond cannot tell apart a rewrite of the same length inside one tick, and a tick is a
+# whole second on filesystems that keep timestamps coarsely. It costs a thousandth of the parse.
 #
 # The files are the record; the cache is only a copy of what one of them said. An entry that is
-# missing, truncated, foreign or stale is a parse, never an error, and every write drops the
-# entry for the file it wrote, so a read that follows a write sees what was written. Set
-# KPOPPER_NO_CACHE=1 to parse every time - for a test, or to tell the cache out of a problem.
+# missing, truncated, foreign, stale or of the wrong shape is a parse, never an error, and every
+# write drops the entry for the file it wrote. Set KPOPPER_NO_CACHE=1 to parse every time - for
+# a test, or to tell the cache out of a problem.
 NO_CACHE = "KPOPPER_NO_CACHE"
 CACHE_FORM = 1              # the entry's own shape: a newer reader ignores what an older wrote
 CACHE_DAYS = 14             # an entry no read has renewed for this long is nobody's
@@ -293,10 +296,11 @@ def _sweep(d):
         pass
 
 
-def _identity(path):
-    """What tells one state of a file from another: how long it is, and when it was written."""
+def _identity(path, data):
+    """What tells one state of a file from another: how long it is, when it was written, and
+    what it holds - the last of which is the one of the three nothing can fake by accident."""
     st = os.stat(path)
-    return [st.st_size, st.st_mtime_ns]
+    return [st.st_size, st.st_mtime_ns, hashlib.sha256(data).hexdigest()]
 
 
 def _cached(path, identity):
@@ -318,16 +322,20 @@ def _cached(path, identity):
     except Exception:
         return None
     if not isinstance(entry, dict) or entry.get("form") != CACHE_FORM \
-            or entry.get("path") != path or entry.get("identity") != identity:
+            or entry.get("path") != path or entry.get("identity") != identity \
+            or not isinstance(entry.get("doc"), dict):
         return None
     _PARSED[path] = (identity, raw)
-    return entry.get("doc")
+    return entry["doc"]
 
 
 def _keep(path, identity, doc):
     """The parse kept for the next reader: in this process, and in a file of its own - written
     where only this user can read it, and put in place in one step, so nobody meets half an
-    entry. A cache that cannot be written changes nothing about the answer."""
+    entry. A cache that cannot be written changes nothing about the answer. Only a document of
+    the shape a record has is kept, so nothing that reads one has to ask what it got."""
+    if not isinstance(doc, dict):
+        return
     try:
         raw = pickle.dumps({"form": CACHE_FORM, "path": path, "identity": identity, "doc": doc},
                            protocol=pickle.HIGHEST_PROTOCOL)
@@ -352,8 +360,8 @@ def _keep(path, identity, doc):
 
 def forget(path):
     """What a write leaves behind: the entry for the file it wrote, gone from this process and
-    from the state directory, so the next read parses what is on disk now rather than trusting
-    a length and a nanosecond to have moved."""
+    from the state directory. The key would catch the change anyway; dropping the entry is what
+    keeps the directory one entry per file rather than one per version of one."""
     p = os.path.abspath(path)
     _PARSED.pop(p, None)
     try:
@@ -364,30 +372,24 @@ def forget(path):
 
 def parse(path):
     """One file of the record, as the parser reads it - the record, a file a pointer names, a
-    hypothesis beside it. Every reader of a record file comes through here, so none of them
-    can be served a parse of a file as it no longer is."""
+    hypothesis beside it. Every reader of a record file comes through here, so none of them can
+    be served the parse of a file as it no longer is: what comes back is the parse of the bytes
+    that are there now, or those bytes parsed again."""
     path = os.path.abspath(path)
+    with io.open(path, "rb") as f:
+        data = f.read()
+    text = data.decode("utf-8")
     if os.environ.get(NO_CACHE, "") not in ("", "0"):
-        with io.open(path, encoding="utf-8") as f:
-            return yaml.safe_load(f.read())
+        return yaml.safe_load(text)
     try:
-        identity = _identity(path)
+        identity = _identity(path, data)
     except OSError:
-        identity = None
-    if identity is not None:
-        got = _cached(path, identity)
-        if got is not None:
-            return got
-    with io.open(path, encoding="utf-8") as f:
-        text = f.read()
+        return yaml.safe_load(text)
+    got = _cached(path, identity)
+    if got is not None:
+        return got
     doc = yaml.safe_load(text)
-    try:
-        # kept only if the file is still the one that was read a moment ago: a file written
-        # while it was being parsed leaves no entry behind
-        if identity is not None and _identity(path) == identity:
-            _keep(path, identity, doc)
-    except OSError:
-        pass
+    _keep(path, identity, doc)
     return doc
 
 

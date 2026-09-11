@@ -1951,21 +1951,22 @@ judgments:
   d.parse_kept_by_file_identity:
     rests_on: [s.2026_09_11_read_once, p.record_parsers, m.prompt_hook_10x_parsing, m.prompt_hook_10x_kept]
     verdict: "a file of the record is parsed when it changes, not when it is read: its parsed
-              document is kept under the user's own state directory against the file's path, its
-              length and its last write, and every write drops the entry for the file it wrote"
+              document is kept under the user's own state directory against what the file is - its
+              path, its length, its last write and the digest of the bytes that were parsed - and
+              every write drops the entry for the file it wrote"
     because: "Every command reads the whole record, and the hooks read it at every prompt and every
               edit: a prompt on a record ten times this one's cost {{m.prompt_hook_10x_parsing}}
               seconds, {{m.prompt_hook_10x_kept}} once the parse is kept. Reading the bytes is a
-              millisecond and parsing them is the whole cost, so what is kept is the parse, and the
-              key is what the file is - its path, its length, the nanosecond it was last written. The
-              files remain the authority: an entry that is missing, truncated, about another file or
-              of an older shape is a parse, never an error, and nothing read back from one is ever
-              built into an object, so a file under the state directory cannot become code. A length
-              and a nanosecond cannot tell apart a rewrite of the same length inside one tick, which
-              is why every write drops the entry it wrote over rather than trusting the key to have
-              moved. One function opens a file of a record and parses it; a second would read a
-              record without ever seeing what was kept for it, and {{p.record_parsers}} is the count
-              that would show one."
+              millisecond and parsing them is the whole cost, so what is kept is the parse. The bytes
+              are in the key because a length and a nanosecond cannot tell apart a rewrite of the
+              same length inside one tick - and a tick is a whole second where a filesystem keeps its
+              timestamps coarsely - while digesting them costs a thousandth of the parse they save.
+              The files remain the authority: an entry that is missing, truncated, about another
+              file, of an older shape or holding anything but a document is a parse, never an error,
+              and nothing read back from one is ever built into an object, so a file under the state
+              directory cannot become code. One function opens a file of a record and parses it; a
+              second would read a record without ever seeing what was kept for it, and
+              {{p.record_parsers}} is the count that would show one."
     wrong_if: "p.record_parsers > 1"
     seen:
       s.2026_09_11_read_once: "read 2026-09-11"

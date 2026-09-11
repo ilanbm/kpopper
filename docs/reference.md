@@ -321,10 +321,10 @@ comes from the same source files, with one version across distribution manifests
 
 Every command reads the whole record, so a file's parsed form is kept under
 `$XDG_STATE_HOME/kpopper/cache`, or `~/.local/state/kpopper/cache`, one private entry per
-file, and taken again whenever the file's path, length or last write differs. The files are
-the authority: an entry that cannot be read is simply a parse, and every write drops the
-entry for the file it wrote. `kpopper --no-cache <command>`, or `KPOPPER_NO_CACHE=1`, parses
-every time.
+file, and taken again whenever the file's path, length, last write or content differs. The
+files are the authority: an entry that cannot be read, or holds anything but a document, is
+simply a parse, and every write drops the entry for the file it wrote. `kpopper --no-cache
+<command>`, or `KPOPPER_NO_CACHE=1`, parses every time.
 
 The plugin's hooks are the layer every session gets without choosing it, and they carry
 pointers, never values. The session opener prints the record's head and what needs a person,
