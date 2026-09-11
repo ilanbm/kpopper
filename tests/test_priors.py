@@ -31,7 +31,7 @@ PRIOR = "prior.macros_bind_by_position"
 # than decided, so the count has one judgment on each side of it
 TRIED = "c.monthly_export_regenerated"
 LOW = "prior.regeneration_is_deterministic"
-OWN = ROOT / "PROVENANCE.yaml"                      # this project's own record
+OWN = ROOT / "GROUNDING.yaml"                      # this project's own record
 NO_PRIORS = ROOT / "tests" / "fixtures" / "hypotheses" / "PROVENANCE.yaml"
 COUNT = "{} judgments rest on prior.* claims, {} of them on a prior at 0.8 or above"
 RATE = "graph.prior_reversal_rate"

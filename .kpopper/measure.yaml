@@ -18,15 +18,16 @@ page_string_lines:
               if isinstance(n, ast.Assign) and isinstance(n.value, ast.Constant)
               and isinstance(n.value.value, str) and n.value.end_lineno - n.value.lineno >= 2))
 
-# p.recipe_runners - files under scripts/ that name the allowlist file: whatever runs a recipe
-# has to read it by name, so a second executor shows here
+# p.recipe_runners - files under scripts/ that call the recipe runner: the layout names the
+# allowlist file for every reader, so naming it no longer tells a runner apart, and a second
+# executor shows here by the call
 recipe_runners:
   - python3
   - -I
   - -c
   - |
     import glob
-    print(sum('PROVENANCE.measure' in open(f, encoding='utf-8').read() for f in glob.glob('scripts/*.py')))
+    print(sum('run_recipe(' in open(f, encoding='utf-8').read() for f in glob.glob('scripts/*.py')))
 
 # p.record_parsers - functions of the reader that open a file and hand it to the YAML parser.
 # Every file of a record is read through one of them, which is what keeps a kept parse from
@@ -119,7 +120,7 @@ blocked_on_reopeners:
   - |
     import re
     n, deps, hole = 0, False, False
-    for line in open('PROVENANCE.yaml', encoding='utf-8'):
+    for line in open('GROUNDING.yaml', encoding='utf-8'):
         if re.match(r'^(\S|  \S)', line):
             n += deps and hole
             deps, hole = False, False
@@ -137,7 +138,7 @@ blocked_on_implementation:
   - |
     import re
     n, deps, kind = 0, False, ""
-    for line in open('PROVENANCE.yaml', encoding='utf-8'):
+    for line in open('GROUNDING.yaml', encoding='utf-8'):
         if re.match(r'^(\S|  \S)', line):
             n += deps and kind == "implementation"
             deps, kind = False, ""
@@ -206,3 +207,14 @@ coverage_thresholds:
   - scripts/render_page.py
   - coverage
   - coverage_lines
+
+# p.entry_names - the names the locator recognizes for the entry file: a third would be a
+# second convention, and it shows here
+entry_names:
+  - python3
+  - -I
+  - -c
+  - |
+    import ast
+    t = ast.parse(open('scripts/workspace.py', encoding='utf-8').read())
+    print(len(next(n.value.elts for n in ast.walk(t) if isinstance(n, ast.Assign) and any(getattr(x, 'id', '') == 'NAMES' for x in n.targets))))

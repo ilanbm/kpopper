@@ -17,8 +17,8 @@ straight through to provenance.py; page renders the record and can open what it 
   kpopper ingest  pending                important findings still needing attention
   kpopper review  <id | "section title">  it still holds: seen rewritten from what the record holds
                   add --hypothesis NAME to any of the three: the write lands in
-                  PROVENANCE.d/NAME.yaml beside the record and the base is not touched - where a
-                  write contradicts the base, the refusal names this command
+                  .kpopper/hypotheses/NAME.yaml beside the record and the base is not touched -
+                  where a write contradicts the base, the refusal names this command
   kpopper consolidate [--dry-run] [<hypothesis> ...]   the record with its hypotheses laid over
                   it, tested with the reader's own check - and, without --dry-run, folded into the
                   base when the test is clean; --refute NAME "why" leaves one negative finding and
@@ -31,7 +31,7 @@ straight through to provenance.py; page renders the record and can open what it 
                   reference rewritten across the record, its hypotheses and the brief
   kpopper distinct <a> <b> "<why>"        two subjects that look alike: recorded on a, so the
                   pair never returns as a candidate
-  kpopper page    [--out PATH] [args...]  the record as one page
+  kpopper page    [--out PATH] [args...]  the record as one page, .kpopper/build/page.html by default
                   add --open to look at it in your own browser, --tree to land there
                   add --verify to check the page instead of writing one
                   add --checks [PAGE] for the browser checks on a page already written
@@ -96,10 +96,37 @@ def do_checks(args):
     return subprocess.run([node, str(checker)] + args).returncode
 
 
+def page_of(rest):
+    """Where the page lands without --out, and what --checks looks at without a path: the
+    record's build directory, `.kpopper/build/page.html`, or record.html in the working
+    directory for a record under the old name. The record is the yaml files given, minus the
+    brief named by --brief, else the one this directory answers for; nothing is created."""
+    sys.path.insert(0, str(HERE))
+    import provenance as P
+    brief = rest[rest.index("--brief") + 1] if "--brief" in rest and rest.index("--brief") + 1 < len(rest) else None
+    files = [x for x in rest if x.endswith((".yaml", ".yml")) and x != brief] or P.default_paths()
+    return P.layout_of(files)
+
+
+def default_page(rest):
+    """The page's default place, created: the build directory gets a .gitignore that keeps
+    everything in it out of the tree - the record is reviewed, what is rebuilt from it is
+    not. A record under the old name keeps writing record.html here, and creates nothing."""
+    lay = page_of(rest)
+    if lay["build"]:
+        pathlib.Path(lay["build"]).mkdir(parents=True, exist_ok=True)
+        ignore = pathlib.Path(lay["build"]) / ".gitignore"
+        if not ignore.exists():
+            ignore.write_text("*\n", encoding="utf-8")
+    return lay["page"]
+
+
 def do_page(args):
     """--out/--open/--tree/--checks belong to this dispatcher, not to render_page.py, so they
-    are peeled off here and never forwarded."""
-    out, after, tree, checks, rest = "record.html", False, False, False, []
+    are peeled off here and never forwarded. Without --out the page lands in the record's own
+    build directory, `.kpopper/build/page.html`, which ignores itself - or, for a record under
+    the old name, as `record.html` here, as it always did."""
+    out, after, tree, checks, rest = None, False, False, False, []
     i = 0
     while i < len(args):
         a = args[i]
@@ -116,7 +143,10 @@ def do_page(args):
         else:
             rest.append(a); i += 1
     if checks:
-        # a written page, not a record: nothing here is rendered and nothing is verified
+        # a written page, not a record: nothing here is rendered and nothing is verified -
+        # without a page named, the one `page` writes by default
+        if not any(a.endswith((".html", ".htm")) for a in rest):
+            rest = rest + [page_of(rest)["page"]]
         sys.exit(do_checks(rest))
     script = str(HERE / "render_page.py")
     if "--verify" in rest:
@@ -125,6 +155,8 @@ def do_page(args):
     proc = subprocess.run([sys.executable, script] + rest, stdout=subprocess.PIPE)
     if proc.returncode:
         sys.exit(proc.returncode)               # a build error leaves no page worth writing
+    if out is None:
+        out = default_page(rest)
     pathlib.Path(out).write_bytes(proc.stdout)
     if after:
         webbrowser.open("file://" + os.path.abspath(out) + ("#tree" if tree else ""))

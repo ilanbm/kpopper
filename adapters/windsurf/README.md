@@ -10,7 +10,7 @@ Claude Code's plugin otherwise automates with `session_open.sh` / `session_gate.
 | file | does |
 |---|---|
 | `rules/kpopper.md` | the condensed method + open/close duties in prose, since nothing here can run them for you. |
-| `hooks.json` | `post_write_code`, scoped in-script to writes of `PROVENANCE.yaml`, runs `provenance.py check` and surfaces it in the Cascade UI. Advisory only. |
+| `hooks.json` | `post_write_code`, scoped in-script to writes of `GROUNDING.yaml` (or `PROVENANCE.yaml`), runs `provenance.py check` and surfaces it in the Cascade UI. Advisory only. |
 
 ## Verified against docs
 
@@ -18,12 +18,12 @@ Source: `https://docs.devin.ai/desktop/cascade/hooks`, fetched 2026-09-01.
 
 - **No file-pattern scoping in `hooks.json` itself.** The schema has no glob or path
   filter on a hook entry — "the schema does not support glob patterns or file-specific
-  filtering within hook definitions." So "scoped to `PROVENANCE.yaml`" has to happen
+  filtering within hook definitions." So "scoped to `GROUNDING.yaml`" has to happen
   inside the command, not in the config: the shipped `command` reads the hook's own
   stdin JSON, pulls the file path out of `tool_info.file_path` (falling back to a
   top-level `file_path`, since two doc fetches described the payload slightly
   differently and I could not fully reconcile them — see below), and only runs
-  `check` when that file's basename is `PROVENANCE.yaml`. Confirmed working against a
+  `check` when that file's basename is `GROUNDING.yaml` or `PROVENANCE.yaml`. Confirmed working against a
   hand-built payload for both the matching and non-matching case.
 - **`post_write_code` cannot block anything.** Exit code 2 is documented as a
   blocking error only for *pre*-hooks; `post_write_code` fires after the write already

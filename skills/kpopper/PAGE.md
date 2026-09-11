@@ -7,7 +7,7 @@ are about to build or change a page; it is not part of what a session reads to s
 nothing typed twice. The first two are what `kpopper page` runs for you:
 
 ```bash
-kpopper page --out record.html                              # the page
+kpopper page                                                # the page, at .kpopper/build/page.html
 kpopper page --verify                                       # deterministic, no browser
 ```
 
@@ -17,7 +17,7 @@ than assuming where an installed plugin unpacks:
 
 ```bash
 S=$(dirname "$(find ~/.claude -name worktrees -prune -o -path '*kpopper*/scripts/render_page.py' -print 2>/dev/null | sort -V | tail -1)")
-node "$S/verify_page.js" record.html                        # what only looking catches
+node "$S/verify_page.js" .kpopper/build/page.html           # what only looking catches
 ```
 
 What makes it worth opening is not the layout — it is the provenance layer. Hover any key to
@@ -35,7 +35,7 @@ and not know. Write layout if you need layout; call this for the mechanism.
 record's own prefixes. It is the fallback when an arrangement is wrong, and it is the only tab
 when you supply no brief.
 
-When hypotheses wait beside the record (`PROVENANCE.d/`), one line under the heading says how
+When hypotheses wait beside the record (`.kpopper/hypotheses/`), one line under the heading says how
 many, and how many are contested; the page draws the base alone - what a hypothesis proposes is
 read with `kpopper pull`.
 
@@ -518,7 +518,7 @@ compared with the record's - a tab whose shape moved says so at its top, and `--
 | `replaced:` | on an arrangement | written by `add` when a decision replaces another under the same id, one line each, oldest first: the born of what it replaced, how many sessions it stood, and the sign that ended it - so the sequence of decisions reads from the record alone. |
 | `graph.*`, `page.*` | as a dependency, or inside a falsifier | names the reader computes; see below. |
 | `reopened_by:` | on a judgment | the prose sign that re-opens a judgment decided on a session's prior — a `prior.*` claim whose value is the confidence — or on taste. `blocked_on` keeps its meaning: the predicate cannot be evaluated, and why. Not a hole and not waiting: the judgment needs no person, `check` counts it among the declared, and the card shows it in a row of its own. |
-| `measure:` | on an entry | the name of the recipe that takes the value again from the tree - a bare name, never a command. `PROVENANCE.measure.yaml` beside the record maps it to an argument list, and only `kpopper remeasure --run` - the pull request's step - runs it; what differs is laid over the record as the hypothesis `tree/<commit>` through the same dry run. Stands on a stored scalar reading alone: `check` fails it on a judgment, a rule, a source, a computed name, or a name that is not one; a hypothesis replacing a measured entry carries the line with it. `pull` says *measured by*; the page carries the name into the entry payload and displays it in the hover. |
+| `measure:` | on an entry | the name of the recipe that takes the value again from the tree - a bare name, never a command. `.kpopper/measure.yaml` beside the record maps it to an argument list, and only `kpopper remeasure --run` - the pull request's step - runs it; what differs is laid over the record as the hypothesis `tree/<commit>` through the same dry run. Stands on a stored scalar reading alone: `check` fails it on a judgment, a rule, a source, a computed name, or a name that is not one; a hypothesis replacing a measured entry carries the line with it. `pull` says *measured by*; the page carries the name into the entry payload and displays it in the hover. |
 
 **Computed names**
 

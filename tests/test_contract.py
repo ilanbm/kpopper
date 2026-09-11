@@ -1032,7 +1032,7 @@ class TheWritePath(unittest.TestCase):
     def test_add_inserts_in_id_order_and_touches_nothing_else(self):
         with tempfile.TemporaryDirectory() as d:
             rec = pathlib.Path(d) / "PROVENANCE.yaml"
-            shutil.copy(ROOT / "PROVENANCE.yaml", rec)
+            shutil.copy(ROOT / "GROUNDING.yaml", rec)
             before = rec.read_text(encoding="utf-8")
             updated = re.search(r"^  updated: (\S+)", before, re.M).group(1)
             code, out, err = run(SCRIPTS / "provenance.py", "add", "p.reference_test", "v=1",

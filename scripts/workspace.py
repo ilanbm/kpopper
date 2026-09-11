@@ -1,4 +1,7 @@
-"""Locate a record without reading project content or requiring Git or PyYAML."""
+"""Locate a record without reading project content or requiring Git or PyYAML.
+
+The entry file is GROUNDING.yaml; a record born under the earlier name, PROVENANCE.yaml, is
+still found wherever it is, and never created again."""
 import argparse
 import hashlib
 import json
@@ -6,6 +9,10 @@ import os
 from pathlib import Path
 import subprocess
 import sys
+
+ENTRY = "GROUNDING.yaml"
+LEGACY = "PROVENANCE.yaml"
+NAMES = (ENTRY, LEGACY)
 
 
 def _git(directory, flag):
@@ -33,8 +40,8 @@ def locate(directory=None):
     # outside Git, the home directory and filesystem root are boundaries too.
     current = directory
     while True:
-        candidate = current / "PROVENANCE.yaml"
-        if os.path.lexists(candidate):
+        candidate = next((c for c in (current / n for n in NAMES) if os.path.lexists(c)), None)
+        if candidate is not None:
             root, record = current, candidate
             status = "found" if candidate.is_file() else "unavailable"
             if status == "unavailable":
@@ -68,7 +75,7 @@ def locate(directory=None):
         identity = str(common) + "\0" + str(root.relative_to(git_root))
     else:
         identity = str(root)
-    return {"workspace": str(root), "record": str(record or root / "PROVENANCE.yaml"),
+    return {"workspace": str(root), "record": str(record or root / ENTRY),
             "status": status, "reason": reason,
             "key": hashlib.sha256(identity.encode("utf-8")).hexdigest()}
 

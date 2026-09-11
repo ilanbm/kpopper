@@ -308,13 +308,13 @@ def _record_selections(path, raw, inputs):
         raise DocumentError("The source could not be read as a record") from error
     if not isinstance(body, dict) or any(body.get(key) for key in ("record", "also")):
         raise DocumentError("Pointer records require an explicit source extraction")
-    hypotheses = path.parent / I.P.HYPOTHESES
+    hypotheses = Path(I.P.layout(path)["hypotheses"])
     if hypotheses.is_symlink() or (hypotheses.is_dir() and any(
             p.suffix in {".yaml", ".yml"} for p in hypotheses.iterdir())):
         raise DocumentError("Records with hypotheses require an explicit source extraction")
     result = {}
     with tempfile.TemporaryDirectory(prefix="kpopper-record-snapshot-") as directory:
-        snapshot = Path(directory) / "PROVENANCE.yaml"
+        snapshot = Path(directory) / I.P.ENTRY
         snapshot.write_bytes(raw)
         for key, inp in inputs.items():
             if len(inp) == 1:

@@ -53,7 +53,7 @@ this reasoning and review layer a **third brain**; the agent supplies the interp
 **Keep the knowledge system already in use.** A folder of Markdown files, an Obsidian vault,
 a project wiki, or memory files used by Claude or Codex can stay where they are. The agent
 reads relevant material through its available tools and records the claims it relies on,
-with links back to those sources, in `PROVENANCE.yaml`. There is no need to migrate the
+with links back to those sources, in `GROUNDING.yaml`. There is no need to migrate the
 existing notes or replace the agent's memory system.
 
 <p align="center">
@@ -91,7 +91,7 @@ calendars, task systems, files and earlier sessions. In software, they also incl
 commits and pull requests. One project can cross several tools; one source can serve several
 projects.
 
-kpopper keeps a *picture of the project's reasoning* in `PROVENANCE.yaml`: a readable record
+kpopper keeps a *picture of the project's reasoning* in `GROUNDING.yaml`: a readable record
 that connects claims to sources and decisions to their premises. Your documents and tools
 keep their own content. The record makes the reasoning between them available to the next
 person or agent working on the goal.
@@ -587,8 +587,8 @@ See [HTML documents with evidence](docs/documents.md) for the workflow and its l
 
 The project record also has its own HTML page. Its views bring together recorded facts,
 decisions and open questions, and can arrange them as a report. See the
-[Greenhouse example record](examples/greenhouse-report/PROVENANCE.yaml) and its
-[document layout](examples/greenhouse-report/PROVENANCE.view.yaml) for a report built from
+[Greenhouse example record](examples/greenhouse-report/GROUNDING.yaml) and its
+[document layout](examples/greenhouse-report/.kpopper/view.yaml) for a report built from
 recorded readings and a heating judgment.
 
 `kpopper page --open` generates this self-contained HTML from the project's record and a

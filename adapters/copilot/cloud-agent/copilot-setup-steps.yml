@@ -26,7 +26,7 @@ jobs:
       - name: install PyYAML
         run: pip install pyyaml
 
-      - name: open PROVENANCE.yaml
+      - name: open the record
         # KPOPPER_ROOT: where this repo's kpopper checkout lives (a vendored copy, a
         # submodule, whatever the project's own convention is) - set as a repository
         # variable (Settings > Secrets and variables > Actions > Variables) or hardcode
@@ -34,8 +34,8 @@ jobs:
         env:
           KPOPPER_ROOT: ${{ vars.KPOPPER_ROOT }}
         run: |
-          if [ -f PROVENANCE.yaml ] && [ -n "$KPOPPER_ROOT" ]; then
+          if { [ -f GROUNDING.yaml ] || [ -f PROVENANCE.yaml ]; } && [ -n "$KPOPPER_ROOT" ]; then
             python3 "$KPOPPER_ROOT/scripts/provenance.py" open --chars 2000
           else
-            echo "no PROVENANCE.yaml, or KPOPPER_ROOT unset - nothing to open"
+            echo "no record, or KPOPPER_ROOT unset - nothing to open"
           fi
