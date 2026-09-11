@@ -255,8 +255,11 @@ def _cache_ready():
         os.makedirs(d, mode=0o700, exist_ok=True)
         st = os.stat(d)
         uid = getattr(os, "getuid", None)
-        if not stat.S_ISDIR(st.st_mode) or stat.S_IMODE(st.st_mode) & 0o022 \
-                or (uid and st.st_uid != uid()):
+        if not stat.S_ISDIR(st.st_mode):
+            return None
+        # the mode bits are read where the platform keeps them; where it does not, they are
+        # made up, and a made-up answer is no reason to refuse the directory
+        if uid and (stat.S_IMODE(st.st_mode) & 0o022 or st.st_uid != uid()):
             return None
     except OSError:
         return None

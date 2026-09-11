@@ -197,6 +197,7 @@ class TheParseIsKept(unittest.TestCase):
         self.assertEqual(first["judgments"]["born"], again["judgments"]["born"])
         self.assertEqual(str(again["judgments"]["born"]), "2026-09-11")
 
+    @unittest.skipUnless(os.name == "posix", "the mode bits mean this only where they are kept")
     def test_the_entries_are_the_user_s_own(self):
         self.read()
         self.assertEqual(stat.S_IMODE(self.entry().stat().st_mode), 0o600)
@@ -220,6 +221,7 @@ class TheParseIsKept(unittest.TestCase):
         finally:
             os.chmod(self.state.name, 0o700)
 
+    @unittest.skipUnless(os.name == "posix", "the mode bits mean this only where they are kept")
     def test_a_directory_anyone_can_write_to_is_not_used(self):
         os.makedirs(P.cache_dir(), mode=0o700, exist_ok=True)
         os.chmod(P.cache_dir(), 0o777)
