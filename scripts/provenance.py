@@ -217,6 +217,50 @@ def layout_of(paths):
     return layout(_first_of(paths))
 
 
+def leftovers(paths):
+    """Files of the record's other layout beside the entry file -> [(what, where it belongs)]:
+    a record moved by half, renamed with its files left under the earlier names, or a
+    .kpopper/ opened beside a record still under the earlier name. The reader looks in one
+    home, so nothing reads these - and a hypothesis or a brief nobody reads is worse than
+    none, which is why check fails on them and the opener names them. An empty hypotheses
+    directory holds nothing to lose and is passed over."""
+    lay = layout_of(paths)
+    d = os.path.dirname(lay["entry"])
+    other = layout(os.path.join(d, ENTRY if lay["legacy"] else LEGACY_ENTRY))
+    out = []
+    for role in ("hypotheses", "view", "measure", "session"):
+        there = other[role]
+        if not os.path.exists(there):
+            continue
+        if role == "hypotheses" and not glob.glob(os.path.join(there, "*.y*ml")):
+            continue
+        tail = "/" if role == "hypotheses" else ""
+        out.append((os.path.relpath(there, d) + tail, os.path.relpath(lay[role], d) + tail))
+    return out
+
+
+def leftover_lines(paths):
+    """What check says about each file left under the other layout."""
+    lay = layout_of(paths)
+    if lay["legacy"]:
+        return [f"{what} is not read beside {LEGACY_ENTRY} - rename the record to {ENTRY} and move "
+                f"its files into {HOME}/, or move this to {where}" for what, where in leftovers(paths)]
+    return [f"{what} is not read - left under the earlier name; move it to {where}"
+            for what, where in leftovers(paths)]
+
+
+def leftover_head(paths):
+    """The opener's one line about a record moved by half, or None."""
+    left = leftovers(paths)
+    if not left:
+        return None
+    names = ", ".join(what for what, _ in left)
+    if layout_of(paths)["legacy"]:
+        return (f"{names} not read beside {LEGACY_ENTRY} - rename the record to {ENTRY} and move its "
+                f"files into {HOME}/")
+    return f"left under the earlier name, not read: {names} - move into {HOME}/"
+
+
 def brief_for(paths, explicit=None):
     """The brief the page is built from: the one given, else the record's own - under .kpopper/
     beside a record under the new name; beside the record or any file it points at, then in
@@ -1619,6 +1663,10 @@ def check_lines(paths):
     for k, hs in contested(doc).items():
         cont.append(f"{k}: " + ", ".join(f"{n} says {short(c)}" for n, c in hs)
                     + " - one of them folds, or neither; a person decides")
+    # Files of the other layout beside the entry file: a record moved by half. Nothing reads
+    # them, and a checker that passes over what it cannot read is the failure this method
+    # exists to refuse.
+    fail += leftover_lines(paths)
     held = sum(1 for k in ids if not is_builtin(k))
     summary = (f"{len(jud)} judgments, {held} entries, {len(fail)} problems"
                + (f", {len(moved)} moved" if moved else "")
@@ -1756,6 +1804,11 @@ def opening(paths, budget=25, chars=None, host=None):
     waiting = hypothesis_line(doc)
     if waiting:
         head.append(waiting)
+    # a record moved by half: what sits beside the entry file under the other layout is
+    # read by nothing, and this is where a session would otherwise never learn it
+    left = leftover_head(paths)
+    if left:
+        head.append(left)
     if not fields["snapshot"]:
         head.append("no snapshot field: drift cannot be detected in this record")
 

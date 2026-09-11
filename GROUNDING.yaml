@@ -368,6 +368,22 @@ sources:
          documents' derived index that is never written into a project; and two records of 260 and
          511 entries each opening in well under a second"
     read: "2026-09-11"
+  s.2026_09_12_half_move:
+    asked: "A half migration is silent. The layout follows the entry file's name and the reader
+            looks in one home, never both. I reproduced what happens when someone renames only the
+            entry file, which is what a person will do first: mv PROVENANCE.yaml GROUNDING.yaml … the
+            hypothesis line is gone, nothing said … the brief is no longer read, nothing said …
+            check: 0 problems. Proposal: one NOTE in check (and the opener's head, since that is what
+            a session sees) … and the mirror case, a .kpopper/ beside a PROVENANCE.yaml. … .kpopper/
+            is invisible to an agent's default listing: every one of the 53 trials that listed the
+            tree did it with rg --files without --hidden or ls without -a."
+    name: "The review of the layout change from the session that ran the grounding-line eval - what
+           it found, and what it was given. Its reading: a record renamed with its files left under
+           the earlier names lost its hypotheses and its brief from every surface with every check
+           green; a dot-directory is skipped by the listings agents actually run"
+    of: "2026-09-12, given the merged layout change, a reproduction on the page fixture, and the 53
+         tree listings of the grounding-line eval of 2026-09-11"
+    read: "2026-09-12"
   s.2026_09_12_layout:
     asked: "לא כדאי שכל הקבצים שלנו בפרויקט או בכלל יהיו תחת ספרייה בשם ״.kpopper\" ולא בroot של
             הפרויקט? וגם הקונבנציה של השמות של קבצי aux לא עדיף שיהיו בספרייה פנמית תחת איזושהי
@@ -1255,6 +1271,35 @@ judgments:
                           person; only a predicate that holds fails the build"
     distinct_from: d.text_holds_the_prose_it_places
     # distinct 2026-09-04: one decides which reading a snapshot records; this decides how any two readings are shown against each other, whatever they are snapshots of
+  d.a_half_move_is_said:
+    verdict: "files of the record's other layout beside the entry file - the record renamed with its
+              files left under the earlier names, or a .kpopper/ opened beside a record still under
+              the earlier name - fail check and are named in the opener's head with where they
+              belong; the reader still looks in one home, and an empty hypotheses directory left
+              behind is passed over"
+    because: "{{d.home_beside_the_entry}} made the reader look in one home, so a file left under the
+              other is a claim nobody reads - and on the first record moved by hand a hypothesis and
+              a brief vanished from every surface with every check green
+              ({{s.2026_09_12_half_move}}). A checker that passes over what it cannot read is the
+              failure this method exists to refuse, so it fails rather than notes: the pull request
+              that moves a record by half stays red until the move is whole. Saying it costs one line
+              where a session looks first, and the records outside this tree will each go through
+              this by hand."
+    reopened_by: "a record that keeps files under the other name on purpose, for another tool, and
+                  cannot make check green; or a half-moved record that opened green"
+    rests_on: [s.2026_09_12_half_move, d.home_beside_the_entry, d.in_the_tree_only_what_is_reviewed]
+    seen:
+      s.2026_09_12_half_move: "read 2026-09-12"
+      d.home_beside_the_entry: "everything a record keeps beside itself lives in one directory,
+                                .kpopper, beside the file the reader opens first - hypotheses/,
+                                view.yaml, measure.yaml, session.json, records/<head>.yaml when the
+                                record divides, build/ for what is rebuilt - and a record found under
+                                the earlier name keeps the earlier names beside it; the reader looks
+                                in one of the two, never both"
+      d.in_the_tree_only_what_is_reviewed: "in the tree only what is reviewed; ignored only what is
+                                            rebuilt, in the one directory .kpopper/build, with a
+                                            .gitignore the build writes there; state never in the
+                                            tree"
   d.a_line_is_clipped_by_its_parts:
     rests_on: [s.2026_09_04_difference, d.a_comparison_shows_where_it_parts]
     verdict: "a line that shows a comparison is built from parts already clipped, and never cut as a
