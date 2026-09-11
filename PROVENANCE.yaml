@@ -3,6 +3,7 @@ meta:
   name: kpopper
   scope: "What this plugin is for and the decisions that shaped it, kept in its own format -
           the tools eat their own cooking, and every session here opens grounded."
+  prefixes: {d: decision, s: session, m: measurement, p: parameter, q: question, v: view}
 
 sources:
   s.2026_09_01_consolidation:
@@ -295,6 +296,20 @@ sources:
     name: "Finish standalone HTML documents with concise evidence explanations and ordinary-request
            authoring"
     read: "2026-09-10"
+  s.2026_09_11_prefix_words:
+    asked: "\"m.\", \"s.\", \"d.\" - are those convetions in provenance.yaml or self evovled in this
+            project? … האם זה יהיה חכם לבקש שהם יהיו מילה שלמה? שאנשים שמסתכלים על זה יבינו מה הם
+            קוראים? וגם אייג׳נטים שקוראים את זה … ולמה לא לשנות אחורה גם בזה שקיים פה בשביל לבדוק את
+            זה? בכלל לא כדאי לבדוק עם איזה eval אם זה משפר משהו?"
+    name: "The session that asked what the one-letter prefixes are and whether a prefix should be a
+           word - what it was asked, and what it was given. Its reading: the letters were one writing
+           habit that travelled from the first record through the skill examples and was reassigned
+           at every birth, declared nowhere; a prefix is the link a question takes into the record,
+           so a new one is a word, and the letters already written get a legend"
+    of: "2026-09-11, given this record at a51bc75 and its first version, two live records outside
+         this repository with the oldest snapshot of the first, the fixtures, the skill files, and
+         the grounding-line eval of 2026-09-11"
+    read: "2026-09-11"
   s.2026_09_11_read_once:
     asked: "A parse cache for the record. Add a cache of the parsed documents keyed by each file's
             absolute path, size and mtime (ns), stored privately under
@@ -398,6 +413,13 @@ sources:
     name: "The first run on a project this plugin did not build - the g2next keyboard pilot"
     of: "session 'Keyboard size feedback', 2026-09-01, plugin 0.14.0"
     read: "2026-09-01"
+  run.grounding_line_codex:
+    name: "The grounding line measured on the Codex host: twenty recorded prompts and ten the record
+           does not touch, ten trials each with the line and without, one model at medium effort"
+    of: "2026-09-11, a harness outside this repository: the page fixture with a second subject added
+         (39 entries, Hebrew and English names), the hook run per prompt and its line placed in the
+         developer instructions of one arm, the same opener in both"
+    read: "2026-09-11"
   run.hub_vs_now:
     name: "A hand-written page and this plugin's Now tab, rendered from the same record and
            read side by side"
@@ -446,6 +468,16 @@ sources:
     of: "2026-09-03, on the record after the move: the count written as decided while already stale,
          then re-measured with seen left as it was, then seen refreshed by hand"
     read: "2026-09-03"
+
+  run.prefix_survey:
+    name: "The prefixes of the records read side by side - this record and its first version, two
+           live records outside this repository with the oldest snapshot of the first, and the
+           fixtures: which prefixes each holds, what each letter stands for, and where the ids of
+           this record are referenced"
+    of: "2026-09-11, second-level keys counted by prefix in each file, the letters read against the
+         names and kinds of their entries, and the ids of this record searched across the tracked
+         tree at a51bc75"
+    read: "2026-09-11"
 
   run.recipes_probed:
     name: "The five recipes this change names, run against this tree and against copies of it with a
@@ -591,19 +623,20 @@ known:
     name: "Judgments whose declared hole calls itself an implementation hole - work not done yet -
            rather than an observation nobody has made"
     from: run.blocked_on_reread
-    at: "of 60 - the other 56 open observational; the split is measured on both sides, so neither
+    at: "of 61 - the other 57 open observational; the split is measured on both sides, so neither
          half drifts while the total holds"
     measure: blocked_on_implementation
   m.blocked_on_reopeners:
-    v: 60
+    v: 61
+    # set 2026-09-11: measured by blocked_on_reopeners at a51bc75 with the working tree changed
     # reconciled 2026-09-05 after the same-day write rule refused a second reading: this tree adds
     # five observational declarations to the 55 measured earlier that day
-    of: "2026-09-05"
+    of: "2026-09-11"
     name: "Judgments that declare a hole with blocked_on - the count. Whether each names a sign
            that would re-open the decision, or an input the record lacks, is read by hand and said
            beside it"
     from: run.blocked_on_reread
-    at: "of 60 declared holes - 56 say observational and 4 implementation, the second half
+    at: "of 61 declared holes - 57 say observational and 4 implementation, the second half
          measured beside this one; none is written as what the record is missing, and the one
          that names an entry names one the record holds"
     measure: blocked_on_reopeners
@@ -719,6 +752,39 @@ known:
     from: "skills/kpopper/references/shape.md"
     at: "Where the record lives"
     name: "The cost of a second copy"
+  m.grounding_line_prefix_guesses:
+    v: 182
+    unit: trials
+    name: "First reads that were a prefix guessed from the words of the question, of 200 trials
+           without the grounding line; 22 of 200 with it"
+    from: run.grounding_line_codex
+    at: "the first command of each trial - pull heat, pull pump water; the 13 wrong answers were all
+         dates under when., a prefix no question suggests"
+    of: "2026-09-11"
+  m.letter_prefix_ids:
+    v: 214
+    unit: entries
+    name: "Entries of this record under a one-letter prefix - d, s, m, p, q and v"
+    from: run.prefix_survey
+    at: "second-level keys of PROVENANCE.yaml at a51bc75"
+    of: "2026-09-11"
+  m.letter_prefix_refs_outside:
+    v: 281
+    unit: references
+    name: "References to those ids outside the record, in 14 tracked files - the session file, the
+           changelog, the brief, the measure file, the tests and the docs"
+    from: run.prefix_survey
+    at: "the 214 ids searched over the tracked tree at a51bc75, the record itself excluded"
+    of: "2026-09-11"
+  m.letter_prefix_roles:
+    v: 3
+    unit: prefixes
+    name: "Prefixes the judgment role was given across the records read - c. in the first record and
+           the fixtures, d. here, j. in a record born the same day as this one; d. is a date in the
+           first record and a decision here, q. a quote there and a question here"
+    from: run.prefix_survey
+    at: "the judgment collection of each record, and the two letters both live records hold"
+    of: "2026-09-11"
   m.older_records_changed:
     v: 0
     name: "Records written before the field whose reading changed once the reader learned it"
@@ -996,11 +1062,12 @@ known:
     of: "2026-09-10"
 
   m.skill_bytes_largest:
-    v: 19067
+    v: 19998
+    # set 2026-09-11: measured by skill_bytes_largest at a51bc75 with the working tree changed
     name: "The largest skill body a session can be handed now, bytes"
     from: "skills/*/SKILL.md"
     at: "bytes of the largest body"
-    of: "2026-09-10"
+    of: "2026-09-11"
     measure: skill_bytes_largest
 
 open:
@@ -1010,6 +1077,10 @@ open:
   q.followups_outcomes_to_graph: "Which nontrivial followup outcomes should be recorded as new
                                   project evidence, by which authorized writer, so that knowledge
                                   does not remain only in execution history?"
+  q.prefix_eval: "does a word prefix reach the right entry more often than a letter, and does a
+                  legend close the gap? the three-arm eval on the page fixture - the same prompts and
+                  trials as the grounding-line harness, under letters, under letters with
+                  meta.prefixes, and under words - has not run"
   q.pull_defaults: "does a session that ran pull still open the record file for values - and if
                     so, what was missing from the line it got?"
   q.account_copy: "does the hosted copy of this plugin get refreshed from here, or retired?"
@@ -2000,6 +2071,36 @@ judgments:
                                              that can hold - a name, an operator, one value; a
                                              compound or an impossible one is refused, and a
                                              re-opener stands beside it, never in its place"
+  d.prefix_is_a_word:
+    rests_on: [s.2026_09_11_prefix_words, m.letter_prefix_roles, m.grounding_line_prefix_guesses, m.letter_prefix_ids, m.letter_prefix_refs_outside]
+    verdict: "a prefix born from now is a word - the subject a question would name, or the kind
+              spelled out where a record is about one thing - never a letter; an entry joins the
+              prefix its record already holds for its subject, so a record kept under letters keeps
+              them and declares what they stand for in meta.prefixes, which the opener and the page
+              print beside the namespace; check does not fail a letter"
+    because: "The namespace line exists so that a question in plain words becomes a seed, and a
+              letter is no word a question carries: the person who wrote this record asked what m.,
+              s. and d. mean, and a session with no pointer reaches an entry by guessing its prefix
+              from the words of the question ({{m.grounding_line_prefix_guesses}} of 200 first
+              reads). The letters were one habit that travelled from the first record through the
+              skill examples and was reassigned at every birth - {{m.letter_prefix_roles}} prefixes
+              for the judgment role, d. a date there and a decision here - and nothing ever declared
+              them, so the first add is where the word is asked for. Renaming what exists reaches
+              {{m.letter_prefix_ids}} ids and {{m.letter_prefix_refs_outside}} references outside the
+              record on every open branch, for a reading a legend gives in one line; a check that
+              failed a letter would fail every record born before this for a taste in names, and
+              teach shaping the record to pass it."
+    blocked_on: "observational: the test is the eval q.prefix_eval names - the same prompts on the
+                 fixture under letters, under letters with a legend, and under words; falsified if
+                 sessions under words reach the right entry no more often than under letters, or the
+                 legend arm no more often than bare letters, or by a record born after this whose
+                 session read the skill and still chose a letter for a new prefix"
+    seen:
+      s.2026_09_11_prefix_words: "read 2026-09-11"
+      m.letter_prefix_roles: 3
+      m.grounding_line_prefix_guesses: 182
+      m.letter_prefix_ids: 214
+      m.letter_prefix_refs_outside: 281
   d.prior_carries_its_own_falsifier:
     rests_on: [prior.confidence_needs_calibration, m.claims.local_assumed_held, d.hypothesis_is_a_judgment]
     verdict: "the prior kind carries its own falsifier: if judgments resting on priors at 0.8 or

@@ -2,6 +2,7 @@ meta:
   name: Greenhouse winter plan
   scope: Prepare the greenhouse for the coldest February night.
   updated: '2026-09-03'
+  prefixes: {s: session, q: question, c: claim}
 sources:
   s.2026_09_02_heating:
     asked: Can we keep the greenhouse above 12°C through February on the old boiler?

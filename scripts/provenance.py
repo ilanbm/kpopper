@@ -613,6 +613,11 @@ def load(paths):
         seen.add(os.path.abspath(f))
         for k, v in d.items():
             if isinstance(v, dict) and isinstance(doc.get(k), dict):
+                # a legend is declared per file, and a record split across files keeps
+                # every file's letters rather than the last file's
+                mine, theirs = doc[k].get("prefixes"), v.get("prefixes")
+                if k == "meta" and isinstance(mine, dict) and isinstance(theirs, dict):
+                    v = dict(v, prefixes={**mine, **theirs})
                 doc[k].update(v)
             else:
                 doc[k] = v
@@ -1148,6 +1153,53 @@ def priors_line(ids, jud, raw, *, with_high=False):
     return (line, high) if with_high else line
 
 
+# ── the legend ───────────────────────────────────────────────────────────────
+# A prefix is meant to be a word a question carries. A record kept under letters - born
+# before that was asked for, and kept because a rename reaches every reference on every
+# branch - says once in its head what they stand for, `meta.prefixes: {d: decision}`, and
+# every surface that shows a prefix to a person shows the word beside it: the opener's head
+# and the page's namespace bar. Nothing else reads the field.
+LEGEND_WORD = 40            # a legend entry is a word; a sentence there would eat the head
+
+
+def legend_of(meta, ids):
+    """{prefix: word} for the prefixes the record holds, judgments included - a letter the
+    record no longer holds is not repeated, and what is not a word is not a legend."""
+    declared = (meta or {}).get("prefixes")
+    if not isinstance(declared, dict):
+        return {}
+    held = {k.split(".")[0] for k in ids if isinstance(k, str) and not is_builtin(k)}
+    out = {}
+    for g, w in declared.items():
+        if isinstance(g, str) and isinstance(w, str) and g in held:
+            w = " ".join(w.split())
+            if w:
+                out[g] = w if len(w) <= LEGEND_WORD else w[:LEGEND_WORD - 1] + "…"
+    return out
+
+
+def legend_notes(meta, ids):
+    """What check says about a legend nothing can print: a key YAML read as something other
+    than a word (`on:` and `yes:` are booleans unless quoted), a value that is not one, a
+    prefix the record does not hold - each silent in the opener, and said here instead."""
+    declared = (meta or {}).get("prefixes")
+    if declared is None:
+        return []
+    if not isinstance(declared, dict):
+        return ["meta.prefixes is not a mapping of prefix to word - nothing is printed from it"]
+    held = {k.split(".")[0] for k in ids if isinstance(k, str) and not is_builtin(k)}
+    notes = []
+    for g, w in declared.items():
+        if not isinstance(g, str):
+            notes.append(f"meta.prefixes: the key {g!r} is not a word - yes, no, on, off, true "
+                         "and false are booleans to YAML unless quoted")
+        elif g not in held:
+            notes.append(f"meta.prefixes: {g} is held by nothing in the record")
+        elif not isinstance(w, str) or not w.strip():
+            notes.append(f"meta.prefixes: {g} stands for {w!r}, which is not a word - quote it")
+    return notes
+
+
 # ── arrangements ─────────────────────────────────────────────────────────────
 # An arrangement is a judgment by shape: it rests on a session source - the occasion it
 # decides - and its sign is a name the build computes, read by its predicate or rested on.
@@ -1460,6 +1512,8 @@ def check_lines(paths):
     priors = priors_line(ids, jud, raw)
     if priors:
         note.append(priors)
+    # A legend the opener could not print, said here since the opener says nothing.
+    note += legend_notes(doc.get("meta"), ids)
     # Coverage, when a brief sits beside the record: which intents no tab of the page serves,
     # and where what each of them wrote falls - facts the page counted, said here so a session
     # that never builds the page still hears them. The page decides its own falsifiers; the
@@ -1614,6 +1668,11 @@ def opening(paths, budget=25, chars=None, host=None):
         head.append("holds: " + " · ".join(f"{g} ({n})" for g, n in
                                             sorted(heavy, key=lambda kv: (-kv[1], kv[0])))
                     + (f" · and {loose} standalone" if loose else ""))
+    # What a letter stands for, beside the namespace - judgments' prefixes included, since
+    # a grounding line names them by id (see legend_of).
+    legend = legend_of(meta, ids)
+    if legend:
+        head.append("prefixes: " + " · ".join(f"{g}={w}" for g, w in legend.items()))
     held = sum(1 for k in ids if not is_builtin(k))
     head.append(f"{held} entries, {len(jud)} judgments"
                + (f", {len(open_ids)} open questions" if open_ids else "")
