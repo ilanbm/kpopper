@@ -53,15 +53,15 @@ sections:
     why: each of these is a judgment that cannot close for want of a fact nobody has recorded
     pick: blocked
   - title: The dates that are running
-    pick: d.
+    pick: date.
   - title: The mortgage
-    pick: [mtg., c.equity_10pct]
+    pick: [mtg., claim.equity_10pct]
     as: lines
 shape: {entries: 89, judgments: 12, flagged: 9, blocked: 4}
 ```
 
 `pick` takes a state (`blocked`, `unchecked`, `broken`, `falsified`, `moved`, `no_predicate`,
-`flagged`, `judgments`, `all`), a prefix (`d.`), or an exact id — evaluated at render time,
+`flagged`, `judgments`, `all`), a prefix (`date.`), or an exact id — evaluated at render time,
 never a frozen list. That is what keeps a section current: a judgment that becomes blocked
 tomorrow appears under *What is blocking now* with no edit to the brief.
 
@@ -90,15 +90,15 @@ that fits a section is `table`, that is a signal the section is not about anythi
 particular.
 
 **Groupings are declared, not inferred.** The record's prefixes say what *kind* a thing is —
-`d.` is a date — and that is a different question from which thread it belongs to. `d.prg_out`
-is a date and it is Prague; nothing in the record says so. So the brief declares its groupings
+`date.` says it is a date — and that is a different question from which thread it belongs to.
+`date.prg_out` is a date and it is Prague; nothing in the record says so. So the brief declares its groupings
 once, under whatever names the project reads by — fronts, fields, subsystems, environments —
 and every renderer can then say what a row is under:
 
 ```yaml
 groups:
-  The mortgage: [mtg., equity., d.rate_lock, c.equity_10pct]
-  Prague:       [prg., d.prg_out, d.prg_deadline]
+  The mortgage: [mtg., equity., date.rate_lock, claim.equity_10pct]
+  Prague:       [prg., date.prg_out, date.prg_deadline]
 ```
 
 A group supplies a hue and appears as a small tag beside each item wherever a section mixes more than one —
@@ -113,11 +113,11 @@ which one it reads by:
 ```yaml
 groups:
   threads:
-    The mortgage: [mtg., equity., d.rate_lock, c.equity_10pct]
-    Prague:       [prg., d.prg_out, d.prg_deadline]
+    The mortgage: [mtg., equity., date.rate_lock, claim.equity_10pct]
+    Prague:       [prg., date.prg_out, date.prg_deadline]
   counterparts:
-    Adi:   [mtg.adi_fee, q.adi_gift, q.cond7]
-    Dolev: [crypto., q.dolev_filed]
+    Adi:   [mtg.adi_fee, quote.adi_gift, quote.cond7]
+    Dolev: [crypto., quote.dolev_filed]
 sections:
   - title: Who is holding what
     pick: [mtg., crypto., q.]
@@ -330,13 +330,14 @@ with what it rests on and what would make it wrong. Nothing here invents a secon
 staleness for it; what is special is only what it is *held against*.
 
 **An arrangement, by shape**, is a judgment that rests on a session source - the occasion it
-decides - and whose sign is a name the build computes, read by its `wrong_if` or rested on. `v.`
-is the prefix to use and nothing depends on it. A judgment over the page's counts that rests
+decides - and whose sign is a name the build computes, read by its `wrong_if` or rested on. `view.`
+is the prefix to use - a word, like every prefix - and nothing depends on it; records born before
+the word was asked for keep `v.`. A judgment over the page's counts that rests
 on no session source decides no occasion; a judgment resting on a session source with no count
 in its sign is that session's ordinary decision.
 
 ```yaml
-v.glazing_tab:
+view.glazing_tab:
   rests_on: [s.2026_09_03_glazing, page.unserved]
   verdict: "a second tab, for the day the quote is read"
   because: "... the two merge the day a judgment on one tab rests on the other's numbers."
@@ -409,7 +410,7 @@ deleted tab either leaves its sources unserved - a gap printed at every open - o
 another tab, which is a merge.
 
 **A reversal is the arrangement written again under its own id.** Editing the brief past a
-standing decision fails; a decision changes only by `add v.x …` with a new verdict, which is a
+standing decision fails; a decision changes only by `add view.x …` with a new verdict, which is a
 contradiction of what the base holds unless one of two things is true, decided by the same door
 every same-id write goes through:
 

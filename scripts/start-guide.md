@@ -54,6 +54,8 @@ question or throwaway task can finish without any record.
 
 Create the file with real material, not an empty template: the request that brought the session
 here, a source, and a supported finding or open question. Keep only roles with something to hold.
+Name each entry `<prefix>.<name>` with the prefix a word a question would use - the subject
+(`venue.`, `heat.`) or the kind (`decision.`, `session.`) - never a letter.
 For a small record with no judgments yet, use `sources`, `known` and `open` with their ordinary
 source/value/question fields; the reader accepts this starting shape without a `schema` block.
 Use `kpopper add` for judgments so the tool fills their `seen` snapshots. Do not invent a conclusion,

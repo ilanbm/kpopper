@@ -55,7 +55,7 @@ on — a `prior.*` claim whose value is the confidence; see *An agent's prior as
 **Give it a name.** One line per entry, in the record's own language, saying what the thing *is*:
 
 ```yaml
-  d.rate_lock:
+  date.rate_lock:
     name: סוף שמירת הריבית באישור העקרוני
     v: 2026-09-18
     src: ...
@@ -171,6 +171,17 @@ source or rule less so, the same premises a pair to judge - and a name only orde
 ids that are one subject fold with `same <a> <b>`: every reference rewritten, `also:` left on the
 survivor; two that only look alike are kept apart with `distinct <a> <b> "why"`, and the pair never
 returns. Neither shows on `pull` or the page yet - the file holds `also:` and `distinct_from`.
+
+**A prefix is a word.** An id is `<prefix>.<name>`, and the prefix is what a question becomes
+when it reaches the record: the subject a person would name - `mtg.`, `venue.`, `heat.` - or,
+where a record is about one thing and its entries differ only by kind, the kind spelled out -
+`decision.`, `measure.`, `session.`. Never a letter: the opener's namespace line is what turns
+a question into a seed ([ground](../ground/SKILL.md)), a session with no pointer reaches an
+entry by guessing its prefix from the question's words, and `m` is no word a question carries.
+Keep it short - it is retyped in every `rests_on`. An entry joins the prefix its record already
+holds for its subject, so a record kept under letters keeps them - a rename reaches every
+reference on every branch - and says once in its head what they stand for, `meta.prefixes:
+{d: decision, s: session}`, which the opener and the page print beside the namespace.
 
 A write that contradicts what the base holds - the same id with a different value or verdict, a reading no newer than the base's that differs, a judgment resting on what only a hypothesis holds - is refused into the base and named a hypothesis: the refusal prints the `--hypothesis NAME` command that writes the same thing into `PROVENANCE.d/NAME.yaml` beside the record. Nothing written into the body opens that door. Testing, folding and refuting hypotheses is the [consolidate skill](../consolidate/SKILL.md).
 
