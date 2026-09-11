@@ -145,7 +145,7 @@ def context(location, host=None):
         # greetings too.
         record, mapping = moves(host)
         lines.append("No knowledge record in this workspace. For work that will be revisited, "
-                     + record + " keeps findings as they arise - the first write creates PROVENANCE.yaml; "
+                     + record + " keeps findings as they arise - the first write creates GROUNDING.yaml; "
                      + mapping + " builds an initial map of existing materials on request. "
                      "A one-off needs nothing. Never offer any of this on a greeting.")
         if current["offered"]:

@@ -59,8 +59,11 @@ def resolve(args):
                                  encoding="utf-8", capture_output=True)
         except OSError:
             top = None
-        if top is not None and top.returncode == 0 and (Path(top.stdout.strip()) / "PROVENANCE.yaml").is_file():
-            path = (Path(top.stdout.strip()) / "PROVENANCE.yaml").resolve()
+        if top is not None and top.returncode == 0:
+            for name in provenance.ENTRY_NAMES:
+                if (Path(top.stdout.strip()) / name).is_file():
+                    path = (Path(top.stdout.strip()) / name).resolve()
+                    break
     project = args.project or config.get("project") or re.sub(r"[^A-Za-z0-9._-]", "-", path.parent.name).strip("-._")[:70] or "project"
     requested_state = args.state or config.get("state")
     if requested_state:
@@ -71,7 +74,7 @@ def resolve(args):
         state = base / identity
     profile = args.profile or (Path(config["profile"]) if config.get("profile") else None)
     if profile is None:
-        candidate = path.parent / "PROVENANCE.session.json"
+        candidate = Path(provenance.layout(path)["session"])
         if candidate.is_file():
             profile = candidate
     reader = None if args.normalized else Path(provenance.__file__).resolve()

@@ -7,7 +7,9 @@ description: "Read the project's knowledge record before answering from memory o
 
 The record answers two questions a session cannot answer reliably in its head: what is known here now, with its sources, and what a change reaches. Ask it before restating a value, a date or a decision from memory, and before changing one. The command line is `kpopper` where it is on PATH; otherwise the `command` in the `KPOPPER_AGENT_CONTEXT` line the session opener printed (`python3 <plugin>/scripts/cli.py`) runs the same code. Do not guess a path and do not write a second reader - [the method's reference](../kpopper/references/method.md#finding-the-reader) says how to find the installed copy when neither is at hand.
 
-This method owns one known entry point: **`PROVENANCE.yaml` in the project's working directory.**
+This method owns one known entry point: **`GROUNDING.yaml` in the project's working directory** - or
+`PROVENANCE.yaml`, the name records were born under before, read wherever it already is and never
+created again.
 Git is optional. Use the location resolved by the opener or `kpopper open --json`: it checks
 the current directory and ancestors within the workspace boundary, then Git's registered
 external location. Do not start a duplicate because the file is outside the current directory.

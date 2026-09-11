@@ -17,7 +17,7 @@ This installs PyYAML with the CLI. The ordinary reader and HTML page need no Lea
 An isolated CLI installation does not supply dependencies to an unrelated Python
 environment used by a host's hooks.
 
-Save [the launch-party example](../examples/launch-party/PROVENANCE.yaml) as `PROVENANCE.yaml` in
+Save [the launch-party example](../examples/launch-party/GROUNDING.yaml) as `GROUNDING.yaml` in
 an empty directory. Run these commands there:
 
 ```sh
@@ -66,10 +66,14 @@ host agent. Users can invoke the [watch plugin command](../skills/watch/SKILL.md
 to complete that flow without operating the individual protocol steps.
 See [the followups guide](../skills/kpopper/FOLLOWUPS.md) for the full input contract,
 task-system routing, recovery and daily workflow. Scheduling metadata is kept outside
-`PROVENANCE.yaml`; scanning and finishing tasks do not rewrite knowledge or `seen`.
+`GROUNDING.yaml`; scanning and finishing tasks do not rewrite knowledge or `seen`.
 
-`PROVENANCE.yaml` lives in the project's working directory. Git is optional. The file can
-also point to existing material, including multiple record files:
+`GROUNDING.yaml` lives in the project's working directory, and everything the record keeps
+beside itself - hypotheses, the page's brief, the measurement recipes, the session profile,
+what is built from it - lives in `.kpopper/` next to it. A record born under the earlier name,
+`PROVENANCE.yaml`, is read as it is, with `PROVENANCE.d/`, `PROVENANCE.view.yaml`,
+`PROVENANCE.measure.yaml` and `PROVENANCE.session.json` beside it, and is never created again.
+Git is optional. The file can also point to existing material, including multiple record files:
 
 ```yaml
 record: analysis/facts.yaml
@@ -80,7 +84,7 @@ For a Git repository that keeps its record outside the working tree, register th
 path in the Git common directory:
 
 ```sh
-printf '%s\n' '/absolute/path/to/PROVENANCE.yaml' > "$(git rev-parse --git-common-dir)/kpopper-record"
+printf '%s\n' '/absolute/path/to/GROUNDING.yaml' > "$(git rev-parse --git-common-dir)/kpopper-record"
 kpopper where
 ```
 
@@ -110,7 +114,7 @@ known:
     rule: "stock.packages - workshop.guests"
 ```
 
-Here the two inputs refer to the [workshop example](../examples/workshop/PROVENANCE.yaml).
+Here the two inputs refer to the [workshop example](../examples/workshop/GROUNDING.yaml).
 The reader follows those references for dependency reach and displays the rule. It does
 not evaluate arbitrary arithmetic formulas into current values. A predicate over an
 unevaluated derived value cannot be treated as a successful check. The core also has
@@ -148,7 +152,7 @@ and confirming the underlying evidence remain part of review.
 | Command | Purpose |
 |---|---|
 | `kpopper set <id> <value> --why "reason" --as-of YYYY-MM-DD` | Record a scalar reading with its explanation and date. |
-| `kpopper add <id> field=value ...` | Add an entry or judgment. Judgment snapshots are filled from the record. Where no record resolves for the workspace, the first `add` creates `PROVENANCE.yaml` at its root with that entry. |
+| `kpopper add <id> field=value ...` | Add an entry or judgment. Judgment snapshots are filled from the record. Where no record resolves for the workspace, the first `add` creates `GROUNDING.yaml` at its root with that entry. |
 | `kpopper review <id>` | Refresh a judgment's snapshot after reviewing it against the current record. |
 | `kpopper review "section title"` | Refresh the page section's review snapshot. |
 | `kpopper same <a> <b>` | Record that two IDs describe one subject; by default, retire `b` into `a`. |
@@ -163,7 +167,7 @@ not decide identity: `same` and `distinct` record that decision explicitly.
 
 ### Hypotheses and consolidation
 
-A competing claim can live in `PROVENANCE.d/<name>.yaml` beside the base record. The writer
+A competing claim can live in `.kpopper/hypotheses/<name>.yaml` beside the base record. The writer
 can refuse a contradictory reading or a premature judgment rewrite and suggest a hypothesis;
 write it explicitly with `--hypothesis NAME`. A newly dated observation may supersede an
 older reading, while same-day disagreement remains a conflict. A standing judgment has its
@@ -210,7 +214,7 @@ analysis. No graph, hypothesis or review snapshot is written by comparison. Loca
 are not proof of remote freshness; the runner never fetches automatically.
 
 To capture observations independent of branch code, configure an existing external record
-with `watch setup --shared-record /absolute/PROVENANCE.yaml`, or explicitly select
+with `watch setup --shared-record /absolute/GROUNDING.yaml`, or explicitly select
 `--shared-private`. `watch share --file REPORT.json` requires an external environment scope,
 source location, quotation, date and scalar value. The background writer preserves evidence,
 uses the canonical writer, serializes commits and retains conflicts for review. `watch shared`
@@ -251,7 +255,7 @@ returning important findings to an originating Codex task on supported hosts.
 
 ## Measurement
 
-An entry can name a recipe with `measure: recipe_name`. `PROVENANCE.measure.yaml` beside
+An entry can name a recipe with `measure: recipe_name`. `.kpopper/measure.yaml` beside
 the record maps that name to an argument list. Treat this file as executable configuration
 and review it as code.
 
@@ -272,8 +276,8 @@ repository's measurement and CI contract.
 kpopper page --open
 kpopper page --open --tree
 kpopper page --verify
-kpopper page --out record.html
-kpopper page --checks record.html
+kpopper page                      # written to .kpopper/build/page.html
+kpopper page --checks .kpopper/build/page.html
 ```
 
 The renderer generates a self-contained HTML snapshot. The deterministic `--verify` checks
@@ -282,7 +286,7 @@ and `playwright-core`, which is not bundled:
 
 ```sh
 npm i --no-save playwright-core
-kpopper page --checks record.html
+kpopper page --checks .kpopper/build/page.html
 ```
 
 The checker looks for the driver beside the page; `NODE_PATH` can point at an existing

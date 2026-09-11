@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Read a PROVENANCE record: check its invariants, and report what a change reaches.
+"""Read a knowledge record: check its invariants, and report what a change reaches.
 
   python3 provenance.py open    [file ...]        the whole opening: head + what moved
   python3 provenance.py check   [file ...]
@@ -20,15 +20,16 @@ what it wrote, what is MOVED now, which predicate fired. `set --help`, `add --he
 names the entries nearest a new one, and `same` or `distinct` records the answer
 (sameness.py).
 
-Without a file argument the record is PROVENANCE.yaml here, else the path this checkout
-registered in `<git common dir>/kpopper-record` - for a project whose tree cannot hold it.
+Without a file argument the record is GROUNDING.yaml here - or PROVENANCE.yaml, the name
+records were born under before - else the path this checkout registered in
+`<git common dir>/kpopper-record`, for a project whose tree cannot hold it.
 A file is parsed when it changes, not at every command: its parsed form is kept under the
 user's state directory, keyed by what the file is. `--no-cache`, or KPOPPER_NO_CACHE=1,
 parses every time.
 
 The record forks on a contradiction, never on a session: a write that contradicts the base
-is refused into it and goes into a hypothesis - `PROVENANCE.d/<name>.yaml` beside the record,
-the record's own shape - with `--hypothesis <name>`. Every command reads the hypotheses over
+is refused into it and goes into a hypothesis - `.kpopper/hypotheses/<name>.yaml` beside the
+record, the record's own shape - with `--hypothesis <name>`. Every command reads the hypotheses over
 the base: `pull` shows what each proposes, `check` and `open` say where two disagree
 (CONTESTED), the opener counts what waits, and the base alone is what is evaluated until
 consolidation tests the union.
@@ -55,7 +56,11 @@ EXPR = re.compile(r"[<>=!+\-*/()]|\bor\b|\band\b|\bnot\b")
 # shown and never retyped. A judgment id placed this way, `{{c.boiler_short}}`, asks for that
 # judgment's reasoning at that spot.
 REF = re.compile(r"\{\{\s*([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z0-9_]+)+)\s*\}\}")
-DEFAULT = ["PROVENANCE.yaml"]
+ENTRY = "GROUNDING.yaml"            # the record's entry point, born by the first add
+LEGACY_ENTRY = "PROVENANCE.yaml"    # the name records were born under before: still read, never created
+ENTRY_NAMES = (ENTRY, LEGACY_ENTRY)
+HOME = ".kpopper"                   # beside the entry file: everything a record keeps beside itself
+DEFAULT = [ENTRY]
 
 # Names the reader computes rather than reads: counted from the record alone (graph.*), or
 # where the page is built (page.*). Never written, never stored. A judgment may rest on one
@@ -141,8 +146,9 @@ def registered_record():
 
 def default_paths():
     """Use the same bounded discovery as the opener, including non-Git workspaces."""
-    if os.path.exists(DEFAULT[0]):
-        return DEFAULT
+    for name in ENTRY_NAMES:
+        if os.path.exists(name):
+            return [name]
     try:
         from .workspace import locate
     except ImportError:
@@ -160,8 +166,71 @@ def default_paths():
     return [location["record"]] if location["status"] == "found" else DEFAULT
 
 
-HYPOTHESES = "PROVENANCE.d"      # beside the record: one file per hypothesis, the record's shape
+HYPOTHESES = "PROVENANCE.d"      # the hypotheses of a record under the old name, beside it
+HYPOTHESES_HOME = "hypotheses"   # under HOME for a record under the new: one file per hypothesis
 HYPOTHESIS_NAME = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_\-]*$")
+
+
+def is_legacy(entry):
+    """A record found as PROVENANCE.yaml keeps its files under the names it was born with."""
+    return os.path.basename(str(entry)) == LEGACY_ENTRY
+
+
+def _first_of(paths):
+    return (sorted(glob.glob(paths[0])) or [paths[0]])[0]
+
+
+def hypotheses_rel(entry):
+    """The hypotheses directory relative to the entry file's own - for a tree read through
+    git, where nothing is absolute."""
+    return HYPOTHESES if is_legacy(entry) else HOME + "/" + HYPOTHESES_HOME
+
+
+def layout(first):
+    """Where a record keeps what sits beside it, decided by the name of the file the reader
+    opens first. GROUNDING.yaml keeps everything under .kpopper/ beside it - hypotheses/,
+    view.yaml, measure.yaml, session.json, and build/ for what is rebuilt. PROVENANCE.yaml,
+    the name records were born under before, keeps PROVENANCE.d/, PROVENANCE.view.yaml,
+    PROVENANCE.measure.yaml and PROVENANCE.session.json beside it, as it always did. One home
+    per record: the reader never looks in both."""
+    first = os.path.abspath(str(first))
+    d = os.path.dirname(first)
+    if is_legacy(first):
+        return {"legacy": True, "entry": first, "home": d,
+                "hypotheses": os.path.join(d, HYPOTHESES), "hypotheses_name": HYPOTHESES,
+                "view": re.sub(r"\.ya?ml$", "", first) + ".view.yaml",
+                "measure": os.path.join(d, "PROVENANCE.measure.yaml"),
+                "measure_name": "PROVENANCE.measure.yaml",
+                "session": os.path.join(d, "PROVENANCE.session.json"),
+                "build": None, "page": "record.html"}
+    home = os.path.join(d, HOME)
+    return {"legacy": False, "entry": first, "home": home,
+            "hypotheses": os.path.join(home, HYPOTHESES_HOME),
+            "hypotheses_name": HOME + "/" + HYPOTHESES_HOME,
+            "view": os.path.join(home, "view.yaml"),
+            "measure": os.path.join(home, "measure.yaml"), "measure_name": HOME + "/measure.yaml",
+            "session": os.path.join(home, "session.json"),
+            "build": os.path.join(home, "build"), "page": os.path.join(home, "build", "page.html")}
+
+
+def layout_of(paths):
+    return layout(_first_of(paths))
+
+
+def brief_for(paths, explicit=None):
+    """The brief the page is built from: the one given, else the record's own - under .kpopper/
+    beside a record under the new name; beside the record or any file it points at, then in
+    the working directory, for one kept under the old."""
+    if explicit:
+        return explicit
+    lay = layout_of(paths)
+    if not lay["legacy"]:
+        return lay["view"] if os.path.exists(lay["view"]) else None
+    for p in list(paths) + [LEGACY_ENTRY]:
+        c = re.sub(r"\.ya?ml$", "", p) + ".view.yaml"
+        if os.path.exists(c):
+            return c
+    return None
 
 
 class Record(dict):
@@ -174,10 +243,10 @@ class Record(dict):
 
 
 def hypothesis_dir(paths):
-    """Where a record's hypotheses live: PROVENANCE.d beside the file the reader opens first -
-    the root of a pointer record, the registered file of a project whose tree holds none."""
-    first = sorted(glob.glob(paths[0])) or [paths[0]]
-    return os.path.join(os.path.dirname(os.path.abspath(first[0])), HYPOTHESES)
+    """Where a record's hypotheses live: .kpopper/hypotheses beside the file the reader opens
+    first - the root of a pointer record, the registered file of a project whose tree holds
+    none - and PROVENANCE.d beside a record kept under the old name. One place per record."""
+    return layout_of(paths)["hypotheses"]
 
 
 def hypothesis_path(paths, name):
@@ -2340,7 +2409,7 @@ def _bump_updated(lines, date):
 
 # ── what a write answers ─────────────────────────────────────────────────────
 def _brief_beside(path):
-    b = re.sub(r"\.ya?ml$", "", path) + ".view.yaml"
+    b = layout(path)["view"]
     return b if os.path.exists(b) else None
 
 
@@ -3528,7 +3597,7 @@ def _insert_block(lines, collection, nid, block):
 
 def _fork(paths, action):
     """A write into a hypothesis beside the record: the same validation and the same edits,
-    on `PROVENANCE.d/<name>.yaml` - the base is not touched. The record is read as it stands
+    on `.kpopper/hypotheses/<name>.yaml` - the base is not touched. The record is read as it stands
     under the hypothesis, so a judgment written there rests on what it proposes and its
     snapshot says so. A hypothesis that does not exist yet is opened by its first write, with
     the day it was born in its head; an entry the base holds is carried over whole and set
@@ -4192,7 +4261,7 @@ must reconcile those fields first. Judgment snapshots are never refreshed by set
 A reading newer than the one the base holds - its `of:`, else its source's read date -
 updates it. One of the same day or earlier that differs is a contradiction: refused into
 the base, and the refusal names the command that writes it into a hypothesis instead.
-`--hypothesis NAME` writes into `PROVENANCE.d/NAME.yaml` beside the record, opened by its
+`--hypothesis NAME` writes into `.kpopper/hypotheses/NAME.yaml` beside the record, opened by its
 first write, and the base is not touched: the entry is carried over whole and set there.""",
     "add": """  add <id> field=value ... [--in COLLECTION] [--as-of YYYY-MM-DD] [--hypothesis NAME] [file]
   add <id> '{field: value, ...}'
@@ -4204,13 +4273,13 @@ is written as `rests_on='[a, b]'`; a judgment's `seen` is filled by this tool fr
 dependencies hold now and must not be given. Refused: an id already in the record, a
 dependency that is not an entry (add it first, or declare it with blocked_on), a reference
 to nothing, a judgment whose wrong_if already holds. The reply is the reach. Where no record
-resolves for the workspace, the first add creates PROVENANCE.yaml at its root - a checkout's
+resolves for the workspace, the first add creates GROUNDING.yaml at its root - a checkout's
 root, or the working directory outside git - with that entry; a registered record that is
 unavailable is a location problem, refused rather than replaced.
 
 A contradiction is refused into the base and named a hypothesis: the same id with a
 different value or verdict, or a judgment resting on what only a hypothesis holds - the
-refusal names the `--hypothesis NAME` command that writes it into `PROVENANCE.d/NAME.yaml`
+refusal names the `--hypothesis NAME` command that writes it into `.kpopper/hypotheses/NAME.yaml`
 beside the record instead, where its `seen` is taken from the record as it stands under
 that hypothesis, and the base is not touched.
 
@@ -4260,7 +4329,7 @@ def write_command(cmd, rest):
         raise Refused("--why is one line: a second line would be a line of the record")
     if opts.get("hypothesis") and not HYPOTHESIS_NAME.match(opts["hypothesis"]):
         raise Refused("--hypothesis takes a name - letters, digits, underscores, dashes - that "
-                      f"becomes {HYPOTHESES}/<name>.yaml beside the record")
+                      "becomes <name>.yaml in the hypotheses directory beside the record")
     action = {"kind": cmd, "id": nid, "as_of": as_of, "why": opts.get("why"), "into": opts.get("in"),
               "hypothesis": opts.get("hypothesis"), "source": opts.get("source"), "at": opts.get("at")}
     if cmd == "set":
@@ -4308,12 +4377,25 @@ def write_command(cmd, rest):
     except BaseException:
         # a first entry that was refused leaves no empty record behind
         for f in born:
-            if os.path.exists(f) and os.path.getsize(f) < 64:
+            if _newborn_only(f):
                 os.remove(f)
         raise
     for f in born:
         print(f"created {f} - this workspace's record, born with its first entry")
     return code
+
+
+HEAD_LINE = "# Kept with kpopper: read it with `kpopper open`, write it with `kpopper add`.\n"
+
+
+def _newborn_only(path):
+    """A record that holds nothing but what its birth wrote - the head line and the day."""
+    try:
+        with io.open(path, encoding="utf-8") as f:
+            text = f.read()
+    except OSError:
+        return False
+    return re.fullmatch(re.escape(HEAD_LINE) + r"meta:\n  updated: \d{4}-\d{2}-\d{2}\n", text) is not None
 
 
 def _newborn(action):
@@ -4341,7 +4423,7 @@ def _newborn(action):
     path = location["record"]
     stamp = action.get("as_of") or datetime.date.today().isoformat()
     try:
-        _write_text(path, f"meta:\n  updated: {stamp}\n")
+        _write_text(path, HEAD_LINE + f"meta:\n  updated: {stamp}\n")
     except OSError as e:
         raise Refused(f"refused - no record here, and none could be created at {path}: {e}")
     return [path]

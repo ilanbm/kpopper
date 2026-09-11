@@ -13,18 +13,18 @@ opening is the provenance layer - hover anything for where it came from, click t
 dependency, and see the graph around it outlined in place.
 
 ```bash
-kpopper page --out record.html       # the page
+kpopper page                        # the page, at .kpopper/build/page.html
 kpopper page --open [--tree]        # and look at it in your own browser
 kpopper page --verify               # deterministic, no browser
-kpopper page --checks record.html   # the browser checks, on a page already written
+kpopper page --checks .kpopper/build/page.html   # the browser checks, on a page already written
 ```
 
 The same three, by the scripts themselves - `R` is the reader's path, found as [the method's reference](../kpopper/references/method.md#finding-the-reader) says:
 
 ```bash
-python3 "$(dirname "$R")/render_page.py" > record.html      # the page
+python3 "$(dirname "$R")/render_page.py" > page.html        # the page
 python3 "$(dirname "$R")/render_page.py" --verify           # deterministic, no browser
-node    "$(dirname "$R")/verify_page.js" record.html        # what only looking catches
+node    "$(dirname "$R")/verify_page.js" page.html          # what only looking catches
 ```
 
 **Read [`PAGE.md`](../kpopper/PAGE.md) before writing a brief or choosing a layout** - the brief

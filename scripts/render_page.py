@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """Render a record as one self-contained HTML page - in two tabs, sharing one provenance layer.
 
-  python3 render_page.py [file ...] > record.html
-  python3 render_page.py --brief PROVENANCE.view.yaml [file ...] > record.html
+  python3 render_page.py [file ...] > page.html
+  python3 render_page.py --brief .kpopper/view.yaml [file ...] > page.html
   python3 render_page.py --verify [file ...]
 
 **Now** is the tab the session writes: an arrangement of the record aimed at what this
@@ -154,13 +154,9 @@ def shape_of(ids, jud, flags):
 
 # ── the brief ────────────────────────────────────────────────────────────────
 def find_brief(paths, explicit=None):
-    if explicit:
-        return explicit
-    for p in list(paths) + ["PROVENANCE.yaml"]:
-        c = re.sub(r"\.ya?ml$", "", p) + ".view.yaml"
-        if os.path.exists(c):
-            return c
-    return None
+    """The brief given, else the record's own: `.kpopper/view.yaml` beside a record under the
+    new name, `<file>.view.yaml` beside a record - or a file it points at - under the old."""
+    return P.brief_for(paths, explicit)
 
 
 def same_value(old, now):

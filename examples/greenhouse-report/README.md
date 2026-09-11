@@ -2,7 +2,7 @@
 
 This example presents the Greenhouse data as an ordinary report with linked reasoning.
 The data is adapted from the repository's page fixture; the document layout is kept in
-`PROVENANCE.view.yaml`.
+`.kpopper/view.yaml`.
 
 With the kpopper CLI installed, run from this directory:
 

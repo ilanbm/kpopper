@@ -51,7 +51,7 @@ def _records(root, entry, sha=None):
     """Materialize only the bounded record/pointer/hypothesis closure, never source files."""
     import posixpath
     files, queue = {}, [entry]
-    hdir = str(PurePosixPath(entry).parent / P.HYPOTHESES)
+    hdir = str(PurePosixPath(entry).parent / P.hypotheses_rel(entry))
     if sha:
         listing = git(root, 'ls-tree', '-r', '--name-only', sha, '--', hdir + '/')
         queue += [p for p in listing.splitlines() if p.endswith(('.yaml', '.yml'))]
@@ -261,6 +261,16 @@ class Watch:
         self.entry = self.record.relative_to(self.tree).as_posix()
         self.key = digest(self.entry)
         self.config_path = self.common / 'kpopper-watch' / (self.key + '.json')
+        if found['status'] != 'found' and not self.config_path.exists():
+            # A record that went missing was watched under whichever entry name it had; the
+            # configuration is looked for under the other name in the same directory.
+            for name in workspace.NAMES:
+                other = self.record.with_name(name)
+                entry = other.relative_to(self.tree).as_posix()
+                path = self.common / 'kpopper-watch' / (digest(entry) + '.json')
+                if path.exists():
+                    self.record, self.entry, self.key, self.config_path = other, entry, digest(entry), path
+                    break
         if found['status'] != 'found' and not self.config_path.exists():
             raise ValueError('watch needs an existing project record')
         state = os.environ.get('XDG_STATE_HOME', '')

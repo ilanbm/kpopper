@@ -55,7 +55,7 @@ purpose, to reuse `scripts/session_open.sh` instead of duplicating it.
 
 - The exact working directory `${extensionPath}`-relative commands execute with once
   substituted — the docs confirm the substitution itself but not the process cwd,
-  which matters for `session_open.sh`'s own `[ -f PROVENANCE.yaml ]` check (it assumes
+  which matters for `session_open.sh`'s own record lookup, `GROUNDING.yaml` or `PROVENANCE.yaml` (it assumes
   cwd is the project root, same assumption every other adapter here makes, and the one
   the existing Claude Code plugin already relies on).
 - Whether `gemini extensions link` is available on every distribution channel (some
