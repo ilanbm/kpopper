@@ -43,6 +43,9 @@ the method's cost.
 `open` also prints **what the record holds** — the namespace, not the values: `mtg (11) ·
 pay (4) · c50 (9) · …`. That one line is the whole link between a question in plain language
 and the graph. "What is happening with the mortgage" has no meaning to a file; `mtg` does.
+A record kept under letters says what they stand for in its head (`meta.prefixes`), and the
+opener prints that legend beside the namespace - `prefixes: d=decision · m=measurement` - as
+the page's namespace bar shows the words.
 
 **A second command runs when the work starts, not before:** `provenance.py affects <seed>` for
 what a change reaches, or `provenance.py pull <seed>` to ground yourself on the subject itself —

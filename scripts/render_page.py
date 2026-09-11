@@ -952,6 +952,12 @@ def build(paths, brief_path=None):
                    "reopened": next((str(b[k]) for k in P.REOPENED if b.get(k)), "")}
 
     labels = (brief.get("labels") or {}) if brief else {}
+    # what a prefix is called on a surface: the brief's label, else the word the record's
+    # own legend gives a letter, else the prefix itself
+    legend = P.legend_of(meta, ids)
+
+    def prefix_label(g):
+        return labels.get(g) or legend.get(g) or g
     # A grouping is a scheme, and a brief may declare several: `groups:` is either one
     # scheme - group name -> selectors - or several, scheme name -> group name -> selectors.
     # A section says which scheme it reads by, and an id under two groups of one scheme is
@@ -1042,7 +1048,7 @@ def build(paths, brief_path=None):
         if s in schemes:
             return list(index.get(s, {}).get(k, []))
         if s == "prefix":
-            return [labels.get(k.split(".")[0]) or k.split(".")[0]] if "." in k else []
+            return [prefix_label(k.split(".")[0])] if "." in k else []
         v = (raw.get(k) or {}).get(s) if isinstance(raw.get(k), dict) else None
         if v is None or isinstance(v, (dict, list)):
             return []
@@ -1285,8 +1291,7 @@ def build(paths, brief_path=None):
     def r_grouped(keys):
         g = {}
         for k in keys:
-            names = groups_of(k) or [labels.get(k.split(".")[0])
-                                     or (k.split(".")[0] if "." in k else "-")]
+            names = groups_of(k) or [prefix_label(k.split(".")[0]) if "." in k else "-"]
             for name in names:               # an id under two groups is drawn under both
                 g.setdefault(name, []).append(k)
         o = ['<div class="grid">']
@@ -1688,12 +1693,18 @@ def build(paths, brief_path=None):
     if jud:
         rec_html.append(f'<h2>{w["judgments"]} <span class="n">{len(jud)}</span></h2>')
         rec_html.append(cards(sorted(jud)))
+    # a prefix the legend names is shown by its word, the letter one hover away
+    def prefix_heading(g):
+        word = legend.get(g)
+        return (f' title="{html.escape(g)}."' if word else "", html.escape(word or g))
+
     for g, keys in sorted(prefixes.items(), key=lambda kv: (-len(kv[1]), kv[0])):
-        rec_html.append(f'<h2 id="g-{html.escape(g)}">{html.escape(g)}</h2>' + r_table(keys))
+        hover, word = prefix_heading(g)
+        rec_html.append(f'<h2 id="g-{html.escape(g)}"{hover}>{word}</h2>' + r_table(keys))
 
     # ── the page ─────────────────────────────────────────────────────────────
     ns = '<nav class="ns" dir="ltr">' + "".join(
-        f'<a href="#g-{html.escape(g)}">{html.escape(g)} ({len(v)})</a>'
+        f'<a href="#g-{html.escape(g)}"{prefix_heading(g)[0]}>{prefix_heading(g)[1]} ({len(v)})</a>'
         for g, v in sorted(prefixes.items(), key=lambda kv: (-len(kv[1]), kv[0]))) + "</nav>"
     head = [h1]
     if meta.get("scope"):
