@@ -179,6 +179,53 @@ class OneHomePerRecord(Scratch):
                          (".kpopper/hypotheses", "PROVENANCE.d"))
 
 
+class AHalfMove(Scratch):
+    """A record renamed with its files left under the earlier names, or a .kpopper/ opened
+    beside a record still under the earlier name: nothing reads what was left, so check fails
+    on it and the opener names it - the silence the first hand migration would otherwise meet."""
+
+    def test_files_left_under_the_earlier_name_fail_check_and_are_named_by_the_opener(self):
+        legacy(self.dir, "remeasure")                       # a hypothesis, a brief and an allowlist
+        (self.dir / "PROVENANCE.yaml").rename(self.dir / "GROUNDING.yaml")
+        code, out, err = self.cli("check")
+        self.assertEqual(code, 1, out + err)
+        for what, where in (("PROVENANCE.d/", ".kpopper/hypotheses/"), ("PROVENANCE.view.yaml", ".kpopper/view.yaml"),
+                            ("PROVENANCE.measure.yaml", ".kpopper/measure.yaml")):
+            self.assertIn(f"FAIL {what} is not read - left under the earlier name; move it to {where}", out)
+        code, out, err = self.cli("open")
+        self.assertIn("left under the earlier name, not read: PROVENANCE.d/, PROVENANCE.view.yaml, "
+                      "PROVENANCE.measure.yaml - move into .kpopper/", out)
+        self.assertNotIn("hypothesis waits", out, "not read, so not counted")
+        home = self.dir / ".kpopper"
+        home.mkdir()
+        (self.dir / "PROVENANCE.d").rename(home / "hypotheses")
+        (self.dir / "PROVENANCE.view.yaml").rename(home / "view.yaml")
+        (self.dir / "PROVENANCE.measure.yaml").rename(home / "measure.yaml")
+        code, out, err = self.cli("check")
+        self.assertNotIn("not read", out)
+        code, out, err = self.cli("open")
+        self.assertIn("1 hypothesis waits", out)
+        self.assertNotIn("left under", out)
+
+    def test_a_home_opened_beside_a_record_under_the_earlier_name_is_named_too(self):
+        legacy(self.dir, "page")
+        (self.dir / ".kpopper").mkdir()
+        (self.dir / ".kpopper" / "view.yaml").write_text("title: moved first\n", encoding="utf-8")
+        code, out, err = self.cli("check")
+        self.assertEqual(code, 1, out + err)
+        self.assertIn("FAIL .kpopper/view.yaml is not read beside PROVENANCE.yaml - rename the record to "
+                      "GROUNDING.yaml and move its files into .kpopper/, or move this to PROVENANCE.view.yaml", out)
+        code, out, err = self.cli("open")
+        self.assertIn(".kpopper/view.yaml not read beside PROVENANCE.yaml - rename the record to GROUNDING.yaml", out)
+
+    def test_an_empty_hypotheses_directory_left_behind_loses_nothing_and_says_nothing(self):
+        brought_over(self.dir, "page")
+        (self.dir / "PROVENANCE.d").mkdir()
+        code, out, err = self.cli("check")
+        self.assertEqual(code, 0, out + err)
+        self.assertNotIn("not read", out)
+
+
 class ThePage(Scratch):
     def test_the_page_lands_in_the_build_directory_which_ignores_itself(self):
         brought_over(self.dir, "page")
