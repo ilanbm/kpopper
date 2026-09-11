@@ -141,10 +141,76 @@ class AWriteLandsWhereItsSubjectIs(unittest.TestCase):
         text = (self.root / "rooms.yaml").read_text(encoding="utf-8")
         self.assertLess(text.index("judgments:"), text.index("room.too_few_seats:"))
 
+    def test_a_named_collection_still_lands_in_the_shard_that_holds_the_subject(self):
+        """--in says which collection, never which file; the subject still says which file."""
+        self.add("mtg.late", "v=3", "name=people who arrive after it starts",
+                 "from=mtg.minutes", "--in", "known")
+        self.assertEqual(holder(self.root, "mtg.late"), "meetings.yaml")
+
     def test_a_source_joins_the_sources_of_its_own_shard(self):
         self.add("room.survey", "name=the seating survey", "file=rooms/survey.md",
                  "read=2026-09-11")
         self.assertEqual(holder(self.root, "room.survey"), "rooms.yaml")
+
+    def test_a_shard_without_the_collection_opens_it_rather_than_lose_the_subject(self):
+        """A domain file that has no sources: yet is still where that domain's first source
+        belongs - filing it among the meetings is how a division comes undone."""
+        rooms = self.root / "rooms.yaml"
+        rooms.write_text(rooms.read_text(encoding="utf-8").split("known:", 1)[1]
+                         .join(("known:", "")).strip() + "\n", encoding="utf-8")
+        self.assertNotIn("sources:", rooms.read_text(encoding="utf-8"))
+        self.add("room.survey", "name=the seating survey", "file=rooms/survey.md",
+                 "read=2026-09-11")
+        self.assertEqual(holder(self.root, "room.survey"), "rooms.yaml")
+        self.assertIn("sources:", rooms.read_text(encoding="utf-8"))
+
+    def test_a_record_divided_by_kind_keeps_each_kind_where_it_is(self):
+        """The head of an id chooses a file only among the files that could hold the entry. A
+        record divided by kind rather than by subject has each collection in one file, and a
+        subject it has not met goes to the file that holds its kind."""
+        with tempfile.TemporaryDirectory() as d:
+            root = pathlib.Path(d)
+            (root / "PROVENANCE.yaml").write_text(
+                "meta:\n  updated: 2026-09-11\n\nrecord: sources.yaml\nalso: known.yaml\n",
+                encoding="utf-8")
+            (root / "sources.yaml").write_text(
+                'sources:\n  mtg.minutes: {name: "the minutes", file: "m.md", read: "2026-09-10"}\n'
+                '  room.plan: {name: "the plan", file: "r.pdf", read: "2026-09-09"}\n', encoding="utf-8")
+            (root / "known.yaml").write_text(
+                'known:\n  lab.bench: {v: 2, name: "benches", from: room.plan}\n'
+                '  mtg.attendees: {v: 14, name: "people", from: mtg.minutes}\n', encoding="utf-8")
+            code, out, err = run(SCRIPTS / "provenance.py", "add", "survey.floor",
+                                 "name=the seating survey", "file=survey/floor.md",
+                                 "read=2026-09-11", "--as-of", "2026-09-11",
+                                 root / "PROVENANCE.yaml")
+            self.assertEqual(code, 0, out + err)
+            self.assertEqual(holder(root, "survey.floor"), "sources.yaml")
+            # and a reading of a subject one file holds alone still joins that subject
+            code, out, err = run(SCRIPTS / "provenance.py", "add", "lab.stools", "v=6",
+                                 "name=stools at the bench", "from=room.plan",
+                                 "--as-of", "2026-09-11", root / "PROVENANCE.yaml")
+            self.assertEqual(code, 0, out + err)
+            self.assertEqual(holder(root, "lab.stools"), "known.yaml")
+
+    def test_the_pointer_index_is_not_a_place_to_keep_entries(self):
+        for nid, fields in (("mtg.verdict", ("rests_on=[mtg.attendees]", "verdict=it is decided",
+                                             "because=because", "wrong_if=mtg.attendees < 0")),
+                            ("new.verdict", ("rests_on=[mtg.attendees]", "verdict=so is this",
+                                             "because=because", "wrong_if=mtg.attendees < 0"))):
+            with self.subTest(nid=nid):
+                with tempfile.TemporaryDirectory() as d:
+                    root = pathlib.Path(d)
+                    record = copy(SPLIT, root)
+                    text = (root / "meetings.yaml").read_text(encoding="utf-8")
+                    (root / "meetings.yaml").write_text(text.split("judgments:")[0], encoding="utf-8")
+                    text = (root / "rooms.yaml").read_text(encoding="utf-8")
+                    (root / "rooms.yaml").write_text(text.split("judgments:")[0], encoding="utf-8")
+                    code, out, err = run(SCRIPTS / "provenance.py", "add", nid, *fields,
+                                         "--as-of", "2026-09-11", record)
+                    self.assertEqual(code, 0, out + err)
+                    self.assertEqual(holder(root, nid), "meetings.yaml")
+                    self.assertEqual(record.read_text(encoding="utf-8"),
+                                     (SPLIT / "PROVENANCE.yaml").read_text(encoding="utf-8"))
 
     def test_an_entry_is_set_where_it_is_held(self):
         was = (self.root / "meetings.yaml").read_text(encoding="utf-8")
@@ -190,6 +256,26 @@ class AWriteLandsWhereItsSubjectIs(unittest.TestCase):
                                      "--as-of", "2026-09-11", record)
                 self.assertEqual(code, 0, out + err)
                 self.assertEqual(holder(pathlib.Path(d), nid), "PROVENANCE.yaml")
+            self.assertEqual(run(SCRIPTS / "provenance.py", "check", record)[0], 0)
+
+
+class TheFoldPlacesWhatItCarries(unittest.TestCase):
+    """A hypothesis folded into a divided record is a write like any other: the entry it
+    proposes goes where its subject is, not into whichever file comes first."""
+
+    def test_a_folded_entry_lands_in_the_shard_that_holds_its_subject(self):
+        with tempfile.TemporaryDirectory() as d:
+            root = pathlib.Path(d)
+            record = copy(SPLIT, root)
+            (root / "PROVENANCE.d").mkdir()
+            (root / "PROVENANCE.d" / "window.yaml").write_text(
+                'hypothesis: {born: "2026-09-11", claim: "the room has a window"}\n'
+                'known:\n  room.window:\n    v: true\n    name: "the room has a window"\n'
+                '    from: room.plan\n', encoding="utf-8")
+            code, out, err = run(SCRIPTS / "consolidate.py", "window", "--as-of", "2026-09-11", record)
+            self.assertEqual(code, 0, out + err)
+            self.assertEqual(holder(root, "room.window"), "rooms.yaml")
+            self.assertIn("rooms.yaml", out)
             self.assertEqual(run(SCRIPTS / "provenance.py", "check", record)[0], 0)
 
 

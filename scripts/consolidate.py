@@ -464,10 +464,6 @@ def _replace_block(lines, nid, block):
     lines[s:e] = block
 
 
-def _collections_of_text(lines):
-    return {n for n, _, _ in P._collections_in(lines)}
-
-
 def _rel(paths, p):
     """A path as the commit wants it: relative to the checkout the record sits in, else to the
     record's own directory."""
@@ -533,8 +529,7 @@ def fold(paths, names=(), refs=(), stamp=None):
                 out.append(f"replace {k} with what {h['name']} holds, where it stands"
                            + (" - born renewed, and what it replaced kept" if renewed else ""))
             else:
-                target = next((f for f in files if collection in _collections_of_text(texts[f])),
-                              files[0])
+                target = P._file_for(files, k, collection, texts)
                 where = P._insert_block(texts[target], collection, k, block)
                 out.append("carry " + where.replace(f"{k} into", f"{k} from {h['name']} into", 1))
                 added += 1
@@ -567,6 +562,7 @@ def fold(paths, names=(), refs=(), stamp=None):
         for h in c.hyps:
             if h.get("path") and os.path.isfile(h["path"]):
                 os.remove(h["path"])
+                P.forget(h["path"])
                 deleted.append(h["path"])
         d = P.hypothesis_dir(paths)
         if os.path.isdir(d) and not os.listdir(d):
@@ -653,6 +649,7 @@ def refute(paths, name, why, source=None, stamp=None):
             P._apply(paths, action)              # the write path, inside the lock already held
         try:
             os.remove(h["path"])
+            P.forget(h["path"])
         except OSError as e:
             for f in files:
                 if _text_of(f) != originals[f]:

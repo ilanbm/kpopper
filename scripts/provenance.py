@@ -215,6 +215,7 @@ def _as_day(v):
 NO_CACHE = "KPOPPER_NO_CACHE"
 CACHE_FORM = 1              # the entry's own shape: a newer reader ignores what an older wrote
 CACHE_DAYS = 14             # an entry no read has renewed for this long is nobody's
+CACHE_ENTRIES = 64          # and this many, newest kept: more records than anyone reads at once
 SWEEP = ".swept"            # in the directory: when it was last looked over
 _PARSED = {}                # this process's own: absolute path -> (identity, the entry's bytes)
 _SWEPT = False              # the directory is looked over once in a run, and once in a day
@@ -256,6 +257,8 @@ def _cache_ready():
     d = cache_dir()
     try:
         os.makedirs(d, mode=0o700, exist_ok=True)
+        if os.path.islink(d):
+            return None       # a link is somebody else's directory wearing this one's name
         st = os.stat(d)
         uid = getattr(os, "getuid", None)
         if not stat.S_ISDIR(st.st_mode):
@@ -272,26 +275,42 @@ def _cache_ready():
 
 
 def _sweep(d):
-    """A record that was moved, renamed or deleted leaves behind an entry nobody will ask for
-    again. So the directory is looked over once a day, and an entry no parse has rewritten for
-    a fortnight goes: a record still in use is read from an entry that outlives it or parsed
+    """A record that was moved, renamed or deleted - a throwaway checkout, a test's own file -
+    leaves behind an entry nobody will ask for again. So the directory is looked over once a
+    day: what a parse has not rewritten for a fortnight goes, and so does everything past the
+    newest few dozen. A record still in use is read from an entry that outlives that or parsed
     once more, and either way the directory stays the size of what is actually read."""
     global _SWEPT
     _SWEPT = True
-    marker, now = os.path.join(d, SWEEP), time.time()
+    now = time.time()
     try:
-        if now - os.stat(marker).st_mtime < 86400:
-            return
+        names = [n for n in os.listdir(d) if n.endswith(".parse")]
     except OSError:
-        pass
-    try:
-        io.open(marker, "w", encoding="utf-8").close()
-        for name in os.listdir(d):
-            if not name.endswith(".parse"):
-                continue
-            entry = os.path.join(d, name)
-            if now - os.stat(entry).st_mtime > CACHE_DAYS * 86400:
-                os.remove(entry)
+        return
+    if len(names) <= CACHE_ENTRIES:
+        try:                  # within its bounds and looked over today: nothing to do
+            if now - os.stat(os.path.join(d, SWEEP)).st_mtime < 86400:
+                return
+        except OSError:
+            pass
+    aged = []
+    for name in names:
+        entry = os.path.join(d, name)
+        try:
+            aged.append((os.stat(entry).st_mtime, entry))
+        except OSError:
+            continue          # somebody else's sweep got there first
+    aged.sort(reverse=True)
+    for i, (when, entry) in enumerate(aged):
+        if i < CACHE_ENTRIES and now - when <= CACHE_DAYS * 86400:
+            continue
+        try:
+            os.remove(entry)
+        except OSError:
+            pass              # one entry that will not go is no reason to leave the rest
+    try:                      # the mark of a sweep is written when there has been one
+        fd = os.open(os.path.join(d, SWEEP), os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+        os.close(fd)
     except OSError:
         pass
 
@@ -346,7 +365,8 @@ def _keep(path, identity, doc):
         return
     tmp = None
     try:
-        fd, tmp = tempfile.mkstemp(prefix=".parse.", dir=cache_dir())   # mkstemp opens it 0600
+        # the temporary name ends in .parse too, so one left by a killed writer is swept
+        fd, tmp = tempfile.mkstemp(prefix=".writing.", suffix=".parse", dir=cache_dir())
         with io.open(fd, "wb") as f:
             f.write(raw)
         os.replace(tmp, _cache_file(path))
@@ -378,17 +398,16 @@ def parse(path):
     path = os.path.abspath(path)
     with io.open(path, "rb") as f:
         data = f.read()
-    text = data.decode("utf-8")
     if os.environ.get(NO_CACHE, "") not in ("", "0"):
-        return yaml.safe_load(text)
+        return yaml.safe_load(data.decode("utf-8"))
     try:
         identity = _identity(path, data)
     except OSError:
-        return yaml.safe_load(text)
+        return yaml.safe_load(data.decode("utf-8"))
     got = _cached(path, identity)
     if got is not None:
         return got
-    doc = yaml.safe_load(text)
+    doc = yaml.safe_load(data.decode("utf-8"))
     _keep(path, identity, doc)
     return doc
 
@@ -3278,7 +3297,7 @@ def _files_of(paths):
     return out
 
 
-def _file_for(files, nid, collection=None):
+def _file_for(files, nid, collection=None, texts=None):
     """Which file of the record a write lands in. A record is one file until it outgrows one,
     and then a pointer index over a file per domain - so the choice has to keep a subject
     together instead of piling every new entry into whichever file comes first:
@@ -3287,27 +3306,41 @@ def _file_for(files, nid, collection=None):
         are looking for;
       else the file whose collection already holds the entry's neighbours: the ids sharing the
         head of its id, which is what a record is divided by when it is divided at all;
+      else the file that is that subject's own, everything in it sharing the head - which opens
+        the collection there, rather than filing a room's first source among the meetings;
       else the first file that holds the collection;
-      else the first file, which opens the collection.
+      else the first file that holds anything at all, a pointer index being a list of files and
+        not a place to keep entries.
 
-    A record in one file answers that file to all of it, as it always did."""
-    head = nid.split(".")[0]
-    opened = None
+    A record in one file answers that file to all of it, as it always did. `texts` gives the
+    files' lines where the caller is already holding them."""
+    head, opened, own, held = nid.split(".")[0], None, None, None
     for f in files:
-        with io.open(f, encoding="utf-8") as fh:
-            lines = fh.read().split("\n")
+        if texts is not None and f in texts:
+            lines = texts[f]
+        else:
+            with io.open(f, encoding="utf-8") as fh:
+                lines = fh.read().split("\n")
         if _locate(lines, nid):
             return f
         if collection is None:
             continue
-        cols = {n: (s, e) for n, s, e in _collections_in(lines)}
-        if collection not in cols:
-            continue
-        if opened is None:
-            opened = f
-        if any(m.split(".")[0] == head for m, _ in _members_of(lines, *cols[collection])[1]):
-            return f
-    return opened or files[0]
+        cols, members = {}, {}
+        for name, s, e in _collections_in(lines):
+            cols[name] = (s, e)
+            if name != "meta":          # the head of the file is not a collection of entries
+                members[name] = [m for m, _ in _members_of(lines, s, e)[1] if "." in m]
+        theirs = [m for ms in members.values() for m in ms]
+        if held is None and theirs:
+            held = f
+        if collection in cols:
+            if any(m.split(".")[0] == head for m in members.get(collection, [])):
+                return f
+            if opened is None:
+                opened = f
+        if own is None and theirs and all(m.split(".")[0] == head for m in theirs):
+            own = f
+    return own or opened or held or files[0]
 
 
 def _collection_for(doc, ids, jud, fields, nid, body, explicit):

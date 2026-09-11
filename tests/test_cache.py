@@ -238,6 +238,7 @@ class TheParseIsKept(unittest.TestCase):
         self.assertEqual(self.read()["known"]["room.seats"]["v"], 12)
         self.assertEqual(P.load([str(other)])["known"]["room.seats"]["v"], 77)
 
+    @unittest.skipUnless(os.name == "posix", "a directory is closed to its owner only here")
     def test_a_directory_that_cannot_be_written_changes_no_answer(self):
         os.environ["XDG_STATE_HOME"] = os.path.join(self.state.name, "nothing", "here")
         os.chmod(self.state.name, 0o500)
@@ -262,6 +263,20 @@ class TheParseIsKept(unittest.TestCase):
             self.read()
         self.assertEqual(c.n, 2)
         self.assertFalse(self.entry().exists(), "nothing is kept while the switch is on")
+
+    def test_more_entries_than_the_directory_holds_leave_the_newest(self):
+        """A record that was thrown away leaves an entry nobody will ask for again - a
+        throwaway checkout, a test's own file - so the directory is looked over when a run
+        first reads from it and keeps the newest few dozen, plus what that run then writes."""
+        for i in range(P.CACHE_ENTRIES + 6):
+            one = self.root / ("r%d.yaml" % i)
+            one.write_text(RECORD.replace("v: 12", "v: %d" % i), encoding="utf-8")
+            P.load([str(one)])
+            P._SWEPT = False                     # each read as a run of its own
+        kept = sorted(pathlib.Path(P.cache_dir()).glob("*.parse"))
+        self.assertLessEqual(len(kept), P.CACHE_ENTRIES + 1)
+        last = self.entry(self.root / ("r%d.yaml" % (P.CACHE_ENTRIES + 5)))
+        self.assertIn(last, kept, "the newest entry is what a sweep keeps")
 
     def test_an_entry_no_read_renewed_for_a_fortnight_goes(self):
         self.read()
