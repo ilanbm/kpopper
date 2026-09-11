@@ -73,7 +73,9 @@ beside itself - hypotheses, the page's brief, the measurement recipes, the sessi
 what is built from it - lives in `.kpopper/` next to it. A record born under the earlier name,
 `PROVENANCE.yaml`, is read as it is, with `PROVENANCE.d/`, `PROVENANCE.view.yaml`,
 `PROVENANCE.measure.yaml` and `PROVENANCE.session.json` beside it, and is never created again.
-Git is optional. The file can also point to existing material, including multiple record files:
+A record moved by half - renamed with those files left under the earlier names, or a `.kpopper/`
+opened beside a record still under the earlier name - fails `check` and is named by the opener,
+since nothing reads what was left. Git is optional. The file can also point to existing material, including multiple record files:
 
 ```yaml
 record: analysis/facts.yaml

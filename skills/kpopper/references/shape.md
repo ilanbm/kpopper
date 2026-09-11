@@ -4,7 +4,7 @@ One file, three sections, and the two ways a record lives somewhere other than t
 
 ## Where the record lives
 
-The entry point is `GROUNDING.yaml` in the project's working directory, born by the first `kpopper add`. Everything the record keeps beside itself lives in `.kpopper/` next to it - `hypotheses/`, `view.yaml`, `measure.yaml`, `session.json`, and `build/` for what is rebuilt from it, which ignores itself. A record born under the earlier name, `PROVENANCE.yaml`, is read as it is, with `PROVENANCE.d/`, `PROVENANCE.view.yaml`, `PROVENANCE.measure.yaml` and `PROVENANCE.session.json` beside it; to bring one over, rename the file and move those four into `.kpopper/` in the same commit.
+The entry point is `GROUNDING.yaml` in the project's working directory, born by the first `kpopper add`. Everything the record keeps beside itself lives in `.kpopper/` next to it - `hypotheses/`, `view.yaml`, `measure.yaml`, `session.json`, and `build/` for what is rebuilt from it, which ignores itself. A record born under the earlier name, `PROVENANCE.yaml`, is read as it is, with `PROVENANCE.d/`, `PROVENANCE.view.yaml`, `PROVENANCE.measure.yaml` and `PROVENANCE.session.json` beside it; to bring one over, rename the file and move those four into `.kpopper/` in the same commit - a record moved by half fails `check` and is named by the opener, since nothing reads what was left under the other name. The directory is a dot-directory: a plain `ls` or `rg --files` skips it, so list it as `ls -a .kpopper` or `rg --files --hidden` when looking for the brief or a hypothesis.
 
 **If the project already keeps a record somewhere else** — a `facts.yaml` in a subfolder, a table someone maintains — do not move it and do not duplicate it. Create `GROUNDING.yaml` as a pointer:
 

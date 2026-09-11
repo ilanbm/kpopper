@@ -42,8 +42,8 @@ read with `kpopper pull`.
 **Now** is the tab *you* write, and you are the only one who can: the arrangement of this record
 aimed at what this session is for. Intent is the one input the record cannot derive — it lives
 in the conversation, and a session records it as a source (`s.*`, below) so the page can be held
-against it. The arrangement itself goes in a brief beside the record (`<record>.view.yaml`,
-picked up automatically):
+against it. The arrangement itself goes in a brief beside the record (`.kpopper/view.yaml`, or
+`PROVENANCE.view.yaml` beside a record under the earlier name - picked up automatically):
 
 ```yaml
 title: "The loan, this week"

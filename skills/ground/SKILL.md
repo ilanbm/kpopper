@@ -9,7 +9,11 @@ The record answers two questions a session cannot answer reliably in its head: w
 
 This method owns one known entry point: **`GROUNDING.yaml` in the project's working directory** - or
 `PROVENANCE.yaml`, the name records were born under before, read wherever it already is and never
-created again.
+created again. What the record keeps beside itself - hypotheses, the brief, the recipes - sits in
+`.kpopper/` next to the entry file, a dot-directory a plain `ls` or `rg --files` skips: list it as
+`ls -a .kpopper` or `rg --files --hidden`, and never conclude from a listing that skipped it that
+there are no hypotheses. A record moved by half, its files left under the earlier names, fails
+`check` and is named in the opener's head.
 Git is optional. Use the location resolved by the opener or `kpopper open --json`: it checks
 the current directory and ancestors within the workspace boundary, then Git's registered
 external location. Do not start a duplicate because the file is outside the current directory.
