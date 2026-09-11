@@ -1,5 +1,5 @@
 meta:
-  updated: 2026-09-11
+  updated: 2026-09-12
   name: kpopper
   scope: "What this plugin is for and the decisions that shaped it, kept in its own format -
           the tools eat their own cooking, and every session here opens grounded."
@@ -296,6 +296,23 @@ sources:
     name: "Finish standalone HTML documents with concise evidence explanations and ordinary-request
            authoring"
     read: "2026-09-10"
+  s.2026_09_11_gate_question:
+    asked: "Measure per trial after turn two: was the record written at all; through kpopper add/set
+            or by hand; does it contain the decision or finding turn one produced; is what was
+            written sourced or filler; kpopper check green; did the session write in turn one
+            already, before any question - that rate is the baseline the question is supposed to
+            move. Report the recorded-the-decision rate per arm, the filler rate per arm - the
+            failure the decision names, a stop that teaches sessions to write filler - the
+            hand-written rate, and the cost per trial."
+    name: "The session that measured the untouched-record question on the Codex host - what it was
+           asked, and what it was given. Its reading: the opener and the record skill make a session
+           write unasked, the one question catches most of what they leave, nothing written to answer
+           it was filler, and twice it was written in haste"
+    of: "2026-09-11, given the branch at bcca831, the page fixture's record with its view and
+         measure files, the eight skills beside four ordinary ones, ten episodes of greenhouse work
+         and five quick lookups, and one model at medium effort through a harness outside this
+         repository"
+    read: "2026-09-11"
   s.2026_09_11_prefix_words:
     asked: "\"m.\", \"s.\", \"d.\" - are those convetions in provenance.yaml or self evovled in this
             project? … האם זה יהיה חכם לבקש שהם יהיו מילה שלמה? שאנשים שמסתכלים על זה יבינו מה הם
@@ -437,6 +454,16 @@ sources:
     name: "The first run on a project this plugin did not build - the g2next keyboard pilot"
     of: "session 'Keyboard size feedback', 2026-09-01, plugin 0.14.0"
     read: "2026-09-01"
+  run.gate_question_eval:
+    from: s.2026_09_11_gate_question
+    name: "The untouched-record question tried on the Codex host: two real user turns per trial, the
+           real opener before the first and the real gate against its mark after it, the gate's
+           question on the second turn's prompt in one arm of two, the same continuation in both"
+    of: "2026-09-11, a harness outside this repository: 200 trials over ten episodes of ordinary
+         work on the page fixture's record, three in Hebrew, and 100 over five quick lookups from its
+         files, two in Hebrew; ten trials per episode per arm, one model at medium effort, every
+         record read by hand where it was written"
+    read: "2026-09-11"
   run.grounding_line_codex:
     name: "The grounding line measured on the Codex host: twenty recorded prompts and ten the record
            does not touch, ten trials each with the line and without, one model at medium effort"
@@ -1093,6 +1120,48 @@ known:
     at: "bytes of the largest body"
     of: "2026-09-11"
     measure: skill_bytes_largest
+
+  m.unasked.question_filler:
+    v: 0
+    unit: entries
+    name: "Entries written to answer the question with nothing behind them - a restated prompt, an
+           empty entry, a judgment with no falsifier"
+    from: run.gate_question_eval
+    at: "of the 22 sessions that wrote when asked, and of 300 trials; two of the 22 wrote something
+         wrong instead - a wrong total, and a set that replaced a recorded quote with another
+         supplier's"
+    of: "2026-09-11"
+
+  m.unasked.question_reached:
+    v: 13
+    unit: trials
+    name: "Trials whose first turn left the record untouched, so the question was asked, or would
+           have been"
+    from: run.gate_question_eval
+    at: "of 200 over the ten episodes and 39 of 100 over the quick lookups - every one the
+         eight-prompts form, since no first turn changed a file of the tree without writing the
+         record too"
+    of: "2026-09-11"
+
+  m.unasked.question_wrote:
+    v: 22
+    unit: sessions
+    name: "Sessions that wrote the record on the turn after the question, of those asked"
+    from: run.gate_question_eval
+    at: "of 25 asked across both sets, against 8 of 27 not asked; 20 of the 22 carry the first
+         turn's finding with its source, 3 took the line's own finish"
+    of: "2026-09-11"
+
+  m.unasked.turn_one:
+    v: 187
+    unit: trials
+    name: "Sessions that wrote the record during the first turn of ordinary work, before any
+           question, with the opener's output and the record skill in front of them"
+    from: run.gate_question_eval
+    at: "of 200 trials over the ten episodes, and 61 of 100 over the quick lookups; the writes read
+         by hand are in the method's shape - a source with what it was asked, values with where they
+         came from, rules for what was worked out"
+    of: "2026-09-11"
 
 open:
   q.followups_dispatch: "Which followups should stay in the daily session and which should receive
@@ -2830,6 +2899,34 @@ judgments:
                                          literal and is not read for one - and a predicate that is
                                          not one is declined by the reader and reported where an
                                          empty predicate is, never answered false"
+  d.unasked_recording_is_the_opener:
+    rests_on: [s.2026_09_11_gate_question, run.gate_question_eval, m.unasked.turn_one, m.unasked.question_wrote, m.unasked.question_filler, d.gate_asks_once_after_work, run.design_talk]
+    verdict: "on the Codex host a session that opens on the record writes it unasked during ordinary
+              work, and the one question catches most of what it leaves"
+    because: "With the opener's output and the record skill in front of it a session wrote the
+              record during the first turn in {{m.unasked.turn_one}} of 200 trials of ordinary work;
+              where the first turn left the record untouched, the question moved writing on the next
+              turn to {{m.unasked.question_wrote}} of 25 against 8 of 27, and
+              {{m.unasked.question_filler}} of those writes were filler ({{run.gate_question_eval}}).
+              The cost of asking, seen twice in 22 writes, is haste - a wrong number and a wrong
+              correction, both sourced - which is not the failure {{d.gate_asks_once_after_work}}
+              guards against. The Claude host and the old single skill, where {{run.design_talk}}
+              happened, were not measured."
+    wrong_if: "m.unasked.turn_one < 150"
+    reopened_by: "the same episodes on the Claude host leaving the record untouched in most first
+                  turns, or a session asked once writing entries with nothing behind them"
+    seen:
+      s.2026_09_11_gate_question: "read 2026-09-11"
+      run.gate_question_eval: "read 2026-09-11"
+      m.unasked.turn_one: 187
+      m.unasked.question_wrote: 22
+      m.unasked.question_filler: 0
+      d.gate_asks_once_after_work: "a session that changed files of the tree, or ran eight prompts,
+                                    with the record untouched is asked once whether there was nothing
+                                    to keep - as a line on the prompt, and as one stop on the turn
+                                    after a line went unanswered; the gate still yields after one
+                                    bounce"
+      run.design_talk: "read 2026-09-02"
   d.watch_async_compatibility:
     rests_on: [s.watch_contract, d.record_is_code, d.no_feed_of_other_branches]
     verdict: "Keep code records with their branches. Opted-in background watch previews only
