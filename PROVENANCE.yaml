@@ -1,5 +1,5 @@
 meta:
-  updated: 2026-09-10
+  updated: 2026-09-11
   name: kpopper
   scope: "What this plugin is for and the decisions that shaped it, kept in its own format -
           the tools eat their own cooking, and every session here opens grounded."
@@ -295,6 +295,23 @@ sources:
     name: "Finish standalone HTML documents with concise evidence explanations and ordinary-request
            authoring"
     read: "2026-09-10"
+  s.2026_09_11_read_once:
+    asked: "A parse cache for the record. Add a cache of the parsed documents keyed by each file's
+            absolute path, size and mtime (ns), stored privately under
+            $XDG_STATE_HOME/kpopper/cache/, one entry per file, invalidated whenever any of those
+            three values changes, written atomically, and never trusted over the files: a corrupt or
+            unreadable cache entry is rebuilt, never an error. Place an add by prefix across pointer
+            shards: the file whose collection already holds an entry with the same prefix (the id's
+            head before the first dot) wins; else the first file that holds the collection; else the
+            first file, opening the collection there."
+    name: "The session that stopped re-reading the whole record at every prompt and taught a write
+           which file of a divided record it belongs in - what it was asked, and what it was given.
+           Its reading: a parse is kept against the file's own identity and dropped by every write,
+           and a new entry joins the file its subject is already in"
+    of: "2026-09-11, given the reader at 1.4.0 parsing the record at every command and both hooks, a
+         synthetic record ten times this one's measured at 3 MB/s, the pointer form that merges
+         shards on read, and d.scale_by_federation's answer to a record that outgrows one file"
+    read: "2026-09-11"
   s.background_ingestion:
     name: "Background capture and selective delivery contract"
     file: "skills/kpopper/INGESTION.md"
@@ -742,6 +759,21 @@ known:
     at: "tool.setuptools.package-data"
     measure: checks_in_the_wheel
     of: "2026-09-03"
+  m.prompt_hook_10x_kept:
+    v: 0.17
+    unit: s
+    name: "what the grounding hook costs at every prompt on that same record, with the parse kept"
+    from: s.2026_09_11_read_once
+    at: "the same five runs, the entry already written: what is left is the interpreter starting and
+         the field roles being worked out, not the read"
+  m.prompt_hook_10x_parsing:
+    v: 1.3
+    unit: s
+    name: "what the grounding hook cost at every prompt on a record ten times this one's, parsing it
+           each time"
+    from: s.2026_09_11_read_once
+    at: "best of five runs of scripts/ground_hook.py against a synthetic 2.26 MB record - this
+         record's collections nine times over under other names - on one laptop, Python 3.14"
   m.reach.assumed_at_high_confidence:
     v: 0
     name: "Unchecked claims about the project that were asserted at a confidence of 0.8 or above"
@@ -812,6 +844,12 @@ known:
     at: "run_recipe, called by measure and by nothing else - the reader, the page, the hooks and
          consolidate read the name an entry carries and run nothing"
     measure: recipe_runners
+  p.record_parsers:
+    v: 1
+    name: "Functions of the reader that open a file and parse it as YAML"
+    from: "scripts/provenance.py"
+    at: "parse - load, load_hypotheses, _files_of and the readers of the brief all come through it"
+    measure: record_parsers
   p.reference_resolvers:
     v: 1
     name: "Functions that resolve a reference to what it shows - the value, a rule's name, a
@@ -1045,6 +1083,28 @@ judgments:
       d.a_comparison_shows_where_it_parts: "where two readings are printed side by side, each is
                                             clipped to where they part rather than to where they
                                             agree; the head is kept only when they part inside it"
+  d.a_write_joins_its_own_shard:
+    rests_on: [s.2026_09_11_read_once, d.scale_by_federation, d.add_places_by_prefix]
+    verdict: "a new entry goes into the file whose collection already holds its neighbours - the
+              entries whose ids share its head - and a write to an entry goes into the file that
+              holds it; a record in one file answers that file to all of it"
+    because: "{{d.add_places_by_prefix}} is the same rule one level down, and it stopped at the
+              file's edge: {{d.scale_by_federation}}, but the writer took the first file that held
+              the collection whatever the subject, so the first entries written into a divided record
+              would have undone the division one at a time, in whichever file came first. The head of
+              an id is what such a record is divided by, because the prefix is the subject, so it is
+              what the choice reads. A subject the record has not met yet still lands in the first
+              file that holds its collection rather than opening a second home for it, and a record
+              in one file cannot tell the difference."
+    reopened_by: "a record divided some other way than by the head of its ids - a file per kind, or
+                  per quarter - where a new entry lands away from the subject it belongs with"
+    seen:
+      s.2026_09_11_read_once: "read 2026-09-11"
+      d.scale_by_federation: "a record scales by sharding into domain records under a pointer index,
+                              never by growing one file"
+      d.add_places_by_prefix: "add inserts a new entry beside the entries it shares the longest
+                               dotted prefix with, in id order among them, and at a collection's tail
+                               only when id order puts it there"
   d.add_places_by_prefix:
     rests_on: [m.multi.record_pairs_conflicting, d.base_shared_forks_on_contradiction]
     verdict: "add inserts a new entry beside the entries it shares the longest dotted prefix with,
@@ -1888,6 +1948,30 @@ judgments:
       d.reasoning_in_record: "reasoning is the because of the judgment it belongs to, in the record;
                               the page's connective text lives in the brief; both resolve references
                               at build and both carry seen"
+  d.parse_kept_by_file_identity:
+    rests_on: [s.2026_09_11_read_once, p.record_parsers, m.prompt_hook_10x_parsing, m.prompt_hook_10x_kept]
+    verdict: "a file of the record is parsed when it changes, not when it is read: its parsed
+              document is kept under the user's own state directory against the file's path, its
+              length and its last write, and every write drops the entry for the file it wrote"
+    because: "Every command reads the whole record, and the hooks read it at every prompt and every
+              edit: a prompt on a record ten times this one's cost {{m.prompt_hook_10x_parsing}}
+              seconds, {{m.prompt_hook_10x_kept}} once the parse is kept. Reading the bytes is a
+              millisecond and parsing them is the whole cost, so what is kept is the parse, and the
+              key is what the file is - its path, its length, the nanosecond it was last written. The
+              files remain the authority: an entry that is missing, truncated, about another file or
+              of an older shape is a parse, never an error, and nothing read back from one is ever
+              built into an object, so a file under the state directory cannot become code. A length
+              and a nanosecond cannot tell apart a rewrite of the same length inside one tick, which
+              is why every write drops the entry it wrote over rather than trusting the key to have
+              moved. One function opens a file of a record and parses it; a second would read a
+              record without ever seeing what was kept for it, and {{p.record_parsers}} is the count
+              that would show one."
+    wrong_if: "p.record_parsers > 1"
+    seen:
+      s.2026_09_11_read_once: "read 2026-09-11"
+      p.record_parsers: 1
+      m.prompt_hook_10x_parsing: 1.3
+      m.prompt_hook_10x_kept: 0.17
   d.predicate_shape_is_one_reading:
     rests_on: [s.2026_09_04_falsifier_shape, p.predicate_shapes, d.arrangement_sign_is_one_comparison]
     verdict: "what shape a predicate must have to be decided is one reading, asked wherever a

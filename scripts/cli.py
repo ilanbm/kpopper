@@ -71,11 +71,13 @@ def parser():
     help_text = "Commands:\n" + "\n".join(
         "  kpopper %-13s %s" % (name, description) for name, (_, description) in COMMANDS.items())
     help_text += "\n\nUse COMMAND --help for details. --json returns structured output."
-    result = argparse.ArgumentParser(prog="kpopper", usage="kpopper [--workspace PATH] COMMAND [OPTIONS]",
+    result = argparse.ArgumentParser(prog="kpopper", usage="kpopper [--workspace PATH] [--no-cache] COMMAND [OPTIONS]",
                                      description="Keep what you know, its grounds, and what needs another look.",
                                      epilog=help_text, formatter_class=argparse.RawDescriptionHelpFormatter)
     result.add_argument("--workspace", help="working directory for the operation")
     result.add_argument("--json", action="store_true", help="return structured output")
+    result.add_argument("--no-cache", action="store_true",
+                        help="parse the record instead of reading a kept parse")
     result.add_argument("command", nargs="?", help="operation to perform")
     result.add_argument("args", nargs=argparse.REMAINDER, help=argparse.SUPPRESS)
     return result
@@ -136,6 +138,9 @@ def main():
         root.print_help()
         sys.exit(0)
     cmd, rest = options.command, options.args
+    if options.no_cache:
+        # every command below runs as another process: the switch travels in the environment
+        os.environ["KPOPPER_NO_CACHE"] = "1"
     if cmd == "start":
         root.error("Use kpopper open, kpopper map, or kpopper config; start is not a public command.")
     if cmd not in COMMANDS and cmd != "_agent":
