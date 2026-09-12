@@ -6,7 +6,9 @@
   <a href="#popper-give-a-conclusion-a-way-to-fail">What's going on? Who is this guy?</a>
 </p>
 
-# Keep the reasoning. Move the work forward.
+<a id="keep-the-reasoning-move-the-work-forward"></a>
+
+# Your project, more self-aware.
 
 kpopper connects decisions to the evidence, assumptions and earlier decisions they
 depend on, and records what would make them worth revisiting. Your agents can follow

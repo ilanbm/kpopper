@@ -394,6 +394,13 @@ sources:
     of: "Choice between the corrected large Popper portrait and the prior small-portrait typographic
          hero. The smile was requested as a comparison, not selected as the default."
     read: "2026-09-13"
+  s.2026_09_13_more_self_aware_tagline:
+    asked: "יופי בוא נלך על זה"
+    name: "The maintainer approved Your project, more self-aware. as the main tagline after
+           clarifying that more compares the project with its state before adding kpopper."
+    of: "Final wording choice in the README tagline discussion. The concrete explanation of recorded
+         dependencies and review remains immediately below it."
+    read: "2026-09-13"
   s.2026_09_13_readme_depth:
     asked: "ואגב הreadme באמת מכסה כמו שצריך את הפרויקט?"
     name: "README revision request: informative headings distinct from illustrated headlines;
@@ -423,6 +430,14 @@ sources:
     of: "Maintainer feedback after the expanded README and large-portrait hero. The proposed
          executive-function wording and elusive-smile effect are directions to assess, not
          established product or perceptual capabilities."
+    read: "2026-09-13"
+  s.2026_09_13_self_aware_tagline:
+    asked: "Your project, self-aware.\nאם זה לא הבטחה מוזרה שתגרום לאנשים להסתכל על הפרויקט מוזר, אז
+            זה מצויין"
+    name: "The maintainer selected Your project, self-aware. as the main tagline, conditional on it
+           not becoming a misleading promise about the product."
+    of: "README tagline discussion. The immediate paragraph explains the recorded dependencies and
+         review behavior; reader response to this wording has not been measured."
     read: "2026-09-13"
   s.2026_09_13_story_approval:
     asked: "הם מושלמים."
@@ -2630,6 +2645,29 @@ judgments:
                               Provide desktop and phone layouts, text explanations and runnable
                               examples."
       s.2026_09_13_reasoning_emphasis: "read 2026-09-13"
+  d.readme_main_tagline:
+    rests_on: [s.2026_09_13_self_aware_tagline, d.readme_layered_explanation, s.2026_09_13_more_self_aware_tagline]
+    verdict: "Use Your project, more self-aware. as the main README tagline, immediately followed by
+              the concrete explanation of decisions, evidence, assumptions and conditions for
+              review."
+    because: "The comparative frames an improvement in the project's recorded context and
+              reviewability relative to its earlier state. The adjacent paragraph anchors the
+              metaphor in recorded relationships and changed premises. It does not claim
+              consciousness, unrestricted understanding or automatic observation of the entire
+              project. Reader response and adoption effects remain unmeasured."
+    reopened_by: "An uncoached reader interprets the opening as a claim of conscious software or
+                  automatic awareness of unrecorded events, or cannot explain the concrete
+                  reasoning-and-review function after reading the headline and paragraph."
+    seen:
+      s.2026_09_13_self_aware_tagline: "read 2026-09-13"
+      d.readme_layered_explanation: "Lead with recorded dependencies between decisions, evidence and
+                                     assumptions, and the conditions for review. Use descriptive
+                                     story headings and visible record excerpts, with complete
+                                     records, state tables and diagrams in the example guides.
+                                     Distinguish shared reasoning roles from mandatory sections,
+                                     spell the name kpopper, and link to Popper's idea without
+                                     explaining every part of the visual joke."
+      s.2026_09_13_more_self_aware_tagline: "read 2026-09-13"
   d.readme_opens_with_what_it_does:
     rests_on: [s.2026_09_12_first_readings, s.2026_09_13_readme_direction, d.named_for_popper, s.2026_09_13_readme_depth]
     verdict: "Keep the hero, explain the practical benefit immediately below it, then show concrete

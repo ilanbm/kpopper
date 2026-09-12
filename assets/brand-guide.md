@@ -112,6 +112,13 @@ density and visual treatment for the image's purpose.
 
 ## README entrance
 
+The main tagline is **Your project, more self-aware.** The comparative describes
+improving the project's recorded context and capacity for review. Use it with the immediate,
+concrete explanation of recorded decisions, their evidence and assumptions, and
+conditions for review. Here, self-awareness is a metaphor for making that reasoning
+inspectable; it is not a claim of consciousness or automatic knowledge of everything
+happening in the project.
+
 Lead with the hero, then explain the practical value in ordinary language. Show
 the shared-cache/private-results case, then the download-promise/retention case,
 followed by the Cowork workshop. This gives developers a familiar entrance while
