@@ -111,6 +111,9 @@ def graph(record):
         raw = P.with_builtins(doc, ids, judgments, fields)
         values = {}
         for key in ids:
+            if key in P.PAGE:
+                values[key] = {"unavailable": "counted when the page is built"}
+                continue
             try:
                 values[key] = T.normalize(P.snapshot_value(key, raw, ids, judgments, {}))
             except (P.Refused, ValueError) as error:

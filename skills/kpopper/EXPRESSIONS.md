@@ -70,9 +70,9 @@ second arithmetic evaluator. After a package update changes the core source, run
 A missing, invalid or incompatible core makes structured calculations explicitly unavailable.
 Conditions that need them read `UNKNOWN`; ordinary scalar reads, independent writes and
 independent followups still work. Writing or reviewing a judgment that needs a calculated
-snapshot remains refused until it can actually be computed. `check` reports uncomputable
-rules as failures unless they explicitly declare why they are blocked; success is not a
-substitute for a missing computation.
+snapshot remains refused until it can actually be computed. `check` reports an unavailable
+core for rules or conditions as a failure unless they explicitly declare why they are
+blocked; success is not a substitute for a missing computation.
 
 `pull`, source search, the page and checked sessions use the same calculation semantics.
 The Python layer derives references and display text and calls Lean for arithmetic. Results
@@ -126,5 +126,4 @@ reading with its source explicitly when that is what the source means.
 A historical snapshot containing only a textual formula has no historical calculated value.
 After an equivalent conversion it reads `UNCHECKED`, with the original snapshot preserved,
 until an explicit review captures the current result. It is not reported as a numeric move.
-Pointer,
-multi-file and hypothesis-backed records require explicit authoring instead.
+Pointer, multi-file and hypothesis-backed records require explicit authoring instead.

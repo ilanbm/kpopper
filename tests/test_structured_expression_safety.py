@@ -119,6 +119,27 @@ class WithoutCore(RecordCase):
             states = {row["id"]: row["state"] for row in store.scan()["items"]}
             self.assertEqual(states, {"independent": "ready", "dependent": "unknown"})
 
+    def test_structured_scalar_condition_cannot_pass_check_without_core(self):
+        del self.doc["known"]["order.total"]
+        self.doc["judgments"]["c.budget"].update(rests_on=["order.price"], seen={"order.price": 20},
+            wrong_if=op("gt", ref("order.price"), num(10)))
+        self.save()
+        failures = P.check_lines([str(self.path)])[0]
+        self.assertTrue(any("condition cannot be computed" in line and "setup" in line for line in failures), failures)
+        self.doc["judgments"]["c.budget"]["blocked_on"] = "Lean is not available on this host yet"
+        self.save()
+        self.assertFalse(P.check_lines([str(self.path)])[0])
+
+    def test_unmeasured_page_count_is_unavailable_not_recorded_null(self):
+        self.doc["judgments"]["c.page"] = {"rests_on": ["page.spill"], "seen": {"page.spill": 0},
+            "verdict": "Everything appears", "wrong_if": "page.spill > 0"}
+        self.save()
+        values, _, error = F.graph(str(self.path))
+        self.assertIsNone(error)
+        for operator, expected in (("!=", 0), ("==", None)):
+            self.assertIsNone(self.trigger({"condition": {"id": "page.spill", "op": operator, "value": expected}}, values))
+        self.assertIsNone(self.trigger({"changed": "page.spill"}, values, {"page.spill": 0}))
+
 
 class WithCore(RecordCase):
     @classmethod
@@ -188,6 +209,24 @@ class WithCore(RecordCase):
         raw = {"input.one": {"v": 1.0}, "input.other": {"v": 1}}
         for operator, expected in (("eq", True), ("gt", False), ("lt", False)):
             self.assertIs(P.evaluate(op(operator, ref("input.one"), ref("input.other")), raw, set(raw)), expected)
+
+    def test_typed_references_do_not_inherit_legacy_name_restrictions(self):
+        for name in ("total", "סכום", "true"):
+            with self.subTest(name=name):
+                self.doc["known"][name] = {"v": 5, "from": "s.report"}
+                self.doc["judgments"]["c.value"] = {"rests_on": [name], "seen": {name: 5},
+                    "verdict": "Within range", "wrong_if": op("gt", ref(name), num(10))}
+                self.save()
+                ids, jud, fields, raw = self.world()
+                pred = jud["c.value"]["pred"]
+                self.assertEqual(P.why_undecided(pred), "")
+                self.assertEqual(P.one_comparison(pred, raw, ids), "")
+                self.assertFalse(P.check_lines([str(self.path)])[0])
+                self.assertEqual(P._state("c.value", jud["c.value"], raw, ids, fields)[0], "HOLDS")
+        raw = {"graph.entries": {"v": 3}, "true": {"v": 5}}
+        pred = op("gt", ref("graph.entries"), ref("true"))
+        self.assertEqual(P.why_undecided(pred), "")
+        self.assertEqual(P.one_comparison(pred, raw, set(raw)), "")
 
 
 class StaticExpressions(unittest.TestCase):

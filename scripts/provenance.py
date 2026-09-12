@@ -1085,12 +1085,17 @@ def why_undecided(pred):
         except (ValueError, TypeError) as error:
             return str(error)
         parts = comparison_parts(pred)
-        return why_undecided(" ".join(parts)) if parts else ""
-    m = CMP.match(str(pred or ""))
-    if not m or SECOND.search(QUOTED.sub("", m.group(3).strip())):
-        return "is not one comparison this reader decides (a name, an operator, one value)"
-    name, op, rhs = m.group(1), m.group(2), m.group(3).strip()
-    if BOOL.match(rhs):
+        if parts is None:
+            return ""
+        name, op, rhs = parts
+        boolean_literal = "bool" in pred["args"][1]
+    else:
+        m = CMP.match(str(pred or ""))
+        if not m or SECOND.search(QUOTED.sub("", m.group(3).strip())):
+            return "is not one comparison this reader decides (a name, an operator, one value)"
+        name, op, rhs = m.group(1), m.group(2), m.group(3).strip()
+        boolean_literal = bool(BOOL.match(rhs))
+    if boolean_literal:
         # a truth value is matched, and only against another truth value. A computed name
         # is a count whatever the record holds, so this one is decided here and not left
         # to a reading that would come back None and be taken for green.
@@ -1173,6 +1178,20 @@ def evaluate(pred, raw, ids):
     a, b = (na, nb) if na is not None and nb is not None else (str(a), str(b))
     return {"<": a < b, ">": a > b, "<=": a <= b, ">=": a >= b,
             "==": a == b, "!=": a != b}[op]
+
+
+def computation_error(pred, raw, ids):
+    """A required evaluator failure is different from an unavailable operand."""
+    if not isinstance(pred, dict):
+        match = CMP.match(str(pred or ""))
+        if not match or not any(isinstance(raw.get(key), dict) and isinstance(raw[key].get("rule"), dict)
+                                for key in (match.group(1), match.group(3).strip())):
+            return ""
+        try:
+            pred = E.convert(pred, predicate=True)
+        except (ValueError, SyntaxError, RecursionError):
+            return ""
+    return E.compute(raw, ids, pred).get("error", "")
 
 
 def short(v, n=40):
@@ -1469,28 +1488,31 @@ def one_comparison(pred, raw=None, ids=None):
     bad = why_undecided(pred)
     if bad:
         return bad
-    if isinstance(pred, dict):
-        parts = comparison_parts(pred)
-        return one_comparison(" ".join(parts), raw, ids) if parts else ""
-    m = CMP.match(str(pred or ""))
-    rhs = m.group(3).strip()
-    name, op = m.group(1), m.group(2)
+    parts = comparison_parts(pred)
+    if parts is None:  # a valid structured comparison containing arithmetic
+        return ""
+    name, op, rhs = parts
+    rhs = rhs.strip()
+    typed = isinstance(pred, dict)
+    reference_rhs = "ref" in pred["args"][1] if typed else bool(ID.fullmatch(rhs))
     # On top of the shape, a sign names its value outright. This is the arrangement's own
     # rule and not a second reading of the shape: what the reader can decide is settled in
     # why_undecided, and this asks the narrower thing a sign over a count is held to.
-    if not (NUM_VALUE.match(rhs) or ID.fullmatch(rhs) or BOOL.match(rhs)
+    if not (typed or NUM_VALUE.match(rhs) or reference_rhs or BOOL.match(rhs)
             or QUOTED.fullmatch(rhs)):
         return ("does not name one value a sign carries (a number, a truth value, a text in "
                 "quotes, or another entry)")
-    if ID.fullmatch(rhs) and raw is not None and not is_builtin(rhs) \
+    if reference_rhs and raw is not None and not is_builtin(rhs) \
             and (rhs not in (ids or ()) or value_of(raw, ids, rhs) is None):
         return f"compares against {rhs}, which holds no value the build can compare"
     # and a count held against a truth value never matches, whether the truth value is
     # written into the sign or reached through an entry - the shape alone cannot see the
     # second one, and here the value is in hand
-    if is_builtin(name) and ID.fullmatch(rhs) and raw is not None \
+    if is_builtin(name) and reference_rhs and raw is not None \
             and isinstance(value_of(raw, ids, rhs), bool):
         return f"holds a count against a truth value ({name} {op} {rhs}), which never matches"
+    if reference_rhs:
+        return ""
     try:
         x = float(rhs.replace(",", ""))
     except ValueError:
@@ -1726,6 +1748,8 @@ def check_lines(paths):
             else:
                 fail.append(f"{name}: {what} - and nothing says why not, so it can never be "
                             f"re-checked")
+        elif (error := computation_error(j["pred"], raw, ids)):
+            (note if blocked else fail).append(f"{name}: condition cannot be computed: " + error)
         elif evaluate(j["pred"], raw, ids) is True:
             fail.append(_fired_failure(name, j))
         elif [t for t in predicate_refs(j["pred"]) if t in PAGE]:
@@ -2797,9 +2821,9 @@ def _state(name, j, raw, ids, fields, touched=()):
         reopened = _decided(j)
         if reopened:
             return "HOLDS", "decided; reopened by " + short(reopened, 80)
-        return "UNKNOWN", "nothing evaluable would say otherwise"
+        return "NO_PREDICATE", "nothing evaluable would say otherwise"
     if not named_:
-        return "BLOCKED", "no predicate to evaluate; declared - " + short(blocked, 80)
+        return "DECLARED", "no predicate to evaluate; declared - " + short(blocked, 80)
     pred = short(j["pred"], 80)
     if evaluate(j["pred"], raw, ids) is None:
         if why_undecided(j["pred"]):

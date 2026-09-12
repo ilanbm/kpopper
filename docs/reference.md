@@ -141,11 +141,16 @@ for supported operators, exact fractions, snapshots and checked migration comman
 | `MOVED` | A comparable dependency differs from the last-review snapshot. This calls for attention and does not itself fail the check. |
 | Movement inside a condition | A changed dependency is named by a predicate that still evaluates false; the movement is muted. |
 | `UNKNOWN` | A named condition currently has no result because an input or the Lean core is unavailable, or the operand types differ. This does not mean the judgment holds. |
+| `NO_PREDICATE` / `DECLARED` | No executable condition was recorded, with `DECLARED` indicating an explained gap. Reviewing a changed premise can settle its movement alert without inventing a falsifier. |
 | `UNCHECKED` after formula conversion | The old snapshot recorded formula text only; an explicit review is needed to capture a calculated result. Historical snapshots are preserved. |
 | Declared gap | `blocked_on` explains why a condition cannot currently be checked. This is reported as a note. |
 | Human re-opener | `reopened_by` names a sign a person must interpret. It is reported, not mechanically evaluated. |
 
 A record with no inferred snapshot field is reported as lacking a basis for drift detection.
+`graph.flagged` and `page.spill` count attention, including unknown results. An unavailable
+core can increase them even when the stored record has not changed. A condition on those
+counts reports that attention threshold; it does not establish that the original judgments
+are false. Conditions waiting on builtin counts do not feed back into those same counts.
 Keep a `seen` value for every declared dependency so later checks have a meaningful before.
 Legacy scalar comparison skips dependencies without comparable current values, including
 general rules. Use `affects` to inspect their declared reach; reach alone is not evidence
