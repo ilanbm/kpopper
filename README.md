@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="assets/kpopper-hero-editorial-v9.png" width="760" alt="kpopper. Logic symbols rise from the blue word lemma in the fictional quotation: It really whips the lemma's ass! Below it, a small portrait accompanies the humorous attribution Karl Popper, the father of K-pop. His speech bubble says OMG 이건 꼭 필요해! — roughly, OMG, I really need this!">
+  <img src="assets/kpopper-hero.png" width="760" alt="kpopper. Logic symbols rise from the blue word lemma in the fictional quotation: It really whips the lemma's ass! Below it, a small portrait accompanies the humorous attribution Karl Popper, the father of K-pop. His speech bubble says OMG 이건 꼭 필요해! — roughly, OMG, I really need this!">
 </p>
 
 # kpopper
@@ -30,9 +30,34 @@ the other makes a decision that relies on its earlier value.
 </p>
 
 **kpopper checks the combined record and points back to that decision.**
-The [full example](#coding-check-the-reasoning-behind-a-merge) shows the recorded
-condition, the failed check and the CI setup. These checks cover declared assumptions;
-the agent must record them and keep the relevant readings current.
+
+<details>
+<summary>See the recorded reason and the failed check</summary>
+
+PR B records a blocking call against a stated 10-second waiting budget:
+
+```yaml
+checkout.blocking_call:
+  rests_on: [request.timeout_seconds]
+  verdict: "A blocking call fits the checkout's 10-second waiting budget."
+  wrong_if: "request.timeout_seconds > 10"
+  seen: {request.timeout_seconds: 5}
+```
+
+After PR A raises the recorded timeout to 30, `kpopper check` reports:
+
+```text
+checkout.blocking_call: wrong_if holds (request.timeout_seconds > 10) - broken by its own condition
+```
+
+The configured timeout no longer supports the stated bound. This does not mean a
+request actually took 30 seconds. See the [full example and CI setup](#coding-check-the-reasoning-behind-a-merge).
+
+</details>
+
+These checks cover declared assumptions; the agent must record them and keep the
+relevant readings current. A decision needs no invented numeric threshold: a changed
+premise can also prompt review without proving the decision wrong.
 
 ## Beyond code: one update changes the plan
 
@@ -44,7 +69,8 @@ Once the cancellation is recorded, kpopper flags that decision so the next sessi
 can revisit the announcement and plan the next step.
 
 The same record connects decisions to evidence in research, financial planning and
-other ongoing projects. Keep your existing documents and task tools.
+other ongoing projects. **Keep your existing documents, notes and task tools.**
+The record links back to relevant evidence; there is no need to migrate your knowledge system.
 [Try the launch example](#ready-to-launch-had-a-condition), or explore
 [a changed offer that needs the agent's judgment](examples/offer-review/README.md).
 
@@ -468,6 +494,15 @@ This is a practical use of falsification, not an automated implementation of the
 method. Choosing good evidence and meaningful breaking conditions remains intellectual work.
 
 ## A third brain for work in progress
+
+An agent's working instructions and the work it produces serve different readers.
+Plan section numbers can leak into code comments; a website can start describing the
+prompt that produced it. The useful boundary resembles the **fourth wall**: keep
+production instructions in the working context, and put what the audience needs in
+the finished work. A report may still need its assumptions, evidence and sources.
+
+kpopper provides a separate place to preserve decisions and their reasons across
+sessions. The agent still has to respect that boundary; the record does not enforce it.
 
 The excitement around building an organizational **second brain** is well deserved. A team's
 knowledge already lives across notes and agent memory, documents and research, conversations,

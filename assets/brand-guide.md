@@ -4,7 +4,7 @@ The character is an earnest philosopher in an absurd pop-star role. The visual
 treatment is an editorial ink poster: expressive portrait, clear typography and
 a small number of strong accents.
 
-[Current hero illustration](kpopper-hero-editorial-v9.png)
+[Current hero illustration](kpopper-hero.png)
 
 ## Character and language
 

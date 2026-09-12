@@ -1,5 +1,5 @@
 meta:
-  updated: 2026-09-12
+  updated: 2026-09-13
   name: kpopper
   scope: "What this plugin is for and the decisions that shaped it, kept in its own format -
           the tools eat their own cooking, and every session here opens grounded."
@@ -344,6 +344,16 @@ sources:
          synthetic record ten times this one's measured at 3 MB/s, the pointer form that merges
          shards on read, and d.scale_by_federation's answer to a record that outgrows one file"
     read: "2026-09-11"
+  s.2026_09_12_first_readings:
+    asked: "זהו, צריך לעבד ולהבין כאן את העיקר ולראות איך מתקדמים ומשפרים"
+    name: "Maintainer-reported first-reader feedback, paraphrased: the programmer liked the name,
+           slogan, humorous attribution and two-PR scenario, did not know second brain, needed the
+           small attribution pointed out on a phone, and found the source illustration busy. A
+           separate reader disliked the illustration style; no reaction to the name, slogan or
+           scenario was reported for that reader."
+    of: "README feedback reported by the maintainer during the September 2026 redesign. These are
+         reported reactions to the earlier entrance, not observations from a controlled reader test."
+    read: "2026-09-13"
   s.2026_09_12_half_move:
     asked: "A half migration is silent. The layout follows the entry file's name and the reader
             looks in one home, never both. I reproduced what happens when someone renames only the
@@ -377,6 +387,18 @@ sources:
          the six host adapters, the root layouts of .github, .claude and .codex, the README's own
          word use, and a dry run of a judgment rewrite through the door"
     read: "2026-09-12"
+  s.2026_09_13_readme_direction:
+    asked: "מסכים, תעשה את זה"
+    name: "Approved README direction, paraphrased: retain the illustrated hero, explain practical
+           value immediately, lead with the two-PR case and follow with non-code work. Use the
+           selected blue k icon and ink-poster hero with its fictional quotation, italic attribution
+           and secondary Korean bubble. Keep the attribution within the image without a duplicate
+           caption. Retain the detailed crowded-to-ordered source illustration. Integrate the useful
+           parallel README work into this direction."
+    of: "Maintainer choices in the README redesign discussion, including the explicit choice to
+         retain the detailed knowledge-source illustration and the subsequent approval to combine the
+         parallel changes."
+    read: "2026-09-13"
   s.background_ingestion:
     name: "Background capture and selective delivery contract"
     file: "skills/kpopper/INGESTION.md"
@@ -1252,6 +1274,11 @@ open:
   q.arrangement_falsifiers: "will sessions write arrangement falsifiers a build can evaluate and
                              that say something - to be read as a foreign agent would, after
                              fifteen real arrangements?"
+  q.readme_reader_comprehension: "Can readers new to the project explain what the redesigned
+                                  entrance preserves, what its checks actually detect, and how it
+                                  applies beyond code without coaching? Ask what the source
+                                  illustration communicates as well. The approved design has not yet
+                                  established reader comprehension or repeat use."
   q.same_day_rereading: "where does a re-reading go when the session changed the file a premise was
                          read from, on the day it was read? set refuses it into the base as two
                          writers, and the hypothesis beside it is a contested reading the dry run
@@ -2106,6 +2133,19 @@ judgments:
                   creates another input event; or a host is advertised as waking an idle task without
                   a verified supported route."
     seen: {s.background_ingestion: "read 2026-09-09"}
+  d.knowledge_map_keeps_its_detail:
+    rests_on: [s.2026_09_13_readme_direction]
+    verdict: "Keep the detailed, playful knowledge-source illustration: many existing tools and
+              materials on the left, an ordered record of selected reasoning on the right."
+    because: "The maintainer explicitly chose this composition after seeing the simpler alternative.
+              Its density shows the breadth of sources and the contrast with the reasoning layer. The
+              brand guide therefore allows expressive conceptual illustrations alongside restrained
+              process diagrams. This is a chosen treatment whose communication still needs reader
+              evidence, not a demonstrated conversion improvement."
+    reopened_by: "An uncoached reader at phone width cannot identify the crowded-to-ordered
+                  contrast, or reads the illustration as a promise to migrate or automatically
+                  organize every source despite its caption and surrounding explanation."
+    seen: {s.2026_09_13_readme_direction: "read 2026-09-13"}
   d.local_claims_want_a_run:
     rests_on: [s.2026_09_04_calibration, prior.local_needs_a_run, m.claims.general_held,
                m.claims.local_checked_held, m.claims.local_assumed_held, m.reach.general_held,
@@ -2522,6 +2562,44 @@ judgments:
       d.spill_on_every_tab: "what fell through the arrangement - flagged judgments nothing picked,
                              and what a session wrote for an intent no tab serves - is counted once
                              for the page and drawn on every tab"
+  d.readme_opens_with_what_it_does:
+    rests_on: [s.2026_09_12_first_readings, s.2026_09_13_readme_direction, d.named_for_popper]
+    verdict: "Keep the hero, explain the practical benefit immediately below it, then show the
+              two-PR case with an expandable record and check, a non-code example and installation.
+              Introduce the third-brain metaphor later."
+    because: "The reported reader connected with the merge scenario while the opening metaphor
+              required explanation. Code gives a familiar first case; the next example keeps the
+              wider scope visible. Showing the declared condition and actual failure text makes the
+              promise inspectable, while distinguishing a recorded-premise check from code
+              correctness. The existing notes and tools remain in place."
+    reopened_by: "A new reader given the README without coaching cannot explain what it preserves or
+                  what triggers review, takes a green check as proof of arbitrary code correctness,
+                  or concludes from the opening that non-code projects are unsupported. Record the
+                  misunderstanding and where it arose; stopping after finding an answer is not
+                  failure."
+    seen:
+      s.2026_09_12_first_readings: "read 2026-09-13"
+      s.2026_09_13_readme_direction: "read 2026-09-13"
+      d.named_for_popper: "the project keeps the name kpopper; discovery runs on direct links and
+                           qualified search, never on the bare term"
+  d.readme_visual_identity:
+    rests_on: [s.2026_09_13_readme_direction, s.2026_09_12_first_readings]
+    verdict: "Use the approved typographic ink-poster hero and white geometric k on electric blue.
+              Keep the one-line lemma slogan, separate italic attribution and small portrait with its
+              Korean aside; the image contains the attribution once. Process diagrams use editable
+              sources and phone layouts."
+    because: "The name and wordplay remain part of the identity, but their references must not be
+              required to understand the tool. Clear typography gives the quotation and attribution
+              priority over the character. Precise process diagrams must preserve their meaning at
+              phone width, including the separate worker running in parallel. The Korean aside is
+              secondary; essential product explanations remain text."
+    reopened_by: "Readers at ordinary phone width cannot read the primary slogan or attribution,
+                  mistake the fictional attribution for a historical quotation, or misunderstand
+                  process boundaries in the diagrams. Revisit the compact icon if users confuse it
+                  with another product at its actual display size."
+    seen:
+      s.2026_09_13_readme_direction: "read 2026-09-13"
+      s.2026_09_12_first_readings: "read 2026-09-13"
   d.record_is_code:
     rests_on: [s.2026_09_01_consolidation, d.register_out_of_tree, d.base_shared_forks_on_contradiction, p.hypothesis_homes]
     verdict: "the record of what is known about the code lives in the tree - committed with the work
