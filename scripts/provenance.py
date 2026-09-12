@@ -172,8 +172,10 @@ HYPOTHESIS_NAME = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_\-]*$")
 
 
 def is_legacy(entry):
-    """A record found as PROVENANCE.yaml keeps its files under the names it was born with."""
-    return os.path.basename(str(entry)) == LEGACY_ENTRY
+    """Every record except one born under the new canonical name keeps the adjacent layout
+    older releases supported. That includes explicitly named and registered records such as
+    notes.yaml; renaming one must not silently move where its hypotheses and metadata live."""
+    return os.path.basename(str(entry)) != ENTRY
 
 
 def _first_of(paths):
@@ -189,10 +191,10 @@ def hypotheses_rel(entry):
 def layout(first):
     """Where a record keeps what sits beside it, decided by the name of the file the reader
     opens first. GROUNDING.yaml keeps everything under .kpopper/ beside it - hypotheses/,
-    view.yaml, measure.yaml, session.json, and build/ for what is rebuilt. PROVENANCE.yaml,
-    the name records were born under before, keeps PROVENANCE.d/, PROVENANCE.view.yaml,
-    PROVENANCE.measure.yaml and PROVENANCE.session.json beside it, as it always did. One home
-    per record: the reader never looks in both."""
+    view.yaml, measure.yaml, session.json, and build/ for what is rebuilt. Records under the
+    earlier default name or a custom name keep PROVENANCE.d/, <record>.view.yaml,
+    PROVENANCE.measure.yaml and PROVENANCE.session.json beside them, as they always did. One
+    home per record: the reader never looks in both."""
     first = os.path.abspath(str(first))
     d = os.path.dirname(first)
     if is_legacy(first):
@@ -3597,9 +3599,14 @@ def apply(paths, action):
     one lock, so a second writer waits rather than overwrites. Aimed at a hypothesis, the
     same write lands in the file beside the record and the base is not touched."""
     with _locked(paths[0]):
-        if action.get("hypothesis"):
-            return _fork(paths, action)
-        return _apply(paths, action)
+        return _apply_unlocked(paths, action)
+
+
+def _apply_unlocked(paths, action):
+    """The mutation body for a caller already holding the record-directory lock."""
+    if action.get("hypothesis"):
+        return _fork(paths, action)
+    return _apply(paths, action)
 
 
 def _ensure_collection(lines, collection):
@@ -4422,17 +4429,10 @@ def write_command(cmd, rest):
         action["body"] = body
     else:
         files = [x for x in args if x.endswith((".yaml", ".yml"))]
-    born = []
-    try:
-        if cmd == "add" and not files:
-            files = born = _newborn(action)
-        code = apply(files or default_paths(), action)
-    except BaseException:
-        # a first entry that was refused leaves no empty record behind
-        for f in born:
-            if _newborn_only(f):
-                os.remove(f)
-        raise
+    if cmd == "add" and not files:
+        code, born = _apply_first_add(action)
+    else:
+        code, born = apply(files or default_paths(), action), []
     for f in born:
         print(f"created {f} - this workspace's record, born with its first entry")
     return code
@@ -4451,16 +4451,8 @@ def _newborn_only(path):
     return re.fullmatch(re.escape(HEAD_LINE) + r"meta:\n  updated: \d{4}-\d{2}-\d{2}\n", text) is not None
 
 
-def _newborn(action):
-    """Where no record resolves for the workspace, the first `add` creates one: a file with
-    today's date in its head, at the workspace root - a git checkout's root, or the working
-    directory outside git - and the entry lands in the section its shape calls for. Nothing
-    is created for any other command, and a registered record that is unavailable is a
-    location problem `default_paths` refuses rather than a place for another. -> [path], or
-    [] when a record already resolves."""
-    paths = default_paths()
-    if os.path.exists(paths[0]):
-        return []
+def _workspace_location():
+    """The workspace locator, loaded in both package and file-path use."""
     try:
         from .workspace import locate
     except ImportError:
@@ -4470,16 +4462,55 @@ def _newborn(action):
         module = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(module)
         locate = module.locate
-    location = locate()
-    if location["status"] != "missing":
-        return []
-    path = location["record"]
+    return locate()
+
+
+def _newborn(action, path):
+    """Create the empty head for a first add at its resolved path. The caller holds the
+    record-directory lock through this write, the entry mutation, and any cleanup."""
     stamp = action.get("as_of") or datetime.date.today().isoformat()
     try:
         _write_text(path, HEAD_LINE + f"meta:\n  updated: {stamp}\n")
     except OSError as e:
         raise Refused(f"refused - no record here, and none could be created at {path}: {e}")
-    return [path]
+    return path
+
+
+def _apply_first_add(action):
+    """Apply an add that names no record file, creating the workspace record if needed.
+
+    Birth is part of the same critical section as the ordinary load/edit/replace mutation.
+    A refused birth is removed before the lock is released, so a waiting writer either sees
+    the completed record or creates a fresh one after cleanup. -> (exit code, born paths)."""
+    location = _workspace_location()
+    if location["status"] == "unavailable":
+        raise SystemExit(location["reason"] + " " + location["record"])
+    path = location["record"]
+    while True:
+        with _locked(path):
+            # Resolve again only after owning the directory. Another first writer may have
+            # completed, or may have removed its refused newborn, while this writer waited.
+            location = _workspace_location()
+            if location["status"] == "unavailable":
+                raise SystemExit(location["reason"] + " " + location["record"])
+            current = location["record"]
+            if os.path.dirname(os.path.abspath(current)) != os.path.dirname(os.path.abspath(path)):
+                # Registration moved concurrently, or a registered file disappeared and the
+                # workspace fell back to its own root. Release this lock and retry under the
+                # directory that actually owns the current record.
+                path = current
+                continue
+            if location["status"] == "found":
+                return _apply_unlocked([current], action), []
+            _newborn(action, current)
+            try:
+                return _apply_unlocked([current], action), [current]
+            except BaseException:
+                # Still inside the birth lock: no successful waiter can be removed between
+                # this exact-content check and unlink.
+                if _newborn_only(current):
+                    os.remove(current)
+                raise
 
 
 if __name__ == "__main__":
