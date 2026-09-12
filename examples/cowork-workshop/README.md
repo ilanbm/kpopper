@@ -8,6 +8,66 @@ This is a fictional project-planning example for Claude Cowork or another agent
 working with documents. It illustrates a changed premise that needs judgment,
 rather than a condition that mechanically proves the plan wrong.
 
+<p align="center">
+  <a href="../../assets/stories/cowork-workshop.png">
+    <picture>
+      <source media="(max-width: 600px)" srcset="../../assets/stories/cowork-workshop-mobile.png">
+      <img src="../../assets/stories/cowork-workshop.png" width="760" alt="The client moves a cooking workshop online while the saved plan still assumes one shared kitchen. The changed format prompts review of equipment, ingredients and activities.">
+    </picture>
+  </a>
+</p>
+
+| State | Current `workshop.format` | The agenda's `seen` | Result |
+|---|---|---|---|
+| Before | `onsite` | `onsite` | No moved premise |
+| After the update is recorded | `remote` | `onsite` | **MOVED**, exit zero |
+
+```mermaid
+flowchart TD
+    brief["Updated client brief"] --> format["workshop.format: remote"]
+    format --> agenda["workshop.agenda<br/>last reviewed with onsite"]
+    agenda --> review["Review equipment, ingredients and activities<br/>agent judgment needed"]
+    classDef changed fill:#e8f0ff,stroke:#0666ff,color:#101828
+    classDef attention fill:#fff8e7,stroke:#c88700,color:#101828
+    class format changed
+    class review attention
+```
+
+<details>
+<summary>The complete after record</summary>
+
+```yaml
+meta:
+  updated: 2025-01-02
+  scope: Fictional cooking-workshop plan after the client changes the format; the saved plan awaits review.
+sources:
+  s.original_brief:
+    name: Original workshop brief
+    file: ../sources/original-brief.md
+    read: '2025-01-01'
+  s.updated_brief:
+    name: "Updated client brief: online workshop"
+    file: "../sources/updated-brief.md"
+    read: "2025-01-02"
+known:
+  workshop.format:
+    v: remote
+    from: s.updated_brief
+    at: "Participants join online from home"
+    of: '2025-01-02'
+judgments:
+  workshop.agenda:
+    rests_on: [workshop.format]
+    verdict: "Use the shared-kitchen agenda and provide ingredients at the venue."
+    because: "The onsite brief provides one kitchen, equipment and ingredients for participants to
+              use together."
+    reopened_by: "The workshop format or access to the kitchen changes; review the activities,
+                  equipment and ingredients participants need."
+    seen: {workshop.format: onsite}
+```
+
+</details>
+
 ## Read and run
 
 - [Original brief](sources/original-brief.md): onsite, with equipment and ingredients supplied.

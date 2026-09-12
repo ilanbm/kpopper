@@ -1,21 +1,50 @@
 <p align="center">
-  <img src="assets/kpopper-hero.png" width="760" alt="kpopper. Logic symbols rise from the blue word lemma in the fictional quotation: It really whips the lemma's ass! Below it, a small portrait accompanies the humorous attribution Karl Popper, the father of K-pop. His speech bubble says OMG 이건 꼭 필요해! — roughly, OMG, I really need this!">
+  <img src="assets/kpopper-hero.png" width="760" alt="kpopper. An ink illustration of Karl Popper holds a microphone and makes a finger heart, looking toward the wordmark and fictional quotation: It really whips the lemma's ass! Logic symbols rise from the blue word lemma. A separate italic attribution reads Karl Popper, the father of K-pop. His speech bubble says OMG 이건 꼭 필요해! — roughly, OMG, I really need this!">
 </p>
 
-# kpopper
+<p align="center">
+  <a href="#popper-give-a-conclusion-a-way-to-fail">What's going on? Who is this guy?</a>
+</p>
 
-**Keep the reasons behind your code. Check them before you merge.**
+# Keep the reasoning. Move the work forward.
 
-kpopper records your agent's decisions, the evidence behind them, and what would
-make them worth reconsidering. The next session can pick up those reasons; when
-recorded facts change, checks point to the decisions that need another look.
+kpopper gives your agents a living record of your project's facts, sources,
+decisions and open questions. It connects decisions to their evidence and
+assumptions, so the reasoning stays available across sessions, branches and
+documents. When recorded facts change, checks point to what needs another look.
 
-[Get started](#get-started) · [See the PR check](#coding-check-the-reasoning-behind-a-merge) ·
-[Beyond code](#beyond-code-new-format-old-assumptions) ·
-[See a document](#share-a-document-with-its-reasons) ·
-[Why kpopper?](#popper-give-a-conclusion-a-way-to-fail)
+**Connect what you know to what you do next.**
 
-## Two green PRs. Someone else's results.
+**[Get started](#get-started)** · [Examples](#access-control-and-shared-caching) ·
+[Capabilities](#what-you-can-do-with-kpopper) · [Record format](#the-knowledge-record) ·
+[Why the name?](#popper-give-a-conclusion-a-way-to-fail)
+
+<details>
+<summary>Contents</summary>
+
+- [Access control and shared caching](#access-control-and-shared-caching)
+- [Download promises and storage retention](#download-promises-and-storage-retention)
+- [Revisiting plans when the brief changes](#revisiting-plans-when-the-brief-changes)
+- [Installation and first use](#get-started)
+- [What you can do with kpopper](#what-you-can-do-with-kpopper)
+- [Projects, goals and existing sources](#start-with-the-work)
+- [Past, present and future](#past-present-future)
+- [Background capture during a conversation](#keep-the-conversation-moving)
+- [The record and its evolving structure](#the-knowledge-record)
+- [Review that needs judgment](#when-a-review-needs-judgment)
+- [Followups and background checks](#followups-and-background-checks)
+- [Checks across branches and in CI](#coding-check-the-reasoning-behind-a-merge)
+- [Karl Popper, K-pop and the name](#popper-give-a-conclusion-a-way-to-fail)
+- [The third-brain idea](#a-third-brain-for-work-in-progress)
+- [The optional Lean core](#the-lean-proof-assistant-from-fermat-to-agents)
+- [Documents with their evidence](#share-a-document-with-its-reasons)
+- [The record's page and graph view](#explore-the-projects-knowledge-record)
+- [Availability and limits](#what-is-available-and-what-is-next)
+- [Try it, get help and contribute](#make-it-earn-its-place)
+
+</details>
+
+## Access control and shared caching
 
 Two agents start from a search service whose results are all public. PR A adds
 private projects and filters results for each user. PR B adds a shared cache keyed
@@ -32,18 +61,29 @@ only by the query, relying on those results being public and identical for every
 
 The files merge cleanly. **The reason for sharing the cache no longer holds.**
 
-<details>
-<summary>See the recorded reason and the failed check</summary>
-
-PR B records its assumption:
+The relevant part of PR B's `GROUNDING.yaml`:
 
 ```yaml
-search.shared_cache:
-  rests_on: [search.results_public]
-  verdict: "Search responses can share a cache keyed only by query because all results are public."
-  wrong_if: "search.results_public == false"
-  seen: {search.results_public: true}
+known:
+  search.results_public: {v: true, measure: search_results_public}
+
+judgments:
+  search.shared_cache:
+    rests_on: [search.results_public]
+    verdict: >-
+      Search responses can share a cache keyed only by query
+      because all results are public.
+    wrong_if: "search.results_public == false"
+    seen: {search.results_public: true}
 ```
+
+`rests_on` names the premise. `seen` keeps its value at the last review. When the
+measured value becomes `false`, `wrong_if` fires and identifies the cache decision.
+Source locators and the complete record are in the
+[example](examples/merge-assumptions/cache/pr-b/GROUNDING.yaml).
+
+<details>
+<summary>How the example measures the change</summary>
 
 In the [runnable example](examples/merge-assumptions/README.md), a reviewed measurement
 recipe reads the explicit visibility switch in `search.py`. After PR A enables private
@@ -58,7 +98,7 @@ infer arbitrary security properties from code or replace behavioral tests.
 
 </details>
 
-## Two green PRs. One broken promise.
+## Download promises and storage retention
 
 Exports stay for 30 days; download emails currently promise seven. PR A reduces
 storage retention to seven days. PR B extends the download promise to 30 days.
@@ -77,11 +117,30 @@ Each change fits the other policy on its own branch.
 the file.** The example's recipes read both the policy and the promise in the actual
 email template. [Run both merge stories](examples/merge-assumptions/README.md).
 
+PR B records the promise against the retention period it sees:
+
+```yaml
+known:
+  exports.retention_days: {v: 30, measure: retention_days}
+  downloads.promised_days: {v: 30, measure: promised_days}
+
+judgments:
+  downloads.availability:
+    rests_on: [exports.retention_days, downloads.promised_days]
+    verdict: "Keep exports available for the full promised download window."
+    wrong_if: "exports.retention_days < downloads.promised_days"
+    seen: {exports.retention_days: 30, downloads.promised_days: 30}
+```
+
+After the merge, the measured values are seven days of retention and 30 days promised.
+The comparison fails. The [full record](examples/merge-assumptions/downloads/pr-b/GROUNDING.yaml)
+and recipes connect both readings to their files.
+
 These are fictional, executable examples. Checks cover the assumptions the record
 declares and the inputs deliberately measured or recorded. A changed premise can also
 prompt review without proving a decision wrong.
 
-## Beyond code: new format, old assumptions
+## Revisiting plans when the brief changes
 
 In Claude Cowork, you're planning a cooking workshop around the venue's shared kitchen,
 equipment and ingredients. A later client brief moves the workshop entirely online.
@@ -99,6 +158,26 @@ Once the agent records the new format, kpopper flags the saved plan for review.
 **It does not decide whether the activities can work remotely.** The next session can
 recover the old reason, read the updated brief, and work out what participants need.
 [Try the Cowork example](examples/cowork-workshop/README.md).
+
+The after record retains the old decision and its review snapshot:
+
+```yaml
+known:
+  workshop.format: {v: remote}
+
+judgments:
+  workshop.agenda:
+    rests_on: [workshop.format]
+    verdict: "Use the shared-kitchen agenda and provide ingredients at the venue."
+    reopened_by: >-
+      The workshop format or access to the kitchen changes; review the
+      activities, equipment and ingredients participants need.
+    seen: {workshop.format: onsite}
+```
+
+The current value is `remote`; the decision was reviewed against `onsite`. That is a
+`MOVED` notice. The prose in `reopened_by` tells the agent what deserves attention;
+it is not an executable predicate. [Read the complete after record](examples/cowork-workshop/after/GROUNDING.yaml).
 
 The same record connects decisions to evidence in research, financial planning and
 other ongoing projects. **Keep your existing documents, notes and task tools.**
@@ -211,6 +290,23 @@ session. A one-off question may need no record at all.
 For a standalone CLI installation and a walkthrough of the launch-party example, see
 [Try it from the command line](docs/reference.md#try-it-from-the-command-line).
 
+## What you can do with kpopper
+
+| In your work | What kpopper keeps or connects |
+|---|---|
+| Pick up a project in a later session | Relevant facts, goals, decisions, reasons and open questions, with bounded orientation and focused retrieval. [Reading the record](docs/reference.md#find-and-read-the-record). |
+| Trace a recommendation | Sources, their dates and locations, the premises used, and the values seen at the last review. [Record format](#the-knowledge-record). |
+| Notice when a decision needs another look | Changed recorded premises and declared breaking conditions, including facts connected to reviewed measurement recipes. [Checking rules](docs/reference.md#what-check-means). |
+| Keep competing claims in view | Hypotheses, explicit reconciliation and retained refutations. [Consolidation](skills/consolidate/SKILL.md). |
+| Work across branches | Combined-record checks in CI and optional background compatibility checks while work continues. [Coding and CI](docs/coding-and-ci.md). |
+| Return to deferred work | Followups tied to dates, recorded changes or preceding work, with configured host scheduling. [Followups](#followups-and-background-checks). |
+| Share a result people can inspect | Standalone HTML with selected evidence and review choices, plus a separate navigable page for the project record. [Documents](#share-a-document-with-its-reasons). |
+| Let the structure grow with the project | Domain-specific subjects and vocabulary within a small set of explicit relationships and checks. [Evolving structure](#a-structure-that-grows-with-the-project). |
+| Bind a session's reads to a known version | An experimental, optional Lean-backed view checks selected session contracts and rejects reads against an outdated record revision. [Checked sessions](docs/checked-sessions.md). |
+
+Use the parts your project needs. Existing documents, tools and memory remain where
+they are; the agent records the relevant connections between them.
+
 ## Start with the work
 
 A project is **work around a goal**. Its materials may span documents, conversations,
@@ -291,53 +387,6 @@ where the conversation can safely continue without that result.
 
 ## How it works
 
-### Return to work when it is ready
-
-Followups connect deferred work to the knowledge behind it. A check can become ready on a
-date, after a recorded value changes, when a threshold is crossed, or after another task
-finishes. Missing evidence remains an open question. Keep the task in your existing system
-or directory; kpopper has a private local fallback when you need one.
-
-**A short daily review is strongly recommended for ongoing work.** It checks what is due,
-what changed and which relevant piece of knowledge needs another look, with a small work
-budget and notifications for meaningful results. During active Claude Code and Codex
-sessions, event hooks also surface changed readiness. The daily schedule catches elapsed
-dates and missed events.
-
-**Catch branch conflicts while work is still in progress.** With local watch enabled,
-changes to a worktree's graph are checked in the background against the selected main ref.
-Only the changes authored on that branch are overlaid; neither graph is rewritten. New
-contradictions return to the working session, and the daily review checks registered
-worktrees as a fallback. Results name their exact versions; remote refs are not fetched
-automatically.
-
-External observations can also be shared immediately through one canonical record outside
-the branches. Each needs a source, date and environment. Branch experiments remain local;
-conflicting observations are retained for review. See [background watch and shared facts](skills/watch/references/compatibility.md).
-
-Run **`/kpopper:watch`** in Claude Code, or **`$watch`** in Codex, to check and set
-up local branch checks and the daily review. For live checks alone, ask watch to enable
-only local compatibility. The command inspects existing schedules, creates or repairs one when
-needed, and reads it back before confirming installation. Add `check` for inspection only,
-or `resume` to enable a paused review. Existing schedule times are preserved unless you ask
-to change them. The host performs scheduling within your authorization; a saved plan alone
-is not an active automation. See [the setup command](skills/watch/SKILL.md).
-Claims prevent duplicate work, and a check deferred until more evidence arrives stays open
-with its history intact. Followup scans and outcomes never silently rewrite the knowledge
-graph or mark its judgments reviewed. See the [followups guide](skills/kpopper/FOLLOWUPS.md)
-for routing, supported conditions, daily setup and platform limits.
-
-The scheduled host starts or resumes an agent session. That agent is instructed to claim
-and perform up to three ready followups within the user's existing authorization, record
-their outcomes, and surface decisions or blockers. There is no automatic dispatcher that
-opens a separate session for every item. Work assigned to an external owner stays with it.
-
-The review packet currently offers at most one flagged judgment as a graph-maintenance
-candidate. The prompt also allows a relevant source refresh or open-question check, but
-there is no general source-age scanner or sweep of every worktree graph. One review is
-bound to the record selected at setup; that can be a worktree copy. Choose a durable record
-and runtime for an ongoing schedule. See [record scope and retention](skills/kpopper/FOLLOWUPS.md#record-scope-and-retention).
-
 ### The knowledge record
 
 The technical term is an **epistemic record**: a record of what is known and how it is
@@ -378,6 +427,34 @@ subject you need. The optional checked session mode below adds a complete, navig
 within a token budget. In both cases, the aim is to spend the next session's context on the
 work at hand.
 
+### A structure that grows with the project
+
+**Start with a finding, not a database design.** A research project can name claims
+and experiments; a workshop can name participants and supplies; a codebase can name
+interfaces and deployment assumptions. Add subjects, categories and views when the
+work creates a reason for them.
+
+The record is ordinary YAML, and Git is optional. Keep it with the project or in a
+deliberately configured external location; your source documents stay in their
+existing tools. [Storage and location](docs/reference.md#record-location-and-shape).
+
+The vocabulary is flexible. The ordinary reader recognizes dependency, predicate
+and snapshot roles by their shape; `facts`/`claims` can serve the same purpose as
+`known`/`judgments`. The documented names are the easiest starting point. When two
+fields fit the same role, an explicit `schema` mapping resolves the ambiguity.
+
+The relationships stay explicit: where a reading came from, what a decision depends
+on, what it was reviewed against, and what would bring it back for review. Supported
+checks enforce their structural and comparison rules; arbitrary prose still needs
+interpretation.
+
+This is the useful sense of an **evolving record**: the person or agent can adapt its
+structure as needs emerge, and later checks recompute what moved from the current
+values and saved snapshots. Conclusions are not silently rewritten, and a structural
+change should migrate the existing record and pass its checks in the same change.
+See [the shape](skills/kpopper/references/shape.md) and
+[how structure grows](skills/kpopper/references/method.md#add-structure-only-when-something-forces-it).
+
 ### When a review needs judgment
 
 Some conditions can be compared mechanically; others require reading a source and
@@ -395,6 +472,31 @@ and connect it to an available host schedule. The optional daily review can also
 select one flagged decision for attention. A prose condition alone is not an
 automatic background review of every judgment. See [followups](skills/kpopper/FOLLOWUPS.md)
 for triggers, work budgets and scheduling.
+
+## Followups and background checks
+
+Deferred work can become ready on a date, after a recorded value changes, when a
+threshold is crossed, or after another task finishes. Keep the task in your existing
+system; kpopper connects it to the knowledge it depends on and has a private local
+fallback when needed.
+
+A configured daily review can revisit due work and a flagged decision within a small
+budget, surfacing meaningful results. During active sessions, supported host hooks
+also surface changed readiness. A saved followup alone does not start an agent or
+create a schedule.
+
+With local watch enabled, worktree graph changes are checked in a separate background
+process against the selected main ref. Results identify the exact versions checked;
+comparison rewrites neither graph. Scoped external observations can live in one
+canonical record outside the branches, while branch experiments remain local.
+
+Run **`/kpopper:watch`** in Claude Code or **`$watch`** in Codex to inspect and configure
+these routines. The host supplies scheduling within your authorization. Recording a
+followup's outcome and reviewing a decision are explicit actions.
+
+See [setup and host limits](skills/watch/SKILL.md),
+[followup routing and review budgets](skills/kpopper/FOLLOWUPS.md), and
+[branch compatibility and shared observations](skills/watch/references/compatibility.md).
 
 ## “Ready to launch” had a condition
 
@@ -493,9 +595,14 @@ unrelated IDs, can still require human review.
 
 ## Popper: give a conclusion a way to fail
 
-**It really whips the lemma's ass!**
+The man in the banner is **Karl Popper**, cast here as an unlikely K-pop star.
+**kpopper** combines his name with K-pop; the microphone, finger heart and Korean
+“OMG, I really need this!” are part of the performance.
 
-The slogan nods to Winamp; the name casts Karl Popper as the father of K-pop.
+The attribution **“Karl Popper, the father of K-pop”** is our joke, not a historical
+quotation. **“It really whips the lemma's ass!”** riffs on Winamp's llama slogan:
+*llama* becomes *lemma*, a supporting result in a proof. The little logic symbols
+help point to that wordplay.
 
 Karl Popper was a philosopher of science who argued that scientific theories should expose
 themselves to tests that could prove them wrong. Surviving a test does not make a theory
@@ -727,6 +834,12 @@ not established productivity results.
 
 Keep the record as small as the work allows. Its purpose is to help you move the project
 forward with reasons you can inspect and revise.
+
+**Try it on one project you will return to.** [Install kpopper](#get-started), or
+[run the merge examples](examples/merge-assumptions/README.md) before installing a plugin.
+If it helps, star the repository and [tell us what changed in your work](https://github.com/ilanbm/kpopper/issues).
+Questions and reproducible problems belong in [Issues](https://github.com/ilanbm/kpopper/issues);
+see [Contributing](CONTRIBUTING.md) to improve the project.
 
 [Command and storage reference](docs/reference.md) · [Contributing and validation](CONTRIBUTING.md) ·
 [Changelog](CHANGELOG.md) · [MIT license](LICENSE)

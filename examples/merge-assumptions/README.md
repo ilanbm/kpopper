@@ -5,6 +5,8 @@ illustrations. Each starts from one shared base. Two branches change different p
 of the project; their tests pass separately and after a clean Git merge. A recorded
 decision's condition fails when the merged inputs are measured.
 
+[Search cache](#search-cache) · [Download promise](#download-promise) · [Run both](#run)
+
 ## Run
 
 With Git, Python 3.9+ and the repository's Python dependencies installed:
@@ -37,6 +39,75 @@ from the assembled example repository, not from the overlay directory alone.
 
 ### Search cache
 
+<p align="center">
+  <a href="../../assets/stories/cache-privacy.png">
+    <picture>
+      <source media="(max-width: 600px)" srcset="../../assets/stories/cache-privacy-mobile.png">
+      <img src="../../assets/stories/cache-privacy.png" width="760" alt="Private search and shared caching pass their branch tests and merge cleanly. The combined behavior can send Alice's private result to Bob; the recorded public-results assumption fails.">
+    </picture>
+  </a>
+</p>
+
+The stored reading and the measured tree are deliberately separate:
+
+| State | Public results: stored / measured | Cache decision's `seen` | `check` | `remeasure --run` |
+|---|---|---|---|---|
+| Base | `true` / `true` | No cache decision yet | Pass | Pass |
+| PR A | `true` / `false` | No cache decision yet | Pass | Changed reading; no condition broken |
+| PR B | `true` / `true` | `true` | Pass | Pass |
+| Merged | `true` / `false` | `true` | Pass | **Condition fails** |
+
+How the measured change reaches the decision:
+
+```mermaid
+flowchart TD
+    source["search.py: private projects enabled"] --> recipe["Recipe: search_results_public"]
+    recipe --> value["search.results_public: false<br/>measured overlay"]
+    value --> decision["search.shared_cache<br/>last reviewed with true"]
+    decision --> failure["Condition fires:<br/>search.results_public == false"]
+    classDef changed fill:#e8f0ff,stroke:#0666ff,color:#101828
+    classDef failed fill:#fff0f3,stroke:#d52045,color:#101828
+    class value changed
+    class failure failed
+```
+
+<details>
+<summary>The complete GROUNDING.yaml on PR B</summary>
+
+```yaml
+meta:
+  updated: 2026-09-13
+  scope: Fictional search service. Public-only search before private projects are
+    enabled.
+sources:
+  s.search:
+    name: Search visibility switch
+    file: search.py
+    read: '2025-01-01'
+known:
+  search.results_public:
+    v: true
+    from: s.search
+    at: INCLUDE_PRIVATE_PROJECTS is false
+    of: '2025-01-01'
+    measure: search_results_public
+judgments:
+  search.shared_cache:
+    rests_on: [search.results_public]
+    verdict: "Search responses can share a cache keyed only by query because all results are
+              public."
+    because: "In this example public results are identical for everyone making the same query.
+              Private results require reconsidering the cache key and access checks."
+    wrong_if: "search.results_public == false"
+    seen: {search.results_public: true}
+```
+
+</details>
+
+The canonical merged record is still PR B's record. The `false` reading in the graph
+is the measurement overlay tested against it, not a silent edit of the file.
+
+
 - [Base search](cache/base/search.py) returns public projects only. In this example,
   everyone making the same query sees the same public results.
 - [PR A](cache/pr-a/search.py) enables private projects, filtering them by owner.
@@ -58,6 +129,85 @@ function and cache reuse with public fixtures separately. The missing combined
 test could be added to the application's suite.
 
 ### Download promise
+
+<p align="center">
+  <a href="../../assets/stories/download-promise.png">
+    <picture>
+      <source media="(max-width: 600px)" srcset="../../assets/stories/download-promise-mobile.png">
+      <img src="../../assets/stories/download-promise.png" width="760" alt="One branch shortens storage retention to seven days; the other promises 30-day downloads. Both pass separately. Their clean merge leaves a download promise longer than the file's lifetime.">
+    </picture>
+  </a>
+</p>
+
+Each pair below is **retention / promised download days**:
+
+| State | Stored values | Measured values | Decision's `seen` | `remeasure --run` |
+|---|---|---|---|---|
+| Base | `30 / 7` | `30 / 7` | No new promise decision yet | Pass |
+| PR A | `30 / 7` | `7 / 7` | No new promise decision yet | Changed reading; no condition broken |
+| PR B | `30 / 30` | `30 / 30` | `30 / 30` | Pass |
+| Merged | `30 / 30` | `7 / 30` | `30 / 30` | **Condition fails** |
+
+The dependency comes from two different source formats:
+
+```mermaid
+flowchart TD
+    policy["storage-policy.yaml"] --> retention["exports.retention_days: 7<br/>measured overlay"]
+    email["download-email.html"] --> promise["downloads.promised_days: 30"]
+    retention --> decision["downloads.availability<br/>last reviewed with 30 / 30"]
+    promise --> decision
+    decision --> failure["Condition fires:<br/>retention is shorter than the promise"]
+    classDef changed fill:#e8f0ff,stroke:#0666ff,color:#101828
+    classDef failed fill:#fff0f3,stroke:#d52045,color:#101828
+    class retention changed
+    class failure failed
+```
+
+<details>
+<summary>The complete GROUNDING.yaml on PR B</summary>
+
+```yaml
+meta:
+  updated: 2026-09-13
+  scope: Fictional export service. File retention and the download promise are separate
+    inputs.
+sources:
+  s.storage:
+    name: Export retention policy
+    file: storage-policy.yaml
+    read: '2025-01-01'
+  s.email:
+    name: Download email template
+    file: download-email.html
+    read: '2025-01-01'
+known:
+  exports.retention_days:
+    v: 30
+    from: s.storage
+    at: retention_days
+    of: '2025-01-01'
+    measure: retention_days
+  downloads.promised_days:
+    v: 30
+    from: s.email
+    at: Download available for 30 days
+    of: '2025-01-01'
+    measure: promised_days
+judgments:
+  downloads.availability:
+    rests_on: [exports.retention_days, downloads.promised_days]
+    verdict: "Keep exports available for the full promised download window."
+    because: "A link that is still advertised as usable needs its exported file to remain
+              available."
+    wrong_if: "exports.retention_days < downloads.promised_days"
+    seen: {exports.retention_days: 30, downloads.promised_days: 30}
+```
+
+</details>
+
+Again, plain `check` still passes on the stored record. Measurement is the step that
+brings the changed policy into the comparison.
+
 
 - [The base policy](downloads/base/storage-policy.yaml) retains exports for 30 days;
   [the base email](downloads/base/download-email.html) promises seven days.

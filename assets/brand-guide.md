@@ -9,11 +9,13 @@ a small number of strong accents.
 ## Character and language
 
 - Keep the wordmark lowercase: **kpopper**.
+- Write the product name **kpopper** in prose too, including at the start of a
+  sentence. Technical identifiers such as `KPOPPER_*` retain their actual spelling.
 - Karl Popper performs with a microphone and a finger-heart gesture. His serious
   expression carries the humor.
-- In the hero, the wordmark and quotation lead. A small portrait beside the
-  attribution identifies the fictional speaker; the character does not dominate
-  the banner.
+- In the hero, a large ink portrait occupies the left side and looks inward toward
+  the wordmark and quotation on the right. Keep the serious expression and recognizably
+  Popper-like features. The full-width banner balances character and typography.
 - The slogan is **“It really whips the lemma's ass!”** — a Winamp reference with
   *lemma* in place of *llama*.
 - The playful attribution is **“Karl Popper, the father of K-pop”**, without a
@@ -24,12 +26,10 @@ a small number of strong accents.
 - The Korean aside, when used with Popper, reads **OMG / 이건 꼭 필요해!**
   (roughly, "OMG, I really need this!"). Keep it secondary to the quotation
   and attribution and attach its bubble clearly to the character.
-- Compose the portrait and speech bubble as one group. The short bubble tail
-  points to the mouth and stays clear of the attribution; it must not read as
-  an underline or an annotation attached to the author's name.
-- Align the quotation, the attribution and the illustration group's right edges
-  to one shared guide. Leave a deliberate white gap between quotation and
-  attribution, and keep a separate lower margin around the illustration group.
+- Compose the portrait and speech bubble as one group on the left. The short tail
+  points to the mouth; the bubble stays clear of the quotation and attribution.
+- Align the quotation and attribution to one shared right guide. Leave a deliberate
+  white gap between them and keep the portrait clear of the text column.
 
 ## Voice and audience
 
@@ -51,8 +51,8 @@ a small number of strong accents.
   italic type for the dry attribution.
 - Color *lemma* in the same electric blue as the initial *k*. Keep the rest of
   the slogan black and use only a few logic symbols near the highlighted word.
-- Expressive ink lines and print texture. Connect the compact portrait to the
-  author attribution, leaving the wordmark and quotation their own space.
+- Expressive ink lines and print texture. The larger portrait identifies the
+  fictional speaker while leaving the wordmark and quotation their own space.
 - Use a wide hero so the practical explanation remains close to the top on a phone.
 - Keep illustration details subordinate to the name, slogan and face. Logic marks
   stay near the word they explain; they do not become a background pattern.
@@ -120,6 +120,12 @@ installation link above the examples.
 Essential explanations remain text. Image alt text includes the wordplay and
 attribution. Keep the caption within the hero without repeating it beneath the
 image. Philosophy and the third-brain metaphor follow the concrete examples.
+
+A small curiosity link beneath the hero can lead directly to the Popper explanation.
+The main text heading states the practical value rather than repeating the wordmark.
+Give the illustrated cases descriptive section headings, visible record excerpts,
+and links to their executable examples. A compact capabilities overview and a
+collapsible contents list provide routes into the longer explanation.
 
 ## Compact icon
 

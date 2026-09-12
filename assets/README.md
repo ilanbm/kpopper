@@ -2,12 +2,17 @@
 
 ## Brand hero
 
-`kpopper-hero.png` is the current README hero: a prominent wordmark and
-quotation, a right-aligned attribution and a small ink portrait with a Korean
-speech bubble grouped below it.
+`kpopper-hero.png` is the current README hero: a large ink portrait on the left,
+a prominent wordmark and one-line quotation on the right, and a separate italic
+attribution beneath the quotation. Popper looks inward toward the wording; a small
+Korean speech bubble accompanies the portrait.
 The Winamp-inspired slogan is presented as a
 fictional humorous quotation, with logic symbols around *lemma*. It is not a
 historical quotation or photograph.
+
+The facial reference is the historical portrait reproduced in
+[LSE's account of Popper and its philosophy department](https://blogs.lse.ac.uk/lsehistory/2019/03/20/conjectures-and-refutations-karl-popper-and-the-growth-of-lse-philosophy/).
+The performer pose, clothing and speech bubble are fictional illustration.
 
 See [the visual identity](brand-guide.md).
 
