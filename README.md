@@ -1,7 +1,6 @@
 <p align="center">
   <img src="assets/kpopper-hero-editorial-v9.png" width="760" alt="kpopper. Logic symbols rise from the blue word lemma in the fictional quotation: It really whips the lemma's ass! Below it, a small portrait accompanies the humorous attribution Karl Popper, the father of K-pop. His speech bubble says OMG 이건 꼭 필요해! — roughly, OMG, I really need this!">
 </p>
-<p align="center"><em>Karl Popper, the father of K-pop</em></p>
 
 # kpopper
 

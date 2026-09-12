@@ -107,8 +107,8 @@ the two-PR case first, followed by a non-code project. This gives developers a
 familiar entrance while making the broader scope visible.
 
 Essential explanations remain text. Image alt text includes the wordplay and
-attribution, and the caption remains readable outside the raster image. Philosophy
-and the third-brain metaphor follow the concrete examples.
+attribution. Keep the caption within the hero without repeating it beneath the
+image. Philosophy and the third-brain metaphor follow the concrete examples.
 
 ## Compact icon
 
