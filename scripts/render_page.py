@@ -43,35 +43,14 @@ DATE_JS = "\n" + (_PAGE / "dates.js").read_text(encoding="utf-8")
 # ── what the record says about itself ────────────────────────────────────────
 # One reading of state, used by every section selector. The same four conditions
 # `provenance.py open` ranks by; named here so a brief can select on them.
-STATES = ("broken", "falsified", "unchecked", "moved", "blocked", "no_predicate")
+STATES = ("broken", "falsified", "unchecked", "moved", "blocked", "no_predicate", "unknown")
 GROUPED_SHAPES = ("grouped", "fronts")
 
 
-def flags_of(ids, jud, fields, raw):
+def flags_of(ids, jud, fields, raw, defer_counts=False):
     """Per judgment: the set of conditions that put it in front of a person - derived the
     way `check` and `open` derive them, so the page never disagrees with the reader."""
-    out = {}
-    for name, j in jud.items():
-        f, blocked = set(), next((str(j["body"][k]) for k in P.BLOCKED if j["body"].get(k)), "")
-        reopened = next((str(j["body"][k]) for k in P.REOPENED if j["body"].get(k)), "")
-        for d in j["deps"]:
-            if d not in ids:
-                f.add("blocked" if blocked else "broken")
-            elif fields["snapshot"] and d not in j["seen"]:
-                f.add("unchecked")
-        # a judgment decided with a re-opener and an empty predicate field is in front of
-        # nobody: a person reads the sign. Prose in the predicate field is still prose,
-        # and so is a predicate this reader cannot decide - the page counts what check does.
-        if not ([t for t in P.predicate_refs(j["pred"]) if t in ids]
-                and not P.why_undecided(j["pred"])) and not blocked \
-                and not (reopened and not j["pred"]):
-            f.add("no_predicate")
-        elif P.evaluate(j["pred"], raw, ids) is True:
-            f.add("falsified")
-        if any(s == "moved" for _, _, _, s in P.moved_deps(j, raw, ids)):
-            f.add("moved")
-        out[name] = f
-    return out
+    return P.flags(ids, jud, fields, raw, defer_counts=defer_counts)
 
 
 RTL = re.compile(r"[\u0590-\u05ff\u0600-\u06ff]")
@@ -413,12 +392,12 @@ def arrangements_of(ids, jud, raw, tabs, picks, cov, flags, doc):
         for q, text in sorted(questions.items()):
             if v in P.ID.findall(text):
                 contested.append(("question", q, text))
-        m = P.CMP.match(P.predicate_text(j["pred"]))
-        counted = P.value_of(raw, ids, m.group(1)) if m else None
+        parts = P.comparison_parts(j["pred"])
+        counted = P.value_of(raw, ids, parts[0]) if parts else None
         out[v] = {"sources": srcs, "tabs": titles, "keys": keys, "own": [title_of[k] for k in own],
                   "linked": not cut, "cut": cut,
                   "fired": "falsified" in flags.get(v, ()), "pred": P.predicate_text(j["pred"]),
-                  "reading": (f"{m.group(1)} is {counted}" if m and counted is not None else ""),
+                  "reading": (f"{parts[0]} is {counted}" if parts and counted is not None else ""),
                   "born": born, "stood": stood, "drift": drift,
                   # the request is drawn only as the record accepts it: a session source
                   # carrying what was asked, rested on - check fails any other
@@ -641,7 +620,7 @@ def link_target(entry):
 
 
 URGENCY = {"broken": (100, "stop"), "falsified": (95, "stop"), "unchecked": (80, "stop"),
-           "moved": (70, "warn"), "blocked": (60, "warn"), "no_predicate": (40, "mut")}
+           "moved": (70, "warn"), "blocked": (60, "warn"), "no_predicate": (40, "mut"), "unknown": (75, "warn")}
 
 # What each state means, said the way a person would say it. The machine name stays -
 # in the hover, where the keys and the rules live. Nothing on the reading surface is
@@ -651,7 +630,8 @@ SAYS = {"broken": "rests on something that is not in this record",
         "moved": "something it rests on no longer matches what it last saw",
         "unchecked": "has never been checked against one of the things it rests on",
         "blocked": "waiting on something nobody has recorded yet",
-        "no_predicate": "nothing here would show it to be wrong"}
+        "no_predicate": "nothing here would show it to be wrong",
+        "unknown": "its condition cannot currently be evaluated"}
 
 # A human name for an entry belongs to the entry, not to a session: what a thing is
 # does not change because someone opened the page for a different reason. This is the
@@ -870,7 +850,7 @@ def build(paths, brief_path=None):
     built = P.builtins(doc, ids, jud, fields, P.bodies(doc))
     raw0 = P.bodies(doc)
     raw0.update(built)
-    flags = flags_of(ids, jud, fields, raw0)
+    flags = flags_of(ids, jud, fields, raw0, defer_counts=True)
     shape = shape_of(ids, jud, flags)
     brief, tabs = {}, []
     if brief_path and os.path.exists(brief_path):
@@ -1459,8 +1439,8 @@ def build(paths, brief_path=None):
                 E[k]["v"] = v
                 raw0[k]["v"] = v
         page_counts.update({k: v for k, v in cov["page"].items() if v is not None})
-        flags = flags_of(ids, jud, fields, raw0)
-        shape = shape_of(ids, jud, flags)
+    flags = flags_of(ids, jud, fields, raw0)
+    shape = shape_of(ids, jud, flags)
     # every arrangement held against the brief - after the counts, since its sign is read
     # from them, and before anything is drawn
     arrangements, earned = (arrangements_of(ids, jud, raw0, tabs, picks, cov, flags, doc)

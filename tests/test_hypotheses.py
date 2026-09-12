@@ -136,9 +136,12 @@ class HypothesesBesideTheRecord(unittest.TestCase):
         code, out, _ = run(SCRIPTS / "provenance.py", "open", RECORD)
         self.assertEqual(code, 0, out)
         age = P._age("2026-09-03", datetime.date.today())
+        waiting = (f"2 hypotheses wait - bigger_boiler ({age}, never folds, 2 rest on it) · "
+                   f"glazing_redo ({age}, 1 rests on it)")
+        # The age grows; the opener's bounded line is not fixed to a one-digit age.
+        waiting = waiting if len(waiting) <= 110 else waiting[:110] + " ..."
         self.assertIn(f"8 entries, 1 judgments, 1 open questions, updated 2026-09-03\n"
-                      f"2 hypotheses wait - bigger_boiler ({age}, never folds, 2 rest on it) · "
-                      f"glazing_redo ({age}, 1 rests on it)\n", out)
+                      f"{waiting}\n", out)
         self.assertIn("needs a person (1):\n  heat.loss_kw: CONTESTED - bigger_boiler says 33, "
                       "glazing_redo says 28\n", out)
         # nothing else about the hypotheses enters the opener

@@ -70,6 +70,10 @@ All graph references must appear in `related`; prerequisites must already exist 
 form cycles. Conditions over computed premises use the current calculated value, including
 exact rational numbers. `changed` retains the complete snapshot, so a changed formula can
 trigger review even when its result is unchanged. An unavailable calculation stays unknown.
+An unreadable value does not disable unrelated followups. Its ID stays visible with an
+`unavailable` reason, distinct from a recorded null. Both a condition and a change trigger
+over that value remain unknown; a followup listing it in `related` cannot become ready
+merely because its date arrived. A missing historical baseline requires an explicit refresh.
 Missing data and unsupported conditions are unknown, not false evidence. A graph
 change is visible only once it is recorded; use existing source ingestion to bring in real news.
 This syntax does not execute shell commands or interpret arbitrary predicates.

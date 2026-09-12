@@ -32,6 +32,13 @@ when the output budget cannot carry every diagnostic. Relative source files reso
 beside the record file that defined the winning entry. Sources declared in a hypothesis
 resolve beside the base record, so folding the hypothesis does not relocate them.
 
+Source contents are read only inside the primary record's directory tree, or from an
+integrity-checked ingestion capture. For an authorized source directory elsewhere, pass
+`--source-root /path/to/sources`; repeat it for multiple directories and on every `--read`.
+The record and its hypotheses cannot grant this permission. Parent traversal and symlinks
+are checked against the resolved roots. Outside sources appear in `unindexed` until a root
+is explicitly supplied. Changing those grants invalidates the search revision.
+
 `omitted` counts matching results not returned because of `--limit` or `--chars`.
 Excerpts declare truncation. Use `--read` with the returned reference and revision to
 recover exact text; use `next_offset` to continue a partial read. The `search-corpus`

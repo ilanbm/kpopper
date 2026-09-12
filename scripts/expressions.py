@@ -136,6 +136,35 @@ def _core_type():
 _CORE = None
 
 
+def _finite_payload(value, active=None, depth=0):
+    """Unavailable JSON readings stay local; never turn NaN into a number or text."""
+    if type(value) is float and not math.isfinite(value):
+        return None
+    if not isinstance(value, (dict, list)):
+        return value
+    active = set() if active is None else active
+    if depth > 128 or id(value) in active:
+        return None
+    active.add(id(value))
+    try:
+        if isinstance(value, list):
+            return [_finite_payload(v, active, depth + 1) for v in value]
+        return {k: _finite_payload(v, active, depth + 1) for k, v in value.items()}
+    finally:
+        active.remove(id(value))
+
+
+def _record_body(body):
+    if not isinstance(body, dict):
+        body = {"v": body}
+    reading = body.get("v") if body.get("v") is not None else body.get("quoted")
+    if body.get("rule") is None and type(reading) is float and not math.isfinite(reading):
+        # A corrupt primary reading must not become a null that lets Lean fall
+        # through to a secondary quote, verdict or source date.
+        return {"v": None}
+    return body
+
+
 @lru_cache(maxsize=16)
 def _compute(record_json, predicate_json, dependencies_json, source_hash):
     return _CORE.request({"operation": "compute", "record": json.loads(record_json),
@@ -148,9 +177,9 @@ def compute(raw, ids, predicate=None, dependencies=None):
         if _CORE is None:
             _CORE = _core_type()()
         _CORE.ensure_program()
-        record = {"nodes": {key: {"body": body if isinstance(body, dict) else {"v": body}}
+        record = {"nodes": {key: {"body": _record_body(body)}
                             for key, body in raw.items() if key in ids}}
-        result = _compute(json.dumps(record, sort_keys=True, ensure_ascii=False, default=str, allow_nan=False),
+        result = _compute(json.dumps(_finite_payload(record), sort_keys=True, ensure_ascii=False, default=str, allow_nan=False),
                           json.dumps(predicate, sort_keys=True, ensure_ascii=False),
                           json.dumps(sorted(dependencies if dependencies is not None else refs(predicate))),
                           _CORE.build["source_sha256"] + _CORE.build["binary_sha256"])

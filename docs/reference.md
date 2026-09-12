@@ -140,6 +140,8 @@ for supported operators, exact fractions, snapshots and checked migration comman
 | Failure: structural or undeclared gap | Examples include unresolved dependencies, missing dependency snapshots within an inferred snapshot field, undeclared predicate references, or unsupported predicates without an explanation. |
 | `MOVED` | A comparable dependency differs from the last-review snapshot. This calls for attention and does not itself fail the check. |
 | Movement inside a condition | A changed dependency is named by a predicate that still evaluates false; the movement is muted. |
+| `UNKNOWN` | A named condition currently has no result because an input or the Lean core is unavailable, or the operand types differ. This does not mean the judgment holds. |
+| `UNCHECKED` after formula conversion | The old snapshot recorded formula text only; an explicit review is needed to capture a calculated result. Historical snapshots are preserved. |
 | Declared gap | `blocked_on` explains why a condition cannot currently be checked. This is reported as a note. |
 | Human re-opener | `reopened_by` names a sign a person must interpret. It is reported, not mechanically evaluated. |
 

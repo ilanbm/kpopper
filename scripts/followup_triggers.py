@@ -219,6 +219,18 @@ def _condition_scalar(value):
     return value
 
 
+def unavailable(value):
+    """A failed read is distinct from a recorded null, for conditions and changes."""
+    if not isinstance(value, dict):
+        return False
+    if set(value) == {'unavailable'} and isinstance(value['unavailable'], str):
+        return True
+    if set(value) == {'computed'}:
+        computed = value['computed']
+        return not isinstance(computed, dict) or computed.get('value') is None
+    return False
+
+
 def evaluate(trigger, values, baseline, completed, observations, now, zone='UTC'):
     """Evaluate to true, false or unknown, with stable relevant inputs and wake time."""
     _validate(trigger, None)
@@ -231,8 +243,10 @@ def evaluate(trigger, values, baseline, completed, observations, now, zone='UTC'
 
     def snapshot(group, mapping, identity):
         raw = mapping.get(identity, _MISSING)
-        if raw is _MISSING:
+        if raw is _MISSING or unavailable(raw):
             state = {'available': False}
+            if raw is not _MISSING:
+                state['detail'] = raw
             result = _MISSING
         else:
             try:

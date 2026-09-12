@@ -68,10 +68,14 @@ def _record_files(record):
     return sorted(files)
 
 
-def corpus(record=None, state_dir=None):
+def corpus(record=None, state_dir=None, source_roots=None):
     rec = I._record_path(record)
     if not rec.is_file():
         raise ValueError("no record found; open or map this workspace first")
+    # These grants come from the caller, never a source or a hypothesis in the record.
+    roots = sorted({rec.parent.resolve(), *(Path(root).expanduser().resolve() for root in (source_roots or []))})
+    if any(not root.is_dir() for root in roots):
+        raise ValueError("source roots must be existing directories")
     files = _record_files(rec)
     stamps = {str(path): I._sha(path.read_bytes()) for path in files}
     doc = P.load([str(rec)])
@@ -150,6 +154,8 @@ def corpus(record=None, state_dir=None):
                 diagnostics.append({"ref": source_ref, "reason": "captured source integrity check failed"})
                 continue
             try:
+                if str(source) not in captured_files and not any(source == root or root in source.parents for root in roots):
+                    raise ValueError("outside allowed source roots; pass --source-root for an authorized directory")
                 if source.suffix.lower() not in TEXT_SUFFIXES:
                     raise ValueError("only local UTF-8 text sources are indexed")
                 if not source.is_file():
@@ -173,7 +179,8 @@ def corpus(record=None, state_dir=None):
                          "capture_state": captured_files.get(str(source))})
     if _record_files(rec) != files or any(I._sha(Path(path).read_bytes()) != stamp for path, stamp in stamps.items()):
         raise ValueError("record changed during search; retry")
-    revision = digest(encode({"record": str(rec), "files": stamps, "rows": rows, "unindexed": diagnostics}))
+    revision = digest(encode({"record": str(rec), "files": stamps, "rows": rows, "unindexed": diagnostics,
+                              "source_roots": [str(root) for root in roots]}))
     return {"record": str(rec), "revision": revision, "revision_kind": "search-corpus",
             "record_sha256": stamps[str(rec)], "rows": rows, "unindexed": diagnostics}
 
@@ -193,13 +200,13 @@ def _excerpt(content, terms, size=320):
             "total_characters": len(content)}
 
 
-def search(query, record=None, state_dir=None, limit=5, chars=6000):
+def search(query, record=None, state_dir=None, limit=5, chars=6000, source_roots=None):
     if not isinstance(query, str) or not query.strip() or len(query) > 2000:
         raise ValueError("query must contain 1..2000 characters")
     if not 1 <= limit <= 50 or not 500 <= chars <= 100000:
         raise ValueError("limit must be 1..50; chars must be 500..100000")
     terms = list(dict.fromkeys(re.findall(r"[^\W_]+", query.casefold())))[:32]
-    data = corpus(record, state_dir)
+    data = corpus(record, state_dir, source_roots)
     rows = data.pop("rows")
     matches = []
     if terms:
@@ -235,8 +242,8 @@ def search(query, record=None, state_dir=None, limit=5, chars=6000):
     return result
 
 
-def read(ref, revision, record=None, state_dir=None, offset=0, length=4000):
-    data = corpus(record, state_dir)
+def read(ref, revision, record=None, state_dir=None, offset=0, length=4000, source_roots=None):
+    data = corpus(record, state_dir, source_roots)
     if revision != data["revision"]:
         raise ValueError("record, capture state or source changed; search again")
     row = next((r for r in data["rows"] if r["ref"] == ref), None)
@@ -260,6 +267,7 @@ def main(argv=None):
     parser.add_argument("query", nargs="?")
     parser.add_argument("--record")
     parser.add_argument("--state-dir")
+    parser.add_argument("--source-root", action="append", default=[], help="authorize an additional local source directory; repeat on reads")
     parser.add_argument("--limit", type=int, default=5)
     parser.add_argument("--chars", type=int, default=6000)
     parser.add_argument("--read")
@@ -272,11 +280,11 @@ def main(argv=None):
         if args.read:
             if args.query or not args.revision:
                 raise ValueError("--read requires --revision and no query")
-            result = read(args.read, args.revision, args.record, args.state_dir, args.offset, args.length)
+            result = read(args.read, args.revision, args.record, args.state_dir, args.offset, args.length, args.source_root)
         else:
             if args.revision or args.offset:
                 raise ValueError("--revision and --offset require --read")
-            result = search(args.query, args.record, args.state_dir, args.limit, args.chars)
+            result = search(args.query, args.record, args.state_dir, args.limit, args.chars, args.source_root)
     except (ValueError, OSError, sqlite3.Error, P.yaml.YAMLError) as error:
         print(encode({"error": str(error)}) if args.json else str(error), file=sys.stderr)
         return 2

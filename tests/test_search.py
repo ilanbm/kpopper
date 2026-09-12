@@ -58,6 +58,51 @@ class Search(unittest.TestCase):
         self.assertTrue(found["results"])
         self.assertFalse((self.root / "state").exists())
 
+    def test_external_sources_require_explicit_roots_and_reads_recheck_permission(self):
+        with tempfile.TemporaryDirectory() as directory:
+            outside = Path(directory) / "outside.md"
+            outside.write_text("external-sentinel-7421")
+            self.doc["sources"]["s.contract"]["file"] = str(outside)
+            self.rec.write_text(yaml.safe_dump(self.doc))
+            denied = self.cli("sentinel")
+            self.assertFalse(denied["results"])
+            self.assertIn("allowed source roots", denied["unindexed"][0]["reason"])
+            found = self.cli("sentinel", "--source-root", directory)
+            hit = next(x for x in found["results"] if x["kind"] == "source")
+            full = self.cli("--read", hit["ref"], "--revision", found["revision"], "--source-root", directory)
+            self.assertEqual(full["content"], outside.read_text())
+            denied_read = subprocess.run([sys.executable, str(ROOT / "scripts/cli.py"), "search", "--record", str(self.rec),
+                "--read", hit["ref"], "--revision", found["revision"]], text=True, capture_output=True, env=self.env)
+            self.assertNotEqual(denied_read.returncode, 0)
+            self.assertNotIn("external-sentinel-7421", denied_read.stdout)
+
+    def test_symlinks_and_parent_paths_cannot_escape_source_roots(self):
+        with tempfile.TemporaryDirectory() as directory:
+            outside = Path(directory) / "outside.md"
+            outside.write_text("external-sentinel-7421")
+            link = self.root / "link.md"
+            try:
+                link.symlink_to(outside)
+            except OSError:
+                self.skipTest("symlinks unavailable")
+            for locator in ("link.md", os.path.relpath(outside, self.root)):
+                self.doc["sources"]["s.contract"]["file"] = locator
+                self.rec.write_text(yaml.safe_dump(self.doc))
+                found = self.cli("sentinel")
+                self.assertFalse(found["results"])
+                self.assertTrue(found["unindexed"])
+
+    def test_validated_capture_source_outside_record_root_remains_searchable(self):
+        with tempfile.TemporaryDirectory() as directory:
+            state = Path(directory) / "queue"
+            event = I.capture({"target": "shipping.cost", "value": 90, "date": "2026-09-13", "source_quote": "external-capture-sentinel"},
+                              self.rec, state, start=False)
+            result = I.process(self.rec, state)[0]
+            self.assertEqual(result["state"], "applied", result)
+            found = self.cli("external-capture-sentinel", "--state-dir", str(state))
+            hit = next(row for row in found["results"] if row["kind"] == "source")
+            self.assertEqual(hit["capture_state"], "applied")
+
     def test_claim_match_carries_sources_dependencies_and_live_state(self):
         self.doc["known"]["shipping.cost"]["v"] = 120
         self.rec.write_text(yaml.safe_dump(self.doc, allow_unicode=True, sort_keys=False))

@@ -83,6 +83,14 @@ def migrate(record=None, apply=False):
             baseline = set(P.check_lines([str(rec)])[0])
             errors = P.check_lines([str(shadow)])[0]
             answer["problems"] = [error for error in errors if error not in baseline]
+            _, after_ids, after_judgments, _, after_raw = I._record_world(shadow)
+            for nid, judgment in judgments.items():
+                old_result = P.evaluate(judgment["pred"], raw, ids)
+                new_result = P.evaluate(after_judgments[nid]["pred"], after_raw, after_ids)
+                # Newly executable rules can turn unknown into a result. A condition
+                # that already had a result must retain it, including false -> unknown.
+                if old_result is not None and new_result is not old_result:
+                    answer["problems"].append(f"{nid}: migration changes condition result from {old_result} to {new_result}; author the typed reading explicitly")
             after = shadow.read_bytes()
             answer["after_sha256"] = I._sha(after)
             if apply and not answer["problems"]:

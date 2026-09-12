@@ -108,8 +108,15 @@ def graph(record):
             if any(isinstance(body, dict) and "rests_on" in body for body in raw.values()):
                 raise
             ids, judgments, fields = set(raw), {}, {}
-        raw = P.bodies(doc)
-        values = {key: T.normalize(P.snapshot_value(key, raw, ids, judgments, {})) for key in ids}
+        raw = P.with_builtins(doc, ids, judgments, fields)
+        values = {}
+        for key in ids:
+            try:
+                values[key] = T.normalize(P.snapshot_value(key, raw, ids, judgments, {}))
+            except (P.Refused, ValueError) as error:
+                # Keep the ID and the reason, without inventing a null reading or
+                # making an unrelated followup depend on this calculation.
+                values[key] = {"unavailable": str(error)}
         flags = P.flags(ids, judgments, fields, raw) if judgments else {}
         return values, [{"id": key, "reasons": sorted(value)} for key, value in sorted(flags.items()) if value], None
     except (OSError, ValueError, TypeError, AttributeError, yaml.YAMLError, SystemExit) as error:
@@ -403,6 +410,10 @@ class Store:
         if graph_error or any(key not in values for key in spec["related"]):
             state = "unknown"
             reasons.append(graph_error or "A related graph entry is missing")
+        unavailable = [key for key in spec["related"] if T.unavailable(values.get(key))]
+        if unavailable:
+            state = "unknown"
+            reasons.append("Related values are unavailable: " + ", ".join(unavailable))
         claim = item["claim"]
         if claim:
             state = "claimed" if T.parse_time(claim["expires_at"]) > now else "interrupted"

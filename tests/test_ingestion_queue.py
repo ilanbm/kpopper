@@ -161,6 +161,8 @@ class IngestionQueue(unittest.TestCase):
         self.assertEqual(receipt["actionable_judgments"], ["c.acceptable", "c.second"])
         fixed = self.read()
         fixed["judgments"]["c.acceptable"]["seen"]["facts.count"] = 4
+        # A refreshed snapshot alone does not resolve an unknown condition.
+        fixed["judgments"]["c.acceptable"]["wrong_if"] = "facts.count > 5"
         self.record.write_text(yaml.safe_dump(fixed, sort_keys=False))
         signal = I.pending(self.record, self.state)[0]
         self.assertEqual(signal["actionable_judgments"], ["c.second"])

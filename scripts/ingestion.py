@@ -35,7 +35,7 @@ P = importlib.util.module_from_spec(_SPEC)
 _SPEC.loader.exec_module(P)
 
 TERMINAL = {"applied", "needs_primary", "superseded", "error"}
-ACTIONABLE = {"MOVED", "UNCHECKED", "BROKEN", "BLOCKED"}
+ACTIONABLE = {"MOVED", "UNCHECKED", "BROKEN", "BLOCKED", "UNKNOWN"}
 AUTO_STATES = {"captured", "processing"}
 EVENT_FIELDS = {"event_id", "session_id", "source_quote", "target", "value", "date",
                 "kind", "question", "reason", "updates", "record_sha256"}

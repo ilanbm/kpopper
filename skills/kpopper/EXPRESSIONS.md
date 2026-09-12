@@ -60,9 +60,19 @@ decimal exponents, and computed numerators/denominators to 1024 decimal characte
 
 ## Computation and review snapshots
 
-Build the optional local core once using `kpopper session setup`. This compiles the pinned
-Lean source; reads never download or compile it. A missing or invalid core makes structured
-calculations explicitly unavailable. Legacy literal reading still works without Lean.
+The local core is required for structured calculations. Before authoring the first one,
+run `kpopper session status`. If it is not ready, make Lean **4.33.1** available and run
+`kpopper session setup` (or pass `--lean-root /path/to/toolchain`). Both commands work with
+the base Python package; session transport extras are needed only for checked session views.
+Setup compiles the pinned source once. Reads never download or compile it, and there is no
+second arithmetic evaluator. After a package update changes the core source, run setup again.
+
+A missing, invalid or incompatible core makes structured calculations explicitly unavailable.
+Conditions that need them read `UNKNOWN`; ordinary scalar reads, independent writes and
+independent followups still work. Writing or reviewing a judgment that needs a calculated
+snapshot remains refused until it can actually be computed. `check` reports uncomputable
+rules as failures unless they explicitly declare why they are blocked; success is not a
+substitute for a missing computation.
 
 `pull`, source search, the page and checked sessions use the same calculation semantics.
 The Python layer derives references and display text and calls Lean for arithmetic. Results
@@ -108,5 +118,13 @@ Migration uses a deterministic grammar, never a model. It converts supported rul
 predicates, including legacy expressions in `v`, and reports unconverted fields. Unknown
 names, unsupported syntax, ambiguous bare predicate operands and ambiguous escaped literals
 stay unchanged for review. It does not refresh snapshots. The whole single-file result is
-checked before one atomic replacement; new check failures prevent application. Pointer,
+checked before one atomic replacement; new check failures prevent application. Every
+previously decidable condition must keep its result, so numeric text that the legacy
+reader coerced cannot silently become an unknown typed comparison. Record a typed numeric
+reading with its source explicitly when that is what the source means.
+
+A historical snapshot containing only a textual formula has no historical calculated value.
+After an equivalent conversion it reads `UNCHECKED`, with the original snapshot preserved,
+until an explicit review captures the current result. It is not reported as a numeric move.
+Pointer,
 multi-file and hypothesis-backed records require explicit authoring instead.

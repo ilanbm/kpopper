@@ -747,7 +747,7 @@ def hypothesis_line(doc, today=None, width=110):
     parts = [p for _, p in sorted(items)]
     n = len(hyps)
     line = f"{n} hypothes{'is waits' if n == 1 else 'es wait'} - " + " · ".join(parts)
-    return line if len(line) < width else line[:width] + " ..."
+    return line if len(line) <= width else line[:width] + " ..."
 
 
 def _every_id(doc, ids):
@@ -1050,6 +1050,21 @@ QUOTED = re.compile(r"(['\"]).*?\1", re.S)
 SECOND = re.compile(r"(<=|>=|==|!=|<|>)|\bor\b|\band\b")
 
 
+def comparison_parts(pred):
+    """Expose a simple comparison for validation/display without parsing rendered text."""
+    if isinstance(pred, dict):
+        try:
+            E.validate(pred, predicate=True)
+        except (ValueError, TypeError):
+            return None
+        left, right = pred["args"]
+        if set(left) != {"ref"} or "op" in right:
+            return None
+        return left["ref"], E.COMPARISONS[pred["op"]], E.text(right)
+    match = CMP.match(str(pred or ""))
+    return match.groups() if match else None
+
+
 def why_undecided(pred):
     """Why this reader cannot decide `pred` as one comparison - '' when it can.
 
@@ -1067,9 +1082,10 @@ def why_undecided(pred):
     if isinstance(pred, dict):
         try:
             E.validate(pred, predicate=True)
-            return ""
         except (ValueError, TypeError) as error:
             return str(error)
+        parts = comparison_parts(pred)
+        return why_undecided(" ".join(parts)) if parts else ""
     m = CMP.match(str(pred or ""))
     if not m or SECOND.search(QUOTED.sub("", m.group(3).strip())):
         return "is not one comparison this reader decides (a name, an operator, one value)"
@@ -1132,7 +1148,7 @@ def evaluate(pred, raw, ids):
            for k in (m.group(1), m.group(3).strip())):
         try:
             expression = E.convert(pred, predicate=True)
-        except (ValueError, SyntaxError):
+        except (ValueError, SyntaxError, RecursionError):
             return None
         return E.compute(raw, ids, expression)["predicate"]["holds_on_current_values"]
     a = value_of(raw, ids, m.group(1))
@@ -1190,6 +1206,23 @@ def apart(a, b, n=40):
     return "…" + short(sa[at:], n - 1), "…" + short(sb[at:], n - 1)
 
 
+def legacy_snapshot_rule(old, current_rule):
+    """A legacy formula is historical syntax, never a historical numeric result."""
+    if not isinstance(old, str) or not isinstance(current_rule, dict):
+        return None
+    try:
+        rule = E.convert(old)
+        return rule if E.refs(rule) else None
+    except (ValueError, SyntaxError, RecursionError):
+        return None
+
+
+def formula_only_snapshots(j, raw):
+    return [dep for dep, old in j["snap"].items()
+            if isinstance(raw.get(dep), dict) and isinstance(raw[dep].get("rule"), dict)
+            and legacy_snapshot_rule(old, raw[dep]["rule"]) == raw[dep]["rule"]]
+
+
 def moved_deps(j, raw, ids):
     """Dependencies whose value differs from the snapshot taken when the judgment was
     written -> [(dep, seen, now, state)]. `state` is what the predicate makes of the move:
@@ -1210,6 +1243,11 @@ def moved_deps(j, raw, ids):
     for dep, old in j["snap"].items():
         snapshot = old.get("computed") if isinstance(old, dict) else None
         current_rule = raw[dep].get("rule") if isinstance(raw.get(dep), dict) else None
+        legacy_rule = legacy_snapshot_rule(old, current_rule)
+        if legacy_rule is not None:
+            if legacy_rule != current_rule:
+                out.append((dep, old, predicate_text(current_rule), "moved"))
+            continue
         if dep in ids and (isinstance(current_rule, dict) or isinstance(snapshot, dict)):
             now = value_of(raw, ids, dep)
             previous = snapshot.get("value") if isinstance(snapshot, dict) else old
@@ -1432,7 +1470,8 @@ def one_comparison(pred, raw=None, ids=None):
     if bad:
         return bad
     if isinstance(pred, dict):
-        return ""
+        parts = comparison_parts(pred)
+        return one_comparison(" ".join(parts), raw, ids) if parts else ""
     m = CMP.match(str(pred or ""))
     rhs = m.group(3).strip()
     name, op = m.group(1), m.group(2)
@@ -1465,7 +1504,23 @@ def one_comparison(pred, raw=None, ids=None):
     return ""
 
 
-def flags(ids, jud, fields, raw):
+def pending_counts(pred, raw, ids):
+    """Do not feed judgments about not-yet-counted builtins back into those counts."""
+    pending, seen = list(predicate_refs(pred)), set()
+    while pending:
+        key = pending.pop()
+        if key in seen:
+            continue
+        seen.add(key)
+        body = raw.get(key)
+        if is_builtin(key) and (not isinstance(body, dict) or body.get("v") is None):
+            return True
+        if isinstance(body, dict):
+            pending.extend(rule_refs(body, ids))
+    return False
+
+
+def flags(ids, jud, fields, raw, defer_counts=False):
     """Per judgment: the conditions that put it in front of a person, derived the one way
     every surface derives them. A predicate over a value `raw` does not carry - a count
     not yet taken - is left undecided, never guessed. A judgment decided with a re-opener
@@ -1478,6 +1533,8 @@ def flags(ids, jud, fields, raw):
                 f.add("blocked" if blocked else "broken")
             elif fields["snapshot"] and d not in j["seen"]:
                 f.add("unchecked")
+        if formula_only_snapshots(j, raw):
+            f.add("unchecked")
         # A predicate this reader cannot decide falsifies nothing, whatever it names: it
         # is counted where an empty field is counted, not passed over as one that holds.
         named = bool([t for t in predicate_refs(j["pred"]) if t in ids]) \
@@ -1486,6 +1543,8 @@ def flags(ids, jud, fields, raw):
             f.add("no_predicate")
         elif named and evaluate(j["pred"], raw, ids) is True:
             f.add("falsified")
+        elif named and evaluate(j["pred"], raw, ids) is None and not (defer_counts and pending_counts(j["pred"], raw, ids)):
+            f.add("unknown")
         if any(s == "moved" for _, _, _, s in moved_deps(j, raw, ids)):
             f.add("moved")
         out[name] = f
@@ -1501,7 +1560,7 @@ def counts(doc, ids, jud, fields, raw):
     `raw` here is the record's own bodies, without the counts."""
     open_ids = {k for g in OPEN for k in (doc.get(g) or {})}
     held = [k for k in ids if k not in jud and not is_builtin(k)]
-    fl = flags(ids, jud, fields, {k: v for k, v in raw.items() if not is_builtin(k)})
+    fl = flags(ids, jud, fields, {k: v for k, v in raw.items() if not is_builtin(k)}, defer_counts=True)
 
     def count(flag):
         return sum(1 for f in fl.values() if flag in f)
@@ -2708,6 +2767,7 @@ def _state(name, j, raw, ids, fields, touched=()):
     if named_ and evaluate(j["pred"], raw, ids) is True:
         return "FIRED", f"wrong_if holds ({predicate_text(j['pred'])}) - broken by its own condition"
     unchecked = [d for d in j["deps"] if fields["snapshot"] and d not in j["seen"]]
+    formula_only = formula_only_snapshots(j, raw)
     moves = [(d, o, n, s) for d, o, n, s in moved_deps(j, raw, ids) if not touched or d in touched]
     if any(s == "moved" for _, _, _, s in moves):
         d, o, n, _ = next(x for x in moves if x[3] == "moved")
@@ -2716,12 +2776,18 @@ def _state(name, j, raw, ids, fields, touched=()):
             body = raw.get(d)
             if snapshot["computed"].get("rule") != (body.get("rule") if isinstance(body, dict) else None):
                 return "MOVED", f"{d}: formula changed since review"
+        current_body = raw.get(d)
+        if legacy_snapshot_rule(snapshot, current_body.get("rule") if isinstance(current_body, dict) else None) is not None:
+            return "MOVED", f"{d}: formula changed since legacy review; no historical result was recorded"
         was, is_ = apart(o, n)
         return "MOVED", (f"{d} moved {was} -> {is_} since it was reviewed - "
                          f"if it still holds: review {name}")
     if unchecked:
         return "UNCHECKED", (f"never checked against {', '.join(unchecked)} - "
                              f"if it holds: review {name}")
+    if formula_only:
+        return "UNCHECKED", (f"legacy snapshot records only the formula for {', '.join(formula_only)}, "
+                             f"not a historical result; review {name} to record the current calculation")
     if any(s == "muted" for _, _, _, s in moves):
         d, o, n, _ = next(x for x in moves if x[3] == "muted")
         was, is_ = apart(o, n)
@@ -2731,16 +2797,16 @@ def _state(name, j, raw, ids, fields, touched=()):
         reopened = _decided(j)
         if reopened:
             return "HOLDS", "decided; reopened by " + short(reopened, 80)
-        return "HOLDS", "nothing evaluable would say otherwise"
+        return "UNKNOWN", "nothing evaluable would say otherwise"
     if not named_:
-        return "HOLDS", "no predicate to evaluate; declared - " + short(blocked, 80)
+        return "BLOCKED", "no predicate to evaluate; declared - " + short(blocked, 80)
     pred = short(j["pred"], 80)
     if evaluate(j["pred"], raw, ids) is None:
         if why_undecided(j["pred"]):
-            return "HOLDS", f"wrong_if is not a comparison this reader decides ({pred})"
+            return "UNKNOWN", f"wrong_if is not a comparison this reader decides ({pred})"
         if any(t in PAGE for t in predicate_refs(j["pred"])):
-            return "HOLDS", f"wrong_if is counted when the page is built ({pred}) - page --verify decides it"
-        return "HOLDS", f"wrong_if compares against something with no value to compare ({pred})"
+            return "UNKNOWN", f"wrong_if is counted when the page is built ({pred}) - page --verify decides it"
+        return "UNKNOWN", f"wrong_if cannot currently be evaluated ({pred}); a value or the Lean core is unavailable, or types differ"
     return "HOLDS", f"wrong_if does not hold ({pred})"
 
 
