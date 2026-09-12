@@ -459,6 +459,18 @@ sources:
     of: "python3 ast over scripts/render_page.py - top-level string constants of three lines or more,
          at b47f7a0 and again after the move"
     read: "2026-09-03"
+  run.entry_name_eval:
+    from: s.2026_09_12_layout
+    name: "The entry file's name tried on the Codex host: the same record under five names -
+           GROUNDING.yaml, PROVENANCE.yaml, REASONING.yaml, GROUND.yaml and ground.yaml - in a
+           workspace of thirty-five files whose decoys share the record's vocabulary and hold no
+           number, with no plugin, no hook, no opener, no skill and no instruction naming the file;
+           one model at medium effort, one prompt per trial"
+    of: "2026-09-12, a harness outside this repository: 1,000 trials over the grounding-line eval's
+         20 recorded prompts, half in Hebrew, ten per prompt per name, and 250 over its 10 unrelated
+         prompts, five per prompt per name; no trial failed; the two short names added on a question
+         asked while it ran"
+    read: "2026-09-12"
   run.first_external:
     name: "The first run on a project this plugin did not build - the g2next keyboard pilot"
     of: "session 'Keyboard size feedback', 2026-09-01, plugin 0.14.0"
@@ -715,6 +727,40 @@ known:
     name: "Claims about this project that held - checked with a run before they were asserted"
     from: run.claims_scored
     at: "of 6"
+  m.entry_name.false_reads:
+    v: 8
+    unit: trials
+    name: "Reads of the record on prompts it does not touch, of 250 over the unrelated prompts and
+           five names"
+    from: run.entry_name_eval
+    at: "PROVENANCE.yaml 3/50, GROUND.yaml 3/50, ground.yaml 2/50, GROUNDING.yaml 0/50,
+         REASONING.yaml 0/50 - p 0.20; a false read cost one command and about six thousand tokens"
+    of: "2026-09-12"
+    distinct_from: "m.entry_name.reads, m.entry_name.unread_by_no_command"
+    # distinct 2026-09-12: one counts reads where the record applied, the other where it did not
+    # distinct 2026-09-12: one counts reads that should not have happened, the other misses that were no look at all
+  m.entry_name.reads:
+    v: 967
+    unit: trials
+    name: "Trials that read the record before answering, of 1,000 over the recorded prompts and five
+           names"
+    from: run.entry_name_eval
+    at: "GROUNDING.yaml 196/200, GROUND.yaml 195/200, REASONING.yaml 194/200, PROVENANCE.yaml
+         192/200, ground.yaml 190/200 - chi-square across the five 3.64 on 4 degrees, p 0.46; English
+         100/100 under every name but one trial, and in every cell the trials that read answered with
+         the recorded value and the trials that did not read did not"
+    of: "2026-09-12"
+  m.entry_name.unread_by_no_command:
+    v: 32
+    unit: trials
+    name: "Of the 33 trials that did not read the record, those that ran no command at all - the
+           session answered from what it knew and never listed the tree"
+    from: run.entry_name_eval
+    at: "31 of them on one Hebrew date prompt, the drip lines' installation; the one other miss
+         listed the tree and did not open the record. A name reaches a session only after it looks,
+         so the re-opener of d.entry_file_is_grounding - found the file and did not read it - fired
+         in none of 1,000 trials"
+    of: "2026-09-12"
   m.first_run.repair:
     v: 217
     unit: seconds
