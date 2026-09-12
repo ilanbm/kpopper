@@ -1,0 +1,16 @@
+meta:
+  scope: Fictional search service. Public-only search before private projects are
+    enabled.
+sources:
+  s.search:
+    name: Search visibility switch
+    file: search.py
+    read: '2025-01-01'
+known:
+  search.results_public:
+    v: true
+    from: s.search
+    at: INCLUDE_PRIVATE_PROJECTS is false
+    of: '2025-01-01'
+    measure: search_results_public
+judgments: {}

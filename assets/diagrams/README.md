@@ -1,13 +1,13 @@
-# README diagrams
+# README process diagrams
 
 The SVG files are the editable sources. Their PNG renders are displayed in the
 README so layout does not depend on fonts installed on a reader's device.
 
+The opening cases use the [illustrated story series](../stories/README.md).
 The knowledge-source section uses the [detailed source-map illustration](../knowledge-sources.png).
 
 | Diagram | Desktop | Mobile | What it explains |
 |---|---|---|---|
-| Two PRs | [SVG](ci-merge.svg) · [PNG](ci-merge.png) | [SVG](ci-merge-mobile.svg) · [PNG](ci-merge-mobile.png) | A common base, separate passing records, B's recorded reason and the dependency broken by a clean merge. |
 | Conversation | [SVG](conversation-flow.svg) · [PNG](conversation-flow.png) | [SVG](conversation-flow-mobile.svg) · [PNG](conversation-flow-mobile.png) | The main session continues while a separate background process records and checks the update; only important findings return. |
 | Across time | [SVG](work-across-time.svg) · [PNG](work-across-time.png) | [SVG](work-across-time-mobile.svg) · [PNG](work-across-time-mobile.png) | Sources, reasons and review snapshots; current connections and changes; followups, daily reviews and triggers. |
 

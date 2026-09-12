@@ -18,9 +18,16 @@ with a 512-pixel `kpopper-icon.png` render. The letterform is made from paths an
 does not depend on an installed font. No external organization avatar or favicon
 has been changed by adding these files.
 
-## README diagrams
+## Illustrated stories
 
-The PR, conversation and time diagrams live in `diagrams/`, with editable SVG sources
+The opening series lives in `stories/`: two merge cases followed by a cooking-workshop
+case in Claude Cowork. Each has a desktop and phone layout. The illustrations use bold
+typography and expressive ink scenes; the accompanying examples distinguish a failed
+condition from a changed premise that needs judgment. See [the story index](stories/README.md).
+
+## Process diagrams
+
+The conversation and time diagrams live in `diagrams/`, with editable SVG sources
 and PNG renders. See [the diagram index and rendering notes](diagrams/README.md).
 
 ## Knowledge-source illustration

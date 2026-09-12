@@ -1,0 +1,34 @@
+meta:
+  updated: 2026-09-13
+  scope: Fictional export service. File retention and the download promise are separate
+    inputs.
+sources:
+  s.storage:
+    name: Export retention policy
+    file: storage-policy.yaml
+    read: '2025-01-01'
+  s.email:
+    name: Download email template
+    file: download-email.html
+    read: '2025-01-01'
+known:
+  exports.retention_days:
+    v: 30
+    from: s.storage
+    at: retention_days
+    of: '2025-01-01'
+    measure: retention_days
+  downloads.promised_days:
+    v: 30
+    from: s.email
+    at: Download available for 30 days
+    of: '2025-01-01'
+    measure: promised_days
+judgments:
+  downloads.availability:
+    rests_on: [exports.retention_days, downloads.promised_days]
+    verdict: "Keep exports available for the full promised download window."
+    because: "A link that is still advertised as usable needs its exported file to remain
+              available."
+    wrong_if: "exports.retention_days < downloads.promised_days"
+    seen: {exports.retention_days: 30, downloads.promised_days: 30}

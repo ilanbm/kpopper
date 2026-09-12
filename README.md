@@ -11,68 +11,100 @@ make them worth reconsidering. The next session can pick up those reasons; when
 recorded facts change, checks point to the decisions that need another look.
 
 [Get started](#get-started) · [See the PR check](#coding-check-the-reasoning-behind-a-merge) ·
-[Beyond code](#beyond-code-one-update-changes-the-plan) ·
+[Beyond code](#beyond-code-new-format-old-assumptions) ·
 [See a document](#share-a-document-with-its-reasons) ·
 [Why kpopper?](#popper-give-a-conclusion-a-way-to-fail)
 
-## Two green PRs. One broken assumption.
+## Two green PRs. Someone else's results.
 
-Two agents work on separate branches of a checkout service. One raises a timeout;
-the other makes a decision that relies on its earlier value.
+Two agents start from a search service whose results are all public. PR A adds
+private projects and filters results for each user. PR B adds a shared cache keyed
+only by the query, relying on those results being public and identical for everyone.
 
 <p align="center">
-  <a href="assets/diagrams/ci-merge.png">
+  <a href="assets/stories/cache-privacy.png">
     <picture>
-      <source media="(max-width: 600px)" srcset="assets/diagrams/ci-merge-mobile.png">
-      <img src="assets/diagrams/ci-merge.png" width="680" alt="PR A changes a timeout from 5 to 30 seconds. PR B relies on 5 seconds fitting a 10-second waiting budget. Both records pass separately. Git merges cleanly, but the combined record fails the blocking-call condition because 30 seconds exceeds 10 seconds.">
+      <source media="(max-width: 600px)" srcset="assets/stories/cache-privacy-mobile.png">
+      <img src="assets/stories/cache-privacy.png" width="760" alt="PR A adds private projects in search.py. PR B caches by query in cache.py because all results were public. Tests pass separately and Git merges cleanly. The combination risks serving Alice's private result to Bob. kpopper flags the failed recorded condition and points back to the cache decision.">
     </picture>
   </a>
 </p>
 
-**kpopper checks the combined record and points back to that decision.**
+The files merge cleanly. **The reason for sharing the cache no longer holds.**
 
 <details>
 <summary>See the recorded reason and the failed check</summary>
 
-PR B records a blocking call against a stated 10-second waiting budget:
+PR B records its assumption:
 
 ```yaml
-checkout.blocking_call:
-  rests_on: [request.timeout_seconds]
-  verdict: "A blocking call fits the checkout's 10-second waiting budget."
-  wrong_if: "request.timeout_seconds > 10"
-  seen: {request.timeout_seconds: 5}
+search.shared_cache:
+  rests_on: [search.results_public]
+  verdict: "Search responses can share a cache keyed only by query because all results are public."
+  wrong_if: "search.results_public == false"
+  seen: {search.results_public: true}
 ```
 
-After PR A raises the recorded timeout to 30, `kpopper check` reports:
+In the [runnable example](examples/merge-assumptions/README.md), a reviewed measurement
+recipe reads the explicit visibility switch in `search.py`. After PR A enables private
+projects, `kpopper remeasure --run` tests that new reading against the cache decision
+and fails its condition. It leaves the canonical record unchanged; `check` alone
+would still see the old recorded value.
 
-```text
-checkout.blocking_call: wrong_if holds (request.timeout_seconds > 10) - broken by its own condition
-```
-
-The configured timeout no longer supports the stated bound. This does not mean a
-request actually took 30 seconds. See the [full example and CI setup](#coding-check-the-reasoning-behind-a-merge).
+The example creates two local Git branches, runs their tests, merges them and checks
+the combination. A separate integration probe also catches the privacy problem.
+kpopper preserves the declared reason and connects the change to it; it does not
+infer arbitrary security properties from code or replace behavioral tests.
 
 </details>
 
-These checks cover declared assumptions; the agent must record them and keep the
-relevant readings current. A decision needs no invented numeric threshold: a changed
-premise can also prompt review without proving the decision wrong.
+## Two green PRs. One broken promise.
 
-## Beyond code: one update changes the plan
+Exports stay for 30 days; download emails currently promise seven. PR A reduces
+storage retention to seven days. PR B extends the download promise to 30 days.
+Each change fits the other policy on its own branch.
 
-You're planning a launch with an agent in Claude Cowork. The announcement is ready:
-the venue has confirmed Friday's booking. Then the venue cancels.
+<p align="center">
+  <a href="assets/stories/download-promise.png">
+    <picture>
+      <source media="(max-width: 600px)" srcset="assets/stories/download-promise-mobile.png">
+      <img src="assets/stories/download-promise.png" width="760" alt="PR A keeps exports for seven days in storage-policy.yaml. PR B promises 30-day downloads in download-email.html because files previously stayed for 30 days. Tests pass and Git merges cleanly. Together, a still-promised link can point to a file deleted on day seven. The recorded condition fails: seven days of storage is less than the 30 days promised.">
+    </picture>
+  </a>
+</p>
 
-The draft is unchanged. Its readiness depended on a fact that no longer holds.
-Once the cancellation is recorded, kpopper flags that decision so the next session
-can revisit the announcement and plan the next step.
+**The email still says the link is available. The storage policy has already deleted
+the file.** The example's recipes read both the policy and the promise in the actual
+email template. [Run both merge stories](examples/merge-assumptions/README.md).
+
+These are fictional, executable examples. Checks cover the assumptions the record
+declares and the inputs deliberately measured or recorded. A changed premise can also
+prompt review without proving a decision wrong.
+
+## Beyond code: new format, old assumptions
+
+In Claude Cowork, you're planning a cooking workshop around the venue's shared kitchen,
+equipment and ingredients. A later client brief moves the workshop entirely online.
+
+<p align="center">
+  <a href="assets/stories/cowork-workshop.png">
+    <picture>
+      <source media="(max-width: 600px)" srcset="assets/stories/cowork-workshop-mobile.png">
+      <img src="assets/stories/cowork-workshop.png" width="760" alt="A later session records the client's change from an onsite cooking workshop to an online event. The saved plan still assumes one shared kitchen with equipment and ingredients provided. kpopper reports that the workshop format moved from onsite to remote. The agent needs to revisit equipment, ingredients and activities; this is a review notice, not an automatically failed conclusion.">
+    </picture>
+  </a>
+</p>
+
+Once the agent records the new format, kpopper flags the saved plan for review.
+**It does not decide whether the activities can work remotely.** The next session can
+recover the old reason, read the updated brief, and work out what participants need.
+[Try the Cowork example](examples/cowork-workshop/README.md).
 
 The same record connects decisions to evidence in research, financial planning and
 other ongoing projects. **Keep your existing documents, notes and task tools.**
 The record links back to relevant evidence; there is no need to migrate your knowledge system.
-[Try the launch example](#ready-to-launch-had-a-condition), or explore
-[a changed offer that needs the agent's judgment](examples/offer-review/README.md).
+For another example that needs judgment, explore
+[a replacement offer with an uncertain deadline](examples/offer-review/README.md).
 
 ## Get started
 
@@ -409,60 +441,55 @@ earlier decision was based on**. It knows to revisit the announcement before reu
 
 ## Coding: check the reasoning behind a merge
 
-**Two branches can be sound on their own and undermine each other's decisions when merged.**
+**Two branches can pass their own tests and undermine each other's decisions when merged.**
 Git checks whether their text can be combined. kpopper adds a check on the recorded premises
 and conditions behind the work.
 
-Consider two pull requests in an example checkout service:
+The [two executable merge stories](examples/merge-assumptions/README.md) reproduce the
+opening illustrations in disposable local Git repositories:
 
-In this example, checkout has a stated 10-second budget for waiting on this dependency.
-
-| Pull request | Change | Its record in isolation |
+| Story | Independent changes | The declared condition that fails together |
 |---|---|---|
-| PR A: support longer requests | Raise the request timeout from 5 to 30 seconds. | Passes. |
-| PR B: simplify checkout | Use a blocking call because the current 5-second timeout fits that waiting budget. | Passes. |
+| Search cache | Add private projects; cache results by query because all results are public. | `search.results_public == false` |
+| Download promise | Retain files for seven days; promise downloads for 30 days. | `exports.retention_days < downloads.promised_days` |
 
-PR B records the reason for its choice:
+Run them with Git and the package's Python dependencies installed:
 
-```yaml
-checkout.blocking_call:
-  rests_on: [request.timeout_seconds]
-  verdict: "A blocking call fits the checkout's 10-second waiting budget."
-  wrong_if: "request.timeout_seconds > 10"
-  seen: {request.timeout_seconds: 5}
+```sh
+python3 examples/merge-assumptions/run.py
 ```
 
-Each branch's record passes separately. The YAML can merge without a text conflict. But
-after PR A lands, PR B's proposed merge result has a timeout of 30. CI reports:
+Each branch's tests and measurement checks pass. Git merges the branches without a text
+conflict, and the combined branch tests still pass. Measurement then fails the recorded
+condition. The runner also uses a separate integration probe that detects each problem;
+these examples show a gap in those branch tests, not a limit on what tests can express.
 
-```text
-checkout.blocking_call: wrong_if holds (request.timeout_seconds > 10) - broken by its own condition
-```
+The recipes connect explicit inputs in the merged tree to the record: the search visibility
+switch, the storage policy and the promise in an email template. `remeasure --run` tests
+changed readings as a hypothesis without silently rewriting the canonical record. A plain
+`check` cannot see a tree change while its recorded input remains unchanged.
 
-The failure points to the checkout decision and the premise it used. That is a regression
-in the recorded reasoning, even though the lines merged cleanly. It does not show that a
-request actually took 30 seconds; the configured timeout no longer supports the stated bound.
+There are three useful checks:
 
-There are two ways to check the combination:
-
-- **During work or before merging:** `kpopper consolidate --dry-run --from <branch-or-ref>` reads another
-  branch's committed record as proposed changes and tests it against the current record.
+- **Across branches during work:** `kpopper consolidate --dry-run --from <branch-or-ref>` reads
+  another branch's committed record as proposed changes and tests it against the current record.
 - **On the proposed merge result in CI:** `kpopper check` checks the combined record;
   `kpopper consolidate --dry-run` also tests the hypotheses stored beside it.
+- **Against the actual tree:** `kpopper remeasure --run` runs the deliberately configured recipes
+  and tests their readings against the declared conditions.
 
-The checks report fired conditions, structural gaps and conflicting claims. A changed
-premise that needs review can be reported without failing CI; an affected hypothesis still
-needs review before it can be folded. Decisions are revised explicitly.
+A changed premise that needs review can be reported without failing CI; an affected hypothesis
+still needs review before it can be folded. Decisions are revised explicitly.
 
-**This already runs in kpopper's own [CI workflow](.github/workflows/check.yml)** on pull
-requests and pushes to `main`, alongside the test suite, measurement recipes and page checks.
-The merge checks use the Python reader and do not require the optional Lean core.
-See [Add reasoning checks to CI](docs/coding-and-ci.md) for a workflow to copy.
+**These commands already run in kpopper's own [CI workflow](.github/workflows/check.yml)** on
+pull requests and pushes to `main`, alongside the test suite and page checks. They use the
+Python reader and do not require the optional Lean core. See
+[Add reasoning checks to CI](docs/coding-and-ci.md) for setup, including measurement recipes.
 
 The coverage is what the record declares. These checks do not infer intent from arbitrary
-code or prove that all goals are mutually compatible. Keep relevant readings current;
-reviewed measurement recipes can connect selected code facts to the record. A contradiction
-expressed only in prose, or hidden behind unrelated IDs, can still require human review.
+code or prove that all goals are mutually compatible. Keep relevant readings current and
+review measurement recipes as code. A contradiction expressed only in prose, or hidden behind
+unrelated IDs, can still require human review.
 
 ## Popper: give a conclusion a way to fail
 

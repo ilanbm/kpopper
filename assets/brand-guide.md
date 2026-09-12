@@ -65,6 +65,15 @@ a small number of strong accents.
 The identity includes playfulness as well as precise explanations. Choose the
 density and visual treatment for the image's purpose.
 
+- The [opening story series](stories/README.md) uses strong black and blue headlines,
+  two source or decision panels, and a larger ink scene showing what their combination
+  puts at risk. Keep the reason visible, alongside the change it depends on.
+- The first two stories show code changes; the third shows work in Claude Cowork.
+  Red marks a failed declared condition, while amber marks a changed premise needing
+  judgment. The illustration must preserve this distinction.
+- Story illustrations may carry people, expressive objects and handwritten notes.
+  Phone layouts stack the panels and collect their connections without making
+  independent inputs look sequential. Keep the essential explanation in text as well.
 - The knowledge-source illustration uses a deliberately busy left side to show
   the breadth of existing tools and materials, contrasted with an ordered reasoning
   layer on the right. Its recognizable icons and many small details carry that idea.
@@ -89,7 +98,7 @@ density and visual treatment for the image's purpose.
 - Author precise diagrams with editable text and shapes. The README diagram series
   uses Arial as its reference family, a shared spacing grid and a consistent type hierarchy.
   Display PNG renders for consistent viewing; retain SVG sources for editing.
-  The generated hero remains a separate wordmark/illustration asset.
+  The hero and illustrated story series remain separate illustration assets.
 - Give desktop and phone layouts the same semantic content. Use compact filled
   arrowheads with an explicit size, keep connector paths clear of text, and name
   separate or parallel processes directly. Reduce decoration before removing meaning.
@@ -103,8 +112,10 @@ density and visual treatment for the image's purpose.
 ## README entrance
 
 Lead with the hero, then explain the practical value in ordinary language. Show
-the two-PR case first, followed by a non-code project. This gives developers a
-familiar entrance while making the broader scope visible.
+the shared-cache/private-results case, then the download-promise/retention case,
+followed by the Cowork workshop. This gives developers a familiar entrance while
+making the broader scope and the need for judgment visible. Keep a direct
+installation link above the examples.
 
 Essential explanations remain text. Image alt text includes the wordplay and
 attribution. Keep the caption within the hero without repeating it beneath the

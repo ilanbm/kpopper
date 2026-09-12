@@ -399,6 +399,14 @@ sources:
          retain the detailed knowledge-source illustration and the subsequent approval to combine the
          parallel changes."
     read: "2026-09-13"
+  s.2026_09_13_story_approval:
+    asked: "הם מושלמים."
+    name: "Approval of the illustrated README story series: cache and private results, download
+           promise versus retention, then a cooking-workshop plan in Claude Cowork. The first cache
+           phone layout was included in the approved previews."
+    of: "The maintainer selected cache plus download-link validity, followed by Cowork, and approved
+         the resulting ink-poster story previews."
+    read: "2026-09-13"
   s.background_ingestion:
     name: "Background capture and selective delivery contract"
     file: "skills/kpopper/INGESTION.md"
@@ -2582,6 +2590,34 @@ judgments:
       s.2026_09_13_readme_direction: "read 2026-09-13"
       d.named_for_popper: "the project keeps the name kpopper; discovery runs on direct links and
                            qualified search, never on the bare term"
+  d.readme_story_series:
+    rests_on: [s.2026_09_13_story_approval, d.readme_opens_with_what_it_does, d.readme_visual_identity]
+    verdict: "Open with the approved illustrated series: shared cache and private results, download
+              promise versus retention, then the Cowork workshop. Provide desktop and phone layouts,
+              text explanations and runnable examples."
+    because: "Two code cases expose different dependencies: a visibility assumption and a promise
+              across policy and email. The workshop shows the same continuity problem when a changed
+              premise requires judgment rather than an executable failure. The two-input composition
+              and larger consequence scene preserve the narrative energy the maintainer preferred.
+              Published examples make the green branch tests, clean merges and failed recorded
+              conditions inspectable, and show that ordinary integration tests can also detect the
+              problems."
+    reopened_by: "An uncoached reader cannot identify the reason invalidated in either code story,
+                  treats the Cowork review notice as proof the plan is wrong, believes the tool
+                  discovers unrecorded assumptions automatically, or cannot read the essential
+                  content on a phone. Revisit the length if readers who want to try the tool cannot
+                  find installation."
+    seen:
+      s.2026_09_13_story_approval: "read 2026-09-13"
+      d.readme_opens_with_what_it_does: "Keep the hero, explain the practical benefit immediately
+                                         below it, then show the two-PR case with an expandable
+                                         record and check, a non-code example and installation.
+                                         Introduce the third-brain metaphor later."
+      d.readme_visual_identity: "Use the approved typographic ink-poster hero and white geometric k
+                                 on electric blue. Keep the one-line lemma slogan, separate italic
+                                 attribution and small portrait with its Korean aside; the image
+                                 contains the attribution once. Process diagrams use editable sources
+                                 and phone layouts."
   d.readme_visual_identity:
     rests_on: [s.2026_09_13_readme_direction, s.2026_09_12_first_readings]
     verdict: "Use the approved typographic ink-poster hero and white geometric k on electric blue.
