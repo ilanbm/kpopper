@@ -12,9 +12,10 @@ a small number of strong accents.
 - Write the product name **kpopper** in prose too, including at the start of a
   sentence. Technical identifiers such as `KPOPPER_*` retain their actual spelling.
 - Karl Popper performs with a microphone and a finger-heart gesture. His serious
-  expression carries the humor.
+  expression carries the humor, with room for a barely perceptible, closed-mouth
+  smile. Keep his composure and a natural gaze rather than an exaggerated side-eye.
 - In the hero, a large ink portrait occupies the left side and looks inward toward
-  the wordmark and quotation on the right. Keep the serious expression and recognizably
+  the wordmark and quotation on the right. Keep the restrained expression and recognizably
   Popper-like features. The full-width banner balances character and typography.
 - The slogan is **“It really whips the lemma's ass!”** — a Winamp reference with
   *lemma* in place of *llama*.
@@ -122,6 +123,8 @@ attribution. Keep the caption within the hero without repeating it beneath the
 image. Philosophy and the third-brain metaphor follow the concrete examples.
 
 A small curiosity link beneath the hero can lead directly to the Popper explanation.
+Let the visual joke stand; that section can introduce his idea without explaining
+each prop or spelling out every piece of the pun.
 The main text heading states the practical value rather than repeating the wordmark.
 Give the illustrated cases descriptive section headings, visible record excerpts,
 and links to their executable examples. A compact capabilities overview and a

@@ -4,8 +4,8 @@
 
 `kpopper-hero.png` is the current README hero: a large ink portrait on the left,
 a prominent wordmark and one-line quotation on the right, and a separate italic
-attribution beneath the quotation. Popper looks inward toward the wording; a small
-Korean speech bubble accompanies the portrait.
+attribution beneath the quotation. Popper looks inward toward the wording with a
+restrained, faintly amused expression; a small Korean speech bubble accompanies the portrait.
 The Winamp-inspired slogan is presented as a
 fictional humorous quotation, with logic symbols around *lemma*. It is not a
 historical quotation or photograph.

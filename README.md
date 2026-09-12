@@ -8,12 +8,12 @@
 
 # Keep the reasoning. Move the work forward.
 
-kpopper gives your agents a living record of your project's facts, sources,
-decisions and open questions. It connects decisions to their evidence and
-assumptions, so the reasoning stays available across sessions, branches and
-documents. When recorded facts change, checks point to what needs another look.
+kpopper connects decisions to the evidence, assumptions and earlier decisions they
+depend on, and records what would make them worth revisiting. Your agents can follow
+that reasoning across sessions. When a recorded premise changes, kpopper traces its
+reach through the record and surfaces what needs another look.
 
-**Connect what you know to what you do next.**
+**A reasoning layer your agents can inspect, carry forward, and challenge.**
 
 **[Get started](#get-started)** · [Examples](#access-control-and-shared-caching) ·
 [Capabilities](#what-you-can-do-with-kpopper) · [Record format](#the-knowledge-record) ·
@@ -27,7 +27,7 @@ documents. When recorded facts change, checks point to what needs another look.
 - [Revisiting plans when the brief changes](#revisiting-plans-when-the-brief-changes)
 - [Installation and first use](#get-started)
 - [What you can do with kpopper](#what-you-can-do-with-kpopper)
-- [Projects, goals and existing sources](#start-with-the-work)
+- [One project, across your existing tools](#one-project-across-your-existing-tools)
 - [Past, present and future](#past-present-future)
 - [Background capture during a conversation](#keep-the-conversation-moving)
 - [The record and its evolving structure](#the-knowledge-record)
@@ -307,7 +307,9 @@ For a standalone CLI installation and a walkthrough of the launch-party example,
 Use the parts your project needs. Existing documents, tools and memory remain where
 they are; the agent records the relevant connections between them.
 
-## Start with the work
+<a id="start-with-the-work"></a>
+
+## One project, across your existing tools
 
 A project is **work around a goal**. Its materials may span documents, conversations,
 calendars, task systems, files and earlier sessions. In software, they also include code,
@@ -390,7 +392,8 @@ where the conversation can safely continue without that result.
 ### The knowledge record
 
 The technical term is an **epistemic record**: a record of what is known and how it is
-grounded. The main pieces are ordinary YAML:
+grounded. These are roles in the method, not six mandatory YAML sections. Start with
+what the work needs; a source and one finding can be enough.
 
 | Piece | What it preserves |
 |---|---|
@@ -400,6 +403,13 @@ grounded. The main pieces are ordinary YAML:
 | Judgment | A conclusion, its reasoning, declared dependencies and condition for reconsideration. |
 | Review snapshot | What those dependencies held when the judgment was last reviewed: `seen`. |
 | Open question | Something unresolved, retained without inventing an answer. |
+
+The method is opinionated about grounding conclusions, declaring dependencies and
+preserving a basis for review. A judgment needs the values it was reviewed against
+to make drift detectable, and a meaningful condition for reconsideration. A record
+with no judgments yet does not need invented conclusions, snapshots or derivations
+just to fill a template. Field names and project-specific categories are described
+[below](#a-structure-that-grows-with-the-project).
 
 **Change is compared with the last review.** When a recorded scalar differs from a judgment's
 `seen` snapshot, the reader identifies the movement. A supported `wrong_if` comparison says
@@ -442,6 +452,8 @@ The vocabulary is flexible. The ordinary reader recognizes dependency, predicate
 and snapshot roles by their shape; `facts`/`claims` can serve the same purpose as
 `known`/`judgments`. The documented names are the easiest starting point. When two
 fields fit the same role, an explicit `schema` mapping resolves the ambiguity.
+Some control fields, including `reopened_by` and `blocked_on`, are recognized by
+name; flexible vocabulary does not mean every keyword can be renamed.
 
 The relationships stay explicit: where a reading came from, what a decision depends
 on, what it was reviewed against, and what would bring it back for review. Supported
@@ -596,13 +608,6 @@ unrelated IDs, can still require human review.
 ## Popper: give a conclusion a way to fail
 
 The man in the banner is **Karl Popper**, cast here as an unlikely K-pop star.
-**kpopper** combines his name with K-pop; the microphone, finger heart and Korean
-“OMG, I really need this!” are part of the performance.
-
-The attribution **“Karl Popper, the father of K-pop”** is our joke, not a historical
-quotation. **“It really whips the lemma's ass!”** riffs on Winamp's llama slogan:
-*llama* becomes *lemma*, a supporting result in a proof. The little logic symbols
-help point to that wordplay.
 
 Karl Popper was a philosopher of science who argued that scientific theories should expose
 themselves to tests that could prove them wrong. Surviving a test does not make a theory
@@ -613,8 +618,16 @@ kpopper borrows that discipline for agent reasoning: **preserve the evidence, st
 would undermine a conclusion, and know when to reconsider it.** This is the idea behind
 the name.
 
-`wrong_if: 'venue.status != "confirmed"'` is an executable comparison. If it evaluates
-to true, `check` fails. A green check means no failing condition was found by these checks;
+**Now prove that Karl Popper isn't the father of K-pop.**
+
+Our imaginary announcement, **“Popper's K-pop debut is out,”** has a more concrete test:
+
+```yaml
+wrong_if: 'popper.single_status != "released"'
+```
+
+If the recorded status is `planned`, that condition fires and `check` fails.
+A green check means no failing condition was found by these checks;
 it does not establish that the recommendation is true, wise, complete or authorized.
 
 The predicate language is deliberately small: one supported comparison over declared
