@@ -1,0 +1,10 @@
+# The same record as tests/fixtures/shards/whole, divided by subject: one file per domain,
+# named here. Every reader merges them on the way in, so both shapes answer alike.
+meta:
+  updated: 2026-09-11
+  name: Two domains
+  scope: "What the standup needs and what the room has: the same record as one file and as
+          two shards under a pointer, so both can be held to the same answer."
+
+record: meetings.yaml
+also: rooms.yaml

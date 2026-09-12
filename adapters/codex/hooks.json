@@ -5,11 +5,20 @@
         "hooks": [
           {
             "type": "command",
-            "command": "\"../../scripts/session_open.sh\""
+            "command": "\"../../scripts/session_open.sh\" --host codex"
           },
           {
             "type": "command",
             "command": "\"../../scripts/ingestion_hook.sh\" codex start",
+            "timeout": 10
+          }
+        ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"../../scripts/ground_hook.py\" codex start",
             "timeout": 10
           }
         ]
@@ -20,7 +29,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "\"../../scripts/session_gate.sh\""
+            "command": "\"../../scripts/session_gate.sh\" --host codex"
           }
         ]
       }
@@ -35,6 +44,15 @@
             "timeout": 130
           }
         ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"../../scripts/ground_hook.py\" codex read",
+            "timeout": 10
+          }
+        ]
       }
     ],
     "UserPromptSubmit": [
@@ -45,6 +63,15 @@
             "command": "\"../../scripts/ingestion_hook.sh\" codex wait",
             "async": true,
             "timeout": 130
+          }
+        ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"../../scripts/ground_hook.py\" codex prompt",
+            "timeout": 15
           }
         ]
       }

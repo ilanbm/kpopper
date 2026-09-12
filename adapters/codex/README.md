@@ -48,12 +48,15 @@ before copying this configuration to another project:
 
 Then install the project configuration and skill:
 
+Use the absolute checkout path for `<kpopper>` so the skill symlinks resolve correctly. Each
+skill is its own directory under `skills/`, one per occasion, and each needs a link.
+
 ```sh
 mkdir -p .codex .agents/skills
 cp <kpopper>/adapters/codex/hooks.json .codex/hooks.json
 # Replace script paths in the copied file.
 cat <kpopper>/adapters/codex/AGENTS.md.snippet >> AGENTS.md
-ln -s <kpopper>/skills/kpopper .agents/skills/kpopper
+for s in <kpopper>/skills/*/; do ln -s "$s" .agents/skills/"$(basename "$s")"; done
 ```
 
 A plain project hook does not receive `$PLUGIN_ROOT`. Keep the existing record or registered

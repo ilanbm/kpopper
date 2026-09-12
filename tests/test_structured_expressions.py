@@ -213,6 +213,42 @@ class StructuredRecord(unittest.TestCase):
         self.assertIn("order.total", text)
         self.assertIn("150", text)
 
+    def test_followup_conditions_consume_computed_results_and_track_formula_changes(self):
+        from scripts import followups as F, followup_triggers as T
+        import datetime, yaml
+        values, _, error = F.graph(str(self.path))
+        self.assertIsNone(error)
+        def evaluate(trigger, current):
+            return T.evaluate(trigger, values=current, baseline=values, completed=set(), observations={},
+                              now=datetime.datetime(2026, 9, 12, tzinfo=datetime.timezone.utc))["value"]
+        self.assertTrue(evaluate({"condition": {"id": "order.total", "op": ">", "value": 50}}, values))
+        self.doc["known"]["order.total"]["rule"] = op("add", num(50), num(50))
+        self.path.write_text(yaml.safe_dump(self.doc, sort_keys=False))
+        updated, _, error = F.graph(str(self.path))
+        self.assertIsNone(error)
+        self.assertTrue(evaluate({"changed": "order.total"}, updated))
+
+    def test_watch_reports_unknown_structured_condition(self):
+        from scripts import watch as W
+        import yaml
+        self.doc["known"]["order.quantity"]["v"] = True
+        self.path.write_text(yaml.safe_dump(self.doc, sort_keys=False))
+        findings = W.uncertain(self.P.load([str(self.path)]))
+        self.assertIn("c.budget", findings)
+        self.assertIn("cannot currently be evaluated", " ".join(findings["c.budget"]))
+
+    def test_remeasurement_can_compare_structured_conditions(self):
+        import subprocess, yaml
+        self.doc["known"]["order.price"]["measure"] = "price"
+        self.path.write_text(yaml.safe_dump(self.doc, sort_keys=False))
+        recipe = Path(self.P.layout(self.path)["measure"])
+        recipe.write_text(yaml.safe_dump({"price": [sys.executable, "-I", "-c", "print(40)"]}))
+        result = subprocess.run([sys.executable, str(ROOT / "scripts/remeasure.py"), "--run", str(self.path)],
+                                text=True, capture_output=True)
+        self.assertNotIn("Traceback", result.stdout + result.stderr)
+        self.assertIn("c.budget", result.stdout)
+        self.assertNotEqual(result.returncode, 0)  # The new price actually breaks the budget.
+
     def test_migration_keeps_ambiguous_literals_and_comments(self):
         from scripts.expression_cli import migrate
         import yaml
@@ -309,6 +345,23 @@ class StructuredRecord(unittest.TestCase):
         self.assertFalse(refused["applied"])
         self.assertTrue(refused["problems"])
         self.assertEqual(self.path.read_bytes(), before)
+
+    def test_grounding_migration_preserves_the_hidden_brief(self):
+        from scripts.expression_cli import migrate
+        import yaml
+        modern = self.path.with_name("GROUNDING.yaml")
+        self.path.rename(modern)
+        self.path = modern
+        self.doc["known"]["order.total"]["rule"] = "order.price * order.quantity"
+        self.doc["judgments"]["c.budget"]["wrong_if"] = "order.total > 150"
+        self.path.write_text(yaml.safe_dump(self.doc, sort_keys=False))
+        brief = self.path.parent / ".kpopper/view.yaml"
+        brief.parent.mkdir()
+        brief.write_text(yaml.safe_dump({"title": "Order", "sections": [{"title": "Total", "pick": ["order.total"]}]}))
+        before = brief.read_bytes()
+        result = migrate(self.path, apply=True)
+        self.assertTrue(result["applied"], result)
+        self.assertEqual(brief.read_bytes(), before)
 
 
 if __name__ == "__main__":

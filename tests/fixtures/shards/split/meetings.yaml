@@ -1,0 +1,24 @@
+sources:
+  mtg.minutes:
+    name: "the standup minutes"
+    file: "meetings/standup-2026-09.md"
+    read: "2026-09-10"
+
+known:
+  mtg.attendees:
+    v: 14
+    name: "people at the standup"
+    from: mtg.minutes
+    at: "the attendance line of 2026-09-10"
+
+open:
+  mtg.slot: "is the standup still at nine once the floor moves?"
+
+judgments:
+  mtg.outgrown_the_room:
+    rests_on: [mtg.attendees, room.seats, room.spare]
+    verdict: "the standup has outgrown the room"
+    because: "{{mtg.attendees}} people against {{room.seats}} seats, which leaves
+              {{room.spare}}."
+    wrong_if: "mtg.attendees <= room.seats"
+    seen: {mtg.attendees: 14, room.seats: 12, room.spare: "room.seats - mtg.attendees"}

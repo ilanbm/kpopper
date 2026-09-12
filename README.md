@@ -17,63 +17,43 @@ mortgage applications need the same continuity: a new session can pick up the go
 and earlier decisions, along with the reasons behind them. kpopper is available as an agent
 plugin and through the command line.
 
+It can also create an ordinary HTML report with its evidence built in. Read the document,
+open an explanation beside a marked passage, and follow it back to the source—all in one
+file you can keep or share.
+
 <sub>*<ins>Third brain</ins>: a layer over a second brain's stored knowledge—how claims are
 grounded, why decisions were made, and what would call them into question.</sub>
 
 [Get started](#get-started) · [See an example](#ready-to-launch-had-a-condition) ·
-[See a document](#regular-html-annotated-with-reasoning) ·
-[The third brain](#a-third-brain-for-work-in-progress) · [How it works](#how-it-works) ·
+[The third brain](#a-third-brain-for-work-in-progress) ·
+[See a document](#share-a-document-with-its-reasons) ·
+[Past, present, future](#past-present-future) · [How it works](#how-it-works) ·
 [Coding & CI](#coding-check-the-reasoning-behind-a-merge) ·
 [Why Lean](#the-lean-proof-assistant-from-fermat-to-agents) · [Command reference](docs/reference.md)
 
-## Start with the work
-
-A project is **work around a goal**. Its materials may span documents, conversations,
-calendars, task systems, files and earlier sessions. In software, they also include code,
-commits and pull requests. One project can cross several tools; one source can serve several
-projects.
-
-kpopper keeps a *picture of the project's reasoning* in `PROVENANCE.yaml`: a readable record
-that connects claims to sources and decisions to their premises. Your documents and tools
-keep their own content. The record makes the reasoning between them available to the next
-person or agent working on the goal.
-
-| When you return to… | The useful thing to recover |
-|---|---|
-| A software project in Codex or Claude Code | Why a design was chosen, the code or test supporting it, and the changes that could invalidate it. |
-| Financial analysis in Claude Cowork | Which sources support a forecast's assumptions, when they were checked, and which decisions depend on them. |
-| A product launch | Which commitments support the launch plan, and which assumptions changed. |
-| Your weekly plan | Why a task has priority, the deadline behind it, and the availability it assumes. |
-| Research with an agent and an Obsidian vault | The evidence for an explanation, competing accounts, and the observation that would challenge it. |
-| A mortgage application | Which lender offer and documents support the plan, when the offer expires, and which conditions still need confirmation. |
-
-The same five questions orient the work:
-
-1. **What are we trying to achieve?** Goals, outcomes and priorities.
-2. **What is known now?** Facts, commitments, deadlines and constraints.
-3. **What was decided, and why?** Decisions, assumptions and alternatives.
-4. **Where is the evidence?** Sources and enough detail to find the relevant passage again.
-5. **What needs another look?** Open questions, conflicting reports and changed premises.
-
-These questions guide what to record. Today, the record grows from findings made during
-the work; guided project mapping is [planned](#what-is-available-and-what-is-next).
-Relevant sources come from the user's context and available tools. Access to a file alone
-does not make it part of the project.
-
 ## A third brain for work in progress
 
-A second brain helps you capture, organize and use knowledge. Tiago Forte's formulation
-explicitly includes turning that material into work through *Capture, Organize, Distill,
-Express*. [His introduction](https://fortelabs.com/blog/basboverview/) describes the method.
+The excitement around building an organizational **second brain** is well deserved. A team's
+knowledge already lives across notes and agent memory, documents and research, conversations,
+plans and commitments, code and data. An agent can connect the relevant pieces into a shared,
+evolving picture of the work.
 
-The **third brain** is our metaphor for a further job: keeping track of what your working
-conclusions depend on, and bringing them back into question when those dependencies change.
+Andrej Karpathy's [LLM Wiki](https://gist.github.com/karpathy/442a6bf555914893e9891c11519de94f)
+describes how an agent can maintain that picture as a persistent wiki: synthesizing sources,
+surfacing contradictions and revisiting stale claims.
+
+As that knowledge becomes a basis for action, its reasoning deserves an explicit record: why
+a conclusion was accepted, which sources and assumptions support it, and what would call for
+reconsideration.
+
+kpopper gives that record structure. It connects conclusions to their grounds, preserves what
+they were reviewed against, and checks declared conditions as recorded facts change. We call
+this reasoning and review layer a **third brain**; the agent supplies the interpretation.
 
 **Keep the knowledge system already in use.** A folder of Markdown files, an Obsidian vault,
 a project wiki, or memory files used by Claude or Codex can stay where they are. The agent
 reads relevant material through its available tools and records the claims it relies on,
-with links back to those sources, in `PROVENANCE.yaml`. kpopper adds the dependencies,
-review snapshots and conditions for reconsideration. There is no need to migrate the
+with links back to those sources, in `GROUNDING.yaml`. There is no need to migrate the
 existing notes or replace the agent's memory system.
 
 <p align="center">
@@ -103,6 +83,55 @@ Operationally, the analogy is straightforward: retrieve the relevant context, co
 with new information, draw attention to a consequential mismatch, and review the conclusion.
 In kpopper those steps are explicit records and checks. The person or agent supplies the
 interpretation; the software follows the declared connections. You retain the decision.
+
+## Start with the work
+
+A project is **work around a goal**. Its materials may span documents, conversations,
+calendars, task systems, files and earlier sessions. In software, they also include code,
+commits and pull requests. One project can cross several tools; one source can serve several
+projects.
+
+kpopper keeps a *picture of the project's reasoning* in `GROUNDING.yaml`: a readable record
+that connects claims to sources and decisions to their premises. Your documents and tools
+keep their own content. The record makes the reasoning between them available to the next
+person or agent working on the goal.
+
+| When you return to… | The useful thing to recover |
+|---|---|
+| A software project in Codex or Claude Code | Why a design was chosen, the code or test supporting it, and the changes that could invalidate it. |
+| Financial analysis in Claude Cowork | Which sources support a forecast's assumptions, when they were checked, and which decisions depend on them. |
+| A product launch | Which commitments support the launch plan, and which assumptions changed. |
+| Your weekly plan | Why a task has priority, the deadline behind it, and the availability it assumes. |
+| Research with an agent and an Obsidian vault | The evidence for an explanation, competing accounts, and the observation that would challenge it. |
+| A mortgage application | Which lender offer and documents support the plan, when the offer expires, and which conditions still need confirmation. |
+
+The same five questions orient the work:
+
+1. **What are we trying to achieve?** Goals, outcomes and priorities.
+2. **What is known now?** Facts, commitments, deadlines and constraints.
+3. **What was decided, and why?** Decisions, assumptions and alternatives.
+4. **Where is the evidence?** Sources and enough detail to find the relevant passage again.
+5. **What needs another look?** Open questions, conflicting reports and changed premises.
+
+These questions guide what to record. Learn from findings during ordinary work, or ask
+for an [initial map or deeper investigation](docs/first-use.md) of selected materials.
+The agent uses the sources available in your context; access to a file alone does not
+make it part of the project.
+
+## Past, present, future
+
+Keep the work connected across time: the sources and decisions behind it, what needs
+attention now, and the checks or actions to return to later.
+
+<p align="center">
+  <a href="assets/work-across-time.png">
+    <img src="assets/work-across-time.png" width="820" alt="Three connected parts of kpopper: Past holds sources, decision reasons and review snapshots. Present connects claims, changed premises and new information. Future holds followups, daily reviews and time or event triggers. A return arrow asks the agent to bring outcomes back to the record.">
+  </a>
+</p>
+
+The Future panel shows deferred work tracked by followups. The return arrow is the agent's
+step of recording useful outcomes as evidence; marking a followup complete is a separate
+operation and does not automatically rewrite the knowledge record.
 
 ## “Ready to launch” had a condition
 
@@ -155,7 +184,7 @@ time. kpopper is designed to keep the reasoning connecting them available across
 with sources, review snapshots and explicit conditions for reconsideration.
 
 Install it in the environment where that work happens. The package includes the
-[method](skills/kpopper/SKILL.md), record tools and host-specific hooks; setup depends on
+[method](skills/kpopper/SKILL.md) with one skill per occasion beside it, record tools and host-specific hooks; setup depends on
 the environment.
 
 ### Claude Cowork
@@ -235,11 +264,12 @@ and limitations; automatic opening and stop behavior differ by host. See the
 
 ### Start working
 
-The local scripts need **Python 3.9+ and PyYAML** available in the environment used by the
-host's `python3`. If PyYAML is missing, install it in that environment:
+The local scripts need **Python 3.9+** and the [package dependencies](pyproject.toml)
+available in the environment used by the host's `python3`. A Python package installation
+includes them. For a plugin-only installation, install them in that environment:
 
 ```sh
-python3 -m pip install pyyaml
+python3 -m pip install 'PyYAML>=5.1' 'html5lib>=1.1,<2' 'tinycss2>=1.2,<2' tzdata
 ```
 
 Lean is optional; the ordinary reader and page work without it. In a new agent session
@@ -279,6 +309,55 @@ an update, inspect its outcome before relying on it. Background work is useful p
 where the conversation can safely continue without that result.
 
 ## How it works
+
+### Return to work when it is ready
+
+Followups connect deferred work to the knowledge behind it. A check can become ready on a
+date, after a recorded value changes, when a threshold is crossed, or after another task
+finishes. Missing evidence remains an open question. Keep the task in your existing system
+or directory; kpopper has a private local fallback when you need one.
+
+**A short daily review is strongly recommended for ongoing work.** It checks what is due,
+what changed and which relevant piece of knowledge needs another look, with a small work
+budget and notifications for meaningful results. During active Claude Code and Codex
+sessions, event hooks also surface changed readiness. The daily schedule catches elapsed
+dates and missed events.
+
+**Catch branch conflicts while work is still in progress.** With local watch enabled,
+changes to a worktree's graph are checked in the background against the selected main ref.
+Only the changes authored on that branch are overlaid; neither graph is rewritten. New
+contradictions return to the working session, and the daily review checks registered
+worktrees as a fallback. Results name their exact versions; remote refs are not fetched
+automatically.
+
+External observations can also be shared immediately through one canonical record outside
+the branches. Each needs a source, date and environment. Branch experiments remain local;
+conflicting observations are retained for review. See [background watch and shared facts](skills/watch/references/compatibility.md).
+
+Run **`/kpopper:watch`** in Claude Code, or **`$watch`** in Codex, to check and set
+up local branch checks and the daily review. For live checks alone, ask watch to enable
+only local compatibility. The command inspects existing schedules, creates or repairs one when
+needed, and reads it back before confirming installation. Add `check` for inspection only,
+or `resume` to enable a paused review. Existing schedule times are preserved unless you ask
+to change them. The host performs scheduling within your authorization; a saved plan alone
+is not an active automation. See [the setup command](skills/watch/SKILL.md).
+Claims prevent duplicate work, and a check deferred until more evidence arrives stays open
+with its history intact. Followup scans and outcomes never silently rewrite the knowledge
+graph or mark its judgments reviewed. See the [followups guide](skills/kpopper/FOLLOWUPS.md)
+for routing, supported conditions, daily setup and platform limits.
+
+The scheduled host starts or resumes an agent session. That agent is instructed to claim
+and perform up to three ready followups within the user's existing authorization, record
+their outcomes, and surface decisions or blockers. There is no automatic dispatcher that
+opens a separate session for every item. Work assigned to an external owner stays with it.
+
+The review packet currently offers at most one flagged judgment as a graph-maintenance
+candidate. The prompt also allows a relevant source refresh or open-question check, but
+there is no general source-age scanner or sweep of every worktree graph. One review is
+bound to the record selected at setup; that can be a worktree copy. Choose a durable record
+and runtime for an ongoing schedule. See [record scope and retention](skills/kpopper/FOLLOWUPS.md#record-scope-and-retention).
+
+### The knowledge record
 
 The technical term is an **epistemic record**: a record of what is known and how it is
 grounded. The main pieces are ordinary YAML:
@@ -359,7 +438,7 @@ in the recorded reasoning, even though the lines merged cleanly.
 
 There are two ways to check the combination:
 
-- **Before merging:** `kpopper consolidate --dry-run --from <branch-or-ref>` reads another
+- **During work or before merging:** `kpopper consolidate --dry-run --from <branch-or-ref>` reads another
   branch's committed record as proposed changes and tests it against the current record.
 - **On the proposed merge result in CI:** `kpopper check` checks the combined record;
   `kpopper consolidate --dry-run` also tests the hypotheses stored beside it.
@@ -459,36 +538,58 @@ The ordinary commands remain available without it.
 
 [Logo source and trademark information](assets/README.md#lean-logo).
 
-## Regular HTML, annotated with reasoning
+## Share a document with its reasons
 
-A report can still read like a report: paragraphs, figures, tables and dates. In a kpopper
-page, linked details carry another layer—the reasoning and evidence behind them. Read the
-document normally, then follow a reference when something deserves a closer look.
+Ask for the document you want:
 
-**Hover to see what a conclusion rests on.** Here, the heating recommendation opens into
-its premises, breaking condition and explanation. The related figures are highlighted
-in the document itself.
+> Create an HTML project update from these notes, with a recommendation and a checklist.
+
+With kpopper active, the agent writes the content, design and evidence mapping together.
+You do not need to ask for the layer separately or prepare a knowledge record first.
+
+**Open the explanation where you are reading.** Hover over a dotted passage to preview
+its explanation; click to keep it open. The card focuses on that passage, with an explanation
+in ordinary language and technical details collapsed. Click outside or use the close button
+to return to the document.
 
 <p align="center">
-  <a href="assets/document-hover.png">
-    <img src="assets/document-hover.png" width="820" alt="An excerpt from the Greenhouse winter report's Now tab. Hovering over the heating conclusion opens a card with its dependencies, breaking condition and reasoning; the related 24 kW and 31 kW figures are highlighted in the report.">
+  <a href="assets/standalone-document-reasoning.png">
+    <img src="assets/standalone-document-reasoning.png" width="820" alt="The Autumn Garden Workshop report with its 16-day registration-window passage and a focused explanation visible together. The card marks the author's interpretation as Not checked, explains how it was derived from two dates, and links to the project notes offered as context.">
   </a>
 </p>
 
-**Click to pin the card, then drill down.** In this example, two clicks follow the heating
-conclusion to the capacity-gap calculation, then to the recorded boiler output. The final
-card shows the value and names the service-sheet source behind it. The back button or
-Escape steps back through that reading path.
+<sub>The card distinguishes the author's interpretation from a fact stated in the source:
+the notes give two dates, but do not define a registration window. Its reasoning,
+**Not checked** status and source link remain visible alongside the document.
+Click the image to inspect it at full size.</sub>
 
-<p align="center">
-  <a href="assets/document-drilldown.png">
-    <img src="assets/document-drilldown.png" width="820" alt="The same report after two drilldown steps: heating conclusion to shortfall calculation to boiler-output reading. The open card shows a value of 24 and the named service-sheet source, with a back button for returning through the reading path.">
-  </a>
-</p>
+**Follow the source, then come back.** An internal source link opens only the relevant
+reading in the same card. Back returns to the explanation without losing your place.
+The card keeps its position while longer content scrolls inside it.
 
-<sub>Actual browser captures from the [example record](examples/greenhouse-report/PROVENANCE.yaml)
-and its [document layout](examples/greenhouse-report/PROVENANCE.view.yaml). Click either image
-to inspect it at full size.</sub>
+**Keep or share one file.** The HTML contains the document, selected source snapshots and
+review choices. Open it offline in a browser with JavaScript enabled; no account, server
+or neighboring files are needed to read the document and inspect its evidence.
+
+Give the agent a changed source later and it can prepare a new copy with grouped
+before-and-after corrections. A changed count and the percentage calculated from it stay
+one decision. Accept or keep the original, then choose **Save document copy** to retain
+your choice and the evidence behind it.
+
+A match covers the stated comparison or calculation against a saved reading. Missing
+evidence and unchecked interpretations remain explicit; unmarked text is not checked.
+Opening an old file does not reread sources or discover later changes.
+See [HTML documents with evidence](docs/documents.md) for the workflow and its limits.
+
+<a id="regular-html-annotated-with-reasoning"></a>
+
+## Explore the project's knowledge record
+
+The project record also has its own HTML page. Its views bring together recorded facts,
+decisions and open questions, and can arrange them as a report. See the
+[Greenhouse example record](examples/greenhouse-report/GROUNDING.yaml) and its
+[document layout](examples/greenhouse-report/.kpopper/view.yaml) for a report built from
+recorded readings and a heating judgment.
 
 `kpopper page --open` generates this self-contained HTML from the project's record and a
 chosen layout. **Now** and other project tabs can present reports, plans or comparisons;
@@ -498,20 +599,24 @@ localization and checks on stale explanatory text, see the [page reference](skil
 
 ## What is available, and what is next
 
+This table describes the current repository. Check the [changelog](CHANGELOG.md) when
+updating an older installation; a merged feature may still be awaiting a release.
+
 | Status | Capability |
 |---|---|
 | Available | YAML records, source references, judgment checks, dependency tracing, review snapshots, hypotheses and consolidation. |
-| Available | CLI, HTML page and agent integrations, with host-specific setup and limits. |
+| Available | CLI, HTML record page and agent integrations, with host-specific setup and limits. |
+| Available | Standalone HTML authoring with contextual explanations, selected source snapshots and grouped corrections saved in the document copy. |
 | Available | Checks on combined records and hypotheses in CI, including before-merge inspection of another branch's record. |
 | Available within stated limits | Background processing of explicit reports and selective delivery of important findings. |
 | Platform import route documented; runtime not yet validated | ChatGPT Work installation and execution of this plugin. |
 | Experimental, opt-in | Lean-checked session views, revision-bound reads and a project-bound MCP server. |
-| Planned | Guided starting choices: learn during ordinary work, map selected existing materials, or investigate a defined subject and period in depth. |
-| Planned | Conversational onboarding that distinguishes a new user from a new project, explains concepts when first used, offers cards and links, and lets the user skip. |
+| Available through the agent | Guided starting choices: learn during ordinary work, map selected existing materials, or investigate a defined subject and period in depth. |
+| Available within host limits | Optional first-use explanations, workspace guidance and the ability to skip or turn guidance off. |
 
-An agent can help gather and interpret information using its available tools today. The
-planned guided flows are not built-in scanning or connectors. Their scope should begin
-with where the work and decisions actually happen, and which sources the user wants included.
+Mapping runs in the calling agent session, using its available tools and the sources you
+authorize. It does not install connectors or scan accounts by itself. See
+[starting a knowledge record](docs/first-use.md) for the workflow and host requirements.
 
 ## Make it earn its place
 

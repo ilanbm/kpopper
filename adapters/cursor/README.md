@@ -13,7 +13,7 @@ harness-neutral `scripts/provenance.py` underneath.
 | `hooks.json` | sessionStart → `gate-open.sh`, stop → `gate-stop.sh`. |
 | `scripts/gate-open.sh` | writes `${TMPDIR}/kpopper-base-cursor-<conversation_id>`, prints the opening. |
 | `scripts/gate-stop.sh` | compares the current FAIL count to that baseline; bounces once. |
-| `rules/kpopper.mdc` | the condensed method, `.mdc` frontmatter, agent-requested + auto-attached on `PROVENANCE.yaml`. |
+| `rules/kpopper.mdc` | the condensed method, `.mdc` frontmatter, agent-requested + auto-attached on `GROUNDING.yaml` or `PROVENANCE.yaml`. |
 
 ## Verified against docs
 
@@ -50,7 +50,7 @@ Source: `https://cursor.com/docs/hooks`, plus `https://ntorres.dev/blog/cursor-h
 - **`.mdc` frontmatter** is `description` (used for agent-requested matching),
   `globs` (comma-separated, auto-attaches the rule when a matching file is in context),
   `alwaysApply` (bypasses both — loads for every request, so used sparingly per Cursor's
-  own guidance). `rules/kpopper.mdc` sets both `description` and `globs: PROVENANCE.yaml`
+  own guidance). `rules/kpopper.mdc` sets both `description` and `globs: GROUNDING.yaml,PROVENANCE.yaml`
   so it attaches either by relevance or the moment that file is touched, and leaves
   `alwaysApply: false`.
 

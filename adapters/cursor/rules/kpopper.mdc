@@ -1,6 +1,6 @@
 ---
-description: Maintain PROVENANCE.yaml - an epistemic record of what is known, how each piece is grounded, and what would falsify each judgment. Use when work will be revisited, and when resuming such work.
-globs: PROVENANCE.yaml
+description: Maintain GROUNDING.yaml - an epistemic record of what is known, how each piece is grounded, and what would falsify each judgment. Use when work will be revisited, and when resuming such work.
+globs: GROUNDING.yaml,PROVENANCE.yaml
 alwaysApply: false
 ---
 
@@ -8,7 +8,8 @@ alwaysApply: false
 # kpopper — the method, condensed
 
 Start with the user's goal: planning, research, coordination, decisions or software.
-Keep one PROVENANCE.yaml entry point in the project's working directory for work that
+Keep one GROUNDING.yaml entry point (an existing PROVENANCE.yaml is that entry point too,
+read as it is) in the project's working directory for work that
 will be revisited. Git is optional; sources may span documents, conversations, calendars,
 task systems, files and earlier sessions. Record three things while working:
 

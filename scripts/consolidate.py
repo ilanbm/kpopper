@@ -134,7 +134,7 @@ def _check_of(udoc):
     written where nothing else sits - no brief, no hypotheses - and checked as a base is."""
     body = {k: v for k, v in udoc.items() if k not in ("record", "also")}
     with tempfile.TemporaryDirectory() as d:
-        p = os.path.join(d, "PROVENANCE.yaml")
+        p = os.path.join(d, P.ENTRY)
         with io.open(p, "w", encoding="utf-8") as f:
             yaml.safe_dump(body, f, sort_keys=False, allow_unicode=True, width=1000)
         fail, _, moved, _, _ = P.check_lines([p])
@@ -464,10 +464,6 @@ def _replace_block(lines, nid, block):
     lines[s:e] = block
 
 
-def _collections_of_text(lines):
-    return {n for n, _, _ in P._collections_in(lines)}
-
-
 def _rel(paths, p):
     """A path as the commit wants it: relative to the checkout the record sits in, else to the
     record's own directory."""
@@ -533,8 +529,7 @@ def fold(paths, names=(), refs=(), stamp=None):
                 out.append(f"replace {k} with what {h['name']} holds, where it stands"
                            + (" - born renewed, and what it replaced kept" if renewed else ""))
             else:
-                target = next((f for f in files if collection in _collections_of_text(texts[f])),
-                              files[0])
+                target = P._file_for(files, k, collection, texts)
                 where = P._insert_block(texts[target], collection, k, block)
                 out.append("carry " + where.replace(f"{k} into", f"{k} from {h['name']} into", 1))
                 added += 1
@@ -567,6 +562,7 @@ def fold(paths, names=(), refs=(), stamp=None):
         for h in c.hyps:
             if h.get("path") and os.path.isfile(h["path"]):
                 os.remove(h["path"])
+                P.forget(h["path"])
                 deleted.append(h["path"])
         d = P.hypothesis_dir(paths)
         if os.path.isdir(d) and not os.listdir(d):
@@ -653,6 +649,7 @@ def refute(paths, name, why, source=None, stamp=None):
             P._apply(paths, action)              # the write path, inside the lock already held
         try:
             os.remove(h["path"])
+            P.forget(h["path"])
         except OSError as e:
             for f in files:
                 if _text_of(f) != originals[f]:
@@ -717,6 +714,15 @@ def from_ref(paths, ref, doc=None):
         code, text, _ = _git(here, "show", f"{sha}:{path}")
         return None if code else text
 
+    # The ref may keep its record under the other entry name - one side renamed it - so the
+    # file is looked for under both, and its hypotheses where that name keeps them.
+    if show(rel) is None and posixpath.basename(rel) in P.ENTRY_NAMES:
+        for name in P.ENTRY_NAMES:
+            alt = posixpath.join(rdir, name) if rdir else name
+            if alt != rel and show(alt) is not None:
+                rel = alt
+                break
+
     with tempfile.TemporaryDirectory() as t:
         texts, queue, seen = {}, [rel], set()
         while queue:
@@ -741,7 +747,7 @@ def from_ref(paths, ref, doc=None):
                                 + " ".join(str(e).split())[:120])
             queue += [posixpath.normpath(posixpath.join(posixpath.dirname(path), c))
                       for c in _pointers(d if isinstance(d, dict) else {})]
-        hdir = posixpath.join(rdir, P.HYPOTHESES) if rdir else P.HYPOTHESES
+        hdir = posixpath.join(rdir, P.hypotheses_rel(rel)) if rdir else P.hypotheses_rel(rel)
         _, listing, _ = _git(here, "ls-tree", "--name-only", sha, hdir + "/")
         htexts = {}
         for path in listing.split("\n"):
@@ -833,8 +839,9 @@ file - nothing else of it enters. The finding is one entry:
     refutes: [<id>, ...]    judgment ids held by the hypothesis, when it held any;
                             identities, not dependencies of the finding
 
---from <ref> reads another branch's committed record - `git show <ref>:PROVENANCE.yaml`, the
-files it points at, and its PROVENANCE.d/ - and lays it over this base as hypotheses: the
+--from <ref> reads another branch's committed record - `git show <ref>:GROUNDING.yaml`, or the
+older PROVENANCE.yaml, the files it points at, and its hypotheses directory - and lays it over
+this base as hypotheses: the
 ref's base as one named after the ref, holding only what differs from this base in its
 claim, is newer by its day, or is new to it; each hypothesis file it carries as one more,
 named <ref>:<name>. The same dry run, the same report, the same refusal; the fold writes

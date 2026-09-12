@@ -16,7 +16,7 @@ HERE = Path(__file__).resolve().parent
 
 def parser():
     p = argparse.ArgumentParser(description=__doc__)
-    p.add_argument("operation", choices=["setup", "status", "open", "read", "propose", "serve", "enable", "disable", "hook-open"])
+    p.add_argument("operation", choices=["setup", "status", "open", "read", "search", "context", "propose", "serve", "enable", "disable", "hook-open"])
     p.add_argument("--input", type=Path, help="native record; defaults to the project's registered record")
     p.add_argument("--normalized", action="store_true", help="input is a normalized JSON snapshot")
     p.add_argument("--no-settings", action="store_true", help="use explicit arguments and record-local defaults without user settings")
@@ -28,6 +28,16 @@ def parser():
     p.add_argument("--ref")
     p.add_argument("--revision")
     p.add_argument("--offset", type=int)
+    p.add_argument("--query", default="", help="search text; use the original question or a faithful project-aware query")
+    p.add_argument("--id", dest="ids", action="append", default=[], help="exact known node ID; repeat for multiple candidates")
+    p.add_argument("--limit", type=int, default=8, help="search candidate limit,1..32")
+    p.add_argument("--cursor", help="returned search continuation; repeat the same query/IDs/branch/mode")
+    p.add_argument("--direction", choices=["support","impact"], help="explicit context traversal direction")
+    p.add_argument("--depth", type=int, default=1, help="context depth,0..4; zero reads only seeds")
+    p.add_argument("--max-nodes", type=int, default=16, help="context candidate cap including seeds,1..64")
+    p.add_argument("--branch", help="declared branch hint; only breaks ranking ties")
+    p.add_argument("--search-mode", choices=["lexical","semantic","hybrid"], default="hybrid")
+    p.add_argument("--embedding-dir", type=Path, help="optional local pinned E5 assets; search/serve only, never downloaded")
     p.add_argument("--kind", choices=["observed", "inferred", "assumed", "question"])
     p.add_argument("--text")
     p.add_argument("--basis", action="append", default=[])
@@ -49,8 +59,11 @@ def resolve(args):
                                  encoding="utf-8", capture_output=True)
         except OSError:
             top = None
-        if top is not None and top.returncode == 0 and (Path(top.stdout.strip()) / "PROVENANCE.yaml").is_file():
-            path = (Path(top.stdout.strip()) / "PROVENANCE.yaml").resolve()
+        if top is not None and top.returncode == 0:
+            for name in provenance.ENTRY_NAMES:
+                if (Path(top.stdout.strip()) / name).is_file():
+                    path = (Path(top.stdout.strip()) / name).resolve()
+                    break
     project = args.project or config.get("project") or re.sub(r"[^A-Za-z0-9._-]", "-", path.parent.name).strip("-._")[:70] or "project"
     requested_state = args.state or config.get("state")
     if requested_state:
@@ -61,7 +74,7 @@ def resolve(args):
         state = base / identity
     profile = args.profile or (Path(config["profile"]) if config.get("profile") else None)
     if profile is None:
-        candidate = path.parent / "PROVENANCE.session.json"
+        candidate = Path(provenance.layout(path)["session"])
         if candidate.is_file():
             profile = candidate
     reader = None if args.normalized else Path(provenance.__file__).resolve()
@@ -113,7 +126,7 @@ def main(argv=None):
             return 0 if result["ready"] else 1
         from .view import GroundingService
         project, path, state, reader, profile = resolve(args)
-        service = GroundingService(project, path, state, reader, args.encoding, profile=profile)
+        service = GroundingService(project, path, state, reader, args.encoding, profile=profile,embedding_dir=args.embedding_dir)
         if args.operation == "serve":
             from .mcp_server import make_server
             make_server(service).run(transport="stdio")
@@ -144,6 +157,16 @@ def main(argv=None):
             if args.ref is None or args.revision is None:
                 raise ValueError("read requires --ref and --revision from open")
             result = service.reading(args.ref, args.revision, args.tokens if args.tokens is not None else 1600, args.offset)
+        elif args.operation == "search":
+            if args.revision is None:
+                raise ValueError("search requires --revision from open")
+            result=service.searching(args.query,args.revision,args.tokens if args.tokens is not None else 1000,
+                                     args.ids,args.limit,args.branch,args.search_mode,args.cursor)
+        elif args.operation == "context":
+            if args.revision is None or args.direction is None:
+                raise ValueError("context requires --revision and --direction support|impact")
+            result=service.contextualizing(args.ids,args.revision,args.direction,
+                                           args.tokens if args.tokens is not None else 2000,args.depth,args.max_nodes)
         else:
             if args.revision is None or args.kind is None or args.text is None:
                 raise ValueError("propose requires --revision, --kind and --text")

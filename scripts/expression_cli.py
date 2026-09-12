@@ -77,7 +77,9 @@ def migrate(record=None, apply=False):
             shadow.write_text("\n".join(lines), encoding="utf-8")
             brief = P._brief_beside(str(rec))
             if brief:
-                (shadow.parent / Path(brief).name).write_bytes(Path(brief).read_bytes())
+                target_brief = Path(P.layout(shadow)["view"])
+                target_brief.parent.mkdir(parents=True, exist_ok=True)
+                target_brief.write_bytes(Path(brief).read_bytes())
             baseline = set(P.check_lines([str(rec)])[0])
             errors = P.check_lines([str(shadow)])[0]
             answer["problems"] = [error for error in errors if error not in baseline]

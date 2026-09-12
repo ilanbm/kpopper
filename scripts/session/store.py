@@ -142,12 +142,14 @@ def native_record(path, reader_path):
 
 
 class SessionService:
-    def __init__(self,project,input_path,state_dir,reader=None,encoding='o200k_base'):
+    def __init__(self,project,input_path,state_dir,reader=None,encoding='o200k_base',*,embedding_dir=None):
         if not re.fullmatch(r'[A-Za-z0-9][A-Za-z0-9._-]{0,79}',project): raise ValueError('invalid project name')
         self.project=project; self.input_path=Path(input_path).resolve()
         self.reader=Path(reader).resolve() if reader else None
         self.state_dir=Path(state_dir).resolve()
         self.encoder=TextEncoder(encoding)
+        self.embedding_dir=Path(embedding_dir).expanduser().resolve() if embedding_dir else None
+        self._searcher=None
         self.state_dir.mkdir(parents=True,exist_ok=True,mode=0o700)
         identity={'project':project,'input_path':str(self.input_path)}
         held=atomic_create(self.state_dir/'project.json',identity)
@@ -239,6 +241,59 @@ class SessionService:
             if len(self.encoder.encode(diagnostic))>tokens: raise BudgetTooSmall('budget cannot carry a complete read response')
             return diagnostic
         return response
+
+    def searching(self,query,revision,tokens=1000,ids=None,limit=8,branch=None,mode='hybrid',cursor=None):
+        """Find references in the current record; the exact reader supplies evidence."""
+        self.budget(tokens)
+        graph,current=self.expect(revision)
+        from .search import SearchIndex,continuation,read_continuation
+        held=read_continuation(cursor) if cursor is not None else None
+        offset=held['offset'] if held else 0
+        if branch is not None and branch not in graph.groups:
+            raise ValueError('unknown branch; read the map for a declared route')
+        if self._searcher is None:
+            semantic=None
+            if self.embedding_dir is not None:
+                from .embeddings import E5Index
+                semantic=E5Index(self.embedding_dir)
+            self._searcher=SearchIndex(semantic)
+        result=self._searcher.search(graph.nodes,query,ids,limit,
+                                    graph.groups[branch] if branch else (),mode,offset)
+        binding=digest({'project':self.project,'revision':current,'query':query,'ids':ids if ids is not None else [],
+                        'branch':branch,'mode':mode,'ranking':result.pop('ranking_fingerprint')})
+        if held and held['binding']!=binding:
+            raise ValueError('search cursor belongs to a different search or ranking; start a fresh search')
+        semantic=result.pop('semantic_index')
+        if semantic:
+            model=semantic.get('model',{})
+            result['semantic_index']={key:semantic[key] for key in ['document_count','chunk_count'] if key in semantic}
+            result['semantic_index']['model']={key:model[key] for key in ['name','revision','weights_sha256','tokenizer_sha256'] if key in model}
+        hits=result.pop('hits')
+        packet={'project':self.project,'revision':current,
+                'scope':'Ranked candidate subset of this record; scores are not evidence or claim confidence.',
+                'root_ref':'/','branch_hint':branch,**result,'hits':hits,
+                'next':'Read refs for evidence. Continue with next_cursor and the same search arguments; refine the query or read / for other candidates.'}
+        while True:
+            packet['returned']=len(hits)
+            following=offset+len(hits)
+            packet['limited']=following<result['matched_candidates']
+            packet['budget_omitted']=min(limit,result['matched_candidates']-offset)-len(hits)
+            packet['next_offset']=following if packet['limited'] else None
+            packet['next_cursor']=continuation(following,binding) if packet['limited'] else None
+            response=encode(packet)+'\n'
+            if len(self.encoder.encode(response))<=tokens:
+                return response
+            if not hits or len(hits)==1:
+                raise BudgetTooSmall('budget cannot carry a complete search response; raise tokens')
+            hits.pop()
+
+    def contextualizing(self,ids,revision,direction,tokens=2000,depth=1,max_nodes=16):
+        """Read selected declared neighbors; traversal never establishes entailment."""
+        self.budget(tokens)
+        graph,current=self.expect(revision)
+        from .context import context_packet
+        return context_packet(graph,lambda nid:self.read_value(graph,'node:'+nid),ids,direction,
+                              self.project,current,self.encoder,tokens,depth,max_nodes)
 
     def proposing(self,revision,kind,text,basis,revisit=''):
         graph,current=self.expect(revision)

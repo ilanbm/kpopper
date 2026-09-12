@@ -224,6 +224,25 @@ class BatchIngestion(unittest.TestCase):
         self.assertEqual(state["state"], "applied", state)
         self.assertEqual(yaml.safe_load(self.rec.read_text())["known"]["order.price"]["v"], 20)
 
+    def test_grounding_batch_stages_the_hidden_brief_in_its_own_layout(self):
+        modern = self.root / "GROUNDING.yaml"
+        self.rec.rename(modern)
+        self.rec = modern
+        brief = self.root / ".kpopper" / "view.yaml"
+        brief.parent.mkdir()
+        # The existing page gate requires a tab to serve newly captured source intents.
+        source_id = "s.ingest_" + I._event_id(self.rec.resolve(), self.report())
+        brief.write_text(yaml.safe_dump({"title": "Order", "tabs": [{"title": "Budget", "serves": [source_id],
+            "sections": [{"title": "Readings", "pick": ["order.price", "order.quantity", "order.limit", "c.affordable"]}]}]}))
+        original = brief.read_bytes()
+        result = self.run_report()
+        self.assertEqual(result["state"], "applied", result)
+        self.assertEqual(brief.read_bytes(), original)
+        drafts = list((self.state / "drafts").glob("*/.kpopper/view.yaml"))
+        self.assertEqual(len(drafts), 1)
+        self.assertEqual(drafts[0].read_bytes(), original)
+        self.assertFalse((self.root / "view.yaml").exists())
+
 
 if __name__ == "__main__":
     unittest.main()

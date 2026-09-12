@@ -1,8 +1,11 @@
 # Starting a knowledge record
 
 kpopper can begin in a workspace with no record, including one without Git. The session
-opener gives the agent a short instruction to continue your task and offer a starting choice
-at a suitable moment. It creates no record and scans no materials by itself.
+opener says in two lines that no record exists, which skill keeps findings as they arise and
+which one maps existing materials on request, and whether the starting choices were already
+offered here. The timing of that offer - once, at a suitable moment in real work, never on a
+greeting - is the [map skill](../skills/map/SKILL.md)'s. The opener creates no record and
+scans no materials by itself.
 
 Choose **Learn while working**, **Initial map**, or **Deeper investigation** in the conversation.
 An initial map covers your goals, current situation, commitments, decisions, evidence and
@@ -17,7 +20,10 @@ something to conclude, and their snapshots are filled by the existing writer.
 
 ## Commands
 
-The public interface has three operations:
+The first-use interface has three operations. When deferred work first arises, the agent
+also recommends a short daily review once per workspace. This recommendation is optional
+and respects the guidance preference; it does not activate a schedule. The separate
+[followups guide](../skills/kpopper/FOLLOWUPS.md) covers capture and host scheduling.
 
 ```bash
 kpopper open
@@ -75,7 +81,7 @@ Preferences live under `$XDG_STATE_HOME/kpopper/first-use`, or
 `~/.local/state/kpopper/first-use`. Choices are stored per workspace, shared across worktrees
 of the same repository. Introduction and explanation acknowledgements are stored for the
 local user so a new project does not repeat the tutorial. These files contain preferences
-and acknowledgements, not copies of source material. They are separate from `PROVENANCE.yaml`
+and acknowledgements, not copies of source material. They are separate from `GROUNDING.yaml`
 and are not synced between devices by kpopper.
 
 The existing record opener still supplies the current view, including an enabled checked

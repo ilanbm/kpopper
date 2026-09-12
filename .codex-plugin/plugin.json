@@ -1,7 +1,7 @@
 {
   "name": "kpopper",
-  "version": "1.2.0",
-  "description": "An epistemic record for work that gets revisited: what is known, how each piece is grounded, and what would make each judgment wrong. Self-evolving — judgments re-check against their dependencies and surface what drifted, so staleness is derived rather than remembered. Ships a reader, a checker, and a two-tab HTML page with a provenance layer: the arrangement this session chose, and the record itself.",
+  "version": "1.5.0",
+  "description": "An epistemic record for work that gets revisited: what is known, how each piece is grounded, and what would make each judgment wrong. Self-evolving — judgments re-check against their dependencies and surface what drifted, so staleness is derived rather than remembered. Ships a reader, a checker, and a two-tab HTML page with a provenance layer: the arrangement this session chose, and the record itself. Also packages authored HTML documents with inline evidence snapshots and offline copy-update review.",
   "author": {
     "name": "Ilan Bar Magen"
   },
@@ -19,7 +19,7 @@
   "interface": {
     "displayName": "kpopper",
     "shortDescription": "Keep sources, judgments, and important changes together.",
-    "longDescription": "An epistemic record for work that gets revisited: what is known, how each piece is grounded, and what would make each judgment wrong. Self-evolving — judgments re-check against their dependencies and surface what drifted, so staleness is derived rather than remembered. Ships a reader, a checker, and a two-tab HTML page with a provenance layer: the arrangement this session chose, and the record itself.",
+    "longDescription": "An epistemic record for work that gets revisited: what is known, how each piece is grounded, and what would make each judgment wrong. Self-evolving — judgments re-check against their dependencies and surface what drifted, so staleness is derived rather than remembered. Ships a reader, a checker, and a two-tab HTML page with a provenance layer: the arrangement this session chose, and the record itself. Also packages authored HTML documents with inline evidence snapshots and offline copy-update review.",
     "developerName": "Ilan Bar Magen",
     "category": "Productivity",
     "capabilities": [
@@ -27,7 +27,8 @@
       "Write"
     ],
     "defaultPrompt": [
-      "Open this project’s record and show what needs attention."
+      "Open this project’s record and show what needs attention.",
+      "Check and set up this project's daily kpopper review."
     ]
   }
 }

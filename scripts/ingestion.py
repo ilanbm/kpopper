@@ -615,7 +615,7 @@ def _prepare(rec, root, event, envelope, before_bytes):
     _atomic(shadow, before_bytes)
     brief = P._brief_beside(str(rec))
     if brief:
-        _atomic(draft / Path(brief).name, Path(brief).read_bytes())
+        _atomic(Path(P.layout(shadow)["view"]), Path(brief).read_bytes())
     mark = draft / "mark.json"
     paths = [str(shadow)]
     source_id = "s.ingest_" + eid
@@ -675,6 +675,7 @@ def _replace_record(record, data):
             out.flush()
             os.fsync(out.fileno())
         os.replace(name, str(record))
+        P.forget(record)
         try:
             dfd = os.open(str(record.parent), os.O_RDONLY)
             try:

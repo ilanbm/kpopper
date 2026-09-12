@@ -19,7 +19,7 @@ the project. Use the user's language and their names for the work.
 An absent file does not mean an empty body of knowledge or a new user. Respect the opener's
 record location, including a record elsewhere or in a parent directory. An unavailable
 registered record needs its location restored; it must not trigger a replacement. If existing
-materials already maintain a compatible record, use the pointer mechanism in SKILL.md.
+materials already maintain a compatible record, use the pointer mechanism in the method's shape reference (skills/kpopper/references/shape.md).
 
 At the first suitable moment in meaningful work, offer three choices in a short conversational
 card. Skip the introductory explanation if `introduced` is true. Defer the offer during urgent
@@ -54,6 +54,8 @@ question or throwaway task can finish without any record.
 
 Create the file with real material, not an empty template: the request that brought the session
 here, a source, and a supported finding or open question. Keep only roles with something to hold.
+Name each entry `<prefix>.<name>` with the prefix a word a question would use - the subject
+(`venue.`, `heat.`) or the kind (`decision.`, `session.`) - never a letter.
 For a small record with no judgments yet, use `sources`, `known` and `open` with their ordinary
 source/value/question fields; the reader accepts this starting shape without a `schema` block.
 Use `kpopper add` for judgments so the tool fills their `seen` snapshots. Do not invent a conclusion,

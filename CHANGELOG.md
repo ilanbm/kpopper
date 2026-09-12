@@ -1,5 +1,36 @@
 # Changelog
 
+## 1.5.0 — 2026-09-11
+
+- Say when a record was moved by half, and name the directory a plain listing skips (#65) — minor
+- Name the record's entry file GROUNDING.yaml and keep its files in .kpopper beside it (#64) — minor
+- Record the untouched-record question's measurement on the Codex host (#63) — patch
+- Ask for a word as a prefix, and show a legend for the letters a record keeps (#62) — minor
+- Read a record file once per change, and write where its subject is (#59) — minor
+
+Decisions recorded: d.a_half_move_is_said, d.a_write_joins_its_own_shard, d.brand_on_the_directory, d.entry_file_is_grounding, d.home_beside_the_entry, d.in_the_tree_only_what_is_reviewed, d.parse_kept_by_file_identity, d.prefix_is_a_word, d.unasked_recording_is_the_opener
+
+## 1.4.0 — 2026-09-10
+
+- Split the method into skills per occasion and pass every session through the record (#56) — minor
+
+Decisions recorded: d.first_add_is_the_birth, d.gate_asks_once_after_work, d.hooks_carry_pointers, d.named_until_read, d.no_record_opener_is_two_lines, d.skill_is_an_occasion
+
+## 1.3.0 — 2026-09-10
+
+- Add resumable search and evidence context to checked sessions (#50) — minor
+- Add asynchronous branch watch and scoped shared facts (#55) — minor
+- Lead with the third brain and show standalone document reasoning (#54) — patch
+- Add standalone HTML documents with offline evidence and review (#51) — minor
+- Add graph-linked followups and daily review (#53) — minor
+- Strengthen falsification guidance and speed up dependency reach (#52) — patch
+- Add optional first-use guidance and workspace mapping (#47) — minor
+- Rewrite README around agent reasoning and practical adoption (#48) — patch
+- Reduce the README diagram size by 86% (#46) — patch
+- Document background capture within the README workflow (#43) — patch
+
+Decisions recorded: d.context_is_an_explicit_read, d.followups_installation_is_not_execution, d.followups_readiness_is_not_authority, d.standalone_html_is_a_copy, d.watch_async_compatibility, d.watch_shared_scope, d.workspace_operations
+
 ## 1.2.0 — 2026-09-09
 
 - Add experimental Lean-checked session grounding (#44) — minor

@@ -518,7 +518,8 @@ class TheRepositoryTests(unittest.TestCase):
         for name in ("provenance.py", "consolidate.py", "sameness.py", "render_page.py", "cli.py"):
             text = (SCRIPTS / name).read_text(encoding="utf-8")
             self.assertNotIn("import remeasure", text, name)
-            self.assertNotIn(R.ALLOWLIST, text, name)
+            self.assertNotIn("run_recipe", text, name)        # nothing but the runner runs one
+            self.assertNotIn("allowlist_path", text, name)    # or resolves the list it runs from
 
 
 if __name__ == "__main__":

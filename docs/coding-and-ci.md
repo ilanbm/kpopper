@@ -7,7 +7,7 @@ illustrates this with a request timeout and a checkout budget.
 
 ## Check the proposed merge result
 
-Keep `PROVENANCE.yaml` and any referenced record files available in the checkout. For a
+Keep `GROUNDING.yaml` and any referenced record files available in the checkout. For a
 separate project using the published package, a GitHub Actions workflow can start with:
 
 ```yaml
@@ -81,7 +81,7 @@ actual merged tree in CI as well.
 
 A code change that never updates a relevant reading may be invisible to the record. For
 facts that can be measured reproducibly, attach a named `measure` recipe and define its
-argument list in `PROVENANCE.measure.yaml`:
+argument list in `.kpopper/measure.yaml`:
 
 ```sh
 kpopper remeasure       # Inspect what would run

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Read a PROVENANCE record: check its invariants, and report what a change reaches.
+"""Read a knowledge record: check its invariants, and report what a change reaches.
 
   python3 provenance.py open    [file ...]        the whole opening: head + what moved
   python3 provenance.py check   [file ...]
@@ -20,12 +20,16 @@ what it wrote, what is MOVED now, which predicate fired. `set --help`, `add --he
 names the entries nearest a new one, and `same` or `distinct` records the answer
 (sameness.py).
 
-Without a file argument the record is PROVENANCE.yaml here, else the path this checkout
-registered in `<git common dir>/kpopper-record` - for a project whose tree cannot hold it.
+Without a file argument the record is GROUNDING.yaml here - or PROVENANCE.yaml, the name
+records were born under before - else the path this checkout registered in
+`<git common dir>/kpopper-record`, for a project whose tree cannot hold it.
+A file is parsed when it changes, not at every command: its parsed form is kept under the
+user's state directory, keyed by what the file is. `--no-cache`, or KPOPPER_NO_CACHE=1,
+parses every time.
 
 The record forks on a contradiction, never on a session: a write that contradicts the base
-is refused into it and goes into a hypothesis - `PROVENANCE.d/<name>.yaml` beside the record,
-the record's own shape - with `--hypothesis <name>`. Every command reads the hypotheses over
+is refused into it and goes into a hypothesis - `.kpopper/hypotheses/<name>.yaml` beside the
+record, the record's own shape - with `--hypothesis <name>`. Every command reads the hypotheses over
 the base: `pull` shows what each proposes, `check` and `open` say where two disagree
 (CONTESTED), the opener counts what waits, and the base alone is what is evaluated until
 consolidation tests the union.
@@ -42,7 +46,8 @@ Where two fields genuinely fit the same role it refuses to guess and asks for a
 one-line `schema:` block. A checker that quietly passes over what it cannot read
 is worse than no checker, so every ambiguity is an error, never a skip.
 """
-import io, os, re, sys, glob, json, shlex, hashlib, subprocess, datetime, textwrap, tempfile, contextlib, yaml
+import io, os, re, sys, glob, json, time, shlex, stat, pickle, hashlib, subprocess, datetime, \
+    textwrap, tempfile, contextlib, yaml
 from decimal import Decimal, InvalidOperation
 import importlib.util
 
@@ -87,7 +92,11 @@ EXPR = re.compile(r"[<>=!+\-*/()]|\bor\b|\band\b|\bnot\b")
 # shown and never retyped. A judgment id placed this way, `{{c.boiler_short}}`, asks for that
 # judgment's reasoning at that spot.
 REF = re.compile(r"\{\{\s*([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z0-9_]+)+)\s*\}\}")
-DEFAULT = ["PROVENANCE.yaml"]
+ENTRY = "GROUNDING.yaml"            # the record's entry point, born by the first add
+LEGACY_ENTRY = "PROVENANCE.yaml"    # the name records were born under before: still read, never created
+ENTRY_NAMES = (ENTRY, LEGACY_ENTRY)
+HOME = ".kpopper"                   # beside the entry file: everything a record keeps beside itself
+DEFAULT = [ENTRY]
 
 # Names the reader computes rather than reads: counted from the record alone (graph.*), or
 # where the page is built (page.*). Never written, never stored. A judgment may rest on one
@@ -176,8 +185,9 @@ def registered_record():
 
 def default_paths():
     """Use the same bounded discovery as the opener, including non-Git workspaces."""
-    if os.path.exists(DEFAULT[0]):
-        return DEFAULT
+    for name in ENTRY_NAMES:
+        if os.path.exists(name):
+            return [name]
     try:
         from .workspace import locate
     except ImportError:
@@ -195,8 +205,115 @@ def default_paths():
     return [location["record"]] if location["status"] == "found" else DEFAULT
 
 
-HYPOTHESES = "PROVENANCE.d"      # beside the record: one file per hypothesis, the record's shape
+HYPOTHESES = "PROVENANCE.d"      # the hypotheses of a record under the old name, beside it
+HYPOTHESES_HOME = "hypotheses"   # under HOME for a record under the new: one file per hypothesis
 HYPOTHESIS_NAME = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_\-]*$")
+
+
+def is_legacy(entry):
+    """A record found as PROVENANCE.yaml keeps its files under the names it was born with."""
+    return os.path.basename(str(entry)) == LEGACY_ENTRY
+
+
+def _first_of(paths):
+    return (sorted(glob.glob(paths[0])) or [paths[0]])[0]
+
+
+def hypotheses_rel(entry):
+    """The hypotheses directory relative to the entry file's own - for a tree read through
+    git, where nothing is absolute."""
+    return HYPOTHESES if is_legacy(entry) else HOME + "/" + HYPOTHESES_HOME
+
+
+def layout(first):
+    """Where a record keeps what sits beside it, decided by the name of the file the reader
+    opens first. GROUNDING.yaml keeps everything under .kpopper/ beside it - hypotheses/,
+    view.yaml, measure.yaml, session.json, and build/ for what is rebuilt. PROVENANCE.yaml,
+    the name records were born under before, keeps PROVENANCE.d/, PROVENANCE.view.yaml,
+    PROVENANCE.measure.yaml and PROVENANCE.session.json beside it, as it always did. One home
+    per record: the reader never looks in both."""
+    first = os.path.abspath(str(first))
+    d = os.path.dirname(first)
+    if is_legacy(first):
+        return {"legacy": True, "entry": first, "home": d,
+                "hypotheses": os.path.join(d, HYPOTHESES), "hypotheses_name": HYPOTHESES,
+                "view": re.sub(r"\.ya?ml$", "", first) + ".view.yaml",
+                "measure": os.path.join(d, "PROVENANCE.measure.yaml"),
+                "measure_name": "PROVENANCE.measure.yaml",
+                "session": os.path.join(d, "PROVENANCE.session.json"),
+                "build": None, "page": "record.html"}
+    home = os.path.join(d, HOME)
+    return {"legacy": False, "entry": first, "home": home,
+            "hypotheses": os.path.join(home, HYPOTHESES_HOME),
+            "hypotheses_name": HOME + "/" + HYPOTHESES_HOME,
+            "view": os.path.join(home, "view.yaml"),
+            "measure": os.path.join(home, "measure.yaml"), "measure_name": HOME + "/measure.yaml",
+            "session": os.path.join(home, "session.json"),
+            "build": os.path.join(home, "build"), "page": os.path.join(home, "build", "page.html")}
+
+
+def layout_of(paths):
+    return layout(_first_of(paths))
+
+
+def leftovers(paths):
+    """Files of the record's other layout beside the entry file -> [(what, where it belongs)]:
+    a record moved by half, renamed with its files left under the earlier names, or a
+    .kpopper/ opened beside a record still under the earlier name. The reader looks in one
+    home, so nothing reads these - and a hypothesis or a brief nobody reads is worse than
+    none, which is why check fails on them and the opener names them. An empty hypotheses
+    directory holds nothing to lose and is passed over."""
+    lay = layout_of(paths)
+    d = os.path.dirname(lay["entry"])
+    other = layout(os.path.join(d, ENTRY if lay["legacy"] else LEGACY_ENTRY))
+    out = []
+    for role in ("hypotheses", "view", "measure", "session"):
+        there = other[role]
+        if not os.path.exists(there):
+            continue
+        if role == "hypotheses" and not glob.glob(os.path.join(there, "*.y*ml")):
+            continue
+        tail = "/" if role == "hypotheses" else ""
+        out.append((os.path.relpath(there, d) + tail, os.path.relpath(lay[role], d) + tail))
+    return out
+
+
+def leftover_lines(paths):
+    """What check says about each file left under the other layout."""
+    lay = layout_of(paths)
+    if lay["legacy"]:
+        return [f"{what} is not read beside {LEGACY_ENTRY} - rename the record to {ENTRY} and move "
+                f"its files into {HOME}/, or move this to {where}" for what, where in leftovers(paths)]
+    return [f"{what} is not read - left under the earlier name; move it to {where}"
+            for what, where in leftovers(paths)]
+
+
+def leftover_head(paths):
+    """The opener's one line about a record moved by half, or None."""
+    left = leftovers(paths)
+    if not left:
+        return None
+    names = ", ".join(what for what, _ in left)
+    if layout_of(paths)["legacy"]:
+        return (f"{names} not read beside {LEGACY_ENTRY} - rename the record to {ENTRY} and move its "
+                f"files into {HOME}/")
+    return f"left under the earlier name, not read: {names} - move into {HOME}/"
+
+
+def brief_for(paths, explicit=None):
+    """The brief the page is built from: the one given, else the record's own - under .kpopper/
+    beside a record under the new name; beside the record or any file it points at, then in
+    the working directory, for one kept under the old."""
+    if explicit:
+        return explicit
+    lay = layout_of(paths)
+    if not lay["legacy"]:
+        return lay["view"] if os.path.exists(lay["view"]) else None
+    for p in list(paths) + [LEGACY_ENTRY]:
+        c = re.sub(r"\.ya?ml$", "", p) + ".view.yaml"
+        if os.path.exists(c):
+            return c
+    return None
 
 
 class Record(dict):
@@ -209,10 +326,10 @@ class Record(dict):
 
 
 def hypothesis_dir(paths):
-    """Where a record's hypotheses live: PROVENANCE.d beside the file the reader opens first -
-    the root of a pointer record, the registered file of a project whose tree holds none."""
-    first = sorted(glob.glob(paths[0])) or [paths[0]]
-    return os.path.join(os.path.dirname(os.path.abspath(first[0])), HYPOTHESES)
+    """Where a record's hypotheses live: .kpopper/hypotheses beside the file the reader opens
+    first - the root of a pointer record, the registered file of a project whose tree holds
+    none - and PROVENANCE.d beside a record kept under the old name. One place per record."""
+    return layout_of(paths)["hypotheses"]
 
 
 def hypothesis_path(paths, name):
@@ -234,6 +351,219 @@ def _as_day(v):
         return None
 
 
+# ── reading a file of the record ─────────────────────────────────────────────
+# Every command reads the whole record, and the hooks read it at every prompt and every edit.
+# Reading the bytes is a millisecond and parsing them is the whole cost, so a file's parsed
+# document is kept under the user's own state directory, keyed by the file's absolute path, its
+# size, the nanosecond it was last written, and the digest of the bytes that were parsed. Any of
+# the four differing is a parse. The digest is what makes the key honest: a length and a
+# nanosecond cannot tell apart a rewrite of the same length inside one tick, and a tick is a
+# whole second on filesystems that keep timestamps coarsely. It costs a thousandth of the parse.
+#
+# The files are the record; the cache is only a copy of what one of them said. An entry that is
+# missing, truncated, foreign, stale or of the wrong shape is a parse, never an error, and every
+# write drops the entry for the file it wrote. Set KPOPPER_NO_CACHE=1 to parse every time - for
+# a test, or to tell the cache out of a problem.
+NO_CACHE = "KPOPPER_NO_CACHE"
+CACHE_FORM = 1              # the entry's own shape: a newer reader ignores what an older wrote
+CACHE_DAYS = 14             # an entry no read has renewed for this long is nobody's
+CACHE_ENTRIES = 64          # and this many, newest kept: more records than anyone reads at once
+SWEEP = ".swept"            # in the directory: when it was last looked over
+_PARSED = {}                # this process's own: absolute path -> (identity, the entry's bytes)
+_SWEPT = False              # the directory is looked over once in a run, and once in a day
+# What a parsed record can hold beyond mappings, lists and scalars, which carry themselves
+VALUES = {("datetime", "date"), ("datetime", "datetime"), ("datetime", "time"),
+          ("datetime", "timedelta"), ("datetime", "timezone"), ("builtins", "set"),
+          ("builtins", "frozenset"), ("builtins", "complex")}
+
+
+class _OnlyValues(pickle.Unpickler):
+    """A cache entry holds what the parser returned - mappings, lists, scalars, dates - and
+    nothing else is built from it, so a file under the state directory can never become code
+    this process runs."""
+
+    def find_class(self, module, name):
+        if (module, name) not in VALUES:
+            raise pickle.UnpicklingError(f"{module}.{name} is not a value a record holds")
+        return super().find_class(module, name)
+
+
+def cache_dir():
+    """Where the parsed documents are kept: the user's state directory, where this tool keeps
+    what belongs to a person rather than to a project."""
+    configured = os.environ.get("XDG_STATE_HOME", "")
+    base = configured if configured and os.path.isabs(configured) else \
+        os.path.join(os.path.expanduser("~"), ".local", "state")
+    return os.path.join(base, "kpopper", "cache")
+
+
+def _cache_file(path):
+    """One entry per file, named for the whole absolute path: two records never share an entry -
+    two checkouts of one project, or two hypotheses of the same name beside different records."""
+    return os.path.join(cache_dir(), hashlib.sha256(path.encode("utf-8")).hexdigest() + ".parse")
+
+
+def _cache_ready():
+    """The directory, private to this user. Nothing is read from or written to one that anybody
+    else can write to, and a directory that cannot be made leaves the cache out of this run."""
+    d = cache_dir()
+    try:
+        os.makedirs(d, mode=0o700, exist_ok=True)
+        if os.path.islink(d):
+            return None       # a link is somebody else's directory wearing this one's name
+        st = os.stat(d)
+        uid = getattr(os, "getuid", None)
+        if not stat.S_ISDIR(st.st_mode):
+            return None
+        # the mode bits are read where the platform keeps them; where it does not, they are
+        # made up, and a made-up answer is no reason to refuse the directory
+        if uid and (stat.S_IMODE(st.st_mode) & 0o022 or st.st_uid != uid()):
+            return None
+    except OSError:
+        return None
+    if not _SWEPT:
+        _sweep(d)
+    return d
+
+
+def _sweep(d):
+    """A record that was moved, renamed or deleted - a throwaway checkout, a test's own file -
+    leaves behind an entry nobody will ask for again. So the directory is looked over once a
+    day: what a parse has not rewritten for a fortnight goes, and so does everything past the
+    newest few dozen. A record still in use is read from an entry that outlives that or parsed
+    once more, and either way the directory stays the size of what is actually read."""
+    global _SWEPT
+    _SWEPT = True
+    now = time.time()
+    try:
+        names = [n for n in os.listdir(d) if n.endswith(".parse")]
+    except OSError:
+        return
+    if len(names) <= CACHE_ENTRIES:
+        try:                  # within its bounds and looked over today: nothing to do
+            if now - os.stat(os.path.join(d, SWEEP)).st_mtime < 86400:
+                return
+        except OSError:
+            pass
+    aged = []
+    for name in names:
+        entry = os.path.join(d, name)
+        try:
+            aged.append((os.stat(entry).st_mtime, entry))
+        except OSError:
+            continue          # somebody else's sweep got there first
+    aged.sort(reverse=True)
+    for i, (when, entry) in enumerate(aged):
+        if i < CACHE_ENTRIES and now - when <= CACHE_DAYS * 86400:
+            continue
+        try:
+            os.remove(entry)
+        except OSError:
+            pass              # one entry that will not go is no reason to leave the rest
+    try:                      # the mark of a sweep is written when there has been one
+        fd = os.open(os.path.join(d, SWEEP), os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+        os.close(fd)
+    except OSError:
+        pass
+
+
+def _identity(path, data):
+    """What tells one state of a file from another: how long it is, when it was written, and
+    what it holds - the last of which is the one of the three nothing can fake by accident."""
+    st = os.stat(path)
+    return [st.st_size, st.st_mtime_ns, hashlib.sha256(data).hexdigest()]
+
+
+def _cached(path, identity):
+    """What this file parsed to last time, if the file is still the one that parsed. Anything
+    unreadable, of another shape, or about another file reads as nothing at all."""
+    raw, memo = None, _PARSED.get(path)
+    if memo is not None and memo[0] == identity:
+        raw = memo[1]
+    elif _cache_ready():
+        try:
+            with io.open(_cache_file(path), "rb") as f:
+                raw = f.read()
+        except OSError:
+            return None
+    if raw is None:
+        return None
+    try:
+        entry = _OnlyValues(io.BytesIO(raw)).load()
+    except Exception:
+        return None
+    if not isinstance(entry, dict) or entry.get("form") != CACHE_FORM \
+            or entry.get("path") != path or entry.get("identity") != identity \
+            or not isinstance(entry.get("doc"), dict):
+        return None
+    _PARSED[path] = (identity, raw)
+    return entry["doc"]
+
+
+def _keep(path, identity, doc):
+    """The parse kept for the next reader: in this process, and in a file of its own - written
+    where only this user can read it, and put in place in one step, so nobody meets half an
+    entry. A cache that cannot be written changes nothing about the answer. Only a document of
+    the shape a record has is kept, so nothing that reads one has to ask what it got."""
+    if not isinstance(doc, dict):
+        return
+    try:
+        raw = pickle.dumps({"form": CACHE_FORM, "path": path, "identity": identity, "doc": doc},
+                           protocol=pickle.HIGHEST_PROTOCOL)
+    except Exception:
+        return                       # a document that will not pickle is simply not kept
+    _PARSED[path] = (identity, raw)
+    if not _cache_ready():
+        return
+    tmp = None
+    try:
+        # the temporary name ends in .parse too, so one left by a killed writer is swept
+        fd, tmp = tempfile.mkstemp(prefix=".writing.", suffix=".parse", dir=cache_dir())
+        with io.open(fd, "wb") as f:
+            f.write(raw)
+        os.replace(tmp, _cache_file(path))
+    except OSError:
+        if tmp and os.path.exists(tmp):
+            try:
+                os.remove(tmp)
+            except OSError:
+                pass
+
+
+def forget(path):
+    """What a write leaves behind: the entry for the file it wrote, gone from this process and
+    from the state directory. The key would catch the change anyway; dropping the entry is what
+    keeps the directory one entry per file rather than one per version of one."""
+    p = os.path.abspath(path)
+    _PARSED.pop(p, None)
+    try:
+        os.remove(_cache_file(p))
+    except OSError:
+        pass
+
+
+def parse(path):
+    """One file of the record, as the parser reads it - the record, a file a pointer names, a
+    hypothesis beside it. Every reader of a record file comes through here, so none of them can
+    be served the parse of a file as it no longer is: what comes back is the parse of the bytes
+    that are there now, or those bytes parsed again."""
+    path = os.path.abspath(path)
+    with io.open(path, "rb") as f:
+        data = f.read()
+    if os.environ.get(NO_CACHE, "") not in ("", "0"):
+        return yaml.safe_load(data.decode("utf-8"))
+    try:
+        identity = _identity(path, data)
+    except OSError:
+        return yaml.safe_load(data.decode("utf-8"))
+    got = _cached(path, identity)
+    if got is not None:
+        return got
+    doc = yaml.safe_load(data.decode("utf-8"))
+    _keep(path, identity, doc)
+    return doc
+
+
 def _hypothesis(name, path):
     return {"name": name, "path": path, "head": {}, "doc": {}, "ids": set(), "raw": {}, "error": None}
 
@@ -252,8 +582,7 @@ def load_hypotheses(paths):
         name = re.sub(r"\.ya?ml$", "", os.path.basename(f))
         hyp = _hypothesis(name, f)
         try:
-            with io.open(f, encoding="utf-8") as fh:
-                body = yaml.safe_load(fh.read()) or {}
+            body = parse(f) or {}
             if not isinstance(body, dict):
                 raise ValueError("not a mapping of collections")
             head = body.pop("hypothesis", None)
@@ -436,6 +765,11 @@ def load(paths):
         seen.add(os.path.abspath(f))
         for k, v in d.items():
             if isinstance(v, dict) and isinstance(doc.get(k), dict):
+                # a legend is declared per file, and a record split across files keeps
+                # every file's letters rather than the last file's
+                mine, theirs = doc[k].get("prefixes"), v.get("prefixes")
+                if k == "meta" and isinstance(mine, dict) and isinstance(theirs, dict):
+                    v = dict(v, prefixes={**mine, **theirs})
                 doc[k].update(v)
             else:
                 doc[k] = v
@@ -451,14 +785,14 @@ def load(paths):
                 cf = os.path.join(os.path.dirname(f), c)
                 if os.path.abspath(cf) in seen or not os.path.exists(cf):
                     continue
-                merge(cf, yaml.safe_load(io.open(cf, encoding="utf-8").read()) or {})
+                merge(cf, parse(cf) or {})
 
     for p in paths:
         for f in sorted(glob.glob(p)) or [p]:
             if not os.path.exists(f):
                 sys.exit(f"{f}: no record here. Run this from the directory the record sits "
                          "in, or name the record file as an argument.")
-            merge(f, yaml.safe_load(io.open(f, encoding="utf-8").read()) or {})
+            merge(f, parse(f) or {})
     doc.hypotheses = load_hypotheses(paths)
     return doc
 
@@ -574,7 +908,10 @@ def infer(doc):
         # role inference; this must never hide a misspelled dependency declaration.
         source_collections = {k: v for k, v in collections.items() if k != "meta"}
         judgment_fields = {"rests_on", "wrong_if", "seen", "verdict", "reopened_by", "blocked_on"}
-        if source_collections and set(source_collections) <= {"known", "sources", "open", "questions"} \
+        # A record born with only its head - meta, and nothing yet - is the moment before
+        # the first entry, not a record that lost its graph.
+        newborn = bool(doc) and set(doc) <= {"meta"}
+        if (newborn or source_collections and set(source_collections) <= {"known", "sources", "open", "questions"}) \
                 and not unresolved and not any(
                     judgment_fields.intersection(body) for group in source_collections.values()
                     for body in group.values() if isinstance(body, dict)):
@@ -1005,6 +1342,53 @@ def priors_line(ids, jud, raw, *, with_high=False):
     return (line, high) if with_high else line
 
 
+# ── the legend ───────────────────────────────────────────────────────────────
+# A prefix is meant to be a word a question carries. A record kept under letters - born
+# before that was asked for, and kept because a rename reaches every reference on every
+# branch - says once in its head what they stand for, `meta.prefixes: {d: decision}`, and
+# every surface that shows a prefix to a person shows the word beside it: the opener's head
+# and the page's namespace bar. Nothing else reads the field.
+LEGEND_WORD = 40            # a legend entry is a word; a sentence there would eat the head
+
+
+def legend_of(meta, ids):
+    """{prefix: word} for the prefixes the record holds, judgments included - a letter the
+    record no longer holds is not repeated, and what is not a word is not a legend."""
+    declared = (meta or {}).get("prefixes")
+    if not isinstance(declared, dict):
+        return {}
+    held = {k.split(".")[0] for k in ids if isinstance(k, str) and not is_builtin(k)}
+    out = {}
+    for g, w in declared.items():
+        if isinstance(g, str) and isinstance(w, str) and g in held:
+            w = " ".join(w.split())
+            if w:
+                out[g] = w if len(w) <= LEGEND_WORD else w[:LEGEND_WORD - 1] + "…"
+    return out
+
+
+def legend_notes(meta, ids):
+    """What check says about a legend nothing can print: a key YAML read as something other
+    than a word (`on:` and `yes:` are booleans unless quoted), a value that is not one, a
+    prefix the record does not hold - each silent in the opener, and said here instead."""
+    declared = (meta or {}).get("prefixes")
+    if declared is None:
+        return []
+    if not isinstance(declared, dict):
+        return ["meta.prefixes is not a mapping of prefix to word - nothing is printed from it"]
+    held = {k.split(".")[0] for k in ids if isinstance(k, str) and not is_builtin(k)}
+    notes = []
+    for g, w in declared.items():
+        if not isinstance(g, str):
+            notes.append(f"meta.prefixes: the key {g!r} is not a word - yes, no, on, off, true "
+                         "and false are booleans to YAML unless quoted")
+        elif g not in held:
+            notes.append(f"meta.prefixes: {g} is held by nothing in the record")
+        elif not isinstance(w, str) or not w.strip():
+            notes.append(f"meta.prefixes: {g} stands for {w!r}, which is not a word - quote it")
+    return notes
+
+
 # ── arrangements ─────────────────────────────────────────────────────────────
 # An arrangement is a judgment by shape: it rests on a session source - the occasion it
 # decides - and its sign is a name the build computes, read by its predicate or rested on.
@@ -1325,6 +1709,8 @@ def check_lines(paths):
     priors = priors_line(ids, jud, raw)
     if priors:
         note.append(priors)
+    # A legend the opener could not print, said here since the opener says nothing.
+    note += legend_notes(doc.get("meta"), ids)
     # Coverage, when a brief sits beside the record: which intents no tab of the page serves,
     # and where what each of them wrote falls - facts the page counted, said here so a session
     # that never builds the page still hears them. The page decides its own falsifiers; the
@@ -1361,6 +1747,10 @@ def check_lines(paths):
     for k, hs in contested(doc).items():
         cont.append(f"{k}: " + ", ".join(f"{n} says {short(c)}" for n, c in hs)
                     + " - one of them folds, or neither; a person decides")
+    # Files of the other layout beside the entry file: a record moved by half. Nothing reads
+    # them, and a checker that passes over what it cannot read is the failure this method
+    # exists to refuse.
+    fail += leftover_lines(paths)
     held = sum(1 for k in ids if not is_builtin(k))
     summary = (f"{len(jud)} judgments, {held} entries, {len(fail)} problems"
                + (f", {len(moved)} moved" if moved else "")
@@ -1369,7 +1759,21 @@ def check_lines(paths):
     return fail, note, moved, cont, summary
 
 
-def opening(paths, budget=25, chars=None):
+SKILL_FORMS = {"claude": "/kpopper:{}", "codex": "${}"}
+
+
+def next_moves(host):
+    """The session's next moves, named the way the host invokes a skill - `/kpopper:ground`
+    in Claude Code, `$ground` in Codex - or nothing, for a host that runs the reader's verbs
+    directly and is told those instead."""
+    form = SKILL_FORMS.get(host or "")
+    if not form:
+        return None
+    return {"ground": form.format("ground") + " <entry|prefix>", "record": form.format("record"),
+            "consolidate": form.format("consolidate")}
+
+
+def opening(paths, budget=25, chars=None, host=None):
     """
     What a session should read instead of the whole record.
 
@@ -1465,6 +1869,11 @@ def opening(paths, budget=25, chars=None):
         head.append("holds: " + " · ".join(f"{g} ({n})" for g, n in
                                             sorted(heavy, key=lambda kv: (-kv[1], kv[0])))
                     + (f" · and {loose} standalone" if loose else ""))
+    # What a letter stands for, beside the namespace - judgments' prefixes included, since
+    # a grounding line names them by id (see legend_of).
+    legend = legend_of(meta, ids)
+    if legend:
+        head.append("prefixes: " + " · ".join(f"{g}={w}" for g, w in legend.items()))
     held = sum(1 for k in ids if not is_builtin(k))
     head.append(f"{held} entries, {len(jud)} judgments"
                + (f", {len(open_ids)} open questions" if open_ids else "")
@@ -1479,6 +1888,11 @@ def opening(paths, budget=25, chars=None):
     waiting = hypothesis_line(doc)
     if waiting:
         head.append(waiting)
+    # a record moved by half: what sits beside the entry file under the other layout is
+    # read by nothing, and this is where a session would otherwise never learn it
+    left = leftover_head(paths)
+    if left:
+        head.append(left)
     if not fields["snapshot"]:
         head.append("no snapshot field: drift cannot be detected in this record")
 
@@ -1509,8 +1923,19 @@ def opening(paths, budget=25, chars=None):
         line = f"  ? {qid}: {text}"
         quests.append(line if len(line) < 100 else line[:100] + " ...")
 
-    footer = ("next: pull <entry|prefix> (values with sources) · affects <entry> "
-             "(what a change reaches) · check")
+    # The next moves are named as the host invokes them: a skill where the host has skills
+    # (`/kpopper:ground` in Claude Code, `$ground` in Codex), the reader's own verbs elsewhere.
+    moves = next_moves(host)
+    if moves:
+        footer = (f"next: {moves['ground']} (values with sources, what a change reaches) · "
+                  f"{moves['record']} (what this session found) · check")
+        rest = (f" · {moves['ground']} (values with sources, what a change reaches) · "
+                f"{moves['record']}")
+    else:
+        footer = ("next: pull <entry|prefix> (values with sources) · affects <entry> "
+                  "(what a change reaches) · check")
+        rest = (" · pull <entry|prefix> (values with sources) · affects <entry> "
+                "(what a change reaches)")
     # An intent no tab of the page serves is said at every open, in the one line that is
     # already about what to do next: the newest first and how many more, never the list -
     # the slot is for what needs a person, and check names the rest with a hint each. An
@@ -1520,14 +1945,16 @@ def opening(paths, budget=25, chars=None):
     fired = sorted(k for k, f in facts.items() if f["fired"])
     cov = info.get("coverage") if info and "error" not in info else None
     unserved = [r["id"] for r in cov["rows"] if r["unserved"]] if cov else []
-    rest = (" · pull <entry|prefix> (values with sources) · affects <entry> "
-            "(what a change reaches)")
     if fired:
         footer = (f"next: check - {fired[0]} fired ({short(jud[fired[0]]['pred'], 40)})"
                   + (f" (and {len(fired) - 1} more)" if len(fired) > 1 else "") + rest)
     elif unserved:
         footer = (f"next: check - {unserved[0]} is served by no tab"
                   + (f" (and {len(unserved) - 1} more)" if len(unserved) > 1 else "") + rest)
+    if moves and doc.hypotheses:
+        # hypotheses beside the record are a move of their own on a host that has the skill
+        n = len(doc.hypotheses)
+        footer += f" · {moves['consolidate']} ({n} hypothes{'is waits' if n == 1 else 'es wait'})"
 
     for l in head:
         print(l)
@@ -2122,7 +2549,7 @@ def _bump_updated(lines, date):
 
 # ── what a write answers ─────────────────────────────────────────────────────
 def _brief_beside(path):
-    b = re.sub(r"\.ya?ml$", "", path) + ".view.yaml"
+    b = layout(path)["view"]
     return b if os.path.exists(b) else None
 
 
@@ -2327,7 +2754,7 @@ def _texts_that_saw(paths, keys):
     brief = _brief_beside(paths[0])
     if not brief:
         return []
-    b = yaml.safe_load(io.open(brief, encoding="utf-8").read()) or {}
+    b = parse(brief) or {}
     secs = [s for s in (b.get("sections") or []) if isinstance(s, dict)]
     for tab in (b.get("tabs") or []):
         if isinstance(tab, dict):
@@ -3143,6 +3570,7 @@ def _write_text(path, text):
     if os.path.exists(path):
         os.chmod(tmp, os.stat(path).st_mode & 0o7777)
     os.replace(tmp, path)
+    forget(path)
 
 
 @contextlib.contextmanager
@@ -3175,7 +3603,7 @@ def _files_of(paths):
             return
         seen.add(os.path.abspath(f))
         out.append(f)
-        d = yaml.safe_load(io.open(f, encoding="utf-8").read()) or {}
+        d = parse(f) or {}
         for key in ("record", "also"):
             v = d.get(key)
             v = [v] if isinstance(v, str) else v if isinstance(v, list) else \
@@ -3189,6 +3617,52 @@ def _files_of(paths):
     return out
 
 
+def _file_for(files, nid, collection=None, texts=None):
+    """Which file of the record a write lands in. A record is one file until it outgrows one,
+    and then a pointer index over a file per domain - so the choice has to keep a subject
+    together instead of piling every new entry into whichever file comes first:
+
+      the file that already holds the entry - what a set, a review and a superseded judgment
+        are looking for;
+      else the file whose collection already holds the entry's neighbours: the ids sharing the
+        head of its id, which is what a record is divided by when it is divided at all;
+      else the file that is that subject's own, everything in it sharing the head - which opens
+        the collection there, rather than filing a room's first source among the meetings;
+      else the first file that holds the collection;
+      else the first file that holds anything at all, a pointer index being a list of files and
+        not a place to keep entries.
+
+    A record in one file answers that file to all of it, as it always did. `texts` gives the
+    files' lines where the caller is already holding them."""
+    head, opened, own, held = nid.split(".")[0], None, None, None
+    for f in files:
+        if texts is not None and f in texts:
+            lines = texts[f]
+        else:
+            with io.open(f, encoding="utf-8") as fh:
+                lines = fh.read().split("\n")
+        if _locate(lines, nid):
+            return f
+        if collection is None:
+            continue
+        cols, members = {}, {}
+        for name, s, e in _collections_in(lines):
+            cols[name] = (s, e)
+            if name != "meta":          # the head of the file is not a collection of entries
+                members[name] = [m for m, _ in _members_of(lines, s, e)[1] if "." in m]
+        theirs = [m for ms in members.values() for m in ms]
+        if held is None and theirs:
+            held = f
+        if collection in cols:
+            if any(m.split(".")[0] == head for m in members.get(collection, [])):
+                return f
+            if opened is None:
+                opened = f
+        if own is None and theirs and all(m.split(".")[0] == head for m in theirs):
+            own = f
+    return own or opened or held or files[0]
+
+
 def _collection_for(doc, ids, jud, fields, nid, body, explicit):
     """The collection a new entry goes into: the one named; else the one holding the
     entries it shares a prefix with; else, by shape - a judgment with the judgments, a
@@ -3198,6 +3672,19 @@ def _collection_for(doc, ids, jud, fields, nid, body, explicit):
         if explicit not in cols and explicit not in doc:
             raise Refused(f"no collection {explicit} in this record")
         return explicit
+    # the head is never a home: meta reads as a collection when every value in it is a
+    # plain scalar, and an entry filed there is one no reader can see
+    cols = {c: m for c, m in cols.items() if c != "meta"}
+    if not cols:
+        # a newborn record: the three sections, named as the method recommends, by shape
+        if isinstance(body, dict) and fields["deps"] in body:
+            return "judgments"
+        if not isinstance(body, dict):
+            return OPEN[0]
+        if not any(k in body for k in ("v", "rule", "quoted")) and \
+                any(k in body for k in ("asked", "url", "file", "read")):
+            return "sources"
+        return "known"
     head = nid.split(".")[0]
     homes = [c for c, m in cols.items() if any(k.split(".")[0] == head for k in m)]
     if len(homes) == 1:
@@ -3209,7 +3696,7 @@ def _collection_for(doc, ids, jud, fields, nid, body, explicit):
         return by_jud[0]
     if not isinstance(body, dict):
         opens = [c for c in cols if c in OPEN]
-        return opens[0] if opens else sorted(cols)[0]
+        return opens[0] if opens else OPEN[0]
     sourceish = not any(k in body for k in ("v", "rule", "quoted")) and \
         any(k in body for k in ("asked", "url", "file", "read"))
     cited = {}
@@ -3221,10 +3708,25 @@ def _collection_for(doc, ids, jud, fields, nid, body, explicit):
                         cited[c2] = cited.get(c2, 0) + 1
     if sourceish and cited:
         return sorted(cited, key=lambda c: -cited[c])[0]
-    valued = sorted(cols, key=lambda c: -sum(1 for k, b in cols[c].items()
-                                             if isinstance(b, dict) and k not in jud
-                                             and ("v" in b or "rule" in b or "quoted" in b)))
-    return valued[0]
+
+    def counted(c):
+        return sum(1 for k, b in cols[c].items() if isinstance(b, dict) and k not in jud
+                   and ("v" in b or "rule" in b or "quoted" in b))
+    if sourceish:
+        # nothing cites a source yet: a section whose every member is source-shaped is the
+        # sources', whatever it is called; a young record without one opens it under the
+        # method's own name
+        def source_shaped(b):
+            return isinstance(b, dict) and not any(k in b for k in ("v", "rule", "quoted")) \
+                and any(k in b for k in ("asked", "url", "file", "read"))
+        homes = [c for c in cols if c not in OPEN and c != "judgments" and cols[c]
+                 and all(source_shaped(b) for b in cols[c].values())]
+        if "sources" in cols:
+            return "sources"
+        return sorted(homes)[0] if homes else "sources"
+    valued = sorted(cols, key=lambda c: -counted(c))
+    # a value lands where values are; a young record holding none yet opens the section
+    return valued[0] if counted(valued[0]) else "known"
 
 
 def apply(paths, action):
@@ -3287,7 +3789,7 @@ def _insert_block(lines, collection, nid, block):
 
 def _fork(paths, action):
     """A write into a hypothesis beside the record: the same validation and the same edits,
-    on `PROVENANCE.d/<name>.yaml` - the base is not touched. The record is read as it stands
+    on `.kpopper/hypotheses/<name>.yaml` - the base is not touched. The record is read as it stands
     under the hypothesis, so a judgment written there rests on what it proposes and its
     snapshot says so. A hypothesis that does not exist yet is opened by its first write, with
     the day it was born in its head; an entry the base holds is carried over whole and set
@@ -3454,7 +3956,7 @@ def _review_section(paths, brief, title, stamp, raw, ids, jud):
     """A section of the brief reviewed by its title: the references of its text
     snapshotted into `seen`, and `reviewed` moved. The record is not touched."""
     btext = io.open(brief, encoding="utf-8").read()
-    b = yaml.safe_load(btext) or {}
+    b = parse(brief) or {}
     secs = [s for s in (b.get("sections") or []) if isinstance(s, dict)]
     for tab in (b.get("tabs") or []):
         if isinstance(tab, dict):
@@ -3522,14 +4024,9 @@ def _apply(paths, action):
         return _review_section(paths, brief, nid, stamp, raw, ids, jud)
 
     snapshot_field = fields["snapshot"] or "seen"
-    # which file holds the entry: the one it is found in; a new one goes where its
-    # collection is, else into the first file
-    target = files[0]
-    if kind in ("set", "review"):
-        for f in files:
-            if _locate(io.open(f, encoding="utf-8").read().split("\n"), nid):
-                target = f
-                break
+    # which file of the record holds the write: the one that holds the entry, and for a new
+    # one the file its neighbours are in (_file_for)
+    target = files[0] if kind == "add" else _file_for(files, nid)
     out, seen, arrangement, supersede, arranged = [], {}, False, False, False
     if kind == "add":
         body = action["body"]
@@ -3556,17 +4053,10 @@ def _apply(paths, action):
             body[snapshot_field] = seen
             action["body"] = body
         if supersede:
-            for f in files:
-                if _locate(io.open(f, encoding="utf-8").read().split("\n"), nid):
-                    target = f
-                    break
+            target = _file_for(files, nid)
         else:
             collection = _collection_for(doc, ids, jud, fields, nid, body, action.get("into"))
-            for f in files:
-                if collection in {n for n, _, _ in
-                                  _collections_in(io.open(f, encoding="utf-8").read().split("\n"))}:
-                    target = f
-                    break
+            target = _file_for(files, nid, collection)
     original = io.open(target, encoding="utf-8").read()
     lines = original.split("\n")
     if kind == "set":
@@ -3588,8 +4078,9 @@ def _apply(paths, action):
         out.append("supersede {}: {} -> {} - {}".format(
             nid, *apart(was, _verdict_of(body), 60), why))
     elif kind == "add":
-        if collection == "judgments" and not jud and collection not in doc:
-            lines += ["", "judgments:"]
+        # a collection the file lacks - the first judgment, a newborn record's first
+        # section - is opened at the end, and the entry is its first member
+        _ensure_collection(lines, collection)
         out.append("add " + _add_in(lines, nid, body, collection))
     else:
         j = jud[nid]
@@ -3665,7 +4156,7 @@ def _apply(paths, action):
     # an arrangement's review also rewrites the shape it stood on - every tab it governs -
     # once the record is safely written, so a failed write leaves the brief as it was
     if kind == "review" and arrangement and shape is not None:
-        b = yaml.safe_load(io.open(brief, encoding="utf-8").read()) or {}
+        b = parse(brief) or {}
         wheres = _tabs_for(b, nid, facts2)
         if not wheres:
             out.append("  no tab's sections earn a session source this rests on - no shape "
@@ -3745,15 +4236,93 @@ def _gate_judgments(ids, jud, raw):
     }
 
 
+NUDGE_TURNS = 8      # prompts a session may run with the record untouched before it is asked once
+TREE_FILES = 500     # working files the mark keeps, so a dirty tree cannot bloat it
+
+
+def tree_state(paths, workspace=None):
+    """What a session's end is held against beyond the record's own checks: a digest of the
+    record with its hypotheses - any write moves it - and the git tree's state of the
+    workspace the session works in (the current directory unless named): HEAD, each tracked
+    file's changed line counts against it, and each untracked file with a digest of its
+    content - so a file that was already dirty at the mark still counts when it changes
+    again. None outside git."""
+    h = hashlib.sha1()
+    for f in list(_files_of(paths)) + sorted(glob.glob(os.path.join(hypothesis_dir(paths), "*.yaml"))):
+        with io.open(f, "rb") as fh:
+            h.update(fh.read())
+    tree = None
+    cwd = workspace or os.getcwd()
+
+    def git(*args, timeout=5):
+        return subprocess.run(["git", *args], cwd=cwd, capture_output=True, text=True, timeout=timeout)
+    try:
+        head = git("rev-parse", "HEAD")
+        changed = git("diff", "HEAD", "--numstat")
+        untracked = git("ls-files", "--others", "--exclude-standard")
+        if head.returncode == 0 and changed.returncode == 0 and untracked.returncode == 0:
+            files = sorted(l.strip() for l in changed.stdout.splitlines() if l.strip())
+            for rel in sorted(l for l in untracked.stdout.splitlines() if l.strip())[:TREE_FILES]:
+                full = os.path.join(cwd, rel)
+                try:
+                    size = os.path.getsize(full)
+                    if size <= 1 << 20:
+                        with io.open(full, "rb") as fh:
+                            stamp = hashlib.sha1(fh.read()).hexdigest()[:12]
+                    else:
+                        stamp = f"size {size}"
+                except OSError:
+                    stamp = "unreadable"
+                files.append(f"?? {rel} {stamp}")
+            tree = {"head": head.stdout.strip(), "files": files[:TREE_FILES], "n": len(files)}
+    except (OSError, subprocess.SubprocessError):
+        pass
+    return {"digest": h.hexdigest(), "tree": tree}
+
+
+NUDGE_COOLDOWN = 10  # prompts between two askings, in either form
+
+
+def untouched(base, paths, turns, host=None, nudged_at=None, workspace=None):
+    """The one thing the gate asks of a session that never wrote: after real work - files
+    of the tree changed since the mark, or enough prompts went by - was there nothing to
+    keep? Asked once, and only while the record is exactly as the session found it. Not on
+    the turn whose prompt already carried the softer form of the question: the turn after,
+    when a line went unanswered, is when a stop is earned."""
+    if not base.get("digest") or base.get("nudged"):
+        return None
+    if nudged_at is not None and turns <= nudged_at:
+        return None
+    now = tree_state(paths, workspace)
+    if now["digest"] != base["digest"]:
+        return None
+    was, is_ = base.get("tree"), now["tree"]
+    changed = 0
+    if was and is_:
+        changed = len(set(was.get("files") or []) ^ set(is_.get("files") or []))
+        if was.get("head") != is_.get("head"):
+            changed = max(changed, 1)
+    if not changed and turns < NUDGE_TURNS:
+        return None
+    form = SKILL_FORMS.get(host or "")
+    record = form.format("record") if form else "`kpopper add`"
+    what = (f"{changed} file{'' if changed == 1 else 's'} of the tree changed" if changed
+            else f"{turns} prompts in")
+    return (f"kpopper: {what}, the record untouched. If a finding, decision or measurement came "
+            f"out of this session, {record} keeps it now; if nothing will be revisited, finish.")
+
+
 def mark(state_path, paths):
     """Written at session start: how many problems check finds, which intents no tab of the
-    page serves, and the ids the record holds."""
+    page serves, the ids the record holds, and the record and tree as the session found
+    them."""
     doc = load(paths)
     ids, jud, fields = infer(doc)
     fail, _, _, _, _ = check_lines(paths)
     state = {"fails": len(fail), "failures": fail, "unserved": _unserved(paths),
              "ids": sorted(_every_id(doc, ids)),
-             "judgments": _gate_judgments(ids, jud, with_builtins(doc, ids, jud, fields))}
+             "judgments": _gate_judgments(ids, jud, with_builtins(doc, ids, jud, fields)),
+             "nudged": False, **tree_state(paths)}
     with io.open(state_path, "w", encoding="utf-8") as f:
         json.dump(state, f)
     return 0
@@ -3773,14 +4342,15 @@ def _marked(state_path):
             state = {"fails": 0}
     return {"fails": int(state.get("fails") or 0), "unserved": list(state.get("unserved") or []),
             "ids": state.get("ids"), "failures": state.get("failures"),
-            "judgments": state.get("judgments") or {}}
+            "judgments": state.get("judgments") or {}, "digest": state.get("digest"),
+            "tree": state.get("tree"), "nudged": bool(state.get("nudged"))}
 
 
-def gate(state_path, paths):
+def gate(state_path, paths, turns=0, host=None, nudged_at=None):
     """What a session hears before it can finish, against the mark its opener left: the
     record failing worse than it found it; an intent the session left unserved; entries it
-    wrote with no intent recorded. Printed, and 2 when there is anything - the hook bounces
-    once and yields."""
+    wrote with no intent recorded; and, once, real work that left the record untouched.
+    Printed, and 2 when there is anything - the hook bounces once and yields."""
     base = _marked(state_path)
     fail, _, _, _, _ = check_lines(paths)
     doc = load(paths)
@@ -3840,6 +4410,19 @@ def gate(state_path, paths):
             out.append(f"this session wrote {len(new)} {'entry' if len(new) == 1 else 'entries'} "
                        f"({named_}) and recorded no intent: add s.<date>_<slug> asked=\"...\" "
                        f"name=\"...\", and from: it on what it wrote")
+    if not out:
+        nudge = untouched(base, paths, turns, host, nudged_at)
+        if nudge:
+            out.append(nudge)
+            # once: the mark remembers that the question was asked, and at which prompt
+            try:
+                raw_state = json.loads(io.open(state_path, encoding="utf-8").read())
+                if isinstance(raw_state, dict):
+                    raw_state["nudged"], raw_state["nudged_turn"] = True, turns
+                    with io.open(state_path, "w", encoding="utf-8") as f:
+                        json.dump(raw_state, f)
+            except (OSError, ValueError):
+                pass
     for l in out:
         print(l)
     if allowed:
@@ -3870,7 +4453,7 @@ must reconcile those fields first. Judgment snapshots are never refreshed by set
 A reading newer than the one the base holds - its `of:`, else its source's read date -
 updates it. One of the same day or earlier that differs is a contradiction: refused into
 the base, and the refusal names the command that writes it into a hypothesis instead.
-`--hypothesis NAME` writes into `PROVENANCE.d/NAME.yaml` beside the record, opened by its
+`--hypothesis NAME` writes into `.kpopper/hypotheses/NAME.yaml` beside the record, opened by its
 first write, and the base is not touched: the entry is carried over whole and set there.""",
     "add": """  add <id> field=value ... [--in COLLECTION] [--as-of YYYY-MM-DD] [--hypothesis NAME] [file]
   add <id> '{field: value, ...}'
@@ -3881,11 +4464,14 @@ never at the tail - in the style of the entry it lands beside; meta.updated move
 is written as `rests_on='[a, b]'`; a judgment's `seen` is filled by this tool from what its
 dependencies hold now and must not be given. Refused: an id already in the record, a
 dependency that is not an entry (add it first, or declare it with blocked_on), a reference
-to nothing, a judgment whose wrong_if already holds. The reply is the reach.
+to nothing, a judgment whose wrong_if already holds. The reply is the reach. Where no record
+resolves for the workspace, the first add creates GROUNDING.yaml at its root - a checkout's
+root, or the working directory outside git - with that entry; a registered record that is
+unavailable is a location problem, refused rather than replaced.
 
 A contradiction is refused into the base and named a hypothesis: the same id with a
 different value or verdict, or a judgment resting on what only a hypothesis holds - the
-refusal names the `--hypothesis NAME` command that writes it into `PROVENANCE.d/NAME.yaml`
+refusal names the `--hypothesis NAME` command that writes it into `.kpopper/hypotheses/NAME.yaml`
 beside the record instead, where its `seen` is taken from the record as it stands under
 that hypothesis, and the base is not touched.
 
@@ -3935,7 +4521,7 @@ def write_command(cmd, rest):
         raise Refused("--why is one line: a second line would be a line of the record")
     if opts.get("hypothesis") and not HYPOTHESIS_NAME.match(opts["hypothesis"]):
         raise Refused("--hypothesis takes a name - letters, digits, underscores, dashes - that "
-                      f"becomes {HYPOTHESES}/<name>.yaml beside the record")
+                      "becomes <name>.yaml in the hypotheses directory beside the record")
     action = {"kind": cmd, "id": nid, "as_of": as_of, "why": opts.get("why"), "into": opts.get("in"),
               "hypothesis": opts.get("hypothesis"), "source": opts.get("source"), "at": opts.get("at")}
     if cmd == "set":
@@ -3975,11 +4561,73 @@ def write_command(cmd, rest):
         action["body"] = body
     else:
         files = [x for x in args if x.endswith((".yaml", ".yml"))]
-    return apply(files or default_paths(), action)
+    born = []
+    try:
+        if cmd == "add" and not files:
+            files = born = _newborn(action)
+        code = apply(files or default_paths(), action)
+    except BaseException:
+        # a first entry that was refused leaves no empty record behind
+        for f in born:
+            if _newborn_only(f):
+                os.remove(f)
+        raise
+    for f in born:
+        print(f"created {f} - this workspace's record, born with its first entry")
+    return code
+
+
+HEAD_LINE = "# Kept with kpopper: read it with `kpopper open`, write it with `kpopper add`.\n"
+
+
+def _newborn_only(path):
+    """A record that holds nothing but what its birth wrote - the head line and the day."""
+    try:
+        with io.open(path, encoding="utf-8") as f:
+            text = f.read()
+    except OSError:
+        return False
+    return re.fullmatch(re.escape(HEAD_LINE) + r"meta:\n  updated: \d{4}-\d{2}-\d{2}\n", text) is not None
+
+
+def _newborn(action):
+    """Where no record resolves for the workspace, the first `add` creates one: a file with
+    today's date in its head, at the workspace root - a git checkout's root, or the working
+    directory outside git - and the entry lands in the section its shape calls for. Nothing
+    is created for any other command, and a registered record that is unavailable is a
+    location problem `default_paths` refuses rather than a place for another. -> [path], or
+    [] when a record already resolves."""
+    paths = default_paths()
+    if os.path.exists(paths[0]):
+        return []
+    try:
+        from .workspace import locate
+    except ImportError:
+        import importlib.util
+        spec = importlib.util.spec_from_file_location(
+            "_kpopper_workspace", os.path.join(os.path.dirname(__file__), "workspace.py"))
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        locate = module.locate
+    location = locate()
+    if location["status"] != "missing":
+        return []
+    path = location["record"]
+    stamp = action.get("as_of") or datetime.date.today().isoformat()
+    try:
+        _write_text(path, HEAD_LINE + f"meta:\n  updated: {stamp}\n")
+    except OSError as e:
+        raise Refused(f"refused - no record here, and none could be created at {path}: {e}")
+    return [path]
 
 
 if __name__ == "__main__":
-    a = sys.argv[1:] or ["check"]
+    a = [x for x in sys.argv[1:] if x != "--no-cache"]
+    if len(a) != len(sys.argv[1:]):
+        # the same switch as KPOPPER_NO_CACHE=1, set here so anything this run starts
+        # parses the record too, and nothing reads a kept parse
+        os.environ[NO_CACHE] = "1"
+    a = a or ["check"]
     cmd, rest = a[0], a[1:]
     if cmd == "where":
         # the record this directory answers for: at the root, or registered with the
@@ -3990,11 +4638,17 @@ if __name__ == "__main__":
             sys.exit(0)
         sys.exit(1)
     if cmd in ("mark", "gate"):
-        # the hooks' own: the state file the opener writes, then the record
+        # the hooks' own: the state file the opener writes, then the record; the gate also
+        # hears how many prompts the session ran and which host asks, for its one question
         if not rest:
             sys.exit(f"{cmd} needs the state file the opener writes")
         files = [x for x in rest[1:] if x.endswith((".yaml", ".yml"))] or default_paths()
-        sys.exit((mark if cmd == "mark" else gate)(rest[0], files))
+        if cmd == "mark":
+            sys.exit(mark(rest[0], files))
+        turns = int(rest[rest.index("--turns") + 1]) if "--turns" in rest else 0
+        host = rest[rest.index("--host") + 1] if "--host" in rest else None
+        at = int(rest[rest.index("--nudged-at") + 1]) if "--nudged-at" in rest else None
+        sys.exit(gate(rest[0], files, turns, host, at))
     if cmd in ("set", "add", "review"):
         sys.exit(write_command(cmd, rest))
     if cmd in ("same", "distinct"):
@@ -4017,5 +4671,6 @@ if __name__ == "__main__":
     if cmd == "open":
         b = int(rest[rest.index("--budget") + 1]) if "--budget" in rest else 25
         c = int(rest[rest.index("--chars") + 1]) if "--chars" in rest else None
-        sys.exit(opening(files, b, c))
+        h = rest[rest.index("--host") + 1] if "--host" in rest else None
+        sys.exit(opening(files, b, c, h))
     sys.exit(check(files))

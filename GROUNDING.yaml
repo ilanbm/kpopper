@@ -1,8 +1,9 @@
 meta:
-  updated: 2026-09-10
+  updated: 2026-09-12
   name: kpopper
   scope: "What this plugin is for and the decisions that shaped it, kept in its own format -
           the tools eat their own cooking, and every session here opens grounded."
+  prefixes: {d: decision, s: session, m: measurement, p: parameter, q: question, v: view}
 
 sources:
   s.2026_09_01_consolidation:
@@ -262,18 +263,159 @@ sources:
             counts for coverage but no longer silences a flagged item"
     of: "2026-09-04, given the written layer at 2e5f4f3 and what four pieces since then built on it"
     read: "2026-09-04"
+  doc.checked_retrieval:
+    name: "Checked-session search continuation and explicit context contract"
+    file: "docs/retrieval.md"
+    read: "2026-09-10"
   doc.checked_sessions:
     name: "Optional checked-session interface and guarantee limits"
     file: "docs/checked-sessions.md"
     read: "2026-09-09"
     note: "The optional checked-session interface, its explicit setup and activation, and the limits
            of its guarantees."
+  s.2026_09_10_skills_split:
+    asked: "נראה שזה די משובש, למה הכל תחת סקיל אחד? ברור שיצירת הhtmls צריך להיות בסקיל אחר ואולי
+            גם עוד מצבים שם צריכים התייחסות נפרדת. אבל הכי חשוב לגרום לכל סשן תמיד לעבוד ולעבור דרכנו
+            בשביל לבדוק דברים בשביל עדכן, זה חייב לקרות ומכאן אמורים להיגזר הסקילים. הפעולה של
+            שליחה/עדכון נשמע שהיא צריכה להיות סקיל נפרד לא? ועם frontmatter שמסביר במדוייק וממש
+            משכנע. ואולי סקיל נוסף לretrival/quering וכו? בקיצור נראה לי שחייבים לסדר את זה בפרויקט,
+            אחרת הוא לא יהיה שמיש!"
+    name: "The session that cut the method into one skill per occasion and made every session pass
+           through the record - what it was asked, and what it was given. Its reading: the hooks are
+           the only always-on layer and carry pointers; a skill is one occasion; a session that did
+           real work and never wrote is asked once"
+    of: "2026-09-10, given the shipped skill whole at 1.3.0, the hooks, the record's own decisions
+         on the opener and the gate, the activation A/B of 2026-09-09, a session transcript that
+         recited git status on a greeting, and four decisions taken in the native question UI"
+    read: "2026-09-10"
+  s.2026_09_10_standalone_html:
+    asked: "כן הסתכלתי עליו.\n\nבקופסאות אין צורך לחזור על מה שנלחץ לא צריך את ה״במסמך כתוב X\", זה
+            ממש יותר וגורם לא לקרוא את ההסבר האמיתי\n\nאחרי התיקון הזה נראה לי שהעבודה מספיקה כבר לא?
+            מקסימום נשנה דברים בעתיד\n\nתיצור PR? ואגב היוזר אמור פשוט לבקש ליצור מסמך וזהו זה לבד
+            יוסיף את כל השכבה שלנו?"
+    name: "Finish standalone HTML documents with concise evidence explanations and ordinary-request
+           authoring"
+    read: "2026-09-10"
+  s.2026_09_11_gate_question:
+    asked: "Measure per trial after turn two: was the record written at all; through kpopper add/set
+            or by hand; does it contain the decision or finding turn one produced; is what was
+            written sourced or filler; kpopper check green; did the session write in turn one
+            already, before any question - that rate is the baseline the question is supposed to
+            move. Report the recorded-the-decision rate per arm, the filler rate per arm - the
+            failure the decision names, a stop that teaches sessions to write filler - the
+            hand-written rate, and the cost per trial."
+    name: "The session that measured the untouched-record question on the Codex host - what it was
+           asked, and what it was given. Its reading: the opener and the record skill make a session
+           write unasked, the one question catches most of what they leave, nothing written to answer
+           it was filler, and twice it was written in haste"
+    of: "2026-09-11, given the branch at bcca831, the page fixture's record with its view and
+         measure files, the eight skills beside four ordinary ones, ten episodes of greenhouse work
+         and five quick lookups, and one model at medium effort through a harness outside this
+         repository"
+    read: "2026-09-11"
+  s.2026_09_11_prefix_words:
+    asked: "\"m.\", \"s.\", \"d.\" - are those convetions in provenance.yaml or self evovled in this
+            project? … האם זה יהיה חכם לבקש שהם יהיו מילה שלמה? שאנשים שמסתכלים על זה יבינו מה הם
+            קוראים? וגם אייג׳נטים שקוראים את זה … ולמה לא לשנות אחורה גם בזה שקיים פה בשביל לבדוק את
+            זה? בכלל לא כדאי לבדוק עם איזה eval אם זה משפר משהו?"
+    name: "The session that asked what the one-letter prefixes are and whether a prefix should be a
+           word - what it was asked, and what it was given. Its reading: the letters were one writing
+           habit that travelled from the first record through the skill examples and was reassigned
+           at every birth, declared nowhere; a prefix is the link a question takes into the record,
+           so a new one is a word, and the letters already written get a legend"
+    of: "2026-09-11, given this record at a51bc75 and its first version, two live records outside
+         this repository with the oldest snapshot of the first, the fixtures, the skill files, and
+         the grounding-line eval of 2026-09-11"
+    read: "2026-09-11"
+  s.2026_09_11_read_once:
+    asked: "A parse cache for the record. Add a cache of the parsed documents keyed by each file's
+            absolute path, size and mtime (ns), stored privately under
+            $XDG_STATE_HOME/kpopper/cache/, one entry per file, invalidated whenever any of those
+            three values changes, written atomically, and never trusted over the files: a corrupt or
+            unreadable cache entry is rebuilt, never an error. Place an add by prefix across pointer
+            shards: the file whose collection already holds an entry with the same prefix (the id's
+            head before the first dot) wins; else the first file that holds the collection; else the
+            first file, opening the collection there."
+    name: "The session that stopped re-reading the whole record at every prompt and taught a write
+           which file of a divided record it belongs in - what it was asked, and what it was given.
+           Its reading: a parse is kept against the file's own identity and dropped by every write,
+           and a new entry joins the file its subject is already in"
+    of: "2026-09-11, given the reader at 1.4.0 parsing the record at every command and both hooks, a
+         synthetic record ten times this one's measured at 3 MB/s, the pointer form that merges
+         shards on read, and d.scale_by_federation's answer to a record that outgrows one file"
+    read: "2026-09-11"
+  s.2026_09_12_half_move:
+    asked: "A half migration is silent. The layout follows the entry file's name and the reader
+            looks in one home, never both. I reproduced what happens when someone renames only the
+            entry file, which is what a person will do first: mv PROVENANCE.yaml GROUNDING.yaml … the
+            hypothesis line is gone, nothing said … the brief is no longer read, nothing said …
+            check: 0 problems. Proposal: one NOTE in check (and the opener's head, since that is what
+            a session sees) … and the mirror case, a .kpopper/ beside a PROVENANCE.yaml. … .kpopper/
+            is invisible to an agent's default listing: every one of the 53 trials that listed the
+            tree did it with rg --files without --hidden or ls without -a."
+    name: "The review of the layout change from the session that ran the grounding-line eval - what
+           it found, and what it was given. Its reading: a record renamed with its files left under
+           the earlier names lost its hypotheses and its brief from every surface with every check
+           green; a dot-directory is skipped by the listings agents actually run"
+    of: "2026-09-12, given the merged layout change, a reproduction on the page fixture, and the 53
+         tree listings of the grounding-line eval of 2026-09-11"
+    read: "2026-09-12"
+  s.2026_09_12_layout:
+    asked: "לא כדאי שכל הקבצים שלנו בפרויקט או בכלל יהיו תחת ספרייה בשם ״.kpopper\" ולא בroot של
+            הפרויקט? וגם הקונבנציה של השמות של קבצי aux לא עדיף שיהיו בספרייה פנמית תחת איזושהי
+            קובנציה של שמות? וגם השם provanance.yaml, האם הוא מוצלח או כדאי שם אחר? … ומה לגבי
+            החשיבות של לקדם את השם kpopper כמותג פה? וגם הקונבנציה הקיימת של claude וcodex וgithub של
+            קובץ עם נקודה בהתחלה בתוך הריפו? … GROUNDING.yaml זה שם מצויין, אבל אני תוהה גם על
+            REASONING.yaml … אם יהיו עוד קבצים שיצטרכו להיות לא gitignored … איפה הקבצים האלה יהיו?"
+    name: "The session that put the record's files in their places and gave the entry file its name
+           - what it was asked, and what it was given. Its reading: the dot-directory convention the
+           hosts use holds configuration and automation and keeps the one file meant to be read at
+           the root; the brand goes on the directory, the verbs, the check and the head line, the
+           concept on the file's name; grounding is what the file does for a session, reasoning is
+           one field of one kind of entry"
+    of: "2026-09-12, given this record at 60f4a8b, the three live records outside this repository,
+         the six host adapters, the root layouts of .github, .claude and .codex, the README's own
+         word use, and a dry run of a judgment rewrite through the door"
+    read: "2026-09-12"
   s.background_ingestion:
     name: "Background capture and selective delivery contract"
     file: "skills/kpopper/INGESTION.md"
     read: "2026-09-09"
     asked: "Retain explicit reports without waiting for graph maintenance, and return only findings
             that need attention."
+  s.branch_comparison_core:
+    name: "Cross-branch and in-memory consolidation checks"
+    file: "scripts/consolidate.py"
+    read: "2026-09-10"
+    revision: d17225095c856b147d03522981f2c639e57f73e1
+  s.followups_contract:
+    name: "Followup task and authority contract"
+    file: "skills/kpopper/FOLLOWUPS.md"
+    read: "2026-09-10"
+    revision: "7bbd2fcd134bf6d34c1e18465eaa230b18d69cb3"
+  s.followups_daily:
+    name: "Daily review prompt, work budget and receipts"
+    file: "scripts/followup_daily.py"
+    read: "2026-09-10"
+    revision: "7bbd2fcd134bf6d34c1e18465eaa230b18d69cb3"
+  s.followups_install:
+    name: "Daily installation inspection and readback protocol"
+    file: "scripts/followup_install.py"
+    read: "2026-09-10"
+    revision: "7bbd2fcd134bf6d34c1e18465eaa230b18d69cb3"
+  s.followups_state:
+    name: "Followup storage, claims and retained outcomes"
+    file: "scripts/followups.py"
+    read: "2026-09-10"
+    revision: "7bbd2fcd134bf6d34c1e18465eaa230b18d69cb3"
+  s.watch_command:
+    name: "Watch plugin command"
+    file: "skills/watch/SKILL.md"
+    read: "2026-09-10"
+  s.watch_contract:
+    name: "Background watch and shared observations"
+    file: "skills/watch/references/compatibility.md"
+    read: "2026-09-10"
   doc.fact_moves:
     url: "https://claude.ai/code/artifact/ca99e558-60ae-4b22-9221-e3b29d7d7e2b"
     name: "מה קורה כשעובדה זזה - the unified node model"
@@ -317,10 +459,39 @@ sources:
     of: "python3 ast over scripts/render_page.py - top-level string constants of three lines or more,
          at b47f7a0 and again after the move"
     read: "2026-09-03"
+  run.entry_name_eval:
+    from: s.2026_09_12_layout
+    name: "The entry file's name tried on the Codex host: the same record under five names -
+           GROUNDING.yaml, PROVENANCE.yaml, REASONING.yaml, GROUND.yaml and ground.yaml - in a
+           workspace of thirty-five files whose decoys share the record's vocabulary and hold no
+           number, with no plugin, no hook, no opener, no skill and no instruction naming the file;
+           one model at medium effort, one prompt per trial"
+    of: "2026-09-12, a harness outside this repository: 1,000 trials over the grounding-line eval's
+         20 recorded prompts, half in Hebrew, ten per prompt per name, and 250 over its 10 unrelated
+         prompts, five per prompt per name; no trial failed; the two short names added on a question
+         asked while it ran"
+    read: "2026-09-12"
   run.first_external:
     name: "The first run on a project this plugin did not build - the g2next keyboard pilot"
     of: "session 'Keyboard size feedback', 2026-09-01, plugin 0.14.0"
     read: "2026-09-01"
+  run.gate_question_eval:
+    from: s.2026_09_11_gate_question
+    name: "The untouched-record question tried on the Codex host: two real user turns per trial, the
+           real opener before the first and the real gate against its mark after it, the gate's
+           question on the second turn's prompt in one arm of two, the same continuation in both"
+    of: "2026-09-11, a harness outside this repository: 200 trials over ten episodes of ordinary
+         work on the page fixture's record, three in Hebrew, and 100 over five quick lookups from its
+         files, two in Hebrew; ten trials per episode per arm, one model at medium effort, every
+         record read by hand where it was written"
+    read: "2026-09-11"
+  run.grounding_line_codex:
+    name: "The grounding line measured on the Codex host: twenty recorded prompts and ten the record
+           does not touch, ten trials each with the line and without, one model at medium effort"
+    of: "2026-09-11, a harness outside this repository: the page fixture with a second subject added
+         (39 entries, Hebrew and English names), the hook run per prompt and its line placed in the
+         developer instructions of one arm, the same opener in both"
+    read: "2026-09-11"
   run.hub_vs_now:
     name: "A hand-written page and this plugin's Now tab, rendered from the same record and
            read side by side"
@@ -336,6 +507,11 @@ sources:
     name: "The source update and recording gate regression contract"
     file: "tests/test_ingestion.py"
     read: "2026-09-07"
+  doc.standalone_html:
+    name: "Standalone authored HTML contract"
+    from: s.2026_09_10_standalone_html
+    file: "docs/documents.md"
+    read: "2026-09-10"
   doc.three_briefs:
     name: "The three briefs that exist - a finance hub, a keyboard pilot, an academic review -
            and what they contain"
@@ -364,6 +540,16 @@ sources:
     of: "2026-09-03, on the record after the move: the count written as decided while already stale,
          then re-measured with seen left as it was, then seen refreshed by hand"
     read: "2026-09-03"
+
+  run.prefix_survey:
+    name: "The prefixes of the records read side by side - this record and its first version, two
+           live records outside this repository with the oldest snapshot of the first, and the
+           fixtures: which prefixes each holds, what each letter stands for, and where the ids of
+           this record are referenced"
+    of: "2026-09-11, second-level keys counted by prefix in each file, the letters read against the
+         names and kinds of their entries, and the ids of this record searched across the tracked
+         tree at a51bc75"
+    read: "2026-09-11"
 
   run.recipes_probed:
     name: "The five recipes this change names, run against this tree and against copies of it with a
@@ -434,24 +620,95 @@ known:
          its own change and written after; and 'no fresh reading' needs a threshold nobody stated,
          which the method forbids inventing. An entry with no recipe is this shape still, so it stays
          the default and a recipe is named per entry"
+  branches.comparison_direction:
+    name: "Which side receives the proposed change"
+    v: "The receiving record is the base; the named ref is an overlay. Main plus a worktree change
+        is a different preview from a worktree with main imported over it."
+    from: s.branch_comparison_core
+    at: "from_ref pruning relative to doc, followed by union_of layering"
+    of: "2026-09-10"
+  branches.premerge_check:
+    name: "Checking another branch without merging"
+    v: "consolidate --dry-run --from can evaluate a committed branch at any time without merging
+        code or writing the receiving record. It reads local Git refs and does not fetch them."
+    from: s.branch_comparison_core
+    at: "read, from_ref and main; public HELP for --dry-run and --from"
+    of: "2026-09-10"
+  branches.virtual_overlay:
+    name: "Read-only working-change preview primitive"
+    v: "union_of accepts a chosen base and in-memory hypotheses, checks their union and returns
+        findings without writing either source record. Automatic worktree/main monitoring is not part
+        of this callable."
+    from: s.branch_comparison_core
+    at: "hypothesis and union_of"
+    of: "2026-09-10"
+  followups.command:
+    name: "User-facing ongoing review command"
+    v: watch
+    from: s.watch_command
+    at: "name and invocation; the current scheduled cadence remains daily"
+    of: "2026-09-10"
+  followups.execution:
+    name: "Who performs a ready followup"
+    v: "The scheduled host agent performs authorized work in its own review run. The coordinator
+        does not automatically dispatch a separate session per item."
+    from: s.followups_daily
+    at: "plan; compare Store.claim in scripts/followups.py"
+    of: "2026-09-10"
+  followups.installation_evidence:
+    name: "What installation confirmation proves"
+    v: "Matching host configuration readback confirms installation. The installer explicitly leaves
+        first-run verification false; a real scheduled wake needs separate runtime evidence."
+    from: s.followups_install
+    at: "inspect_host and finish"
+    of: "2026-09-10"
+  followups.maintenance_scope:
+    name: "What graph maintenance currently selects"
+    v: "The packet returns at most one flagged judgment. Source refresh and open-question work are
+        permitted by the agent prompt, without a general source-age or worktree-graph sweep."
+    from: s.followups_state
+    at: "graph and Store.scan; maintenance instruction in scripts/followup_daily.py::plan"
+    of: "2026-09-10"
+  followups.outcome_retention:
+    name: "What completion preserves"
+    v: "Attempt outcomes and evidence remain in the private followup ledger. Finishing a task does
+        not write new knowledge into the project record or refresh its review snapshots."
+    from: s.followups_state
+    at: "Store.finish, Store.resolve and Store.restore"
+    of: "2026-09-10"
+  followups.record_scope:
+    name: "Which graph daily review reads"
+    v: "One record path is pinned at setup. By default it is the record located from the selected
+        workspace, including a worktree copy; sibling worktree graphs are not enumerated."
+    from: s.followups_state
+    at: "Store.setup, Store.scan and graph"
+    of: "2026-09-10"
+  followups.state_storage:
+    name: "Where followup state lives"
+    v: "Private workspace-keyed state is shared across related worktrees; task content stays in the
+        selected external system or Markdown destination."
+    from: s.followups_state
+    at: "Store.__init__, Store.setup and Store._register"
+    of: "2026-09-10"
   m.blocked_on_implementation:
     v: 4
     name: "Judgments whose declared hole calls itself an implementation hole - work not done yet -
            rather than an observation nobody has made"
     from: run.blocked_on_reread
-    at: "of 60 - the other 56 open observational; the split is measured on both sides, so neither
+    at: "of 61 - the other 57 open observational; the split is measured on both sides, so neither
          half drifts while the total holds"
     measure: blocked_on_implementation
   m.blocked_on_reopeners:
-    v: 60
+    v: 61
+    # set 2026-09-11: measured by blocked_on_reopeners at a51bc75 with the working tree changed
     # reconciled 2026-09-05 after the same-day write rule refused a second reading: this tree adds
     # five observational declarations to the 55 measured earlier that day
-    of: "2026-09-05"
+    of: "2026-09-11"
     name: "Judgments that declare a hole with blocked_on - the count. Whether each names a sign
            that would re-open the decision, or an input the record lacks, is read by hand and said
            beside it"
     from: run.blocked_on_reread
-    at: "of 60 declared holes - 56 say observational and 4 implementation, the second half
+    at: "of 61 declared holes - 57 say observational and 4 implementation, the second half
          measured beside this one; none is written as what the record is missing, and the one
          that names an entry names one the record holds"
     measure: blocked_on_reopeners
@@ -470,6 +727,40 @@ known:
     name: "Claims about this project that held - checked with a run before they were asserted"
     from: run.claims_scored
     at: "of 6"
+  m.entry_name.false_reads:
+    v: 8
+    unit: trials
+    name: "Reads of the record on prompts it does not touch, of 250 over the unrelated prompts and
+           five names"
+    from: run.entry_name_eval
+    at: "PROVENANCE.yaml 3/50, GROUND.yaml 3/50, ground.yaml 2/50, GROUNDING.yaml 0/50,
+         REASONING.yaml 0/50 - p 0.20; a false read cost one command and about six thousand tokens"
+    of: "2026-09-12"
+    distinct_from: "m.entry_name.reads, m.entry_name.unread_by_no_command"
+    # distinct 2026-09-12: one counts reads where the record applied, the other where it did not
+    # distinct 2026-09-12: one counts reads that should not have happened, the other misses that were no look at all
+  m.entry_name.reads:
+    v: 967
+    unit: trials
+    name: "Trials that read the record before answering, of 1,000 over the recorded prompts and five
+           names"
+    from: run.entry_name_eval
+    at: "GROUNDING.yaml 196/200, GROUND.yaml 195/200, REASONING.yaml 194/200, PROVENANCE.yaml
+         192/200, ground.yaml 190/200 - chi-square across the five 3.64 on 4 degrees, p 0.46; English
+         100/100 under every name but one trial, and in every cell the trials that read answered with
+         the recorded value and the trials that did not read did not"
+    of: "2026-09-12"
+  m.entry_name.unread_by_no_command:
+    v: 32
+    unit: trials
+    name: "Of the 33 trials that did not read the record, those that ran no command at all - the
+           session answered from what it knew and never listed the tree"
+    from: run.entry_name_eval
+    at: "31 of them on one Hebrew date prompt, the drip lines' installation; the one other miss
+         listed the tree and did not open the record. A name reaches a session only after it looks,
+         so the re-opener of d.entry_file_is_grounding - found the file and did not read it - fired
+         in none of 1,000 trials"
+    of: "2026-09-12"
   m.first_run.repair:
     v: 217
     unit: seconds
@@ -507,6 +798,13 @@ known:
          falsifier's own"
     of: "2026-09-03"
     measure: coverage_thresholds
+  p.entry_names:
+    v: 2
+    name: "Names the locator recognizes for the record's entry file"
+    from: "scripts/workspace.py"
+    at: NAMES
+    of: "2026-09-12"
+    measure: entry_names
   p.fields_a_build_writes:
     v: 0
     name: "Fields of the record a read command - check, open, page - writes"
@@ -525,7 +823,8 @@ known:
     v: 1
     name: "Places the reader reads hypothesis files from"
     from: "scripts/provenance.py"
-    at: "hypothesis_dir - PROVENANCE.d beside the file the reader opens first"
+    at: "hypothesis_dir - .kpopper/hypotheses beside the file the reader opens first, PROVENANCE.d
+         beside a record kept under the old name"
     of: "2026-09-04"
   p.hypothesis_name_inputs:
     v: 2
@@ -564,9 +863,42 @@ known:
     from: doc.checked_sessions
   skill.two_shapes:
     quoted: "Two parallel records is the most expensive mistake available here"
-    from: "skills/kpopper/SKILL.md"
-    at: "Step 1"
+    from: "skills/kpopper/references/shape.md"
+    at: "Where the record lives"
     name: "The cost of a second copy"
+  m.grounding_line_prefix_guesses:
+    v: 182
+    unit: trials
+    name: "First reads that were a prefix guessed from the words of the question, of 200 trials
+           without the grounding line; 22 of 200 with it"
+    from: run.grounding_line_codex
+    at: "the first command of each trial - pull heat, pull pump water; the 13 wrong answers were all
+         dates under when., a prefix no question suggests"
+    of: "2026-09-11"
+  m.letter_prefix_ids:
+    v: 214
+    unit: entries
+    name: "Entries of this record under a one-letter prefix - d, s, m, p, q and v"
+    from: run.prefix_survey
+    at: "second-level keys of PROVENANCE.yaml at a51bc75"
+    of: "2026-09-11"
+  m.letter_prefix_refs_outside:
+    v: 281
+    unit: references
+    name: "References to those ids outside the record, in 14 tracked files - the session file, the
+           changelog, the brief, the measure file, the tests and the docs"
+    from: run.prefix_survey
+    at: "the 214 ids searched over the tracked tree at a51bc75, the record itself excluded"
+    of: "2026-09-11"
+  m.letter_prefix_roles:
+    v: 3
+    unit: prefixes
+    name: "Prefixes the judgment role was given across the records read - c. in the first record and
+           the fixtures, d. here, j. in a record born the same day as this one; d. is a date in the
+           first record and a decision here, q. a quote there and a question here"
+    from: run.prefix_survey
+    at: "the judgment collection of each record, and the two letters both live records hold"
+    of: "2026-09-11"
   m.older_records_changed:
     v: 0
     name: "Records written before the field whose reading changed once the reader learned it"
@@ -607,6 +939,21 @@ known:
     at: "tool.setuptools.package-data"
     measure: checks_in_the_wheel
     of: "2026-09-03"
+  m.prompt_hook_10x_kept:
+    v: 0.15
+    unit: s
+    name: "what the grounding hook costs at every prompt on that same record, with the parse kept"
+    from: s.2026_09_11_read_once
+    at: "the same five runs, the entry already written: what is left is the interpreter starting and
+         the field roles being worked out, not the read"
+  m.prompt_hook_10x_parsing:
+    v: 1.3
+    unit: s
+    name: "what the grounding hook cost at every prompt on a record ten times this one's, parsing it
+           each time"
+    from: s.2026_09_11_read_once
+    at: "best of five runs of scripts/ground_hook.py against a synthetic 2.26 MB record - this
+         record's collections nine times over under other names - on one laptop, Python 3.14"
   m.reach.assumed_at_high_confidence:
     v: 0
     name: "Unchecked claims about the project that were asserted at a confidence of 0.8 or above"
@@ -677,6 +1024,12 @@ known:
     at: "run_recipe, called by measure and by nothing else - the reader, the page, the hooks and
          consolidate read the name an entry carries and run nothing"
     measure: recipe_runners
+  p.record_parsers:
+    v: 1
+    name: "Functions of the reader that open a file and parse it as YAML"
+    from: "scripts/provenance.py"
+    at: "parse - load, load_hypotheses, _files_of and the readers of the brief all come through it"
+    measure: record_parsers
   p.reference_resolvers:
     v: 1
     name: "Functions that resolve a reference to what it shows - the value, a rule's name, a
@@ -735,6 +1088,13 @@ known:
            to matter, and the page stays JS either way"
     from: s.2026_09_03_language
     reach: general
+  p.skills_shipped:
+    v: 8
+    name: "Skill directories the plugin ships, each one occasion with its own SKILL.md"
+    from: "skills/*/SKILL.md"
+    at: "one directory per skill"
+    of: "2026-09-10"
+    measure: skills_shipped
   p.supersede_doors:
     v: 1
     name: "Functions that decide whether a write under an id the base holds may replace what it
@@ -808,7 +1168,77 @@ known:
     at: "m.page_string_lines written as 431 with seen at 431 after the move had already made it 0: 0
          problems; MOVED only once a hand set the value to 0"
 
+  m.skill_bytes_before:
+    v: 64011
+    name: "The one skill body a session loaded before the split, bytes"
+    from: s.2026_09_10_skills_split
+    at: "skills/kpopper/SKILL.md at 1.3.0, whole"
+    of: "2026-09-10"
+
+  m.skill_bytes_largest:
+    v: 20533
+    # measured 2026-09-12 after combining the occasion skills with structured expressions and source search
+    # set 2026-09-12: measured by skill_bytes_largest after the skills learned the entry file and the directory beside it
+    # set 2026-09-11: measured by skill_bytes_largest at a51bc75 with the working tree changed
+    name: "The largest skill body a session can be handed now, bytes"
+    from: "skills/*/SKILL.md"
+    at: "bytes of the largest body"
+    of: "2026-09-12"
+    measure: skill_bytes_largest
+
+  m.unasked.question_filler:
+    v: 0
+    unit: entries
+    name: "Entries written to answer the question with nothing behind them - a restated prompt, an
+           empty entry, a judgment with no falsifier"
+    from: run.gate_question_eval
+    at: "of the 22 sessions that wrote when asked, and of 300 trials; two of the 22 wrote something
+         wrong instead - a wrong total, and a set that replaced a recorded quote with another
+         supplier's"
+    of: "2026-09-11"
+
+  m.unasked.question_reached:
+    v: 13
+    unit: trials
+    name: "Trials whose first turn left the record untouched, so the question was asked, or would
+           have been"
+    from: run.gate_question_eval
+    at: "of 200 over the ten episodes and 39 of 100 over the quick lookups - every one the
+         eight-prompts form, since no first turn changed a file of the tree without writing the
+         record too"
+    of: "2026-09-11"
+
+  m.unasked.question_wrote:
+    v: 22
+    unit: sessions
+    name: "Sessions that wrote the record on the turn after the question, of those asked"
+    from: run.gate_question_eval
+    at: "of 25 asked across both sets, against 8 of 27 not asked; 20 of the 22 carry the first
+         turn's finding with its source, 3 took the line's own finish"
+    of: "2026-09-11"
+
+  m.unasked.turn_one:
+    v: 187
+    unit: trials
+    name: "Sessions that wrote the record during the first turn of ordinary work, before any
+           question, with the opener's output and the record skill in front of them"
+    from: run.gate_question_eval
+    at: "of 200 trials over the ten episodes, and 61 of 100 over the quick lookups; the writes read
+         by hand are in the method's shape - a source with what it was asked, values with where they
+         came from, rules for what was worked out"
+    of: "2026-09-11"
+
 open:
+  q.followups_dispatch: "Which followups should stay in the daily session and which should receive
+                         a dedicated execution session? No per-item dispatch policy is currently
+                         implemented."
+  q.followups_outcomes_to_graph: "Which nontrivial followup outcomes should be recorded as new
+                                  project evidence, by which authorized writer, so that knowledge
+                                  does not remain only in execution history?"
+  q.prefix_eval: "does a word prefix reach the right entry more often than a letter, and does a
+                  legend close the gap? the three-arm eval on the page fixture - the same prompts and
+                  trials as the grounding-line harness, under letters, under letters with
+                  meta.prefixes, and under words - has not run"
   q.pull_defaults: "does a session that ran pull still open the record file for values - and if
                     so, what was missing from the line it got?"
   q.account_copy: "does the hosted copy of this plugin get refreshed from here, or retired?"
@@ -864,6 +1294,35 @@ judgments:
                           person; only a predicate that holds fails the build"
     distinct_from: d.text_holds_the_prose_it_places
     # distinct 2026-09-04: one decides which reading a snapshot records; this decides how any two readings are shown against each other, whatever they are snapshots of
+  d.a_half_move_is_said:
+    verdict: "files of the record's other layout beside the entry file - the record renamed with its
+              files left under the earlier names, or a .kpopper/ opened beside a record still under
+              the earlier name - fail check and are named in the opener's head with where they
+              belong; the reader still looks in one home, and an empty hypotheses directory left
+              behind is passed over"
+    because: "{{d.home_beside_the_entry}} made the reader look in one home, so a file left under the
+              other is a claim nobody reads - and on the first record moved by hand a hypothesis and
+              a brief vanished from every surface with every check green
+              ({{s.2026_09_12_half_move}}). A checker that passes over what it cannot read is the
+              failure this method exists to refuse, so it fails rather than notes: the pull request
+              that moves a record by half stays red until the move is whole. Saying it costs one line
+              where a session looks first, and the records outside this tree will each go through
+              this by hand."
+    reopened_by: "a record that keeps files under the other name on purpose, for another tool, and
+                  cannot make check green; or a half-moved record that opened green"
+    rests_on: [s.2026_09_12_half_move, d.home_beside_the_entry, d.in_the_tree_only_what_is_reviewed]
+    seen:
+      s.2026_09_12_half_move: "read 2026-09-12"
+      d.home_beside_the_entry: "everything a record keeps beside itself lives in one directory,
+                                .kpopper, beside the file the reader opens first - hypotheses/,
+                                view.yaml, measure.yaml, session.json, records/<head>.yaml when the
+                                record divides, build/ for what is rebuilt - and a record found under
+                                the earlier name keeps the earlier names beside it; the reader looks
+                                in one of the two, never both"
+      d.in_the_tree_only_what_is_reviewed: "in the tree only what is reviewed; ignored only what is
+                                            rebuilt, in the one directory .kpopper/build, with a
+                                            .gitignore the build writes there; state never in the
+                                            tree"
   d.a_line_is_clipped_by_its_parts:
     rests_on: [s.2026_09_04_difference, d.a_comparison_shows_where_it_parts]
     verdict: "a line that shows a comparison is built from parts already clipped, and never cut as a
@@ -882,6 +1341,28 @@ judgments:
       d.a_comparison_shows_where_it_parts: "where two readings are printed side by side, each is
                                             clipped to where they part rather than to where they
                                             agree; the head is kept only when they part inside it"
+  d.a_write_joins_its_own_shard:
+    rests_on: [s.2026_09_11_read_once, d.scale_by_federation, d.add_places_by_prefix]
+    verdict: "a new entry goes into the file whose collection already holds its neighbours - the
+              entries whose ids share its head - and a write to an entry goes into the file that
+              holds it; a record in one file answers that file to all of it"
+    because: "{{d.add_places_by_prefix}} is the same rule one level down, and it stopped at the
+              file's edge: {{d.scale_by_federation}}, but the writer took the first file that held
+              the collection whatever the subject, so the first entries written into a divided record
+              would have undone the division one at a time, in whichever file came first. The head of
+              an id is what such a record is divided by, because the prefix is the subject, so it is
+              what the choice reads. A subject the record has not met yet still lands in the first
+              file that holds its collection rather than opening a second home for it, and a record
+              in one file cannot tell the difference."
+    reopened_by: "a record divided some other way than by the head of its ids - a file per kind, or
+                  per quarter - where a new entry lands away from the subject it belongs with"
+    seen:
+      s.2026_09_11_read_once: "read 2026-09-11"
+      d.scale_by_federation: "a record scales by sharding into domain records under a pointer index,
+                              never by growing one file"
+      d.add_places_by_prefix: "add inserts a new entry beside the entries it shares the longest
+                               dotted prefix with, in id order among them, and at a collection's tail
+                               only when id order puts it there"
   d.add_places_by_prefix:
     rests_on: [m.multi.record_pairs_conflicting, d.base_shared_forks_on_contradiction]
     verdict: "add inserts a new entry beside the entries it shares the longest dotted prefix with,
@@ -1007,6 +1488,32 @@ judgments:
       d.metrics_derived_builtin: "graph.* and page.* are derived entries the reader computes itself
                                   - counts and shares, never stored, thresholds only inside
                                   falsifiers"
+  d.brand_on_the_directory:
+    verdict: "the brand goes on the directory, the verbs, the check's name and the head line of a
+              born record; the concept goes on the entry file's name"
+    because: "A file named for a tool becomes a standard when the tool already dominates its niche;
+              a file named for the concept becomes one when many vendors are the aim from the first
+              day, which {{goal.portable}} says this is - and this tool renamed itself twice while
+              the file's name survived both. The brand is still an asset: {{lit.name_risk}} says
+              qualified search works, both registries hold the name, and it shows to an adopter where
+              the hosts show theirs - the directory in every repository that adopts, visible and
+              searchable; the check on every pull request; the first line of a record someone finds,
+              which said nothing before; the commands and the skill namespace, which already carry
+              it. The file's name is {{d.entry_file_is_grounding}}."
+    reopened_by: "a person who met a record in a tree and could not find the tool that keeps it from
+                  the tree alone, or an adopter who took the directory's name for the format's"
+    rests_on: [s.2026_09_12_layout, goal.portable, lit.name_risk, d.entry_file_is_grounding]
+    seen:
+      s.2026_09_12_layout: "read 2026-09-12"
+      goal.portable: "usable by any session, in any project, with no author present"
+      lit.name_risk: "bare-term search is owned by a fandom; the org and handle are taken; every
+                      package registry is free; qualified search works"
+      d.entry_file_is_grounding: "the record's entry file is GROUNDING.yaml: the first add creates
+                                  it at the workspace root, the locator finds it first and a record
+                                  kept under the earlier name after it, wherever that record already
+                                  is, and no command creates the earlier name again"
+    distinct_from: d.named_for_popper
+    # distinct 2026-09-12: one is where the brand shows in an adopter's tree, the other is what the tool is called; both read the name's cost
   d.browser_code_in_browser_files:
     rests_on: [m.page_string_lines, prior.strings_lose_tooling]
     verdict: "the page's CSS and JS live in their own files under scripts/page/, read whole at
@@ -1129,6 +1636,24 @@ judgments:
                                           the union is tested by consolidation, and the page draws
                                           the base"
       p.contested_meanings: 1
+  d.context_is_an_explicit_read:
+    rests_on: [doc.checked_retrieval, d.checked_session_is_optional]
+    verdict: "Search continues from a revision-bound ranked position; graph context is explicitly
+              requested around known IDs for support or impact, keeps exact source reads and unread
+              boundaries, and leaves global search available."
+    because: "A needed source can occur later in a ranking or outside declared links. Declared paths
+              can recover additional source records, but a path or search score does not establish a
+              claim, and a bounded neighborhood cannot establish full coverage."
+    reopened_by: "An unchanged search skips an unread match when it resumes; an
+                  old returned cursor is silently applied to a changed ranking; a context read loses
+                  source qualifications or hides unread boundaries; or task evidence justifies a
+                  different retrieval contract."
+    seen:
+      doc.checked_retrieval: "read 2026-09-10"
+      d.checked_session_is_optional: "Offer the checked session transport alongside the legacy
+                                      reader, enabled explicitly per project or machine; keep each
+                                      judgment's source body alongside its computed card, exact raw
+                                      reads and a reversible hook choice."
   d.contradiction_by_id_and_day:
     rests_on: [s.2026_09_04_minted_permission, s.2026_09_03_hypotheses, d.base_shared_forks_on_contradiction, d.write_path_returns_reach, p.supersede_doors]
     verdict: "a contradiction is told by the id and the day: the same id with a value read no later
@@ -1251,6 +1776,61 @@ judgments:
                                           the union is tested by consolidation, and the page draws
                                           the base"
       p.union_tests: 1
+  d.entry_file_is_grounding:
+    verdict: "the record's entry file is GROUNDING.yaml: the first add creates it at the workspace
+              root, the locator finds it first and a record kept under the earlier name after it,
+              wherever that record already is, and no command creates the earlier name again"
+    because: "The name is the one thing a session with no author present reads before anything else,
+              and {{goal.portable}} is the bar: a file named for what it does for the session - what
+              its answers stand on - carries its own instruction, where provenance named the half of
+              the content that is sources and readings and reads, in software now, as a supply-chain
+              attestation. Grounding is the word the method already uses in its skill, its opener and
+              its grounding line, and {{d.prefix_is_a_word}} is the same rule one level up: a name is
+              the link a question takes into the record. Reasoning, the pitch word, names a process
+              and one field, {{d.reasoning_in_record}}, not the state the file holds. The earlier
+              name stays read so that no record has to move, and {{p.entry_names}} counts the names
+              the locator knows - a third would be a second convention."
+    wrong_if: "p.entry_names > 2"
+    reopened_by: "a session with no author present that found the file and did not read it before
+                  answering from memory, or an adopter who asked what the file is, or a live record
+                  the locator stopped finding under its earlier name"
+    rests_on: [s.2026_09_12_layout, goal.portable, d.prefix_is_a_word, d.reasoning_in_record, p.entry_names]
+    seen:
+      s.2026_09_12_layout: "read 2026-09-12"
+      goal.portable: "usable by any session, in any project, with no author present"
+      d.prefix_is_a_word: "a prefix born from now is a word - the subject a question would name, or
+                           the kind spelled out where a record is about one thing - never a letter;
+                           an entry joins the prefix its record already holds for its subject, so a
+                           record kept under letters keeps them and declares what they stand for in
+                           meta.prefixes, which the opener and the page print beside the namespace;
+                           check does not fail a letter"
+      d.reasoning_in_record: "reasoning is the because of the judgment it belongs to, in the record;
+                              the page's connective text lives in the brief; both resolve references
+                              at build and both carry seen"
+      p.entry_names: 2
+  d.first_add_is_the_birth:
+    verdict: "where no record resolves, the first add creates GROUNDING.yaml at the workspace root
+              with that entry, under one line that says what keeps it; no other command creates one,
+              and an unavailable registered record is refused, never replaced"
+    because: "The write occasion had no mechanical first step: add refused where no record existed,
+              so every first record was a hand-written file. Installation alone still creates
+              nothing; the first finding does, and on a surface that can publish the record is met as
+              its page ({{d.first_meeting_artifact}}). The file it creates carries the name
+              {{d.entry_file_is_grounding}} gives it, and one line saying what keeps it, so a record
+              found without its author leads back to the tool."
+    reopened_by: "a record born by a first add where a registered one was meant; or a session that
+                  writes the file by hand rather than through add once this exists; or a first add
+                  that created the earlier name"
+    rests_on: [s.2026_09_10_skills_split, s.2026_09_12_layout, d.first_meeting_artifact, d.entry_file_is_grounding]
+    seen:
+      s.2026_09_10_skills_split: "read 2026-09-10"
+      s.2026_09_12_layout: "read 2026-09-12"
+      d.first_meeting_artifact: "a record born in this session, on a surface that can publish, is
+                                 rendered and shown as a live artifact without asking"
+      d.entry_file_is_grounding: "the record's entry file is GROUNDING.yaml: the first add creates
+                                  it at the workspace root, the locator finds it first and a record
+                                  kept under the earlier name after it, wherever that record already
+                                  is, and no command creates the earlier name again"
   d.fold_passes_the_one_door:
     rests_on: [s.2026_09_04_minted_permission, s.2026_09_04_consolidate, d.contradiction_by_id_and_day, p.supersede_doors]
     verdict: "a folded reading passes the one door a written one does, with a person's hand on it:
@@ -1279,6 +1859,39 @@ judgments:
                                       superseded only when its wrong_if holds; the same premises
                                       under different ids are different subjects"
       p.supersede_doors: 1
+  d.followups_installation_is_not_execution:
+    rests_on: [followups.installation_evidence, s.followups_install]
+    verdict: "Report configured scheduling separately from evidence that a scheduled run actually
+              fired."
+    because: "A retained local request or matching host configuration cannot demonstrate a later
+              wake, filesystem access at that time, or completion of the intended work."
+    reopened_by: "The installation flow reports a successful scheduled execution using only
+                  configuration readback or a simulated dispatch."
+    seen:
+      followups.installation_evidence: "Matching host configuration readback confirms installation.
+                                        The installer explicitly leaves first-run verification false;
+                                        a real scheduled wake needs separate runtime evidence."
+      s.followups_install: "read 2026-09-10"
+  d.followups_readiness_is_not_authority:
+    rests_on: [followups.execution, followups.outcome_retention, d.moved_is_a_flag, s.followups_contract]
+    verdict: "A due trigger and a claim select work to consider or perform within existing
+              authorization; they do not authorize additional effects or silently review
+              conclusions."
+    because: "Readiness describes timing and evidence. Claims coordinate actors. The user still
+              determines the scope of authorized work, and task completion is separate from checking
+              the conclusions that used its evidence."
+    reopened_by: "A runner treats a due trigger or claim token as permission for an unapproved
+                  action, or clears a judgment warning merely because the task completed."
+    seen:
+      followups.execution: "The scheduled host agent performs authorized work in its own review run.
+                            The coordinator does not automatically dispatch a separate session per
+                            item."
+      followups.outcome_retention: "Attempt outcomes and evidence remain in the private followup
+                                    ledger. Finishing a task does not write new knowledge into the
+                                    project record or refresh its review snapshots."
+      d.moved_is_a_flag: "a dependency that moved since the snapshot flags the judgment for a
+                          person; only a predicate that holds fails the build"
+      s.followups_contract: "read 2026-09-10"
   d.gate_and_opener_against_the_mark:
     rests_on: [s.2026_09_03_coverage, d.gate_reminds, d.open_is_a_slot, p.gate_bounces]
     verdict: "the opener marks where a session began - failures, judgments, readings, unserved
@@ -1299,6 +1912,26 @@ judgments:
                        conditions"
       d.open_is_a_slot: "the session opener fills a fixed character slot, highest value per
                          character first; values never preload"
+      p.gate_bounces: 1
+  d.gate_asks_once_after_work:
+    rests_on: [s.2026_09_10_skills_split, run.design_talk, d.gate_reminds, p.gate_bounces]
+    verdict: "a session that changed files of the tree, or ran eight prompts, with the record
+              untouched is asked once whether there was nothing to keep - as a line on the prompt,
+              and as one stop on the turn after a line went unanswered; the gate still yields after
+              one bounce"
+    because: "Seven decisions lived only in chat and the gate could not see a record nobody touched
+              ({{run.design_talk}}). One stop is a question, not a failure, and it comes only after
+              the softer form was ignored for a turn; a stop that repeated would teach sessions to
+              write filler, which the unattributed-entries reminder ({{d.gate_reminds}}) already
+              catches, and {{p.gate_bounces}} stays where it was."
+    wrong_if: "p.gate_bounces > 1"
+    seen:
+      s.2026_09_10_skills_split: "read 2026-09-10"
+      run.design_talk: "read 2026-09-02"
+      d.gate_reminds: "the stop gate compares against the session-start mark and yields after one
+                       bounce; unchanged existing judgments falsified by updated readings can stay
+                       flagged while recording finishes, and check still reports their failed
+                       conditions"
       p.gate_bounces: 1
   d.gate_by_consequence:
     rests_on: [prior.gate_by_consequence, m.claims.general_held, d.hypothesis_is_a_judgment]
@@ -1325,6 +1958,61 @@ judgments:
                                    truth is pending - its premises in rests_on, its claim in verdict,
                                    what would refute its success in wrong_if - and the merge is its
                                    test"
+  d.home_beside_the_entry:
+    verdict: "everything a record keeps beside itself lives in one directory, .kpopper, beside the
+              file the reader opens first - hypotheses/, view.yaml, measure.yaml, session.json,
+              records/<head>.yaml when the record divides, build/ for what is rebuilt - and a record
+              found under the earlier name keeps the earlier names beside it; the reader looks in one
+              of the two, never both"
+    because: "The hosts this method adapts to keep one file meant to be read at the root and
+              everything else in a directory named for the tool that owns it - .github, .claude,
+              .codex - and that split answers two questions at once: the root holds the one file a
+              person or a session must find by eye, and the directory carries the namespace, so a
+              file inside needs only its role for a name. The directory follows the entry file, as
+              {{d.record_is_code}} and {{d.register_out_of_tree}} already place hypotheses, so a
+              pointer record and a registered one keep theirs beside the file the reader opens; a
+              divided record's shards go there too, because at that size the reading goes through
+              open, pull and the page ({{d.scale_by_federation}}) and the write already knows its
+              shard ({{d.a_write_joins_its_own_shard}}). {{p.hypothesis_homes}} stays the count of
+              places hypotheses are read from - a record under either name has one."
+    wrong_if: "p.hypothesis_homes > 1"
+    reopened_by: "a reviewer who missed a change under .kpopper in a pull request, a person on a
+                  surface without git who could not find the page or the brief, or a second file
+                  convention appearing beside the entry file"
+    rests_on: [s.2026_09_12_layout, d.record_is_code, d.register_out_of_tree, d.scale_by_federation, d.a_write_joins_its_own_shard, p.hypothesis_homes]
+    seen:
+      s.2026_09_12_layout: "read 2026-09-12"
+      d.record_is_code: "the record of what is known about the code lives in the tree - committed
+                         with the work it describes, reviewed in the same pull request, checked by
+                         the same CI - and a hypothesis travels with its branch; an out-of-tree
+                         record holds only what the tree cannot hold, the world outside the code; a
+                         user-level directory is at most an index of records, never content; a
+                         session named as a source is provenance, not process"
+      d.register_out_of_tree: "a record the tree cannot hold registers its path in the git common
+                               dir, so every worktree finds it and nothing enters the tree"
+      d.scale_by_federation: "a record scales by sharding into domain records under a pointer index,
+                              never by growing one file"
+      d.a_write_joins_its_own_shard: "a new entry goes into the file whose collection already holds
+                                      its neighbours - the entries whose ids share its head - and a
+                                      write to an entry goes into the file that holds it; a record in
+                                      one file answers that file to all of it"
+      p.hypothesis_homes: 1
+  d.hooks_carry_pointers:
+    rests_on: [s.2026_09_10_skills_split, d.open_is_a_slot]
+    verdict: "the hooks are the one layer every session gets without choosing; they name the entries
+              a prompt touches and the skill for the next move, in the host's own syntax, and never a
+              value"
+    because: "The opener's slot already keeps values out ({{d.open_is_a_slot}}); a line that carried
+              values would grow with the record and preload what the work may never ask. A pointer
+              costs a line, the skill it names costs the occasion, and a session that never chose to
+              look is looking anyway - the record reaches the question at the moment it is asked."
+    reopened_by: "a session that answers from the grounding line's ids without pulling them, the
+                  line read as evidence; or hit lines on prompts the record does not touch, measured
+                  on a held-out prompt set"
+    seen:
+      s.2026_09_10_skills_split: "read 2026-09-10"
+      d.open_is_a_slot: "the session opener fills a fixed character slot, highest value per
+                         character first; values never preload"
   d.hypotheses_read_beside_the_base:
     rests_on: [s.2026_09_03_hypotheses, d.consolidation_is_a_test, d.no_feed_of_other_branches, p.hypothesis_thresholds]
     verdict: "every command reads the hypotheses beside the record over the base - pull shows what
@@ -1376,6 +2064,35 @@ judgments:
       s.2026_09_04_merge_driver_reason: "read 2026-09-04"
       alt.record_merge_driver: rejected
       p.hypothesis_name_inputs: 2
+  d.in_the_tree_only_what_is_reviewed:
+    verdict: "in the tree only what is reviewed; ignored only what is rebuilt, in the one directory
+              .kpopper/build, with a .gitignore the build writes there; state never in the tree"
+    because: "{{d.record_is_code}} already says why the record and its hypotheses are committed - an
+              untracked file dies with its worktree, the honest fate of a claim nobody committed -
+              and the same reasoning sorts everything else: the brief, the recipes and the session
+              profile are reviewed, so they are tracked; the page is rebuilt from them, so it is not;
+              the parse cache, the gate's mark and the pointer to a record outside the tree are
+              state, and state already lives under the user's state directory and the git common
+              directory ({{d.home_beside_the_entry}}). One ignored directory that ignores itself
+              leaves the project's own .gitignore untouched and rules out ignore rules per file, the
+              shape that rots."
+    reopened_by: "an ignore rule for the record's files anywhere but .kpopper/build/.gitignore, a
+                  state file written into the tree, or a reviewed file a session found ignored"
+    rests_on: [s.2026_09_12_layout, d.record_is_code, d.home_beside_the_entry]
+    seen:
+      s.2026_09_12_layout: "read 2026-09-12"
+      d.record_is_code: "the record of what is known about the code lives in the tree - committed
+                         with the work it describes, reviewed in the same pull request, checked by
+                         the same CI - and a hypothesis travels with its branch; an out-of-tree
+                         record holds only what the tree cannot hold, the world outside the code; a
+                         user-level directory is at most an index of records, never content; a
+                         session named as a source is provenance, not process"
+      d.home_beside_the_entry: "everything a record keeps beside itself lives in one directory,
+                                .kpopper, beside the file the reader opens first - hypotheses/,
+                                view.yaml, measure.yaml, session.json, records/<head>.yaml when the
+                                record divides, build/ for what is rebuilt - and a record found under
+                                the earlier name keeps the earlier names beside it; the reader looks
+                                in one of the two, never both"
   d.ingestion_attention_is_selective:
     rests_on: [s.background_ingestion]
     verdict: "Background ingestion retains a receipt for every event and notifies only when a
@@ -1488,6 +2205,23 @@ judgments:
                                           a coverage gap exists, or a person asks"
     distinct_from: d.minimal_repair
     # distinct 2026-09-04: minimal repair is how much structural change a fired trigger buys; this is what may fire one at all
+  d.named_until_read:
+    rests_on: [s.2026_09_10_skills_split, d.hooks_carry_pointers]
+    verdict: "an entry is named until it is read: a read leg marks the ids that passed through a
+              tool's output, a read entry is silent until its body changes or the session compacts,
+              and an unread one repeats after ten prompts"
+    because: "Once per session went silent when a later question needed the same id; naming every
+              hit repeated one id thirty times in a focused session, and a line the model learns to
+              skip is worse than none. The purpose of the line is the read, so its memory follows the
+              read ({{d.hooks_carry_pointers}})."
+    reopened_by: "a session that read an id and is named it again within the cooldown while its body
+                  did not change; or one that never reads and is named the same id more than once in
+                  ten prompts"
+    seen:
+      s.2026_09_10_skills_split: "read 2026-09-10"
+      d.hooks_carry_pointers: "the hooks are the one layer every session gets without choosing; they
+                               name the entries a prompt touches and the skill for the next move, in
+                               the host's own syntax, and never a value"
   d.names_rank_never_decide:
     rests_on: [s.2026_09_04_sameness, d.sameness_is_judged, alt.sameness_from_names, p.candidate_reasons]
     verdict: "a candidate pair is named for a declared reason - the same source and place, the same
@@ -1526,6 +2260,23 @@ judgments:
                   pending; an uncertain send causes another automatic offer in the same epoch; or a
                   quiet native worker completion starts a new primary turn."
     seen: {s.background_ingestion: "read 2026-09-09"}
+  d.no_record_opener_is_two_lines:
+    rests_on: [s.2026_09_10_skills_split, d.workspace_operations]
+    verdict: "with no record the opener says so in two lines and names the skills; the starting
+              offer and its timing belong to the map skill"
+    because: "The hook's onboarding text was offered on a greeting against its own instruction: long
+              hook text pushes behaviour onto every session, a skill's pushes only when the moment
+              invokes it. The first-use contract ({{d.workspace_operations}}) is unchanged in what it
+              offers; only where the offer is carried moved."
+    reopened_by: "a session that offers the starting choices on a greeting under the two-line
+                  opener; or one that never offers them where the work is clearly revisited"
+    seen:
+      s.2026_09_10_skills_split: "read 2026-09-10"
+      d.workspace_operations: "The public workspace interface is open, map with an optional deep
+                               flag, and config for guidance. Mapping runs through the calling agent
+                               and distinguishes a returned task from accepted work and a completed
+                               result; a plain terminal without a bound session must fail
+                               explicitly."
   d.one_reference_resolver:
     rests_on: [d.reasoning_in_record, p.reference_resolvers]
     verdict: "a reference resolves the same way on every surface - the value where the entry holds
@@ -1589,6 +2340,31 @@ judgments:
       d.reasoning_in_record: "reasoning is the because of the judgment it belongs to, in the record;
                               the page's connective text lives in the brief; both resolve references
                               at build and both carry seen"
+  d.parse_kept_by_file_identity:
+    rests_on: [s.2026_09_11_read_once, p.record_parsers, m.prompt_hook_10x_parsing, m.prompt_hook_10x_kept]
+    verdict: "a file of the record is parsed when it changes, not when it is read: its parsed
+              document is kept under the user's own state directory against what the file is - its
+              path, its length, its last write and the digest of the bytes that were parsed - and
+              every write drops the entry for the file it wrote"
+    because: "Every command reads the whole record, and the hooks read it at every prompt and every
+              edit: a prompt on a record ten times this one's cost {{m.prompt_hook_10x_parsing}}
+              seconds, {{m.prompt_hook_10x_kept}} once the parse is kept. Reading the bytes is a
+              millisecond and parsing them is the whole cost, so what is kept is the parse. The bytes
+              are in the key because a length and a nanosecond cannot tell apart a rewrite of the
+              same length inside one tick - and a tick is a whole second where a filesystem keeps its
+              timestamps coarsely - while digesting them costs a thousandth of the parse they save.
+              The files remain the authority: an entry that is missing, truncated, about another
+              file, of an older shape or holding anything but a document is a parse, never an error,
+              and nothing read back from one is ever built into an object, so a file under the state
+              directory cannot become code. One function of the reader opens a file of a record and
+              parses it; a second would read a record without ever seeing what was kept for it, and
+              {{p.record_parsers}} is the count that would show one."
+    wrong_if: "p.record_parsers > 1"
+    seen:
+      s.2026_09_11_read_once: "read 2026-09-11"
+      p.record_parsers: 1
+      m.prompt_hook_10x_parsing: 1.3
+      m.prompt_hook_10x_kept: 0.15
   d.predicate_shape_is_one_reading:
     rests_on: [s.2026_09_04_falsifier_shape, p.predicate_shapes, d.arrangement_sign_is_one_comparison]
     verdict: "what shape a predicate must have to be decided is one reading, asked wherever a
@@ -1616,6 +2392,36 @@ judgments:
                                              that can hold - a name, an operator, one value; a
                                              compound or an impossible one is refused, and a
                                              re-opener stands beside it, never in its place"
+  d.prefix_is_a_word:
+    rests_on: [s.2026_09_11_prefix_words, m.letter_prefix_roles, m.grounding_line_prefix_guesses, m.letter_prefix_ids, m.letter_prefix_refs_outside]
+    verdict: "a prefix born from now is a word - the subject a question would name, or the kind
+              spelled out where a record is about one thing - never a letter; an entry joins the
+              prefix its record already holds for its subject, so a record kept under letters keeps
+              them and declares what they stand for in meta.prefixes, which the opener and the page
+              print beside the namespace; check does not fail a letter"
+    because: "The namespace line exists so that a question in plain words becomes a seed, and a
+              letter is no word a question carries: the person who wrote this record asked what m.,
+              s. and d. mean, and a session with no pointer reaches an entry by guessing its prefix
+              from the words of the question ({{m.grounding_line_prefix_guesses}} of 200 first
+              reads). The letters were one habit that travelled from the first record through the
+              skill examples and was reassigned at every birth - {{m.letter_prefix_roles}} prefixes
+              for the judgment role, d. a date there and a decision here - and nothing ever declared
+              them, so the first add is where the word is asked for. Renaming what exists reaches
+              {{m.letter_prefix_ids}} ids and {{m.letter_prefix_refs_outside}} references outside the
+              record on every open branch, for a reading a legend gives in one line; a check that
+              failed a letter would fail every record born before this for a taste in names, and
+              teach shaping the record to pass it."
+    blocked_on: "observational: the test is the eval q.prefix_eval names - the same prompts on the
+                 fixture under letters, under letters with a legend, and under words; falsified if
+                 sessions under words reach the right entry no more often than under letters, or the
+                 legend arm no more often than bare letters, or by a record born after this whose
+                 session read the skill and still chose a letter for a new prefix"
+    seen:
+      s.2026_09_11_prefix_words: "read 2026-09-11"
+      m.letter_prefix_roles: 3
+      m.grounding_line_prefix_guesses: 182
+      m.letter_prefix_ids: 214
+      m.letter_prefix_refs_outside: 281
   d.prior_carries_its_own_falsifier:
     rests_on: [prior.confidence_needs_calibration, m.claims.local_assumed_held, d.hypothesis_is_a_judgment]
     verdict: "the prior kind carries its own falsifier: if judgments resting on priors at 0.8 or
@@ -2046,6 +2852,27 @@ judgments:
                                        prefixes nothing picks, spill, drift, the recent streak - and
                                        nothing in the mechanism acts on a number"
       p.coverage_thresholds: 0
+  d.skill_is_an_occasion:
+    rests_on: [s.2026_09_10_skills_split, p.skills_shipped, m.skill_bytes_largest, m.skill_bytes_before, d.open_is_a_slot]
+    verdict: "a skill is one occasion - the moment a session is in, said in its description - and
+              its body is the how-to for that moment alone; the method's long-form waits in reference
+              files read only when needed"
+    because: "One skill covered four occasions under one description and loaded
+              {{m.skill_bytes_before}} bytes on every invocation; after a compaction only the first
+              five thousand tokens of a skill return, which in that file was the philosophy while the
+              commands began at line 688. A precise description triggers - the activation A/B of
+              2026-09-09 - and a body cut to the occasion costs the occasion: {{p.skills_shipped}}
+              skills now, the largest {{m.skill_bytes_largest}} bytes. The opener keeps the same
+              discipline for the record ({{d.open_is_a_slot}}): what is read is what the moment asks
+              for."
+    wrong_if: "m.skill_bytes_largest > 32000"
+    seen:
+      s.2026_09_10_skills_split: "read 2026-09-10"
+      p.skills_shipped: 8
+      m.skill_bytes_largest: 19067
+      m.skill_bytes_before: 64011
+      d.open_is_a_slot: "the session opener fills a fixed character slot, highest value per
+                         character first; values never preload"
   d.spill_on_every_tab:
     rests_on: [s.2026_09_03_coverage, d.author_free_build_guarantees]
     verdict: "what fell through the arrangement - flagged judgments nothing picked, and what a
@@ -2061,6 +2888,19 @@ judgments:
       s.2026_09_03_coverage: "read 2026-09-03"
       d.author_free_build_guarantees: "the session composes freely and the build enforces the
                                        element rules on the output"
+  d.standalone_html_is_a_copy:
+    from: s.2026_09_10_standalone_html
+    rests_on: [doc.standalone_html]
+    verdict: "Keep authored HTML and finite evidence in one portable file; refresh prepares atomic
+              text corrections on a copy while preserving unmarked, unavailable and unchecked
+              states."
+    because: "Readers need to inspect sources and choose related corrections offline without a
+              renderer replacing the author's document or promoting unreviewed prose to checked
+              fact."
+    reopened_by: "A saved copy loses its selected content or evidence, a partial related edit is
+                  applied, evidence runs in the document shell, or an unmarked statement is presented
+                  as checked."
+    seen: {doc.standalone_html: "read 2026-09-10"}
   d.stood_is_derived:
     rests_on: [s.2026_09_03_arrangements, d.metrics_derived_builtin, d.minimal_repair, p.fields_a_build_writes]
     verdict: "how long an arrangement stood is derived - the sessions read on a later day than it
@@ -2189,6 +3029,81 @@ judgments:
                                          literal and is not read for one - and a predicate that is
                                          not one is declined by the reader and reported where an
                                          empty predicate is, never answered false"
+  d.unasked_recording_is_the_opener:
+    rests_on: [s.2026_09_11_gate_question, run.gate_question_eval, m.unasked.turn_one, m.unasked.question_wrote, m.unasked.question_filler, d.gate_asks_once_after_work, run.design_talk]
+    verdict: "on the Codex host a session that opens on the record writes it unasked during ordinary
+              work, and the one question catches most of what it leaves"
+    because: "With the opener's output and the record skill in front of it a session wrote the
+              record during the first turn in {{m.unasked.turn_one}} of 200 trials of ordinary work;
+              where the first turn left the record untouched, the question moved writing on the next
+              turn to {{m.unasked.question_wrote}} of 25 against 8 of 27, and
+              {{m.unasked.question_filler}} of those writes were filler ({{run.gate_question_eval}}).
+              The cost of asking, seen twice in 22 writes, is haste - a wrong number and a wrong
+              correction, both sourced - which is not the failure {{d.gate_asks_once_after_work}}
+              guards against. The Claude host and the old single skill, where {{run.design_talk}}
+              happened, were not measured."
+    wrong_if: "m.unasked.turn_one < 150"
+    reopened_by: "the same episodes on the Claude host leaving the record untouched in most first
+                  turns, or a session asked once writing entries with nothing behind them"
+    seen:
+      s.2026_09_11_gate_question: "read 2026-09-11"
+      run.gate_question_eval: "read 2026-09-11"
+      m.unasked.turn_one: 187
+      m.unasked.question_wrote: 22
+      m.unasked.question_filler: 0
+      d.gate_asks_once_after_work: "a session that changed files of the tree, or ran eight prompts,
+                                    with the record untouched is asked once whether there was nothing
+                                    to keep - as a line on the prompt, and as one stop on the turn
+                                    after a line went unanswered; the gate still yields after one
+                                    bounce"
+      run.design_talk: "read 2026-09-02"
+  d.watch_async_compatibility:
+    rests_on: [s.watch_contract, d.record_is_code, d.no_feed_of_other_branches]
+    verdict: "Keep code records with their branches. Opted-in background watch previews only
+              authored worktree changes against a configured main ref, and selectively returns new
+              contradictions or incomplete checks to the originating session. Comparison never folds
+              or refreshes seen."
+    because: "The working session must continue while cross-branch checks run. Captured input
+              identities make a late result distinguishable from a result about current work, and a
+              scoped compatibility finding avoids a general feed of other branches."
+    reopened_by: "A result is delivered as current after its captured inputs change, an unchanged
+                  finding repeatedly interrupts the session, or comparison writes either graph."
+    seen:
+      s.watch_contract: "read 2026-09-10"
+      d.record_is_code: "the record of what is known about the code lives in the tree - committed
+                         with the work it describes, reviewed in the same pull request, checked by
+                         the same CI - and a hypothesis travels with its branch; an out-of-tree
+                         record holds only what the tree cannot hold, the world outside the code; a
+                         user-level directory is at most an index of records, never content; a
+                         session named as a source is provenance, not process"
+      d.no_feed_of_other_branches: "the opener adds one line - how many hypotheses wait, and for how
+                                    long; nothing another branch claims is pushed into a session, it
+                                    is pulled by seed or surfaces as a collision on the same id"
+  d.watch_shared_scope:
+    rests_on: [s.watch_contract, d.record_is_code, d.base_shared_forks_on_contradiction]
+    verdict: "External scalar observations may enter one explicitly configured shared record before
+              a branch merges, with a source, observation date and environment. Branch measurements,
+              experiments and judgments remain branch-bound. Conflicts stay retained for review;
+              certainty of wording never chooses shared scope."
+    because: "A fact about an external environment can matter on main immediately without describing
+              proposed code. Explicit scope and serialized canonical writes prevent that route from
+              silently publishing branch assumptions or overwriting competing observations."
+    reopened_by: "A branch-scoped observation reaches the shared record automatically, a same-day
+                  conflict loses its competing evidence, or concurrent updates discard an unrelated
+                  fact."
+    seen:
+      s.watch_contract: "read 2026-09-10"
+      d.record_is_code: "the record of what is known about the code lives in the tree - committed
+                         with the work it describes, reviewed in the same pull request, checked by
+                         the same CI - and a hypothesis travels with its branch; an out-of-tree
+                         record holds only what the tree cannot hold, the world outside the code; a
+                         user-level directory is at most an index of records, never content; a
+                         session named as a source is provenance, not process"
+      d.base_shared_forks_on_contradiction: "a consistent addition goes straight to the shared
+                                             record from any session or branch; a write that
+                                             contradicts the record opens a named hypothesis, and
+                                             whatever later rests on the contradiction goes there - a
+                                             session is never the unit"
   d.whole_shape_surface:
     rests_on: [doc.fact_moves]
     verdict: "the shape of the whole gets one surface of its own - the tree - and the reading

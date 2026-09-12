@@ -100,8 +100,8 @@ kpopper expressions convert 'order.total > 150' --predicate
 To preview a record migration, then apply a clean result:
 
 ```sh
-kpopper expressions migrate --record PROVENANCE.yaml
-kpopper expressions migrate --record PROVENANCE.yaml --apply
+kpopper expressions migrate --record GROUNDING.yaml
+kpopper expressions migrate --record GROUNDING.yaml --apply
 ```
 
 Migration uses a deterministic grammar, never a model. It converts supported rules and

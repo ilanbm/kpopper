@@ -14,10 +14,23 @@ gh pr create
 
 Every pull request runs the tests, then `kpopper check`, `kpopper consolidate --dry-run`,
 `kpopper remeasure --run` and `kpopper page --verify` on the two Python versions the package
-claims to support, and fails if `PROVENANCE.view.yaml` no longer matches the record it renders
+claims to support, and fails if `.kpopper/view.yaml` no longer matches the record it renders
 from — the record moved, the view did not. The tests run against the fixture record in
 `tests/fixtures/page`, which exercises every field the reader and the page accept; a new field
 goes there first.
+
+Standalone-document changes also run the offline UI suite with Node 22 or later:
+
+```sh
+pip install .
+npm ci --prefix tests/document-support --ignore-scripts --no-audit --no-fund
+npm run test:documents
+```
+
+Set `PYTHON` to the Python interpreter with the package dependencies when it is not
+`python3`. These tests build real synthetic artifacts and execute their scripts in a
+DOM model. They cover review/export behavior; native browser layout, sandbox/CSP
+behavior and downloads require a separate permitted browser check.
 
 The dry run lays the hypotheses beside the record over it and checks the result: red on a
 contested id, a falsifier that holds, or a hole; a premise that moved under a judgment is green
@@ -26,7 +39,7 @@ tree — and the same steps run on every push to `main`, the second net for two 
 were each consistent and contradict together.
 
 `remeasure` takes every entry that names a recipe again from that tree. An entry whose value is
-a fact about the tree says `measure: <name>`, and `PROVENANCE.measure.yaml` at the root maps the
+a fact about the tree says `measure: <name>`, and `.kpopper/measure.yaml` beside the record maps the
 name to an argument list — `[python3, -I, -c, "..."]`, `[sed, -n, '...', a/file]` — the one file
 whose content ever runs, reviewed as code in the pull request that edits it. A recipe runs once,
 without a shell, with sixty seconds and 64 KiB of output, from the root of the checkout the
@@ -112,9 +125,9 @@ every channel, but the driver that drives the browser ships with none of them, s
 local step:
 
 ```
-kpopper page --out record.html
+kpopper page
 npm i --no-save playwright-core
-kpopper page --checks record.html
+kpopper page --checks .kpopper/build/page.html
 ```
 
 `--checks` runs the copy of the checker that came with the reader, so it works the same from a

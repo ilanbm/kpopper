@@ -26,7 +26,8 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import provenance as P    # noqa: E402
 import consolidate as C   # noqa: E402
 
-ALLOWLIST = "PROVENANCE.measure.yaml"   # beside the first file the reader opens, and only there
+ALLOWLIST = "measure.yaml"              # under .kpopper beside the first file the reader opens, and
+                                        # only there; PROVENANCE.measure.yaml beside a record under the old name
 TIMEOUT = 60                            # seconds a recipe may take
 CAP = 64 * 1024                         # bytes either stream may print before the recipe is killed
 TREE = "tree"                           # the hypothesis the tree's readings make: tree/<commit> -
@@ -37,8 +38,18 @@ TREE = "tree"                           # the hypothesis the tree's readings mak
 def allowlist_path(paths):
     """Where the recipes live: beside the first record file, and nowhere else - no pointer,
     shard or hypothesis is followed for it."""
-    first = (sorted(glob.glob(paths[0])) or [paths[0]])[0]
-    return os.path.join(os.path.dirname(os.path.abspath(first)), ALLOWLIST)
+    return P.layout_of(paths)["measure"]
+
+
+def allowlist_name(paths):
+    """The allowlist as the record's directory names it: `.kpopper/measure.yaml`, or
+    `PROVENANCE.measure.yaml` beside a record under the old name."""
+    return P.layout_of(paths)["measure_name"]
+
+
+def _name_of(path):
+    base = os.path.basename(path)
+    return P.HOME + "/" + base if os.path.basename(os.path.dirname(path)) == P.HOME else base
 
 
 class _Strict(yaml.SafeLoader):
@@ -68,11 +79,11 @@ def read_allowlist(path):
     try:
         data = yaml.load(text, Loader=_Strict)
     except yaml.YAMLError as e:
-        raise P.Refused(f"refused - {ALLOWLIST} does not read: " + " ".join(str(e).split())[:200])
+        raise P.Refused(f"refused - {_name_of(path)} does not read: " + " ".join(str(e).split())[:200])
     if data is None:
         return {}
     if not isinstance(data, dict):
-        raise P.Refused(f"refused - {ALLOWLIST} is not a mapping of recipe names to argument lists")
+        raise P.Refused(f"refused - {_name_of(path)} is not a mapping of recipe names to argument lists")
     out, problems = {}, []
     for k, v in data.items():
         if not isinstance(k, str) or not P.MEASURE_NAME.match(k):
@@ -86,7 +97,7 @@ def read_allowlist(path):
             continue
         out[k] = list(v)
     if problems:
-        raise P.Refused(f"refused - {ALLOWLIST}:\n  " + "\n  ".join(problems))
+        raise P.Refused(f"refused - {_name_of(path)}:\n  " + "\n  ".join(problems))
     return out
 
 
@@ -358,7 +369,7 @@ def measure(paths, run=False, timeout=None, cap=None, today=None):
     if not names:
         if allow:
             n = len(allow)
-            out.append(f"{ALLOWLIST} holds {n} recipe{'s' if n != 1 else ''}, and no entry names one - "
+            out.append(f"{allowlist_name(paths)} holds {n} recipe{'s' if n != 1 else ''}, and no entry names one - "
                        f"nothing to re-measure")
         else:
             out.append("no measures beside the record - nothing to re-measure")
@@ -366,13 +377,13 @@ def measure(paths, run=False, timeout=None, cap=None, today=None):
     cited = sorted({n for by in names.values() for n in by})
     if allow is None:
         out.append(f"refused - {len(cited)} recipe{'s' if len(cited) != 1 else ''} named and no "
-                   f"{ALLOWLIST} beside the record to hold {'them' if len(cited) != 1 else 'it'}: "
+                   f"{allowlist_name(paths)} beside the record to hold {'them' if len(cited) != 1 else 'it'}: "
                    + ", ".join(cited))
         return out, 1
     missing = [n for n in cited if n not in allow]
     if missing:
         out.append(f"refused - the record names recipe{'s' if len(missing) != 1 else ''} "
-                   f"{ALLOWLIST} does not hold: " + ", ".join(missing)
+                   f"{allowlist_name(paths)} does not hold: " + ", ".join(missing)
                    + " - a measurement nothing takes is a hole, and a falsifier reading it tests nothing")
         return out, 1
     unused = [n for n in sorted(allow) if n not in cited]
@@ -388,7 +399,7 @@ def measure(paths, run=False, timeout=None, cap=None, today=None):
         for n in by:
             serves.setdefault(n, []).append(nid)
     out.append(f"{len(cited)} recipe{'s' if len(cited) != 1 else ''} named by {len(names)} "
-               f"entr{'ies' if len(names) != 1 else 'y'}, from {ALLOWLIST}, run from {root}:")
+               f"entr{'ies' if len(names) != 1 else 'y'}, from {allowlist_name(paths)}, run from {root}:")
     for n in cited:
         exe = resolve(allow[n], root)
         shown = " ".join(shlex.quote(" ".join(a.split())) for a in allow[n][1:])
@@ -461,7 +472,7 @@ def measure(paths, run=False, timeout=None, cap=None, today=None):
     page_bound = []
     if c.jud:
         for name_, j in sorted(c.jud.items()):
-            toks = set(P.ID.findall(j["pred"]))
+            toks = set(P.predicate_refs(j["pred"]))
             pages = sorted(t for t in toks if t in P.PAGE)
             mine = sorted(t for t in toks if t in differing)
             if pages and mine:
@@ -516,7 +527,8 @@ def measure(paths, run=False, timeout=None, cap=None, today=None):
 HELP = """  remeasure [--run] [file]
 
 Every entry that names a recipe - `measure: <name>` - taken again from the tree, by the argument
-list PROVENANCE.measure.yaml beside the record holds for that name. Without --run: the plan,
+list .kpopper/measure.yaml beside the record holds for that name (PROVENANCE.measure.yaml beside
+a record under the old name). Without --run: the plan,
 and nothing runs. With --run: each cited recipe once, from the checkout's root, without a shell,
 its streams capped and its time bounded; the one line it prints is the value. What differs from
 the record is laid over it as the hypothesis tree/<commit> - with the hypotheses beside the

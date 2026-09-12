@@ -90,6 +90,18 @@ def open_context(argv):
             message = result.stderr.strip() or result.stdout.strip() or "The record could not be opened."
             return _emit({**data, "error": message}, message, args.json, result.returncode)
         text = result.stdout
+        try:
+            try:
+                from .followups import summary
+            except ImportError:
+                from followups import summary
+            followups = summary(location, counts_only=True)
+            if followups:
+                data["followups"] = followups
+                text += "\n" + followups
+        except (ImportError, OSError, ValueError, KeyError, TypeError) as error:
+            data["followups_error"] = str(error)
+            text += "\nFollowups unavailable: " + str(error)
         if data.get("mapping"):
             text += "\nMapping: " + data["mapping"]["mapping"]
         return _emit(data, text, args.json)

@@ -80,7 +80,7 @@ def corpus(record=None, state_dir=None):
     # can replace a source ID, including the base directory of its relative locator.
     for filename in P._files_of([str(rec)]):
         path = Path(filename).resolve()
-        body = P.yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+        body = P.parse(str(path)) or {}
         for members in P.collections_of(body).values():
             for nid in members:
                 origins[nid] = path.parent

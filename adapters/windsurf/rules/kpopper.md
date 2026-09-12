@@ -1,7 +1,7 @@
 ---
 trigger: model_decision
-description: Maintain PROVENANCE.yaml - an epistemic record of what is known, how each piece is grounded, and what would falsify each judgment. Use when work will be revisited, and when resuming such work.
-globs: PROVENANCE.yaml
+description: Maintain GROUNDING.yaml - an epistemic record of what is known, how each piece is grounded, and what would falsify each judgment. Use when work will be revisited, and when resuming such work.
+globs: GROUNDING.yaml,PROVENANCE.yaml
 labels: [provenance, epistemic]
 modified: 2026-09-01
 ---
@@ -10,7 +10,8 @@ modified: 2026-09-01
 # kpopper — the method, condensed
 
 Start with the user's goal: planning, research, coordination, decisions or software.
-Keep one PROVENANCE.yaml entry point in the project's working directory for work that
+Keep one GROUNDING.yaml entry point (an existing PROVENANCE.yaml is that entry point too,
+read as it is) in the project's working directory for work that
 will be revisited. Git is optional; sources may span documents, conversations, calendars,
 task systems, files and earlier sessions. Record three things while working:
 
@@ -61,7 +62,7 @@ needs a person, ranked and cut to a budget.
 
 If it fails worse than it did when you started, fix the record — or declare the hole
 with `blocked_on` — before you stop. Nothing enforces this: `hooks.json` in this same
-directory runs `check` after every write to `PROVENANCE.yaml` and can show you the
+directory runs `check` after every write to `GROUNDING.yaml` (or `PROVENANCE.yaml`) and can show you the
 output, but it cannot stop you from finishing anyway, and its output never reaches you
 automatically — see this adapter's README. This rule, read at the right moment, is the
 actual mechanism.

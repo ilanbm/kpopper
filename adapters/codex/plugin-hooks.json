@@ -5,11 +5,29 @@
         "hooks": [
           {
             "type": "command",
-            "command": "\"$PLUGIN_ROOT/scripts/session_open.sh\""
+            "command": "\"$PLUGIN_ROOT/scripts/session_open.sh\" --host codex"
           },
           {
             "type": "command",
             "command": "\"$PLUGIN_ROOT/scripts/ingestion_hook.sh\" codex start",
+            "timeout": 10
+          }
+        ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"$PLUGIN_ROOT/scripts/watch_hook.py\" codex start",
+            "timeout": 10
+          }
+        ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"$PLUGIN_ROOT/scripts/ground_hook.py\" codex start",
             "timeout": 10
           }
         ]
@@ -20,7 +38,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "\"$PLUGIN_ROOT/scripts/session_gate.sh\""
+            "command": "\"$PLUGIN_ROOT/scripts/session_gate.sh\" --host codex"
           }
         ]
       }
@@ -35,6 +53,34 @@
             "timeout": 130
           }
         ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"$PLUGIN_ROOT/scripts/followups_hook.py\"",
+            "timeout": 10
+          }
+        ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"$PLUGIN_ROOT/scripts/watch_hook.py\" codex wait",
+            "timeout": 130,
+            "async": true
+          }
+        ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"$PLUGIN_ROOT/scripts/ground_hook.py\" codex read",
+            "timeout": 10
+          }
+        ]
       }
     ],
     "UserPromptSubmit": [
@@ -45,6 +91,25 @@
             "command": "\"$PLUGIN_ROOT/scripts/ingestion_hook.sh\" codex wait",
             "async": true,
             "timeout": 130
+          }
+        ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"$PLUGIN_ROOT/scripts/watch_hook.py\" codex wait",
+            "timeout": 130,
+            "async": true
+          }
+        ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"$PLUGIN_ROOT/scripts/ground_hook.py\" codex prompt",
+            "timeout": 15
           }
         ]
       }

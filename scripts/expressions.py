@@ -10,6 +10,7 @@ import hashlib
 import importlib
 import importlib.util
 import json
+import math
 from pathlib import Path
 import re
 import sys
@@ -99,10 +100,14 @@ def text(tree):
 def number(value):
     """Decode exact numeric output for display/comparison, never evaluate a formula."""
     if type(value) in (int, float):
+        if type(value) is float and not math.isfinite(value):
+            return None
         return Fraction(str(value))
     if isinstance(value, dict) and set(value) == {"rational"}:
         pair = value["rational"]
-        if isinstance(pair, list) and len(pair) == 2:
+        if isinstance(pair, list) and len(pair) == 2 and all(
+                isinstance(item, str) and len(item) <= 1024 for item in pair) and \
+                re.fullmatch(r"-?[0-9]+", pair[0]) and re.fullmatch(r"[0-9]+", pair[1]):
             try:
                 return Fraction(int(pair[0]), int(pair[1]))
             except (ValueError, TypeError, ZeroDivisionError):

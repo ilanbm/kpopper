@@ -41,7 +41,7 @@ class Search(unittest.TestCase):
         self.assertEqual(p.returncode, 0, p.stdout + p.stderr)
         return json.loads(p.stdout)
 
-    def test_hebrew_source_match_and_exact_read_without_writes(self):
+    def test_hebrew_source_match_and_exact_read_preserve_records_and_ingestion_state(self):
         before = self.rec.read_bytes()
         found = self.cli("ההובלה")
         hit = next(x for x in found["results"] if x["kind"] == "source")
@@ -50,6 +50,12 @@ class Search(unittest.TestCase):
         full = self.cli("--read", hit["ref"], "--revision", found["revision"])
         self.assertEqual(full["content"], self.source.read_text())
         self.assertEqual(self.rec.read_bytes(), before)
+        self.assertFalse((self.root / "state" / "kpopper" / "ingestion").exists())
+
+    def test_no_cache_source_search_performs_no_state_writes(self):
+        self.env["KPOPPER_NO_CACHE"] = "1"
+        found = self.cli("ההובלה")
+        self.assertTrue(found["results"])
         self.assertFalse((self.root / "state").exists())
 
     def test_claim_match_carries_sources_dependencies_and_live_state(self):
