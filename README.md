@@ -15,16 +15,16 @@ reach through the record and surfaces what needs another look.
 
 **A reasoning layer your agents can inspect, carry forward, and challenge.**
 
-**[Get started](#get-started)** · [Examples](#access-control-and-shared-caching) ·
+**[Get started](#get-started)** · [Examples](#example-1-private-data-exposure) ·
 [Capabilities](#what-you-can-do-with-kpopper) · [Record format](#the-knowledge-record) ·
 [Why the name?](#popper-give-a-conclusion-a-way-to-fail)
 
 <details>
 <summary>Contents</summary>
 
-- [Access control and shared caching](#access-control-and-shared-caching)
-- [Download promises and storage retention](#download-promises-and-storage-retention)
-- [Revisiting plans when the brief changes](#revisiting-plans-when-the-brief-changes)
+- [Example 1: Private data exposure](#example-1-private-data-exposure)
+- [Example 2: Unavailable downloads](#example-2-unavailable-downloads)
+- [Example 3: Outdated planning assumptions](#example-3-outdated-planning-assumptions)
 - [Installation and first use](#get-started)
 - [What you can do with kpopper](#what-you-can-do-with-kpopper)
 - [One project, across your existing tools](#one-project-across-your-existing-tools)
@@ -44,7 +44,9 @@ reach through the record and surfaces what needs another look.
 
 </details>
 
-## Access control and shared caching
+<a id="access-control-and-shared-caching"></a>
+
+## Example 1: Private data exposure
 
 Two agents start from a search service whose results are all public. PR A adds
 private projects and filters results for each user. PR B adds a shared cache keyed
@@ -98,7 +100,9 @@ infer arbitrary security properties from code or replace behavioral tests.
 
 </details>
 
-## Download promises and storage retention
+<a id="download-promises-and-storage-retention"></a>
+
+## Example 2: Unavailable downloads
 
 Exports stay for 30 days; download emails currently promise seven. PR A reduces
 storage retention to seven days. PR B extends the download promise to 30 days.
@@ -140,7 +144,9 @@ These are fictional, executable examples. Checks cover the assumptions the recor
 declares and the inputs deliberately measured or recorded. A changed premise can also
 prompt review without proving a decision wrong.
 
-## Revisiting plans when the brief changes
+<a id="revisiting-plans-when-the-brief-changes"></a>
+
+## Example 3: Outdated planning assumptions
 
 In Claude Cowork, you're planning a cooking workshop around the venue's shared kitchen,
 equipment and ingredients. A later client brief moves the workshop entirely online.

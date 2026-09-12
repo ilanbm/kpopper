@@ -126,8 +126,9 @@ A small curiosity link beneath the hero can lead directly to the Popper explanat
 Let the visual joke stand; that section can introduce his idea without explaining
 each prop or spelling out every piece of the pun.
 The main text heading states the practical value rather than repeating the wordmark.
-Give the illustrated cases descriptive section headings, visible record excerpts,
-and links to their executable examples. A compact capabilities overview and a
+Number the illustrated examples and name each case's risk or review problem in its
+section heading. Keep the narrative headline in the image. Include visible record
+excerpts and links to the executable examples. A compact capabilities overview and a
 collapsible contents list provide routes into the longer explanation.
 
 ## Compact icon
