@@ -134,7 +134,8 @@ Let the visual joke stand; that section can introduce his idea without explainin
 each prop or spelling out every piece of the pun.
 The main text heading states the practical value rather than repeating the wordmark.
 Number the illustrated examples and name each case's risk or review problem in its
-section heading. Keep the narrative headline in the image. Include visible record
+section heading. Add a short parenthetical cue for the idea it demonstrates, such
+as assumption checks, consistency or freshness. Keep the narrative headline in the image. Include visible record
 excerpts and links to the executable examples. A compact capabilities overview and a
 collapsible contents list provide routes into the longer explanation.
 

@@ -6,9 +6,13 @@ scene. The PNGs are illustration assets, not product screenshots or editable SVG
 
 | Story | Desktop | Phone | What the result means |
 |---|---|---|---|
-| Shared cache and private search | [Image](cache-privacy.png) | [Image](cache-privacy-mobile.png) | A recorded condition fails when results cease to be public. |
-| Download promise and retention | [Image](download-promise.png) | [Image](download-promise-mobile.png) | A recorded condition fails when retention is shorter than the promised window. |
-| Cowork cooking workshop | [Image](cowork-workshop.png) | [Image](cowork-workshop-mobile.png) | The recorded format changes; the agent needs to review the saved plan. |
+| Private data exposure (assumption checks) | [Image](cache-privacy.png) | [Image](cache-privacy-mobile.png) | A recorded condition fails when results cease to be public. |
+| Premature file deletion (consistency) | [Image](download-promise.png) | [Image](download-promise-mobile.png) | A recorded condition fails when retention is shorter than the promised window. |
+| Outdated planning assumptions (freshness) | [Image](cowork-workshop.png) | [Image](cowork-workshop-mobile.png) | The recorded format changes; the agent needs to review the saved plan. |
+
+Parenthetical labels identify each story's emphasis. Consistency compares the storage
+policy with the download promise; freshness asks whether the saved plan's premises
+still match the updated brief. These descriptions can overlap across examples.
 
 Desktop images are 1536×1024. Phone images are 1024×1536 and stack the two panels,
 with connectors that collect independent inputs rather than making them sequential.

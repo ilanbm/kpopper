@@ -17,16 +17,16 @@ reach through the record and surfaces what needs another look.
 
 **A reasoning layer your agents can inspect, carry forward, and challenge.**
 
-**[Get started](#get-started)** · [Examples](#example-1-private-data-exposure) ·
+**[Get started](#get-started)** · [Examples](#example-1-private-data-exposure-assumption-checks) ·
 [Capabilities](#what-you-can-do-with-kpopper) · [Record format](#the-knowledge-record) ·
 [Why the name?](#popper-give-a-conclusion-a-way-to-fail)
 
 <details>
 <summary>Contents</summary>
 
-- [Example 1: Private data exposure](#example-1-private-data-exposure)
-- [Example 2: Unavailable downloads](#example-2-unavailable-downloads)
-- [Example 3: Outdated planning assumptions](#example-3-outdated-planning-assumptions)
+- [Example 1: Private data exposure (assumption checks)](#example-1-private-data-exposure-assumption-checks)
+- [Example 2: Premature file deletion (consistency)](#example-2-premature-file-deletion-consistency)
+- [Example 3: Outdated planning assumptions (freshness)](#example-3-outdated-planning-assumptions-freshness)
 - [Installation and first use](#get-started)
 - [What you can do with kpopper](#what-you-can-do-with-kpopper)
 - [One project, across your existing tools](#one-project-across-your-existing-tools)
@@ -48,7 +48,9 @@ reach through the record and surfaces what needs another look.
 
 <a id="access-control-and-shared-caching"></a>
 
-## Example 1: Private data exposure
+<a id="example-1-private-data-exposure"></a>
+
+## Example 1: Private data exposure (assumption checks)
 
 Two agents start from a search service whose results are all public. PR A adds
 private projects and filters results for each user. PR B adds a shared cache keyed
@@ -104,7 +106,9 @@ infer arbitrary security properties from code or replace behavioral tests.
 
 <a id="download-promises-and-storage-retention"></a>
 
-## Example 2: Unavailable downloads
+<a id="example-2-unavailable-downloads"></a>
+
+## Example 2: Premature file deletion (consistency)
 
 Exports stay for 30 days; download emails currently promise seven. PR A reduces
 storage retention to seven days. PR B extends the download promise to 30 days.
@@ -148,7 +152,9 @@ prompt review without proving a decision wrong.
 
 <a id="revisiting-plans-when-the-brief-changes"></a>
 
-## Example 3: Outdated planning assumptions
+<a id="example-3-outdated-planning-assumptions"></a>
+
+## Example 3: Outdated planning assumptions (freshness)
 
 In Claude Cowork, you're planning a cooking workshop around the venue's shared kitchen,
 equipment and ingredients. A later client brief moves the workshop entirely online.

@@ -1,4 +1,6 @@
-# New format. Old assumptions.
+<a id="new-format-old-assumptions"></a>
+
+# Outdated planning assumptions (freshness)
 
 A cooking workshop was planned onsite, using the venue's shared kitchen, equipment
 and ingredients. A later client brief moves it entirely online. The plan still

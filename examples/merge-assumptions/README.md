@@ -5,7 +5,7 @@ illustrations. Each starts from one shared base. Two branches change different p
 of the project; their tests pass separately and after a clean Git merge. A recorded
 decision's condition fails when the merged inputs are measured.
 
-[Search cache](#search-cache) · [Download promise](#download-promise) · [Run both](#run)
+[Search cache](#search-cache-assumption-checks) · [Premature file deletion](#premature-file-deletion-consistency) · [Run both](#run)
 
 ## Run
 
@@ -37,7 +37,9 @@ Each case has a `base/` directory and `pr-a/` and `pr-b/` overlays. An overlay c
 only files that branch changes or adds. Paths inside records and recipes resolve
 from the assembled example repository, not from the overlay directory alone.
 
-### Search cache
+<a id="search-cache"></a>
+
+### Search cache (assumption checks)
 
 <p align="center">
   <a href="../../assets/stories/cache-privacy.png">
@@ -128,7 +130,9 @@ branch tests still pass because they exercise access control in the uncached sea
 function and cache reuse with public fixtures separately. The missing combined
 test could be added to the application's suite.
 
-### Download promise
+<a id="download-promise"></a>
+
+### Premature file deletion (consistency)
 
 <p align="center">
   <a href="../../assets/stories/download-promise.png">
