@@ -1,212 +1,60 @@
 <p align="center">
-  <img src="assets/kpopper-hero.png" width="520" alt="Humorous illustration of Karl Popper as a pop star. Slogan: It really whips the lemma's ass! The caption jokes: Karl Popper, the father of K-pop.">
+  <img src="assets/kpopper-hero-editorial-v9.png" width="760" alt="kpopper. Logic symbols rise from the blue word lemma in the fictional quotation: It really whips the lemma's ass! Below it, a small portrait accompanies the humorous attribution Karl Popper, the father of K-pop. His speech bubble says OMG 이건 꼭 필요해! — roughly, OMG, I really need this!">
 </p>
+<p align="center"><em>Karl Popper, the father of K-pop</em></p>
 
 # kpopper
 
-**A <ins>third brain</ins>\* for agents, built on evidence and falsifiability.**
+**Keep the reasons behind your code. Check them before you merge.**
 
-kpopper helps agents carry a project's reasoning across sessions. It records
-what is known, where the evidence comes from, why decisions were made, and what would call
-them into question. When recorded facts change, it traces the affected decisions and flags
-conditions that no longer hold.
+kpopper records your agent's decisions, the evidence behind them, and what would
+make them worth reconsidering. The next session can pick up those reasons; when
+recorded facts change, checks point to the decisions that need another look.
 
-Use it for a software project in Codex or Claude Code, financial analysis in Claude Cowork,
-or research an agent develops from an Obsidian vault. Product launches, weekly plans and
-mortgage applications need the same continuity: a new session can pick up the goal, constraints
-and earlier decisions, along with the reasons behind them. kpopper is available as an agent
-plugin and through the command line.
-
-It can also create an ordinary HTML report with its evidence built in. Read the document,
-open an explanation beside a marked passage, and follow it back to the source—all in one
-file you can keep or share.
-
-<sub>*<ins>Third brain</ins>: a layer over a second brain's stored knowledge—how claims are
-grounded, why decisions were made, and what would call them into question.</sub>
-
-[Get started](#get-started) · [See an example](#ready-to-launch-had-a-condition) ·
-[The third brain](#a-third-brain-for-work-in-progress) ·
+[Get started](#get-started) · [See the PR check](#coding-check-the-reasoning-behind-a-merge) ·
+[Beyond code](#beyond-code-one-update-changes-the-plan) ·
 [See a document](#share-a-document-with-its-reasons) ·
-[Past, present, future](#past-present-future) · [How it works](#how-it-works) ·
-[Coding & CI](#coding-check-the-reasoning-behind-a-merge) ·
-[Why Lean](#the-lean-proof-assistant-from-fermat-to-agents) · [Command reference](docs/reference.md)
+[Why kpopper?](#popper-give-a-conclusion-a-way-to-fail)
 
-## A third brain for work in progress
+## Two green PRs. One broken assumption.
 
-The excitement around building an organizational **second brain** is well deserved. A team's
-knowledge already lives across notes and agent memory, documents and research, conversations,
-plans and commitments, code and data. An agent can connect the relevant pieces into a shared,
-evolving picture of the work.
-
-Andrej Karpathy's [LLM Wiki](https://gist.github.com/karpathy/442a6bf555914893e9891c11519de94f)
-describes how an agent can maintain that picture as a persistent wiki: synthesizing sources,
-surfacing contradictions and revisiting stale claims.
-
-As that knowledge becomes a basis for action, its reasoning deserves an explicit record: why
-a conclusion was accepted, which sources and assumptions support it, and what would call for
-reconsideration.
-
-kpopper gives that record structure. It connects conclusions to their grounds, preserves what
-they were reviewed against, and checks declared conditions as recorded facts change. We call
-this reasoning and review layer a **third brain**; the agent supplies the interpretation.
-
-**Keep the knowledge system already in use.** A folder of Markdown files, an Obsidian vault,
-a project wiki, or memory files used by Claude or Codex can stay where they are. The agent
-reads relevant material through its available tools and records the claims it relies on,
-with links back to those sources, in `GROUNDING.yaml`. There is no need to migrate the
-existing notes or replace the agent's memory system.
+Two agents work on separate branches of a checkout service. One raises a timeout;
+the other makes a decision that relies on its earlier value.
 
 <p align="center">
-  <a href="assets/third-brain-sources.png">
-    <img src="assets/third-brain-sources.png" width="760" alt="Many notes, memory files, documents, research papers, conversations, plans, code files and datasets remain in their existing places. An agent selects relevant evidence, and kpopper connects claims, decisions and review conditions.">
+  <a href="assets/diagrams/ci-merge.png">
+    <picture>
+      <source media="(max-width: 600px)" srcset="assets/diagrams/ci-merge-mobile.png">
+      <img src="assets/diagrams/ci-merge.png" width="680" alt="PR A changes a timeout from 5 to 30 seconds. PR B relies on 5 seconds fitting a 10-second waiting budget. Both records pass separately. Git merges cleanly, but the combined record fails the blocking-call condition because 30 seconds exceeds 10 seconds.">
+    </picture>
   </a>
 </p>
 
-| Role | Question it helps answer |
-|---|---|
-| You | What matters, and what should we do? |
-| Your second brain: notes, documents and saved knowledge | What have we learned and kept that can help? |
-| kpopper, working with your agent | What supports this decision, what has changed, and what needs review? |
+**kpopper checks the combined record and points back to that decision.**
+The [full example](#coding-check-the-reasoning-behind-a-merge) shows the recorded
+condition, the failed check and the CI setup. These checks cover declared assumptions;
+the agent must record them and keep the relevant readings current.
 
-That distinction is useful when a perfectly retrievable note contains a decision whose
-premises have expired. Finding the note is one job; noticing that its recommendation needs
-another look is another.
+## Beyond code: one update changes the plan
 
-There is a loose parallel with human memory: remembering can involve updating what was
-previously learned. In a laboratory study of episodic memory, reminders led participants to
-incorrectly include newly learned items when recalling an earlier list.
-[Hupbach et al., 2007](https://pubmed.ncbi.nlm.nih.gov/17202429/) provide one concrete example.
-This motivates an analogy, not a claim that kpopper models the brain or that neuroscience
-validates the product.
+You're planning a launch with an agent in Claude Cowork. The announcement is ready:
+the venue has confirmed Friday's booking. Then the venue cancels.
 
-Operationally, the analogy is straightforward: retrieve the relevant context, compare it
-with new information, draw attention to a consequential mismatch, and review the conclusion.
-In kpopper those steps are explicit records and checks. The person or agent supplies the
-interpretation; the software follows the declared connections. You retain the decision.
+The draft is unchanged. Its readiness depended on a fact that no longer holds.
+Once the cancellation is recorded, kpopper flags that decision so the next session
+can revisit the announcement and plan the next step.
 
-## Start with the work
-
-A project is **work around a goal**. Its materials may span documents, conversations,
-calendars, task systems, files and earlier sessions. In software, they also include code,
-commits and pull requests. One project can cross several tools; one source can serve several
-projects.
-
-kpopper keeps a *picture of the project's reasoning* in `GROUNDING.yaml`: a readable record
-that connects claims to sources and decisions to their premises. Your documents and tools
-keep their own content. The record makes the reasoning between them available to the next
-person or agent working on the goal.
-
-| When you return to… | The useful thing to recover |
-|---|---|
-| A software project in Codex or Claude Code | Why a design was chosen, the code or test supporting it, and the changes that could invalidate it. |
-| Financial analysis in Claude Cowork | Which sources support a forecast's assumptions, when they were checked, and which decisions depend on them. |
-| A product launch | Which commitments support the launch plan, and which assumptions changed. |
-| Your weekly plan | Why a task has priority, the deadline behind it, and the availability it assumes. |
-| Research with an agent and an Obsidian vault | The evidence for an explanation, competing accounts, and the observation that would challenge it. |
-| A mortgage application | Which lender offer and documents support the plan, when the offer expires, and which conditions still need confirmation. |
-
-The same five questions orient the work:
-
-1. **What are we trying to achieve?** Goals, outcomes and priorities.
-2. **What is known now?** Facts, commitments, deadlines and constraints.
-3. **What was decided, and why?** Decisions, assumptions and alternatives.
-4. **Where is the evidence?** Sources and enough detail to find the relevant passage again.
-5. **What needs another look?** Open questions, conflicting reports and changed premises.
-
-These questions guide what to record. Learn from findings during ordinary work, or ask
-for an [initial map or deeper investigation](docs/first-use.md) of selected materials.
-The agent uses the sources available in your context; access to a file alone does not
-make it part of the project.
-
-## Past, present, future
-
-Keep the work connected across time: the sources and decisions behind it, what needs
-attention now, and the checks or actions to return to later.
-
-<p align="center">
-  <a href="assets/work-across-time.png">
-    <img src="assets/work-across-time.png" width="820" alt="Three connected parts of kpopper: Past holds sources, decision reasons and review snapshots. Present connects claims, changed premises and new information. Future holds followups, daily reviews and time or event triggers. A return arrow asks the agent to bring outcomes back to the record.">
-  </a>
-</p>
-
-The Future panel shows deferred work tracked by followups. The return arrow is the agent's
-step of recording useful outcomes as evidence; marking a followup complete is a separate
-operation and does not automatically rewrite the knowledge record.
-
-## “Ready to launch” had a condition
-
-Karl Popper is releasing his debut K-pop single.
-An agent has prepared Friday's launch-party announcement. The venue has confirmed the
-booking. The decision: **the announcement is ready, provided the booking stays confirmed.**
-
-The next day, the venue cancels. A later session picks up the launch plan. The announcement
-copy is unchanged; the reason it was ready to publish has disappeared.
-
-kpopper preserves that connection:
-
-```yaml
-sources:
-  booking:
-    name: "Venue confirmation"
-    quoted: "Your booking for Friday is confirmed."
-    read: "2026-09-09"
-
-known:
-  venue.status: {v: confirmed, from: booking, as_of: "2026-09-09"}
-
-judgments:
-  launch.announcement:
-    rests_on: [venue.status]
-    verdict: "Friday's announcement is ready, provided the venue booking stays confirmed."
-    because: "The announcement names the date and venue confirmed in the booking email."
-    wrong_if: 'venue.status != "confirmed"'
-    seen: {venue.status: confirmed}
-```
-
-After the session records the cancellation, the next check reports:
-
-```text
-launch.announcement: wrong_if holds (venue.status != "confirmed") - broken by its own condition
-```
-
-The next agent sees **which decision needs review, which premise changed, and what the
-earlier decision was based on**. It knows to revisit the announcement before reusing
-“ready to launch.”
-
-[Try the example](docs/reference.md#try-it-from-the-command-line) ·
-[See a PR and CI case](#coding-check-the-reasoning-behind-a-merge)
+The same record connects decisions to evidence in research, financial planning and
+other ongoing projects. Keep your existing documents and task tools.
+[Try the launch example](#ready-to-launch-had-a-condition), or explore
+[a changed offer that needs the agent's judgment](examples/offer-review/README.md).
 
 ## Get started
 
-Project work in **Claude Cowork and ChatGPT Work** is a natural fit for this method:
-tasks share dependencies, decisions constrain later choices, and commitments unfold over
-time. kpopper is designed to keep the reasoning connecting them available across sessions,
-with sources, review snapshots and explicit conditions for reconsideration.
-
-Install it in the environment where that work happens. The package includes the
+Install kpopper where your agent works. The guides below cover coding agents and
+project work in Claude Cowork and ChatGPT Work. The package includes the
 [method](skills/kpopper/SKILL.md) with one skill per occasion beside it, record tools and host-specific hooks; setup depends on
 the environment.
-
-### Claude Cowork
-
-Open **Customize → Plugins → Add marketplace**, enter `ilanbm/kpopper`, then install
-**kpopper** from that marketplace. This uses the same Claude plugin package.
-[Cowork's installation guide](https://claude.com/docs/cowork/guide/plugins) describes the
-repository import and component controls.
-
-### ChatGPT Work
-
-**Workspace import is supported by the platform; kpopper's full Work runtime is not yet
-validated.** A workspace administrator can open **Admin → Plugins → Add → Import marketplace**,
-enter `https://github.com/ilanbm/kpopper` as the source and leave **Path** empty. Once the
-plugin is available to the workspace, install it from **Plugins** and start a new Work
-conversation. The repository uses a
-[supported marketplace format](https://learn.chatgpt.com/docs/enterprise/plugin-management).
-
-The scripts, Python dependencies and persistent project record must also be accessible in
-Work's execution environment. Installing a plugin through the web does not deploy local
-hook scripts. See [Work setup and current limits](docs/chatgpt-work.md) before relying on
-automatic opening or background delivery.
 
 ### Claude Code
 
@@ -240,6 +88,27 @@ Start a new Codex task after installation. Review the plugin's hook definitions 
 prompted; hook trust is separate from installation. The repository includes a native Codex
 manifest and host-specific hooks. See [Codex setup and behavior](adapters/codex/README.md)
 and [OpenAI's plugin guide](https://learn.chatgpt.com/docs/plugins).
+
+### Claude Cowork
+
+Open **Customize → Plugins → Add marketplace**, enter `ilanbm/kpopper`, then install
+**kpopper** from that marketplace. This uses the same Claude plugin package.
+[Cowork's installation guide](https://claude.com/docs/cowork/guide/plugins) describes the
+repository import and component controls.
+
+### ChatGPT Work
+
+**Workspace import is supported by the platform; kpopper's full Work runtime is not yet
+validated.** A workspace administrator can open **Admin → Plugins → Add → Import marketplace**,
+enter `https://github.com/ilanbm/kpopper` as the source and leave **Path** empty. Once the
+plugin is available to the workspace, install it from **Plugins** and start a new Work
+conversation. The repository uses a
+[supported marketplace format](https://learn.chatgpt.com/docs/enterprise/plugin-management).
+
+The scripts, Python dependencies and persistent project record must also be accessible in
+Work's execution environment. Installing a plugin through the web does not deploy local
+hook scripts. See [Work setup and current limits](docs/chatgpt-work.md) before relying on
+automatic opening or background delivery.
 
 ### Other agents
 
@@ -285,6 +154,58 @@ session. A one-off question may need no record at all.
 For a standalone CLI installation and a walkthrough of the launch-party example, see
 [Try it from the command line](docs/reference.md#try-it-from-the-command-line).
 
+## Start with the work
+
+A project is **work around a goal**. Its materials may span documents, conversations,
+calendars, task systems, files and earlier sessions. In software, they also include code,
+commits and pull requests. One project can cross several tools; one source can serve several
+projects.
+
+kpopper keeps a *picture of the project's reasoning* in `GROUNDING.yaml`: a readable record
+that connects claims to sources and decisions to their premises. Your documents and tools
+keep their own content. The record makes the reasoning between them available to the next
+person or agent working on the goal.
+
+| When you return to… | The useful thing to recover |
+|---|---|
+| A software project in Codex or Claude Code | Why a design was chosen, the code or test supporting it, and the changes that could invalidate it. |
+| Financial analysis in Claude Cowork | Which sources support a forecast's assumptions, when they were checked, and which decisions depend on them. |
+| A product launch | Which commitments support the launch plan, and which assumptions changed. |
+| Your weekly plan | Why a task has priority, the deadline behind it, and the availability it assumes. |
+| Research with an agent and an Obsidian vault | The evidence for an explanation, competing accounts, and the observation that would challenge it. |
+| A mortgage application | Which lender offer and documents support the plan, when the offer expires, and which conditions still need confirmation. |
+
+The same five questions orient the work:
+
+1. **What are we trying to achieve?** Goals, outcomes and priorities.
+2. **What is known now?** Facts, commitments, deadlines and constraints.
+3. **What was decided, and why?** Decisions, assumptions and alternatives.
+4. **Where is the evidence?** Sources and enough detail to find the relevant passage again.
+5. **What needs another look?** Open questions, conflicting reports and changed premises.
+
+These questions guide what to record. Learn from findings during ordinary work, or ask
+for an [initial map or deeper investigation](docs/first-use.md) of selected materials.
+The agent uses the sources available in your context; access to a file alone does not
+make it part of the project.
+
+## Past, present, future
+
+Keep the work connected across time: the sources and decisions behind it, what needs
+attention now, and the checks or actions to return to later.
+
+<p align="center">
+  <a href="assets/diagrams/work-across-time.png">
+    <picture>
+      <source media="(max-width: 600px)" srcset="assets/diagrams/work-across-time-mobile.png">
+      <img src="assets/diagrams/work-across-time.png" width="760" alt="Past preserves sources, evidence, decision reasons and review snapshots. Present connects claims, changes, contradictions and new information. Future holds followups, daily reviews and time or event triggers. The agent records outcomes back into the record.">
+    </picture>
+  </a>
+</p>
+
+The Future panel shows deferred work tracked by followups. The return arrow is the agent's
+step of recording useful outcomes as evidence; marking a followup complete is a separate
+operation and does not automatically rewrite the knowledge record.
+
 ## Keep the conversation moving
 
 New information often arrives halfway through another task. kpopper can retain an explicit
@@ -292,8 +213,11 @@ report and process a supported update in a separate worker. Routine results stay
 important unresolved findings are available for delivery back to the conversation.
 
 <p align="center">
-  <a href="assets/conversation-flow-v2.png">
-    <img src="assets/conversation-flow-v2.png" width="720" alt="An agent captures a venue cancellation while the conversation continues. kpopper saves the source, checks the recorded venue-to-announcement dependency, and returns a review notice. Routine updates stay quiet.">
+  <a href="assets/diagrams/conversation-flow.png">
+    <picture>
+      <source media="(max-width: 600px)" srcset="assets/diagrams/conversation-flow-mobile.png">
+      <img src="assets/diagrams/conversation-flow.png" width="720" alt="Two parallel lanes: the main agent session keeps the conversation moving while a separate background worker saves the sourced venue cancellation and checks the venue-to-announcement dependency. Only an important finding returns to the session; routine updates send no notification.">
+    </picture>
   </a>
 </p>
 
@@ -397,6 +321,67 @@ subject you need. The optional checked session mode below adds a complete, navig
 within a token budget. In both cases, the aim is to spend the next session's context on the
 work at hand.
 
+### When a review needs judgment
+
+Some conditions can be compared mechanically; others require reading a source and
+making a judgment. `reopened_by` preserves a prose condition for reconsideration.
+`blocked_on` records why a condition cannot currently be checked. Neither field
+calls a model or schedules work.
+
+When a declared, comparable premise changes, the write response and subsequent
+`open` or `check` can surface the affected decision. During the task, the agent
+reads the relevant sources and decides whether to retain, revise or question it.
+A review explicitly updates `seen`; the checker never does that on its own.
+
+For a review that must happen later, attach a followup to a date or recorded change
+and connect it to an available host schedule. The optional daily review can also
+select one flagged decision for attention. A prose condition alone is not an
+automatic background review of every judgment. See [followups](skills/kpopper/FOLLOWUPS.md)
+for triggers, work budgets and scheduling.
+
+## “Ready to launch” had a condition
+
+Karl Popper is releasing his debut K-pop single.
+An agent has prepared Friday's launch-party announcement. The venue has confirmed the
+booking. The decision: **the announcement is ready, provided the booking stays confirmed.**
+
+The next day, the venue cancels. A later session picks up the launch plan. The announcement
+copy is unchanged; the reason it was ready to publish has disappeared.
+
+kpopper preserves that connection:
+
+```yaml
+sources:
+  booking:
+    name: "Venue confirmation"
+    quoted: "Your booking for Friday is confirmed."
+    read: "2026-09-09"
+
+known:
+  venue.status: {v: confirmed, from: booking, as_of: "2026-09-09"}
+
+judgments:
+  launch.announcement:
+    rests_on: [venue.status]
+    verdict: "Friday's announcement is ready, provided the venue booking stays confirmed."
+    because: "The announcement names the date and venue confirmed in the booking email."
+    wrong_if: 'venue.status != "confirmed"'
+    seen: {venue.status: confirmed}
+```
+
+After the session records the cancellation, the next check reports:
+
+```text
+launch.announcement: wrong_if holds (venue.status != "confirmed") - broken by its own condition
+```
+
+The next agent sees **which decision needs review, which premise changed, and what the
+earlier decision was based on**. It knows to revisit the announcement before reusing
+“ready to launch.”
+
+[Try the example](docs/reference.md#try-it-from-the-command-line) ·
+[See a PR and CI case](#coding-check-the-reasoning-behind-a-merge)
+
 ## Coding: check the reasoning behind a merge
 
 **Two branches can be sound on their own and undermine each other's decisions when merged.**
@@ -405,23 +390,19 @@ and conditions behind the work.
 
 Consider two pull requests in an example checkout service:
 
+In this example, checkout has a stated 10-second budget for waiting on this dependency.
+
 | Pull request | Change | Its record in isolation |
 |---|---|---|
 | PR A: support longer requests | Raise the request timeout from 5 to 30 seconds. | Passes. |
-| PR B: simplify checkout | Use a blocking call because the current 5-second timeout fits a 10-second request budget. | Passes. |
-
-<p align="center">
-  <a href="assets/ci-merge.png">
-    <img src="assets/ci-merge.png" width="760" alt="Two PR records pass separately. PR A raises a timeout to 30 seconds; PR B relies on the original 5-second timeout fitting a 10-second checkout budget. Git merges cleanly, but kpopper flags the combined decision because 30 seconds exceeds 10 seconds.">
-  </a>
-</p>
+| PR B: simplify checkout | Use a blocking call because the current 5-second timeout fits that waiting budget. | Passes. |
 
 PR B records the reason for its choice:
 
 ```yaml
 checkout.blocking_call:
   rests_on: [request.timeout_seconds]
-  verdict: "A blocking call fits the checkout's 10-second request budget."
+  verdict: "A blocking call fits the checkout's 10-second waiting budget."
   wrong_if: "request.timeout_seconds > 10"
   seen: {request.timeout_seconds: 5}
 ```
@@ -434,7 +415,8 @@ checkout.blocking_call: wrong_if holds (request.timeout_seconds > 10) - broken b
 ```
 
 The failure points to the checkout decision and the premise it used. That is a regression
-in the recorded reasoning, even though the lines merged cleanly.
+in the recorded reasoning, even though the lines merged cleanly. It does not show that a
+request actually took 30 seconds; the configured timeout no longer supports the stated bound.
 
 There are two ways to check the combination:
 
@@ -459,6 +441,10 @@ expressed only in prose, or hidden behind unrelated IDs, can still require human
 
 ## Popper: give a conclusion a way to fail
 
+**It really whips the lemma's ass!**
+
+The slogan nods to Winamp; the name casts Karl Popper as the father of K-pop.
+
 Karl Popper was a philosopher of science who argued that scientific theories should expose
 themselves to tests that could prove them wrong. Surviving a test does not make a theory
 certain. [The Stanford Encyclopedia of Philosophy](https://plato.stanford.edu/entries/popper/)
@@ -481,6 +467,59 @@ certainty. See [the checking rules](docs/reference.md#what-check-means).
 
 This is a practical use of falsification, not an automated implementation of the scientific
 method. Choosing good evidence and meaningful breaking conditions remains intellectual work.
+
+## A third brain for work in progress
+
+The excitement around building an organizational **second brain** is well deserved. A team's
+knowledge already lives across notes and agent memory, documents and research, conversations,
+plans and commitments, code and data. An agent can connect the relevant pieces into a shared,
+evolving picture of the work.
+
+Andrej Karpathy's [LLM Wiki](https://gist.github.com/karpathy/442a6bf555914893e9891c11519de94f)
+describes how an agent can maintain that picture as a persistent wiki: synthesizing sources,
+surfacing contradictions and revisiting stale claims.
+
+As that knowledge becomes a basis for action, its reasoning deserves an explicit record: why
+a conclusion was accepted, which sources and assumptions support it, and what would call for
+reconsideration.
+
+kpopper gives that record structure. It connects conclusions to their grounds, preserves what
+they were reviewed against, and checks declared conditions as recorded facts change. We call
+this reasoning and review layer a **third brain**; the agent supplies the interpretation.
+
+**Keep the knowledge system already in use.** A folder of Markdown files, an Obsidian vault,
+a project wiki, or memory files used by Claude or Codex can stay where they are. The agent
+reads relevant material through its available tools and records the claims it relies on,
+with links back to those sources, in `GROUNDING.yaml`. There is no need to migrate the
+existing notes or replace the agent's memory system.
+
+<p align="center">
+  <a href="assets/knowledge-sources.png">
+    <img src="assets/knowledge-sources.png" width="760" alt="Dense clusters of notes and memory, documents and research, conversations, plans and commitments, and code and data fill the left side. An agent selects relevant evidence. On the right, kpopper arranges claims, decisions and review conditions in GROUNDING.yaml. Sources stay put; reasoning stays connected.">
+  </a>
+</p>
+
+| Role | Question it helps answer |
+|---|---|
+| You | What matters, and what should we do? |
+| Your second brain: notes, documents and saved knowledge | What have we learned and kept that can help? |
+| kpopper, working with your agent | What supports this decision, what has changed, and what needs review? |
+
+That distinction is useful when a perfectly retrievable note contains a decision whose
+premises have expired. Finding the note is one job; noticing that its recommendation needs
+another look is another.
+
+There is a loose parallel with human memory: remembering can involve updating what was
+previously learned. In a laboratory study of episodic memory, reminders led participants to
+incorrectly include newly learned items when recalling an earlier list.
+[Hupbach et al., 2007](https://pubmed.ncbi.nlm.nih.gov/17202429/) provide one concrete example.
+This motivates an analogy, not a claim that kpopper models the brain or that neuroscience
+validates the product.
+
+Operationally, the analogy is straightforward: retrieve the relevant context, compare it
+with new information, draw attention to a consequential mismatch, and review the conclusion.
+In kpopper those steps are explicit records and checks. The person or agent supplies the
+interpretation; the software follows the declared connections. You retain the decision.
 
 ## The Lean proof assistant: from Fermat to agents
 

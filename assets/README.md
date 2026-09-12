@@ -1,6 +1,43 @@
 # Image sources
 
-## Work across time
+## Brand hero
+
+`kpopper-hero-editorial-v9.png` is the current README hero: a prominent wordmark and
+quotation, a right-aligned attribution and a small ink portrait with a Korean
+speech bubble grouped below it.
+The Winamp-inspired slogan is presented as a
+fictional humorous quotation, with logic symbols around *lemma*. It is not a
+historical quotation or photograph.
+
+See [the visual identity](brand-guide.md).
+The earlier `kpopper-hero.png` is retained.
+
+## Compact icon
+
+`kpopper-icon.svg` is the selected white geometric k on electric blue, supplied
+with a 512-pixel `kpopper-icon.png` render. The letterform is made from paths and
+does not depend on an installed font. No external organization avatar or favicon
+has been changed by adding these files.
+
+## README diagrams
+
+The PR, conversation and time diagrams live in `diagrams/`, with editable SVG sources
+and PNG renders. See [the diagram index and rendering notes](diagrams/README.md).
+The older versions are retained.
+
+## Knowledge-source illustration
+
+`knowledge-sources.png` restores the detailed, playful source-map treatment: crowded
+groups of familiar tools and materials on the left, and an ordered reasoning layer
+on the right. It retains the earlier illustration's composition and updates the
+record filename to `GROUNDING.yaml`. The original `third-brain-sources.png` is
+retained, but is not used by the README.
+
+The agent selects relevant evidence; the source files and tools remain in place.
+This is a conceptual illustration, not a screenshot or a claim to automatically
+organize every source.
+
+## Earlier work-across-time illustration
 
 `work-across-time.png` is a conceptual illustration for the README's Past, Present and
 Future overview. It shows sources and earlier reasoning, current dependency checks, and

@@ -1,0 +1,52 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1040" height="1000" viewBox="0 0 1040 1000" role="img" aria-labelledby="title desc">
+<title id="title">Two green PRs. One broken assumption.</title>
+<desc id="desc">Both branches start from a 5-second timeout. A allows 30 seconds; B chooses a blocking call because 5 seconds fits its 10-second waiting budget. Each record passes separately. Git combines the records cleanly, but the merged timeout breaks B’s recorded reason.</desc>
+<defs><marker id="blue" viewBox="0 0 12 10" refX="11" refY="5" markerWidth="12" markerHeight="10" markerUnits="userSpaceOnUse" orient="auto"><path d="M1 1L11 5 1 9Z" fill="#0666ff"/></marker><marker id="gray" viewBox="0 0 12 10" refX="11" refY="5" markerWidth="12" markerHeight="10" markerUnits="userSpaceOnUse" orient="auto"><path d="M1 1L11 5 1 9Z" fill="#596579"/></marker><marker id="red" viewBox="0 0 12 10" refX="11" refY="5" markerWidth="12" markerHeight="10" markerUnits="userSpaceOnUse" orient="auto"><path d="M1 1L11 5 1 9Z" fill="#c52c42"/></marker></defs>
+<rect width="1040" height="1000" fill="white"/>
+<rect x="43.7895" y="28.0702" width="952.421" height="84.2105" rx="12" fill="#f3f7ff" stroke="#c6d0df" stroke-width="1.8"/>
+<text x="76.6316" y="60.5263" font-family="Arial, Helvetica, sans-serif" font-size="23" font-weight="700" text-anchor="start" fill="#596579">SHARED BASE</text>
+<text x="76.6316" y="94.7368" font-family="Arial, Helvetica, sans-serif" font-size="34" font-weight="700" text-anchor="start" fill="#142033">Request timeout: 5 seconds</text>
+<path d="M520 115.789L520 148.246" fill="none" stroke="#0666ff" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M520 148.246L270.947 148.246L270.947 181.579" fill="none" stroke="#0666ff" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#blue)"/>
+<path d="M520 148.246L769.053 148.246L769.053 181.579" fill="none" stroke="#0666ff" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#blue)"/>
+<circle cx="520" cy="148.246" r="4" fill="#0666ff"/>
+<rect x="43.7895" y="201.754" width="454.316" height="273.684" rx="12" fill="white" stroke="#c6d0df" stroke-width="1.8"/>
+<rect x="541.895" y="201.754" width="454.316" height="273.684" rx="12" fill="white" stroke="#c6d0df" stroke-width="1.8"/>
+<text x="76.6316" y="242.105" font-family="Arial, Helvetica, sans-serif" font-size="28" font-weight="700" text-anchor="start" fill="#0666ff">PR A</text>
+<text x="76.6316" y="282.456" font-family="Arial, Helvetica, sans-serif" font-size="30" font-weight="700" text-anchor="start" fill="#142033">Allow longer</text>
+<text x="76.6316" y="315.351" font-family="Arial, Helvetica, sans-serif" font-size="30" font-weight="700" text-anchor="start" fill="#142033">requests</text>
+<text x="76.6316" y="364.912" font-family="Arial, Helvetica, sans-serif" font-size="25" font-weight="400" text-anchor="start" fill="#596579">Timeout</text>
+<text x="76.6316" y="414.912" font-family="Arial, Helvetica, sans-serif" font-size="44" font-weight="700" text-anchor="start" fill="#0666ff">5 → 30 s</text>
+<circle cx="91.6842" cy="446.491" r="11" fill="#18794e"/>
+<path d="M86.6842 446.491l4 4 7-8" fill="none" stroke="white" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"/>
+<text x="124.526" y="454.386" font-family="Arial, Helvetica, sans-serif" font-size="28" font-weight="700" text-anchor="start" fill="#18794e">Record passes</text>
+<text x="574.737" y="242.105" font-family="Arial, Helvetica, sans-serif" font-size="28" font-weight="700" text-anchor="start" fill="#0666ff">PR B</text>
+<text x="574.737" y="282.456" font-family="Arial, Helvetica, sans-serif" font-size="30" font-weight="700" text-anchor="start" fill="#142033">Use a blocking</text>
+<text x="574.737" y="315.351" font-family="Arial, Helvetica, sans-serif" font-size="30" font-weight="700" text-anchor="start" fill="#142033">call</text>
+<text x="574.737" y="364.912" font-family="Arial, Helvetica, sans-serif" font-size="25" font-weight="400" text-anchor="start" fill="#596579">Recorded reason</text>
+<text x="574.737" y="414.912" font-family="Arial, Helvetica, sans-serif" font-size="28" font-weight="400" text-anchor="start" fill="#142033">5 s fits a 10 s budget</text>
+<circle cx="589.789" cy="446.491" r="11" fill="#18794e"/>
+<path d="M584.789 446.491l4 4 7-8" fill="none" stroke="white" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"/>
+<text x="622.632" y="454.386" font-family="Arial, Helvetica, sans-serif" font-size="28" font-weight="700" text-anchor="start" fill="#18794e">Record passes</text>
+<path d="M270.947 482.456L270.947 518.421L520 518.421" fill="none" stroke="#0666ff" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M769.053 482.456L769.053 518.421L520 518.421" fill="none" stroke="#0666ff" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+<circle cx="520" cy="518.421" r="4" fill="#0666ff"/>
+<path d="M520 518.421L520 548.246" fill="none" stroke="#0666ff" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#blue)"/>
+<rect x="239.474" y="567.544" width="561.053" height="56.1404" rx="12" fill="#f7f8fa" stroke="#c6d0df" stroke-width="1.8"/>
+<text x="520" y="605.263" font-family="Arial, Helvetica, sans-serif" font-size="30" font-weight="700" text-anchor="middle" fill="#142033">Git merge: clean</text>
+<path d="M520 631.579L520 662.281" fill="none" stroke="#0666ff" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#blue)"/>
+<rect x="43.7895" y="684.211" width="952.421" height="188.596" rx="12" fill="#fff4f5" stroke="#e8a5b0" stroke-width="1.8"/>
+<text x="76.6316" y="721.053" font-family="Arial, Helvetica, sans-serif" font-size="24" font-weight="700" text-anchor="start" fill="#c52c42">COMBINED RECORD</text>
+<text x="76.6316" y="759.649" font-family="Arial, Helvetica, sans-serif" font-size="25" font-weight="400" text-anchor="start" fill="#596579">Timeout from A</text>
+<text x="591.158" y="759.649" font-family="Arial, Helvetica, sans-serif" font-size="25" font-weight="400" text-anchor="start" fill="#596579">Decision from B</text>
+<text x="76.6316" y="822.807" font-family="Arial, Helvetica, sans-serif" font-size="50" font-weight="700" text-anchor="start" fill="#0666ff">30 s</text>
+<text x="591.158" y="801.754" font-family="Arial, Helvetica, sans-serif" font-size="30" font-weight="400" text-anchor="start" fill="#142033">Blocking call</text>
+<text x="591.158" y="835.965" font-family="Arial, Helvetica, sans-serif" font-size="30" font-weight="400" text-anchor="start" fill="#142033">fits 10 s</text>
+<path d="M299.684 806.14L548.737 806.14" fill="none" stroke="#c52c42" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#red)"/>
+<circle cx="413.263" cy="806.14" r="13" fill="#c52c42"/>
+<path d="M408.263 801.14l10 10m0-10l-10 10" fill="none" stroke="white" stroke-width="2.5"/>
+<circle cx="184.737" cy="907.018" r="11" fill="#c52c42"/>
+<path d="M180.737 903.018l8 8m0-8l-8 8" fill="none" stroke="white" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"/>
+<text x="217.579" y="914.912" font-family="Arial, Helvetica, sans-serif" font-size="30" font-weight="700" text-anchor="start" fill="#c52c42">30 s &gt; 10 s: condition fails</text>
+<text x="520" y="965.789" font-family="Arial, Helvetica, sans-serif" font-size="30" font-weight="700" text-anchor="middle" fill="#142033">Revisit the checkout decision</text>
+</svg>

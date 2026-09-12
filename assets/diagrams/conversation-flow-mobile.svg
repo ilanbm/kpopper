@@ -1,0 +1,47 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="760" height="1150" viewBox="0 0 760 1150" role="img" aria-labelledby="title desc">
+<title id="title">Your session continues while a separate worker checks the update.</title>
+<desc id="desc">An agent captures an explicit venue cancellation. A separate background process runs in parallel, saves a sourced reading, and checks the venue-to-announcement dependency. The main session continues with the set list. Only an important finding returns; routine results send no notification.</desc>
+<defs><marker id="blue" viewBox="0 0 12 10" refX="11" refY="5" markerWidth="12" markerHeight="10" markerUnits="userSpaceOnUse" orient="auto"><path d="M1 1L11 5 1 9Z" fill="#0666ff"/></marker><marker id="gray" viewBox="0 0 12 10" refX="11" refY="5" markerWidth="12" markerHeight="10" markerUnits="userSpaceOnUse" orient="auto"><path d="M1 1L11 5 1 9Z" fill="#596579"/></marker><marker id="red" viewBox="0 0 12 10" refX="11" refY="5" markerWidth="12" markerHeight="10" markerUnits="userSpaceOnUse" orient="auto"><path d="M1 1L11 5 1 9Z" fill="#c52c42"/></marker></defs>
+<rect width="760" height="1150" fill="white"/>
+<rect x="32" y="32" width="332" height="1048" rx="16" fill="#fbfcfe" stroke="#c6d0df" stroke-width="1.8"/>
+<rect x="396" y="32" width="332" height="1048" rx="16" fill="#f3f7ff" stroke="#adc8fa" stroke-width="1.8" stroke-dasharray="5 5"/>
+<rect x="396" y="32" width="332" height="167" rx="16" fill="#142033" stroke="#142033" stroke-width="1.8"/>
+<text x="56" y="86" font-family="Arial, Helvetica, sans-serif" font-size="29" font-weight="700" text-anchor="start" fill="#142033">Main agent session</text>
+<text x="56" y="129" font-family="Arial, Helvetica, sans-serif" font-size="26" font-weight="400" text-anchor="start" fill="#0666ff">Your conversation</text>
+<text x="56" y="164" font-family="Arial, Helvetica, sans-serif" font-size="26" font-weight="400" text-anchor="start" fill="#0666ff">keeps moving</text>
+<text x="420" y="86" font-family="Arial, Helvetica, sans-serif" font-size="28" font-weight="700" text-anchor="start" fill="white">Background worker</text>
+<text x="420" y="129" font-family="Arial, Helvetica, sans-serif" font-size="26" font-weight="400" text-anchor="start" fill="#c1d5ff">Separate process</text>
+<text x="420" y="164" font-family="Arial, Helvetica, sans-serif" font-size="26" font-weight="400" text-anchor="start" fill="#c1d5ff">Runs in parallel</text>
+<path d="M68 246H328Q344 246 344 262V360Q344 376 328 376H95L70 388V376H68Q52 376 52 360V262Q52 246 68 246Z" fill="#f3f7ff" stroke="#c6d0df" stroke-width="1.8"/>
+<text x="73" y="293" font-family="Arial, Helvetica, sans-serif" font-size="30" font-weight="400" text-anchor="start" fill="#142033">“The venue</text>
+<text x="73" y="333" font-family="Arial, Helvetica, sans-serif" font-size="30" font-weight="400" text-anchor="start" fill="#142033">cancelled.”</text>
+<text x="68" y="419" font-family="Arial, Helvetica, sans-serif" font-size="24" font-weight="400" text-anchor="start" fill="#0666ff">Agent captures update</text>
+<path d="M352 318L408 318" fill="none" stroke="#0666ff" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#blue)" stroke-dasharray="5 4"/>
+<rect x="416" y="246" width="292" height="164" rx="12" fill="white" stroke="#c6d0df" stroke-width="1.8"/>
+<text x="436" y="284" font-family="Arial, Helvetica, sans-serif" font-size="28" font-weight="700" text-anchor="start" fill="#142033">1  Save source</text>
+<text x="436" y="325" font-family="Arial, Helvetica, sans-serif" font-size="27" font-weight="400" text-anchor="start" fill="#c52c42">Venue: cancelled</text>
+<text x="436" y="367" font-family="Arial, Helvetica, sans-serif" font-size="25" font-weight="400" text-anchor="start" fill="#596579">Dated reading</text>
+<path d="M198 440L198 504" fill="none" stroke="#596579" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#gray)"/>
+<path d="M562 421L562 479" fill="none" stroke="#0666ff" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#blue)"/>
+<path d="M68 526H328Q344 526 344 542V655Q344 671 328 671H95L70 683V671H68Q52 671 52 655V542Q52 526 68 526Z" fill="white" stroke="#c6d0df" stroke-width="1.8"/>
+<text x="73" y="575" font-family="Arial, Helvetica, sans-serif" font-size="30" font-weight="400" text-anchor="start" fill="#142033">“Let’s work on</text>
+<text x="73" y="615" font-family="Arial, Helvetica, sans-serif" font-size="30" font-weight="400" text-anchor="start" fill="#142033">the set list.”</text>
+<text x="68" y="718" font-family="Arial, Helvetica, sans-serif" font-size="24" font-weight="400" text-anchor="start" fill="#0666ff">The session continues</text>
+<rect x="416" y="500" width="292" height="266" rx="12" fill="white" stroke="#c6d0df" stroke-width="1.8"/>
+<text x="436" y="542" font-family="Arial, Helvetica, sans-serif" font-size="27" font-weight="700" text-anchor="start" fill="#142033">2  Check recorded</text>
+<text x="436" y="577" font-family="Arial, Helvetica, sans-serif" font-size="27" font-weight="700" text-anchor="start" fill="#142033">    dependencies</text>
+<text x="436" y="627" font-family="Arial, Helvetica, sans-serif" font-size="27" font-weight="400" text-anchor="start" fill="#c52c42">Venue: cancelled</text>
+<path d="M561 644L561 670" fill="none" stroke="#0666ff" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#blue)"/>
+<text x="436" y="705" font-family="Arial, Helvetica, sans-serif" font-size="26" font-weight="400" text-anchor="start" fill="#142033">Announcement:</text>
+<text x="436" y="744" font-family="Arial, Helvetica, sans-serif" font-size="28" font-weight="700" text-anchor="start" fill="#926100">needs review</text>
+<path d="M198 737L198 820" fill="none" stroke="#596579" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#gray)"/>
+<path d="M68 844H328Q344 844 344 860V979Q344 995 328 995H95L70 1007V995H68Q52 995 52 979V860Q52 844 68 844Z" fill="#fff8e8" stroke="#dec68f" stroke-width="1.8"/>
+<text x="73" y="895" font-family="Arial, Helvetica, sans-serif" font-size="27" font-weight="400" text-anchor="start" fill="#142033">“The announcement</text>
+<text x="73" y="935" font-family="Arial, Helvetica, sans-serif" font-size="27" font-weight="400" text-anchor="start" fill="#142033">needs review.”</text>
+<text x="429" y="822" font-family="Arial, Helvetica, sans-serif" font-size="26" font-weight="700" text-anchor="start" fill="#926100">Only important</text>
+<text x="429" y="856" font-family="Arial, Helvetica, sans-serif" font-size="26" font-weight="700" text-anchor="start" fill="#926100">findings return</text>
+<path d="M562 874L562 921L351 921" fill="none" stroke="#0666ff" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#blue)"/>
+<text x="430" y="993" font-family="Arial, Helvetica, sans-serif" font-size="26" font-weight="400" text-anchor="start" fill="#596579">Routine update?</text>
+<text x="430" y="1028" font-family="Arial, Helvetica, sans-serif" font-size="26" font-weight="400" text-anchor="start" fill="#596579">No notification.</text>
+<text x="380" y="1124" font-family="Arial, Helvetica, sans-serif" font-size="27" font-weight="700" text-anchor="middle" fill="#142033">Capture → process → notify when needed</text>
+</svg>
