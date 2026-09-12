@@ -344,6 +344,20 @@ sources:
          synthetic record ten times this one's measured at 3 MB/s, the pointer form that merges
          shards on read, and d.scale_by_federation's answer to a record that outgrows one file"
     read: "2026-09-11"
+  s.2026_09_12_first_readings:
+    asked: "what do the first readings of the README by people outside the project say, and what
+            follows from them"
+    name: "The session that read the README through the first two people outside the project - what
+           it was asked, and what it was given. Its reading: the name, the slogan, the caption and
+           the merge scene landed; the term third brain, the illustration style and the sources panel
+           did not. A count over the four live records the same day: 163 judgments, 62 with a
+           comparison the check evaluates, and almost every comparison a tripwire on what the
+           decision looked at rather than a threshold"
+    of: "2026-09-12, given one reading of the README on a phone by a programmer who works in Cursor
+         and Copilot and had not met the term second brain, one reaction to the illustrations from a
+         reader outside the field, and the four records read from their files: this repository, a
+         personal project, a keyboard pilot and a finance hub"
+    read: "2026-09-12"
   s.2026_09_12_half_move:
     asked: "A half migration is silent. The layout follows the entry file's name and the reader
             looks in one home, never both. I reproduced what happens when someone renames only the
@@ -1234,6 +1248,11 @@ open:
   q.followups_outcomes_to_graph: "Which nontrivial followup outcomes should be recorded as new
                                   project evidence, by which authorized writer, so that knowledge
                                   does not remain only in execution history?"
+  q.illustration_style: "do the illustrations cost more readers than they win - two readers took the
+                         style for unedited generated art and neither saw the wink, while the name,
+                         slogan and caption landed with the same readers; the test is the same reader
+                         test that re-opens d.readme_opens_with_what_it_does, asked what the pictures
+                         are for"
   q.prefix_eval: "does a word prefix reach the right entry more often than a letter, and does a
                   legend close the gap? the three-arm eval on the page fixture - the same prompts and
                   trials as the grounding-line harness, under letters, under letters with
@@ -2522,6 +2541,26 @@ judgments:
       d.spill_on_every_tab: "what fell through the arrangement - flagged judgments nothing picked,
                              and what a session wrote for an intent no tab serves - is counted once
                              for the page and drawn on every tab"
+  d.readme_opens_with_what_it_does:
+    rests_on: [s.2026_09_12_first_readings, d.named_for_popper]
+    verdict: "the first line of the README says what the tool does in plain words and the merge
+              scene follows it; a metaphor names a section, never the first line"
+    because: "A first line that needs a term the reader may not know loses the reader who does not
+              know it and starts an argument with the reader who does: third brain read as second
+              brain to the first outside reader, and the scene he lit up at was four hundred lines
+              down. What it does, in the words of a reader who has never seen the record, costs
+              nothing to understand, and the merge scene is the belief every engineer already holds -
+              a clean merge and two green checks mean the work is sound - shown breaking. The name
+              stays as {{d.named_for_popper}} decided; the slogan and the caption stay because they
+              landed with the same readers who did not follow the metaphor, and the caption moves out
+              of the image into text the phone can show."
+    reopened_by: "three to five people who have never seen the repository read the README for one
+                  minute and fewer than three can say what it does; or a reader who reaches the merge
+                  scene and does not go on"
+    seen:
+      s.2026_09_12_first_readings: "read 2026-09-12"
+      d.named_for_popper: "the project keeps the name kpopper; discovery runs on direct links and
+                           qualified search, never on the bare term"
   d.record_is_code:
     rests_on: [s.2026_09_01_consolidation, d.register_out_of_tree, d.base_shared_forks_on_contradiction, p.hypothesis_homes]
     verdict: "the record of what is known about the code lives in the tree - committed with the work

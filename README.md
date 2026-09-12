@@ -1,10 +1,40 @@
 <p align="center">
-  <img src="assets/kpopper-hero.png" width="520" alt="Humorous illustration of Karl Popper as a pop star. Slogan: It really whips the lemma's ass! The caption jokes: Karl Popper, the father of K-pop.">
+  <img src="assets/kpopper-hero.png" width="400" alt="Karl Popper drawn as a K-pop idol on stage. Slogan: It really whips the lemma's ass!">
+  <br>
+  <sub>Karl Popper, the father of K-pop.</sub>
 </p>
 
 # kpopper
 
-**A <ins>third brain</ins>\* for agents, built on evidence and falsifiability.**
+**kpopper keeps what your agent knows, where it came from and what would make it wrong, and
+checks it at every session, write and pull request.**
+
+**Two green PRs. One broken assumption.** PR A raises a request timeout from 5 to 30 seconds.
+PR B, written the same week, uses a blocking call because the current 5-second timeout fits a
+10-second checkout budget. Each passes on its own. Git merges them without a conflict. Nothing
+in the code says that B's decision rested on A's number.
+
+PR B's record carries the reason:
+
+```yaml
+checkout.blocking_call:
+  rests_on: [request.timeout_seconds]
+  verdict: "A blocking call fits the checkout's 10-second request budget."
+  wrong_if: "request.timeout_seconds > 10"
+  seen: {request.timeout_seconds: 5}
+```
+
+After A lands, the check on the merged record reports:
+
+```text
+checkout.blocking_call: wrong_if holds (request.timeout_seconds > 10) - broken by its own condition
+```
+
+The lines merged cleanly; the reasoning did not. The report names the decision, the premise it
+used and the value it saw. Most conditions are humbler than a threshold: a decision records
+what it looked at, and the check says when that moved. The same holds outside code: an
+announcement that was ready while the venue was confirmed, a forecast that rested on a rate
+that changed. [See the launch example](#ready-to-launch-had-a-condition).
 
 kpopper helps agents carry a project's reasoning across sessions. It records
 what is known, where the evidence comes from, why decisions were made, and what would call
@@ -21,68 +51,12 @@ It can also create an ordinary HTML report with its evidence built in. Read the 
 open an explanation beside a marked passage, and follow it back to the source—all in one
 file you can keep or share.
 
-<sub>*<ins>Third brain</ins>: a layer over a second brain's stored knowledge—how claims are
-grounded, why decisions were made, and what would call them into question.</sub>
-
 [Get started](#get-started) · [See an example](#ready-to-launch-had-a-condition) ·
-[The third brain](#a-third-brain-for-work-in-progress) ·
 [See a document](#share-a-document-with-its-reasons) ·
 [Past, present, future](#past-present-future) · [How it works](#how-it-works) ·
 [Coding & CI](#coding-check-the-reasoning-behind-a-merge) ·
+[Why a separate layer](#a-third-brain-for-work-in-progress) ·
 [Why Lean](#the-lean-proof-assistant-from-fermat-to-agents) · [Command reference](docs/reference.md)
-
-## A third brain for work in progress
-
-The excitement around building an organizational **second brain** is well deserved. A team's
-knowledge already lives across notes and agent memory, documents and research, conversations,
-plans and commitments, code and data. An agent can connect the relevant pieces into a shared,
-evolving picture of the work.
-
-Andrej Karpathy's [LLM Wiki](https://gist.github.com/karpathy/442a6bf555914893e9891c11519de94f)
-describes how an agent can maintain that picture as a persistent wiki: synthesizing sources,
-surfacing contradictions and revisiting stale claims.
-
-As that knowledge becomes a basis for action, its reasoning deserves an explicit record: why
-a conclusion was accepted, which sources and assumptions support it, and what would call for
-reconsideration.
-
-kpopper gives that record structure. It connects conclusions to their grounds, preserves what
-they were reviewed against, and checks declared conditions as recorded facts change. We call
-this reasoning and review layer a **third brain**; the agent supplies the interpretation.
-
-**Keep the knowledge system already in use.** A folder of Markdown files, an Obsidian vault,
-a project wiki, or memory files used by Claude or Codex can stay where they are. The agent
-reads relevant material through its available tools and records the claims it relies on,
-with links back to those sources, in `GROUNDING.yaml`. There is no need to migrate the
-existing notes or replace the agent's memory system.
-
-<p align="center">
-  <a href="assets/third-brain-sources.png">
-    <img src="assets/third-brain-sources.png" width="760" alt="Many notes, memory files, documents, research papers, conversations, plans, code files and datasets remain in their existing places. An agent selects relevant evidence, and kpopper connects claims, decisions and review conditions.">
-  </a>
-</p>
-
-| Role | Question it helps answer |
-|---|---|
-| You | What matters, and what should we do? |
-| Your second brain: notes, documents and saved knowledge | What have we learned and kept that can help? |
-| kpopper, working with your agent | What supports this decision, what has changed, and what needs review? |
-
-That distinction is useful when a perfectly retrievable note contains a decision whose
-premises have expired. Finding the note is one job; noticing that its recommendation needs
-another look is another.
-
-There is a loose parallel with human memory: remembering can involve updating what was
-previously learned. In a laboratory study of episodic memory, reminders led participants to
-incorrectly include newly learned items when recalling an earlier list.
-[Hupbach et al., 2007](https://pubmed.ncbi.nlm.nih.gov/17202429/) provide one concrete example.
-This motivates an analogy, not a claim that kpopper models the brain or that neuroscience
-validates the product.
-
-Operationally, the analogy is straightforward: retrieve the relevant context, compare it
-with new information, draw attention to a consequential mismatch, and review the conclusion.
-In kpopper those steps are explicit records and checks. The person or agent supplies the
-interpretation; the software follows the declared connections. You retain the decision.
 
 ## Start with the work
 
@@ -95,6 +69,12 @@ kpopper keeps a *picture of the project's reasoning* in `GROUNDING.yaml`: a read
 that connects claims to sources and decisions to their premises. Your documents and tools
 keep their own content. The record makes the reasoning between them available to the next
 person or agent working on the goal.
+
+**Keep the knowledge system already in use.** A folder of Markdown files, an Obsidian vault,
+a project wiki, or memory files used by Claude or Codex can stay where they are. The agent
+reads relevant material through its available tools and records the claims it relies on,
+with links back to those sources, in `GROUNDING.yaml`. There is no need to migrate the
+existing notes or replace the agent's memory system.
 
 | When you return to… | The useful thing to recover |
 |---|---|
@@ -481,6 +461,62 @@ certainty. See [the checking rules](docs/reference.md#what-check-means).
 
 This is a practical use of falsification, not an automated implementation of the scientific
 method. Choosing good evidence and meaningful breaking conditions remains intellectual work.
+
+## A third brain for work in progress
+
+A finished piece of work does not carry the reasons it was made. A pull request shows the
+change, not the timeout it assumed. A report shows the forecast, not the rate it rested on.
+A plan shows the date, not the booking that made it possible. Those reasons live somewhere
+else, or nowhere, and an agent left alone blurs the line: plan section numbers turn up in
+code comments, and a page begins to describe the instruction that produced it. Theatre has a
+name for the line, the fourth wall: the play does not acknowledge that it is being staged.
+kpopper keeps that line. The work stays what it is, and the reasoning behind it goes into a
+record the work never mentions and the next session opens first.
+
+The excitement around building an organizational **second brain** is well deserved. A team's
+knowledge already lives across notes and agent memory, documents and research, conversations,
+plans and commitments, code and data. An agent can connect the relevant pieces into a shared,
+evolving picture of the work.
+
+Andrej Karpathy's [LLM Wiki](https://gist.github.com/karpathy/442a6bf555914893e9891c11519de94f)
+describes how an agent can maintain that picture as a persistent wiki: synthesizing sources,
+surfacing contradictions and revisiting stale claims.
+
+As that knowledge becomes a basis for action, its reasoning deserves an explicit record: why
+a conclusion was accepted, which sources and assumptions support it, and what would call for
+reconsideration.
+
+kpopper gives that record structure. It connects conclusions to their grounds, preserves what
+they were reviewed against, and checks declared conditions as recorded facts change. We call
+this reasoning and review layer a **third brain**; the agent supplies the interpretation.
+
+<p align="center">
+  <a href="assets/third-brain-sources.png">
+    <img src="assets/third-brain-sources.png" width="760" alt="Many notes, memory files, documents, research papers, conversations, plans, code files and datasets remain in their existing places. An agent selects relevant evidence, and kpopper connects claims, decisions and review conditions.">
+  </a>
+</p>
+
+| Role | Question it helps answer |
+|---|---|
+| You | What matters, and what should we do? |
+| Your second brain: notes, documents and saved knowledge | What have we learned and kept that can help? |
+| kpopper, working with your agent | What supports this decision, what has changed, and what needs review? |
+
+That distinction is useful when a perfectly retrievable note contains a decision whose
+premises have expired. Finding the note is one job; noticing that its recommendation needs
+another look is another.
+
+There is a loose parallel with human memory: remembering can involve updating what was
+previously learned. In a laboratory study of episodic memory, reminders led participants to
+incorrectly include newly learned items when recalling an earlier list.
+[Hupbach et al., 2007](https://pubmed.ncbi.nlm.nih.gov/17202429/) provide one concrete example.
+This motivates an analogy, not a claim that kpopper models the brain or that neuroscience
+validates the product.
+
+Operationally, the analogy is straightforward: retrieve the relevant context, compare it
+with new information, draw attention to a consequential mismatch, and review the conclusion.
+In kpopper those steps are explicit records and checks. The person or agent supplies the
+interpretation; the software follows the declared connections. You retain the decision.
 
 ## The Lean proof assistant: from Fermat to agents
 
