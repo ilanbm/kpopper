@@ -81,7 +81,7 @@ the surface.
 
 ### 2. Something you worked out
 
-Record the rule, never the result. Use `rule={expr: "order.price * order.quantity"}` and executable `wrong_if={expr: "order.total > order.limit"}`. `add` and `update` also store supported plain formula strings in this readable form; the local Lean core computes them. Keep `rests_on` explicit and historical snapshots intact. Inside `expr`, quoted text is literal; `ref("an opaque id")` names a reference. Read fallback diagnostics: text retained without Lean is not a calculated result. [EXPRESSIONS.md](../kpopper/EXPRESSIONS.md) covers syntax and migration; unsupported work needs its declared limit.
+Record the rule, never the result. The same applies to non-numeric work: if you derive a list by filtering another, record the filter as a textual `rule`. Keep its inputs and limits explicit. For supported calculations, use `rule={expr: "order.price * order.quantity"}` and executable `wrong_if={expr: "order.total > order.limit"}`. `add` and `update` also store supported plain formula strings in this readable form; the local Lean core computes them. Keep `rests_on` explicit and historical snapshots intact. Inside `expr`, quoted text is literal; `ref("an opaque id")` names a reference. Read fallback diagnostics: text retained without Lean is not a calculated result. [EXPRESSIONS.md](../kpopper/EXPRESSIONS.md) covers syntax and migration; unsupported work needs its declared limit.
 
 ### 3. Something you concluded or composed
 
