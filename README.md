@@ -30,10 +30,6 @@ reach through the record and surfaces what needs another look.
   </a>
 </p>
 
-Parts of the reasoning become explicit dependencies and repeatable checks.
-[Inspect the illustrated record](assets/diagrams/README.md#more-deterministic-reasoning),
-then see how those checks help when work changes independently.
-
 <details>
 <summary>Contents</summary>
 

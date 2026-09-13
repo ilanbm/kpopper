@@ -40,7 +40,6 @@ shows natural-language statements, their explicit YAML relationship and a repeat
 comparison; its exact record is supplied alongside it. Separate editable SVG schematics
 preserve compact maps of the conversation and time processes; they are not the
 illustration sources.
-See [the overview index and maintenance notes](diagrams/README.md).
 
 ## Knowledge-source illustration
 
