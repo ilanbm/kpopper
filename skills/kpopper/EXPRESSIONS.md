@@ -4,6 +4,19 @@ Store new calculations and executable conditions as structured data. The primary
 chooses the formula and its meaning; the writer validates its structure and the packaged
 Lean core computes it. No model call or arbitrary code execution is involved in evaluation.
 
+`add` and source-report `update` also accept a supported formula as text, such as
+`rule='order.price * order.quantity'` or `wrong_if='order.price * order.quantity > 150'`.
+The normal writer stores the corresponding structured expression when Lean can validate
+its result. This includes exact decimal arithmetic and references in the record's original
+language. Choose tagged operands explicitly when a name or literal is ambiguous.
+
+Unsupported syntax, date-like rules, numeric-looking quoted literals and comparisons
+depending on legacy text coercion stay text with a diagnostic. Missing Lean also produces
+an explicit fallback diagnostic; it never turns text into a calculated result. Report
+receipts retain these diagnostics. Existing formulas and historical `seen` fields are
+not migrated by an unrelated write. A newly authored calculation with a missing dependency,
+cycle or division by zero is refused unless its missing computation is explicitly declared.
+
 ```yaml
 order.total:
   rule:

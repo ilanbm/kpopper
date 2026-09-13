@@ -368,13 +368,16 @@ class TheWritePathForks(unittest.TestCase):
                                  "verdict=the old boiler holds after all", "wrong_if=heat.loss_kw > 40",
                                  "--as-of", "2026-09-03", rec)
             self.assertEqual(code, 1)
-            self.assertEqual((out + err).strip(),
+            self.assertTrue((out + err).strip().startswith(
                              "refused - c.boiler_short is already a judgment, concluding 'the old boiler cannot "
                              "hold 12°C on the coldest February nig…' - the standing judgment holds, and its "
                              "wrong_if has not fired, so a different verdict under "
-                             "the same id contradicts it, and a hypothesis holds the other: add c.boiler_short "
-                             "'rests_on=[heat.boiler_kw, heat.loss_kw]' 'verdict=the old boiler holds after "
-                             "all' 'wrong_if=heat.loss_kw > 40' --as-of 2026-09-03 --hypothesis c_boiler_short_26d205")
+                             "the same id contradicts it, and a hypothesis holds the other: "), out + err)
+            command = shlex.split((out + err).strip().split('a hypothesis holds the other: ', 1)[1])
+            self.assertEqual(command[:2], ['add', 'c.boiler_short'])
+            condition = P.yaml.safe_load(next(part.split('=', 1)[1] for part in command if part.startswith('wrong_if=')))
+            self.assertEqual(P.predicate_text(condition), 'heat.loss_kw > 40')
+            self.assertEqual(command[-4:], ['--as-of', '2026-09-03', '--hypothesis', 'c_boiler_short_26d205'])
             # a verdict of any shape is still named: the mark is taken over the whole of it, and
             # a claim it could not read would leave the refusal with no command to offer
             code, out, err = run(SCRIPTS / "provenance.py", "add", "c.boiler_short",
@@ -407,11 +410,11 @@ class TheWritePathForks(unittest.TestCase):
             self.assertIn("the base is untouched; c_boiler_short holds 0 entries and 1 judgment\n", out)
             self.assertEqual(rec.read_text(encoding="utf-8"), before)
             h = pathlib.Path(d) / "PROVENANCE.d" / "c_boiler_short.yaml"
-            self.assertEqual(h.read_text(encoding="utf-8"),
-                             'hypothesis: {born: "2026-09-03"}\n\njudgments:\n  c.boiler_short:\n'
-                             '    rests_on: [heat.boiler_kw, heat.loss_kw]\n'
-                             '    verdict: "the old boiler holds after all"\n    wrong_if: "heat.loss_kw > 40"\n'
-                             '    seen: {heat.boiler_kw: 24, heat.loss_kw: 31}\n')
+            saved = P.yaml.safe_load(h.read_text(encoding="utf-8"))
+            saved['judgments']['c.boiler_short']['wrong_if'] = P.predicate_text(saved['judgments']['c.boiler_short']['wrong_if'])
+            self.assertEqual(saved, {'hypothesis': {'born': '2026-09-03'}, 'judgments': {'c.boiler_short': {
+                'rests_on': ['heat.boiler_kw', 'heat.loss_kw'], 'verdict': 'the old boiler holds after all',
+                'wrong_if': 'heat.loss_kw > 40', 'seen': {'heat.boiler_kw': 24, 'heat.loss_kw': 31}}}})
             # pull reads the proposal beside the standing judgment
             code, out, _ = run(SCRIPTS / "provenance.py", "pull", "c.boiler_short", rec)
             self.assertEqual(code, 0, out)
@@ -527,10 +530,11 @@ class TheWritePathForks(unittest.TestCase):
                           "(heat.loss_kw <= heat.boiler_kw)\n"
                           "the new judgment holds: wrong_if does not hold (heat.loss_kw > heat.boiler_kw)\n", out)
             text = rec.read_text(encoding="utf-8")
-            self.assertIn("  c.boiler_short:\n    rests_on: [heat.boiler_kw, heat.loss_kw]\n"
-                          '    verdict: "the old boiler holds on the coldest night"\n'
-                          '    wrong_if: "heat.loss_kw > heat.boiler_kw"\n'
-                          "    seen: {heat.boiler_kw: 24, heat.loss_kw: 20}\n", text)
+            saved = P.yaml.safe_load(text)['judgments']['c.boiler_short']
+            saved['wrong_if'] = P.predicate_text(saved['wrong_if'])
+            self.assertEqual(saved, {'rests_on': ['heat.boiler_kw', 'heat.loss_kw'],
+                'verdict': 'the old boiler holds on the coldest night', 'wrong_if': 'heat.loss_kw > heat.boiler_kw',
+                'seen': {'heat.boiler_kw': 24, 'heat.loss_kw': 20}})
             self.assertEqual(text.count("c.boiler_short:"), 1)
             self.assertEqual(run(SCRIPTS / "provenance.py", "check", rec)[0], 0)
     def test_a_request_a_session_wrote_itself_admits_nothing_and_the_fold_does(self):

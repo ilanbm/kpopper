@@ -13,6 +13,7 @@ straight through to provenance.py; page renders the record and can open what it 
   kpopper session <setup|status|open|read|search|context|propose|serve>  checked, revision-bound session views
   kpopper set     <key> <value> [--why "..."] [--as-of DATE]   change one value; the reply is the reach
   kpopper add     <id> field=value ...    a new entry or judgment, in id order, its seen filled
+  kpopper update  --file JSON            apply one source report atomically and return its receipt
   kpopper ingest  capture --file JSON    retain a report and process it in the background
                   add --notify-task TASK_ID to return a native Codex delivery job
   kpopper ingest  pending                important findings still needing attention
@@ -55,6 +56,7 @@ COMMANDS = {
     "affects": ("SUBJECT [SUBJECT ...]", "Trace what a change reaches."),
     "add": ("ID FIELD=VALUE ...", "Add a grounded entry or judgment."),
     "set": ("ID VALUE [--why TEXT] [--as-of DATE]", "Update a reading and see what it affects."),
+    "update": ("--file JSON [--record FILE] [--state-dir PATH]", "Apply related changes from one source report atomically and return the result."),
     "review": ("ID [--as-of DATE]", "Record a judgment's review against current readings."),
     "document": ("OPERATION [OPTIONS]", "Create or refresh a standalone authored HTML document with evidence."),
     "page": ("[--open] [--out PATH] [--verify]", "Render or verify the knowledge page."),
@@ -153,7 +155,7 @@ def do_page(args):
         sys.exit(do_checks(rest))
     script = str(HERE / "render_page.py")
     if "--verify" in rest:
-        # nothing is written in this mode; the exit code is the whole answer.
+        # No HTML is written; derived measurements are retained outside the record.
         sys.exit(subprocess.run([sys.executable, script] + rest).returncode)
     proc = subprocess.run([sys.executable, script] + rest, stdout=subprocess.PIPE)
     if proc.returncode:
@@ -180,7 +182,7 @@ def main():
         root.error("Use kpopper open, kpopper map, or kpopper config; start is not a public command.")
     if cmd not in COMMANDS and cmd != "_agent":
         root.error("unknown command: " + cmd)
-    if cmd not in {"open", "map", "config", "_agent", "session", "ingest", "document", "followups", "watch"} and rest in (["--help"], ["-h"]):
+    if cmd not in {"open", "map", "config", "_agent", "session", "ingest", "update", "document", "followups", "watch"} and rest in (["--help"], ["-h"]):
         usage, description = COMMANDS[cmd]
         print("usage: kpopper " + cmd + (" " + usage if usage else "") + " [--json]\n\n" + description)
         if cmd in {"set", "add", "review", "same", "distinct"}:
@@ -237,6 +239,12 @@ def main():
         # Expressions already return structured data; a global JSON option needs
         # no legacy-output wrapper or second subprocess.
         sys.exit(expression_cli.main(rest))
+    if cmd == "update":
+        try:
+            from .ingestion import update_main
+        except ImportError:
+            from ingestion import update_main
+        sys.exit(update_main(rest))
     if cmd == "search":
         try:
             from . import search

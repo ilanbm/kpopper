@@ -1,5 +1,14 @@
 # Capture now, receive only what needs attention
 
+For an update needed in the current answer, use `kpopper update --file report.json`.
+It accepts the same report contract below, processes only that report, and returns its
+durable receipt. Exit 0 means `applied`; exit 1 means retained but needing a primary
+decision; exit 2 means an invalid request. Inspect `reason`, `diagnostics`, `reach` and
+`newly_fired_judgments` before relying on the result. `applied` does not review judgments.
+Use one `updates` array for related changes from one report: all changes commit together,
+share one source and are checked in their final state. Reuse `event_id` to retry the same
+envelope safely. Supported newly authored formulas normalize to structured expressions.
+
 Use the existing graph to find what new information changes while its context is still fresh.
 `kpopper ingest capture` retains a source report immediately and starts a separate worker. The
 worker writes an explicit update through the same writer as `set`, follows declared dependencies,
@@ -54,8 +63,8 @@ version does not invoke a language model to infer missing identity, intent, time
 
 ## Several related changes from one source
 
-The primary agent can supply `updates` instead of `target`/`value`, using the same capture
-command and delivery path. One source quotation and date ground the whole batch:
+The primary agent can supply `updates` instead of `target`/`value`, using `update` now or
+`ingest capture` in the background. One source quotation and date ground the whole batch:
 
 For a batch with new entries, first read the relevant record with `open --json` or
 `search`, and copy its `record_sha256` into the envelope below. Use the hash returned

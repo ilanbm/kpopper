@@ -51,6 +51,9 @@ import io, os, re, sys, glob, json, time, shlex, stat, pickle, hashlib, subproce
 from decimal import Decimal, InvalidOperation
 import importlib.util
 
+with io.open(__file__, 'rb') as _source_file:
+    LOADED_SOURCE_HASH = hashlib.sha256(_source_file.read()).hexdigest()
+
 _expression_name = "_kpopper_expressions_" + hashlib.sha256(os.path.dirname(__file__).encode()).hexdigest()[:12]
 if _expression_name not in sys.modules:
     _spec = importlib.util.spec_from_file_location(_expression_name, os.path.join(os.path.dirname(__file__), "expressions.py"))
@@ -60,7 +63,10 @@ E = sys.modules[_expression_name]
 
 
 def predicate_text(value):
-    return E.text(value) if isinstance(value, dict) else str(value or "")
+    rendered = E.text(value) if isinstance(value, dict) else str(value or "")
+    # Operators keep their inner grouping; the surrounding sentence supplies its
+    # own parentheses, so do not double-wrap the outermost expression.
+    return rendered[1:-1] if isinstance(value, dict) and rendered.startswith('(') and rendered.endswith(')') else rendered
 
 
 def predicate_refs(value):
@@ -3061,7 +3067,7 @@ def _not_born_broken(a, doc, ids, jud, fields, raw):
         return []
     pred = predicate_of(a["body"], fields)
     if pred and evaluate(pred, raw, ids) is True:
-        return [f"wrong_if already holds ({pred}) - the judgment would be born broken"]
+        return [f"wrong_if already holds ({predicate_text(pred)}) - the judgment would be born broken"]
     return []
 
 
@@ -3211,7 +3217,8 @@ def _command_of(a, name):
                 if isinstance(v, list):
                     s = "[" + ", ".join(scalar(x, fold=False) for x in v) + "]"
                 elif isinstance(v, dict):
-                    s = "{" + ", ".join(f"{k2}: {scalar(x, fold=False)}" for k2, x in v.items()) + "}"
+                    s = yaml.safe_dump(v, default_flow_style=True, allow_unicode=True,
+                                       sort_keys=False, width=1000000).strip()
                 elif isinstance(v, bool):
                     s = str(v).lower()
                 else:
@@ -3368,6 +3375,72 @@ def _nearest_existing(a, doc, ids, jud, fields, raw):
     sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
     import sameness
     return sameness.nearest_existing(a, doc, ids, jud, fields, raw)
+
+
+def authored_fields(action, fields):
+    """A first conventional falsifier has no existing predicate role to infer from."""
+    body = action.get('body')
+    if action['kind'] == 'add' and isinstance(body, dict) and fields['deps'] in body \
+            and fields['predicate'] is None and 'wrong_if' in body:
+        return dict(fields, predicate='wrong_if')
+    return fields
+
+
+def normalize_authored(action, ids, fields, raw):
+    """Normalize only new/changed expression fields, in their actual writing context."""
+    if action['kind'] != 'add' or not isinstance(action.get('body'), dict):
+        return action, []
+    import copy
+    action = copy.deepcopy(action)
+    body, nid = action['body'], action['id']
+    predicate = fields['deps'] in body
+    field = fields['predicate'] if predicate else 'rule'
+    source = body.get(field)
+    previous = raw.get(nid)
+    if not isinstance(source, str) or (isinstance(previous, dict) and previous.get(field) == source):
+        return action, []
+
+    def keep(reason):
+        return action, [f"NOTE {nid}.{field} kept as text: {reason}"]
+
+    if not predicate and any(key in body for key in ('v', 'quoted')):
+        return keep('a stored reading and a calculation need distinct fields/entries')
+    try:
+        comparison = CMP.match(source) if predicate else None
+        tree = E.convert_authored(source, predicate=predicate,
+            legacy_rhs=comparison.group(3) if comparison else None)
+    except (ValueError, SyntaxError, RecursionError) as error:
+        return keep(str(error))
+    # A lone unknown word may be a prose rule, not a missing graph reference.
+    if not predicate and set(tree) == {'ref'} and tree['ref'] not in ids and tree['ref'] != nid:
+        return keep('unknown or ambiguous reference; use a tagged ref for an intended dependency')
+    candidate = dict(raw)
+    candidate[nid] = dict(body, **{field: tree})
+    candidate_ids = ids | {nid} | {key for key in E.refs(tree) if is_builtin(key)}
+    result = E.compute(candidate, candidate_ids, tree if predicate else None)
+    if result.get('error'):
+        return keep(result['error'])
+    if predicate:
+        before = evaluate(source, raw, ids)
+        after = result['predicate']['holds_on_current_values']
+        # Arithmetic operands were never understood by the legacy single-value
+        # comparison reader. A new, decidable formula uses the typed semantics.
+        arithmetic = any('op' in node for node in tree['args'])
+        if after is None or (before is not None and before is not after and not arithmetic):
+            return keep('typed comparison is unavailable or changes the existing interpretation')
+        left, right = tree['args']
+        # Legacy comparisons may coerce two text readings to numbers later.
+        if 'ref' in left and 'ref' in right and any(isinstance(value_of(raw, ids, node['ref']), str) for node in (left, right)):
+            return keep('comparisons between text readings need an explicit choice of typed semantics')
+    else:
+        calculated = result['values'].get(nid, {})
+        if calculated.get('value') is None:
+            reason = calculated.get('reason', 'unavailable calculation')
+            if reason in {'division_by_zero', 'cyclic_reference', 'missing_reference'} and not _blocked_text(body):
+                raise Refused(f"refused - {nid}: rule cannot be computed: {reason}")
+            return keep(reason)
+    body[field] = tree
+    return action, [f"{nid}.{field}: stored as a structured expression"]
 
 
 # Every refusal a write can meet, in one place. The fork on a contradiction is the last of
@@ -3819,7 +3892,7 @@ def _collection_for(doc, ids, jud, fields, nid, body, explicit):
     return valued[0] if counted(valued[0]) else "known"
 
 
-def apply(paths, action):
+def apply(paths, action, diagnostics=None):
     """The one write. `action` says what kind (set, add, review) and what that kind needs;
     it is validated whole before a byte is touched, applied to the file's text without
     reformatting anything else, read back, and answered with the reach. All of it under
@@ -3827,8 +3900,8 @@ def apply(paths, action):
     same write lands in the file beside the record and the base is not touched."""
     with _locked(paths[0]):
         if action.get("hypothesis"):
-            return _fork(paths, action)
-        return _apply(paths, action)
+            return _fork(paths, action, diagnostics)
+        return _apply(paths, action, diagnostics)
 
 
 def _ensure_collection(lines, collection):
@@ -3877,7 +3950,7 @@ def _insert_block(lines, collection, nid, block):
     return f"{nid} into {collection}, {'before' if before else 'after'} {anchor}"
 
 
-def _fork(paths, action):
+def _fork(paths, action, diagnostics=None):
     """A write into a hypothesis beside the record: the same validation and the same edits,
     on `.kpopper/hypotheses/<name>.yaml` - the base is not touched. The record is read as it stands
     under the hypothesis, so a judgment written there rests on what it proposes and its
@@ -3895,9 +3968,11 @@ def _fork(paths, action):
         doc.hypotheses = dict(doc.hypotheses, **{name: hyp})
     under = layered(doc, hyp)
     ids, jud, fields = infer(under)
+    fields = authored_fields(action, fields)
     raw = with_builtins(under, ids, jud, fields)
     for k, v in counts(under, ids, jud, fields, bodies(under)).items():
         raw.setdefault(k, {"name": COMPUTED[k], "v": v})
+    action, expression_notes = normalize_authored(action, ids, fields, raw)
     stamp = action.get("as_of") or datetime.date.today().isoformat()
     refusals = validate(action, under, ids, jud, fields, raw)
     if refusals:
@@ -3913,7 +3988,7 @@ def _fork(paths, action):
         with io.open(hyp["path"], encoding="utf-8") as fh:
             original = fh.read()
     lines = (original if original is not None else f'hypothesis: {{born: "{stamp}"}}\n').split("\n")
-    out, seen = [], {}
+    out, seen = list(expression_notes), {}
     if kind == "set":
         now = value_of(raw, ids, nid)
         if nid in hyp["ids"] and now is not None and _same(now, action["value"]) \
@@ -3989,6 +4064,8 @@ def _fork(paths, action):
         raise Refused(f"the write broke the hypothesis and was undone: {e}")
     for l in out:
         print(l)
+    if diagnostics is not None:
+        diagnostics.extend(expression_notes)
     # the reach, read with the hypothesis laid over the base: what would move if it folded.
     # Nothing in the base has.
     if kind == "review":
@@ -4078,9 +4155,10 @@ def _check_citation_readback(action, body):
         raise ValueError(f"{action['id']} did not retain the requested from/at citation")
 
 
-def _apply(paths, action):
+def _apply(paths, action, diagnostics=None):
     doc = load(paths)
     ids, jud, fields = infer(doc)
+    fields = authored_fields(action, fields)
     raw = with_builtins(doc, ids, jud, fields)
     # every count the reader can take, whether or not the record mentions it yet: a new
     # judgment may be the first to rest on one
@@ -4107,6 +4185,7 @@ def _apply(paths, action):
         for k, v in page0.items():
             raw.setdefault(k, {"name": COMPUTED[k]})["v"] = v
         doc.page = facts
+    action, expression_notes = normalize_authored(action, ids, fields, raw)
     refusals = validate(action, doc, ids, jud, fields, raw)
     if refusals:
         raise Refused("refused - " + "\n          ".join(refusals))
@@ -4117,7 +4196,7 @@ def _apply(paths, action):
     # which file of the record holds the write: the one that holds the entry, and for a new
     # one the file its neighbours are in (_file_for)
     target = files[0] if kind == "add" else _file_for(files, nid)
-    out, seen, arrangement, supersede, arranged = [], {}, False, False, False
+    out, seen, arrangement, supersede, arranged = list(expression_notes), {}, False, False, False
     if kind == "add":
         body = action["body"]
         # a judgment under a standing judgment's id got past validation only because it may
@@ -4236,7 +4315,7 @@ def _apply(paths, action):
                     with_page[k]["v"] = v
                 pred = jud2[nid]["pred"]
                 if pred and evaluate(pred, with_page, ids2) is True:
-                    raise ValueError(f"wrong_if already holds ({pred}) once the page counts it - the "
+                    raise ValueError(f"wrong_if already holds ({predicate_text(pred)}) once the page counts it - the "
                                      f"arrangement would be born broken")
         elif arrangement and brief:
             shape, facts2 = _page_side(paths)[1:]
@@ -4262,6 +4341,8 @@ def _apply(paths, action):
     for l in out:
         print(l)
     _report(paths, kind, nid, doc2, ids2, jud2, fields2, raw2)
+    if diagnostics is not None:
+        diagnostics.extend(expression_notes)
     return 0
 
 

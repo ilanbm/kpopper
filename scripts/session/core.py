@@ -13,6 +13,8 @@ import tempfile
 
 from .model import encode, digest
 
+LOADED_SOURCE_HASH = hashlib.sha256(Path(__file__).read_bytes()).hexdigest()
+
 SOURCE = Path(__file__).resolve().parent / "lean" / "Main.lean"
 LEAN_VERSION = "4.33.1"
 RULES = (SOURCE.parent.parent / "rules.txt").read_text(encoding="utf-8").strip()

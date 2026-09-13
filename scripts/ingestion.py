@@ -102,12 +102,16 @@ def _load(path, default=None):
         return default
 
 
+class LockingUnavailable(RuntimeError):
+    """This platform cannot serialize durable ingestion writes."""
+
+
 @contextlib.contextmanager
 def _file_lock(path):
     try:
         import fcntl
     except ImportError as exc:
-        raise RuntimeError("durable ingestion writes require fcntl file locking") from exc
+        raise LockingUnavailable("durable ingestion writes require fcntl file locking") from exc
     path = Path(path)
     _private_dir(path.parent)
     fd = os.open(str(path), os.O_CREAT | os.O_RDWR, 0o600)
@@ -620,6 +624,7 @@ def _prepare(rec, root, event, envelope, before_bytes):
     paths = [str(shadow)]
     source_id = "s.ingest_" + eid
     date = envelope["date"]
+    diagnostics = []
     with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):
         P.mark(str(mark), paths)
         seeds = _report_seeds(envelope)
@@ -646,7 +651,7 @@ def _prepare(rec, root, event, envelope, before_bytes):
                 if "v" in body or "quoted" in body:
                     body.update({"from": source_id, "at": location, "of": date})
                 action["body"] = body
-            P.apply(paths, action)
+            P.apply(paths, action, diagnostics=diagnostics)
         gate = P.gate(str(mark), paths)
     if gate:
         raise ValueError("canonical gate refused the prepared record")
@@ -662,7 +667,7 @@ def _prepare(rec, root, event, envelope, before_bytes):
     source = P.bodies(doc).get(source_id)
     if not isinstance(source, dict) or source.get("file") != event["source_file"]:
         raise ValueError("prepared target did not retain its captured source")
-    return shadow, after_bytes, _graph(shadow, seeds), target_hash
+    return shadow, after_bytes, _graph(shadow, seeds), target_hash, diagnostics
 
 
 def _replace_record(record, data):
@@ -723,6 +728,7 @@ def _recover(rec, root, event, envelope, journal):
                    graph_before=journal["before_graph"]["hash"], graph_after=after["hash"],
                    reach=after["reach"], newly_fired_judgments=fired,
                    actionable_judgments=actionable, recovered=True,
+                   diagnostics=journal.get("diagnostics", []),
                    target_after_sha256=journal["target_after_sha256"])
 
 
@@ -792,7 +798,7 @@ def _process_event(rec, root, event, crash_after_commit=False):
             _, integrity = _capture_payload(root, event)
             if integrity:
                 return _integrity_question(root, event, integrity)
-            shadow, after_bytes, prepared_graph, target_after_sha256 = \
+            shadow, after_bytes, prepared_graph, target_after_sha256, diagnostics = \
                 _prepare(rec, root, event, envelope, before_bytes)
         except (Exception, SystemExit) as exc:
             return _question(root, event, envelope,
@@ -804,6 +810,7 @@ def _process_event(rec, root, event, crash_after_commit=False):
             "source_id": "s.ingest_" + eid, "attempt": attempt,
             "target_after_sha256": target_after_sha256,
             "brief_hash": _brief_fingerprint(shadow),
+            "diagnostics": diagnostics,
         }
         _save(journal_path, journal)
         with P._locked(str(rec)):
@@ -833,6 +840,7 @@ def _process_event(rec, root, event, crash_after_commit=False):
                        graph_before=before_graph["hash"], graph_after=after["hash"],
                        reach=after["reach"], newly_fired_judgments=fired,
                        actionable_judgments=actionable, recovered=False,
+                       diagnostics=diagnostics,
                        target_after_sha256=target_after_sha256)
     return _question(
         root, event, envelope,
@@ -867,6 +875,30 @@ def status(event_id=None, record=None, state_dir=None):
     events = [_load(path) for path in (root / "events").glob("*.json")]
     return [_load(root / "receipts" / (e["event_id"] + ".json")) or _summary(e)
             for e in sorted((x for x in events if x), key=lambda x: x.get("order", 0))]
+
+
+def update(envelope, record=None, state_dir=None):
+    """Apply one source report now, using the same durable atomic ingestion path."""
+    rec, root = _layout(record, state_dir)
+    event = capture(envelope, rec, root, start=False)
+    process(rec, root, event_id=event['event_id'])
+    return status(event['event_id'], rec, root)
+
+
+def update_main(argv=None):
+    parser = argparse.ArgumentParser(prog='kpopper update', description=update.__doc__)
+    parser.add_argument('--file', required=True, help='report JSON file, or - for standard input')
+    parser.add_argument('--record')
+    parser.add_argument('--state-dir')
+    parser.add_argument('--json', action='store_true', help='receipts are always structured JSON')
+    args = parser.parse_args(argv)
+    try:
+        answer = update(_read_json_arg(args.file), args.record, args.state_dir)
+    except (ValueError, OSError, LockingUnavailable) as error:
+        print(json.dumps({'error': str(error)}, ensure_ascii=False))
+        return 2
+    print(json.dumps(answer, ensure_ascii=False, sort_keys=True))
+    return 0 if answer and answer.get('state') == 'applied' else 1
 
 
 def pending(record=None, state_dir=None, include_handled=False):

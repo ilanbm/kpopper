@@ -129,7 +129,9 @@ known:
 Here the two inputs refer to the [workshop example](../examples/workshop/GROUNDING.yaml).
 The reader derives dependency links from the structure and uses the packaged Lean core
 to compute the value. A missing core or unavailable input is explicit. Legacy text rules
-remain unevaluated until an explicit conversion. See [structured expressions](../skills/kpopper/EXPRESSIONS.md)
+remain unevaluated until an explicit conversion. Normal `add` and report `update` writes
+store supported new formula strings in this structure, with diagnostics for text fallbacks.
+See [structured expressions](../skills/kpopper/EXPRESSIONS.md)
 for supported operators, exact fractions, snapshots and checked migration commands.
 
 ## What check means
@@ -254,6 +256,7 @@ Python alone cannot call host tools. Persistent writes require POSIX locking. Se
 ## Background capture
 
 ```sh
+kpopper update --file report.json        # apply one report now and return its receipt
 kpopper ingest capture --file report.json
 kpopper ingest status --event-id EVENT_ID
 kpopper ingest pending
@@ -262,6 +265,10 @@ kpopper ingest pending
 Capture retains the supplied report and normally starts a separate worker. Supported
 updates pass through the canonical writer. Raw reports, journals and receipts live in a
 private state directory outside the repository, keyed by the canonical record path.
+`update` uses the same atomic path synchronously for the one supplied report. Its receipt
+includes normalization diagnostics and affected judgments; exit 0 means applied, exit 1
+means retained for a decision, and exit 2 means an invalid request. Existing judgments are
+not reviewed by applying new readings.
 
 Automatic writes require explicit reports in a single file. An `updates` list can combine
 existing scalar updates with new grounded facts, rules and judgments in one atomic write.

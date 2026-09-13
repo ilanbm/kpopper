@@ -79,7 +79,7 @@ the surface.
 
 ### 2. Something you worked out
 
-Record the rule, never the result. Use structured `{op, args}` expressions with tagged `ref`, `num`, `text` and `bool` leaves for new calculations and executable falsifiers. The local Lean core computes them; keep `rests_on` explicit and historical snapshots intact. [EXPRESSIONS.md](../kpopper/EXPRESSIONS.md) covers exact numbers, setup and explicit migration. For unsupported non-numeric work, record the rule and its declared limit.
+Record the rule, never the result. `add` and `update` store supported new formulas directly as structured expressions; the local Lean core computes them. Keep `rests_on` explicit and historical snapshots intact. Use tagged `{op, args}` expressions with `ref`, `num`, `text` and `bool` leaves to resolve ambiguity. Read fallback diagnostics: text retained without Lean is not a calculated result. [EXPRESSIONS.md](../kpopper/EXPRESSIONS.md) covers syntax, setup and migration; unsupported work needs its declared limit.
 
 ### 3. Something you concluded or composed
 
@@ -110,8 +110,8 @@ that unrelated entry does. If a rendered number is not exactly one reference, it
 ## The sign that would make it wrong
 
 Every judgment says what would make it wrong, and the reader evaluates it where it honestly can:
-`wrong_if` is one comparison over an entry the judgment rests on - `acme.seats < 150`,
-`flue.clear == false` - and nothing richer; a second comparison on the right-hand side is unread.
+`wrong_if` is one comparison over entries the judgment rests on - `acme.seats < 150`,
+`flue.clear == false`, or supported arithmetic operands. Compound comparisons are unsupported.
 A predicate that cannot be evaluated says so with `blocked_on` and why; a decision taken on a
 session's prior, or on taste, names the prose sign that would re-open it in `reopened_by`. Never
 invent a threshold to make a predicate evaluable, and never write prose in a predicate field.
@@ -193,7 +193,7 @@ kpopper set <key> <value> [--why "..."]  # change one value; the reply is the re
 kpopper set <key> <value> --source <id> --at "..."  # a new reading with its new citation
 kpopper review <id | "section title">    # it still holds: seen rewritten from the record
 kpopper same <a> <b> | distinct <a> <b> "why"   # one subject under two ids, or two that only look alike
-kpopper ingest capture --file report.json   # retain a source report, processed in the background
+kpopper update --file report.json        # apply related source changes together; return the result
 kpopper followups add ...                # deferred work, linked to the knowledge it waits on
 ```
 
@@ -228,8 +228,8 @@ conservative behavior until the next session opens.
 
 **New information is useful when you can see what it changes.** When ongoing record maintenance
 is authorized, capture a material correction or source report while your understanding is fresh.
-For an explicit update that can be checked in the background, use `kpopper ingest capture` and
-continue unrelated work. Interpret once in the primary session; leave unknown meaning open.
+Use `kpopper update --file report.json` when this answer needs the result; otherwise use
+`kpopper ingest capture --file report.json`. Interpret once; leave unknown meaning open.
 Use one `updates` batch for related readings and new grounded entries. Additions require
 `record_sha256` from the primary's prior `open --json` or source-search read; if it changes,
 reread the premises. Keep source quotations separate from the agent's conclusions.

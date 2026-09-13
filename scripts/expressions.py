@@ -1,7 +1,8 @@
 """Structured expression data and a bridge to the single Lean evaluator.
 
 Python validates shape, derives references and renders text. Arithmetic is exclusively
-computed by the packaged Lean program. Legacy text is converted only on explicit request.
+computed by the packaged Lean program. New supported formulas normalize at the writer;
+existing textual expressions require explicit migration.
 """
 import ast
 import copy
@@ -17,6 +18,8 @@ import sys
 import subprocess
 from decimal import Decimal
 from fractions import Fraction
+
+LOADED_SOURCE_HASH = hashlib.sha256(Path(__file__).read_bytes()).hexdigest()
 
 ARITHMETIC = {"add": "+", "sub": "-", "mul": "*", "div": "/"}
 COMPARISONS = {"eq": "==", "ne": "!=", "lt": "<", "le": "<=", "gt": ">", "ge": ">="}
@@ -206,7 +209,7 @@ def convert(source, predicate=False):
         if depth >= 64: raise ValueError("expression depth exceeds 64")
         if isinstance(node, (ast.Name, ast.Attribute)):
             name = ast.get_source_segment(source, node)
-            if not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z0-9_]+)*", name or ""):
+            if not name or not all(part.isidentifier() for part in name.split('.')):
                 raise ValueError("unsupported reference")
             if name in {"true", "false", "True", "False"}:
                 return {"bool": name.lower() == "true"}
@@ -225,3 +228,30 @@ def convert(source, predicate=False):
             return {"op": operators[type(node.ops[0])], "args": [visit(node.left, depth + 1), visit(node.comparators[0], depth + 1)]}
         raise ValueError("unsupported legacy expression; it was not converted")
     return validate(visit(tree.body), predicate=predicate)
+
+
+def convert_authored(source, predicate=False, legacy_rhs=None):
+    """Conservative storage conversion, distinct from an explicit syntax translation."""
+    if not isinstance(source, str) or len(source) > 4000:
+        raise ValueError('expression must be text within 4000 characters')
+    if not predicate and re.fullmatch(r'\s*\d{4}-\d{2}-\d{2}\s*', source):
+        raise ValueError('date-like text is not implicitly arithmetic')
+    if predicate:
+        syntax = ast.parse(source, mode='eval').body
+        if isinstance(syntax, ast.Compare) and len(syntax.comparators) == 1:
+            rhs = syntax.comparators[0]
+            if isinstance(rhs, ast.Name) and rhs.id.lower() not in {'true', 'false'}:
+                raise ValueError('ambiguous bare right operand; choose a ref or text explicitly')
+            if isinstance(rhs, ast.Constant) and isinstance(rhs.value, str):
+                if legacy_rhs is not None and legacy_rhs.strip().strip("\"'") != rhs.value:
+                    raise ValueError('literal quoting changes the legacy reading; choose typed text explicitly')
+                try:
+                    float(rhs.value.replace(',', ''))
+                except ValueError:
+                    pass
+                else:
+                    raise ValueError('numeric-looking text has legacy coercion; choose explicit typed operands')
+        if any(isinstance(node, ast.Constant) and isinstance(node.value, str)
+               and '\\' in (ast.get_source_segment(source, node) or '') for node in ast.walk(syntax)):
+            raise ValueError('legacy escaped literal needs explicit review')
+    return convert(source, predicate=predicate)

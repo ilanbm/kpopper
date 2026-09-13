@@ -74,8 +74,12 @@ An unreadable value does not disable unrelated followups. Its ID stays visible w
 `unavailable` reason, distinct from a recorded null. Both a condition and a change trigger
 over that value remain unknown; a followup listing it in `related` cannot become ready
 merely because its date arrived. A missing historical baseline requires an explicit refresh.
-Page counts are unavailable to followups until a supported reader supplies an actual
-measurement; the graph reader does not treat an unbuilt page count as a recorded null.
+An explicit `kpopper page` or `page --verify` publishes measured page counts outside the
+record. Followups can read those counts for the same record, shards, hypotheses, canonical
+view and evaluator version. Changed inputs, missing or corrupt measurements stay unknown
+until another explicit build. A scan never renders the page or refreshes `seen`.
+An alternate `--brief` does not replace the canonical view's measurement. Verification
+can report a fired condition and still supply a real count; a measurement is not approval.
 Missing data and unsupported conditions are unknown, not false evidence. A graph
 change is visible only once it is recorded; use existing source ingestion to bring in real news.
 This syntax does not execute shell commands or interpret arbitrary predicates.

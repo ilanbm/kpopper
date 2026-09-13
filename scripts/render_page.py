@@ -27,10 +27,12 @@ was written, and a shape that moved raises a banner. Shape, not values - a date 
 does not make a layout wrong; a fourth blocked judgment might.
 """
 import io, os, re, sys, json, html, hashlib, pathlib, datetime, yaml
+LOADED_SOURCE_HASH = hashlib.sha256(pathlib.Path(__file__).read_bytes()).hexdigest()
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 import provenance as P
 from page_words import WORDS
 from page_lint import lint_output
+import page_measurements as MEASUREMENTS
 
 # The page's own code lives beside this file, in the languages its tools speak. Read
 # whole at import and inlined at render, so a page is still one file.
@@ -1769,9 +1771,24 @@ def build(paths, brief_path=None):
                                        "arrangements": arrangements, "earned": earned}
 
 
+def measured_build(paths, brief_path=None):
+    """Explicit page construction publishes counts for the exact inputs it read."""
+    if LOADED_SOURCE_HASH != MEASUREMENTS.LOADED_CODE['render_page.py']:
+        raise ValueError('loaded renderer changed; restart it before measuring')
+    before = MEASUREMENTS.snapshot(paths, brief_path)
+    result = build(paths, brief_path)
+    try:
+        MEASUREMENTS.publish(before, result[4]['page'])
+    except OSError as error:
+        # Rendering remains useful on a read-only host; a missing cache stays
+        # unavailable to followups and must not be mistaken for a saved result.
+        sys.stderr.write('NOTE page measured, but its followup snapshot could not be saved: ' + str(error) + '\n')
+    return result
+
+
 def verify(paths, brief_path=None):
     """Deterministic, no browser. What only looking can catch is a separate job."""
-    page, E, J, ids, info = build(paths, brief_path)
+    page, E, J, ids, info = measured_build(paths, brief_path)
     fail, note = lint_output(page, E, J, info)
     # what the page SHOWS is markup, not script - the provenance layer's own source
     # mentions the attribute it binds to, and that is not an element.
@@ -1864,7 +1881,7 @@ if __name__ == "__main__":
     brief = find_brief(files, brief)
     if "--verify" in a:
         sys.exit(verify(files, brief))
-    page, _, _, _, info = build(files, brief)
+    page, _, _, _, info = measured_build(files, brief)
     for t in info["tabs"]:
         if t["shape"]:
             continue

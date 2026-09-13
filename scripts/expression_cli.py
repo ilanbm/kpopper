@@ -1,6 +1,5 @@
 """Explicit conversion to structured expressions, with a checked migration preview."""
 import argparse
-import ast
 import copy
 import json
 from pathlib import Path
@@ -36,16 +35,9 @@ def migrate(record=None, apply=False):
                 if not isinstance(value, str) or not value.strip():
                     continue
                 try:
-                    if predicate:
-                        syntax = ast.parse(value, mode="eval").body
-                        if isinstance(syntax, ast.Compare) and len(syntax.comparators) == 1:
-                            rhs = syntax.comparators[0]
-                            if isinstance(rhs, ast.Name) and rhs.id.lower() not in {"true", "false"}:
-                                raise ValueError("ambiguous bare right operand; choose a ref or text explicitly")
-                        if any(isinstance(node, ast.Constant) and isinstance(node.value, str)
-                               and "\\" in (ast.get_source_segment(value, node) or "") for node in ast.walk(syntax)):
-                            raise ValueError("legacy escaped literal needs explicit review")
-                    converted = E.convert(value, predicate=predicate)
+                    comparison = P.CMP.match(value) if predicate else None
+                    converted = E.convert_authored(value, predicate=predicate,
+                        legacy_rhs=comparison.group(3) if comparison else None)
                     unknown = set(E.refs(converted)) - ids
                     if unknown:
                         raise ValueError("unknown or ambiguous bare names: " + ", ".join(sorted(unknown)))
