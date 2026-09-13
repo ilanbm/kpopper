@@ -25,7 +25,7 @@ reach through the record and surfaces what needs another look.
   <a href="assets/diagrams/reasoning-check.png">
     <picture>
       <source media="(max-width: 600px)" srcset="assets/diagrams/reasoning-check-mobile.png">
-      <img src="assets/diagrams/reasoning-check.png" width="760" alt="More deterministic reasoning. Conversations on the left show an earlier session agreeing to 30-day downloads because files stay 30 days, followed by a later session reducing storage to seven days. An Agent records arrow leads to Deterministic checks on the right: YAML preserves the decision, current values and earlier review snapshot. Directly below the YAML, seven less than thirty produces Download promise fails. The closing line reads Conversations move on. The reasoning stays checkable. The agent interprets the words; the checker evaluates the recorded condition.">
+      <img src="assets/diagrams/reasoning-check.png" width="760" alt="More deterministic reasoning. An earlier conversation creates an email with a 30-day download window; an action annotation shows the decision and its grounds recorded. A later session drafts a seven-day retention policy and updates the recorded retention from thirty to seven. An Agent records arrow leads to Deterministic checks: YAML retains the conclusion that retention supports the promised window and its earlier 30/30 review snapshot. Below the YAML, seven less than thirty produces Promise no longer supported. The closing line reads Conversations move on. The reasoning stays checkable. The agent interprets the words; the checker evaluates the recorded condition.">
     </picture>
   </a>
 </p>

@@ -17,9 +17,12 @@ rendered. Exporting a schematic should not overwrite the illustration.
 ## More deterministic reasoning
 
 The opening illustration has two parts: **Conversations** and **Deterministic
-checks**. An earlier session establishes the promise and its reason; a later one
-changes retention. An **Agent records** arrow connects the dialogue to the YAML.
-The comparison and **Download promise fails** result sit directly below the code,
+checks**. An earlier session creates the email with a 30-day window and records
+why retention supports it. A later session drafts a seven-day retention policy and
+updates the recorded value. Blue action annotations outside the chat bubbles show
+these record operations without adding user requests to maintain the graph.
+An **Agent records** arrow connects the dialogue to the YAML.
+The comparison and **Promise no longer supported** result sit directly below the code,
 inside the same panel. The phone layout stacks these two parts.
 Both close with **Conversations move on. The reasoning stays checkable.** The
 desktop uses one line; the phone uses two for readability.
@@ -33,7 +36,11 @@ the comparison. Arbitrary formulas and prose are not automatically executable.
 The [pictured record](reasoning-check.yaml) is a fictional, minimal illustration.
 At its earlier review, both the file retention and the promised window were 30
 days. The recorded retention has since changed to seven; `seen` retains the earlier
-values. Source locators are omitted from this teaching excerpt. The
+values. The after-state describes a draft policy, not a production incident.
+`downloads.availability` records the conclusion **Retention supports the promised
+window**; the promised number remains a separate value in `link.days`. A request
+to explore a possible window would not establish that the email already promises it.
+Source locators are omitted from this teaching excerpt. The
 [complete download example](../../examples/merge-assumptions/README.md#premature-file-deletion-consistency)
 includes source files, measurement recipes and the two-branch scenario, with longer
 entry names.
@@ -47,7 +54,7 @@ python3 scripts/kpopper check assets/diagrams/reasoning-check.yaml
 The expected exit status is **1**, with this failed condition:
 
 ```text
-FAIL download.promise: wrong_if holds (files.days < link.days) - broken by its own condition
+FAIL downloads.availability: wrong_if holds (files.days < link.days) - broken by its own condition
 ```
 
 The comparison is `7 < 30`. Repeating the check against the same record produces
@@ -56,8 +63,15 @@ the relevance of the chosen condition. This is a demonstration of repeatable che
 not an evaluation of overall agent reasoning quality.
 
 The conversation bubbles are fictional teaching dialogue, not transcripts of a
-live agent run. The visual names the failed promise directly: a true `wrong_if`
+live agent run. The visual names the unsupported promise directly: a true `wrong_if`
 condition means failure, so the ambiguous label "Condition holds" is not used.
+
+An edit to a policy file alone does not update its recorded value. The agent must
+record the new reading or run a configured measurement. Creating the initial
+conclusion and dependencies is agent work; the background ingestion worker can
+apply an explicit update to an existing scalar. The illustration does not claim
+zero overhead or that all of these operations happen in the background. See
+[capture and write limits](../../skills/kpopper/INGESTION.md).
 
 ## What the illustrations preserve
 
