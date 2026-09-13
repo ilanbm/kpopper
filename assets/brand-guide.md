@@ -91,8 +91,9 @@ density and visual treatment for the image's purpose.
 - The knowledge-source illustration uses a deliberately busy left side to show
   the breadth of existing tools and materials, contrasted with an ordered reasoning
   layer on the right. Its recognizable icons and many small details carry that idea.
-- Keep that illustration's richer cyan, magenta and lavender palette and lively
-  ink treatment. It does not need to imitate the process diagrams.
+- Use the series's black ink, electric blue and restrained accent colors for that
+  illustration too. Preserve its many varied source objects and the contrast in
+  density; remove the earlier neon sticker outlines and candy-colored panels.
 - At small sizes, the main contrast and direction should remain clear. Secondary
   details can reward a closer look; they do not all need equal visual prominence.
 - Existing sources remain in place. The organized layer is the selected claims,
@@ -101,6 +102,10 @@ density and visual treatment for the image's purpose.
 
 ## Diagrams and product images
 
+- "More deterministic reasoning" names a shift of selected reasoning steps into
+  explicit dependencies and repeatable checks. Show the agent's interpretation,
+  the recorded condition and its mechanical evaluation as distinct stages. The
+  opening visual demonstrates this mechanism; the following stories show its value.
 - Each explanatory image carries one question and one main relationship or change.
   Put detailed qualifications and instructions in the surrounding text.
 - Use blue for the emphasized subject or connection, black for ordinary content,

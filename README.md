@@ -21,6 +21,19 @@ reach through the record and surfaces what needs another look.
 [Capabilities](#what-you-can-do-with-kpopper) · [Record format](#the-knowledge-record) ·
 [Why the name?](#popper-give-a-conclusion-a-way-to-fail)
 
+<p align="center">
+  <a href="assets/diagrams/reasoning-check.png">
+    <picture>
+      <source media="(max-width: 600px)" srcset="assets/diagrams/reasoning-check-mobile.png">
+      <img src="assets/diagrams/reasoning-check.png" width="760" alt="More deterministic reasoning. The work says files now stay seven days, the download link promises thirty, and files should last for the promised window. An agent records the values, dependency and condition in YAML. kpopper evaluates seven less than thirty and flags the download promise. The agent interprets the words; the checker evaluates the recorded condition.">
+    </picture>
+  </a>
+</p>
+
+Parts of the reasoning become explicit dependencies and repeatable checks.
+[Inspect the illustrated record](assets/diagrams/README.md#more-deterministic-reasoning),
+then see how those checks help when work changes independently.
+
 <details>
 <summary>Contents</summary>
 

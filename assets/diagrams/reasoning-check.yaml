@@ -1,0 +1,12 @@
+meta:
+  updated: 2026-09-13
+  scope: Fictional illustration of a download promise.
+known:
+  files.days: {v: 7, of: "2026-09-13"}
+  link.days: {v: 30}
+judgments:
+  download.promise:
+    rests_on: [files.days, link.days]
+    verdict: "Keep the download promise"
+    wrong_if: "files.days < link.days"
+    seen: {files.days: 30, link.days: 30}
