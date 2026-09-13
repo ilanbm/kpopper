@@ -439,6 +439,23 @@ sources:
          executive-function wording and elusive-smile effect are directions to assess, not
          established product or perceptual capabilities."
     read: "2026-09-13"
+  s.2026_09_13_reasoning_overview:
+    asked: "a more deterministic reasoning"
+    name: "Accepted ink knowledge map and the comparative promise of more deterministic reasoning"
+    of: "The maintainer approved the new ink knowledge-source illustration and asked for a
+         words-to-YAML-to-calculated-check visual near the opening. They clarified that more
+         qualifies the promise: selected reasoning steps become deterministic, not all
+         natural-language interpretation. The illustration fixture passed at 30/30, then failed
+         identically on three checks after recorded retention became 7. In the follow-up, the
+         maintainer requested actual-looking session dialogue on one side, YAML on the deterministic
+         side, and the calculated result directly beneath it. They questioned Condition holds;
+         the revised illustration names Download promise fails instead. The selected closing line
+         is Conversations move on. The reasoning stays checkable. Further discussion clarified
+         that the email must actually be created with the promised window, the later policy change
+         must update the record, and recording entails agent work rather than zero overhead or an
+         entirely background process. The revised illustration uses downloads.availability with
+         Retention supports the promised window, a draft policy and explicit record-action labels."
+    read: "2026-09-13"
   s.2026_09_13_self_aware_tagline:
     asked: "Your project, self-aware.\nאם זה לא הבטחה מוזרה שתגרום לאנשים להסתכל על הפרויקט מוזר, אז
             זה מצויין"
@@ -2224,18 +2241,21 @@ judgments:
                   a verified supported route."
     seen: {s.background_ingestion: "read 2026-09-09"}
   d.knowledge_map_keeps_its_detail:
-    rests_on: [s.2026_09_13_readme_direction]
+    rests_on: [s.2026_09_13_readme_direction, s.2026_09_13_reasoning_overview]
     verdict: "Keep the detailed, playful knowledge-source illustration: many existing tools and
-              materials on the left, an ordered record of selected reasoning on the right."
-    because: "The maintainer explicitly chose this composition after seeing the simpler alternative.
-              Its density shows the breadth of sources and the contrast with the reasoning layer. The
-              brand guide therefore allows expressive conceptual illustrations alongside restrained
-              process diagrams. This is a chosen treatment whose communication still needs reader
-              evidence, not a demonstrated conversion improvement."
+              materials on the left, an ordered record of selected reasoning on the right. Use the
+              approved black-ink and electric-blue treatment with the series typography."
+    because: "The maintainer retained the dense-to-ordered composition and approved its new ink
+              treatment. The five source categories and varied objects preserve breadth and
+              playfulness, while the typography and palette join the current series. This is a chosen
+              presentation whose communication still needs reader evidence, not a demonstrated
+              conversion improvement."
     reopened_by: "An uncoached reader at phone width cannot identify the crowded-to-ordered
                   contrast, or reads the illustration as a promise to migrate or automatically
                   organize every source despite its caption and surrounding explanation."
-    seen: {s.2026_09_13_readme_direction: "read 2026-09-13"}
+    seen:
+      s.2026_09_13_readme_direction: "read 2026-09-13"
+      s.2026_09_13_reasoning_overview: "read 2026-09-13"
   d.local_claims_want_a_run:
     rests_on: [s.2026_09_04_calibration, prior.local_needs_a_run, m.claims.general_held,
                m.claims.local_checked_held, m.claims.local_assumed_held, m.reach.general_held,
@@ -2706,27 +2726,35 @@ judgments:
                                      explaining every part of the visual joke."
       s.2026_09_13_more_self_aware_tagline: "read 2026-09-13"
   d.readme_opens_with_what_it_does:
-    rests_on: [s.2026_09_12_first_readings, s.2026_09_13_readme_direction, d.named_for_popper, s.2026_09_13_readme_depth]
-    verdict: "Keep the hero, explain the practical benefit immediately below it, then show concrete
-              code and non-code examples with visible recorded premises and a direct route to
-              installation. Introduce the third-brain metaphor later."
+    rests_on: [s.2026_09_12_first_readings, s.2026_09_13_readme_direction, d.named_for_popper, s.2026_09_13_readme_depth, s.2026_09_13_reasoning_overview]
+    verdict: "Keep the hero and practical benefit, with installation directly linked. Place a
+              compact words-to-record-to-check overview before the concrete code and non-code
+              examples, with visible recorded premises and a phone layout. Introduce the third-brain
+              metaphor later."
     because: "The reported reader connected with the merge scenario while the opening metaphor
               required explanation. Concrete code cases give developers a familiar entrance, and the
               following Cowork case makes the wider scope visible. Visible record excerpts expose the
               declared premises; linked guides carry complete records and executable checks.
               Descriptive headings and navigation let readers choose their depth without needing the
-              philosophical references first."
+              philosophical references first. The overview supplies the mechanism before the longer
+              stories demonstrate its value. More deterministic reasoning describes selected
+              comparisons moving into explicit, repeatable checking; the agent chooses readings,
+              dependencies and conditions. The ordinary reader does not evaluate arbitrary formulas
+              or make all language interpretation deterministic."
     reopened_by: "A new reader given the README without coaching cannot explain what it preserves or
                   what triggers review, takes a green check as proof of arbitrary code correctness,
                   or concludes from the opening that non-code projects are unsupported. Record the
                   misunderstanding and where it arose; stopping after finding an answer is not
-                  failure."
+                  failure. Revisit the overview if readers cannot distinguish interpretation from
+                  mechanical comparison, or its extra height prevents them from reaching the examples
+                  or installation."
     seen:
       s.2026_09_12_first_readings: "read 2026-09-13"
       s.2026_09_13_readme_direction: "read 2026-09-13"
       d.named_for_popper: "the project keeps the name kpopper; discovery runs on direct links and
                            qualified search, never on the bare term"
       s.2026_09_13_readme_depth: "read 2026-09-13"
+      s.2026_09_13_reasoning_overview: "read 2026-09-13"
   d.readme_story_series:
     rests_on: [s.2026_09_13_story_approval, d.readme_opens_with_what_it_does, d.readme_visual_identity, s.2026_09_13_worker_and_research]
     verdict: "Open with the approved illustrated series: shared cache and private results, download

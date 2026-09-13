@@ -8,10 +8,70 @@ The SVGs are separate, compact **editable schematic references** for inspecting 
 relationships. They are not the source files from which the illustrated PNGs were
 rendered. Exporting a schematic should not overwrite the illustration.
 
-| Overview | Illustration | Editable schematic | What it explains |
+| Overview | Illustration | Supporting reference | What it explains |
 |---|---|---|---|
 | Conversation | [Desktop](conversation-flow.png) · [Phone](conversation-flow-mobile.png) | [Desktop](conversation-flow.svg) · [Phone](conversation-flow-mobile.svg) | An explicit report is processed separately while the main conversation continues; important findings return. |
 | Across time | [Desktop](work-across-time.png) · [Phone](work-across-time-mobile.png) | [Desktop](work-across-time.svg) · [Phone](work-across-time-mobile.svg) | Past grounds, present attention and configured future work stay connected through explicit recording of outcomes. |
+| More deterministic reasoning | [Desktop](reasoning-check.png) · [Phone](reasoning-check-mobile.png) | [Illustrated record](reasoning-check.yaml) | An agent makes the premises and condition explicit; the reader repeatedly evaluates that declared comparison. |
+
+## More deterministic reasoning
+
+The opening illustration has two parts: **Conversations** and **Deterministic
+checks**. An earlier session creates the email with a 30-day window and records
+why retention supports it. A later session drafts a seven-day retention policy and
+updates the recorded value. Blue action annotations outside the chat bubbles show
+these record operations without adding user requests to maintain the graph.
+An **Agent records** arrow connects the dialogue to the YAML.
+The comparison and **Promise no longer supported** result sit directly below the code,
+inside the same panel. The phone layout stacks these two parts.
+Both close with **Conversations move on. The reasoning stays checkable.** The
+desktop uses one line; the phone uses two for readability.
+
+**More** describes the shift of selected reasoning steps into
+explicit, repeatable checks. The agent still interprets sources and chooses the
+relevant premises and condition; the ordinary reader evaluates supported comparisons
+and follows declared dependencies. YAML holds that structure; the checker executes
+the comparison. Arbitrary formulas and prose are not automatically executable.
+
+The [pictured record](reasoning-check.yaml) is a fictional, minimal illustration.
+At its earlier review, both the file retention and the promised window were 30
+days. The recorded retention has since changed to seven; `seen` retains the earlier
+values. The after-state describes a draft policy, not a production incident.
+`downloads.availability` records the conclusion **Retention supports the promised
+window**; the promised number remains a separate value in `link.days`. A request
+to explore a possible window would not establish that the email already promises it.
+Source locators are omitted from this teaching excerpt. The
+[complete download example](../../examples/merge-assumptions/README.md#premature-file-deletion-consistency)
+includes source files, measurement recipes and the two-branch scenario, with longer
+entry names.
+
+From the repository root:
+
+```sh
+python3 scripts/kpopper check assets/diagrams/reasoning-check.yaml
+```
+
+The expected exit status is **1**, with this failed condition:
+
+```text
+FAIL downloads.availability: wrong_if holds (files.days < link.days) - broken by its own condition
+```
+
+The comparison is `7 < 30`. Repeating the check against the same record produces
+the same result. An accurate comparison still depends on the supplied readings and
+the relevance of the chosen condition. This is a demonstration of repeatable checking,
+not an evaluation of overall agent reasoning quality.
+
+The conversation bubbles are fictional teaching dialogue, not transcripts of a
+live agent run. The visual names the unsupported promise directly: a true `wrong_if`
+condition means failure, so the ambiguous label "Condition holds" is not used.
+
+An edit to a policy file alone does not update its recorded value. The agent must
+record the new reading or run a configured measurement. Creating the initial
+conclusion and dependencies is agent work; the background ingestion worker can
+apply an explicit update to an existing scalar. The illustration does not claim
+zero overhead or that all of these operations happen in the background. See
+[capture and write limits](../../skills/kpopper/INGESTION.md).
 
 ## What the illustrations preserve
 
@@ -42,7 +102,8 @@ interpretation, a delivery guarantee or unconfigured background monitoring. See
 
 ## Layout and maintenance
 
-Desktop illustrations are 1536×1024. Phone illustrations are 1024×1536 and are selected
+The time and conversation desktop illustrations are 1536×1024; the compact reasoning
+overview is 1672×941. Phone illustrations are 1024×1536 and are selected
 by the README's `picture` element at viewport widths up to 600 pixels. The time panels
 stack on a phone; the conversation keeps parallel lanes. Important wording also remains
 in the README text and image descriptions.
