@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1040" height="520" viewBox="0 0 1040 520" role="img" aria-labelledby="title desc">
 <title id="title">Past, present, future.</title>
-<desc id="desc">The past preserves sources, evidence, decision reasons and review snapshots. The present connects claims, changes, contradictions and new information. The future holds followups, daily reviews and time or event triggers. The agent records outcomes back into the record.</desc>
+<desc id="desc">The past preserves sources, evidence, decision reasons and review snapshots. The present connects claims, changes, contradictions and new information. The future holds configured followups, daily reviews and time or event triggers. The agent records outcomes back into the record.</desc>
 <defs><marker id="blue" viewBox="0 0 12 10" refX="11" refY="5" markerWidth="12" markerHeight="10" markerUnits="userSpaceOnUse" orient="auto"><path d="M1 1L11 5 1 9Z" fill="#0666ff"/></marker><marker id="gray" viewBox="0 0 12 10" refX="11" refY="5" markerWidth="12" markerHeight="10" markerUnits="userSpaceOnUse" orient="auto"><path d="M1 1L11 5 1 9Z" fill="#596579"/></marker><marker id="red" viewBox="0 0 12 10" refX="11" refY="5" markerWidth="12" markerHeight="10" markerUnits="userSpaceOnUse" orient="auto"><path d="M1 1L11 5 1 9Z" fill="#c52c42"/></marker></defs>
 <rect width="1040" height="520" fill="white"/>
 <rect x="32.8421" y="32" width="295.579" height="327" rx="12" fill="#f3f7ff" stroke="#c6d0df" stroke-width="1.8"/>
@@ -16,6 +16,7 @@
 <text x="396.842" y="300" font-family="Arial, Helvetica, sans-serif" font-size="25" font-weight="400" text-anchor="start" fill="#142033">New information</text>
 <rect x="711.579" y="32" width="295.579" height="327" rx="12" fill="#f3f7ff" stroke="#c6d0df" stroke-width="1.8"/>
 <text x="736.211" y="94" font-family="Arial, Helvetica, sans-serif" font-size="34" font-weight="700" text-anchor="start" fill="#0666ff">Future</text>
+<text x="736.211" y="126" font-family="Arial, Helvetica, sans-serif" font-size="18" font-weight="400" text-anchor="start" fill="#596579">When configured</text>
 <text x="736.211" y="174" font-family="Arial, Helvetica, sans-serif" font-size="25" font-weight="400" text-anchor="start" fill="#142033">Followups &amp; actions</text>
 <text x="736.211" y="237" font-family="Arial, Helvetica, sans-serif" font-size="25" font-weight="400" text-anchor="start" fill="#142033">Daily reviews</text>
 <text x="736.211" y="300" font-family="Arial, Helvetica, sans-serif" font-size="25" font-weight="400" text-anchor="start" fill="#142033">Time &amp; event triggers</text>

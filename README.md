@@ -366,14 +366,15 @@ attention now, and the checks or actions to return to later.
   <a href="assets/diagrams/work-across-time.png">
     <picture>
       <source media="(max-width: 600px)" srcset="assets/diagrams/work-across-time-mobile.png">
-      <img src="assets/diagrams/work-across-time.png" width="760" alt="Past preserves sources, evidence, decision reasons and review snapshots. Present connects claims, changes, contradictions and new information. Future holds followups, daily reviews and time or event triggers. The agent records outcomes back into the record.">
+      <img src="assets/diagrams/work-across-time.png" width="760" alt="Three ink panels connect past sources, evidence, decisions, reasons and last-review snapshots; present claims, changes, contradictions and new information; and future followups, daily reviews and time or event triggers when configured. A return loop explicitly says the agent records outcomes as evidence.">
     </picture>
   </a>
 </p>
 
-The Future panel shows deferred work tracked by followups. The return arrow is the agent's
-step of recording useful outcomes as evidence; marking a followup complete is a separate
-operation and does not automatically rewrite the knowledge record.
+The Future panel shows deferred work tracked by followups and scheduled reviews when
+configured in the host. The return arrow is the agent's step of recording useful outcomes
+as evidence; marking a followup complete is a separate operation and does not automatically
+rewrite the knowledge record.
 
 ## Keep the conversation moving
 
@@ -385,7 +386,7 @@ important unresolved findings are available for delivery back to the conversatio
   <a href="assets/diagrams/conversation-flow.png">
     <picture>
       <source media="(max-width: 600px)" srcset="assets/diagrams/conversation-flow-mobile.png">
-      <img src="assets/diagrams/conversation-flow.png" width="720" alt="Two parallel lanes: the main agent session keeps the conversation moving while a separate background worker saves the sourced venue cancellation and checks the venue-to-announcement dependency. Only an important finding returns to the session; routine updates send no notification.">
+      <img src="assets/diagrams/conversation-flow.png" width="760" alt="One conversation, two parallel tracks. The main agent captures an explicit venue-cancellation report and continues with the set list. A worker in a separate process saves the dated source, records the change from confirmed to cancelled and checks the venue-to-announcement dependency. The announcement needs review; important findings return through the configured delivery route while routine updates stay quiet.">
     </picture>
   </a>
 </p>

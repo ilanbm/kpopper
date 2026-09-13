@@ -32,8 +32,10 @@ condition from a changed premise that needs judgment. See [the story index](stor
 
 ## Process diagrams
 
-The conversation and time diagrams live in `diagrams/`, with editable SVG sources
-and PNG renders. See [the diagram index and rendering notes](diagrams/README.md).
+The conversation and time overviews live in `diagrams/`, with illustrated desktop
+and phone PNGs in the story series' ink style. Separate editable SVG schematics
+preserve compact maps of the process; they are not the illustration sources.
+See [the overview index and maintenance notes](diagrams/README.md).
 
 ## Knowledge-source illustration
 

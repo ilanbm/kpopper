@@ -75,6 +75,11 @@ density and visual treatment for the image's purpose.
 - Story illustrations may carry people, expressive objects and handwritten notes.
   Phone layouts stack the panels and collect their connections without making
   independent inputs look sequential. Keep the essential explanation in text as well.
+- The time and conversation overviews use the same ink language. Keep their full
+  conceptual coverage: last-review snapshots, configured future work, explicit outcome
+  recording, a separate parallel worker, and selective return of important findings.
+  Choose the layout for the relationship: time panels stack on a phone; parallel
+  conversation tracks remain visibly separate.
 - The knowledge-source illustration uses a deliberately busy left side to show
   the breadth of existing tools and materials, contrasted with an ordered reasoning
   layer on the right. Its recognizable icons and many small details carry that idea.
@@ -96,10 +101,10 @@ density and visual treatment for the image's purpose.
   carry a text label or symbol as well.
 - Prefer short labels, simple arrows and a consistent type scale. Reserve the
   character, speech bubble and logic sparks for places where they carry the joke.
-- Author precise diagrams with editable text and shapes. The README diagram series
-  uses Arial as its reference family, a shared spacing grid and a consistent type hierarchy.
-  Display PNG renders for consistent viewing; retain SVG sources for editing.
-  The hero and illustrated story series remain separate illustration assets.
+- Keep editable text-and-shape schematics when they help inspect a process. The
+  conversation and time overviews have compact SVG references in Arial and separate
+  illustrated PNG layouts. Keep the roles clear: the schematics describe the logic;
+  they are not pixel-matched source files for the ink artwork.
 - Give desktop and phone layouts the same semantic content. Use compact filled
   arrowheads with an explicit size, keep connector paths clear of text, and name
   separate or parallel processes directly. Reduce decoration before removing meaning.

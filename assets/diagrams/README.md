@@ -1,38 +1,55 @@
-# README process diagrams
+# Illustrated process overviews
 
-The SVG files are the editable sources. Their PNG renders are displayed in the
-README so layout does not depend on fonts installed on a reader's device.
+The PNGs are editorial ink illustrations used by the README. They share the opening
+[story series](../stories/README.md)'s typography, palette and visual language while
+preserving the process details in the earlier diagrams.
 
-The opening cases use the [illustrated story series](../stories/README.md).
-The knowledge-source section uses the [detailed source-map illustration](../knowledge-sources.png).
+The SVGs are separate, compact **editable schematic references** for inspecting the
+relationships. They are not the source files from which the illustrated PNGs were
+rendered. Exporting a schematic should not overwrite the illustration.
 
-| Diagram | Desktop | Mobile | What it explains |
+| Overview | Illustration | Editable schematic | What it explains |
 |---|---|---|---|
-| Conversation | [SVG](conversation-flow.svg) · [PNG](conversation-flow.png) | [SVG](conversation-flow-mobile.svg) · [PNG](conversation-flow-mobile.png) | The main session continues while a separate background process records and checks the update; only important findings return. |
-| Across time | [SVG](work-across-time.svg) · [PNG](work-across-time.png) | [SVG](work-across-time-mobile.svg) · [PNG](work-across-time-mobile.png) | Sources, reasons and review snapshots; current connections and changes; followups, daily reviews and triggers. |
+| Conversation | [Desktop](conversation-flow.png) · [Phone](conversation-flow-mobile.png) | [Desktop](conversation-flow.svg) · [Phone](conversation-flow-mobile.svg) | An explicit report is processed separately while the main conversation continues; important findings return. |
+| Across time | [Desktop](work-across-time.png) · [Phone](work-across-time-mobile.png) | [Desktop](work-across-time.svg) · [Phone](work-across-time-mobile.svg) | Past grounds, present attention and configured future work stay connected through explicit recording of outcomes. |
 
-## Shared design
+## What the illustrations preserve
 
-- Desktop canvases are 1040 units wide; mobile canvases are 760 units wide, with
-  more vertical space. The time diagram changes from columns to stacked panels.
-  The README selects mobile PNGs at viewport widths up to 600 pixels using `picture`.
-- Arial is the reference typeface, with Helvetica and sans-serif fallbacks in the
-  editable source. Text uses a deliberate type hierarchy, with compact eyebrow
-  labels, larger section titles and emphasized values.
-- Electric blue `#0666ff`, near-black `#101828`, white, pale blue surfaces and thin borders.
-- Green status labels mean a passing check; red means a failed condition; amber
-  marks attention or review. Labels and symbols accompany colors.
-- Thin connectors with small filled arrowheads. `markerUnits="userSpaceOnUse"`
-  keeps arrowheads independent of line thickness. Join dots clarify branch merges;
-  dashed paths distinguish handoffs and the agent's return step. Paths avoid text.
+The time overview keeps all three perspectives:
 
-The diagrams are conceptual illustrations of the documented behavior, not product
-screenshots or empirical performance results. The source letters, readings and
-assumptions still need an agent or authorized tool to record them. Adjacent README
-text states the runtime and interpretation limits.
+- **Past:** sources and evidence, decisions and reasons, and snapshots of inputs at
+  the last review.
+- **Present:** connected claims, changes and contradictions, and new information.
+- **Future:** followups and actions, daily reviews, and time or event triggers when
+  configured. The return loop is the agent recording outcomes as evidence; finishing
+  a task alone does not rewrite the record.
 
-Render the SVG with Arial available when refreshing the PNG. After editing, check
-both layouts against the documented behavior, inspect the normal display size and
-a 368-pixel-wide mobile render, and check that arrows do not cross text. Preserve
-the semantic content in both layouts: compact presentation must not hide process
-boundaries, reasons, review snapshots or return conditions.
+The conversation overview keeps two visibly parallel tracks. The main agent captures
+an explicit source and update, then continues work that does not depend on that result.
+The separate worker saves the source, records the specified scalar change and checks
+its declared dependencies. An important finding can return through the configured host
+route; routine updates stay quiet. The compact SVG groups source retention and the
+update in one box, while the illustration shows them as separate numbered steps.
+
+These are conceptual illustrations, not product screenshots or evidence of automatic
+interpretation, a delivery guarantee or unconfigured background monitoring. See
+[capture and write limits](../../skills/kpopper/INGESTION.md),
+[host delivery](../../skills/kpopper/DELIVERY.md) and
+[followups](../../skills/kpopper/FOLLOWUPS.md).
+
+## Layout and maintenance
+
+Desktop illustrations are 1536×1024. Phone illustrations are 1024×1536 and are selected
+by the README's `picture` element at viewport widths up to 600 pixels. The time panels
+stack on a phone; the conversation keeps parallel lanes. Important wording also remains
+in the README text and image descriptions.
+
+Keep the ink scenes expressive, labels readable and connectors clear of text. Preserve
+the original concepts and the distinction between recording, checking and deciding.
+Blue identifies the principal connections; amber marks attention. Use no arbitrary
+calendar dates to imply an actual scheduled run.
+
+The schematic references use Arial with Helvetica and sans-serif fallbacks. Their
+smaller canvases and simple shapes are intended for editing the logic. Keep source
+and update handling, parallel-process labels, selective return and explicit outcome
+recording accurate when either representation changes.

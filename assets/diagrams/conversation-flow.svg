@@ -18,9 +18,9 @@
 <text x="93.0526" y="371.635" font-family="Arial, Helvetica, sans-serif" font-size="24" font-weight="400" text-anchor="start" fill="#0666ff">Agent captures update</text>
 <path d="M481.684 282.052L558.316 282.052" fill="none" stroke="#0666ff" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#blue)" stroke-dasharray="5 4"/>
 <rect x="569.263" y="218.191" width="399.579" height="145.461" rx="12" fill="white" stroke="#c6d0df" stroke-width="1.8"/>
-<text x="596.632" y="251.896" font-family="Arial, Helvetica, sans-serif" font-size="28" font-weight="700" text-anchor="start" fill="#142033">1  Save source</text>
+<text x="596.632" y="251.896" font-family="Arial, Helvetica, sans-serif" font-size="28" font-weight="700" text-anchor="start" fill="#142033">1  Source + update</text>
 <text x="596.632" y="288.261" font-family="Arial, Helvetica, sans-serif" font-size="27" font-weight="400" text-anchor="start" fill="#c52c42">Venue: cancelled</text>
-<text x="596.632" y="325.513" font-family="Arial, Helvetica, sans-serif" font-size="25" font-weight="400" text-anchor="start" fill="#596579">Dated reading</text>
+<text x="596.632" y="325.513" font-family="Arial, Helvetica, sans-serif" font-size="25" font-weight="400" text-anchor="start" fill="#596579">Dated source</text>
 <path d="M270.947 390.261L270.947 447.026" fill="none" stroke="#596579" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#gray)"/>
 <path d="M769.053 373.409L769.053 424.852" fill="none" stroke="#0666ff" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#blue)"/>
 <path d="M87.1579 466.539H454.737Q470.737 466.539 470.737 482.539V579.148Q470.737 595.148 454.737 595.148H114.158L89.1579 607.148V595.148H87.1579Q71.1579 595.148 71.1579 579.148V482.539Q71.1579 466.539 87.1579 466.539Z" fill="white" stroke="#c6d0df" stroke-width="1.8"/>

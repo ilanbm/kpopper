@@ -18,9 +18,9 @@
 <text x="68" y="419" font-family="Arial, Helvetica, sans-serif" font-size="24" font-weight="400" text-anchor="start" fill="#0666ff">Agent captures update</text>
 <path d="M352 318L408 318" fill="none" stroke="#0666ff" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#blue)" stroke-dasharray="5 4"/>
 <rect x="416" y="246" width="292" height="164" rx="12" fill="white" stroke="#c6d0df" stroke-width="1.8"/>
-<text x="436" y="284" font-family="Arial, Helvetica, sans-serif" font-size="28" font-weight="700" text-anchor="start" fill="#142033">1  Save source</text>
+<text x="436" y="284" font-family="Arial, Helvetica, sans-serif" font-size="28" font-weight="700" text-anchor="start" fill="#142033">1  Source + update</text>
 <text x="436" y="325" font-family="Arial, Helvetica, sans-serif" font-size="27" font-weight="400" text-anchor="start" fill="#c52c42">Venue: cancelled</text>
-<text x="436" y="367" font-family="Arial, Helvetica, sans-serif" font-size="25" font-weight="400" text-anchor="start" fill="#596579">Dated reading</text>
+<text x="436" y="367" font-family="Arial, Helvetica, sans-serif" font-size="25" font-weight="400" text-anchor="start" fill="#596579">Dated source</text>
 <path d="M198 440L198 504" fill="none" stroke="#596579" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#gray)"/>
 <path d="M562 421L562 479" fill="none" stroke="#0666ff" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#blue)"/>
 <path d="M68 526H328Q344 526 344 542V655Q344 671 328 671H95L70 683V671H68Q52 671 52 655V542Q52 526 68 526Z" fill="white" stroke="#c6d0df" stroke-width="1.8"/>

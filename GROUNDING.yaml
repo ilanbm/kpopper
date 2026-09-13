@@ -401,6 +401,14 @@ sources:
     of: "Final wording choice in the README tagline discussion. The concrete explanation of recorded
          dependencies and review remains immediately below it."
     read: "2026-09-13"
+  s.2026_09_13_process_illustrations:
+    asked: "they should also go through the same process and design compared to the original ones
+            and with our new design and language"
+    name: "The maintainer requested the time and conversation overviews be compared with their
+           original illustrations and brought into the new ink visual language, as the opening
+           examples were."
+    of: "README process illustrations: past/present/future and keeping the conversation moving."
+    read: "2026-09-13"
   s.2026_09_13_readme_depth:
     asked: "ואגב הreadme באמת מכסה כמו שצריך את הפרויקט?"
     name: "README revision request: informative headings distinct from illustrated headlines;
@@ -2718,15 +2726,16 @@ judgments:
                                  toward the lowercase kpopper wordmark and one-line lemma quotation
                                  on the right. Keep the separate italic attribution without a final
                                  period, the secondary Korean bubble and the white geometric k icon
-                                 on electric blue. Process diagrams retain editable sources and phone
-                                 layouts."
+                                 on electric blue. Process overviews use ink illustrations and phone
+                                 layouts with separate editable schematic references."
   d.readme_visual_identity:
-    rests_on: [s.2026_09_13_readme_direction, s.2026_09_12_first_readings, s.2026_09_13_large_hero, s.gaze_direction_study, s.2026_09_13_reasoning_emphasis]
+    rests_on: [s.2026_09_13_readme_direction, s.2026_09_12_first_readings, s.2026_09_13_large_hero, s.gaze_direction_study, s.2026_09_13_reasoning_emphasis, s.2026_09_13_process_illustrations]
     verdict: "Use the large ink portrait of Karl Popper on the left, with a restrained, faintly
               amused expression and a natural inward gaze toward the lowercase kpopper wordmark and
               one-line lemma quotation on the right. Keep the separate italic attribution without a
               final period, the secondary Korean bubble and the white geometric k icon on electric
-              blue. Process diagrams retain editable sources and phone layouts."
+              blue. Process overviews use ink illustrations and phone layouts with separate editable
+              schematic references."
     because: "The maintainer selected the corrected large portrait after comparing it with the
               typographic hero. It gives the philosopher/pop-star joke a recognizable face alongside
               the illustrated stories. Inward gaze is a composition choice informed by banner
@@ -2735,7 +2744,10 @@ judgments:
               closed-mouth smile as the default and preserve clear typography and text explanations
               for readers who do not recognize the references. The smile aims for ambiguity and
               poise; the Mona Lisa's perceptual effect has not been established for this
-              illustration."
+              illustration. The time and conversation overviews share the story series's visual
+              language while preserving the original concepts, explicit parallel worker, configured
+              future work and the agent's separate act of recording outcomes. The SVG references
+              describe the logic; exporting them is not how the illustrated PNGs are produced."
     reopened_by: "Readers at ordinary phone width cannot read the primary slogan or attribution,
                   mistake the fictional attribution for a historical quotation, or misunderstand
                   process boundaries in the diagrams. Revisit the compact icon if users confuse it
@@ -2746,6 +2758,7 @@ judgments:
       s.2026_09_13_large_hero: "read 2026-09-13"
       s.gaze_direction_study: "read 2026-09-13"
       s.2026_09_13_reasoning_emphasis: "read 2026-09-13"
+      s.2026_09_13_process_illustrations: "read 2026-09-13"
   d.record_is_code:
     rests_on: [s.2026_09_01_consolidation, d.register_out_of_tree, d.base_shared_forks_on_contradiction, p.hypothesis_homes]
     verdict: "the record of what is known about the code lives in the tree - committed with the work
