@@ -34,17 +34,20 @@ agent's synthesis. See [the story index](stories/README.md).
 
 ## Process diagrams
 
-The conversation and time overviews live in `diagrams/`, with illustrated desktop
-and phone PNGs in the story series' ink style. Separate editable SVG schematics
-preserve compact maps of the process; they are not the illustration sources.
-See [the overview index and maintenance notes](diagrams/README.md).
+The reasoning, conversation and time overviews live in `diagrams/`, with illustrated
+desktop and phone PNGs in the story series' ink style. The opening reasoning overview
+shows natural-language statements, their explicit YAML relationship and a repeatable
+comparison; its exact record is supplied alongside it. Separate editable SVG schematics
+preserve compact maps of the conversation and time processes; they are not the
+illustration sources.
 
 ## Knowledge-source illustration
 
-`knowledge-sources.png` restores the detailed, playful source-map treatment: crowded
+`knowledge-sources.png` keeps the detailed, playful source-map treatment: crowded
 groups of familiar tools and materials on the left, and an ordered reasoning layer
-on the right. It retains the earlier illustration's composition and updates the
-record filename to `GROUNDING.yaml`.
+on the right. It uses the series's black ink linework, electric-blue emphasis and
+bold editorial typography while retaining the five source categories and their
+many individual objects. The reasoning record is labelled `GROUNDING.yaml`.
 
 The agent selects relevant evidence; the source files and tools remain in place.
 This is a conceptual illustration, not a screenshot or a claim to automatically

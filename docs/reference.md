@@ -48,6 +48,7 @@ limited to numerical thresholds.
 | `kpopper open` | Read a bounded project orientation, namespace and attention report. |
 | `kpopper pull <entry-or-prefix>` | Retrieve a subject's entries, sources and changed premises. |
 | `kpopper affects <entry>` | Follow the downstream reach of an entry through judgments and rule references. |
+| `kpopper export <entry> [entries...]` | Export a focused excerpt with historical/current readings and optional Mermaid. See [graph export](graph-export.md). |
 | `kpopper check` | Report structural problems, declared gaps, movement and fired conditions. |
 
 The legacy opener uses line and character budgets; its output reports omitted attention

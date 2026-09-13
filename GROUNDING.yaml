@@ -463,6 +463,29 @@ sources:
          executive-function wording and elusive-smile effect are directions to assess, not
          established product or perceptual capabilities."
     read: "2026-09-13"
+  s.2026_09_13_reasoning_overview:
+    asked: "a more deterministic reasoning"
+    name: "Accepted ink knowledge map and the comparative promise of more deterministic reasoning"
+    of: "The maintainer approved the new ink knowledge-source illustration and asked for a
+         words-to-YAML-to-calculated-check visual near the opening. They clarified that more
+         qualifies the promise: selected reasoning steps become deterministic, not all
+         natural-language interpretation. The illustration fixture passed at 30/30, then failed
+         identically on three checks after recorded retention became 7. In the follow-up, the
+         maintainer requested actual-looking session dialogue on one side, YAML on the deterministic
+         side, and the calculated result directly beneath it. They questioned Condition holds;
+         the revised illustration names Download promise fails instead. The selected closing line
+         is Conversations move on. The reasoning stays checkable. Further discussion clarified
+         that the email must actually be created with the promised window, the later policy change
+         must update the record, and recording entails agent work rather than zero overhead or an
+         entirely background process. The revised illustration uses downloads.availability with
+         Retention supports the promised window, a draft policy and explicit record-action labels."
+    read: "2026-09-13"
+  s.2026_09_13_remove_duplicate_overview:
+    name: "Remove the introductory caption and linked guide; retain the illustration"
+    asked: "Remove the introductory caption and linked illustration-production guide. Keep the
+            opening illustration and its desktop and phone variants."
+    of: "Maintainer direction, paraphrased"
+    read: "2026-09-13"
   s.2026_09_13_self_aware_tagline:
     asked: "Your project, self-aware.\nאם זה לא הבטחה מוזרה שתגרום לאנשים להסתכל על הפרויקט מוזר, אז
             זה מצויין"
@@ -622,6 +645,10 @@ sources:
     of: "headless Chrome, both pages, 2026-09-02; the hand-written template carries 147 live
          references and wraps 4 passages as judgments"
     read: "2026-09-02"
+  doc.graph_export:
+    name: "Focused graph export contract"
+    file: "docs/graph-export.md"
+    read: "2026-09-14"
   doc.hub_seam:
     name: "The lab's own decision on why its page stays hand-written - the argument is manual,
            the agenda is derived, and a block becomes a query once its content is anchored"
@@ -1300,13 +1327,14 @@ known:
     of: "2026-09-10"
 
   m.skill_bytes_largest:
-    v: 20003
+    v: 20270
+    # set 2026-09-14: Measured by skill_bytes_largest after the recording guidance update
     # set 2026-09-12: measured by skill_bytes_largest after the skills learned the entry file and the directory beside it
     # set 2026-09-11: measured by skill_bytes_largest at a51bc75 with the working tree changed
     name: "The largest skill body a session can be handed now, bytes"
     from: "skills/*/SKILL.md"
     at: "bytes of the largest body"
-    of: "2026-09-12"
+    of: "2026-09-14"
     measure: skill_bytes_largest
 
   m.unasked.question_filler:
@@ -1948,6 +1976,26 @@ judgments:
                               the page's connective text lives in the brief; both resolve references
                               at build and both carry seen"
       p.entry_names: 2
+  d.export_preserves_recorded_context:
+    name: "Focused excerpts preserve historical and current context"
+    rests_on: [doc.graph_export, goal.portable, d.moved_is_a_flag]
+    verdict: "Provide bounded Markdown excerpts by default, with optional Mermaid and original-field
+              details. Label historical and current readings separately, distinguish omitted bodies
+              from missing records, and retain simultaneous condition results and reader flags
+              without changing the record format or evaluation policy."
+    because: "A focused excerpt can omit the current bodies while still carrying historical readings
+              and a condition result computed from the full record. Explicit labels and selection
+              limits preserve those distinctions; readable text also remains useful when diagrams are
+              unavailable."
+    reopened_by: "Readers of supported excerpts confuse historical and current values, treat omitted
+                  bodies as missing records or changed premises as fired conditions, lose a
+                  simultaneous finding, or require unnecessary stops and extensive rereading to
+                  complete ordinary tasks."
+    seen:
+      doc.graph_export: "read 2026-09-14"
+      goal.portable: "usable by any session, in any project, with no author present"
+      d.moved_is_a_flag: "a dependency that moved since the snapshot flags the judgment for a
+                          person; only a predicate that holds fails the build"
   d.first_add_is_the_birth:
     verdict: "where no record resolves, the first add creates GROUNDING.yaml at the workspace root
               with that entry, under one line that says what keeps it; no other command creates one,
@@ -2248,18 +2296,21 @@ judgments:
                   a verified supported route."
     seen: {s.background_ingestion: "read 2026-09-09"}
   d.knowledge_map_keeps_its_detail:
-    rests_on: [s.2026_09_13_readme_direction]
+    rests_on: [s.2026_09_13_readme_direction, s.2026_09_13_reasoning_overview]
     verdict: "Keep the detailed, playful knowledge-source illustration: many existing tools and
-              materials on the left, an ordered record of selected reasoning on the right."
-    because: "The maintainer explicitly chose this composition after seeing the simpler alternative.
-              Its density shows the breadth of sources and the contrast with the reasoning layer. The
-              brand guide therefore allows expressive conceptual illustrations alongside restrained
-              process diagrams. This is a chosen treatment whose communication still needs reader
-              evidence, not a demonstrated conversion improvement."
+              materials on the left, an ordered record of selected reasoning on the right. Use the
+              approved black-ink and electric-blue treatment with the series typography."
+    because: "The maintainer retained the dense-to-ordered composition and approved its new ink
+              treatment. The five source categories and varied objects preserve breadth and
+              playfulness, while the typography and palette join the current series. This is a chosen
+              presentation whose communication still needs reader evidence, not a demonstrated
+              conversion improvement."
     reopened_by: "An uncoached reader at phone width cannot identify the crowded-to-ordered
                   contrast, or reads the illustration as a promise to migrate or automatically
                   organize every source despite its caption and surrounding explanation."
-    seen: {s.2026_09_13_readme_direction: "read 2026-09-13"}
+    seen:
+      s.2026_09_13_readme_direction: "read 2026-09-13"
+      s.2026_09_13_reasoning_overview: "read 2026-09-13"
   d.local_claims_want_a_run:
     rests_on: [s.2026_09_04_calibration, prior.local_needs_a_run, m.claims.general_held,
                m.claims.local_checked_held, m.claims.local_assumed_held, m.reach.general_held,
@@ -2730,27 +2781,33 @@ judgments:
                                      explaining every part of the visual joke."
       s.2026_09_13_more_self_aware_tagline: "read 2026-09-13"
   d.readme_opens_with_what_it_does:
-    rests_on: [s.2026_09_12_first_readings, s.2026_09_13_readme_direction, d.named_for_popper, s.2026_09_13_readme_depth]
-    verdict: "Keep the hero, explain the practical benefit immediately below it, then show concrete
-              code and non-code examples with visible recorded premises and a direct route to
-              installation. Introduce the third-brain metaphor later."
+    rests_on: [s.2026_09_12_first_readings, s.2026_09_13_readme_direction, d.named_for_popper, s.2026_09_13_readme_depth, s.2026_09_13_reasoning_overview, s.2026_09_13_remove_duplicate_overview]
+    verdict: "Keep the hero, practical benefit, direct installation link and opening reasoning
+              illustration, followed by the concrete code and non-code examples with visible
+              recorded premises and phone layouts. Omit the introductory caption and link to the
+              illustration-production guide. Introduce the third-brain metaphor later."
     because: "The reported reader connected with the merge scenario while the opening metaphor
               required explanation. Concrete code cases give developers a familiar entrance, and the
               following Cowork case makes the wider scope visible. Visible record excerpts expose the
               declared premises; linked guides carry complete records and executable checks.
-              Descriptive headings and navigation let readers choose their depth without needing the
-              philosophical references first."
+              Descriptive headings and navigation let readers choose their depth without needing
+              the philosophical references first. The opening illustration shows the mechanism;
+              each full example explains its practical value. Product links lead to the examples
+              and usage rather than to instructions for constructing the illustration."
     reopened_by: "A new reader given the README without coaching cannot explain what it preserves or
                   what triggers review, takes a green check as proof of arbitrary code correctness,
                   or concludes from the opening that non-code projects are unsupported. Record the
                   misunderstanding and where it arose; stopping after finding an answer is not
-                  failure."
+                  failure. Revisit if readers cannot distinguish interpretation from mechanical
+                  comparison or cannot find the examples and installation."
     seen:
       s.2026_09_12_first_readings: "read 2026-09-13"
       s.2026_09_13_readme_direction: "read 2026-09-13"
       d.named_for_popper: "the project keeps the name kpopper; discovery runs on direct links and
                            qualified search, never on the bare term"
       s.2026_09_13_readme_depth: "read 2026-09-13"
+      s.2026_09_13_reasoning_overview: "read 2026-09-13"
+      s.2026_09_13_remove_duplicate_overview: "read 2026-09-13"
   d.readme_story_series:
     rests_on: [s.2026_09_13_story_approval, d.readme_opens_with_what_it_does, d.readme_visual_identity, s.2026_09_13_worker_and_research]
     verdict: "Open with the approved illustrated series: shared cache and private results, download
@@ -2886,6 +2943,32 @@ judgments:
                                  never carries a command, and no command that reads the record runs
                                  one"
       m.blocked_on_reopeners: 53
+  d.record_scope_preserves_learning:
+    name: "Retain useful knowledge within the actual write scope"
+    rests_on: [d.record_is_code, d.gate_asks_once_after_work]
+    verdict: "Keep schema restrictions separate from record-write prohibitions. Before
+              implementation or handoff, check internally for useful unrecorded knowledge and retain
+              it only within existing write authorization."
+    because: "Knowledge about the work belongs with the work, while the reminder must leave room to
+              finish without a write. A schema-preserving update can retain a new finding; a
+              restriction inferred in a draft plan must not become a user prohibition. Existing
+              entries, explicit read-only instructions and record-write bans still govern the
+              action."
+    reopened_by: "Sessions using this guidance still omit useful authorized findings, violate
+                  explicit write prohibitions, create filler or duplicate entries, or add routine
+                  approval requests at implementation or handoff."
+    seen:
+      d.record_is_code: "the record of what is known about the code lives in the tree - committed
+                         with the work it describes, reviewed in the same pull request, checked by
+                         the same CI - and a hypothesis travels with its branch; an out-of-tree
+                         record holds only what the tree cannot hold, the world outside the code; a
+                         user-level directory is at most an index of records, never content; a
+                         session named as a source is provenance, not process"
+      d.gate_asks_once_after_work: "a session that changed files of the tree, or ran eight prompts,
+                                    with the record untouched is asked once whether there was nothing
+                                    to keep - as a line on the prompt, and as one stop on the turn
+                                    after a line went unanswered; the gate still yields after one
+                                    bounce"
   d.refutations_keep_judgment_ids:
     from: s.2026_09_04_prior_reversal_share
     rests_on: [d.prior_confidence_survives_refutation, d.refuted_hypothesis_leaves_one_finding]
