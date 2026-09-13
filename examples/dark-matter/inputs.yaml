@@ -1,0 +1,69 @@
+sources:
+  paper.rotation:
+    name: Rubin, Ford and Thonnard (1980), rotation of 21 Sc galaxies
+    url: https://articles.adsabs.harvard.edu/pdf/1980ApJ...238..471R
+    read: '2026-09-13'
+  paper.lensing:
+    name: Clowe et al. (2006), Bullet Cluster lensing
+    url: https://arxiv.org/abs/astro-ph/0608407v1
+    read: '2026-09-13'
+  paper.cmb:
+    name: Planck 2018 results VI, cosmological parameters (2020; corrected 2021)
+    url: https://arxiv.org/abs/1807.06209v4
+    read: '2026-09-13'
+  research.protocol:
+    name: Scope of this three-paper synthesis example
+    file: README.md
+    read: '2026-09-13'
+
+# Each paper-reading task owns one finding. These are prepared paraphrases,
+# replayed by the example; running the script does not call a language model.
+findings:
+  rotation.finding:
+    name: Outer rotation in the sampled Sc galaxies
+    v: The sampled galaxies have non-falling outer rotation curves; most still rise at the last measured point.
+    from: paper.rotation
+    at: p. 471, abstract
+    fidelity: paraphrase
+  lensing.finding:
+    name: Lensing mass and hot gas in the Bullet Cluster
+    v: The reconstructed lensing mass peaks are displaced from the dominant hot gas and lie near the galaxies.
+    from: paper.lensing
+    at: Abstract, lensing reconstruction and spatial offset
+    fidelity: paraphrase
+  cmb.finding:
+    name: Planck's result within its baseline cosmology
+    v: Planck reports a good fit to CMB observations with base Lambda-CDM, including a cold dark matter component.
+    from: paper.cmb
+    at: Abstract, baseline model and combined parameter analysis
+    fidelity: paraphrase
+
+frame:
+  research.framework:
+    name: Adopted frame for the synthesis
+    v: Standard gravitational mass inference; base Lambda-CDM for the CMB result.
+    from: research.protocol
+    at: Synthesis scope
+    fidelity: paraphrase
+
+judgments:
+  synthesis.dark_matter:
+    name: A dark-matter account across scales
+    rests_on: [rotation.finding, lensing.finding, cmb.finding, research.framework]
+    verdict: Under the stated models, these findings support a dark-matter account across scales.
+    because: >-
+      Rotation, mass location and CMB structure constrain different parts of the
+      account. Their connection is an interpretation, not a vote count or a
+      deduction performed by the checker. This selected set does not establish
+      a particle identity or exhaust alternative explanations.
+    reopened_by: >-
+      A finding or its model assumptions are revised, or a worked alternative
+      accounts for these observations together. Reassess the synthesis and its scope.
+
+open:
+  research.identity:
+    name: What is the dark component?
+    question: Which physical candidates, if any, survive evidence beyond this selected set?
+  research.alternatives:
+    name: Compare explanations on the same evidence
+    question: Which alternative models address all three observations, and what extra assumptions do they need?

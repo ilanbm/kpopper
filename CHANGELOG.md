@@ -1,5 +1,23 @@
 # Changelog
 
+## 1.5.1 — 2026-09-13
+
+- Refresh README introduction and visual identity (#69) — patch
+- Fix concurrent record creation and layout migration regressions (#70) — patch
+- Record the entry-file naming measurement on the Codex host (#66) — patch
+
+Decisions recorded: d.detached_worker_test_cleanup, d.knowledge_map_keeps_its_detail, d.readme_layered_explanation, d.readme_main_tagline, d.readme_opens_with_what_it_does, d.readme_story_series, d.readme_visual_identity
+
+## 1.5.0 — 2026-09-11
+
+- Say when a record was moved by half, and name the directory a plain listing skips (#65) — minor
+- Name the record's entry file GROUNDING.yaml and keep its files in .kpopper beside it (#64) — minor
+- Record the untouched-record question's measurement on the Codex host (#63) — patch
+- Ask for a word as a prefix, and show a legend for the letters a record keeps (#62) — minor
+- Read a record file once per change, and write where its subject is (#59) — minor
+
+Decisions recorded: d.a_half_move_is_said, d.a_write_joins_its_own_shard, d.brand_on_the_directory, d.entry_file_is_grounding, d.home_beside_the_entry, d.in_the_tree_only_what_is_reviewed, d.parse_kept_by_file_identity, d.prefix_is_a_word, d.unasked_recording_is_the_opener
+
 ## 1.4.0 — 2026-09-10
 
 - Split the method into skills per occasion and pass every session through the record (#56) — minor

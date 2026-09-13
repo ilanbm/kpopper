@@ -1,0 +1,25 @@
+meta:
+  updated: 2026-09-13
+  scope: Fictional search service. Public-only search before private projects are
+    enabled.
+sources:
+  s.search:
+    name: Search visibility switch
+    file: search.py
+    read: '2025-01-01'
+known:
+  search.results_public:
+    v: true
+    from: s.search
+    at: INCLUDE_PRIVATE_PROJECTS is false
+    of: '2025-01-01'
+    measure: search_results_public
+judgments:
+  search.shared_cache:
+    rests_on: [search.results_public]
+    verdict: "Search responses can share a cache keyed only by query because all results are
+              public."
+    because: "In this example public results are identical for everyone making the same query.
+              Private results require reconsidering the cache key and access checks."
+    wrong_if: "search.results_public == false"
+    seen: {search.results_public: true}
