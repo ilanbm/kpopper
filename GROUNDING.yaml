@@ -455,6 +455,15 @@ sources:
     of: "The maintainer selected cache plus download-link validity, followed by Cowork, and approved
          the resulting ink-poster story previews."
     read: "2026-09-13"
+  s.2026_09_13_worker_and_research:
+    asked: "the guy is not a background worker... so if you want to leave one of the, it should be
+            only in the main session."
+    name: "Maintainer correction of worker imagery and choice of a dark-matter research example"
+    of: "README refinement, paraphrased: remove the worker's human avatar, use a short title about
+         background saving and selective return, and add an academic example with multiple agents
+         on one graph. The maintainer selected dark matter in the follow-up choice. These are design
+         requests, not evidence of improved adoption or research quality."
+    read: "2026-09-13"
   s.background_ingestion:
     name: "Background capture and selective delivery contract"
     file: "skills/kpopper/INGESTION.md"
@@ -2699,22 +2708,29 @@ judgments:
                            qualified search, never on the bare term"
       s.2026_09_13_readme_depth: "read 2026-09-13"
   d.readme_story_series:
-    rests_on: [s.2026_09_13_story_approval, d.readme_opens_with_what_it_does, d.readme_visual_identity]
+    rests_on: [s.2026_09_13_story_approval, d.readme_opens_with_what_it_does, d.readme_visual_identity, s.2026_09_13_worker_and_research]
     verdict: "Open with the approved illustrated series: shared cache and private results, download
-              promise versus retention, then the Cowork workshop. Provide desktop and phone layouts,
-              text explanations and runnable examples."
+              promise versus retention, the Cowork workshop, then a dark-matter research synthesis.
+              Provide desktop and phone layouts, visible record excerpts, source links and runnable
+              examples."
     because: "Two code cases expose different dependencies: a visibility assumption and a promise
               across policy and email. The workshop shows the same continuity problem when a changed
               premise requires judgment rather than an executable failure. The two-input composition
               and larger consequence scene preserve the narrative energy the maintainer preferred.
               Published examples make the green branch tests, clean merges and failed recorded
               conditions inspectable, and show that ordinary integration tests can also detect the
-              problems."
+              problems. The research case adds constructive synthesis across papers: distinct sourced
+              findings feed one judgment with its adopted framework and open questions. It uses
+              selected real abstracts with locators and a runnable replay of three concurrent CLI
+              writers; it does not claim live independent agent research or infer scientific truth
+              from agreement."
     reopened_by: "An uncoached reader cannot identify the reason invalidated in either code story,
                   treats the Cowork review notice as proof the plan is wrong, believes the tool
                   discovers unrecorded assumptions automatically, or cannot read the essential
                   content on a phone. Revisit the length if readers who want to try the tool cannot
-                  find installation."
+                  find installation. Revisit the research story if readers take schematic figures for
+                  measured data, the synthesis for a proof, or the prepared replay for a live model
+                  evaluation."
     seen:
       s.2026_09_13_story_approval: "read 2026-09-13"
       d.readme_opens_with_what_it_does: "Keep the hero, explain the practical benefit immediately
@@ -2727,15 +2743,19 @@ judgments:
                                  on the right. Keep the separate italic attribution without a final
                                  period, the secondary Korean bubble and the white geometric k icon
                                  on electric blue. Process overviews use ink illustrations and phone
-                                 layouts with separate editable schematic references."
+                                 layouts with separate editable schematic references. In the
+                                 conversation overview, show a person only in the main-session
+                                 scene."
+      s.2026_09_13_worker_and_research: "read 2026-09-13"
   d.readme_visual_identity:
-    rests_on: [s.2026_09_13_readme_direction, s.2026_09_12_first_readings, s.2026_09_13_large_hero, s.gaze_direction_study, s.2026_09_13_reasoning_emphasis, s.2026_09_13_process_illustrations]
+    rests_on: [s.2026_09_13_readme_direction, s.2026_09_12_first_readings, s.2026_09_13_large_hero, s.gaze_direction_study, s.2026_09_13_reasoning_emphasis, s.2026_09_13_process_illustrations, s.2026_09_13_worker_and_research]
     verdict: "Use the large ink portrait of Karl Popper on the left, with a restrained, faintly
               amused expression and a natural inward gaze toward the lowercase kpopper wordmark and
               one-line lemma quotation on the right. Keep the separate italic attribution without a
               final period, the secondary Korean bubble and the white geometric k icon on electric
               blue. Process overviews use ink illustrations and phone layouts with separate editable
-              schematic references."
+              schematic references. In the conversation overview, show a person only in the
+              main-session scene."
     because: "The maintainer selected the corrected large portrait after comparing it with the
               typographic hero. It gives the philosopher/pop-star joke a recognizable face alongside
               the illustrated stories. Inward gaze is a composition choice informed by banner
@@ -2747,7 +2767,10 @@ judgments:
               illustration. The time and conversation overviews share the story series's visual
               language while preserving the original concepts, explicit parallel worker, configured
               future work and the agent's separate act of recording outcomes. The SVG references
-              describe the logic; exporting them is not how the illustrated PNGs are produced."
+              describe the logic; exporting them is not how the illustrated PNGs are produced. The
+              maintainer found the worker avatar misleading. The software process now has no person,
+              and the direct title Save in the background. Return when needed. replaces the
+              parallel-tracks slogan and repeated footer."
     reopened_by: "Readers at ordinary phone width cannot read the primary slogan or attribution,
                   mistake the fictional attribution for a historical quotation, or misunderstand
                   process boundaries in the diagrams. Revisit the compact icon if users confuse it
@@ -2759,6 +2782,7 @@ judgments:
       s.gaze_direction_study: "read 2026-09-13"
       s.2026_09_13_reasoning_emphasis: "read 2026-09-13"
       s.2026_09_13_process_illustrations: "read 2026-09-13"
+      s.2026_09_13_worker_and_research: "read 2026-09-13"
   d.record_is_code:
     rests_on: [s.2026_09_01_consolidation, d.register_out_of_tree, d.base_shared_forks_on_contradiction, p.hypothesis_homes]
     verdict: "the record of what is known about the code lives in the tree - committed with the work

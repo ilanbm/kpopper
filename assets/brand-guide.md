@@ -67,11 +67,15 @@ The identity includes playfulness as well as precise explanations. Choose the
 density and visual treatment for the image's purpose.
 
 - The [opening story series](stories/README.md) uses strong black and blue headlines,
-  two source or decision panels, and a larger ink scene showing what their combination
-  puts at risk. Keep the reason visible, alongside the change it depends on.
+  independent source or decision panels, and a larger ink scene showing their
+  consequence or synthesis. Keep the reason visible, alongside its evidence.
 - The first two stories show code changes; the third shows work in Claude Cowork.
   Red marks a failed declared condition, while amber marks a changed premise needing
   judgment. The illustration must preserve this distinction.
+- The research story uses three paper panels that meet in one shared argument.
+  Keep scientific findings, the synthesis agent's judgment, model assumptions and
+  open questions distinct. Scientific drawings are identified as schematics; a
+  connected graph is not a proof or a confidence score.
 - Story illustrations may carry people, expressive objects and handwritten notes.
   Phone layouts stack the panels and collect their connections without making
   independent inputs look sequential. Keep the essential explanation in text as well.
@@ -80,6 +84,10 @@ density and visual treatment for the image's purpose.
   recording, a separate parallel worker, and selective return of important findings.
   Choose the layout for the relationship: time panels stack on a phone; parallel
   conversation tracks remain visibly separate.
+- The conversation overview uses the direct headline "Save in the background.
+  Return when needed." Human illustrations belong only in the main-session scene;
+  a software worker must not look like a second person. Remove redundant slogans
+  when the title already states the benefit.
 - The knowledge-source illustration uses a deliberately busy left side to show
   the breadth of existing tools and materials, contrasted with an ordered reasoning
   layer on the right. Its recognizable icons and many small details carry that idea.

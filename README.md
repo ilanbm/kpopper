@@ -27,6 +27,7 @@ reach through the record and surfaces what needs another look.
 - [Example 1: Private data exposure (assumption checks)](#example-1-private-data-exposure-assumption-checks)
 - [Example 2: Premature file deletion (consistency)](#example-2-premature-file-deletion-consistency)
 - [Example 3: Outdated planning assumptions (freshness)](#example-3-outdated-planning-assumptions-freshness)
+- [Example 4: Dark matter across studies (evidence synthesis)](#example-4-dark-matter-across-studies-evidence-synthesis)
 - [Installation and first use](#get-started)
 - [What you can do with kpopper](#what-you-can-do-with-kpopper)
 - [One project, across your existing tools](#one-project-across-your-existing-tools)
@@ -193,11 +194,55 @@ The current value is `remote`; the decision was reviewed against `onsite`. That 
 `MOVED` notice. The prose in `reopened_by` tells the agent what deserves attention;
 it is not an executable predicate. [Read the complete after record](examples/cowork-workshop/after/GROUNDING.yaml).
 
-The same record connects decisions to evidence in research, financial planning and
-other ongoing projects. **Keep your existing documents, notes and task tools.**
+**Keep your existing documents, notes and task tools.**
 The record links back to relevant evidence; there is no need to migrate your knowledge system.
 For another example that needs judgment, explore
 [a replacement offer with an uncertain deadline](examples/offer-review/README.md).
+
+## Example 4: Dark matter across studies (evidence synthesis)
+
+Give three research agents different papers and the same knowledge record. One
+reads [galaxy rotation](https://articles.adsabs.harvard.edu/pdf/1980ApJ...238..471R),
+another [Bullet Cluster lensing](https://arxiv.org/abs/astro-ph/0608407v1), and a third
+[Planck's CMB results](https://arxiv.org/abs/1807.06209v4). Each adds sourced findings.
+A synthesis agent can follow all three contributions and build a connected argument,
+with its assumptions and open questions attached.
+
+<p align="center">
+  <a href="assets/stories/dark-matter.png">
+    <picture>
+      <source media="(max-width: 600px)" srcset="assets/stories/dark-matter-mobile.png">
+      <img src="assets/stories/dark-matter.png" width="760" alt="Three research agents contribute findings from galaxy rotation, gravitational lensing and the cosmic microwave background to one shared record. A synthesis agent connects the evidence under stated models. The graph retains the adopted assumptions and open questions about physical identity and alternative explanations; new evidence can prompt review.">
+    </picture>
+  </a>
+</p>
+
+**The next session inherits the argument, including how it could fail.** This
+three-paper example connects different observations into a dark-matter account
+under stated models. It keeps that synthesis separate from what each paper reports.
+The illustration is schematic; the [guide](examples/dark-matter/README.md) links
+the readings to their exact source locations and explains their limits.
+
+The synthesis declares its dependencies and a condition for further judgment:
+
+```yaml
+synthesis.dark_matter:
+  rests_on: [rotation.finding, lensing.finding, cmb.finding, research.framework]
+  verdict: Under the stated models, these findings support a dark-matter account across scales.
+  reopened_by: >-
+    A finding or its model assumptions are revised, or a worked alternative
+    accounts for these observations together. Reassess the synthesis and its scope.
+```
+
+The [full GROUNDING.yaml](examples/dark-matter/GROUNDING.yaml) includes the sources,
+readings, open questions and tool-filled `seen`. Agents make the scientific judgment;
+kpopper preserves and traces the declared reasoning. It does not turn agreement
+between agents into proof.
+
+[Run the shared-record example](examples/dark-matter/README.md#run-the-shared-record-example):
+three concurrent CLI writers replay prepared readings, then a proposed change in
+the review framework flags the synthesis. It uses real papers and real record
+operations, without calling models or claiming a live research evaluation.
 
 ## Get started
 
@@ -386,7 +431,7 @@ important unresolved findings are available for delivery back to the conversatio
   <a href="assets/diagrams/conversation-flow.png">
     <picture>
       <source media="(max-width: 600px)" srcset="assets/diagrams/conversation-flow-mobile.png">
-      <img src="assets/diagrams/conversation-flow.png" width="760" alt="One conversation, two parallel tracks. The main agent captures an explicit venue-cancellation report and continues with the set list. A worker in a separate process saves the dated source, records the change from confirmed to cancelled and checks the venue-to-announcement dependency. The announcement needs review; important findings return through the configured delivery route while routine updates stay quiet.">
+      <img src="assets/diagrams/conversation-flow.png" width="760" alt="Save in the background. Return when needed. The main agent captures an explicit venue-cancellation report and continues with the set list. A software worker in a separate process saves the dated source, records the change from confirmed to cancelled and checks the venue-to-announcement dependency. The announcement needs review; important findings return through the configured delivery route while routine updates stay quiet.">
     </picture>
   </a>
 </p>

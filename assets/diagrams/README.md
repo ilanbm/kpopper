@@ -30,6 +30,9 @@ The separate worker saves the source, records the specified scalar change and ch
 its declared dependencies. An important finding can return through the configured host
 route; routine updates stay quiet. The compact SVG groups source retention and the
 update in one box, while the illustration shows them as separate numbered steps.
+The illustration's headline is **Save in the background. Return when needed.**
+A person may appear in the main-session scene; the software worker has no human
+avatar, so the diagram does not imply a second person doing the background work.
 
 These are conceptual illustrations, not product screenshots or evidence of automatic
 interpretation, a delivery guarantee or unconfigured background monitoring. See

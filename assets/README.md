@@ -26,9 +26,11 @@ has been changed by adding these files.
 ## Illustrated stories
 
 The opening series lives in `stories/`: two merge cases followed by a cooking-workshop
-case in Claude Cowork. Each has a desktop and phone layout. The illustrations use bold
+case in Claude Cowork and a research synthesis from three dark-matter papers.
+Each has a desktop and phone layout. The illustrations use bold
 typography and expressive ink scenes; the accompanying examples distinguish a failed
-condition from a changed premise that needs judgment. See [the story index](stories/README.md).
+condition from a changed premise that needs judgment, and paper findings from an
+agent's synthesis. See [the story index](stories/README.md).
 
 ## Process diagrams
 
