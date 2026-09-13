@@ -227,6 +227,12 @@ branch content or silently changes a shared observation's scope.
 Shared facts participate in watch's read-only compatibility view. Existing branch-only
 readers/CI are unchanged; keep committed evidence self-contained. Shared destinations with
 pointers, multiple files or hypotheses remain readable, while automatic writes require review.
+For an ID present on both sides, comparison checks the complete typed entry, its collection
+and provenance against main, the worktree and its hypotheses. A metadata-only difference or
+an unchanged inherited conflict is reported; identical copies are accepted. This check
+detects divergence but does not copy or synchronize entries between the records.
+Branch-only entries are allowed. Their absence from the shared record is not a conflict and
+does not call for copying them into it; the complete graphs need not be identical.
 
 Claude async hooks can wake their session. Ordinary Codex hooks deliver on the next model
 opportunity; `watch scan --notify-task HOST_TASK_ID` returns an optional native-agent delivery

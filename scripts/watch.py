@@ -175,10 +175,19 @@ def compare(snapshot):
     # Shared facts enter a view, never overwrite a same-ID branch reading implicitly.
     shared = snapshot.get('shared')
     if shared:
+        readings = [('main', main), ('worktree', local)] + [
+            ('worktree hypothesis ' + h['name'], _entries(h['doc']))
+            for h in snapshot['working']['hypotheses']]
         for key, (col, body) in _entries(shared['doc']).items():
-            if key in main and not same_claim(main[key][1], body):
-                finding('collision', key, key + ': shared and main readings disagree; reconcile their scopes')
-            elif key not in main:
+            # Shared identity includes the complete typed entry and its provenance,
+            # not just its scalar claim. Check inherited local entries too: the
+            # shared record may have advanced while this branch stayed unchanged.
+            expected = digest((col, body))
+            for label, entries in readings:
+                if key in entries and digest(entries[key]) != expected:
+                    finding('collision', key, key + ': shared and ' + label +
+                            ' entries differ; reconcile their value, provenance and scope')
+            if key not in main:
                 base.setdefault(col, {})[key] = copy.deepcopy(body)
         fail_before, _ = C._check_of(_doc(snapshot['main']['doc']))
         fail_shared, _ = C._check_of(base)
@@ -200,8 +209,6 @@ def compare(snapshot):
                     entries.pop(key, None)
         else:
             col, body = local[key]
-            if shared and key in _entries(shared['doc']) and key not in main:
-                finding('collision', key, key + ': the worktree uses an ID owned by the shared record')
             delta.setdefault(col, {})[key] = copy.deepcopy(body)
     if snapshot['working']['doc'].get('schema') != snapshot['ancestor']['doc'].get('schema'):
         finding('uncheckable', 'schema', 'The worktree changed the record schema; automatic compatibility is incomplete')

@@ -82,12 +82,18 @@ locking, as ingestion and followups do; Windows support is not claimed.
 
 `kpopper watch shared` reads the canonical facts with their sources and retained report states
 from any worktree, including main. The session opener names this destination without preloading
-its claims, so a later session can discover it. Watch's compatibility view includes them and flags ID
-collisions; it never silently replaces a branch fact with a shared fact. Existing branch-only
+its claims, so a later session can discover it. Watch's compatibility view compares complete typed
+entries, collections and provenance with main, the worktree and all its hypotheses, including
+inherited entries. Identical copies are accepted; differences are reported with the conflicting
+location. Comparison never copies entries or silently replaces a branch fact. Existing branch-only
 readers and CI are not reconfigured to consume private state. Keep committed evidence
 self-contained; do not introduce unresolved shared IDs into a tracked record expecting CI
 to have access to your private facts. Reference the shared source or deliberately wire an
 existing multi-file reader when that is the project's established arrangement.
+
+Only shared IDs must agree with their copies. A branch may contain additional facts, sources
+and judgments: their absence from the shared record is expected, not a conflict or an omission
+to reconcile. Do not recommend publishing those entries merely to make entire graphs equal.
 
 Use `watch resolve EVENT_ID --evidence TEXT` after actually reconciling a retained report;
 this records the resolution and stops its reminder without applying its value or reviewing
