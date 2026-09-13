@@ -1,12 +1,54 @@
 # Image sources
 
-## Work across time
+## Brand hero
 
-`work-across-time.png` is a conceptual illustration for the README's Past, Present and
-Future overview. It shows sources and earlier reasoning, current dependency checks, and
-deferred work. The return arrow describes the agent's separate evidence-recording step;
-it does not represent automatic rewriting of the graph. The diagram is not a product
-screenshot or a release roadmap, and its document icons contain no research citations.
+`kpopper-hero.png` is the current README hero: a large ink portrait on the left,
+a prominent wordmark and one-line quotation on the right, and a separate italic
+attribution beneath the quotation. Popper looks inward toward the wording with a
+restrained, faintly amused expression; a small Korean speech bubble accompanies the portrait.
+The Winamp-inspired slogan is presented as a
+fictional humorous quotation, with logic symbols around *lemma*. It is not a
+historical quotation or photograph.
+
+The facial reference is the historical portrait reproduced in
+[LSE's account of Popper and its philosophy department](https://blogs.lse.ac.uk/lsehistory/2019/03/20/conjectures-and-refutations-karl-popper-and-the-growth-of-lse-philosophy/).
+The performer pose, clothing and speech bubble are fictional illustration.
+
+See [the visual identity](brand-guide.md).
+
+## Compact icon
+
+`kpopper-icon.svg` is the selected white geometric k on electric blue, supplied
+with a 512-pixel `kpopper-icon.png` render. The letterform is made from paths and
+does not depend on an installed font. No external organization avatar or favicon
+has been changed by adding these files.
+
+## Illustrated stories
+
+The opening series lives in `stories/`: two merge cases followed by a cooking-workshop
+case in Claude Cowork and a research synthesis from three dark-matter papers.
+Each has a desktop and phone layout. The illustrations use bold
+typography and expressive ink scenes; the accompanying examples distinguish a failed
+condition from a changed premise that needs judgment, and paper findings from an
+agent's synthesis. See [the story index](stories/README.md).
+
+## Process diagrams
+
+The conversation and time overviews live in `diagrams/`, with illustrated desktop
+and phone PNGs in the story series' ink style. Separate editable SVG schematics
+preserve compact maps of the process; they are not the illustration sources.
+See [the overview index and maintenance notes](diagrams/README.md).
+
+## Knowledge-source illustration
+
+`knowledge-sources.png` restores the detailed, playful source-map treatment: crowded
+groups of familiar tools and materials on the left, and an ordered reasoning layer
+on the right. It retains the earlier illustration's composition and updates the
+record filename to `GROUNDING.yaml`.
+
+The agent selects relevant evidence; the source files and tools remain in place.
+This is a conceptual illustration, not a screenshot or a claim to automatically
+organize every source.
 
 ## Product screenshots
 

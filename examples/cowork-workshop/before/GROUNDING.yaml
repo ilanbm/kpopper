@@ -1,0 +1,23 @@
+meta:
+  updated: 2026-09-13
+  scope: Fictional cooking-workshop plan before the client changes the format.
+sources:
+  s.original_brief:
+    name: Original workshop brief
+    file: ../sources/original-brief.md
+    read: '2025-01-01'
+known:
+  workshop.format:
+    v: onsite
+    from: s.original_brief
+    at: Workshop location and supplied kitchen
+    of: '2025-01-01'
+judgments:
+  workshop.agenda:
+    rests_on: [workshop.format]
+    verdict: "Use the shared-kitchen agenda and provide ingredients at the venue."
+    because: "The onsite brief provides one kitchen, equipment and ingredients for participants to
+              use together."
+    reopened_by: "The workshop format or access to the kitchen changes; review the activities,
+                  equipment and ingredients participants need."
+    seen: {workshop.format: onsite}

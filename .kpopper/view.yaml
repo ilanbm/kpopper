@@ -76,7 +76,12 @@ tabs:
              s.2026_09_04_components, s.background_ingestion, s.2026_09_10_standalone_html,
              s.2026_09_10_skills_split, s.2026_09_11_read_once, s.2026_09_11_prefix_words,
              s.2026_09_11_gate_question, s.2026_09_12_layout,
-             s.2026_09_12_half_move]
+             s.2026_09_12_half_move, s.2026_09_12_first_readings,
+             s.2026_09_13_readme_direction, s.2026_09_13_story_approval,
+             s.2026_09_13_readme_depth, s.2026_09_13_large_hero,
+             s.2026_09_13_reasoning_emphasis, s.2026_09_13_self_aware_tagline,
+             s.2026_09_13_more_self_aware_tagline, s.2026_09_13_process_illustrations,
+             s.2026_09_13_worker_and_research]
     sections:
       - title: How to read what follows
         why: a wall of cards is not an argument until you know what separates them
