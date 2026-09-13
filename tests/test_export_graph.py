@@ -15,17 +15,17 @@ sys.path.insert(0, str(ROOT / 'scripts'))
 def example():
     return {
         'schema': {'deps': 'rests_on', 'snapshot': 'seen', 'predicate': 'wrong_if'},
-        'sources': {'s.note': {'name': 'מקור "ראשי" <script> & #quot; [בדיקה] `טקסט`',
+        'sources': {'s.note': {'name': 'Source "primary" <script> & #quot; [check] `text`',
                                'file': 'notes.md'}},
-        'known': {'m.cost': {'v': 12, 'from': 's.note', 'name': 'עלות'},
+        'known': {'m.cost': {'v': 12, 'from': 's.note', 'name': 'Cost'},
                   'm.other': {'v': 3, 'from': 'a prose locator'},
                   'm.total': {'rule': 'm.cost + m.other'}},
         'judgments': {
-            'd.choice': {'verdict': 'להמשיך', 'rests_on': ['m.cost'],
+            'd.choice': {'verdict': 'Continue', 'rests_on': ['m.cost'],
                          'seen': {'m.cost': 10}, 'wrong_if': 'm.cost > 20'},
-            'd.moved': {'verdict': 'לבדוק שוב', 'rests_on': ['m.cost'],
+            'd.moved': {'verdict': 'Review again', 'rests_on': ['m.cost'],
                         'seen': {'m.cost': 10}, 'reopened_by': 'A new quote arrives'},
-            'd.false': {'verdict': 'החלטה', 'rests_on': ['m.cost'],
+            'd.false': {'verdict': 'Decision', 'rests_on': ['m.cost'],
                         'seen': {'m.cost': 10}, 'wrong_if': 'm.cost > 11'}},
         'findings': {'hyp.old': {'v': 'refuted', 'refutes': ['d.moved'], 'at': 'Trial failed'}},
     }
@@ -222,10 +222,10 @@ class ExportGraph(unittest.TestCase):
         self.assertIn('#34;', raw)
         self.assertIn('v: 12', raw)
         self.assertNotIn('<script>', raw)
-        self.assertNotIn('`טקסט`', raw)
+        self.assertNotIn('`text`', raw)
 
     def test_long_values_clipping_and_hypotheses_are_disclosed(self):
-        self.doc['known']['m.cost']['name'] = 'תווית ארוכה ' * 100
+        self.doc['known']['m.cost']['name'] = 'Long label ' * 100
         self.save()
         folder = self.root / '.kpopper/hypotheses'
         folder.mkdir(parents=True)
@@ -285,7 +285,7 @@ class ExportGraph(unittest.TestCase):
         folder = self.root / '.kpopper/hypotheses'
         folder.mkdir(parents=True)
         (folder / 'broken.yaml').write_text('known: [')
-        self.doc['sources']['s.note']['name'] = 'עברית ' * 15 + '\n```\n%%{init: evil}%%'
+        self.doc['sources']['s.note']['name'] = 'Long label ' * 15 + '\n```\n%%{init: evil}%%'
         self.save()
         packet = self.packet('s.note')
         self.assertIn('broken', packet['hypothesis_errors'])
