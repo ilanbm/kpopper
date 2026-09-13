@@ -103,9 +103,11 @@ density and visual treatment for the image's purpose.
 ## Diagrams and product images
 
 - "More deterministic reasoning" names a shift of selected reasoning steps into
-  explicit dependencies and repeatable checks. Show the agent's interpretation,
-  the recorded condition and its mechanical evaluation as distinct stages. The
-  opening visual demonstrates this mechanism; the following stories show its value.
+  explicit dependencies and repeatable checks. Use two clear parts: "Conversations"
+  and "Deterministic checks", joined by "Agent records". Put the YAML and its
+  calculated result together; name the failed decision directly rather than using
+  the ambiguous label "Condition holds". Stack the two parts on phones. The opening
+  visual demonstrates the mechanism; the following stories show its value.
 - Each explanatory image carries one question and one main relationship or change.
   Put detailed qualifications and instructions in the surrounding text.
 - Use blue for the emphasized subject or connection, black for ordinary content,

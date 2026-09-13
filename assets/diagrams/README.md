@@ -16,8 +16,13 @@ rendered. Exporting a schematic should not overwrite the illustration.
 
 ## More deterministic reasoning
 
-The opening illustration shows the path from natural-language statements to a
-recorded comparison. **More** describes the shift of selected reasoning steps into
+The opening illustration has two parts: **Conversations** and **Deterministic
+checks**. An earlier session establishes the promise and its reason; a later one
+changes retention. An **Agent records** arrow connects the dialogue to the YAML.
+The comparison and **Download promise fails** result sit directly below the code,
+inside the same panel. The phone layout stacks these two parts.
+
+**More** describes the shift of selected reasoning steps into
 explicit, repeatable checks. The agent still interprets sources and chooses the
 relevant premises and condition; the ordinary reader evaluates supported comparisons
 and follows declared dependencies. YAML holds that structure; the checker executes
@@ -47,6 +52,10 @@ The comparison is `7 < 30`. Repeating the check against the same record produces
 the same result. An accurate comparison still depends on the supplied readings and
 the relevance of the chosen condition. This is a demonstration of repeatable checking,
 not an evaluation of overall agent reasoning quality.
+
+The conversation bubbles are fictional teaching dialogue, not transcripts of a
+live agent run. The visual names the failed promise directly: a true `wrong_if`
+condition means failure, so the ambiguous label "Condition holds" is not used.
 
 ## What the illustrations preserve
 

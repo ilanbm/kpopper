@@ -446,7 +446,10 @@ sources:
          words-to-YAML-to-calculated-check visual near the opening. They clarified that more
          qualifies the promise: selected reasoning steps become deterministic, not all
          natural-language interpretation. The illustration fixture passed at 30/30, then failed
-         identically on three checks after recorded retention became 7."
+         identically on three checks after recorded retention became 7. In the follow-up, the
+         maintainer requested actual-looking session dialogue on one side, YAML on the deterministic
+         side, and the calculated result directly beneath it. They questioned Condition holds;
+         the revised illustration names Download promise fails instead."
     read: "2026-09-13"
   s.2026_09_13_self_aware_tagline:
     asked: "Your project, self-aware.\nאם זה לא הבטחה מוזרה שתגרום לאנשים להסתכל על הפרויקט מוזר, אז

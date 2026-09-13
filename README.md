@@ -25,7 +25,7 @@ reach through the record and surfaces what needs another look.
   <a href="assets/diagrams/reasoning-check.png">
     <picture>
       <source media="(max-width: 600px)" srcset="assets/diagrams/reasoning-check-mobile.png">
-      <img src="assets/diagrams/reasoning-check.png" width="760" alt="More deterministic reasoning. The work says files now stay seven days, the download link promises thirty, and files should last for the promised window. An agent records the values, dependency and condition in YAML. kpopper evaluates seven less than thirty and flags the download promise. The agent interprets the words; the checker evaluates the recorded condition.">
+      <img src="assets/diagrams/reasoning-check.png" width="760" alt="More deterministic reasoning. Conversations on the left show an earlier session agreeing to 30-day downloads because files stay 30 days, followed by a later session reducing storage to seven days. An Agent records arrow leads to Deterministic checks on the right: YAML preserves the decision, current values and earlier review snapshot. Directly below the YAML, seven less than thirty produces Download promise fails. The agent interprets the words; the checker evaluates the recorded condition.">
     </picture>
   </a>
 </p>
