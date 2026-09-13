@@ -106,12 +106,17 @@ class LockingUnavailable(RuntimeError):
     """This platform cannot serialize durable ingestion writes."""
 
 
-@contextlib.contextmanager
-def _file_lock(path):
+def _require_locking():
     try:
         import fcntl
     except ImportError as exc:
         raise LockingUnavailable("durable ingestion writes require fcntl file locking") from exc
+    return fcntl
+
+
+@contextlib.contextmanager
+def _file_lock(path):
+    fcntl = _require_locking()
     path = Path(path)
     _private_dir(path.parent)
     fd = os.open(str(path), os.O_CREAT | os.O_RDWR, 0o600)
@@ -142,6 +147,7 @@ def state_path(record=None, state_dir=None):
 
 
 def _layout(record=None, state_dir=None):
+    _require_locking()  # Fail before creating/chmod'ing state on unsupported platforms.
     rec = _record_path(record)
     root = state_path(rec, state_dir)
     try:
@@ -611,6 +617,14 @@ def _owned_predecessor(root, event, current_target):
                 and prior.get("target_after_sha256") == current_target.get("body_sha256"))
 
 
+class PreparationRefused(ValueError):
+    """The staged record failed checks; retain the actionable prospective failures."""
+    def __init__(self, issues, diagnostics):
+        self.issues = issues
+        self.diagnostics = diagnostics
+        super().__init__('prepared update failed checks: ' + '\n'.join(issues))
+
+
 def _prepare(rec, root, event, envelope, before_bytes):
     eid = event["event_id"]
     draft = root / "drafts" / (eid + "-" + uuid.uuid4().hex)
@@ -625,6 +639,7 @@ def _prepare(rec, root, event, envelope, before_bytes):
     source_id = "s.ingest_" + eid
     date = envelope["date"]
     diagnostics = []
+    gate_output = io.StringIO()
     with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):
         P.mark(str(mark), paths)
         seeds = _report_seeds(envelope)
@@ -633,7 +648,7 @@ def _prepare(rec, root, event, envelope, before_bytes):
             "into": event["target_snapshot"]["source_collection"],
             "hypothesis": None, "source": None, "at": None,
             "body": {"name": "Captured report", "file": event["source_file"], "read": date,
-                     "asked": "Update " + (", ".join(seeds) if isinstance(seeds, list) else seeds) + " from this captured report."},
+                     "recorded_for": "Update " + (", ".join(seeds) if isinstance(seeds, list) else seeds) + " from this captured report."},
         })
         operations = envelope.get("updates", [{"kind": "set", "id": envelope.get("target"),
                                                "value": envelope.get("value")}])
@@ -652,9 +667,11 @@ def _prepare(rec, root, event, envelope, before_bytes):
                     body.update({"from": source_id, "at": location, "of": date})
                 action["body"] = body
             P.apply(paths, action, diagnostics=diagnostics)
-        gate = P.gate(str(mark), paths)
+        with contextlib.redirect_stdout(gate_output), contextlib.redirect_stderr(gate_output):
+            gate = P.gate(str(mark), paths)
     if gate:
-        raise ValueError("canonical gate refused the prepared record")
+        issues = [line.replace(str(shadow), str(rec)) for line in gate_output.getvalue().splitlines() if line.strip()]
+        raise PreparationRefused(issues or ['the canonical gate refused the prepared record'], diagnostics)
     after_bytes = shadow.read_bytes()
     if "updates" in envelope:
         target_hash = _batch_fingerprint(shadow, envelope["updates"])
@@ -674,7 +691,11 @@ def _replace_record(record, data):
     mode = record.stat().st_mode & 0o7777
     fd, name = tempfile.mkstemp(prefix="." + record.name + ".ingestion.", dir=str(record.parent))
     try:
-        os.fchmod(fd, mode)
+        chmod_fd = getattr(os, 'fchmod', None)
+        if chmod_fd is not None:
+            chmod_fd(fd, mode)
+        else:
+            os.chmod(name, mode)
         with os.fdopen(fd, "wb") as out:
             out.write(data)
             out.flush()
@@ -800,6 +821,9 @@ def _process_event(rec, root, event, crash_after_commit=False):
                 return _integrity_question(root, event, integrity)
             shadow, after_bytes, prepared_graph, target_after_sha256, diagnostics = \
                 _prepare(rec, root, event, envelope, before_bytes)
+        except PreparationRefused as exc:
+            return _question(root, event, envelope, str(exc),
+                             validation_issues=exc.issues, diagnostics=exc.diagnostics)
         except (Exception, SystemExit) as exc:
             return _question(root, event, envelope,
                              "canonical writer refused the report: " + " ".join(str(exc).split()))

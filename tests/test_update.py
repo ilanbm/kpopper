@@ -84,3 +84,10 @@ class Update(unittest.TestCase):
         self.assertEqual(code, 2)
         self.assertIn('fcntl', json.loads(out.getvalue())['error'])
         self.assertEqual(self.record.read_bytes(), before)
+
+    def test_record_replacement_preserves_mode_without_fchmod(self):
+        mode = self.record.stat().st_mode & 0o7777
+        with patch.object(I.os, 'fchmod', None, create=True):
+            I._replace_record(self.record, b'known: {}\n')
+        self.assertEqual(self.record.read_bytes(), b'known: {}\n')
+        self.assertEqual(self.record.stat().st_mode & 0o7777, mode)

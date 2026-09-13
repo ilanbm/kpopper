@@ -1,13 +1,30 @@
-# Capture now, receive only what needs attention
+# Record one source report, with one or many changes
 
-For an update needed in the current answer, use `kpopper update --file report.json`.
+For a source report in an existing single-file record, use `kpopper update --file -` to
+send JSON directly, or `--file report.json` for a saved report. Use the same `updates`
+array for one item or many (up to 32). Send the report while its meaning is fresh; do not
+wait for more unrelated information or for the end of the session. Include every supported
+fact already identified in that report, and keep unresolved meaning explicit.
 It accepts the same report contract below, processes only that report, and returns its
 durable receipt. Exit 0 means `applied`; exit 1 means retained but needing a primary
 decision; exit 2 means an invalid request. Inspect `reason`, `diagnostics`, `reach` and
-`newly_fired_judgments` before relying on the result. `applied` does not review judgments.
+`newly_fired_judgments` before relying on the result. A refused staged update also returns
+`validation_issues` with the actual check failures. `applied` does not review judgments.
 Use one `updates` array for related changes from one report: all changes commit together,
 share one source and are checked in their final state. Reuse `event_id` to retry the same
 envelope safely. Supported newly authored formulas normalize to structured expressions.
+
+If the result is `needs_primary`, none of that report's requested changes was applied by
+that attempt; the source was retained. Inspect the reason and resolve it while the context
+is available, or report the unresolved decision. A corrected envelope uses a new event ID;
+an exact retry reuses its old ID. After a successful correction, acknowledge the earlier
+signal if it has been resolved. Receipts describing recovery may additionally say that a
+prior commit occurred and was later changed; that is not permission to apply it again.
+
+Captured sources carry `recorded_for`, explaining why the report entered the record. They
+do not invent an `asked` work request or require a new page tab for each incoming report.
+Existing user requests, page arrangements, citations and semantic checks retain their rules.
+Neither `recorded_for` nor `asked` grants authority to replace a standing judgment.
 
 Use the existing graph to find what new information changes while its context is still fresh.
 `kpopper ingest capture` retains a source report immediately and starts a separate worker. The

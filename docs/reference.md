@@ -271,6 +271,10 @@ private state directory outside the repository, keyed by the canonical record pa
 includes normalization diagnostics and affected judgments; exit 0 means applied, exit 1
 means retained for a decision, and exit 2 means an invalid request. Existing judgments are
 not reviewed by applying new readings.
+Use an `updates` list for one or many changes already known from the same source; there is
+no need to wait for a larger batch. Refused prepared updates retain their actual
+`validation_issues`. Captured sources record their purpose in `recorded_for`, so ordinary
+evidence ingestion does not create a new `asked` reading occasion that needs its own tab.
 
 Automatic writes require explicit reports in a single file. An `updates` list can combine
 existing scalar updates with new grounded facts, rules and judgments in one atomic write.

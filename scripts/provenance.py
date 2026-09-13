@@ -4581,14 +4581,22 @@ def gate(state_path, paths, turns=0, host=None, nudged_at=None):
         new = sorted(k for k in every if k not in was)
         intents = {k for k in every if k not in jud and isinstance(raw.get(k), dict)
                    and raw[k].get("asked")}
+        # A captured external report records why its evidence entered the graph;
+        # it is not a new user request that a page must serve as a reading occasion.
+        recordings = {k for k in every if k not in jud and isinstance(raw.get(k), dict)
+                      and isinstance(raw[k].get('recorded_for'), str) and raw[k]['recorded_for'].strip()
+                      and not any(field in raw[k] for field in ('v', 'quoted', 'rule', 'verdict'))
+                      and any(isinstance(raw[k].get(field), str) and raw[k][field].strip()
+                              for field in ('file', 'url'))}
+        recording_sources = intents | recordings
 
         def attributed(k):
             b = raw.get(k)
-            if isinstance(b, dict) and str(b.get("from") or "") in intents:
+            if isinstance(b, dict) and str(b.get("from") or "") in recording_sources:
                 return True
             deps = jud[k]["deps"] if k in jud else rests.get(k, [])
-            return bool(set(deps) & intents)
-        if new and not (set(new) & intents) and not any(attributed(k) for k in new):
+            return bool(set(deps) & recording_sources)
+        if new and not (set(new) & recording_sources) and not any(attributed(k) for k in new):
             named_ = ", ".join(new[:4]) + (f" and {len(new) - 4} more" if len(new) > 4 else "")
             out.append(f"this session wrote {len(new)} {'entry' if len(new) == 1 else 'entries'} "
                        f"({named_}) and recorded no intent: add s.<date>_<slug> asked=\"...\" "

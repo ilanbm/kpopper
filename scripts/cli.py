@@ -56,7 +56,7 @@ COMMANDS = {
     "affects": ("SUBJECT [SUBJECT ...]", "Trace what a change reaches."),
     "add": ("ID FIELD=VALUE ...", "Add a grounded entry or judgment."),
     "set": ("ID VALUE [--why TEXT] [--as-of DATE]", "Update a reading and see what it affects."),
-    "update": ("--file JSON [--record FILE] [--state-dir PATH]", "Apply related changes from one source report atomically and return the result."),
+    "update": ("--file JSON|- [--record FILE] [--state-dir PATH]", "Record one or many changes from a source report now; return applied or retained status."),
     "review": ("ID [--as-of DATE]", "Record a judgment's review against current readings."),
     "document": ("OPERATION [OPTIONS]", "Create or refresh a standalone authored HTML document with evidence."),
     "page": ("[--open] [--out PATH] [--verify]", "Render or verify the knowledge page."),

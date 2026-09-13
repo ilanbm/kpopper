@@ -1,11 +1,13 @@
 ---
 name: record
-description: "Write what the work found into the project's knowledge record, so the next session inherits it instead of re-deriving it. Use the moment something worth keeping exists: a fact taken from a source, a rule worked out, a decision or conclusion, a measurement, a correction to a recorded value, or a question left open - and before finishing a session that produced any of these. The first write creates GROUNDING.yaml. Covers add, set, review, same and distinct, judgments with a falsifier, and background capture."
+description: "Write what the work found into the project's knowledge record, so the next session inherits it instead of re-deriving it. Use the moment something worth keeping exists: a fact taken from a source, a rule worked out, a decision or conclusion, a measurement, a correction to a recorded value, or a question left open - and before finishing a session that produced any of these. The first write creates GROUNDING.yaml. Covers one-report update, add, set, review, same and distinct, judgments with a falsifier, and background capture."
 ---
 
 # Record
 
 Keep what the work produced while it is still in your hands: the source with its location, the rule rather than its result, the conclusion with what it rests on and what would make it wrong. It is a byproduct of the work, written when it exists and not at a ceremony. The command line is `kpopper` where it is on PATH; otherwise the `command` in the `KPOPPER_AGENT_CONTEXT` line the session opener printed (`python3 <plugin>/scripts/cli.py`) runs the same code. Do not guess a path and do not write a second reader - [the method's reference](../kpopper/references/method.md#finding-the-reader) says how to find the installed copy when neither is at hand.
+
+**For a source report in an existing single-file record, use `kpopper update --file -`.** Send one `updates` list with everything already known from that report; one item is enough. Record it while the context is fresh, without waiting to collect unrelated facts or reach session end. Read the returned state before relying on the update. [INGESTION.md](../kpopper/INGESTION.md) gives the input and supported layouts; first writes, other layouts and deliberate reviews retain their ordinary commands.
 
 ## The first write
 
@@ -228,16 +230,14 @@ conservative behavior until the next session opens.
 
 **New information is useful when you can see what it changes.** When ongoing record maintenance
 is authorized, capture a material correction or source report while your understanding is fresh.
-Use `kpopper update --file report.json` when this answer needs the result; otherwise use
-`kpopper ingest capture --file report.json`. Interpret once; leave unknown meaning open.
-Use one `updates` batch for related readings and new grounded entries. Additions require
-`record_sha256` from the primary's prior `open --json` or source-search read; if it changes,
-reread the premises. Keep source quotations separate from the agent's conclusions.
-The worker uses the existing writer and returns an attention signal only when a declared
-condition fires or a new review question needs focus. Routine completion requires no waiting or
-ACK. [INGESTION.md](../kpopper/INGESTION.md) gives the small input contract, supported record layouts, and
-the different idle-delivery behavior in Claude Code and Codex. Notification content is a result,
-not a new user report: never capture it again as fresh evidence.
+`update` returns the result now. Choose `ingest capture` when processing should continue in the background;
+the number of items does not choose that mode. Interpret once and keep source quotations separate.
+Additions require `record_sha256` from the primary's prior `open --json` or source-search read;
+if it changes, reread the premises. `applied` means every requested change was written.
+`needs_primary` means retained for handling, not successful recording: inspect its reason and
+`validation_issues`, resolve within the existing authority, or say what remains blocked. Re-submit
+a corrected report under a new event ID; acknowledge an old signal only after resolving it.
+Routine success needs no ACK. Notifications are results, never fresh source reports to capture again.
 
 In Codex hosts with native background agents and `send_message_to_thread`, use
 `capture --notify-task` and dispatch its returned delivery job so an important finding can also

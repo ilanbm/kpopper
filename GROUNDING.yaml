@@ -1299,7 +1299,8 @@ known:
     of: "2026-09-10"
 
   m.skill_bytes_largest:
-    v: 20689
+    v: 21091
+    # measured 2026-09-13 after simplifying source-report recording and pending-result guidance
     # measured 2026-09-13 after the readable-expression authoring guidance changed
     # set 2026-09-13: measured by skill_bytes_largest after the source-report and expression authoring guidance changed
     # measured 2026-09-12 after combining the occasion skills with structured expressions and source search
@@ -3485,7 +3486,10 @@ judgments:
               condition changed from false to true, and whose recorded scalar input changed has
               encountered new evidence. Retaining that finding is successful recording. Structural
               errors, new or edited broken judgments and arrangement failures remain gate failures;
-              legacy marks without those observations retain the conservative count comparison."
+              legacy marks without those observations retain the conservative count comparison.
+              An external report can state its recording purpose in recorded_for on its source;
+              this satisfies recording attribution without inventing an asked reading occasion.
+              Real work requests remain subject to the page's existing coverage requirements."
     wrong_if: "p.gate_bounces > 1"
     seen: {p.gate_bounces: 1, doc.ingestion_contract: "read 2026-09-07"}
   d.one_tree_two_channels:
