@@ -583,6 +583,27 @@ def _mentions(R, worlds, fields, brief):
 
 
 def same(paths, a, b, keep=None, as_of=None):
+    project = P._peer('knowledge_views').project_for(paths)
+    paths = P._peer('knowledge_views').write_paths(paths)
+    if not P._RAW_READS.get():
+        with P._locked(paths[0], project=project):
+            return same(paths, a, b, keep, as_of)
+    doc = P.load(paths, read_mode='frozen')
+    selected = {}
+    for layer in [doc] + [h['doc'] for h in doc.hypotheses.values() if not h['error']]:
+        for collection, members in P.collections_of(layer).items():
+            selected.setdefault(collection, {}).update(members)
+    R = P._peer('recording')
+    G = P._peer('pending_grounding')
+    closure = G.closure(selected, [a, b]) if all(n in G.entries(selected) for n in (a, b)) else selected
+    if R.private_marker(closure):
+        receipt = R.draft(P._peer('knowledge_views').project_for(paths),
+                          {'kind': 'same', 'ids': [a, b]}, closure, 'private identity change retained for review')
+        raise P.Refused('private draft retained at ' + receipt['path'])
+    return _same_unlocked(paths, a, b, keep, as_of)
+
+
+def _same_unlocked(paths, a, b, keep=None, as_of=None):
     """`b` retired into `a` - or the other way round with --keep - across every file the record
     is: the base, the hypotheses beside it, the brief. Read, validated, edited, written, read
     back through check; undone whole when check reports a problem it did not have before."""
@@ -829,6 +850,27 @@ def same(paths, a, b, keep=None, as_of=None):
 
 # ── distinct: the edge that retires a pair ───────────────────────────────────
 def distinct(paths, a, b, why, as_of=None):
+    project = P._peer('knowledge_views').project_for(paths)
+    paths = P._peer('knowledge_views').write_paths(paths)
+    if not P._RAW_READS.get():
+        with P._locked(paths[0], project=project):
+            return distinct(paths, a, b, why, as_of)
+    doc = P.load(paths, read_mode='frozen')
+    selected = {}
+    for layer in [doc] + [h['doc'] for h in doc.hypotheses.values() if not h['error']]:
+        for collection, members in P.collections_of(layer).items():
+            selected.setdefault(collection, {}).update(members)
+    R = P._peer('recording')
+    G = P._peer('pending_grounding')
+    closure = G.closure(selected, [a, b]) if all(n in G.entries(selected) for n in (a, b)) else selected
+    if R.private_marker(closure):
+        receipt = R.draft(P._peer('knowledge_views').project_for(paths),
+                          {'kind': 'distinct', 'ids': [a, b]}, closure, 'private identity change retained for review')
+        raise P.Refused('private draft retained at ' + receipt['path'])
+    return _distinct_unlocked(paths, a, b, why, as_of)
+
+
+def _distinct_unlocked(paths, a, b, why, as_of=None):
     """`distinct_from: b` written on `a`, the why as a comment beneath it, in the file that
     holds `a` - the base's, else the hypothesis's. Nothing else moves."""
     doc = P.load(paths)
@@ -969,12 +1011,10 @@ def command(cmd, rest):
         raise P.Refused("--as-of takes a date, YYYY-MM-DD")
     paths = files or P.default_paths()
     if cmd == "same":
-        with P._locked(paths[0]):
-            return same(paths, given[0], given[1], opts.get("keep"), as_of)
+        return same(paths, given[0], given[1], opts.get("keep"), as_of)
     if "\n" in given[2]:
         raise P.Refused("the why is one line: a second line would be a line of the record")
-    with P._locked(paths[0]):
-        return distinct(paths, given[0], given[1], given[2], as_of)
+    return distinct(paths, given[0], given[1], given[2], as_of)
 
 
 if __name__ == "__main__":

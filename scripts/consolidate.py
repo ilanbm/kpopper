@@ -60,13 +60,18 @@ def read(paths, names=(), refs=()):
     doc = P.load(paths)
     pool = {}
     for n, h in doc.hypotheses.items():
+        if h.get('kind') == 'contribution':
+            continue  # publication acceptance/materialization is a separate explicit step
         if h["error"]:
             raise P.Refused(f"refused - hypothesis {n} could not be read: {h['error']}")
         got, why = P._layer_view(doc, h)
         if got is None:
             raise P.Refused(f"refused - hypothesis {n} cannot be read over the base: {why}")
-        with io.open(h["path"], encoding="utf-8") as fh:
-            h["text"] = fh.read().split("\n")
+        if h['path'].startswith('git:'):
+            h['text'] = P.yaml.safe_dump(h['doc'], allow_unicode=True, sort_keys=False).split('\n')
+        else:
+            with io.open(h["path"], encoding="utf-8") as fh:
+                h["text"] = fh.read().split("\n")
         pool[n] = h
     for ref in list(dict.fromkeys(refs)):
         for h in from_ref(paths, ref, doc):
@@ -490,8 +495,17 @@ def fold(paths, names=(), refs=(), stamp=None):
     and restored whole if the check says anything it did not say before; the folded files
     deleted. Refused when the dry run is not clean, or when what is named never folds."""
     stamp = stamp or datetime.date.today().isoformat()
-    with P._locked(paths[0]):
+    project = P._peer('knowledge_views').project_for(paths)
+    paths = P._peer('knowledge_views').write_paths(paths)
+    with P._locked(paths[0], project=project):
         doc, hyps = read(paths, names, refs)
+        R = P._peer('recording')
+        for hyp in hyps:
+            if R.private_marker(hyp['doc']):
+                receipt = R.draft(P._peer('knowledge_views').project_for(paths),
+                    {'kind': 'consolidate', 'hypothesis': hyp['name']}, hyp['doc'],
+                    'private hypothesis retained; cannot fold into the project record')
+                raise P.Refused('private draft retained at ' + receipt['path'])
         if not hyps:
             print("no hypotheses beside the record - nothing to consolidate")
             return 0

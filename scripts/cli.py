@@ -63,6 +63,7 @@ COMMANDS = {
     "session": ("OPERATION [OPTIONS]", "Manage checked session views and their transport."),
     "ingest": ("OPERATION [OPTIONS]", "Capture source reports and inspect their processing."),
     "followups": ("OPERATION [OPTIONS]", "Capture deferred work, inspect triggers and coordinate daily review."),
+    "knowledge": ("status|materialize|import [OPTIONS]", "Inspect contributions or prepare a portable frozen record."),
     "watch": ("OPERATION [OPTIONS]", "Check branch compatibility asynchronously and share scoped external facts."),
     "pending": ("OPERATION [OPTIONS]", "Inspect, configure and reconcile project contribution publication."),
 }
@@ -75,6 +76,7 @@ def parser():
     result = argparse.ArgumentParser(prog="kpopper", usage="kpopper [--workspace PATH] [--no-cache] COMMAND [OPTIONS]",
                                      description="Keep what you know, its grounds, and what needs another look.",
                                      epilog=help_text, formatter_class=argparse.RawDescriptionHelpFormatter)
+    result.add_argument('--frozen', action='store_true', help='read committed files without live pending contributions')
     result.add_argument("--workspace", help="working directory for the operation")
     result.add_argument("--json", action="store_true", help="return structured output")
     result.add_argument("--no-cache", action="store_true",
@@ -176,6 +178,9 @@ def main():
         root.print_help()
         sys.exit(0)
     cmd, rest = options.command, options.args
+    if options.frozen or '--frozen' in rest:
+        os.environ['KPOPPER_READ_MODE'] = 'frozen'
+        rest = [a for a in rest if a != '--frozen']
     if options.no_cache:
         # every command below runs as another process: the switch travels in the environment
         os.environ["KPOPPER_NO_CACHE"] = "1"
@@ -202,6 +207,12 @@ def main():
             os.chdir(pathlib.Path(options.workspace).expanduser())
         except (OSError, ValueError) as error:
             root.error(str(error))
+    if cmd == 'knowledge':
+        try:
+            from .knowledge_cli import main as knowledge_main
+        except ImportError:
+            from knowledge_cli import main as knowledge_main
+        sys.exit(knowledge_main([a for a in rest if a != '--json']))
     if cmd == "watch":
         try:
             from .watch import main as watch_main

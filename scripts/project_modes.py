@@ -243,7 +243,7 @@ class Project:
             # checking equality, retaining rollback bytes and committing the policy.
             with contextlib.ExitStack() as locks:
                 for directory in sorted({path.parent for path in paths if path.parent.is_dir()}):
-                    locks.enter_context(I.P._locked(str(directory / 'record')))
+                    locks.enter_context(I.P._directory_locked(str(directory / 'record')))
                 report = self.transition_report(mode or current['mode'], record, _pending_proof=proof)
                 if report['blockers']:
                     raise ValueError('; '.join(report['blockers']))

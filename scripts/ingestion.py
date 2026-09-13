@@ -36,7 +36,7 @@ TERMINAL = {"applied", "needs_primary", "superseded", "error"}
 ACTIONABLE = {"MOVED", "UNCHECKED", "BROKEN", "BLOCKED"}
 AUTO_STATES = {"captured", "processing"}
 EVENT_FIELDS = {"event_id", "session_id", "source_quote", "target", "value", "date",
-                "kind", "question", "reason"}
+                "kind", "question", "reason", "shareability", "privacy", "scope"}
 MAX_REPREPARES = 2
 
 
@@ -637,6 +637,8 @@ def _process_event(rec, root, event, crash_after_commit=False):
     issue = event.get("capture_issue")
     if issue:
         return _question(root, event, envelope, issue)
+    if P._peer('recording').private_marker(envelope) or ('scope' in envelope and envelope.get('shareability') != 'project'):
+        return _question(root, event, envelope, 'private or unclear report permission; retained privately')
     if envelope.get("kind", "report") != "report":
         return _question(root, event, envelope, "only kind=report can update an existing reading")
     if "value" not in envelope:

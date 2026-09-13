@@ -70,6 +70,27 @@ def locate(directory=None):
             except (OSError, UnicodeError, ValueError) as error:
                 status, reason = "unavailable", "Cannot read the registered record location: " + str(error)
 
+    try:
+        try:
+            from .project_modes import Project
+        except ImportError:
+            from project_modes import Project
+        project = Project(directory)
+        if project.config_path.exists():
+            record = project.record()
+            status = 'found' if record.is_file() else ('unavailable' if record.exists() else 'missing')
+            reason = '' if status != 'unavailable' else 'The configured record is unavailable.'
+        if status == 'missing' and os.environ.get('KPOPPER_READ_MODE') != 'frozen' and project.git:
+            try:
+                from .knowledge_views import has_pending
+            except ImportError:
+                from knowledge_views import has_pending
+            if has_pending([str(record or project.record())]):
+                record, status = project.record(), 'pending'
+    except ImportError:
+        # File-path discovery remains usable without the optional parser dependency.
+        pass
+
     # Share choices across Git worktrees, while preserving deliberate subprojects.
     if common:
         identity = str(common) + "\0" + str(root.relative_to(git_root))
