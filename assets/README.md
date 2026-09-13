@@ -34,13 +34,14 @@ agent's synthesis. See [the story index](stories/README.md).
 
 ## Process diagrams
 
-The reasoning, conversation and time overviews live in `diagrams/`, with illustrated
-desktop and phone PNGs in the story series' ink style. The opening reasoning overview
-shows natural-language statements, their explicit YAML relationship and a repeatable
-comparison; its exact record is supplied alongside it. Separate editable SVG schematics
-preserve compact maps of the conversation and time processes; they are not the
-illustration sources.
-See [the overview index and maintenance notes](diagrams/README.md).
+The conversation and time overviews live in `diagrams/`, with desktop and phone
+PNG illustrations and separate editable SVG schematics. The schematics describe
+relationships; they are not the source files for the illustrations.
+
+- [Background capture](../README.md#keep-the-conversation-moving): recording a report
+  while other work continues, with selective return of important findings.
+- [Past, present and future](../README.md#past-present-future): sources, review state
+  and configured followups connected through the record.
 
 ## Knowledge-source illustration
 

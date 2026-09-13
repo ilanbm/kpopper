@@ -456,6 +456,12 @@ sources:
          entirely background process. The revised illustration uses downloads.availability with
          Retention supports the promised window, a draft policy and explicit record-action labels."
     read: "2026-09-13"
+  s.2026_09_13_remove_duplicate_overview:
+    name: "Remove the duplicate introductory example and illustration-production guide"
+    asked: "Remove the opening reasoning overview and linked guide: they discuss the illustration
+            rather than the product and repeat the later download-retention example."
+    of: "Maintainer direction, paraphrased"
+    read: "2026-09-13"
   s.2026_09_13_self_aware_tagline:
     asked: "Your project, self-aware.\nאם זה לא הבטחה מוזרה שתגרום לאנשים להסתכל על הפרויקט מוזר, אז
             זה מצויין"
@@ -2726,35 +2732,31 @@ judgments:
                                      explaining every part of the visual joke."
       s.2026_09_13_more_self_aware_tagline: "read 2026-09-13"
   d.readme_opens_with_what_it_does:
-    rests_on: [s.2026_09_12_first_readings, s.2026_09_13_readme_direction, d.named_for_popper, s.2026_09_13_readme_depth, s.2026_09_13_reasoning_overview]
-    verdict: "Keep the hero and practical benefit, with installation directly linked. Place a
-              compact words-to-record-to-check overview before the concrete code and non-code
-              examples, with visible recorded premises and a phone layout. Introduce the third-brain
-              metaphor later."
+    rests_on: [s.2026_09_12_first_readings, s.2026_09_13_readme_direction, d.named_for_popper, s.2026_09_13_readme_depth, s.2026_09_13_remove_duplicate_overview]
+    verdict: "Keep the hero, practical benefit and direct installation link, followed by the
+              concrete code and non-code examples with visible recorded premises and phone
+              layouts. Explain each case once and link to its complete executable example.
+              Introduce the third-brain metaphor later."
     because: "The reported reader connected with the merge scenario while the opening metaphor
               required explanation. Concrete code cases give developers a familiar entrance, and the
               following Cowork case makes the wider scope visible. Visible record excerpts expose the
               declared premises; linked guides carry complete records and executable checks.
-              Descriptive headings and navigation let readers choose their depth without needing the
-              philosophical references first. The overview supplies the mechanism before the longer
-              stories demonstrate its value. More deterministic reasoning describes selected
-              comparisons moving into explicit, repeatable checking; the agent chooses readings,
-              dependencies and conditions. The ordinary reader does not evaluate arbitrary formulas
-              or make all language interpretation deterministic."
+              Descriptive headings and navigation let readers choose their depth without needing
+              the philosophical references first. Each example can explain its mechanism and
+              practical value together, keeping the opening focused on the product."
     reopened_by: "A new reader given the README without coaching cannot explain what it preserves or
                   what triggers review, takes a green check as proof of arbitrary code correctness,
                   or concludes from the opening that non-code projects are unsupported. Record the
                   misunderstanding and where it arose; stopping after finding an answer is not
-                  failure. Revisit the overview if readers cannot distinguish interpretation from
-                  mechanical comparison, or its extra height prevents them from reaching the examples
-                  or installation."
+                  failure. Revisit if readers cannot distinguish interpretation from mechanical
+                  comparison or cannot find the examples and installation."
     seen:
       s.2026_09_12_first_readings: "read 2026-09-13"
       s.2026_09_13_readme_direction: "read 2026-09-13"
       d.named_for_popper: "the project keeps the name kpopper; discovery runs on direct links and
                            qualified search, never on the bare term"
       s.2026_09_13_readme_depth: "read 2026-09-13"
-      s.2026_09_13_reasoning_overview: "read 2026-09-13"
+      s.2026_09_13_remove_duplicate_overview: "read 2026-09-13"
   d.readme_story_series:
     rests_on: [s.2026_09_13_story_approval, d.readme_opens_with_what_it_does, d.readme_visual_identity, s.2026_09_13_worker_and_research]
     verdict: "Open with the approved illustrated series: shared cache and private results, download
