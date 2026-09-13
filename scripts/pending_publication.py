@@ -255,6 +255,14 @@ class Publisher:
         graph = copy.deepcopy(doc)
         current = G.entries(graph)
         additions = {}
+        decisions = self._load()['decisions']
+        replaceable = {}
+        for old, decision in decisions.items():
+            replacement = decision.get('replacement')
+            if decision.get('state') == 'superseded' and replacement in revisions and old in snapshot['bundles']:
+                prior = snapshot['bundles'][old]
+                if G.equivalent(prior, doc, self._evidence(files, prior)):
+                    replaceable.setdefault(replacement, []).append(prior)
         parent = PurePosixPath(self.project.config()['record']).parent
         # Conflicting revisions are obligations, not a sequence-based election.
         for revision in revisions:
@@ -267,7 +275,10 @@ class Publisher:
             for name, value in G.entries(incoming).items():
                 collection, body = value
                 if name in current and G.identity(list(current[name])) != G.identity(list(value)):
-                    raise Attention('pending revisions conflict; explicitly reconcile entry ' + name)
+                    if not any(name in G.entries(prior['manifest']['document']) and
+                               G.identity(list(current[name])) == G.identity(list(G.entries(prior['manifest']['document'])[name]))
+                               for prior in replaceable.get(revision, [])):
+                        raise Attention('pending revisions conflict; explicitly reconcile entry ' + name)
                 graph.setdefault(collection, {})[name] = copy.deepcopy(body)
                 current[name] = value
             for name, data in bundle['files'].items():
@@ -276,7 +287,8 @@ class Publisher:
                     raise Attention('evidence collides with the target record')
                 existing = additions.get(path, self._blob_at(files, path))
                 if existing is not None and existing != data:
-                    raise Attention('pending evidence conflicts with target file: ' + path)
+                    if not any(prior['files'].get(name) == existing for prior in replaceable.get(revision, [])):
+                        raise Attention('pending evidence conflicts with target file: ' + path)
                 additions[path] = data
         record = self.project.config()['record']
         additions[record] = G.P.yaml.safe_dump(graph, allow_unicode=True, sort_keys=False).encode()
@@ -284,6 +296,15 @@ class Publisher:
             bundle = snapshot['bundles'][revision]
             if not G.equivalent(bundle, graph, {name: additions[str(parent / name)] for name in bundle['files']}):
                 raise Attention('combined graph changes a contribution meaning; reconcile before publishing')
+        for old, prior in snapshot['bundles'].items():
+            if old in revisions or not G.equivalent(prior, doc, self._evidence(files, prior)):
+                continue
+            if decisions.get(old, {}).get('state') == 'superseded' and decisions[old].get('replacement') in revisions:
+                continue
+            evidence = {name: additions.get(str(parent / name), self._blob_at(files, str(parent / name)))
+                        for name in prior['files']}
+            if not G.equivalent(prior, graph, evidence):
+                raise Attention('replacement would change another accepted contribution; reconcile its revision explicitly')
         # A temporary index preserves modes, symlinks and submodules of the target;
         # no source checkout files or feature code enter the publication commit.
         index = self.project.state / ('publication-index-' + uuid.uuid4().hex)

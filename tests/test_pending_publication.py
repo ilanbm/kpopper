@@ -497,5 +497,75 @@ class PublicationTests(unittest.TestCase):
         self.assertEqual(self.provider.creates, 1)
 
 
+
+    def test_explicit_supersession_replaces_only_exact_accepted_prior_version(self):
+        first = self.capture(name='api.limit', value=10)
+        self.run_ok()
+        self.merge()
+        self.run_ok()
+        second = self.capture(name='api.limit', value=11)
+        self.assertEqual(self.publisher.run()['outcome'], 'attention')
+        self.publisher.action('supersede', revisions=[first], replacement=second, reason='Reviewed new reading')
+        result = self.run_ok()
+        self.assertEqual(result['states'][second], 'proposed')
+        self.merge()
+        result = self.run_ok()
+        self.assertEqual(result['states'][first], 'superseded')
+        self.assertEqual(result['states'][second], 'accepted')
+        doc = G.P.yaml.safe_load(M.git(self.remote, 'show', 'trunk:GROUNDING.yaml').stdout)
+        self.assertEqual(doc['known']['api.limit']['v'], 11)
+
+    def test_supersession_cannot_replace_a_divergent_target_version(self):
+        first = self.capture(name='api.limit', value=10)
+        self.run_ok()
+        self.merge()
+        self.run_ok()
+        second = self.capture(name='api.limit', value=11)
+        self.publisher.action('supersede', revisions=[first], replacement=second, reason='Reviewed new reading')
+        doc = G.P.yaml.safe_load(M.git(self.remote, 'show', 'trunk:GROUNDING.yaml').stdout)
+        doc['known']['api.limit']['v'] = 12
+        self._replace_target({'GROUNDING.yaml': G.P.yaml.safe_dump(doc).encode()})
+        self.assertEqual(self.publisher.run()['outcome'], 'attention')
+        self.assertIsNone(self.remote_head())
+        self.assertEqual(self.provider.creates, 1)
+
+
+
+    def test_supersession_preserves_other_accepted_source_closures(self):
+        first = self.capture(name='api.limit', value=10)
+        other = self.capture(name='api.other', value=10)
+        self.run_ok()
+        self.merge()
+        self.run_ok()
+        bundle = fixture_bundle('api.limit', 11)
+        doc = bundle['manifest']['document']
+        doc['sources']['s.vendor']['read'] = '2026-09-15'
+        updated = G.prepare(doc, ['api.limit'], scope=bundle['manifest']['scope'], shareability='project',
+                            evidence={'evidence/vendor.txt': b'New source document\n'})
+        self.store.capture(updated, event_id='source-update', contribution_id='limit', shareability='project')
+        self.publisher.action('supersede', revisions=[first], replacement=updated['revision'], reason='Reviewed update')
+        result = self.publisher.run()
+        self.assertEqual(result['outcome'], 'attention')
+        self.assertIn('another accepted contribution', result['detail'])
+        self.assertIsNone(self.remote_head())
+        self.assertEqual(self.publisher.status()['states'][other], 'accepted')
+
+    def test_supersession_can_update_exact_prior_evidence(self):
+        first = self.capture(name='api.limit', value=10)
+        self.run_ok()
+        self.merge()
+        self.run_ok()
+        bundle = fixture_bundle('api.limit', 11)
+        updated = G.prepare(bundle['manifest']['document'], ['api.limit'], scope=bundle['manifest']['scope'],
+                            shareability='project', evidence={'evidence/vendor.txt': b'New source document\n'})
+        self.store.capture(updated, event_id='evidence-update', contribution_id='limit', shareability='project')
+        self.publisher.action('supersede', revisions=[first], replacement=updated['revision'], reason='Reviewed update')
+        self.run_ok()
+        self.merge()
+        proof = self.publisher.verify_obligations()
+        self.assertEqual(proof['terminal'][updated['revision']], 'accepted')
+        self.assertEqual(M.git(self.remote, 'show', 'trunk:evidence/vendor.txt').stdout, b'New source document\n')
+
+
 if __name__ == '__main__':
     unittest.main()
