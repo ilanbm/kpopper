@@ -118,6 +118,14 @@ the current formula, since editing such an alias would also rewrite the supposed
 
 ## Existing expressions
 
+An undecidable condition is now flagged `unknown`, including a condition over an old
+textual rule with no numeric result. This changes attention counts: `graph.flagged`,
+the page's flagged shape and, when such a judgment is omitted, `page.spill` can increase
+without a source edit. Existing layout judgments and saved page shapes may therefore
+need review. `unknown` is not a falsified condition, and historical `seen` values are
+never refreshed automatically. Explicitly migrate supported formulas or explain the
+missing reading; verify the page before reviewing its layout conclusions.
+
 Existing textual rules stay readable and unevaluated. Existing supported textual predicates
 continue to work, including comparisons against newly computed structured rules. To get a
 structured expression without writing anything:

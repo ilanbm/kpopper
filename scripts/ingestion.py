@@ -436,8 +436,20 @@ def capture(envelope, record=None, state_dir=None, start=True):
     return _summary(event)
 
 
-def _graph(record, target=None):
+def _graph(record, target=None, measured=False):
     doc, ids, judgments, fields, raw = _record_world(record)
+    measurement = None
+    if measured and set(ids) & set(P.PAGE):
+        try:
+            from . import page_measurements as M
+        except ImportError:
+            import page_measurements as M
+        measurement = M.snapshot([str(record)])
+        doc, ids, judgments, fields, raw = _record_world(record)
+        page, _ = M.read(measurement)
+        for key, value in page.items():
+            if key in ids:
+                raw.setdefault(key, {'name': P.PAGE[key]})['v'] = value
     if target:
         seeds = target if isinstance(target, list) else [target]
         hit, touched, derived = P.reach_of(ids, judgments, raw, seeds)
@@ -455,6 +467,8 @@ def _graph(record, target=None):
             "name": P.named(judgment["body"]),
             "verdict": judgment["body"].get("verdict"),
         }
+    if measurement is not None and not M.unchanged(measurement, M.snapshot([str(record)])):
+        raise ValueError('record or page inputs changed during pending read; retry')
     return {
         "hash": _sha(Path(record).read_bytes()), "judgments": states,
         "reach": {"judgments": sorted(hit), "via": hit,
@@ -579,6 +593,27 @@ def _capture_payload(root, event):
         return json.loads(envelope_bytes.decode("utf-8")), None
     except (UnicodeError, json.JSONDecodeError) as exc:
         return None, "captured envelope cannot be read: " + " ".join(str(exc).split())
+
+
+def recording_source(nid, body):
+    """A recording-purpose exemption belongs only to a retained, intact capture."""
+    if not isinstance(nid, str) or not nid.startswith('s.ingest_'):
+        return False
+    eid = nid[len('s.ingest_'):]
+    if not re.fullmatch(r'[A-Za-z0-9_-]{1,128}', eid) or not isinstance(body.get('file'), str):
+        return False
+    source = Path(body['file'])
+    if not source.is_absolute() or source.parent.name != 'sources' or source.name != eid + '.txt':
+        return False
+    root = source.parent.parent
+    try:
+        event = _load(_event_file(root, eid))
+        if not isinstance(event, dict) or event.get('event_id') != eid or event.get('source_file') != str(source):
+            return False
+        _, error = _capture_payload(root, event)
+    except (OSError, ValueError):
+        return False
+    return error is None
 
 
 def _integrity_question(root, event, reason, record_committed=False):
@@ -947,7 +982,7 @@ def pending(record=None, state_dir=None, include_handled=False):
             target = signal.get("target")
             try:
                 if target not in graphs:
-                    graphs[target] = _graph(rec, target)
+                    graphs[target] = _graph(rec, target, measured=True)
                 graph = graphs[target]
                 if signal["category"] == "contradiction":
                     live = [name for name in names

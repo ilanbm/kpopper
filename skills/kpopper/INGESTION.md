@@ -25,6 +25,8 @@ Captured sources carry `recorded_for`, explaining why the report entered the rec
 do not invent an `asked` work request or require a new page tab for each incoming report.
 Existing user requests, page arrangements, citations and semantic checks retain their rules.
 Neither `recorded_for` nor `asked` grants authority to replace a standing judgment.
+The recording-purpose exception is checked against the retained capture's event, envelope
+and source bytes; adding `recorded_for` to an arbitrary source does not grant it.
 
 Use the existing graph to find what new information changes while its context is still fresh.
 `kpopper ingest capture` retains a source report immediately and starts a separate worker. The
@@ -125,7 +127,9 @@ Add premises and rules before judgments. The existing writer and final gate vali
 whole staged record, which is then replaced once. Failed operations leave the canonical
 record untouched and retain the report for review. Attention is derived from the final
 graph, so intermediate states do not produce notifications. A reading that really falsifies
-an existing judgment is preserved; ingestion never refreshes that judgment's snapshot.
+an unchanged existing judgment is preserved when no other new check failure is introduced,
+including when a previously missing input arrives. Ingestion never refreshes that judgment's
+snapshot; missing review history or a page-policy failure can still require primary handling.
 
 New entries require and bind to the record hash from the primary's read, checked both at
 capture and before commit. This binds recorded premises, not external source-file contents.

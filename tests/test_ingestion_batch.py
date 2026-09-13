@@ -230,9 +230,8 @@ class BatchIngestion(unittest.TestCase):
         self.rec = modern
         brief = self.root / ".kpopper" / "view.yaml"
         brief.parent.mkdir()
-        # The existing page gate requires a tab to serve newly captured source intents.
-        source_id = "s.ingest_" + I._event_id(self.rec.resolve(), self.report())
-        brief.write_text(yaml.safe_dump({"title": "Order", "tabs": [{"title": "Budget", "serves": [source_id],
+        # Capturing evidence does not invent a new reading occasion for this page.
+        brief.write_text(yaml.safe_dump({"title": "Order", "tabs": [{"title": "Budget",
             "sections": [{"title": "Readings", "pick": ["order.price", "order.quantity", "order.limit", "c.affordable"]}]}]}))
         original = brief.read_bytes()
         result = self.run_report()

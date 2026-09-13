@@ -16,6 +16,11 @@ P, E = I.P, I.P.E
 
 
 class ReadableSyntax(unittest.TestCase):
+    def test_display_keeps_operand_parentheses_in_readable_expressions(self):
+        source = '(order.price + 1) * (order.quantity + 2)'
+        self.assertEqual(P.predicate_text({'expr': source}), source)
+        self.assertEqual(P.predicate_text(E.readable(E.lower({'expr': source}))), source)
+
     def test_readable_storage_lowers_without_losing_exact_tokens_or_names(self):
         source = {'expr': 'מחיר.יחידה * 0.1 + ref("item-with-hyphen")'}
         tree = E.lower(source)

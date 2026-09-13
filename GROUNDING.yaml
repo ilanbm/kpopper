@@ -3483,12 +3483,13 @@ judgments:
               and a gate that cannot be escaped teaches sessions to fight the gate instead of
               fixing the record. New failures are compared by identity so repairing one old error
               cannot hide a new one. A judgment whose body and interpretation are unchanged, whose
-              condition changed from false to true, and whose recorded scalar input changed has
+              condition became true after being false or unknown, and whose recorded input changed or arrived has
               encountered new evidence. Retaining that finding is successful recording. Structural
               errors, new or edited broken judgments and arrangement failures remain gate failures;
               legacy marks without those observations retain the conservative count comparison.
-              An external report can state its recording purpose in recorded_for on its source;
-              this satisfies recording attribution without inventing an asked reading occasion.
+              A retained external capture can state its recording purpose in recorded_for on its source;
+              its event, envelope and source bytes must match before it satisfies recording attribution
+              without inventing an asked reading occasion.
               Real work requests remain subject to the page's existing coverage requirements."
     wrong_if: "p.gate_bounces > 1"
     seen: {p.gate_bounces: 1, doc.ingestion_contract: "read 2026-09-07"}

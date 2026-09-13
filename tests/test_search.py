@@ -41,6 +41,16 @@ class Search(unittest.TestCase):
         self.assertEqual(p.returncode, 0, p.stdout + p.stderr)
         return json.loads(p.stdout)
 
+    def test_ambiguous_schema_returns_a_json_error(self):
+        del self.doc['schema']
+        self.doc['judgments']['c.shipping']['depends_on'] = ['shipping.cost']
+        self.rec.write_text(yaml.safe_dump(self.doc))
+        result = subprocess.run([sys.executable, str(ROOT / 'scripts/cli.py'), 'search', 'cost',
+            '--record', str(self.rec), '--json'], cwd=self.root, env=self.env,
+            text=True, encoding='utf-8', capture_output=True)
+        self.assertEqual(result.returncode, 2)
+        self.assertIn('deps', json.loads(result.stderr)['error'])
+
     def test_hebrew_source_match_and_exact_read_preserve_records_and_ingestion_state(self):
         before = self.rec.read_bytes()
         found = self.cli("ההובלה")

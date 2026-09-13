@@ -66,7 +66,7 @@ def predicate_text(value):
     rendered = E.text(value) if isinstance(value, dict) else str(value or "")
     # Operators keep their inner grouping; the surrounding sentence supplies its
     # own parentheses, so do not double-wrap the outermost expression.
-    return rendered[1:-1] if isinstance(value, dict) and rendered.startswith('(') and rendered.endswith(')') else rendered
+    return rendered[1:-1] if isinstance(value, dict) and 'expr' not in value and rendered.startswith('(') and rendered.endswith(')') else rendered
 
 
 def predicate_refs(value):
@@ -4545,9 +4545,9 @@ def gate(state_path, paths, turns=0, host=None, nudged_at=None):
         current = now.get(name)
         if not current or old.get("shape") != current["shape"] \
                 or old.get("arrangement") or current["arrangement"] \
-                or old.get("predicate") is not False or current["predicate"] is not True:
+                or old.get("predicate") is True or current["predicate"] is not True:
             continue
-        if any(d in old.get("inputs", {}) and v != old["inputs"][d]
+        if any(d not in old.get("inputs", {}) or v != old["inputs"][d]
                for d, v in current["inputs"].items()):
             allowed[_fired_failure(name, jud[name])] = name
     if base["failures"] is not None:
@@ -4583,11 +4583,14 @@ def gate(state_path, paths, turns=0, host=None, nudged_at=None):
                    and raw[k].get("asked")}
         # A captured external report records why its evidence entered the graph;
         # it is not a new user request that a page must serve as a reading occasion.
+        try:
+            from .ingestion import recording_source
+        except ImportError:
+            from ingestion import recording_source
         recordings = {k for k in every if k not in jud and isinstance(raw.get(k), dict)
                       and isinstance(raw[k].get('recorded_for'), str) and raw[k]['recorded_for'].strip()
                       and not any(field in raw[k] for field in ('v', 'quoted', 'rule', 'verdict'))
-                      and any(isinstance(raw[k].get(field), str) and raw[k][field].strip()
-                              for field in ('file', 'url'))}
+                      and recording_source(k, raw[k])}
         recording_sources = intents | recordings
 
         def attributed(k):

@@ -120,3 +120,67 @@ class UpdateFlow(unittest.TestCase):
             P.apply([str(self.record)], {'kind': 'add', 'id': 'offer.price', 'body': {'v': 10, 'from': 's.request'}})
             code = P.gate(str(mark), [str(self.record)])
         self.assertEqual(code, 2)
+
+    def test_an_arbitrary_source_cannot_claim_the_capture_exemption(self):
+        for name in ('s.note', 's.ingest_fake'):
+            with self.subTest(name=name):
+                self.record.write_text(yaml.safe_dump(self.doc, sort_keys=False))
+                mark = self.base / 'mark.json'
+                with contextlib.redirect_stdout(io.StringIO()) as out:
+                    P.mark(str(mark), [str(self.record)])
+                    P.apply([str(self.record)], {'kind': 'add', 'id': name, 'body': {
+                        'file': str(self.work / 'original.md'), 'recorded_for': 'A work request'}})
+                    P.apply([str(self.record)], {'kind': 'add', 'id': 'offer.price', 'body': {'v': 10, 'from': name}})
+                    code = P.gate(str(mark), [str(self.record)])
+                self.assertEqual(code, 2, out.getvalue())
+                self.assertIn('recorded no intent', out.getvalue())
+
+    def test_capture_exemption_requires_intact_evidence(self):
+        result = I.update(self.report(), self.record)
+        source = yaml.safe_load(self.record.read_text())['sources'][result['source']]
+        self.assertTrue(I.recording_source(result['source'], source))
+        Path(result['source_file']).write_text('Changed after capture')
+        self.assertFalse(I.recording_source(result['source'], source))
+        event = Path(result['source_file']).parent.parent / 'events' / (result['event_id'] + '.json')
+        event.write_text('{broken json')
+        self.assertFalse(I.recording_source(result['source'], source))
+
+    def test_completing_a_missing_input_can_falsify_an_unchanged_judgment(self):
+        self.doc['judgments']['c.shipping'] = {'rests_on': ['order.shipping'], 'seen': {'order.shipping': 10},
+            'verdict': 'Shipping fits', 'wrong_if': 'order.shipping > 20', 'blocked_on': 'Awaiting shipping quote'}
+        self.record.write_text(yaml.safe_dump(self.doc, sort_keys=False))
+        before = copy.deepcopy(self.doc['judgments'])
+        result = I.update(self.report(record_sha256=I._sha(self.record.read_bytes()),
+            updates=[{'kind': 'add', 'id': 'order.shipping', 'body': {'v': 25}}]), self.record)
+        self.assertEqual(result['state'], 'applied', result)
+        self.assertEqual(result['newly_fired_judgments'], ['c.shipping'])
+        self.assertEqual(yaml.safe_load(self.record.read_text())['judgments'], before)
+
+    def test_falsification_does_not_excuse_missing_review_history(self):
+        self.doc['judgments']['c.shipping'] = {'rests_on': ['order.shipping'], 'seen': {},
+            'verdict': 'Shipping fits', 'wrong_if': 'order.shipping > 20', 'blocked_on': 'Awaiting shipping quote'}
+        self.record.write_text(yaml.safe_dump(self.doc, sort_keys=False))
+        before = self.record.read_bytes()
+        result = I.update(self.report(record_sha256=I._sha(before),
+            updates=[{'kind': 'add', 'id': 'order.shipping', 'body': {'v': 25}}]), self.record)
+        self.assertEqual(result['state'], 'needs_primary', result)
+        self.assertEqual(self.record.read_bytes(), before)
+        self.assertIn('no snapshot for order.shipping', result['reason'])
+
+    def test_page_question_retires_only_after_review_and_fresh_measurement(self):
+        from scripts import render_page as R
+        self.doc['judgments']['c.page'] = {'rests_on': ['order.price', 'page.spill'],
+            'seen': {'order.price': 20, 'page.spill': 0}, 'verdict': 'Covered', 'wrong_if': 'page.spill > 0'}
+        self.record.write_text(yaml.safe_dump(self.doc, sort_keys=False))
+        result = I.update(self.report(), self.record)
+        self.assertEqual(result['state'], 'applied', result)
+        self.assertIn('c.page', result['actionable_judgments'])
+        with contextlib.redirect_stdout(io.StringIO()):
+            P.apply([str(self.record)], {'kind': 'review', 'id': 'c.page'})
+        self.assertTrue(any(s['category'] == 'question' for s in I.pending(self.record)))
+        R.measured_build([str(self.record)], str(self.brief))
+        with patch.object(R, 'build', side_effect=AssertionError('pending must not render')):
+            self.assertFalse(any(s['category'] == 'question' for s in I.pending(self.record)))
+            self.assertTrue(any(s['category'] == 'contradiction' for s in I.pending(self.record)))
+            self.record.write_bytes(self.record.read_bytes() + b'\n# changed inputs\n')
+            self.assertTrue(any(s['category'] == 'question' for s in I.pending(self.record)))

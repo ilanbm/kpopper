@@ -285,7 +285,7 @@ def main(argv=None):
             if args.revision or args.offset:
                 raise ValueError("--revision and --offset require --read")
             result = search(args.query, args.record, args.state_dir, args.limit, args.chars, args.source_root)
-    except (ValueError, OSError, sqlite3.Error, P.yaml.YAMLError) as error:
+    except (ValueError, OSError, sqlite3.Error, P.yaml.YAMLError, SystemExit) as error:
         print(encode({"error": str(error)}) if args.json else str(error), file=sys.stderr)
         return 2
     # The structured result is also the ordinary CLI output: no second prose rendering
