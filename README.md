@@ -10,12 +10,11 @@
 
 # Your project, more self-aware.
 
-kpopper connects decisions to the evidence, assumptions and earlier decisions they
-depend on, and records what would make them worth revisiting. Your agents can follow
-that reasoning across sessions. When a recorded premise changes, kpopper traces its
-reach through the record and surfaces what needs another look.
+**Your agents reason. kpopper makes that reasoning explicit, persistent, and deterministically checkable.**
 
-**A reasoning layer your agents can inspect, carry forward, and challenge.**
+kpopper connects decisions to the evidence, assumptions and earlier decisions they
+depend on, and records what would make them worth revisiting. When a recorded premise
+changes, kpopper traces its reach through the record and surfaces what needs another look.
 
 **[Get started](#get-started)** · [Examples](#example-1-private-data-exposure-assumption-checks) ·
 [Capabilities](#what-you-can-do-with-kpopper) · [Record format](#the-knowledge-record) ·
