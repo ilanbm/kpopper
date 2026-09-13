@@ -6,7 +6,6 @@ PR head is recyclable; refs/kpopper/pending_grounding is never changed here.
 """
 import contextlib
 import copy
-import fcntl
 import hashlib
 import json
 import os
@@ -50,6 +49,10 @@ class Publisher:
 
     @contextlib.contextmanager
     def lock(self):
+        try:
+            import fcntl
+        except ImportError as error:
+            raise RuntimeError('publication writes require fcntl file locking; local status remains available') from error
         # Kernel ownership recovers on process death; a stale PID never grants a
         # second owner. This is local coordination, not a distributed remote lock.
         M.I._private_dir(self.project.state)

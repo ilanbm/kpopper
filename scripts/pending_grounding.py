@@ -148,7 +148,10 @@ def closure(doc, roots):
 
 def _privacy(value):
     if isinstance(value, dict):
-        if value.get('private') is True or value.get('shareability', 'project') != 'project':
+        if ('private' in value and value['private'] is not False) \
+                or value.get('shareability', 'project') != 'project' \
+                or any(value.get(key) in ('private', 'unclear', 'unknown', 'personal')
+                       for key in ('privacy', 'visibility')):
             raise ValueError('private or unclear sharing permission belongs in a private draft')
         for item in value.values():
             _privacy(item)
@@ -315,6 +318,22 @@ class Store:
         return M.git(self.root, 'update-ref', REF, new, old or zero, check=False).returncode == 0
 
     def capture(self, bundle, *, event_id, contribution_id, shareability):
+        receipt = self._capture(bundle, event_id=event_id, contribution_id=contribution_id,
+                                shareability=shareability)
+        # The durable acknowledgement is established and the policy lock released
+        # before a publisher is even started. Publication failure cannot erase or
+        # turn a successfully retained contribution into a failed capture.
+        try:
+            if __package__:
+                from .pending_publication import trigger_after_capture
+            else:
+                from pending_publication import trigger_after_capture
+            receipt['publication_attempt'] = trigger_after_capture(self.project)
+        except Exception as error:
+            receipt['publication_attempt'] = {'started': False, 'reason': str(error)}
+        return receipt
+
+    def _capture(self, bundle, *, event_id, contribution_id, shareability):
         # Validate again at the object-write boundary, including supplied identity.
         if shareability != 'project':
             raise ValueError('private or unclear sharing permission belongs in a private draft')

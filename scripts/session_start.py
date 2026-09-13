@@ -36,6 +36,16 @@ def _run(script, args, directory):
 def read_view(location, reader_args=None, host=None):
     """The public CLI and hooks use the same checked/legacy opening boundary. `host` names
     the agent host so the opener's next moves read as that host invokes a skill."""
+    if os.environ.get('KPOPPER_READ_MODE') != 'frozen':
+        try:
+            if __package__:
+                from .pending_publication import retry_session
+            else:
+                from pending_publication import retry_session
+            retry_session(location['workspace'])
+        except Exception as error:
+            # Opening remains useful offline and never grants publication rights.
+            print('kpopper publication retry unavailable: ' + str(error), file=sys.stderr)
     if reader_args is None:
         result = _run("session_hook.py", [location["record"]], location["workspace"])
         if result.returncode != 3:
@@ -60,7 +70,7 @@ def opening(payload, host=None):
         output.append("kpopper first-use preferences unavailable: " + str(error))
     if location["status"] == "unavailable":
         return "\n".join(output)
-    if location["status"] == "found":
+    if location["status"] in ("found", "pending"):
         result, checked = read_view(location, host=host)
         if result.stdout:
             output.insert(0, result.stdout.rstrip())

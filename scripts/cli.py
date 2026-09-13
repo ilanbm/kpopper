@@ -46,7 +46,7 @@ READ = ("open", "check", "affects", "pull", "where", "set", "add", "review", "sa
 COMMANDS = {
     "open": ("[FILE ...] [--chars N] [--budget N]", "Open the current knowledge context."),
     "map": ("[--deep]", "Map the work through an available host agent."),
-    "config": ("[--guidance on|off]", "Read or change local user preferences."),
+    "config": ("[--mode simple|advanced] [--record PATH] [--check] [--guidance on|off]", "Inspect the project mode or change local preferences."),
     "check": ("[FILE ...]", "Check the record's consistency and declared conditions."),
     "pull": ("SUBJECT [SUBJECT ...] [--from REF]", "Read a subject and the evidence behind it."),
     "affects": ("SUBJECT [SUBJECT ...]", "Trace what a change reaches."),
@@ -64,6 +64,7 @@ COMMANDS = {
     "ingest": ("OPERATION [OPTIONS]", "Capture source reports and inspect their processing."),
     "followups": ("OPERATION [OPTIONS]", "Capture deferred work, inspect triggers and coordinate daily review."),
     "watch": ("OPERATION [OPTIONS]", "Check branch compatibility asynchronously and share scoped external facts."),
+    "pending": ("OPERATION [OPTIONS]", "Inspect, configure and reconcile project contribution publication."),
 }
 
 
@@ -207,6 +208,12 @@ def main():
         except ImportError:
             from watch import main as watch_main
         sys.exit(watch_main([arg for arg in rest if arg != "--json"]))
+    if cmd == 'pending':
+        try:
+            from .pending_cli import main as pending_main
+        except ImportError:
+            from pending_cli import main as pending_main
+        sys.exit(pending_main((["--json"] if options.json else []) + rest))
     if cmd == "followups":
         try:
             from .followups_cli import main as followups_main

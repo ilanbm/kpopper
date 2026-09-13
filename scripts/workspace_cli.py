@@ -103,20 +103,43 @@ def open_context(argv):
 
 
 def config(argv):
-    parser = _parser("config", "Read or change local user preferences.")
+    parser = _parser("config", "Inspect the project mode or change local preferences.")
     parser.add_argument("--guidance", choices=("on", "off"), help="enable or disable conversational explanations")
+    parser.add_argument('--mode', choices=('simple', 'advanced'), help='set the project-wide knowledge mode')
+    parser.add_argument('--record', help='explicit record location; Simple Git uses an external shared record')
+    parser.add_argument('--check', action='store_true', help='preview the mode transition without changing policy')
+    parser.add_argument('--expected-generation', type=int, help='refuse a policy change if its generation has moved')
     args = parser.parse_args(argv)
     try:
         path = O.state_dir() / "guidance.json"
         value = O._read(path) or {"enabled": True}
         if type(value.get("enabled")) is not bool:
             raise ValueError("Invalid guidance preference: " + str(path))
-        if args.guidance is not None:
+        if args.guidance is not None and not args.check:
             value = {"enabled": args.guidance == "on"}
             O._write(path, value)
-        data = {"guidance": value["enabled"]}
-        return _emit(data, "Guidance: " + ("on" if value["enabled"] else "off"), args.json)
-    except (OSError, ValueError) as error:
+        if __package__:
+            from .project_modes import Project
+        else:
+            from project_modes import Project
+        project = Project()
+        report = None
+        if args.check:
+            report = project.preview_transition(args.mode, args.record)
+            policy = project.config()
+        elif args.mode is not None or args.record is not None:
+            policy = project.configure(args.mode, args.record, args.expected_generation)
+        else:
+            policy = project.config()
+        data = {"guidance": value["enabled"], 'project': policy,
+                'record': str(project.record(policy))}
+        text = ('Mode: ' + policy['mode'] + '\nRecord: ' + data['record'] +
+                '\nGuidance: ' + ('on' if value['enabled'] else 'off'))
+        if report is not None:
+            data['transition'] = report
+            text += '\nTransition: ' + ('; '.join(report['blockers']) if report['blockers'] else 'ready')
+        return _emit(data, text, args.json, 2 if report and report['blockers'] else 0)
+    except (OSError, ValueError, RuntimeError, subprocess.SubprocessError) as error:
         return _emit({"error": str(error)}, str(error), args.json, 2)
 
 
