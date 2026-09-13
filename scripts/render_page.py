@@ -602,9 +602,9 @@ def fits(kind, keys, jud, E, groups_of=None, words=None, label=None):
     return problem("fit_unknown", f"unknown renderer '{kind}'", kind=kind)
 
 
-def link_target(entry):
-    """Record destinations, never executable URLs. Local files remain local links."""
-    from urllib.parse import quote, urlsplit
+def link_target(entry, record_root=None, page_path=None):
+    """A safe record destination, rebased when the generated page's place is known."""
+    from urllib.parse import quote, unquote, urlsplit, urlunsplit
     v = str(entry.get("url") or entry.get("file") or "").strip()
     if not v or any(ord(c) < 32 for c in v):
         return ""
@@ -616,9 +616,43 @@ def link_target(entry):
     if scheme:
         if scheme in ("http", "https") and not parsed.netloc:
             return ""
-        return v if scheme in ("https", "http", "mailto", "file") else ""
+        if scheme not in ("https", "http", "mailto", "file"):
+            return ""
+        # Encode characters that cannot safely occur literally without changing the URL's
+        # path/query/fragment boundaries. Existing escapes remain escapes.
+        return urlunsplit((parsed.scheme, parsed.netloc,
+                           quote(parsed.path, safe="/.-_~%:@!$&'()*+,;="),
+                           quote(parsed.query, safe="/?.-_~%:@!$&'()*+,;="),
+                           quote(parsed.fragment, safe="/?.-_~%:@!$&'()*+,;=")))
+    if v.startswith("//"):
+        return ""
+    is_url = bool(entry.get("url"))
+    # A fragment-only URL belongs to this generated page. Rebasing it as a filesystem path
+    # would break its tabs and tree navigation.
+    if is_url and not parsed.path:
+        return quote(v, safe="?.-_~%=&#+@!$'()*+,;:/")
+    if record_root is not None and page_path is not None:
+        local = unquote(parsed.path) if is_url else v
+        source = local if os.path.isabs(local) else os.path.join(str(record_root), local)
+        absolute = os.path.abspath(source)
+        try:
+            relative = os.path.relpath(absolute, os.path.dirname(os.path.abspath(page_path)))
+            # `local` was decoded for filesystem arithmetic, so '%' is literal here and must be
+            # encoded again (an authored %25 must not turn into an incomplete escape). Windows
+            # path separators become URL separators; a literal POSIX backslash stays literal.
+            if os.sep != "/":
+                relative = relative.replace(os.sep, "/")
+            target = quote(relative, safe="/.-_~")
+        except ValueError:
+            # Windows cannot spell a relative path across drive letters. An absolute file URI
+            # keeps that source reachable and lets the page itself remain a standalone file.
+            target = pathlib.Path(absolute).as_uri()
+        if is_url:
+            target += ("?" + quote(parsed.query, safe="/?.-_~%:@!$&'()*+,;=")) if parsed.query else ""
+            target += ("#" + quote(parsed.fragment, safe="/?.-_~%:@!$&'()*+,;=")) if parsed.fragment else ""
+        return target
     # A URL's query and fragment are navigation, while a file field is a literal path.
-    return quote(v, safe="/.-_~%?=&#+@" if entry.get("url") else "/.-_~") if not v.startswith("//") else ""
+    return quote(v, safe="/.-_~%?=&#+@" if is_url else "/.-_~")
 
 
 URGENCY = {"broken": (100, "stop"), "falsified": (95, "stop"), "unchecked": (80, "stop"),
@@ -842,8 +876,9 @@ def tree_svg(ids, jud, E, J, flags, words=None, label=None):
     return "".join(o)
 
 
-def build(paths, brief_path=None):
+def build(paths, brief_path=None, page_path=None):
     doc = P.load(paths)
+    record_root = os.path.dirname(P.layout_of(paths)["entry"])
     ids, jud, fields = P.infer(doc)
     meta = doc.get("meta") or {}
     declared_lang, page_dir = language(doc), direction(doc)
@@ -1308,7 +1343,7 @@ def build(paths, brief_path=None):
 
     def r_links(keys):
         return '<div class="links">' + ''.join(
-            '<a class="lk"' + hue(k) + f' href="{html.escape(link_target(E[k]), quote=True)}">'
+            '<a class="lk"' + hue(k) + f' href="{html.escape(link_target(E[k], record_root, page_path), quote=True)}">'
             + fx(k, lbl(k)) + note(k) + '</a>' for k in keys) + '</div>'
 
     page_counts = {}          # filled once the page has counted, before anything is drawn
@@ -1739,7 +1774,7 @@ def build(paths, brief_path=None):
             links = []
             for key in keys:
                 if isinstance(key, str) and key in ids:
-                    dest = link_target(E.get(key) or {})
+                    dest = link_target(E.get(key) or {}, record_root, page_path)
                     label = fx(key, lbl(key))
                     links.append(f'<a href="{html.escape(dest, quote=True)}">{label}</a>' if dest else label)
                 else:
@@ -1771,12 +1806,12 @@ def build(paths, brief_path=None):
                                        "arrangements": arrangements, "earned": earned}
 
 
-def measured_build(paths, brief_path=None):
+def measured_build(paths, brief_path=None, page_path=None):
     """Explicit page construction publishes counts for the exact inputs it read."""
     if LOADED_SOURCE_HASH != MEASUREMENTS.LOADED_CODE['render_page.py']:
         raise ValueError('loaded renderer changed; restart it before measuring')
     before = MEASUREMENTS.snapshot(paths, brief_path)
-    result = build(paths, brief_path)
+    result = build(paths, brief_path, page_path)
     try:
         MEASUREMENTS.publish(before, result[4]['page'])
     except OSError as error:
@@ -1875,13 +1910,20 @@ def verify(paths, brief_path=None):
 
 
 if __name__ == "__main__":
-    a = sys.argv[1:]
+    supplied, a, page_path, i = sys.argv[1:], [], None, 0
+    while i < len(supplied):
+        if supplied[i] == "--page-out":
+            if i + 1 >= len(supplied):
+                sys.exit("--page-out needs a path")
+            page_path, i = supplied[i + 1], i + 2
+        else:
+            a.append(supplied[i]); i += 1
     brief = a[a.index("--brief") + 1] if "--brief" in a else None
     files = [x for x in a if x.endswith((".yaml", ".yml")) and x != brief] or P.default_paths()
     brief = find_brief(files, brief)
     if "--verify" in a:
         sys.exit(verify(files, brief))
-    page, _, _, _, info = measured_build(files, brief)
+    page, _, _, _, info = measured_build(files, brief, page_path)
     for t in info["tabs"]:
         if t["shape"]:
             continue

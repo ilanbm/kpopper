@@ -1,6 +1,6 @@
 {
   "name": "kpopper",
-  "version": "1.5.0",
+  "version": "1.5.2",
   "description": "Browser checks for a kpopper record page: the provenance layer, the tabs and the tree, in both themes and under reduced motion. The record itself is read by the Python package of the same name.",
   "keywords": [
     "provenance",

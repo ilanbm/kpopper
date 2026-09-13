@@ -3,7 +3,9 @@
 kpopper adds checks for the recorded reasons behind software changes. A branch can change
 a premise that another branch's decision depends on, even when Git can combine the files
 without a text conflict. The [README example](../README.md#coding-check-the-reasoning-behind-a-merge)
-illustrates this with a request timeout and a checkout budget.
+illustrates this with a shared search cache and private results, followed by a download
+promise that outlasts file retention. [Run both examples](../examples/merge-assumptions/README.md)
+to see passing branch tests, clean Git merges and failed recorded conditions together.
 
 ## Check the proposed merge result
 

@@ -157,7 +157,12 @@ def do_page(args):
     if "--verify" in rest:
         # No HTML is written; derived measurements are retained outside the record.
         sys.exit(subprocess.run([sys.executable, script] + rest).returncode)
-    proc = subprocess.run([sys.executable, script] + rest, stdout=subprocess.PIPE)
+    # The renderer reads the record, but this dispatcher owns the destination. Give it the
+    # absolute page path so record-relative source files can stay correct wherever --out puts
+    # the page. This internal argument is removed by render_page.py before it finds YAML files.
+    destination = out if out is not None else page_of(rest)["page"]
+    proc = subprocess.run([sys.executable, script, "--page-out", os.path.abspath(destination)] + rest,
+                          stdout=subprocess.PIPE)
     if proc.returncode:
         sys.exit(proc.returncode)               # a build error leaves no page worth writing
     if out is None:

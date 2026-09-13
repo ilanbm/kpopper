@@ -1,5 +1,18 @@
 # Changelog
 
+## 1.5.2 — 2026-09-13
+
+- Remove introductory caption and illustration-production guide (#73) — patch
+- Illustrate more deterministic reasoning and refresh the knowledge map (#71) — patch
+
+## 1.5.1 — 2026-09-13
+
+- Refresh README introduction and visual identity (#69) — patch
+- Fix concurrent record creation and layout migration regressions (#70) — patch
+- Record the entry-file naming measurement on the Codex host (#66) — patch
+
+Decisions recorded: d.detached_worker_test_cleanup, d.knowledge_map_keeps_its_detail, d.readme_layered_explanation, d.readme_main_tagline, d.readme_opens_with_what_it_does, d.readme_story_series, d.readme_visual_identity
+
 ## 1.5.0 — 2026-09-11
 
 - Say when a record was moved by half, and name the directory a plain listing skips (#65) — minor

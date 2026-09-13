@@ -424,11 +424,16 @@ class IngestionQueue(unittest.TestCase):
             text=True, capture_output=True, check=True,
         )
         event = json.loads(run.stdout)
-        for _ in range(100):
+        lease = self.state / "worker.lease"
+        deadline = time.monotonic() + 10
+        while time.monotonic() < deadline:
             current = I.status(event["event_id"], self.record, self.state)
-            if current.get("state") in I.TERMINAL:
+            # The receipt is terminal before the worker's final queue scan and
+            # lease release. Keep its directory alive until that work is done.
+            if current.get("state") in I.TERMINAL and not lease.exists():
                 break
             time.sleep(0.02)
+        self.assertFalse(lease.exists(), "The detached worker did not finish before cleanup")
         self.assertEqual(current["state"], "applied")
         self.assertEqual(self.read()["known"]["facts.count"]["v"], 4)
 

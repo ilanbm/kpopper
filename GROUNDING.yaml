@@ -344,6 +344,16 @@ sources:
          synthetic record ten times this one's measured at 3 MB/s, the pointer form that merges
          shards on read, and d.scale_by_federation's answer to a record that outgrows one file"
     read: "2026-09-11"
+  s.2026_09_12_first_readings:
+    asked: "זהו, צריך לעבד ולהבין כאן את העיקר ולראות איך מתקדמים ומשפרים"
+    name: "Maintainer-reported first-reader feedback, paraphrased: the programmer liked the name,
+           slogan, humorous attribution and two-PR scenario, did not know second brain, needed the
+           small attribution pointed out on a phone, and found the source illustration busy. A
+           separate reader disliked the illustration style; no reaction to the name, slogan or
+           scenario was reported for that reader."
+    of: "README feedback reported by the maintainer during the September 2026 redesign. These are
+         reported reactions to the earlier entrance, not observations from a controlled reader test."
+    read: "2026-09-13"
   s.2026_09_12_half_move:
     asked: "A half migration is silent. The layout follows the entry file's name and the reader
             looks in one home, never both. I reproduced what happens when someone renames only the
@@ -377,6 +387,114 @@ sources:
          the six host adapters, the root layouts of .github, .claude and .codex, the README's own
          word use, and a dry run of a judgment rewrite through the door"
     read: "2026-09-12"
+  s.2026_09_13_large_hero:
+    asked: "1, אבל לאן העיניים שלו אמורות להסתכל עפי כללי המרקטינג?"
+    name: "The maintainer chose the corrected large-portrait hero, asked about gaze direction, and
+           requested a separate exaggerated thumbnail-smile variant to inspect for humor."
+    of: "Choice between the corrected large Popper portrait and the prior small-portrait typographic
+         hero. The smile was requested as a comparison, not selected as the default."
+    read: "2026-09-13"
+  s.2026_09_13_more_self_aware_tagline:
+    asked: "יופי בוא נלך על זה"
+    name: "The maintainer approved Your project, more self-aware. as the main tagline after
+           clarifying that more compares the project with its state before adding kpopper."
+    of: "Final wording choice in the README tagline discussion. The concrete explanation of recorded
+         dependencies and review remains immediately below it."
+    read: "2026-09-13"
+  s.2026_09_13_process_illustrations:
+    asked: "they should also go through the same process and design compared to the original ones
+            and with our new design and language"
+    name: "The maintainer requested the time and conversation overviews be compared with their
+           original illustrations and brought into the new ink visual language, as the opening
+           examples were."
+    of: "README process illustrations: past/present/future and keeping the conversation moving."
+    read: "2026-09-13"
+  s.2026_09_13_readme_depth:
+    asked: "ואגב הreadme באמת מכסה כמו שצריך את הפרויקט?"
+    name: "README revision request: informative headings distinct from illustrated headlines;
+           visible record excerpts; diagrams and record states in the executable examples; a
+           curiosity link to the Popper explanation; a broader concise opening; consistent name
+           casing; flexible record structure and navigation."
+    of: "Maintainer feedback on the illustrated README and its example guides."
+    read: "2026-09-13"
+  s.2026_09_13_readme_direction:
+    asked: "מסכים, תעשה את זה"
+    name: "Approved README direction, paraphrased: retain the illustrated hero, explain practical
+           value immediately, lead with the two-PR case and follow with non-code work. Use the
+           selected blue k icon and ink-poster hero with its fictional quotation, italic attribution
+           and secondary Korean bubble. Keep the attribution within the image without a duplicate
+           caption. Retain the detailed crowded-to-ordered source illustration. Integrate the useful
+           parallel README work into this direction."
+    of: "Maintainer choices in the README redesign discussion, including the explicit choice to
+         retain the detailed knowledge-source illustration and the subsequent approval to combine the
+         parallel changes."
+    read: "2026-09-13"
+  s.2026_09_13_reasoning_emphasis:
+    asked: "איך זה נשמע? אני בכיוון?"
+    name: "README tone refinement: lead with dependencies between decisions, evidence and
+           assumptions; clarify which record roles are shared and when they are needed; replace the
+           vague project heading; remove explanations of the visual joke; use a Popper-themed check
+           and a faint, poised smile for the serious hero."
+    of: "Maintainer feedback after the expanded README and large-portrait hero. The proposed
+         executive-function wording and elusive-smile effect are directions to assess, not
+         established product or perceptual capabilities."
+    read: "2026-09-13"
+  s.2026_09_13_reasoning_overview:
+    asked: "a more deterministic reasoning"
+    name: "Accepted ink knowledge map and the comparative promise of more deterministic reasoning"
+    of: "The maintainer approved the new ink knowledge-source illustration and asked for a
+         words-to-YAML-to-calculated-check visual near the opening. They clarified that more
+         qualifies the promise: selected reasoning steps become deterministic, not all
+         natural-language interpretation. The illustration fixture passed at 30/30, then failed
+         identically on three checks after recorded retention became 7. In the follow-up, the
+         maintainer requested actual-looking session dialogue on one side, YAML on the deterministic
+         side, and the calculated result directly beneath it. They questioned Condition holds;
+         the revised illustration names Download promise fails instead. The selected closing line
+         is Conversations move on. The reasoning stays checkable. Further discussion clarified
+         that the email must actually be created with the promised window, the later policy change
+         must update the record, and recording entails agent work rather than zero overhead or an
+         entirely background process. The revised illustration uses downloads.availability with
+         Retention supports the promised window, a draft policy and explicit record-action labels."
+    read: "2026-09-13"
+  s.2026_09_13_remove_duplicate_overview:
+    name: "Remove the introductory caption and linked guide; retain the illustration"
+    asked: "Remove the introductory caption and linked illustration-production guide. Keep the
+            opening illustration and its desktop and phone variants."
+    of: "Maintainer direction, paraphrased"
+    read: "2026-09-13"
+  s.2026_09_13_self_aware_tagline:
+    asked: "Your project, self-aware.\nאם זה לא הבטחה מוזרה שתגרום לאנשים להסתכל על הפרויקט מוזר, אז
+            זה מצויין"
+    name: "The maintainer selected Your project, self-aware. as the main tagline, conditional on it
+           not becoming a misleading promise about the product."
+    of: "README tagline discussion. The immediate paragraph explains the recorded dependencies and
+         review behavior; reader response to this wording has not been measured."
+    read: "2026-09-13"
+  s.2026_09_13_story_approval:
+    asked: "הם מושלמים."
+    name: "Approval of the illustrated README story series: cache and private results, download
+           promise versus retention, then a cooking-workshop plan in Claude Cowork. The first cache
+           phone layout was included in the approved previews."
+    of: "The maintainer selected cache plus download-link validity, followed by Cowork, and approved
+         the resulting ink-poster story previews."
+    read: "2026-09-13"
+  s.2026_09_13_worker_and_research:
+    asked: "the guy is not a background worker... so if you want to leave one of the, it should be
+            only in the main session."
+    name: "Maintainer correction of worker imagery and choice of a dark-matter research example"
+    of: "README refinement, paraphrased: remove the worker's human avatar, use a short title about
+         background saving and selective return, and add an academic example with multiple agents
+         on one graph. The maintainer selected dark matter in the follow-up choice. These are design
+         requests, not evidence of improved adoption or research quality."
+    read: "2026-09-13"
+  s.2026_09_13_worker_cleanup:
+    name: "Python 3.13 CI failed while deleting a detached worker test directory"
+    url: "https://github.com/ilanbm/kpopper/actions/runs/34729916971/job/103650678003"
+    of: "The detached-capture test reached a terminal receipt, then TemporaryDirectory cleanup
+         failed with Directory not empty in private-state. The worker implementation scans the queue
+         and removes its lease after producing the receipt. The revised test passed 25 repetitions
+         and the 83-test ingestion suite on Python 3.13."
+    read: "2026-09-13"
   s.background_ingestion:
     name: "Background capture and selective delivery contract"
     file: "skills/kpopper/INGESTION.md"
@@ -408,6 +526,11 @@ sources:
     file: "scripts/followups.py"
     read: "2026-09-10"
     revision: "7bbd2fcd134bf6d34c1e18465eaa230b18d69cb3"
+  s.gaze_direction_study:
+    name: "The influence of banner advertisements on attention and memory: human faces with averted
+           gaze can enhance advertising effectiveness"
+    url: "https://pmc.ncbi.nlm.nih.gov/articles/PMC3941030/"
+    read: "2026-09-13"
   s.watch_command:
     name: "Watch plugin command"
     file: "skills/watch/SKILL.md"
@@ -1255,6 +1378,11 @@ open:
   q.arrangement_falsifiers: "will sessions write arrangement falsifiers a build can evaluate and
                              that say something - to be read as a foreign agent would, after
                              fifteen real arrangements?"
+  q.readme_reader_comprehension: "Can readers new to the project explain what the redesigned
+                                  entrance preserves, what its checks actually detect, and how it
+                                  applies beyond code without coaching? Ask what the source
+                                  illustration communicates as well. The approved design has not yet
+                                  established reader comprehension or repeat use."
   q.same_day_rereading: "where does a re-reading go when the session changed the file a premise was
                          read from, on the day it was read? set refuses it into the base as two
                          writers, and the hypothesis beside it is a contested reading the dry run
@@ -1711,6 +1839,18 @@ judgments:
                                   - counts and shares, never stored, thresholds only inside
                                   falsifiers"
       p.coverage_thresholds: 0
+  d.detached_worker_test_cleanup:
+    name: "Wait for detached worker shutdown before deleting its test state"
+    rests_on: [s.2026_09_13_worker_cleanup]
+    verdict: "The detached-capture test waits for both a terminal receipt and removal of
+              worker.lease before cleaning its directory."
+    because: "A terminal event receipt does not mean the worker has finished using the queue
+              directory. The worker releases its lease after its final scan. A bounded wait and
+              explicit lease assertion preserve the result assertions without hiding cleanup errors
+              or changing product behavior."
+    reopened_by: "The worker lifecycle changes so that lease removal precedes more state writes, or
+                  a failed worker leaves the test hanging beyond its bounded wait."
+    seen: {s.2026_09_13_worker_cleanup: "read 2026-09-13"}
   d.distinct_is_a_bare_id:
     rests_on: [s.2026_09_04_sameness, d.sameness_is_judged, d.locate_by_shape]
     verdict: "distinct writes its edge as a bare id - or several, comma-separated - with the why as
@@ -2109,6 +2249,22 @@ judgments:
                   creates another input event; or a host is advertised as waking an idle task without
                   a verified supported route."
     seen: {s.background_ingestion: "read 2026-09-09"}
+  d.knowledge_map_keeps_its_detail:
+    rests_on: [s.2026_09_13_readme_direction, s.2026_09_13_reasoning_overview]
+    verdict: "Keep the detailed, playful knowledge-source illustration: many existing tools and
+              materials on the left, an ordered record of selected reasoning on the right. Use the
+              approved black-ink and electric-blue treatment with the series typography."
+    because: "The maintainer retained the dense-to-ordered composition and approved its new ink
+              treatment. The five source categories and varied objects preserve breadth and
+              playfulness, while the typography and palette join the current series. This is a chosen
+              presentation whose communication still needs reader evidence, not a demonstrated
+              conversion improvement."
+    reopened_by: "An uncoached reader at phone width cannot identify the crowded-to-ordered
+                  contrast, or reads the illustration as a promise to migrate or automatically
+                  organize every source despite its caption and surrounding explanation."
+    seen:
+      s.2026_09_13_readme_direction: "read 2026-09-13"
+      s.2026_09_13_reasoning_overview: "read 2026-09-13"
   d.local_claims_want_a_run:
     rests_on: [s.2026_09_04_calibration, prior.local_needs_a_run, m.claims.general_held,
                m.claims.local_checked_held, m.claims.local_assumed_held, m.reach.general_held,
@@ -2525,6 +2681,163 @@ judgments:
       d.spill_on_every_tab: "what fell through the arrangement - flagged judgments nothing picked,
                              and what a session wrote for an intent no tab serves - is counted once
                              for the page and drawn on every tab"
+  d.readme_layered_explanation:
+    rests_on: [s.2026_09_13_readme_depth, d.readme_opens_with_what_it_does, d.readme_story_series, s.2026_09_13_reasoning_emphasis]
+    verdict: "Lead with recorded dependencies between decisions, evidence and assumptions, and the
+              conditions for review. Use descriptive story headings and visible record excerpts, with
+              complete records, state tables and diagrams in the example guides. Distinguish shared
+              reasoning roles from mandatory sections, spell the name kpopper, and link to Popper's
+              idea without explaining every part of the visual joke."
+    because: "A living record alone can sound like any memory or data system. Dependencies and
+              review conditions describe the concrete function, while grasping every logical
+              consequence or supplying an executive-function brain would imply more than the record
+              and checker provide. The method has common roles and review conventions, but projects
+              use them as needed; a source and finding need no invented judgment. The Popper
+              punchline stays separate from the executable debut-release condition, so an ambiguous
+              father-of-K-pop claim is not presented as something the predicate evaluator
+              understands."
+    reopened_by: "A new reader still cannot describe the purpose, find installation, trace an
+                  illustrated result to its record, or distinguish evolving structure from autonomous
+                  rewriting; or the extra examples and excerpts prevent readers from finding the task
+                  they came for."
+    seen:
+      s.2026_09_13_readme_depth: "read 2026-09-13"
+      d.readme_opens_with_what_it_does: "Keep the hero, explain the practical benefit immediately
+                                         below it, then show concrete code and non-code examples with
+                                         visible recorded premises and a direct route to
+                                         installation. Introduce the third-brain metaphor later."
+      d.readme_story_series: "Open with the approved illustrated series: shared cache and private
+                              results, download promise versus retention, then the Cowork workshop.
+                              Provide desktop and phone layouts, text explanations and runnable
+                              examples."
+      s.2026_09_13_reasoning_emphasis: "read 2026-09-13"
+  d.readme_main_tagline:
+    rests_on: [s.2026_09_13_self_aware_tagline, d.readme_layered_explanation, s.2026_09_13_more_self_aware_tagline]
+    verdict: "Use Your project, more self-aware. as the main README tagline, immediately followed by
+              the concrete explanation of decisions, evidence, assumptions and conditions for
+              review."
+    because: "The comparative frames an improvement in the project's recorded context and
+              reviewability relative to its earlier state. The adjacent paragraph anchors the
+              metaphor in recorded relationships and changed premises. It does not claim
+              consciousness, unrestricted understanding or automatic observation of the entire
+              project. Reader response and adoption effects remain unmeasured."
+    reopened_by: "An uncoached reader interprets the opening as a claim of conscious software or
+                  automatic awareness of unrecorded events, or cannot explain the concrete
+                  reasoning-and-review function after reading the headline and paragraph."
+    seen:
+      s.2026_09_13_self_aware_tagline: "read 2026-09-13"
+      d.readme_layered_explanation: "Lead with recorded dependencies between decisions, evidence and
+                                     assumptions, and the conditions for review. Use descriptive
+                                     story headings and visible record excerpts, with complete
+                                     records, state tables and diagrams in the example guides.
+                                     Distinguish shared reasoning roles from mandatory sections,
+                                     spell the name kpopper, and link to Popper's idea without
+                                     explaining every part of the visual joke."
+      s.2026_09_13_more_self_aware_tagline: "read 2026-09-13"
+  d.readme_opens_with_what_it_does:
+    rests_on: [s.2026_09_12_first_readings, s.2026_09_13_readme_direction, d.named_for_popper, s.2026_09_13_readme_depth, s.2026_09_13_reasoning_overview, s.2026_09_13_remove_duplicate_overview]
+    verdict: "Keep the hero, practical benefit, direct installation link and opening reasoning
+              illustration, followed by the concrete code and non-code examples with visible
+              recorded premises and phone layouts. Omit the introductory caption and link to the
+              illustration-production guide. Introduce the third-brain metaphor later."
+    because: "The reported reader connected with the merge scenario while the opening metaphor
+              required explanation. Concrete code cases give developers a familiar entrance, and the
+              following Cowork case makes the wider scope visible. Visible record excerpts expose the
+              declared premises; linked guides carry complete records and executable checks.
+              Descriptive headings and navigation let readers choose their depth without needing
+              the philosophical references first. The opening illustration shows the mechanism;
+              each full example explains its practical value. Product links lead to the examples
+              and usage rather than to instructions for constructing the illustration."
+    reopened_by: "A new reader given the README without coaching cannot explain what it preserves or
+                  what triggers review, takes a green check as proof of arbitrary code correctness,
+                  or concludes from the opening that non-code projects are unsupported. Record the
+                  misunderstanding and where it arose; stopping after finding an answer is not
+                  failure. Revisit if readers cannot distinguish interpretation from mechanical
+                  comparison or cannot find the examples and installation."
+    seen:
+      s.2026_09_12_first_readings: "read 2026-09-13"
+      s.2026_09_13_readme_direction: "read 2026-09-13"
+      d.named_for_popper: "the project keeps the name kpopper; discovery runs on direct links and
+                           qualified search, never on the bare term"
+      s.2026_09_13_readme_depth: "read 2026-09-13"
+      s.2026_09_13_reasoning_overview: "read 2026-09-13"
+      s.2026_09_13_remove_duplicate_overview: "read 2026-09-13"
+  d.readme_story_series:
+    rests_on: [s.2026_09_13_story_approval, d.readme_opens_with_what_it_does, d.readme_visual_identity, s.2026_09_13_worker_and_research]
+    verdict: "Open with the approved illustrated series: shared cache and private results, download
+              promise versus retention, the Cowork workshop, then a dark-matter research synthesis.
+              Provide desktop and phone layouts, visible record excerpts, source links and runnable
+              examples."
+    because: "Two code cases expose different dependencies: a visibility assumption and a promise
+              across policy and email. The workshop shows the same continuity problem when a changed
+              premise requires judgment rather than an executable failure. The two-input composition
+              and larger consequence scene preserve the narrative energy the maintainer preferred.
+              Published examples make the green branch tests, clean merges and failed recorded
+              conditions inspectable, and show that ordinary integration tests can also detect the
+              problems. The research case adds constructive synthesis across papers: distinct sourced
+              findings feed one judgment with its adopted framework and open questions. It uses
+              selected real abstracts with locators and a runnable replay of three concurrent CLI
+              writers; it does not claim live independent agent research or infer scientific truth
+              from agreement."
+    reopened_by: "An uncoached reader cannot identify the reason invalidated in either code story,
+                  treats the Cowork review notice as proof the plan is wrong, believes the tool
+                  discovers unrecorded assumptions automatically, or cannot read the essential
+                  content on a phone. Revisit the length if readers who want to try the tool cannot
+                  find installation. Revisit the research story if readers take schematic figures for
+                  measured data, the synthesis for a proof, or the prepared replay for a live model
+                  evaluation."
+    seen:
+      s.2026_09_13_story_approval: "read 2026-09-13"
+      d.readme_opens_with_what_it_does: "Keep the hero, explain the practical benefit immediately
+                                         below it, then show concrete code and non-code examples with
+                                         visible recorded premises and a direct route to
+                                         installation. Introduce the third-brain metaphor later."
+      d.readme_visual_identity: "Use the large ink portrait of Karl Popper on the left, with a
+                                 restrained, faintly amused expression and a natural inward gaze
+                                 toward the lowercase kpopper wordmark and one-line lemma quotation
+                                 on the right. Keep the separate italic attribution without a final
+                                 period, the secondary Korean bubble and the white geometric k icon
+                                 on electric blue. Process overviews use ink illustrations and phone
+                                 layouts with separate editable schematic references. In the
+                                 conversation overview, show a person only in the main-session
+                                 scene."
+      s.2026_09_13_worker_and_research: "read 2026-09-13"
+  d.readme_visual_identity:
+    rests_on: [s.2026_09_13_readme_direction, s.2026_09_12_first_readings, s.2026_09_13_large_hero, s.gaze_direction_study, s.2026_09_13_reasoning_emphasis, s.2026_09_13_process_illustrations, s.2026_09_13_worker_and_research]
+    verdict: "Use the large ink portrait of Karl Popper on the left, with a restrained, faintly
+              amused expression and a natural inward gaze toward the lowercase kpopper wordmark and
+              one-line lemma quotation on the right. Keep the separate italic attribution without a
+              final period, the secondary Korean bubble and the white geometric k icon on electric
+              blue. Process overviews use ink illustrations and phone layouts with separate editable
+              schematic references. In the conversation overview, show a person only in the
+              main-session scene."
+    because: "The maintainer selected the corrected large portrait after comparing it with the
+              typographic hero. It gives the philosopher/pop-star joke a recognizable face alongside
+              the illustrated stories. Inward gaze is a composition choice informed by banner
+              eye-tracking research; no increase in adoption or conversions has been measured for
+              this README. Keep the restrained expression with at most a barely perceptible
+              closed-mouth smile as the default and preserve clear typography and text explanations
+              for readers who do not recognize the references. The smile aims for ambiguity and
+              poise; the Mona Lisa's perceptual effect has not been established for this
+              illustration. The time and conversation overviews share the story series's visual
+              language while preserving the original concepts, explicit parallel worker, configured
+              future work and the agent's separate act of recording outcomes. The SVG references
+              describe the logic; exporting them is not how the illustrated PNGs are produced. The
+              maintainer found the worker avatar misleading. The software process now has no person,
+              and the direct title Save in the background. Return when needed. replaces the
+              parallel-tracks slogan and repeated footer."
+    reopened_by: "Readers at ordinary phone width cannot read the primary slogan or attribution,
+                  mistake the fictional attribution for a historical quotation, or misunderstand
+                  process boundaries in the diagrams. Revisit the compact icon if users confuse it
+                  with another product at its actual display size."
+    seen:
+      s.2026_09_13_readme_direction: "read 2026-09-13"
+      s.2026_09_12_first_readings: "read 2026-09-13"
+      s.2026_09_13_large_hero: "read 2026-09-13"
+      s.gaze_direction_study: "read 2026-09-13"
+      s.2026_09_13_reasoning_emphasis: "read 2026-09-13"
+      s.2026_09_13_process_illustrations: "read 2026-09-13"
+      s.2026_09_13_worker_and_research: "read 2026-09-13"
   d.record_is_code:
     rests_on: [s.2026_09_01_consolidation, d.register_out_of_tree, d.base_shared_forks_on_contradiction, p.hypothesis_homes]
     verdict: "the record of what is known about the code lives in the tree - committed with the work

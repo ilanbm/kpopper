@@ -50,6 +50,23 @@ def _safe_path(name):
 def _records(root, entry, sha=None):
     """Materialize only the bounded record/pointer/hypothesis closure, never source files."""
     import posixpath
+    # Each ref keeps the entry name and companion layout it was committed with.  A
+    # checkout can therefore read GROUNDING.yaml while its merge base still has
+    # PROVENANCE.yaml (or the reverse).
+    if sha and PurePosixPath(entry).name in P.ENTRY_NAMES:
+        directory = PurePosixPath(entry).parent
+
+        def exists(name):
+            result = subprocess.run(['git', '-C', str(root), 'cat-file', '-e', sha + ':' + name],
+                                    capture_output=True, timeout=10)
+            return result.returncode == 0
+
+        if not exists(entry):
+            for candidate in P.ENTRY_NAMES:
+                alternate = str(directory / candidate)
+                if alternate != entry and exists(alternate):
+                    entry = alternate
+                    break
     files, queue = {}, [entry]
     hdir = str(PurePosixPath(entry).parent / P.hypotheses_rel(entry))
     if sha:
@@ -259,27 +276,40 @@ class Watch:
         found = workspace.locate(str(self.cwd))
         self.record = Path(found['record']).resolve()
         self.entry = self.record.relative_to(self.tree).as_posix()
-        self.key = digest(self.entry)
-        self.config_path = self.common / 'kpopper-watch' / (self.key + '.json')
-        if found['status'] != 'found' and not self.config_path.exists():
-            # A record that went missing was watched under whichever entry name it had; the
-            # configuration is looked for under the other name in the same directory.
-            for name in workspace.NAMES:
-                other = self.record.with_name(name)
-                entry = other.relative_to(self.tree).as_posix()
-                path = self.common / 'kpopper-watch' / (digest(entry) + '.json')
-                if path.exists():
-                    self.record, self.entry, self.key, self.config_path = other, entry, digest(entry), path
-                    break
+        # Configuration and durable reports stay anchored to the first configured
+        # supported entry name.  self.entry remains this checkout's discovered path,
+        # so old- and new-name worktrees can safely share that storage.
+        configured_entry = self.entry
+        candidates = [self.entry]
+        if self.record.name in workspace.NAMES:
+            candidates += [self.record.with_name(name).relative_to(self.tree).as_posix()
+                           for name in workspace.NAMES if name != self.record.name]
+        config_dir = self.common / 'kpopper-watch'
+        paths = [(candidate, config_dir / (digest(candidate) + '.json')) for candidate in candidates]
+        self.config_path = paths[0][1]
+        existing = [(candidate, path) for candidate, path in paths if path.exists()]
+        if len(existing) > 1:
+            names = ', '.join(candidate for candidate, _ in existing)
+            raise ValueError('multiple watch configurations exist for supported record names (' + names +
+                             '); reconcile their configuration and retained state before using watch')
+        if existing:
+            configured_entry, self.config_path = existing[0]
+        if found['status'] != 'found' and self.config_path.exists():
+            self.record = self.tree / configured_entry
+            self.entry = configured_entry
         if found['status'] != 'found' and not self.config_path.exists():
             raise ValueError('watch needs an existing project record')
+        self.key = digest(configured_entry)
         state = os.environ.get('XDG_STATE_HOME', '')
         home = Path(state) if os.path.isabs(state) else Path.home() / '.local/state'
-        self.project_state = home / 'kpopper/watch' / digest([str(self.common), self.entry])
+        self.project_state = home / 'kpopper/watch' / digest([str(self.common), configured_entry])
         self.state = self.project_state / 'worktrees' / digest(str(self.tree))
 
     def config(self):
-        return I._load(self.config_path)
+        config = I._load(self.config_path)
+        # `entry` describes the checkout being operated on.  A serialized value can
+        # be stale when another worktree is on the other side of the rename.
+        return dict(config, entry=self.entry) if config else config
 
     def setup(self, base_ref=None, shared_record=None, shared_private=False):
         try:
@@ -387,7 +417,7 @@ class Watch:
                 if not isinstance(location, dict) or location.get('tree') == str(self.tree):
                     continue
                 peer = Watch(location['cwd'])
-                if peer.common == self.common and peer.entry == self.entry:
+                if peer.common == self.common and peer.config_path == self.config_path:
                     results.append(peer.request())
             except (Exception, SystemExit) as exc:
                 results.append({'state': 'unavailable', 'location': str(path), 'reason': str(exc)[:300]})
