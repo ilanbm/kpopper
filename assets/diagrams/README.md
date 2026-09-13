@@ -21,6 +21,8 @@ checks**. An earlier session establishes the promise and its reason; a later one
 changes retention. An **Agent records** arrow connects the dialogue to the YAML.
 The comparison and **Download promise fails** result sit directly below the code,
 inside the same panel. The phone layout stacks these two parts.
+Both close with **Conversations move on. The reasoning stays checkable.** The
+desktop uses one line; the phone uses two for readability.
 
 **More** describes the shift of selected reasoning steps into
 explicit, repeatable checks. The agent still interprets sources and chooses the
