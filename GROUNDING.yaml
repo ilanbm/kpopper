@@ -457,9 +457,9 @@ sources:
          Retention supports the promised window, a draft policy and explicit record-action labels."
     read: "2026-09-13"
   s.2026_09_13_remove_duplicate_overview:
-    name: "Remove the duplicate introductory example and illustration-production guide"
-    asked: "Remove the opening reasoning overview and linked guide: they discuss the illustration
-            rather than the product and repeat the later download-retention example."
+    name: "Remove the introductory caption and linked guide; retain the illustration"
+    asked: "Remove the introductory caption and linked illustration-production guide. Keep the
+            opening illustration and its desktop and phone variants."
     of: "Maintainer direction, paraphrased"
     read: "2026-09-13"
   s.2026_09_13_self_aware_tagline:
@@ -2732,18 +2732,19 @@ judgments:
                                      explaining every part of the visual joke."
       s.2026_09_13_more_self_aware_tagline: "read 2026-09-13"
   d.readme_opens_with_what_it_does:
-    rests_on: [s.2026_09_12_first_readings, s.2026_09_13_readme_direction, d.named_for_popper, s.2026_09_13_readme_depth, s.2026_09_13_remove_duplicate_overview]
-    verdict: "Keep the hero, practical benefit and direct installation link, followed by the
-              concrete code and non-code examples with visible recorded premises and phone
-              layouts. Explain each case once and link to its complete executable example.
-              Introduce the third-brain metaphor later."
+    rests_on: [s.2026_09_12_first_readings, s.2026_09_13_readme_direction, d.named_for_popper, s.2026_09_13_readme_depth, s.2026_09_13_reasoning_overview, s.2026_09_13_remove_duplicate_overview]
+    verdict: "Keep the hero, practical benefit, direct installation link and opening reasoning
+              illustration, followed by the concrete code and non-code examples with visible
+              recorded premises and phone layouts. Omit the introductory caption and link to the
+              illustration-production guide. Introduce the third-brain metaphor later."
     because: "The reported reader connected with the merge scenario while the opening metaphor
               required explanation. Concrete code cases give developers a familiar entrance, and the
               following Cowork case makes the wider scope visible. Visible record excerpts expose the
               declared premises; linked guides carry complete records and executable checks.
               Descriptive headings and navigation let readers choose their depth without needing
-              the philosophical references first. Each example can explain its mechanism and
-              practical value together, keeping the opening focused on the product."
+              the philosophical references first. The opening illustration shows the mechanism;
+              each full example explains its practical value. Product links lead to the examples
+              and usage rather than to instructions for constructing the illustration."
     reopened_by: "A new reader given the README without coaching cannot explain what it preserves or
                   what triggers review, takes a green check as proof of arbitrary code correctness,
                   or concludes from the opening that non-code projects are unsupported. Record the
@@ -2756,6 +2757,7 @@ judgments:
       d.named_for_popper: "the project keeps the name kpopper; discovery runs on direct links and
                            qualified search, never on the bare term"
       s.2026_09_13_readme_depth: "read 2026-09-13"
+      s.2026_09_13_reasoning_overview: "read 2026-09-13"
       s.2026_09_13_remove_duplicate_overview: "read 2026-09-13"
   d.readme_story_series:
     rests_on: [s.2026_09_13_story_approval, d.readme_opens_with_what_it_does, d.readme_visual_identity, s.2026_09_13_worker_and_research]

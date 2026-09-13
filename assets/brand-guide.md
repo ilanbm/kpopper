@@ -102,6 +102,18 @@ density and visual treatment for the image's purpose.
 
 ## Diagrams and product images
 
+- "More deterministic reasoning" names a shift of selected reasoning steps into
+  explicit dependencies and repeatable checks. Use two clear parts: "Conversations"
+  and "Deterministic checks", joined by "Agent records". Put the YAML and its
+  calculated result together; name the failed decision directly rather than using
+  the ambiguous label "Condition holds". Stack the two parts on phones. The opening
+  visual demonstrates the mechanism; the following stories show its value.
+- Make the status of a decision concrete: an email created with a promised window
+  is different from a question about whether that window is possible. Show initial
+  recording and subsequent record updates as agent actions, outside the user's
+  chat requests. A policy draft is not a deployed change, and a file edit alone
+  does not establish that the record changed. Use a descriptive conclusion whose
+  stated condition can fail, rather than an instruction such as "Keep the promise".
 - Each explanatory image carries one question and one main relationship or change.
   Put detailed qualifications and instructions in the surrounding text.
 - Use blue for the emphasized subject or connection, black for ordinary content,

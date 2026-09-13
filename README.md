@@ -21,6 +21,15 @@ reach through the record and surfaces what needs another look.
 [Capabilities](#what-you-can-do-with-kpopper) · [Record format](#the-knowledge-record) ·
 [Why the name?](#popper-give-a-conclusion-a-way-to-fail)
 
+<p align="center">
+  <a href="assets/diagrams/reasoning-check.png">
+    <picture>
+      <source media="(max-width: 600px)" srcset="assets/diagrams/reasoning-check-mobile.png">
+      <img src="assets/diagrams/reasoning-check.png" width="760" alt="More deterministic reasoning. An earlier conversation creates an email with a 30-day download window; an action annotation shows the decision and its grounds recorded. A later session drafts a seven-day retention policy and updates the recorded retention from thirty to seven. An Agent records arrow leads to Deterministic checks: YAML retains the conclusion that retention supports the promised window and its earlier 30/30 review snapshot. Below the YAML, seven less than thirty produces Promise no longer supported. The closing line reads Conversations move on. The reasoning stays checkable. The agent interprets the words; the checker evaluates the recorded condition.">
+    </picture>
+  </a>
+</p>
+
 <details>
 <summary>Contents</summary>
 
