@@ -9,6 +9,20 @@ Keep what the work produced while it is still in your hands: the source with its
 
 ## The first write
 
+Use the project's mode and record location. **Simple** shares one logical graph across
+sessions; proposals are named hypotheses, and several sessions can work on the same one.
+**Advanced** keeps branch-specific code context, even with one checkout. Shareable findings
+independent of the feature use `pending_grounding`; feature-local knowledge stays with the
+branch. Check sharing permission before routing: private or unclear material belongs in a
+structured private draft, including its source and evidence, and must not enter Git objects.
+See [project modes](../../docs/project-modes.md) for the complete routing and publication flow.
+
+Keep a measurement tied to its exact environment and commit. An unmerged measurement can
+be a scoped fact; an unadopted assumption or conclusion is a hypothesis. Capture, remote
+proposal and verified target acceptance are distinct. A merge never refreshes `seen`,
+raises confidence or proves a claim. Do not overwrite competing pending revisions merely
+because one arrived later, and do not materialize a live overlay through an ordinary writer.
+
 Default to learning during the user's actual task. Create the record with the first useful
 finding worth revisiting, within the user's write authorization. A record containing only
 `sources`, `known` and `open` is a valid start; add judgments when there are actual conclusions.

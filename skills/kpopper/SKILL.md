@@ -33,6 +33,19 @@ Work that gets revisited needs one thing sessions usually throw away: **where ea
 
 ## Three things worth keeping
 
+There are two project modes. **Simple** uses one shared graph with named competing
+hypotheses. **Advanced** adds branch contexts and `pending_grounding` for shareable,
+feature-independent contributions; one checkout is enough. Several sessions can work on
+one hypothesis in either mode. Non-Git projects default to Simple; new Git projects to
+Advanced; existing registered shared records retain their behavior. Explicit mode changes
+preserve records and require unresolved differences to be reconciled.
+
+Privacy comes before routing. Private or unclear sharing permission means a structured
+private draft outside publishable Git. A finding measured at an unmerged commit can be a
+fact in that precise scope. Merge means incorporation, without proving truth or changing
+the last review. Ordinary reads show relevant pending knowledge; committed artifacts use
+explicit frozen reads. [Project modes](../../docs/project-modes.md) explains the lifecycle.
+
 Everything the record holds is one of three kinds, and each is written the moment it exists,
 by the session doing the work:
 
