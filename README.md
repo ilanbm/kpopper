@@ -440,7 +440,7 @@ important unresolved findings are available for delivery back to the conversatio
   <a href="assets/diagrams/conversation-flow.png">
     <picture>
       <source media="(max-width: 600px)" srcset="assets/diagrams/conversation-flow-mobile.png">
-      <img src="assets/diagrams/conversation-flow.png" width="760" alt="Save in the background. Return when needed. The main agent captures an explicit venue-cancellation report and continues with the set list. A software worker in a separate process saves the dated source, records the change from confirmed to cancelled and checks the venue-to-announcement dependency. The announcement needs review; important findings return through the configured delivery route while routine updates stay quiet.">
+      <img src="assets/diagrams/conversation-flow.png" width="760" alt="Get notified only when something needs attention. The main agent captures an explicit venue-cancellation report and continues with the set list. A software worker in a separate process saves the dated source, records the change from confirmed to cancelled and checks the venue-to-announcement dependency. The announcement needs review; important findings return through the configured delivery route while routine updates stay quiet.">
     </picture>
   </a>
 </p>
