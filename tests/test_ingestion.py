@@ -202,6 +202,14 @@ class Ingestion(unittest.TestCase):
                 self.save(now)
                 self.assertEqual(self.cli("gate", self.mark)[0], 2)
 
+    def test_mark_without_recorded_inputs_cannot_excuse_falsification(self):
+        self.cli('mark', self.mark)
+        marked = json.loads(self.mark.read_text())
+        del marked['judgments']['c.complete']['inputs']
+        self.mark.write_text(json.dumps(marked))
+        self.update()
+        self.assertEqual(self.cli('gate', self.mark)[0], 2)
+
     def test_gate_never_excuses_a_structural_error_alongside_a_fired_judgment(self):
         self.cli("mark", self.mark)
         self.update()

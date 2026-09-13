@@ -263,6 +263,9 @@ def read(ref, revision, record=None, state_dir=None, offset=0, length=4000, sour
 
 
 def main(argv=None):
+    for stream in (sys.stdin, sys.stdout, sys.stderr):
+        if hasattr(stream, 'reconfigure'):
+            stream.reconfigure(encoding='utf-8', newline='\n')
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("query", nargs="?")
     parser.add_argument("--record")

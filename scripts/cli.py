@@ -174,6 +174,10 @@ def do_page(args):
 
 
 def main():
+    for stream in (sys.stdin, sys.stdout, sys.stderr):
+        if hasattr(stream, 'reconfigure'):
+            stream.reconfigure(encoding='utf-8', newline='\n')
+    os.environ['PYTHONIOENCODING'] = 'utf-8'
     root = parser()
     options = root.parse_args()
     if options.command is None:

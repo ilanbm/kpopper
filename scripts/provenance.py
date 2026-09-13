@@ -4545,6 +4545,7 @@ def gate(state_path, paths, turns=0, host=None, nudged_at=None):
         current = now.get(name)
         if not current or old.get("shape") != current["shape"] \
                 or old.get("arrangement") or current["arrangement"] \
+                or not isinstance(old.get("inputs"), dict) \
                 or old.get("predicate") is True or current["predicate"] is not True:
             continue
         if any(d not in old.get("inputs", {}) or v != old["inputs"][d]
@@ -4840,6 +4841,9 @@ def _apply_first_add(action):
 
 
 if __name__ == "__main__":
+    for stream in (sys.stdin, sys.stdout, sys.stderr):
+        if hasattr(stream, 'reconfigure'):
+            stream.reconfigure(encoding='utf-8', newline='\n')
     a = [x for x in sys.argv[1:] if x != "--no-cache"]
     if len(a) != len(sys.argv[1:]):
         # the same switch as KPOPPER_NO_CACHE=1, set here so anything this run starts
