@@ -175,6 +175,7 @@ class StructuredRecord(unittest.TestCase):
         self.assertEqual(snapshot["computed"]["value"], 100)
         self.assertEqual(snapshot["computed"]["rule"], self.doc["known"]["order.total"]["rule"])
 
+    @unittest.skipUnless(os.name == 'posix', 'ingestion writes require POSIX locking')
     def test_final_batch_arithmetic_not_intermediate_state(self):
         report = {"source_quote": "Price 40, quantity 2", "date": "2026-09-11", "updates": [
             {"kind": "set", "id": "order.price", "value": 40},
@@ -187,6 +188,7 @@ class StructuredRecord(unittest.TestCase):
         doc, ids, _, _, raw = self.world()
         self.assertEqual(self.P.value_of(raw, ids, "order.total"), 80)
 
+    @unittest.skipUnless(os.name == 'posix', 'ingestion writes require POSIX locking')
     def test_new_batch_preserves_structures_and_computed_snapshots(self):
         report = {"record_sha256": self.I._sha(self.path.read_bytes()),
                   "source_quote": "Price 20 and quantity 5", "date": "2026-09-11", "updates": [
@@ -262,7 +264,9 @@ class StructuredRecord(unittest.TestCase):
 
     def test_page_renders_formula_and_result(self):
         import subprocess
-        result = subprocess.run([sys.executable, str(ROOT / "scripts/render_page.py"), str(self.path)], text=True, capture_output=True)
+        result = subprocess.run([sys.executable, str(ROOT / "scripts/render_page.py"), str(self.path)],
+                                env=dict(os.environ, PYTHONIOENCODING='cp1252'),
+                                text=True, encoding='utf-8', capture_output=True)
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertIn("order.total", result.stdout)
         self.assertNotIn("&#x27;op&#x27;", result.stdout)

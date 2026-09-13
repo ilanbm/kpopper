@@ -104,13 +104,15 @@ class WithoutCore(RecordCase):
         ids, jud, fields, raw = self.world()
         self.assertEqual(P._state("c.price", jud["c.price"], raw, ids, fields)[0], "MOVED")
 
-    def test_independent_write_and_scheduled_followup_work_without_core(self):
+    def test_independent_write_works_without_core(self):
         import contextlib
         import io
         with contextlib.redirect_stdout(io.StringIO()):
             P.apply([str(self.path)], {"kind": "add", "id": "order.other", "body": {"v": 7, "from": "s.report"}})
         self.assertEqual(yaml.safe_load(self.path.read_text())["known"]["order.other"]["v"], 7)
-        with patch.dict(os.environ, {"XDG_STATE_HOME": str(self.root / "state")}):
+    @unittest.skipUnless(os.name == 'posix', 'followup writes require POSIX locking')
+    def test_scheduled_followup_works_without_core(self):
+        with tempfile.TemporaryDirectory() as state, patch.dict(os.environ, {"XDG_STATE_HOME": state}):
             store = F.Store(self.root)
             store.setup(timezone="UTC")
             for key, related in (("independent", "order.price"), ("dependent", "order.total")):

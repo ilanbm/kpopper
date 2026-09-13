@@ -64,7 +64,11 @@ def migrate(record=None, apply=False, readable=False):
             return answer
         with tempfile.TemporaryDirectory(prefix="kpopper-expression-migration-") as directory:
             shadow = Path(directory) / rec.name
-            lines = before.decode("utf-8").split("\n")
+            # The editor matches logical lines; retain the record's newline style
+            # when writing bytes so Windows does not translate them a second time.
+            source = before.decode("utf-8")
+            newline = "\r\n" if source.count("\r\n") > source.count("\n") / 2 else "\n"
+            lines = source.replace("\r\n", "\n").split("\n")
             try:
                 from .sameness import _set_fields
             except ImportError:
@@ -72,7 +76,7 @@ def migrate(record=None, apply=False, readable=False):
             original_bodies = P.bodies(doc)
             for nid, replacement in bodies.items():
                 _set_fields(lines, nid, replacement, original_bodies[nid])
-            shadow.write_text("\n".join(lines), encoding="utf-8")
+            shadow.write_bytes(newline.join(lines).encode("utf-8"))
             brief = P._brief_beside(str(rec))
             if brief:
                 target_brief = Path(P.layout(shadow)["view"])

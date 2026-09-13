@@ -56,9 +56,9 @@ class Authoring(unittest.TestCase):
 
     def test_exact_constant_arithmetic_and_unicode_references(self):
         self.add('order.decimal', {'rule': '0.1 + 0.2'})
-        doc = yaml.safe_load(self.path.read_text())
+        doc = yaml.safe_load(self.path.read_text(encoding='utf-8'))
         doc['known']['מחיר'] = {'v': 7, 'from': 's.report'}
-        self.path.write_text(yaml.safe_dump(doc, allow_unicode=True, sort_keys=False))
+        self.path.write_text(yaml.safe_dump(doc, allow_unicode=True, sort_keys=False), encoding='utf-8')
         self.add('order.hebrew', {'rule': 'מחיר * 2'})
         doc = self.read(); ids, jud, fields = P.infer(doc); raw = P.with_builtins(doc, ids, jud, fields)
         self.assertEqual(P.value_of(raw, ids, 'order.decimal'), {'rational': ['3', '10']})

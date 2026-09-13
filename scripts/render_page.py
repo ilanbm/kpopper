@@ -1910,6 +1910,9 @@ def verify(paths, brief_path=None):
 
 
 if __name__ == "__main__":
+    for stream in (sys.stdout, sys.stderr):
+        if hasattr(stream, "reconfigure"):
+            stream.reconfigure(encoding="utf-8", newline="\n")
     supplied, a, page_path, i = sys.argv[1:], [], None, 0
     while i < len(supplied):
         if supplied[i] == "--page-out":

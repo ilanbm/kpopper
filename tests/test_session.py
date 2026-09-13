@@ -374,6 +374,7 @@ class CheckedSessionContract(unittest.TestCase):
             'schema': 1, 'enabled': True, 'python': sys.executable, 'tokens': 1000,
             'project': 'nested-project', 'state': str(repository / 'pending')}))
         environment = dict(os.environ)
+        environment['PYTHONIOENCODING'] = 'cp1252'
         environment.pop('KPOPPER_SESSION_CONFIG', None)
         hook = subprocess.run(['sh', str(ROOT / 'scripts' / 'session_open.sh')], input='{}',
             cwd=child, env=environment, text=True, encoding='utf-8', capture_output=True)

@@ -246,6 +246,24 @@ class ReadableRuntime(unittest.TestCase):
         self.assertEqual(P._state('c.budget', jud['c.budget'], raw, ids, fields)[0], 'HOLDS')
         self.assertEqual(migrate(self.path, readable=True)['changes'], [])
 
+    def test_readable_migration_preserves_crlf_and_history(self):
+        from scripts.expression_cli import migrate
+        before = self.path.read_bytes().replace(b'\r\n', b'\n').replace(b'\n', b'\r\n')
+        self.path.write_bytes(before)
+        preview = migrate(self.path, readable=True)
+        self.assertEqual(len(preview['changes']), 2)
+        self.assertEqual(self.path.read_bytes(), before)
+        outcome = migrate(self.path, apply=True, readable=True)
+        self.assertTrue(outcome['applied'], outcome)
+        after = self.path.read_bytes()
+        self.assertIn(b'\r\n', after)
+        self.assertNotIn(b'\n', after.replace(b'\r\n', b''))
+        self.assertNotIn(b'\r\r\n', after)
+        _, ids, _, _, raw = self.world()
+        self.assertEqual(raw['order.total']['rule'], {'expr': 'order.price * order.quantity'})
+        self.assertEqual(P.value_of(raw, ids, 'order.total'), 100)
+        self.assertEqual(raw['c.budget']['seen'], self.doc['judgments']['c.budget']['seen'])
+
     def test_checked_revision_binds_parser_identity_and_guard_keeps_exact_events(self):
         from scripts.session.view import GroundingService
         self.doc['known']['order.total']['rule'] = {'expr': 'order.price * order.quantity'}
