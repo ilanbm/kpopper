@@ -16,7 +16,7 @@ class ProcessBoundaries(unittest.TestCase):
         self.addCleanup(self.tmp.cleanup)
         self.work = Path(self.tmp.name)
         self.record = self.work / 'GROUNDING.yaml'
-        self.record.write_text('sources:\n  s.original: {file: original.md}\nknown:\n  מחיר: {v: 10, from: s.original}\n  price: {v: 10, from: s.original}\n', encoding='utf-8')
+        self.record.write_text('sources:\n  s.original: {file: original.md}\nknown:\n  מחיר: {v: 10, from: s.original}\n  price: {v: 10, from: s.original}\n  order.price: {v: 10, from: s.original}\n', encoding='utf-8')
         (self.work / 'original.md').write_text('המחיר 10', encoding='utf-8')
         self.env = dict(os.environ, PYTHONIOENCODING='cp1252', XDG_STATE_HOME=str(self.work / 'state'), TMPDIR=str(self.work))
 
@@ -72,3 +72,24 @@ assert result['state']=='applied',result
             cwd=self.work, env=self.env, text=True, encoding='utf-8', capture_output=True, timeout=30)
         self.assertEqual(result.returncode, 2, result.stderr)
         self.assertIn('c.בדיקה', result.stderr)
+
+    @unittest.skipUnless(os.name == 'posix', 'durable ingestion requires POSIX locking')
+    def test_notice_hook_delivers_hebrew_once_under_ansi_stdio(self):
+        with self.record.open('a', encoding='utf-8') as stream:
+            stream.write('judgments:\n  c.price:\n    rests_on: [order.price]\n    seen: {order.price: 10}\n    verdict: Fits\n    wrong_if: order.price > 15\n')
+        report = {'source_quote': 'המחיר המעודכן 20', 'date': '2026-09-13',
+                  'updates': [{'kind': 'set', 'id': 'order.price', 'value': 20}]}
+        update = self.run_python('cli.py', 'update', '--file', '-', input=json.dumps(report, ensure_ascii=False))
+        self.assertEqual(update.returncode, 0, update.stderr + update.stdout)
+        receipt = json.loads(update.stdout)
+        env = dict(self.env, PATH=str(Path(sys.executable).parent) + os.pathsep + self.env.get('PATH', ''))
+        def notice(mode='start'):
+            return subprocess.run(['sh', str(ROOT / 'scripts/ingestion_hook.sh'), 'codex', mode],
+                input=json.dumps({'session_id':'notice-test', 'cwd':str(self.work)}),
+                cwd=self.work, env=env, text=True, encoding='utf-8', capture_output=True, timeout=30)
+        first = notice()
+        self.assertEqual(first.returncode, 0, first.stderr)
+        self.assertIn('המחיר המעודכן 20', first.stdout)
+        self.assertIn(receipt['signal_ids'][0], first.stdout)
+        self.assertIn('contradiction', first.stdout)
+        self.assertNotIn('KPOPPER_ATTENTION', notice('wait').stdout)
