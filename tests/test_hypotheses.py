@@ -133,21 +133,27 @@ class HypothesesBesideTheRecord(unittest.TestCase):
             self.assertIn("graph.contested: 1 (ids two hypotheses hold with different claims)", out)
 
     def test_the_opener_counts_what_waits_and_ranks_the_contested_first(self):
-        code, out, _ = run(SCRIPTS / "provenance.py", "open", RECORD)
-        self.assertEqual(code, 0, out)
-        age = P._age("2026-09-03", datetime.date.today())
-        self.assertIn(f"8 entries, 1 judgments, 1 open questions, updated 2026-09-03\n"
-                      f"2 hypotheses wait - bigger_boiler ({age}, never folds, 2 rest on it) · "
-                      f"glazing_redo ({age}, 1 rests on it)\n", out)
-        self.assertIn("needs a person (1):\n  heat.loss_kw: CONTESTED - bigger_boiler says 33, "
-                      "glazing_redo says 28\n", out)
-        # nothing else about the hypotheses enters the opener
-        self.assertNotIn("36", out)
-        self.assertNotIn("c.boiler_enough", out)
-        self.assertTrue(out.endswith(PLAIN_NEXT), out)
-        # the line survives the character budget, with the head
-        code, out, _ = run(SCRIPTS / "provenance.py", "open", "--chars", "300", RECORD)
-        self.assertIn("2 hypotheses wait - bigger_boiler", out)
+        with tempfile.TemporaryDirectory() as d:
+            rec = copy_fixture(pathlib.Path(d))
+            born = (datetime.date.today() - datetime.timedelta(days=1)).isoformat()
+            for hypothesis in (pathlib.Path(d) / "PROVENANCE.d").glob("*.yaml"):
+                text = hypothesis.read_text(encoding="utf-8")
+                hypothesis.write_text(text.replace('born: "2026-09-03"', f'born: "{born}"'),
+                                      encoding="utf-8")
+            code, out, _ = run(SCRIPTS / "provenance.py", "open", rec)
+            self.assertEqual(code, 0, out)
+            self.assertIn(f"8 entries, 1 judgments, 1 open questions, updated 2026-09-03\n"
+                          f"2 hypotheses wait - bigger_boiler (1 day, never folds, 2 rest on it) · "
+                          f"glazing_redo (1 day, 1 rests on it)\n", out)
+            self.assertIn("needs a person (1):\n  heat.loss_kw: CONTESTED - bigger_boiler says 33, "
+                          "glazing_redo says 28\n", out)
+            # nothing else about the hypotheses enters the opener
+            self.assertNotIn("36", out)
+            self.assertNotIn("c.boiler_enough", out)
+            self.assertTrue(out.endswith(PLAIN_NEXT), out)
+            # the line survives the character budget, with the head
+            code, out, _ = run(SCRIPTS / "provenance.py", "open", "--chars", "300", rec)
+            self.assertIn("2 hypotheses wait - bigger_boiler", out)
 
     def test_the_standing_line_says_who_needs_a_person_and_calls_nothing_else_contested(self):
         # contested is one thing - an id two hypotheses hold with different claims; what the
