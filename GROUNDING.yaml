@@ -464,6 +464,14 @@ sources:
          on one graph. The maintainer selected dark matter in the follow-up choice. These are design
          requests, not evidence of improved adoption or research quality."
     read: "2026-09-13"
+  s.2026_09_13_worker_cleanup:
+    name: "Python 3.13 CI failed while deleting a detached worker test directory"
+    url: "https://github.com/ilanbm/kpopper/actions/runs/34729916971/job/103650678003"
+    of: "The detached-capture test reached a terminal receipt, then TemporaryDirectory cleanup
+         failed with Directory not empty in private-state. The worker implementation scans the queue
+         and removes its lease after producing the receipt. The revised test passed 25 repetitions
+         and the 83-test ingestion suite on Python 3.13."
+    read: "2026-09-13"
   s.background_ingestion:
     name: "Background capture and selective delivery contract"
     file: "skills/kpopper/INGESTION.md"
@@ -1805,6 +1813,18 @@ judgments:
                                   - counts and shares, never stored, thresholds only inside
                                   falsifiers"
       p.coverage_thresholds: 0
+  d.detached_worker_test_cleanup:
+    name: "Wait for detached worker shutdown before deleting its test state"
+    rests_on: [s.2026_09_13_worker_cleanup]
+    verdict: "The detached-capture test waits for both a terminal receipt and removal of
+              worker.lease before cleaning its directory."
+    because: "A terminal event receipt does not mean the worker has finished using the queue
+              directory. The worker releases its lease after its final scan. A bounded wait and
+              explicit lease assertion preserve the result assertions without hiding cleanup errors
+              or changing product behavior."
+    reopened_by: "The worker lifecycle changes so that lease removal precedes more state writes, or
+                  a failed worker leaves the test hanging beyond its bounded wait."
+    seen: {s.2026_09_13_worker_cleanup: "read 2026-09-13"}
   d.distinct_is_a_bare_id:
     rests_on: [s.2026_09_04_sameness, d.sameness_is_judged, d.locate_by_shape]
     verdict: "distinct writes its edge as a bare id - or several, comma-separated - with the why as
