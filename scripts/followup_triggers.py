@@ -8,9 +8,9 @@ import math
 import re
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 try:
-    from .expressions import number as _exact_number
+    from .expressions import number as _exact_number, same as _same_expression
 except ImportError:
-    from expressions import number as _exact_number
+    from expressions import number as _exact_number, same as _same_expression
 
 
 UTC = dt.timezone.utc
@@ -199,6 +199,10 @@ def _equal(left, right):
     if type(left) is not type(right):
         return False
     if isinstance(left, dict):
+        if left.keys() == right.keys() == {'computed'}:
+            a, b = left['computed'], right['computed']
+            if isinstance(a, dict) and isinstance(b, dict) and a.keys() == b.keys() and {'rule', 'value'} <= a.keys():
+                return all(_same_expression(a[key], b[key]) if key == 'rule' else _equal(a[key], b[key]) for key in a)
         return left.keys() == right.keys() and all(_equal(left[key], right[key]) for key in left)
     if isinstance(left, list):
         return len(left) == len(right) and all(_equal(a, b) for a, b in zip(left, right))

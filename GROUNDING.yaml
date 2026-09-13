@@ -1176,7 +1176,8 @@ known:
     of: "2026-09-10"
 
   m.skill_bytes_largest:
-    v: 20604
+    v: 20689
+    # measured 2026-09-13 after the readable-expression authoring guidance changed
     # set 2026-09-13: measured by skill_bytes_largest after the source-report and expression authoring guidance changed
     # measured 2026-09-12 after combining the occasion skills with structured expressions and source search
     # set 2026-09-12: measured by skill_bytes_largest after the skills learned the entry file and the directory beside it

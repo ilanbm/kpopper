@@ -3,12 +3,14 @@ from __future__ import annotations
 
 import copy
 import hashlib
+import importlib.util
 import json
 import os
 from pathlib import Path
 import platform
 import shutil
 import subprocess
+import sys
 import tempfile
 
 from .model import encode, digest
@@ -18,6 +20,18 @@ LOADED_SOURCE_HASH = hashlib.sha256(Path(__file__).read_bytes()).hexdigest()
 SOURCE = Path(__file__).resolve().parent / "lean" / "Main.lean"
 LEAN_VERSION = "4.33.1"
 RULES = (SOURCE.parent.parent / "rules.txt").read_text(encoding="utf-8").strip()
+
+
+def expression_module():
+    """Resolve this installation under both ordinary and synthetic package imports."""
+    path = Path(__file__).resolve().parent.parent / 'expressions.py'
+    name = '_kpopper_expressions_' + hashlib.sha256(str(path.parent).encode()).hexdigest()[:12]
+    if name not in sys.modules:
+        spec = importlib.util.spec_from_file_location(name, path)
+        module = importlib.util.module_from_spec(spec)
+        sys.modules[name] = module
+        spec.loader.exec_module(module)
+    return sys.modules[name]
 
 
 def source_hash():
@@ -109,12 +123,17 @@ class Core:
             raise ValueError("checked session core is not ready; run kpopper session setup") from error
         if not valid:
             raise ValueError("checked session core changed; run kpopper session setup")
+        self.expressions = expression_module()
+        self.expression_path = Path(self.expressions.__file__)
+        self.expression_source_hash = self.expressions.LOADED_SOURCE_HASH
+        if hashlib.sha256(self.expression_path.read_bytes()).hexdigest() != self.expression_source_hash:
+            raise ValueError('expression parser changed; restart the session service')
         self.cached = None
         self.program_stamp = self.stamp()
 
     def stamp(self):
         return tuple((p.stat().st_ino, p.stat().st_size, p.stat().st_mtime_ns)
-                     for p in [SOURCE, self.binary, self.root / "build.json"])
+                     for p in [SOURCE, self.binary, self.root / "build.json", self.expression_path])
 
     def ensure_program(self):
         if self.stamp() != self.program_stamp:
@@ -122,6 +141,8 @@ class Core:
 
     def request(self, payload, rejected_assertions=False):
         self.ensure_program()
+        source_text = json.dumps(payload, ensure_ascii=False, allow_nan=False, separators=(",", ":"))
+        payload = self.expressions.wire_payload(payload)
         text = json.dumps(payload, ensure_ascii=False, allow_nan=False, separators=(",", ":"))
         # Lean's JSON protocol is UTF-8, independently of the host code page.
         run = subprocess.run([str(self.binary)], input=text, text=True, encoding="utf-8",
@@ -132,6 +153,8 @@ class Core:
         result = json.loads(run.stdout)
         result["input_sha256"] = hashlib.sha256(text.encode()).hexdigest()
         result["core_source_sha256"] = self.build["source_sha256"]
+        result['source_input_sha256'] = hashlib.sha256(source_text.encode()).hexdigest()
+        result['expression_source_sha256'] = self.expression_source_hash
         return result
 
     def scan(self, record):
@@ -153,6 +176,8 @@ class Core:
             if bundle["id"] == judgment:
                 return {"bundle": bundle, "assertion_checks": [], "assertions_requested": 0,
                         "assertions_accepted": None, "scan_input_sha256": scan["scan_input_sha256"],
+                        'source_scan_input_sha256': scan['source_input_sha256'],
+                        'expression_source_sha256': scan['expression_source_sha256'],
                         "core_source_sha256": self.build["source_sha256"]}
         for error in scan["errors"]:
             if error["id"] == judgment:

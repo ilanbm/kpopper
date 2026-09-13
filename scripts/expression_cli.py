@@ -14,7 +14,7 @@ except ImportError:
 P = I.P
 
 
-def migrate(record=None, apply=False):
+def migrate(record=None, apply=False, readable=False):
     rec = I._record_path(record)
     with P._locked(str(rec)):
         doc, ids, judgments, fields, raw = I._record_world(rec)
@@ -32,17 +32,23 @@ def migrate(record=None, apply=False):
                     candidates.append(("v", False))
             for field, predicate in candidates:
                 value = body.get(field)
-                if not isinstance(value, str) or not value.strip():
+                old_tree = readable and isinstance(value, dict) and 'expr' not in value
+                if not old_tree and (not isinstance(value, str) or not value.strip()):
                     continue
                 try:
-                    comparison = P.CMP.match(value) if predicate else None
-                    converted = E.convert_authored(value, predicate=predicate,
-                        legacy_rhs=comparison.group(3) if comparison else None)
+                    if old_tree:
+                        converted = E.lower(value, predicate)
+                    else:
+                        comparison = P.CMP.match(value) if predicate else None
+                        converted = E.convert_authored(value, predicate=predicate,
+                            legacy_rhs=comparison.group(3) if comparison else None)
                     unknown = set(E.refs(converted)) - ids
                     if unknown:
                         raise ValueError("unknown or ambiguous bare names: " + ", ".join(sorted(unknown)))
                     if predicate and set(E.refs(converted)) - set(judgments[nid]["deps"]):
                         raise ValueError("predicate references are not declared in rests_on")
+                    if readable:
+                        converted = E.readable(converted, predicate)
                 except (ValueError, SyntaxError, RecursionError) as error:
                     skipped.append({"id": nid, "field": field, "reason": str(error)})
                     continue
@@ -99,18 +105,22 @@ def main(argv=None):
     convert = sub.add_parser("convert", help="return structured data without writing any record")
     convert.add_argument("text")
     convert.add_argument("--predicate", action="store_true")
+    convert.add_argument('--readable', action='store_true', help='return the compact expr storage form')
     migrate_parser = sub.add_parser("migrate", help="preview unambiguous conversions; --apply writes a clean result")
     migrate_parser.add_argument("--record")
     migrate_parser.add_argument("--apply", action="store_true")
+    migrate_parser.add_argument('--readable', action='store_true', help='convert supported active formulas to expr; preserve historical snapshots')
     for command in (convert, migrate_parser):
         command.add_argument("--json", action="store_true")
     args = parser.parse_args(argv)
     try:
         if args.action == "convert":
             expression = E.convert(args.text, args.predicate)
+            if args.readable:
+                expression = E.readable(expression, args.predicate)
             result = {"expression": expression, "display": E.text(expression), "references": E.refs(expression)}
         else:
-            result = migrate(args.record, args.apply)
+            result = migrate(args.record, args.apply, args.readable)
         print(json.dumps(result, ensure_ascii=False))
         return 1 if args.action == "migrate" and args.apply and result["problems"] else 0
     except (ValueError, SyntaxError, OSError, RecursionError) as error:

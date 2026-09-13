@@ -123,14 +123,16 @@ Derived entries store their rules:
 ```yaml
 known:
   workshop.spare_packs:
-    rule: {op: sub, args: [{ref: stock.packages}, {ref: workshop.guests}]}
+    rule: {expr: "stock.packages - workshop.guests"}
 ```
 
 Here the two inputs refer to the [workshop example](../examples/workshop/GROUNDING.yaml).
-The reader derives dependency links from the structure and uses the packaged Lean core
+The reader parses the stored formula, derives dependency links and uses the packaged Lean core
 to compute the value. A missing core or unavailable input is explicit. Legacy text rules
 remain unevaluated until an explicit conversion. Normal `add` and report `update` writes
-store supported new formula strings in this structure, with diagnostics for text fallbacks.
+store supported new formula strings in this readable structure, with diagnostics for text
+fallbacks. The old tagged trees stay supported; changing only representation or whitespace
+does not reopen a judgment. Parsed formulas are cached independently of changing values.
 See [structured expressions](../skills/kpopper/EXPRESSIONS.md)
 for supported operators, exact fractions, snapshots and checked migration commands.
 

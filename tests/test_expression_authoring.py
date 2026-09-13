@@ -49,7 +49,7 @@ class Authoring(unittest.TestCase):
         self.add('order.total', {'rule': 'order.price * order.quantity'})
         self.add('c.total', {'rests_on': ['order.total'], 'verdict': 'Fits', 'wrong_if': 'order.total > 150'})
         raw = P.bodies(self.read())
-        self.assertEqual(raw['order.total']['rule'], {'op': 'mul', 'args': [{'ref': 'order.price'}, {'ref': 'order.quantity'}]})
+        self.assertEqual(raw['order.total']['rule'], {'expr': 'order.price * order.quantity'})
         self.assertIsInstance(raw['c.total']['wrong_if'], dict)
         self.assertEqual(raw['c.total']['seen']['order.total']['computed']['value'], 100)
         self.assertEqual(raw['c.original'], self.doc['judgments']['c.original'])
@@ -63,7 +63,7 @@ class Authoring(unittest.TestCase):
         doc = self.read(); ids, jud, fields = P.infer(doc); raw = P.with_builtins(doc, ids, jud, fields)
         self.assertEqual(P.value_of(raw, ids, 'order.decimal'), {'rational': ['3', '10']})
         self.assertEqual(P.value_of(raw, ids, 'order.hebrew'), 14)
-        self.assertEqual(raw['order.hebrew']['rule']['args'][0], {'ref': 'מחיר'})
+        self.assertEqual(P.E.lower(raw['order.hebrew']['rule'])['args'][0], {'ref': 'מחיר'})
 
     def test_arithmetic_operands_are_evaluated_as_new_formulas(self):
         for nid, pred in [('c.product', 'order.price * order.quantity > 150'),

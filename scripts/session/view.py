@@ -269,6 +269,7 @@ class GroundingService(CheckedSessionService):
         data=apply_profile(graph.data,profile)
         data['project_context']=self.project
         data['epistemic_core_source']=self.core.build['source_sha256']
+        data['expression_parser_source']=self.core.expression_source_hash
         routes=MapTree(data)
         data['navigation_routes']={path:sorted(members) for path,members in routes.groups.items()}
         data['navigation_leaf_routes']=routes.leaves

@@ -160,7 +160,7 @@ def _mentioned(body):
                     for t in ID.findall(x):
                         yield t
         elif isinstance(val, dict):
-            if set(val) in ({"ref"}, {"num"}, {"text"}, {"bool"}, {"op", "args"}):
+            if set(val) in ({"ref"}, {"num"}, {"text"}, {"bool"}, {"op", "args"}, {"expr"}):
                 yield from E.refs(val)
                 continue
             for k in val:
@@ -654,6 +654,11 @@ def claim_of(body):
         return body
     for f in ("verdict", "v", "quoted", "rule", "title"):
         if body.get(f) is not None:
+            if f == 'rule' and isinstance(body[f], dict):
+                try:
+                    return E.lower(body[f])
+                except ValueError:
+                    pass
             return body[f]
     return body
 
@@ -937,7 +942,7 @@ def infer(doc):
                     continue           # read by name: it never reads as a predicate or a snapshot
                 if isinstance(val, dict) and val and all(k in ids for k in val):
                     cand["snapshot"][f] = cand["snapshot"].get(f, 0) + 1
-                elif isinstance(val, dict) and ("op" in val or f == "wrong_if"):
+                elif isinstance(val, dict) and ("op" in val or "expr" in val or f == "wrong_if"):
                     cand["predicate"][f] = cand["predicate"].get(f, 0) + 1
                 elif isinstance(val, str) and val and "{{" not in val:
                     named = [t for t in ID.findall(val) if t in ids]
@@ -1060,7 +1065,7 @@ def comparison_parts(pred):
     """Expose a simple comparison for validation/display without parsing rendered text."""
     if isinstance(pred, dict):
         try:
-            E.validate(pred, predicate=True)
+            pred = E.lower(pred, predicate=True)
         except (ValueError, TypeError):
             return None
         left, right = pred["args"]
@@ -1087,7 +1092,7 @@ def why_undecided(pred):
     """
     if isinstance(pred, dict):
         try:
-            E.validate(pred, predicate=True)
+            pred = E.lower(pred, predicate=True)
         except (ValueError, TypeError) as error:
             return str(error)
         parts = comparison_parts(pred)
@@ -1201,7 +1206,7 @@ def computation_error(pred, raw, ids):
 
 
 def short(v, n=40):
-    s = " ".join((predicate_text(v) if isinstance(v, dict) and "op" in v else str(v)).split())
+    s = " ".join((predicate_text(v) if isinstance(v, dict) and ('op' in v or 'expr' in v) else str(v)).split())
     return s if len(s) <= n else s[:n - 1] + "…"
 
 
@@ -1245,7 +1250,7 @@ def legacy_snapshot_rule(old, current_rule):
 def formula_only_snapshots(j, raw):
     return [dep for dep, old in j["snap"].items()
             if isinstance(raw.get(dep), dict) and isinstance(raw[dep].get("rule"), dict)
-            and legacy_snapshot_rule(old, raw[dep]["rule"]) == raw[dep]["rule"]]
+            and E.same(legacy_snapshot_rule(old, raw[dep]["rule"]), raw[dep]["rule"])]
 
 
 def moved_deps(j, raw, ids):
@@ -1270,13 +1275,13 @@ def moved_deps(j, raw, ids):
         current_rule = raw[dep].get("rule") if isinstance(raw.get(dep), dict) else None
         legacy_rule = legacy_snapshot_rule(old, current_rule)
         if legacy_rule is not None:
-            if legacy_rule != current_rule:
+            if not E.same(legacy_rule, current_rule):
                 out.append((dep, old, predicate_text(current_rule), "moved"))
             continue
         if dep in ids and (isinstance(current_rule, dict) or isinstance(snapshot, dict)):
             now = value_of(raw, ids, dep)
             previous = snapshot.get("value") if isinstance(snapshot, dict) else old
-            rule_moved = isinstance(snapshot, dict) and snapshot.get("rule") != current_rule
+            rule_moved = isinstance(snapshot, dict) and not E.same(snapshot.get("rule"), current_rule)
             a, b = E.number(previous), E.number(now)
             equal = a == b if a is not None and b is not None else previous == now
             if rule_moved or (now is not None and previous is not None and not equal):
@@ -1500,7 +1505,7 @@ def one_comparison(pred, raw=None, ids=None):
     name, op, rhs = parts
     rhs = rhs.strip()
     typed = isinstance(pred, dict)
-    reference_rhs = "ref" in pred["args"][1] if typed else bool(ID.fullmatch(rhs))
+    reference_rhs = "ref" in E.lower(pred, predicate=True)["args"][1] if typed else bool(ID.fullmatch(rhs))
     # On top of the shape, a sign names its value outright. This is the arrangement's own
     # rule and not a second reading of the shape: what the reader can decide is settled in
     # why_undecided, and this asks the narrower thing a sign over a count is held to.
@@ -2804,7 +2809,7 @@ def _state(name, j, raw, ids, fields, touched=()):
         snapshot = j["snap"].get(d)
         if isinstance(snapshot, dict) and isinstance(snapshot.get("computed"), dict):
             body = raw.get(d)
-            if snapshot["computed"].get("rule") != (body.get("rule") if isinstance(body, dict) else None):
+            if not E.same(snapshot["computed"].get("rule"), body.get("rule") if isinstance(body, dict) else None):
                 return "MOVED", f"{d}: formula changed since review"
         current_body = raw.get(d)
         if legacy_snapshot_rule(snapshot, current_body.get("rule") if isinstance(current_body, dict) else None) is not None:
@@ -3439,8 +3444,8 @@ def normalize_authored(action, ids, fields, raw):
             if reason in {'division_by_zero', 'cyclic_reference', 'missing_reference'} and not _blocked_text(body):
                 raise Refused(f"refused - {nid}: rule cannot be computed: {reason}")
             return keep(reason)
-    body[field] = tree
-    return action, [f"{nid}.{field}: stored as a structured expression"]
+    body[field] = {'expr': source}
+    return action, [f"{nid}.{field}: stored as a readable expression"]
 
 
 # Every refusal a write can meet, in one place. The fork on a contradiction is the last of

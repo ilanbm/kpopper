@@ -79,7 +79,7 @@ the surface.
 
 ### 2. Something you worked out
 
-Record the rule, never the result. `add` and `update` store supported new formulas directly as structured expressions; the local Lean core computes them. Keep `rests_on` explicit and historical snapshots intact. Use tagged `{op, args}` expressions with `ref`, `num`, `text` and `bool` leaves to resolve ambiguity. Read fallback diagnostics: text retained without Lean is not a calculated result. [EXPRESSIONS.md](../kpopper/EXPRESSIONS.md) covers syntax, setup and migration; unsupported work needs its declared limit.
+Record the rule, never the result. Use `rule={expr: "order.price * order.quantity"}` and executable `wrong_if={expr: "order.total > order.limit"}`. `add` and `update` also store supported plain formula strings in this readable form; the local Lean core computes them. Keep `rests_on` explicit and historical snapshots intact. Inside `expr`, quoted text is literal; `ref("an opaque id")` names a reference. Read fallback diagnostics: text retained without Lean is not a calculated result. [EXPRESSIONS.md](../kpopper/EXPRESSIONS.md) covers syntax and migration; unsupported work needs its declared limit.
 
 ### 3. Something you concluded or composed
 

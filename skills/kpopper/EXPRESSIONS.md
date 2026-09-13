@@ -1,14 +1,17 @@
-# Structured calculations and falsifiers
+# Readable calculations and falsifiers
 
-Store new calculations and executable conditions as structured data. The primary agent
-chooses the formula and its meaning; the writer validates its structure and the packaged
-Lean core computes it. No model call or arbitrary code execution is involved in evaluation.
+Store a new calculation or executable condition as `{expr: "formula"}`. The primary agent
+chooses its meaning; a bounded deterministic parser derives its structure and references,
+and the packaged Lean core computes it. No model call or arbitrary code execution is
+involved in evaluation. The stored expression remains the source of truth.
 
 `add` and source-report `update` also accept a supported formula as text, such as
 `rule='order.price * order.quantity'` or `wrong_if='order.price * order.quantity > 150'`.
-The normal writer stores the corresponding structured expression when Lean can validate
+The normal writer stores the corresponding `expr` expression when Lean can validate
 its result. This includes exact decimal arithmetic and references in the record's original
-language. Choose tagged operands explicitly when a name or literal is ambiguous.
+language. Within `expr`, a bare name is a reference, a quoted string is literal text,
+and `ref("an opaque id")` explicitly references a reserved name or an ID containing spaces
+or punctuation. Calls other than this reference constructor are unsupported.
 
 Unsupported syntax, date-like rules, numeric-looking quoted literals and comparisons
 depending on legacy text coercion stay text with a diagnostic. Missing Lean also produces
@@ -19,20 +22,12 @@ cycle or division by zero is refused unless its missing computation is explicitl
 
 ```yaml
 order.total:
-  rule:
-    op: mul
-    args:
-      - ref: order.price
-      - ref: order.quantity
+  rule: {expr: "order.price * order.quantity"}
 
 c.affordable:
   rests_on: [order.total]
   verdict: The order fits the budget
-  wrong_if:
-    op: gt
-    args:
-      - ref: order.total
-      - num: "150"
+  wrong_if: {expr: "order.total > 150"}
 ```
 
 This is an authoring example: `add` and batch ingestion fill `seen` from the record.
@@ -41,7 +36,15 @@ display text and dependency links are derived from it.
 
 ## Expression grammar, version 1
 
-Each node has exactly the fields shown:
+Readable formulas support `+`, `-`, `*`, `/`, unary minus, parentheses, exact decimal and
+exponent constants, quoted text, booleans, and references. Falsifiers have one comparison:
+`==`, `!=`, `<`, `<=`, `>`, or `>=`, with arithmetic permitted on either side. Each `expr`
+mapping has exactly one field and at most 4000 characters. There are no assignments,
+arbitrary calls, indexing, comprehensions, or compound logical conditions.
+
+The old tagged tree format remains supported. The parser lowers readable formulas to this
+same format for Lean; it is not stored beside the source as a second editable formula.
+These tagged nodes remain useful for constructing expressions programmatically:
 
 | Form | Meaning |
 |---|---|
@@ -89,8 +92,10 @@ blocked; success is not a substitute for a missing computation.
 
 `pull`, source search, the page and checked sessions use the same calculation semantics.
 The Python layer derives references and display text and calls Lean for arithmetic. Results
-are cached by record content, expression and core identity; changing an input invalidates
-the result.
+are cached by record content, expression and core/parser identity; changing an input
+invalidates the result. A bounded per-process cache holds up to 512 parsed formulas, keyed
+by their source and grammar version. Changing values reuses the parsed formula. Changing
+parser code invalidates a live checked session; restart it to use the new program.
 
 When a judgment is written or explicitly reviewed, a calculated premise gets a snapshot:
 
@@ -99,11 +104,13 @@ seen:
   order.total:
     computed:
       value: 100
-      rule: {op: mul, args: [{ref: order.price}, {ref: order.quantity}]}
+      rule: {expr: "order.price * order.quantity"}
 ```
 
 The historical result is not substituted for the current calculation. A changed formula
-also reopens review when it happens to produce the same number. Existing snapshots remain
+also reopens review when it happens to produce the same number. Whitespace, redundant
+parentheses, and equivalent tagged/readable representations are not formula changes.
+Existing snapshots remain
 intact until a person or agent actually reviews the judgment. Correct arithmetic does not
 establish that the source readings or the chosen model describe the world correctly.
 Snapshots are independent historical copies; do not make their formulas YAML aliases of
@@ -118,6 +125,7 @@ structured expression without writing anything:
 ```sh
 kpopper expressions convert 'order.price * order.quantity'
 kpopper expressions convert 'order.total > 150' --predicate
+kpopper expressions convert 'order.price * order.quantity' --readable
 ```
 
 To preview a record migration, then apply a clean result:
@@ -140,3 +148,10 @@ A historical snapshot containing only a textual formula has no historical calcul
 After an equivalent conversion it reads `UNCHECKED`, with the original snapshot preserved,
 until an explicit review captures the current result. It is not reported as a numeric move.
 Pointer, multi-file and hypothesis-backed records require explicit authoring instead.
+
+To convert active tagged trees and supported legacy text to the readable format, preview
+`kpopper expressions migrate --record GROUNDING.yaml --readable`, then add `--apply` to
+apply a clean result. Existing readable formulas and historical snapshots stay untouched.
+The conversion must round-trip to the same parsed structure; reserved or opaque reference
+names use `ref("...")`. Existing source-value types and decidable conditions keep their
+meaning. An unrelated write never migrates existing formulas.
