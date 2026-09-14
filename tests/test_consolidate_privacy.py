@@ -162,6 +162,71 @@ class ConsolidationPrivacy(unittest.TestCase):
         self.assertNotIn(SECRET, output)
         self.assertEqual(before, self.record.read_bytes())
 
+    def removing_source_permission(self):
+        self.doc['sources']['s.hidden'] = {'name': SECRET, 'privacy': 'private'}
+        self.save()
+        path = self.hypothesis(body={'v': 42, 'from': 's.hidden'})
+        value = P.yaml.safe_load(path.read_text())
+        value['sources'] = {'s.hidden': {'name': SECRET}}
+        path.write_text(P.yaml.safe_dump(value))
+        return path
+
+    def test_fold_cannot_remove_inherited_source_privacy(self):
+        path = self.removing_source_permission()
+        draft = self.assert_private_retained(lambda: C.fold([str(self.record)]), path)
+        self.assertIn('privacy', str(draft))
+        self.assertIn(SECRET, str(draft))
+
+    def test_refutation_cannot_remove_inherited_source_privacy(self):
+        path = self.removing_source_permission()
+        self.assert_private_retained(lambda: C.refute([str(self.record)], 'secret', 'public reason'), path)
+
+    def test_fold_checks_original_dependency_chain_even_when_citation_is_removed(self):
+        self.doc['sources']['s.hidden'] = {'name': SECRET, 'privacy': 'private'}
+        self.doc['sources']['s.link'] = {'name': 'Indirect source', 'from': 's.hidden'}
+        self.save()
+        path = self.hypothesis(body={'v': 42, 'from': 's.link'})
+        value = P.yaml.safe_load(path.read_text())
+        value['sources'] = {'s.link': {'name': 'Indirect source', 'from': 's.session'}}
+        path.write_text(P.yaml.safe_dump(value))
+        draft = self.assert_private_retained(lambda: C.fold([str(self.record)]), path)
+        self.assertIn('s.hidden', str(draft))
+
+    def test_imported_branch_cannot_remove_current_source_permission(self):
+        self.doc['sources']['s.hidden'] = {'name': SECRET, 'privacy': 'private', 'read': '2026-09-13'}
+        self.save()
+        M.git(self.root, 'add', 'GROUNDING.yaml')
+        M.git(self.root, '-c', 'commit.gpgsign=false', 'commit', '-m', 'Protected source')
+        M.git(self.root, 'checkout', '-b', 'feature')
+        self.doc['sources']['s.hidden'] = {'name': SECRET, 'read': '2026-09-14'}
+        self.doc['known']['new.fact'] = {'v': 42, 'from': 's.hidden'}
+        self.save()
+        M.git(self.root, 'add', 'GROUNDING.yaml')
+        M.git(self.root, '-c', 'commit.gpgsign=false', 'commit', '-m', 'Proposed source replacement')
+        M.git(self.root, 'checkout', 'trunk')
+        before = self.record.read_bytes()
+        refused, output = self.attempt(lambda: C.fold([str(self.record)], refs=['feature']))
+        self.assertTrue(refused, output)
+        self.assertNotIn(SECRET, output)
+        self.assertEqual(before, self.record.read_bytes())
+        self.assertTrue(list((self.base / 'private').glob('*/*.json')))
+
+    def test_imported_hypothesis_cannot_remove_current_source_permission(self):
+        self.doc['sources']['s.hidden'] = {'name': SECRET, 'privacy': 'private'}
+        self.save()
+        M.git(self.root, 'add', 'GROUNDING.yaml')
+        M.git(self.root, '-c', 'commit.gpgsign=false', 'commit', '-m', 'Protected source')
+        M.git(self.root, 'checkout', '-b', 'feature')
+        path = self.removing_source_permission()
+        M.git(self.root, 'add', str(path.relative_to(self.root)))
+        M.git(self.root, '-c', 'commit.gpgsign=false', 'commit', '-m', 'Proposed permission removal')
+        M.git(self.root, 'checkout', 'trunk')
+        before = self.record.read_bytes()
+        refused, output = self.attempt(lambda: C.fold([str(self.record)], refs=['feature']))
+        self.assertTrue(refused, output)
+        self.assertNotIn(SECRET, output)
+        self.assertEqual(before, self.record.read_bytes())
+
     def test_public_refutation_still_writes_and_deletes(self):
         path = self.hypothesis()
         refused, output = self.attempt(lambda: C.refute([str(self.record)], 'secret', 'public reason'))

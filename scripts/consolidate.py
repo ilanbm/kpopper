@@ -501,6 +501,7 @@ def _guard_private_hypotheses(paths, doc, hyps, action, extra_roots=()):
         context = hyp.get('privacy_context', P.layered(combined, hyp))
         heads = {'hypothesis': hyp.get('head', {}),
                  'record': context.get('meta', {}),
+                 'original_record': doc.get('meta', {}),
                  'source_record': hyp.get('privacy_head', {})}
         entries = G.entries(context)
         roots = set(G.entries(hyp['doc'])) | set(extra_roots)
@@ -511,16 +512,24 @@ def _guard_private_hypotheses(paths, doc, hyps, action, extra_roots=()):
             roots.update(name for name in P.ID.findall(text) if name in entries)
         # The selected source of a refutation belongs to the current record even when
         # the proposal came from another complete code-world.
-        selected = {}
+        selected, original = {}, {}
         try:
             if roots:
                 selected = G.closure(context, sorted(roots))
+            # Layering may remove privacy, citations or dependencies. Recheck the
+            # original bodies of overwritten entries and every proposed dependency
+            # already present in the base, then follow their original source chains.
+            original_roots = (roots | set(G.entries(selected))) & set(G.entries(doc))
+            if original_roots:
+                original = G.closure(doc, sorted(original_roots))
         except ValueError:
             raise P.Refused('refused - hypothesis source closure could not be checked; original retained')
-        if R.private_marker(heads) or R.private_marker(hyp['doc']) or R.private_marker(selected):
+        if any(R.private_marker(value) for value in (heads, hyp['doc'], selected, original)):
             retained = dict(selected, hypothesis=heads['hypothesis'],
                             source_record_metadata=heads['source_record'],
-                            record_metadata=heads['record'])
+                            record_metadata=heads['record'],
+                            original_record_metadata=heads['original_record'],
+                            original_record_closure=original)
             intent = dict(action, hypothesis=hyp['name'])
             receipt = R.draft(P._peer('knowledge_views').project_for(paths), intent, retained,
                               'private hypothesis or source permission; original retained without publication')
