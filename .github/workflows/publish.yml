@@ -1,0 +1,41 @@
+name: publish
+
+# The merge that lands a version is what publishes it: the commit that moves the version is
+# tagged v<x.y.z> and opens a release carrying that version's changelog entry and the files
+# built from that same commit. Every other push to main publishes nothing.
+#
+# Its own workflow rather than a step beside the release pull request, because refreshing
+# that pull request moves its checkout onto the release branch, where the version is the
+# next one - the wrong tree to publish from.
+#
+# And deliberately without a concurrency group. A pending run is cancelled by a newer one in
+# the same group whatever cancel-in-progress says, so two releases landing close together
+# would quietly leave the first one unpublished. A release that fails is made by rerunning
+# its own run, which replays the same commit.
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # The commit before this one is what says whether this one moved the version.
+          fetch-depth: 2
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Publish the released version
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          pip install build
+          python3 .github/scripts/publish_release.py

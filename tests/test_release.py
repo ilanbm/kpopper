@@ -11,9 +11,18 @@ import re
 import unittest
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
-SPEC = importlib.util.spec_from_file_location("release", ROOT / ".github" / "scripts" / "release.py")
-R = importlib.util.module_from_spec(SPEC)
-SPEC.loader.exec_module(R)
+SCRIPTS = ROOT / ".github" / "scripts"
+
+
+def _load(name):
+    spec = importlib.util.spec_from_file_location(name, SCRIPTS / f"{name}.py")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+R = _load("release")
+P = _load("publish_release")
 
 
 class TheBump(unittest.TestCase):
@@ -101,6 +110,64 @@ class TheChangelog(unittest.TestCase):
         body = R.pr_body("0.21.0", "0.20.0", "minor", [{"subject": "s", "pr": 2, "bump": "minor"}], [])
         self.assertIn("from 0.20.0 to **0.21.0**", body)
         self.assertIsNone(R.bump_of(body))
+
+
+class WhatIsPublished(unittest.TestCase):
+    def test_the_tag_carries_the_version(self):
+        self.assertEqual(P.tag_for("1.5.2"), "v1.5.2")
+
+    def test_a_release_says_what_its_own_version_changed(self):
+        log = ("# Changelog\n\n"
+               "## 0.22.0 — 2026-09-05\n\n- later (#9) — minor\n\n"
+               "## 0.21.0 — 2026-09-04\n\n- earlier (#2) — minor\n\n"
+               "Decisions recorded: d.page_is_graph\n")
+        self.assertEqual(P.section_for(log, "0.22.0"), "- later (#9) — minor")
+        older = P.section_for(log, "0.21.0")
+        self.assertIn("- earlier (#2) — minor", older)
+        self.assertIn("Decisions recorded: d.page_is_graph", older)
+        self.assertNotIn("later", older)
+
+    def test_only_a_version_heading_ends_a_section(self):
+        # The section becomes the release's text. A heading quoted inside it - an example, a
+        # fenced block - is text, and cutting there would publish half an entry.
+        log = ("# Changelog\n\n"
+               "## 0.22.0 — 2026-09-05\n\n"
+               "- Accept a heading in a document\n\n"
+               "```\n## example heading\n```\n\n"
+               "- And the rest of it\n\n"
+               "## 0.21.0 — 2026-09-04\n\n- earlier\n")
+        section = P.section_for(log, "0.22.0")
+        self.assertIn("## example heading", section)
+        self.assertIn("- And the rest of it", section)
+        self.assertNotIn("earlier", section)
+
+    def test_a_version_the_changelog_never_mentions_has_no_section(self):
+        log = "# Changelog\n\n## 0.22.0 — 2026-09-05\n\n- a\n"
+        self.assertIsNone(P.section_for(log, "0.21.0"))
+        self.assertIsNone(P.section_for(log, "0.2"))
+
+    def test_the_released_version_has_something_to_say_for_itself(self):
+        # The release is opened with this section as its text, so a version the changelog
+        # skipped stops the release - after the merge, where nothing can be added to it.
+        # Here it is a red pull request instead.
+        version = R.versions_in(R.read_texts())["pyproject.toml"]
+        section = P.section_for((ROOT / "CHANGELOG.md").read_text(encoding="utf-8"), version)
+        self.assertIsNotNone(section, f"CHANGELOG.md carries no section for {version}")
+        self.assertTrue(section.strip(), version)
+
+    def test_a_release_carries_distributions_and_nothing_else(self):
+        paths = [pathlib.Path(n) for n in ("kpopper-1.5.2.tar.gz",
+                                           "kpopper-1.5.2-py3-none-any.whl",
+                                           "kpopper-1.5.2.txt",
+                                           "kpopper-1.5.20.tar.gz",
+                                           "kpopper-1.5.1-py3-none-any.whl")]
+        mine, stray = P.dists_in(paths, "1.5.2")
+        self.assertEqual([p.name for p in mine],
+                         ["kpopper-1.5.2-py3-none-any.whl", "kpopper-1.5.2.tar.gz"])
+        # A file that merely carries the version is not a distribution of it, and 1.5.20
+        # starts with 1.5.2 without being it.
+        self.assertEqual(stray, ["kpopper-1.5.1-py3-none-any.whl",
+                                 "kpopper-1.5.2.txt", "kpopper-1.5.20.tar.gz"])
 
 
 if __name__ == "__main__":
