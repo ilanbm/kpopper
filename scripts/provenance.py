@@ -1562,35 +1562,35 @@ def pending_counts(pred, raw, ids):
     return False
 
 
+def assessment_module():
+    # A configured reader can be loaded directly by file path, outside sys.path.
+    try:
+        from . import assessment
+    except ImportError:
+        path = os.path.join(os.path.dirname(__file__), 'assessment.py')
+        existing = sys.modules.get('assessment')
+        if existing is not None and os.path.abspath(existing.__file__) == os.path.abspath(path):
+            return existing
+        name = '_kpopper_assessment_' + hashlib.sha256(
+            (os.path.abspath(path) + LOADED_SOURCE_HASH).encode()).hexdigest()[:12]
+        if name not in sys.modules:
+            from types import SimpleNamespace
+            spec = importlib.util.spec_from_file_location(name, path)
+            module = importlib.util.module_from_spec(spec)
+            module.P = SimpleNamespace(**globals())
+            sys.modules[name] = module
+            spec.loader.exec_module(module)
+        assessment = sys.modules[name]
+    return assessment
+
+
 def flags(ids, jud, fields, raw, defer_counts=False):
-    """Per judgment: the conditions that put it in front of a person, derived the one way
-    every surface derives them. A predicate over a value `raw` does not carry - a count
-    not yet taken - is left undecided, never guessed. A judgment decided with a re-opener
-    and no predicate is in front of nobody: it is decided, and a person reads the sign."""
-    out = {}
-    for name, j in jud.items():
-        f, blocked = set(), _blocked_text(j["body"])
-        for d in j["deps"]:
-            if d not in ids:
-                f.add("blocked" if blocked else "broken")
-            elif fields["snapshot"] and d not in j["seen"]:
-                f.add("unchecked")
-        if formula_only_snapshots(j, raw):
-            f.add("unchecked")
-        # A predicate this reader cannot decide falsifies nothing, whatever it names: it
-        # is counted where an empty field is counted, not passed over as one that holds.
-        named = bool([t for t in predicate_refs(j["pred"]) if t in ids]) \
-            and not why_undecided(j["pred"])
-        if not named and not blocked and not _decided(j):
-            f.add("no_predicate")
-        elif named and evaluate(j["pred"], raw, ids) is True:
-            f.add("falsified")
-        elif named and evaluate(j["pred"], raw, ids) is None and not (defer_counts and pending_counts(j["pred"], raw, ids)):
-            f.add("unknown")
-        if any(s == "moved" for _, _, _, s in moved_deps(j, raw, ids)):
-            f.add("moved")
-        out[name] = f
-    return out
+    """Existing flags are a compatibility policy over shared assessment findings."""
+    assessment = assessment_module()
+    return {name: assessment.reader_flags(
+                assessment.judgment_state(j, raw, ids, fields, jud),
+                j, raw, ids, fields, defer_counts)
+            for name, j in jud.items()}
 
 
 def counts(doc, ids, jud, fields, raw):
@@ -1724,6 +1724,8 @@ def check_lines(paths):
     for name, j in sorted(jud.items()):
         if name in open_ids:
             continue
+        state = assessment_module().judgment_state(j, raw, ids, fields, jud)
+        condition = {'holds': True, 'does_not_hold': False}.get(state['falsifier']['status'])
         blocked = _blocked_text(j["body"])
         for d in j["deps"]:
             if d not in ids:
@@ -1770,13 +1772,13 @@ def check_lines(paths):
                             f"re-checked")
         elif (error := computation_error(j["pred"], raw, ids)):
             (note if blocked else fail).append(f"{name}: condition cannot be computed: " + error)
-        elif evaluate(j["pred"], raw, ids) is True:
+        elif condition is True:
             fail.append(_fired_failure(name, j))
         elif [t for t in predicate_refs(j["pred"]) if t in PAGE]:
             named_page = sorted({t for t in predicate_refs(j["pred"]) if t in PAGE})
             note.append(f"{name}: wrong_if reads {', '.join(named_page)}, which is counted "
                         f"when the page is built - `page --verify` decides it")
-        elif evaluate(j["pred"], raw, ids) is None:
+        elif condition is None:
             # one comparison, and the reading it needs is not there: a side that holds no
             # value yet, or a truth value held against something that is not one. The shape
             # is right and only the reading is missing, so it is noted rather than failed

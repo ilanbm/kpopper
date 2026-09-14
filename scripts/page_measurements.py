@@ -21,7 +21,7 @@ except ImportError:
 DEFAULT = object()
 ROOT = Path(__file__).resolve().parent
 MAX_BYTES = 256 * 1024
-CODE = [ROOT / name for name in ('page_measurements.py', 'provenance.py', 'expressions.py',
+CODE = [ROOT / name for name in ('page_measurements.py', 'provenance.py', 'expressions.py', 'assessment.py',
         'render_page.py', 'page_words.py', 'page_lint.py', 'sameness.py',
         'session/core.py', 'session/model.py', 'session/lean/Main.lean')]
 CODE += sorted((ROOT / 'page').glob('*'))
@@ -83,6 +83,8 @@ def snapshot(paths, brief=DEFAULT):
     if getattr(P, 'LOADED_SOURCE_HASH', None) != code['provenance.py'] or \
             getattr(P.E, 'LOADED_SOURCE_HASH', None) != code['expressions.py']:
         raise ValueError('loaded record reader changed; restart it before using page measurements')
+    if P.assessment_module().LOADED_SOURCE_HASH != code['assessment.py']:
+        raise ValueError('loaded assessment changed; restart it before using page measurements')
     paths_read = _paths(roots, brief)
     files, stamps = {}, {}
     for name in paths_read:

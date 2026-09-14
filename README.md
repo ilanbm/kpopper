@@ -369,6 +369,7 @@ For a standalone CLI installation and a walkthrough of the launch-party example,
 | Return to deferred work | Followups tied to dates, recorded changes or preceding work, with configured host scheduling. [Followups](#followups-and-background-checks). |
 | Share a result people can inspect | Standalone HTML with selected evidence and review choices, plus a separate navigable page for the project record. [Documents](#share-a-document-with-its-reasons). |
 | Let the structure grow with the project | Domain-specific subjects and vocabulary within a small set of explicit relationships and checks. [Evolving structure](#a-structure-that-grows-with-the-project). |
+| Build a tool on the record | Versioned assessment JSON with independent findings, explicit scope and task-specific attention policies. [Assessment contract](docs/assessment.md). |
 | Bind a session's reads to a known version | An experimental, optional Lean-backed view checks selected session contracts and rejects reads against an outdated record revision. [Checked sessions](docs/checked-sessions.md). |
 
 Use the parts your project needs. Existing documents, tools and memory remain where

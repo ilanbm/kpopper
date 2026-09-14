@@ -36,66 +36,60 @@ STATE_MEANINGS = {
 }
 
 
-def review_readings(judgment, raw, ids, judgments, selected):
-    """A bounded display of the ordinary reader's comparisons, not a new evaluator.
-
-    Only selected current bodies supply displayed readings. Missing records remain
-    distinguishable from present records outside the excerpt. A source/rule can have
-    a recorded reading even when the ordinary scalar comparator cannot compare it.
-    """
-    moves = {dep: state for dep, _, _, state in P.moved_deps(judgment, raw, ids)}
+def review_readings(judgment, raw, ids, judgments, selected, state=None):
+    """Project shared findings without re-evaluating or revealing omitted values."""
+    if state is None:
+        state = P.assessment_module().judgment_state(
+            judgment, raw, ids, {'deps': 'rests_on', 'snapshot': 'seen', 'predicate': 'wrong_if'}, judgments)
     rows = []
-    deps = list(dict.fromkeys(judgment['deps']))
-    for dep in deps[:PREMISE_ROWS]:
-        row = {'id': dep, 'has_review': dep in judgment['snap'],
-               'at_review': judgment['snap'].get(dep)}
-        if dep not in ids:
-            row.update(current_status='missing', comparison='unavailable')
-        elif dep not in selected:
-            row.update(current_status='omitted', comparison='not_shown')
+    falsifier = state['falsifier']
+    # Existing export wording follows the ordinary reader's compatibility policy.
+    covered = set(P.predicate_refs(falsifier['expression']))
+    dependencies = state['basis']['dependencies']
+    for dep, finding in list(dependencies.items())[:PREMISE_ROWS]:
+        prior, current = finding['at_review'], finding['current']
+        row = {'id': dep, 'has_review': prior['status'] == 'recorded',
+               'at_review': prior.get('value')}
+        status = current['status']
+        value = current.get('value')
+        row['current_status'] = 'null' if status == 'recorded' and value is None else \
+            'shown' if status == 'recorded' else status
+        if status == 'recorded':
+            row['current'] = value
+        elif status == 'unavailable':
+            row['unavailable_reason'] = current.get('detail', current.get('reason'))
+        body = raw.get(dep)
+        row['current_calculated'] = isinstance(body, dict) and isinstance(body.get('rule'), dict) \
+            and status == 'recorded'
+        if 'historical_calculation' in finding:
+            row['review_calculated'] = finding['historical_calculation']
+        row['formula_changed'] = finding['rule_changed']
+        if finding.get('historical_formula_only'):
+            row['historical_formula_only'] = True
+        if isinstance(body, dict) and body.get('unit'):
+            row['unit'] = body['unit']
+        if status == 'missing':
+            comparison = 'unavailable'
+        elif not row['has_review']:
+            comparison = 'unreviewed'
+        elif finding['rule_changed'] is True or finding['comparison'] == 'changed':
+            comparison = 'crossed' if dep in covered and falsifier['status'] == 'holds' else \
+                'muted' if dep in covered and falsifier['status'] == 'does_not_hold' and not finding['rule_changed'] else 'moved'
+        elif status == 'unavailable':
+            comparison = 'unavailable'
+        elif finding.get('historical_formula_only'):
+            comparison = 'formula_only'
+        elif finding['comparison'] == 'unknown':
+            comparison = 'not_compared'
         else:
-            body = raw.get(dep)
-            comparable = P.value_of(raw, ids, dep)
-            explicit_null = (isinstance(body, dict) and 'v' in body and body['v'] is None
-                             and body.get('quoted') is None and not body.get('rule'))
-            try:
-                value = comparable if comparable is not None else \
-                    None if explicit_null else P.snapshot_value(dep, raw, ids, judgments, {})
-            except P.Refused as error:
-                value = None
-                row['unavailable_reason'] = str(error)
-            row.update(current_status='null' if explicit_null else
-                       'unavailable' if value is None else 'shown', current=value)
-            rule = body.get('rule') if isinstance(body, dict) else None
-            row['current_calculated'] = isinstance(rule, dict) and comparable is not None
-            old = row['at_review']
-            computed = old.get('computed') if isinstance(old, dict) else None
-            if isinstance(computed, dict) and 'value' in computed and 'rule' in computed:
-                row['review_calculated'] = computed
-                row['formula_changed'] = not P.E.same(computed['rule'], rule)
-            legacy_rule = P.legacy_snapshot_rule(old, rule)
-            if legacy_rule is not None:
-                row['historical_formula_only'] = True
-                row['formula_changed'] = not P.E.same(legacy_rule, rule)
-            if isinstance(body, dict) and comparable is not None and body.get('unit'):
-                row['unit'] = body['unit']
-            if not row['has_review']:
-                row['comparison'] = 'unreviewed'
-            elif dep in moves:
-                row['comparison'] = moves[dep]
-            elif row['current_status'] == 'unavailable':
-                row['comparison'] = 'unavailable'
-            elif legacy_rule is not None:
-                row['comparison'] = 'formula_only'
-            elif comparable is not None and isinstance(computed, dict) and computed.get('value') is not None:
-                row['comparison'] = 'same'
-            elif comparable is None or isinstance(comparable, (list, dict)) \
-                    or isinstance(row['at_review'], (list, dict)):
-                row['comparison'] = 'not_compared'
-            else:
-                row['comparison'] = moves.get(dep, 'same')
+            comparison = 'same'
+        row['comparison'] = comparison
+        if dep in ids and dep not in selected:
+            row['current_status'] = 'omitted'
+            for field in ('current', 'current_calculated', 'unit', 'unavailable_reason'):
+                row.pop(field, None)
         rows.append(row)
-    return rows, max(0, len(deps) - PREMISE_ROWS)
+    return rows, max(0, len(dependencies) - PREMISE_ROWS)
 
 
 def project(paths, seeds, direction='support', depth=1, max_nodes=12):
@@ -120,6 +114,7 @@ def project(paths, seeds, direction='support', depth=1, max_nodes=12):
     if unknown:
         raise ValueError('unknown exact ID(s): ' + ', '.join(unknown) + '; use kpopper open or pull')
     flags = P.flags(ids, judgments, fields, raw)
+    assessment = P.assessment_module().assess(doc, ids, judgments, fields, raw)
     disputed = P.contested(doc)
     sections = {nid: section for section, group in P.collections_of(doc).items()
                 if section != 'meta' for nid in group}
@@ -171,12 +166,22 @@ def project(paths, seeds, direction='support', depth=1, max_nodes=12):
                       'kind': 'missing' if missing else 'judgment' if nid in judgments
                       else 'computed' if P.is_builtin(nid) else sections.get(nid, 'entry')}
         if nid in judgments:
+            if not isinstance(body.get(fields['deps']), list):
+                raise ValueError(f"{nid}: {fields['deps']} must be a list of entry IDs")
             node = nodes[nid]
             node['readings'], node['omitted_readings'] = review_readings(
-                judgments[nid], raw, ids, judgments, distances)
-            predicate = judgments[nid]['pred']
-            node['condition'] = {'expression': predicate,
-                                 'result': P.evaluate(predicate, raw, ids) if predicate else None}
+                judgments[nid], raw, ids, judgments, distances, assessment['nodes'][nid]['state'])
+            findings = assessment['nodes'][nid]['state']
+            falsifier = findings['falsifier']
+            node['condition'] = {'expression': falsifier['expression'],
+                                 'result': {'holds': True, 'does_not_hold': False}.get(falsifier['status']),
+                                 'undeclared_reads': [ref for issue in findings['integrity']['issues']
+                                    if issue['code'] == 'undeclared_predicate_dependencies'
+                                    for ref in issue['related_ids'] if ref in ids],
+                                 'missing_reads': [ref for ref in (falsifier['reads'] or []) if ref not in ids],
+                                 'unparsed_mentions': [ref for issue in findings['integrity']['issues']
+                                    if issue['code'] == 'unsupported_predicate'
+                                    for ref in issue['related_ids']]}
         elif isinstance(body, dict) and isinstance(body.get('rule'), dict):
             nodes[nid]['calculation'] = P.E.current(raw, ids, nid)
     internal = [edge for edge in edges if edge[0] in nodes and edge[2] in nodes]
@@ -200,7 +205,8 @@ def project(paths, seeds, direction='support', depth=1, max_nodes=12):
             'omitted_edges': max(0, len(internal) - MAX_EDGES),
             'hypotheses': len(doc.hypotheses),
             'hypothesis_errors': {name: hyp['error'] for name, hyp in doc.hypotheses.items() if hyp['error']},
-            'fields': fields}
+            'fields': fields,
+            'assessment': {key: value for key, value in assessment.items() if key != 'nodes'}}
 
 
 def plain(value):
@@ -245,7 +251,7 @@ def reading_table(node):
                    'muted': 'changed; within condition; no review flag',
                    'crossed': 'changed; declared condition holds',
                    'unreviewed': 'no historical reading', 'not_compared': 'not compared by reader',
-                   'unavailable': 'not compared', 'not_shown': 'not shown',
+                   'unavailable': 'not compared',
                    'formula_only': 'historical formula only; no historical result'}
     for row in node['readings']:
         old = clipped(row['at_review'], CELL_CHARS) if row['has_review'] else 'not recorded'
@@ -330,6 +336,17 @@ def render_markdown(packet, details=False):
                              f"{clipped(P.predicate_text(condition['expression']))} → {outcome}.")
             else:
                 lines.append('- No executable condition declared.')
+            if condition['undeclared_reads']:
+                lines.append('- Condition reads undeclared dependencies: ' +
+                             clipped(', '.join(condition['undeclared_reads'])) +
+                             '. Changes to these inputs do not follow the declared dependency links.')
+            if condition['missing_reads']:
+                lines.append('- Condition references entries missing from this record: ' +
+                             clipped(', '.join(condition['missing_reads'])) + '.')
+            if condition['unparsed_mentions']:
+                lines.append('- Unparsed condition mentions undeclared entries: ' +
+                             clipped(', '.join(condition['unparsed_mentions'])) +
+                             '. Executable reads could not be determined.')
             lines.extend([''] + reading_table(node))
         if details:
             lines.extend(['', 'Recorded fields:'])
