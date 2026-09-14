@@ -1,5 +1,7 @@
 """Search and page measurements bind the selected knowledge world and its evidence."""
 import os
+import subprocess
+import sys
 from pathlib import Path
 import unittest
 from unittest.mock import patch
@@ -128,6 +130,83 @@ class ModeReaders(Repository):
         first.write_text(second.read_text())
         project.configure('simple', record=str(second))
         self.assertNotEqual(before['identity'], PM.snapshot([str(self.record)])['identity'])
+
+    def simple_page_fixture(self):
+        shared = self.base / 'shared' / 'GROUNDING.yaml'
+        shared.parent.mkdir()
+        doc = {'sources': {'s.evidence': {'name': 'Evidence', 'file': 'evidence.txt'}},
+               'known': {'local.one': {'v': 1, 'from': 's.evidence'}}}
+        self.record.write_text(P.yaml.safe_dump(doc))
+        shared.write_text(self.record.read_text())
+        M.Project(self.root).configure('simple', record=str(shared))
+        for root, title in ((self.root, 'Checkout view'), (shared.parent, 'Shared view')):
+            (root / 'evidence.txt').write_text(title + ' evidence')
+            brief = root / '.kpopper/view.yaml'
+            brief.parent.mkdir(exist_ok=True)
+            brief.write_text(P.yaml.safe_dump({'title': title, 'sections': [
+                {'title': title + ' links', 'pick': ['s.evidence'], 'as': 'links'}]}))
+        return shared
+
+    def assert_evidence_link(self, page, page_path, evidence):
+        from tests.test_page_links import Anchors, resolved_file
+        anchors = Anchors()
+        anchors.feed(page)
+        links = [anchor for anchor in anchors.items if 'lk' in anchor.get('class', '').split()]
+        self.assertTrue(links)
+        self.assertTrue(all(resolved_file(page_path, link['href']) == evidence for link in links))
+
+    def test_simple_page_uses_shared_brief_sources_and_canonical_measurement(self):
+        from scripts import render_page as R
+        shared = self.simple_page_fixture()
+        page_path = self.base / 'rendered.html'
+        self.assertEqual(R.find_brief([str(self.record)]), str(shared.parent / '.kpopper/view.yaml'))
+        page = R.measured_build([str(self.record)], page_path=page_path)[0]
+        self.assertIn('<h1 dir="auto">Shared view</h1>', page)
+        self.assertNotIn('Checkout view', page)
+        self.assert_evidence_link(page, page_path, shared.parent / 'evidence.txt')
+        expected = PM.snapshot([str(shared)])
+        self.assertTrue(PM.cache_path(expected['scope']).exists())
+        self.assertNotIn('stale', PM.read(expected)[1])
+        (shared.parent / '.kpopper/view.yaml').write_text('title: Changed shared view\n')
+        self.assertIn('stale', PM.read(PM.snapshot([str(shared)]))[1])
+
+    def test_frozen_page_keeps_checkout_brief_sources_and_measurement(self):
+        from scripts import render_page as R
+        self.simple_page_fixture()
+        page_path = self.base / 'frozen.html'
+        with patch.dict(os.environ, {'KPOPPER_READ_MODE': 'frozen'}):
+            self.assertEqual(R.find_brief([str(self.record)]), str(self.root / '.kpopper/view.yaml'))
+            page = R.measured_build([str(self.record)], page_path=page_path)[0]
+            self.assertIn('<h1 dir="auto">Checkout view</h1>', page)
+            self.assertNotIn('Shared view', page)
+            self.assert_evidence_link(page, page_path, self.root / 'evidence.txt')
+            expected = PM.snapshot([str(self.record)])
+            self.assertTrue(PM.cache_path(expected['scope']).exists())
+            self.assertNotIn('stale', PM.read(expected)[1])
+
+    def test_renderer_cli_preserves_selected_mode_for_explicit_checkout_path(self):
+        from scripts import render_page as R
+        shared = self.simple_page_fixture()
+        for flags, title, source in (([], 'Shared view', shared.parent / 'evidence.txt'),
+                                     (['--frozen'], 'Checkout view', self.root / 'evidence.txt')):
+            page_path = self.base / ('frozen-cli.html' if flags else 'live-cli.html')
+            result = subprocess.run([sys.executable, R.__file__, str(self.record),
+                                     '--page-out', str(page_path), *flags],
+                                    text=True, capture_output=True, env=os.environ, timeout=30)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertIn('<h1 dir="auto">' + title + '</h1>', result.stdout)
+            self.assert_evidence_link(result.stdout, page_path, source)
+
+    def test_explicit_frozen_renderer_read_ignores_ambient_live_redirection(self):
+        from scripts import render_page as R
+        shared = self.simple_page_fixture()
+        shared.write_text('known:\n  shared.only: {v: 2}\n')
+        brief = R.find_brief([str(self.record)], read_mode='frozen')
+        page_path = self.base / 'frozen-explicit.html'
+        page, entries, _, _, _ = R.build([str(self.record)], brief, page_path, read_mode='frozen')
+        self.assertIn('s.evidence', entries)
+        self.assertNotIn('shared.only', entries)
+        self.assert_evidence_link(page, page_path, self.root / 'evidence.txt')
 
     def test_page_labels_contributions_without_calling_them_hypotheses(self):
         from scripts import render_page as R

@@ -134,10 +134,22 @@ def shape_of(ids, jud, flags):
 
 
 # ── the brief ────────────────────────────────────────────────────────────────
-def find_brief(paths, explicit=None):
+def _read_mode(read_mode=None):
+    mode = read_mode or ('frozen' if P._RAW_READS.get() else os.environ.get('KPOPPER_READ_MODE', 'live'))
+    if mode not in ('live', 'frozen'):
+        raise ValueError('read mode must be live or frozen')
+    return mode
+
+
+def record_paths(paths, *, read_mode=None):
+    """Resolve the selected knowledge world before deriving its brief or evidence roots."""
+    return list(P._peer('knowledge_views').write_paths(paths)) if _read_mode(read_mode) == 'live' else list(paths)
+
+
+def find_brief(paths, explicit=None, *, read_mode=None):
     """The brief given, else the record's own: `.kpopper/view.yaml` beside a record under the
     new name, `<file>.view.yaml` beside a record - or a file it points at - under the old."""
-    return P.brief_for(paths, explicit)
+    return P.brief_for(record_paths(paths, read_mode=read_mode), explicit)
 
 
 def same_value(old, now):
@@ -877,8 +889,10 @@ def tree_svg(ids, jud, E, J, flags, words=None, label=None):
     return "".join(o)
 
 
-def build(paths, brief_path=None, page_path=None):
-    doc = P.load(paths)
+def build(paths, brief_path=None, page_path=None, *, read_mode=None):
+    mode = _read_mode(read_mode)
+    paths = record_paths(paths, read_mode=mode)
+    doc = P.load(paths, read_mode=mode)
     record_root = os.path.dirname(P.layout_of(paths)["entry"])
     ids, jud, fields = P.infer(doc)
     meta = doc.get("meta") or {}
@@ -1816,8 +1830,14 @@ def measured_build(paths, brief_path=None, page_path=None):
     """Explicit page construction publishes counts for the exact inputs it read."""
     if LOADED_SOURCE_HASH != MEASUREMENTS.LOADED_CODE['render_page.py']:
         raise ValueError('loaded renderer changed; restart it before measuring')
+    selected = list(paths)
+    mode = _read_mode()
+    paths = record_paths(selected, read_mode=mode)
+    brief_path = P.brief_for(paths, brief_path)
     before = MEASUREMENTS.snapshot(paths, brief_path)
-    result = build(paths, brief_path, page_path)
+    result = build(paths, brief_path, page_path, read_mode=mode)
+    if _read_mode() != mode or record_paths(selected, read_mode=mode) != paths:
+        raise ValueError('selected record or read mode changed during page measurement; build again')
     try:
         MEASUREMENTS.publish(before, result[4]['page'])
     except OSError as error:
@@ -1927,9 +1947,11 @@ if __name__ == "__main__":
             page_path, i = supplied[i + 1], i + 2
         else:
             a.append(supplied[i]); i += 1
+    if '--frozen' in a:
+        a.remove('--frozen')
+        os.environ['KPOPPER_READ_MODE'] = 'frozen'
     brief = a[a.index("--brief") + 1] if "--brief" in a else None
     files = [x for x in a if x.endswith((".yaml", ".yml")) and x != brief] or P.default_paths()
-    brief = find_brief(files, brief)
     if "--verify" in a:
         sys.exit(verify(files, brief))
     page, _, _, _, info = measured_build(files, brief, page_path)
