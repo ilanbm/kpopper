@@ -466,37 +466,68 @@ where the conversation can safely continue without that result.
 
 ### Two working modes
 
+The difference is **whether sessions share one project context or work against different
+versions of the code**. Both modes support several sessions and competing hypotheses.
+
 <picture>
   <source media="(max-width: 640px)" srcset="assets/diagrams/two-working-modes-mobile.png">
-  <img src="assets/diagrams/two-working-modes.png" alt="Two working modes: Simple sessions share one sourced project record with competing hypotheses; Advanced branches retain their own assumptions and hypotheses, while shareable project findings follow review and acceptance into main.">
+  <img src="assets/diagrams/two-working-modes.png" alt="Two working modes. Simple: sessions share one sourced project record and competing hypotheses; consolidation compares and checks proposals, then folds them into the record, refutes them with a reason, or leaves them pending. Advanced: each branch keeps the assumptions and hypotheses for its code. Branch records pass through consolidation before integration into main. A continuing Shared findings, pending review path captures feature-independent findings with their source, scope and status. Dashed arrows show local reading before merge. With permission, findings enter a knowledge PR, where consolidation reconciles them with the target record before acceptance. Both paths reach the same main record; the shared path continues for the next batch.">
 </picture>
 
 [View the full-size illustration](assets/diagrams/two-working-modes.png) ·
 [View the vertical version](assets/diagrams/two-working-modes-mobile.png)
 
-**Simple** keeps one project graph shared by its sessions. Competing ideas are named
-hypotheses beside that graph: several sessions can examine the same proposal, and one
-session can work on several. Projects without Git start here.
+**Simple — one shared context.** Sessions read and contribute to the same project graph.
+Competing ideas are named hypotheses beside it: several sessions can examine the same
+proposal, and one session can work on several. For a research project, for example, sessions
+can read different papers and compare explanations against the same sourced record.
+**Consolidation** is how those proposals become part of the shared record: compare them
+with what it already holds, check the combined dependencies and resolve conflicting claims.
+A proposal can be folded in, refuted with its reason retained, or left pending.
 
-**Advanced** adds Git branch contexts. Each branch's record describes the version of the
-project being examined, even if the repository has only one checkout. New Git projects
-start here. Existing registered shared records keep their current location and behavior;
-changing mode requires explicit reconciliation.
+**Advanced — branch contexts and shared findings.** Each branch's record describes its
+version of the code. A cache decision on one branch may depend on results being public,
+while another branch introduces private results. Keeping those premises with their branches
+lets review check whether the reasoning still holds when the changes are combined.
+Consolidation reconciles those records: it identifies overlapping subjects and conflicting
+claims, and checks which decisions need another look under the combined premises. Resolve
+what needs judgment before folding a proposal in; unresolved hypotheses remain explicit.
 
-In Advanced, shareable findings that apply to the project independently of a feature go
-into `pending_grounding`. Other local worktrees can read them immediately with their source,
-scope and pending status. With the project's publication permission, they accumulate in
-one review PR. After accepted contributions are verified in the target branch, the same
-`pending_grounding` branch is reused for the next batch. Closing the original session or
-removing its worktree does not erase the pending work.
+Knowledge then follows two paths:
+
+- **Feature knowledge travels with its branch.** Its assumptions, measurements and
+  hypotheses stay attached to the code they describe. Consolidation tests their combination
+  with the target record as part of reviewing the change.
+- **Shared findings have a continuing path of their own.** Shareable findings that apply
+  independently of the feature enter `pending_grounding`, with their sources and scope.
+  They remain available even if the originating session closes or its worktree is removed.
+
+Suppose a session building an integration discovers a documented change to the vendor's
+API limit. **The feature may be abandoned; the finding can still help the project.** Other
+local worktrees can read it immediately, marked as pending, without waiting for the feature
+to merge. It appears alongside their branch record; reading it does not adopt it or replace
+their recorded premises.
+
+With the project's publication permission, shared findings accumulate in one knowledge PR.
+Consolidation reconciles the proposed knowledge with the target record before acceptance;
+conflicts and changed premises need resolution. Accepted contributions are then verified
+in the target branch, shown as `main` above. The same publication branch is reused for
+the next batch, while the local contribution history persists across review cycles. Local
+capture and reading also work without publication.
 
 A measurement of an unmerged commit can be a fact about that commit. A proposed conclusion
 remains a hypothesis. Merging means the team accepted the contribution; it does not prove
 the claim, increase confidence or refresh its last review. Private material and information
 whose sharing permission is unclear stay in a structured private draft.
 
+Projects without Git start in Simple; new Git projects start in Advanced, including those
+with only one checkout. Simple can also be configured for a Git project with one external
+shared record. Existing registered shared records keep their current location and behavior;
+changing mode requires explicit reconciliation.
+
 See [project modes and publication](docs/project-modes.md) for routing, reproducible reads
-and the publication lifecycle.
+and the publication lifecycle, and [consolidation](skills/consolidate/SKILL.md) for the
+dry run, folding and refutation commands.
 
 ### The knowledge record
 

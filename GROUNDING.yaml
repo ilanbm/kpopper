@@ -1,5 +1,5 @@
 meta:
-  updated: 2026-09-11
+  updated: 2026-09-14
   name: kpopper
   scope: "What this plugin is for and the decisions that shaped it, kept in its own format -
           the tools eat their own cooking, and every session here opens grounded."
@@ -543,6 +543,12 @@ sources:
            leave the first unpublished"
     from: "a review of the change"
     of: "2026-09-14"
+  s.2026_09_14_working_modes:
+    name: "Working modes explanation with an explicit consolidation step"
+    asked: "חסרה הקונסולידציה בצורה ברורה"
+    of: "Clarification to the approved README text and illustration update: explain the shared
+         pending findings path and make consolidation visible in both working modes."
+    read: "2026-09-14"
   s.background_ingestion:
     name: "Background capture and selective delivery contract"
     file: "skills/kpopper/INGESTION.md"
@@ -587,6 +593,13 @@ sources:
     name: "Background watch and shared observations"
     file: "skills/watch/references/compatibility.md"
     read: "2026-09-10"
+  s.working_modes_explanation:
+    from: s.2026_09_14_working_modes
+    name: "README working modes explanation and illustrations"
+    file: README.md
+    at: "How it works / Two working modes; assets/diagrams/two-working-modes.png and
+         two-working-modes-mobile.png"
+    read: "2026-09-14"
   doc.fact_moves:
     url: "https://claude.ai/code/artifact/ca99e558-60ae-4b22-9221-e3b29d7d7e2b"
     name: "מה קורה כשעובדה זזה - the unified node model"
@@ -2988,6 +3001,36 @@ judgments:
       s.2026_09_13_reasoning_emphasis: "read 2026-09-13"
       s.2026_09_13_process_illustrations: "read 2026-09-13"
       s.2026_09_13_worker_and_research: "read 2026-09-13"
+  d.readme_working_modes:
+    from: s.2026_09_14_working_modes
+    name: "Explain shared contexts, branch contexts and explicit consolidation"
+    rests_on: [s.working_modes_explanation, d.readme_layered_explanation, d.consolidation_is_a_test]
+    verdict: "Explain Simple as one shared context and Advanced as branch contexts plus a continuing
+              path for shared findings. Show consolidation explicitly in both modes, with folding,
+              refutation and unresolved proposals distinguished. Show local reads of pending findings
+              separately from publication and acceptance into main."
+    because: "A branch-only picture hides findings that outlive the feature which discovered them. A
+              generic review box hides comparison of subjects, conflicting claims and combined
+              dependencies. The shared path and consolidation cycle explain how knowledge becomes
+              available, is reconciled and is retained, while the vendor API example gives that
+              separation a concrete use. These are explanatory design choices; reader comprehension
+              has not been measured."
+    reopened_by: "An uncoached reader interprets pending findings as already accepted, assumes every
+                  finding applies to every branch, cannot explain what consolidation changes, or
+                  reads a connector as automatic adoption or publication."
+    seen:
+      s.working_modes_explanation: "read 2026-09-14"
+      d.readme_layered_explanation: "Lead with recorded dependencies between decisions, evidence and
+                                     assumptions, and the conditions for review. Use descriptive
+                                     story headings and visible record excerpts, with complete
+                                     records, state tables and diagrams in the example guides.
+                                     Distinguish shared reasoning roles from mandatory sections,
+                                     spell the name kpopper, and link to Popper's idea without
+                                     explaining every part of the visual joke."
+      d.consolidation_is_a_test: "consolidating hypotheses into the base tests whether the writers
+                                  worked on the same world: premises re-checked, falsifiers
+                                  evaluated, contradictions stopped - as a dry run at any moment, and
+                                  as a step on every pull request"
   d.record_is_code:
     rests_on: [s.2026_09_01_consolidation, d.register_out_of_tree, d.base_shared_forks_on_contradiction, p.hypothesis_homes]
     verdict: "the record of what is known about the code lives in the tree - committed with the work
