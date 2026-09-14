@@ -17,11 +17,12 @@ from zoneinfo import ZoneInfo
 import yaml
 
 try:
-    from . import workspace as W, provenance as P, followup_triggers as T
+    from . import workspace as W, provenance as P, followup_triggers as T, page_measurements as M
 except ImportError:
     import workspace as W
     import provenance as P
     import followup_triggers as T
+    import page_measurements as M
 
 UTC = dt.timezone.utc
 STATES = {"waiting", "needs_user", "done", "cancelled"}
@@ -95,22 +96,54 @@ def atomic_bytes(path, data):
             os.unlink(name)
 
 
+def _record_view(record):
+    doc = P.load([record])
+    try:
+        ids, judgments, fields = P.infer(doc)
+    except (ValueError, SystemExit):
+        # A source-only record can still supply explicit scalar readings.
+        collections = P.collections_of(doc)
+        raw = {key: body for group in collections.values() for key, body in group.items()}
+        if any(isinstance(body, dict) and "rests_on" in body for body in raw.values()):
+            raise
+        ids, judgments, fields = set(raw), {}, {}
+    return doc, ids, judgments, fields
+
+
 def graph(record):
     """Only recorded semantic values; an unreadable graph cannot become an empty success."""
     try:
-        doc = P.load([record])
-        try:
-            ids, judgments, fields = P.infer(doc)
-        except (ValueError, SystemExit):
-            # A source-only record can still supply explicit scalar readings.
-            collections = P.collections_of(doc)
-            raw = {key: body for group in collections.values() for key, body in group.items()}
-            if any(isinstance(body, dict) and "rests_on" in body for body in raw.values()):
-                raise
-            ids, judgments, fields = set(raw), {}, {}
-        raw = P.bodies(doc)
-        values = {key: T.normalize(P.snapshot_value(key, raw, ids, judgments, {})) for key in ids}
+        doc, ids, judgments, fields = _record_view(record)
+        before, page, page_reason = None, {}, ''
+        # Ordinary followups do not pay for page/engine cache validation. For page
+        # references, reload the record inside the captured measurement boundary.
+        if set(ids) & set(P.PAGE):
+            try:
+                before = M.snapshot([record])
+            except (OSError, ValueError, TypeError):
+                before, page = None, {}
+                page_reason = 'page inputs are unavailable; build the canonical page again'
+            doc, ids, judgments, fields = _record_view(record)
+            if before is not None:
+                page, page_reason = M.read(before)
+        raw = P.with_builtins(doc, ids, judgments, fields)
+        for key, value in page.items():
+            if key in ids:
+                raw.setdefault(key, {'name': P.PAGE[key]})['v'] = value
+        values = {}
+        for key in ids:
+            if key in P.PAGE:
+                values[key] = page[key] if key in page else {"unavailable": page_reason}
+                continue
+            try:
+                values[key] = T.normalize(P.snapshot_value(key, raw, ids, judgments, page))
+            except (P.Refused, ValueError) as error:
+                # Keep the ID and the reason, without inventing a null reading or
+                # making an unrelated followup depend on this calculation.
+                values[key] = {"unavailable": str(error)}
         flags = P.flags(ids, judgments, fields, raw) if judgments else {}
+        if before is not None and not M.unchanged(before, M.snapshot([record])):
+            raise ValueError('record or page inputs changed during followup read; retry')
         return values, [{"id": key, "reasons": sorted(value)} for key, value in sorted(flags.items()) if value], None
     except (OSError, ValueError, TypeError, AttributeError, yaml.YAMLError, SystemExit) as error:
         return {}, [], "Knowledge record unavailable: " + str(error)
@@ -403,6 +436,10 @@ class Store:
         if graph_error or any(key not in values for key in spec["related"]):
             state = "unknown"
             reasons.append(graph_error or "A related graph entry is missing")
+        unavailable = [key for key in spec["related"] if T.unavailable(values.get(key))]
+        if unavailable:
+            state = "unknown"
+            reasons.append("Related values are unavailable: " + ", ".join(unavailable))
         claim = item["claim"]
         if claim:
             state = "claimed" if T.parse_time(claim["expires_at"]) > now else "interrupted"

@@ -67,7 +67,20 @@ Each trigger has exactly one key. Combine leaves through nonempty `all` or `any`
 | `manual: 'The owner confirms that the budget is available'` | Human condition, reported as unknown until deliberately revised |
 
 All graph references must appear in `related`; prerequisites must already exist and cannot
-form cycles. Missing data and unsupported conditions are unknown, not false evidence. A graph
+form cycles. Conditions over computed premises use the current calculated value, including
+exact rational numbers. `changed` retains the complete snapshot, so a changed formula can
+trigger review even when its result is unchanged. An unavailable calculation stays unknown.
+An unreadable value does not disable unrelated followups. Its ID stays visible with an
+`unavailable` reason, distinct from a recorded null. Both a condition and a change trigger
+over that value remain unknown; a followup listing it in `related` cannot become ready
+merely because its date arrived. A missing historical baseline requires an explicit refresh.
+An explicit `kpopper page` or `page --verify` publishes measured page counts outside the
+record. Followups can read those counts for the same record, shards, hypotheses, canonical
+view and evaluator version. Changed inputs, missing or corrupt measurements stay unknown
+until another explicit build. A scan never renders the page or refreshes `seen`.
+An alternate `--brief` does not replace the canonical view's measurement. Verification
+can report a fired condition and still supply a real count; a measurement is not approval.
+Missing data and unsupported conditions are unknown, not false evidence. A graph
 change is visible only once it is recorded; use existing source ingestion to bring in real news.
 This syntax does not execute shell commands or interpret arbitrary predicates.
 

@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
-"""Durable, selective ingestion for existing scalar provenance readings.
+"""Durable, selective ingestion for explicit provenance reports.
 
 Captured text and queue state live outside the repository by default.  A report may
-update one explicitly named, existing scalar reading.  Anything incomplete, ambiguous,
-derived, judgment-shaped, multi-file, or hypothesis-backed is retained for a person.
+update one existing scalar reading or an atomic batch of readings and new grounded
+entries. Interpretation belongs to the calling agent. Unsupported or ambiguous changes
+are retained for review; existing judgments are never rewritten by ingestion.
 
 The implementation requires ``fcntl.flock`` for capture, processing, and acknowledgement,
 matching provenance.py's directory lock.  Those writes fail closed on platforms without
@@ -11,6 +12,7 @@ matching provenance.py's directory lock.  Those writes fail closed on platforms 
 """
 import argparse
 import contextlib
+import copy
 import datetime
 import hashlib
 import importlib.util
@@ -33,10 +35,11 @@ P = importlib.util.module_from_spec(_SPEC)
 _SPEC.loader.exec_module(P)
 
 TERMINAL = {"applied", "needs_primary", "superseded", "error"}
-ACTIONABLE = {"MOVED", "UNCHECKED", "BROKEN", "BLOCKED"}
+ACTIONABLE = {"MOVED", "UNCHECKED", "BROKEN", "BLOCKED", "UNKNOWN"}
 AUTO_STATES = {"captured", "processing"}
 EVENT_FIELDS = {"event_id", "session_id", "source_quote", "target", "value", "date",
-                "kind", "question", "reason", "shareability", "privacy", "scope"}
+                "kind", "question", "reason", "updates", "record_sha256",
+                "shareability", "privacy", "scope"}
 MAX_REPREPARES = 2
 
 
@@ -100,12 +103,21 @@ def _load(path, default=None):
         return default
 
 
-@contextlib.contextmanager
-def _file_lock(path):
+class LockingUnavailable(RuntimeError):
+    """This platform cannot serialize durable ingestion writes."""
+
+
+def _require_locking():
     try:
         import fcntl
     except ImportError as exc:
-        raise RuntimeError("durable ingestion writes require fcntl file locking") from exc
+        raise LockingUnavailable("durable ingestion writes require fcntl file locking") from exc
+    return fcntl
+
+
+@contextlib.contextmanager
+def _file_lock(path):
+    fcntl = _require_locking()
     path = Path(path)
     _private_dir(path.parent)
     fd = os.open(str(path), os.O_CREAT | os.O_RDWR, 0o600)
@@ -136,6 +148,7 @@ def state_path(record=None, state_dir=None):
 
 
 def _layout(record=None, state_dir=None):
+    _require_locking()  # Fail before creating/chmod'ing state on unsupported platforms.
     rec = _record_path(record)
     root = state_path(rec, state_dir)
     try:
@@ -185,9 +198,37 @@ def _validate_envelope(envelope):
     if not isinstance(quote, str) or not quote.strip():
         raise ValueError("source_quote must be non-empty text")
     out = dict(envelope)
+    if out.get("record_sha256") is not None and (not isinstance(out["record_sha256"], str)
+            or not re.fullmatch(r"[0-9a-f]{64}", out["record_sha256"])):
+        raise ValueError("record_sha256 must be the hash returned by the prior record read")
     for field in ("event_id", "session_id", "target", "question", "reason", "kind"):
         if field in out and out[field] is not None and not isinstance(out[field], str):
             raise ValueError(field + " must be text")
+    if "updates" in out:
+        if "target" in out or "value" in out:
+            raise ValueError("use updates or target/value, not both")
+        updates = out["updates"]
+        if not isinstance(updates, list) or not 1 <= len(updates) <= 32:
+            raise ValueError("updates must contain 1..32 operations")
+        names = set()
+        for op in updates:
+            if not isinstance(op, dict) or op.get("kind") not in {"set", "add"}:
+                raise ValueError("each update needs kind=set or kind=add")
+            allowed = {"kind", "id", "at", "value"} if op["kind"] == "set" else {"kind", "id", "at", "body", "into"}
+            required = "value" if op["kind"] == "set" else "body"
+            if set(op) - allowed or required not in op:
+                raise ValueError("invalid fields in " + op["kind"] + " update")
+            name = op.get("id")
+            if not isinstance(name, str) or not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z0-9_]+)*", name):
+                raise ValueError("each update needs a valid entry id")
+            if name in names:
+                raise ValueError("one update per id in a batch: " + name)
+            names.add(name)
+            for field in ("at", "into"):
+                if field in op and (not isinstance(op[field], str) or not op[field].strip()):
+                    raise ValueError(field + " must be non-empty text")
+            if op["kind"] == "add" and not isinstance(op["body"], dict):
+                raise ValueError("add body must be a mapping")
     return out
 
 
@@ -270,6 +311,71 @@ def _target(record, name):
     }
 
 
+def _report_seeds(envelope):
+    return [op["id"] for op in envelope["updates"]] if "updates" in envelope else envelope.get("target")
+
+
+def _brief_fingerprint(record):
+    brief = P._brief_beside(str(record))
+    return _sha(Path(brief).read_bytes()) if brief else None
+
+
+def _batch_fingerprint(record, updates):
+    doc, _, _, _, _ = _record_world(record)
+    raw = P.bodies(doc)
+    return _body_hash({op["id"]: raw.get(op["id"]) for op in updates})
+
+
+def _report_target(record, envelope):
+    """Reading updates bind their targets; new claims bind the whole interpreted record."""
+    expected = envelope.get("record_sha256")
+    has_additions = any(op["kind"] == "add" for op in envelope.get("updates", []))
+    if has_additions and expected is None:
+        raise ValueError("new entries require record_sha256 from the primary's prior open --json or search")
+    if expected is not None and _sha(Path(record).read_bytes()) != expected:
+        raise ValueError("record changed since the primary read it; reread the premises before resubmitting")
+    if "updates" not in envelope:
+        return _target(record, envelope.get("target"))
+    doc, ids, judgments, fields, raw = _record_world(record)
+    homes = set()
+    for op in envelope["updates"]:
+        if op["kind"] == "set":
+            old = _target(record, op["id"])
+            if _basic_type(op["value"]) != old["type"]:
+                raise ValueError(op["id"] + " has a different scalar type")
+            homes.add(old["source_collection"])
+        else:
+            if op["id"] in ids:
+                raise ValueError(op["id"] + " already exists; batch add never replaces an entry or judgment")
+            body = op["body"]
+            if fields.get("snapshot") in body or "seen" in body:
+                raise ValueError("judgment snapshots are computed by the writer")
+            if any(key in body for key in ("from", "at", "of", "src", "source")):
+                raise ValueError("batch readings cite the captured report; use update.at for its location")
+            stored = [key for key in ("v", "quoted") if key in body]
+            derived = "rule" in body
+            judgment = fields.get("deps") in body
+            if judgment and isinstance(body.get(fields["deps"]), list) and any(
+                    isinstance(dep, str) and P.is_builtin(dep) for dep in body[fields["deps"]]):
+                raise ValueError("batch judgments about reader/page counts require primary review; use domain entries as premises")
+            if len(stored) + int(derived) + int(judgment) != 1:
+                raise ValueError("add one stored reading, rule, or judgment per entry")
+            if stored and _basic_type(body[stored[0]]) is None:
+                raise ValueError("new stored readings must be scalar")
+    if not homes:
+        for collection, members in P.collections_of(doc).items():
+            if any(isinstance(body, dict) and nid not in judgments
+                   and not any(key in body for key in ("v", "quoted", "rule"))
+                   and any(body.get(key) for key in ("file", "url", "asked", "read"))
+                   for nid, body in members.items()):
+                homes.add(collection)
+    if len(homes) != 1:
+        raise ValueError("the batch needs one unambiguous existing source collection")
+    fingerprint = _sha(Path(record).read_bytes()) if has_additions else _batch_fingerprint(record, envelope["updates"])
+    return {"body_sha256": fingerprint,
+            "source_collection": next(iter(homes)), "type": "batch"}
+
+
 def _event_id(record, envelope):
     supplied = envelope.get("event_id")
     if supplied is not None:
@@ -308,7 +414,7 @@ def capture(envelope, record=None, state_dir=None, start=True):
             issue = None
             snapshot = None
             try:
-                snapshot = _target(rec, envelope.get("target"))
+                snapshot = _report_target(rec, envelope)
             except (Exception, SystemExit) as exc:
                 issue = " ".join(str(exc).split())
         counter_path = root / "counter.json"
@@ -331,10 +437,26 @@ def capture(envelope, record=None, state_dir=None, start=True):
     return _summary(event)
 
 
-def _graph(record, target=None):
+def _graph(record, target=None, measured=False):
     doc, ids, judgments, fields, raw = _record_world(record)
+    measurement = None
+    if measured and set(ids) & set(P.PAGE):
+        try:
+            from . import page_measurements as M
+        except ImportError:
+            import page_measurements as M
+        measurement = M.snapshot([str(record)])
+        doc, ids, judgments, fields, raw = _record_world(record)
+        page, _ = M.read(measurement)
+        for key, value in page.items():
+            if key in ids:
+                raw.setdefault(key, {'name': P.PAGE[key]})['v'] = value
     if target:
-        hit, touched, derived = P.reach_of(ids, judgments, raw, [target])
+        seeds = target if isinstance(target, list) else [target]
+        hit, touched, derived = P.reach_of(ids, judgments, raw, seeds)
+        for seed in seeds:
+            if seed in judgments:
+                hit.setdefault(seed, seed)
     else:
         hit, touched, derived = {}, set(), []
     states = {}
@@ -346,6 +468,8 @@ def _graph(record, target=None):
             "name": P.named(judgment["body"]),
             "verdict": judgment["body"].get("verdict"),
         }
+    if measurement is not None and not M.unchanged(measurement, M.snapshot([str(record)])):
+        raise ValueError('record or page inputs changed during pending read; retry')
     return {
         "hash": _sha(Path(record).read_bytes()), "judgments": states,
         "reach": {"judgments": sorted(hit), "via": hit,
@@ -427,6 +551,8 @@ def _finish(root, event, envelope, state, reason, signals=None, **extra):
         "signal_ids": [x["id"] for x in signals],
         **extra,
     }
+    if "updates" in envelope:
+        receipt["updates"] = envelope["updates"]
     result = {"receipt": receipt, "signals": signals}
     _save(root / "results" / (eid + ".json"), result)
     _publish(root, result)
@@ -470,6 +596,27 @@ def _capture_payload(root, event):
         return None, "captured envelope cannot be read: " + " ".join(str(exc).split())
 
 
+def recording_source(nid, body):
+    """A recording-purpose exemption belongs only to a retained, intact capture."""
+    if not isinstance(nid, str) or not nid.startswith('s.ingest_'):
+        return False
+    eid = nid[len('s.ingest_'):]
+    if not re.fullmatch(r'[A-Za-z0-9_-]{1,128}', eid) or not isinstance(body.get('file'), str):
+        return False
+    source = Path(body['file'])
+    if not source.is_absolute() or source.parent.name != 'sources' or source.name != eid + '.txt':
+        return False
+    root = source.parent.parent
+    try:
+        event = _load(_event_file(root, eid))
+        if not isinstance(event, dict) or event.get('event_id') != eid or event.get('source_file') != str(source):
+            return False
+        _, error = _capture_payload(root, event)
+    except (OSError, ValueError):
+        return False
+    return error is None
+
+
 def _integrity_question(root, event, reason, record_committed=False):
     envelope_path = root / "envelopes" / (event["event_id"] + ".json")
     source_path = root / "sources" / (event["event_id"] + ".txt")
@@ -506,6 +653,14 @@ def _owned_predecessor(root, event, current_target):
                 and prior.get("target_after_sha256") == current_target.get("body_sha256"))
 
 
+class PreparationRefused(ValueError):
+    """The staged record failed checks; retain the actionable prospective failures."""
+    def __init__(self, issues, diagnostics):
+        self.issues = issues
+        self.diagnostics = diagnostics
+        super().__init__('prepared update failed checks: ' + '\n'.join(issues))
+
+
 def _prepare(rec, root, event, envelope, before_bytes):
     eid = event["event_id"]
     draft = root / "drafts" / (eid + "-" + uuid.uuid4().hex)
@@ -514,44 +669,69 @@ def _prepare(rec, root, event, envelope, before_bytes):
     _atomic(shadow, before_bytes)
     brief = P._brief_beside(str(rec))
     if brief:
-        _atomic(draft / Path(brief).name, Path(brief).read_bytes())
+        _atomic(Path(P.layout(shadow)["view"]), Path(brief).read_bytes())
     mark = draft / "mark.json"
     paths = [str(shadow)]
     source_id = "s.ingest_" + eid
     date = envelope["date"]
+    diagnostics = []
+    gate_output = io.StringIO()
     with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):
         P.mark(str(mark), paths)
+        seeds = _report_seeds(envelope)
         P.apply(paths, {
             "kind": "add", "id": source_id, "as_of": date, "why": None,
             "into": event["target_snapshot"]["source_collection"],
             "hypothesis": None, "source": None, "at": None,
-            "body": {"name": "Captured user report", "file": event["source_file"], "read": date,
-                     "asked": "Update " + envelope["target"] + " from this captured report."},
+            "body": {"name": "Captured report", "file": event["source_file"], "read": date,
+                     "recorded_for": "Update " + (", ".join(seeds) if isinstance(seeds, list) else seeds) + " from this captured report."},
         })
-        P.apply(paths, {
-            "kind": "set", "id": envelope["target"], "value": envelope["value"],
-            "as_of": date, "why": None, "into": None,
-            "hypothesis": None, "source": source_id, "at": "entire captured report",
-        })
-        gate = P.gate(str(mark), paths)
+        operations = envelope.get("updates", [{"kind": "set", "id": envelope.get("target"),
+                                               "value": envelope.get("value")}])
+        # Existing readings settle first. New entries follow in dependency order, so a
+        # new judgment's snapshot sees the final readings, never an intermediate price.
+        operations = sorted(operations, key=lambda op: op["kind"] != "set")
+        for op in operations:
+            action = {"kind": op["kind"], "id": op["id"], "as_of": date, "why": None,
+                      "into": op.get("into"), "hypothesis": None, "source": None, "at": None}
+            location = op.get("at", "entire captured report")
+            if op["kind"] == "set":
+                action.update(value=op["value"], source=source_id, at=location)
+            else:
+                body = copy.deepcopy(op["body"])
+                if "v" in body or "quoted" in body:
+                    body.update({"from": source_id, "at": location, "of": date})
+                action["body"] = body
+            P.apply(paths, action, diagnostics=diagnostics)
+        with contextlib.redirect_stdout(gate_output), contextlib.redirect_stderr(gate_output):
+            gate = P.gate(str(mark), paths)
     if gate:
-        raise ValueError("canonical gate refused the prepared record")
+        issues = [line.replace(str(shadow), str(rec)) for line in gate_output.getvalue().splitlines() if line.strip()]
+        raise PreparationRefused(issues or ['the canonical gate refused the prepared record'], diagnostics)
     after_bytes = shadow.read_bytes()
-    target = _target(shadow, envelope["target"])
-    if type(target["value"]) is not type(envelope["value"]) or target["value"] != envelope["value"]:
-        raise ValueError("prepared target did not read back with the captured scalar value")
+    if "updates" in envelope:
+        target_hash = _batch_fingerprint(shadow, envelope["updates"])
+    else:
+        target = _target(shadow, envelope["target"])
+        if type(target["value"]) is not type(envelope["value"]) or target["value"] != envelope["value"]:
+            raise ValueError("prepared target did not read back with the captured scalar value")
+        target_hash = target["body_sha256"]
     doc = P.load(paths)
     source = P.bodies(doc).get(source_id)
     if not isinstance(source, dict) or source.get("file") != event["source_file"]:
         raise ValueError("prepared target did not retain its captured source")
-    return shadow, after_bytes, _graph(shadow, envelope["target"]), target["body_sha256"]
+    return shadow, after_bytes, _graph(shadow, seeds), target_hash, diagnostics
 
 
 def _replace_record(record, data):
     mode = record.stat().st_mode & 0o7777
     fd, name = tempfile.mkstemp(prefix="." + record.name + ".ingestion.", dir=str(record.parent))
     try:
-        os.fchmod(fd, mode)
+        chmod_fd = getattr(os, 'fchmod', None)
+        if chmod_fd is not None:
+            chmod_fd(fd, mode)
+        else:
+            os.chmod(name, mode)
         with os.fdopen(fd, "wb") as out:
             out.write(data)
             out.flush()
@@ -589,21 +769,23 @@ def _recover(rec, root, event, envelope, journal):
     applied = current_hash == expected
     if not applied:
         try:
-            now = _target(rec, envelope["target"])
-            applied = (now["body_sha256"] == journal["target_after_sha256"] and
+            now_hash = _batch_fingerprint(rec, envelope["updates"]) if "updates" in envelope else \
+                _target(rec, envelope["target"])["body_sha256"]
+            applied = (now_hash == journal["target_after_sha256"] and
                        P.bodies(P.load([str(rec)])).get(journal["source_id"], {}).get("file")
                        == event["source_file"])
         except (Exception, SystemExit):
             applied = False
     if not applied:
         return None
-    after = _graph(rec, envelope["target"])
+    after = _graph(rec, _report_seeds(envelope))
     fired, actionable = _classify(journal["before_graph"], after)
     signals = _signals(event["event_id"], envelope, after, fired, actionable)
     return _finish(root, event, envelope, "applied", None, signals,
                    graph_before=journal["before_graph"]["hash"], graph_after=after["hash"],
                    reach=after["reach"], newly_fired_judgments=fired,
                    actionable_judgments=actionable, recovered=True,
+                   diagnostics=journal.get("diagnostics", []),
                    target_after_sha256=journal["target_after_sha256"])
 
 
@@ -634,6 +816,10 @@ def _process_event(rec, root, event, crash_after_commit=False):
         recovered = _recover(rec, root, event, envelope, journal)
         if recovered is not None:
             return recovered
+        if journal.get("phase") == "record_committed":
+            return _question(root, event, envelope,
+                             "the committed report was changed or reverted later; it will not be applied again",
+                             record_committed=True)
     issue = event.get("capture_issue")
     if issue:
         return _question(root, event, envelope, issue)
@@ -641,9 +827,9 @@ def _process_event(rec, root, event, crash_after_commit=False):
         return _question(root, event, envelope, 'private or unclear report permission; retained privately')
     if envelope.get("kind", "report") != "report":
         return _question(root, event, envelope, "only kind=report can update an existing reading")
-    if "value" not in envelope:
+    if "updates" not in envelope and "value" not in envelope:
         return _question(root, event, envelope, "the report needs an explicit scalar value")
-    if _basic_type(envelope["value"]) != event["target_snapshot"]["type"]:
+    if "updates" not in envelope and _basic_type(envelope["value"]) != event["target_snapshot"]["type"]:
         return _question(root, event, envelope,
                          "the captured value does not have the target's scalar type")
     date = envelope.get("date")
@@ -657,22 +843,25 @@ def _process_event(rec, root, event, crash_after_commit=False):
     for attempt in range(MAX_REPREPARES + 1):
         with P._locked(str(rec)):
             try:
-                current_target = _target(rec, envelope["target"])
+                current_target = _report_target(rec, envelope)
             except (Exception, SystemExit) as exc:
                 return _question(root, event, envelope, "target conflict: " + " ".join(str(exc).split()))
             if current_target["body_sha256"] != event["target_snapshot"]["body_sha256"] and \
-                    not _owned_predecessor(root, event, current_target):
+                    ("updates" in envelope or not _owned_predecessor(root, event, current_target)):
                 return _question(root, event, envelope,
                                  "target changed after capture; the report was retained without overwriting it")
             prepared_target_sha256 = current_target["body_sha256"]
             before_bytes = rec.read_bytes()
-            before_graph = _graph(rec, envelope["target"])
+            before_graph = _graph(rec, _report_seeds(envelope))
         try:
             _, integrity = _capture_payload(root, event)
             if integrity:
                 return _integrity_question(root, event, integrity)
-            shadow, after_bytes, prepared_graph, target_after_sha256 = \
+            shadow, after_bytes, prepared_graph, target_after_sha256, diagnostics = \
                 _prepare(rec, root, event, envelope, before_bytes)
+        except PreparationRefused as exc:
+            return _question(root, event, envelope, str(exc),
+                             validation_issues=exc.issues, diagnostics=exc.diagnostics)
         except (Exception, SystemExit) as exc:
             return _question(root, event, envelope,
                              "canonical writer refused the report: " + " ".join(str(exc).split()))
@@ -682,6 +871,8 @@ def _process_event(rec, root, event, crash_after_commit=False):
             "prepared_graph": prepared_graph, "shadow": str(shadow),
             "source_id": "s.ingest_" + eid, "attempt": attempt,
             "target_after_sha256": target_after_sha256,
+            "brief_hash": _brief_fingerprint(shadow),
+            "diagnostics": diagnostics,
         }
         _save(journal_path, journal)
         with P._locked(str(rec)):
@@ -689,15 +880,14 @@ def _process_event(rec, root, event, crash_after_commit=False):
             if integrity:
                 return _integrity_question(root, event, integrity)
             current = rec.read_bytes()
-            if _sha(current) != journal["before_hash"]:
-                try:
-                    unchanged = (_target(rec, envelope["target"])["body_sha256"] ==
-                                 prepared_target_sha256)
-                except (Exception, SystemExit):
-                    unchanged = False
-                if not unchanged:
-                    return _question(root, event, envelope,
-                                     "target changed while the report was prepared; it was not overwritten")
+            try:
+                unchanged = (_report_target(rec, envelope)["body_sha256"] == prepared_target_sha256)
+            except (Exception, SystemExit):
+                unchanged = False
+            if not unchanged:
+                return _question(root, event, envelope,
+                                 "target or record layout changed while the report was prepared; it was not overwritten")
+            if _sha(current) != journal["before_hash"] or _brief_fingerprint(rec) != journal["brief_hash"]:
                 continue
             _replace_record(rec, after_bytes)
             journal["phase"] = "record_committed"
@@ -705,13 +895,14 @@ def _process_event(rec, root, event, crash_after_commit=False):
             _save(journal_path, journal)
         if crash_after_commit:
             raise _CrashAfterCommit("simulated interruption after record commit")
-        after = _graph(rec, envelope["target"])
+        after = _graph(rec, _report_seeds(envelope))
         fired, actionable = _classify(before_graph, after)
         signals = _signals(eid, envelope, after, fired, actionable)
         return _finish(root, event, envelope, "applied", None, signals,
                        graph_before=before_graph["hash"], graph_after=after["hash"],
                        reach=after["reach"], newly_fired_judgments=fired,
                        actionable_judgments=actionable, recovered=False,
+                       diagnostics=diagnostics,
                        target_after_sha256=target_after_sha256)
     return _question(
         root, event, envelope,
@@ -748,6 +939,30 @@ def status(event_id=None, record=None, state_dir=None):
             for e in sorted((x for x in events if x), key=lambda x: x.get("order", 0))]
 
 
+def update(envelope, record=None, state_dir=None):
+    """Apply one source report now, using the same durable atomic ingestion path."""
+    rec, root = _layout(record, state_dir)
+    event = capture(envelope, rec, root, start=False)
+    process(rec, root, event_id=event['event_id'])
+    return status(event['event_id'], rec, root)
+
+
+def update_main(argv=None):
+    parser = argparse.ArgumentParser(prog='kpopper update', description=update.__doc__)
+    parser.add_argument('--file', required=True, help='report JSON file, or - for standard input')
+    parser.add_argument('--record')
+    parser.add_argument('--state-dir')
+    parser.add_argument('--json', action='store_true', help='receipts are always structured JSON')
+    args = parser.parse_args(argv)
+    try:
+        answer = update(_read_json_arg(args.file), args.record, args.state_dir)
+    except (ValueError, OSError, LockingUnavailable) as error:
+        print(json.dumps({'error': str(error)}, ensure_ascii=False))
+        return 2
+    print(json.dumps(answer, ensure_ascii=False, sort_keys=True))
+    return 0 if answer and answer.get('state') == 'applied' else 1
+
+
 def pending(record=None, state_dir=None, include_handled=False):
     """Return durable important signals; delivery acknowledgement does not delete them."""
     rec, root, exists = _existing_layout(record, state_dir)
@@ -770,7 +985,7 @@ def pending(record=None, state_dir=None, include_handled=False):
             target = signal.get("target")
             try:
                 if target not in graphs:
-                    graphs[target] = _graph(rec, target)
+                    graphs[target] = _graph(rec, target, measured=True)
                 graph = graphs[target]
                 if signal["category"] == "contradiction":
                     live = [name for name in names
@@ -905,6 +1120,9 @@ def _delivery_commands(answer, record, state_dir):
 
 
 def main(argv=None):
+    for stream in (sys.stdin, sys.stdout, sys.stderr):
+        if hasattr(stream, 'reconfigure'):
+            stream.reconfigure(encoding='utf-8', newline='\n')
     parser = argparse.ArgumentParser(description=__doc__)
     sub = parser.add_subparsers(dest="command", required=True)
     cap = sub.add_parser("capture")

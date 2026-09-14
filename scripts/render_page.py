@@ -27,10 +27,12 @@ was written, and a shape that moved raises a banner. Shape, not values - a date 
 does not make a layout wrong; a fourth blocked judgment might.
 """
 import io, os, re, sys, json, html, hashlib, pathlib, datetime, yaml
+LOADED_SOURCE_HASH = hashlib.sha256(pathlib.Path(__file__).read_bytes()).hexdigest()
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 import provenance as P
 from page_words import WORDS
 from page_lint import lint_output
+import page_measurements as MEASUREMENTS
 
 # The page's own code lives beside this file, in the languages its tools speak. Read
 # whole at import and inlined at render, so a page is still one file.
@@ -43,35 +45,14 @@ DATE_JS = "\n" + (_PAGE / "dates.js").read_text(encoding="utf-8")
 # ── what the record says about itself ────────────────────────────────────────
 # One reading of state, used by every section selector. The same four conditions
 # `provenance.py open` ranks by; named here so a brief can select on them.
-STATES = ("broken", "falsified", "unchecked", "moved", "blocked", "no_predicate")
+STATES = ("broken", "falsified", "unchecked", "moved", "blocked", "no_predicate", "unknown")
 GROUPED_SHAPES = ("grouped", "fronts")
 
 
-def flags_of(ids, jud, fields, raw):
+def flags_of(ids, jud, fields, raw, defer_counts=False):
     """Per judgment: the set of conditions that put it in front of a person - derived the
     way `check` and `open` derive them, so the page never disagrees with the reader."""
-    out = {}
-    for name, j in jud.items():
-        f, blocked = set(), next((str(j["body"][k]) for k in P.BLOCKED if j["body"].get(k)), "")
-        reopened = next((str(j["body"][k]) for k in P.REOPENED if j["body"].get(k)), "")
-        for d in j["deps"]:
-            if d not in ids:
-                f.add("blocked" if blocked else "broken")
-            elif fields["snapshot"] and d not in j["seen"]:
-                f.add("unchecked")
-        # a judgment decided with a re-opener and an empty predicate field is in front of
-        # nobody: a person reads the sign. Prose in the predicate field is still prose,
-        # and so is a predicate this reader cannot decide - the page counts what check does.
-        if not ([t for t in P.ID.findall(j["pred"]) if t in ids]
-                and not P.why_undecided(j["pred"])) and not blocked \
-                and not (reopened and not j["pred"]):
-            f.add("no_predicate")
-        elif P.evaluate(j["pred"], raw, ids) is True:
-            f.add("falsified")
-        if any(s == "moved" for _, _, _, s in P.moved_deps(j, raw, ids)):
-            f.add("moved")
-        out[name] = f
-    return out
+    return P.flags(ids, jud, fields, raw, defer_counts=defer_counts)
 
 
 RTL = re.compile(r"[\u0590-\u05ff\u0600-\u06ff]")
@@ -413,12 +394,12 @@ def arrangements_of(ids, jud, raw, tabs, picks, cov, flags, doc):
         for q, text in sorted(questions.items()):
             if v in P.ID.findall(text):
                 contested.append(("question", q, text))
-        m = P.CMP.match(j["pred"])
-        counted = P.value_of(raw, ids, m.group(1)) if m else None
+        parts = P.comparison_parts(j["pred"])
+        counted = P.value_of(raw, ids, parts[0]) if parts else None
         out[v] = {"sources": srcs, "tabs": titles, "keys": keys, "own": [title_of[k] for k in own],
                   "linked": not cut, "cut": cut,
-                  "fired": "falsified" in flags.get(v, ()), "pred": j["pred"],
-                  "reading": (f"{m.group(1)} is {counted}" if m and counted is not None else ""),
+                  "fired": "falsified" in flags.get(v, ()), "pred": P.predicate_text(j["pred"]),
+                  "reading": (f"{parts[0]} is {counted}" if parts and counted is not None else ""),
                   "born": born, "stood": stood, "drift": drift,
                   # the request is drawn only as the record accepts it: a session source
                   # carrying what was asked, rested on - check fails any other
@@ -675,7 +656,7 @@ def link_target(entry, record_root=None, page_path=None):
 
 
 URGENCY = {"broken": (100, "stop"), "falsified": (95, "stop"), "unchecked": (80, "stop"),
-           "moved": (70, "warn"), "blocked": (60, "warn"), "no_predicate": (40, "mut")}
+           "moved": (70, "warn"), "blocked": (60, "warn"), "no_predicate": (40, "mut"), "unknown": (75, "warn")}
 
 # What each state means, said the way a person would say it. The machine name stays -
 # in the hover, where the keys and the rules live. Nothing on the reading surface is
@@ -685,7 +666,8 @@ SAYS = {"broken": "rests on something that is not in this record",
         "moved": "something it rests on no longer matches what it last saw",
         "unchecked": "has never been checked against one of the things it rests on",
         "blocked": "waiting on something nobody has recorded yet",
-        "no_predicate": "nothing here would show it to be wrong"}
+        "no_predicate": "nothing here would show it to be wrong",
+        "unknown": "its condition cannot currently be evaluated"}
 
 # A human name for an entry belongs to the entry, not to a session: what a thing is
 # does not change because someone opened the page for a different reason. This is the
@@ -742,7 +724,7 @@ def tree_svg(ids, jud, E, J, flags, words=None, label=None):
             parents[k] = [d for d in jud[k]["deps"] if d in ids]
         else:
             e = E.get(k) or {}
-            ps = [t for t in P.ID.findall(str(e.get("rule") or "")) if t in ids]
+            ps = [t for t in P.rule_refs(e, ids) if t in ids]
             frm = e.get("from")
             if isinstance(frm, str) and frm in ids and frm != k:
                 ps.append(frm)
@@ -905,7 +887,7 @@ def build(paths, brief_path=None, page_path=None):
     built = P.builtins(doc, ids, jud, fields, P.bodies(doc))
     raw0 = P.bodies(doc)
     raw0.update(built)
-    flags = flags_of(ids, jud, fields, raw0)
+    flags = flags_of(ids, jud, fields, raw0, defer_counts=True)
     shape = shape_of(ids, jud, flags)
     brief, tabs = {}, []
     if brief_path and os.path.exists(brief_path):
@@ -948,8 +930,15 @@ def build(paths, brief_path=None, page_path=None):
         if isinstance(v, str) and P.EXPR.search(v) and [t for t in P.ID.findall(v) if t in ids]:
             E[k].setdefault("rule", v)
             del E[k]["v"]
+        if isinstance(b.get("rule"), dict):
+            E[k]["rule_text"] = P.predicate_text(b["rule"])
+            result = P.E.current(raw, ids, k)
+            if result["value"] is not None:
+                E[k]["v"] = P.E.display_value(result["value"])
+            else:
+                E[k]["calculation_error"] = result["reason"]
         E[k]["used"] = sorted(used.get(k, []))
-        ps = [t for t in P.ID.findall(str(E[k].get("rule") or "")) if t in ids and t != k]
+        ps = [t for t in P.rule_refs(E[k], ids) if t in ids and t != k]
         frm = b.get("from")
         if isinstance(frm, str) and frm in ids and frm != k:
             ps.append(frm)
@@ -975,7 +964,7 @@ def build(paths, brief_path=None, page_path=None):
             swollen.append((name, len(written), "cut"))
         elif drawn > CARD_CHARS:
             swollen.append((name, drawn, "resolved"))
-        J[name] = {"deps": j["deps"], "used": sorted(used.get(name, [])), "pred": j["pred"],
+        J[name] = {"deps": j["deps"], "used": sorted(used.get(name, [])), "pred": P.predicate_text(j["pred"]),
                    "verdict": str(b.get("verdict") or b.get("title") or ""),
                    "because": because,
                    "blocked": why, "waiting": keys,
@@ -1068,7 +1057,7 @@ def build(paths, brief_path=None, page_path=None):
         if e.get("v") is not None:
             value = ((w["yes"] if e["v"] else w["no"]) if component_page or lang != "en" else str(e["v"])) if isinstance(e["v"], bool) else (fmt(e["v"]) if pretty else str(e["v"]))
             return link_ids(value)
-        return ("= " + link_ids(str(e["rule"]))) if e.get("rule") else ""
+        return ("= " + link_ids(P.predicate_text(e["rule"]))) if e.get("rule") else ""
 
     def groups_of(k, scheme=None):
         """The groups this id is under in the scheme being read by - every one of them,
@@ -1121,7 +1110,7 @@ def build(paths, brief_path=None, page_path=None):
         e = E.get(k) or {}
         if e.get("v") is not None:
             return str(e["v"])
-        return ("= " + str(e["rule"])) if e.get("rule") else ""
+        return ("= " + P.predicate_text(e["rule"])) if e.get("rule") else ""
 
     def has_value(k):
         return (E.get(k) or {}).get("v") is not None
@@ -1487,8 +1476,8 @@ def build(paths, brief_path=None, page_path=None):
                 E[k]["v"] = v
                 raw0[k]["v"] = v
         page_counts.update({k: v for k, v in cov["page"].items() if v is not None})
-        flags = flags_of(ids, jud, fields, raw0)
-        shape = shape_of(ids, jud, flags)
+    flags = flags_of(ids, jud, fields, raw0)
+    shape = shape_of(ids, jud, flags)
     # every arrangement held against the brief - after the counts, since its sign is read
     # from them, and before anything is drawn
     arrangements, earned = (arrangements_of(ids, jud, raw0, tabs, picks, cov, flags, doc)
@@ -1817,9 +1806,24 @@ def build(paths, brief_path=None, page_path=None):
                                        "arrangements": arrangements, "earned": earned}
 
 
+def measured_build(paths, brief_path=None, page_path=None):
+    """Explicit page construction publishes counts for the exact inputs it read."""
+    if LOADED_SOURCE_HASH != MEASUREMENTS.LOADED_CODE['render_page.py']:
+        raise ValueError('loaded renderer changed; restart it before measuring')
+    before = MEASUREMENTS.snapshot(paths, brief_path)
+    result = build(paths, brief_path, page_path)
+    try:
+        MEASUREMENTS.publish(before, result[4]['page'])
+    except OSError as error:
+        # Rendering remains useful on a read-only host; a missing cache stays
+        # unavailable to followups and must not be mistaken for a saved result.
+        sys.stderr.write('NOTE page measured, but its followup snapshot could not be saved: ' + str(error) + '\n')
+    return result
+
+
 def verify(paths, brief_path=None):
     """Deterministic, no browser. What only looking can catch is a separate job."""
-    page, E, J, ids, info = build(paths, brief_path)
+    page, E, J, ids, info = measured_build(paths, brief_path)
     fail, note = lint_output(page, E, J, info)
     # what the page SHOWS is markup, not script - the provenance layer's own source
     # mentions the attribute it binds to, and that is not an element.
@@ -1872,7 +1876,7 @@ def verify(paths, brief_path=None):
         # it fails
         for name, j in sorted(J.items()):
             if "falsified" in info["flags"].get(name, ()) and \
-                    any(t in P.PAGE for t in P.ID.findall(j["pred"])):
+                    any(t in P.PAGE for t in P.predicate_refs(j["pred"])):
                 fail.append(f"{name}: wrong_if holds ({j['pred']}) - decided by the page")
         # the arrangements held against the brief: a reversal made by editing the brief
         # fails, a tab no decision records is said, a muted move is said - and an arrangement
@@ -1906,6 +1910,9 @@ def verify(paths, brief_path=None):
 
 
 if __name__ == "__main__":
+    for stream in (sys.stdout, sys.stderr):
+        if hasattr(stream, "reconfigure"):
+            stream.reconfigure(encoding="utf-8", newline="\n")
     supplied, a, page_path, i = sys.argv[1:], [], None, 0
     while i < len(supplied):
         if supplied[i] == "--page-out":
@@ -1919,7 +1926,7 @@ if __name__ == "__main__":
     brief = find_brief(files, brief)
     if "--verify" in a:
         sys.exit(verify(files, brief))
-    page, _, _, _, info = build(files, brief, page_path)
+    page, _, _, _, info = measured_build(files, brief, page_path)
     for t in info["tabs"]:
         if t["shape"]:
             continue

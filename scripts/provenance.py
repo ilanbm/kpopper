@@ -49,6 +49,48 @@ is worse than no checker, so every ambiguity is an error, never a skip.
 import io, os, re, sys, glob, json, time, shlex, stat, pickle, hashlib, subprocess, datetime, \
     textwrap, tempfile, contextlib, yaml
 from decimal import Decimal, InvalidOperation
+import importlib.util
+
+with io.open(__file__, 'rb') as _source_file:
+    LOADED_SOURCE_HASH = hashlib.sha256(_source_file.read()).hexdigest()
+
+_expression_name = "_kpopper_expressions_" + hashlib.sha256(os.path.dirname(__file__).encode()).hexdigest()[:12]
+if _expression_name not in sys.modules:
+    _spec = importlib.util.spec_from_file_location(_expression_name, os.path.join(os.path.dirname(__file__), "expressions.py"))
+    sys.modules[_expression_name] = importlib.util.module_from_spec(_spec)
+    _spec.loader.exec_module(sys.modules[_expression_name])
+E = sys.modules[_expression_name]
+
+
+def predicate_text(value):
+    rendered = E.text(value) if isinstance(value, dict) else str(value or "")
+    # Operators keep their inner grouping; the surrounding sentence supplies its
+    # own parentheses, so do not double-wrap the outermost expression.
+    return rendered[1:-1] if isinstance(value, dict) and 'expr' not in value and rendered.startswith('(') and rendered.endswith(')') else rendered
+
+
+def predicate_refs(value):
+    return E.refs(value) if isinstance(value, dict) else ID.findall(str(value or ""))
+
+
+def predicate_of(body, fields):
+    value = body.get(fields["predicate"]) if fields["predicate"] else None
+    return value if isinstance(value, dict) else str(value or "")
+
+
+def rule_refs(body, ids):
+    if not isinstance(body, dict):
+        return []
+    if isinstance(body.get("rule"), dict):
+        return E.refs(body["rule"])
+    refs = set()
+    for field in ("rule", "v"):
+        value = body.get(field)
+        if field == "rule" and isinstance(value, dict):
+            refs.update(E.refs(value))
+        elif isinstance(value, str) and EXPR.search(value):
+            refs.update(ref for ref in ID.findall(value) if ref in ids)
+    return sorted(refs)
 
 def _peer(name):
     """Load sibling modules even when a configured reader was imported by file path."""
@@ -140,6 +182,9 @@ def _mentioned(body):
                     for t in ID.findall(x):
                         yield t
         elif isinstance(val, dict):
+            if set(val) in ({"ref"}, {"num"}, {"text"}, {"bool"}, {"op", "args"}, {"expr"}):
+                yield from E.refs(val)
+                continue
             for k in val:
                 if isinstance(k, str):
                     for t in ID.findall(k):
@@ -630,6 +675,11 @@ def claim_of(body):
         return body
     for f in ("verdict", "v", "quoted", "rule", "title"):
         if body.get(f) is not None:
+            if f == 'rule' and isinstance(body[f], dict):
+                try:
+                    return E.lower(body[f])
+                except ValueError:
+                    pass
             return body[f]
     return body
 
@@ -732,7 +782,7 @@ def hypothesis_line(doc, today=None, width=110):
     parts = [p for _, p in sorted(items)]
     n = len(hyps)
     line = f"{n} hypothes{'is waits' if n == 1 else 'es wait'} - " + " · ".join(parts)
-    return line if len(line) < width else line[:width] + " ..."
+    return line if len(line) <= width else line[:width] + " ..."
 
 
 def _every_id(doc, ids):
@@ -920,7 +970,7 @@ def infer(doc):
                 and not unresolved and not any(
                     judgment_fields.intersection(body) for group in source_collections.values()
                     for body in group.values() if isinstance(body, dict)):
-            return {nid for group in source_collections.values() for nid in group}, {}, \
+            return {nid for group in source_collections.values() for nid in group} | (ids & set(COMPUTED)), {}, \
                 {"deps": "rests_on", "snapshot": "seen", "predicate": "wrong_if"}
         raise SystemExit(_no_deps(unresolved))
     # The snapshot and the predicate are judgment fields, so they are voted on among the
@@ -936,6 +986,8 @@ def infer(doc):
                     continue           # read by name: it never reads as a predicate or a snapshot
                 if isinstance(val, dict) and val and all(k in ids for k in val):
                     cand["snapshot"][f] = cand["snapshot"].get(f, 0) + 1
+                elif isinstance(val, dict) and ("op" in val or "expr" in val or f == "wrong_if"):
+                    cand["predicate"][f] = cand["predicate"].get(f, 0) + 1
                 elif isinstance(val, str) and val and "{{" not in val:
                     named = [t for t in ID.findall(val) if t in ids]
                     if named and val.strip() not in named and EXPR.search(val):
@@ -952,7 +1004,7 @@ def infer(doc):
                     "deps": list(body.get(fields["deps"]) or []),
                     "seen": set(snap),
                     "snap": snap,      # the values too: what each dependency held at review
-                    "pred": str(body.get(fields["predicate"]) or "") if fields["predicate"] else "",
+                    "pred": predicate_of(body, fields),
                     "body": body,
                 }
     return ids, jud, fields
@@ -1004,6 +1056,8 @@ def human(k):
 
 def fmt(v):
     """Thousands separators on a number a reader sees. Nothing else is touched."""
+    if isinstance(v, dict) and E.number(v) is not None:
+        return E.display_value(v)
     if isinstance(v, bool) or not isinstance(v, (int, float)):
         return str(v)
     return f"{v:,}" if isinstance(v, int) else f"{v:,.10g}".rstrip()
@@ -1023,7 +1077,7 @@ def reference_text(k, raw, ids, jud, label=None, reasoning=False):
     if k not in ids:
         return None
     v = value_of(raw, ids, k)
-    if v is not None and not isinstance(v, (list, dict)):
+    if v is not None and (not isinstance(v, (list, dict)) or E.number(v) is not None):
         return fmt(v)
     return label(k) if label else (named(raw.get(k)) or human(k))
 
@@ -1051,6 +1105,21 @@ QUOTED = re.compile(r"(['\"]).*?\1", re.S)
 SECOND = re.compile(r"(<=|>=|==|!=|<|>)|\bor\b|\band\b")
 
 
+def comparison_parts(pred):
+    """Expose a simple comparison for validation/display without parsing rendered text."""
+    if isinstance(pred, dict):
+        try:
+            pred = E.lower(pred, predicate=True)
+        except (ValueError, TypeError):
+            return None
+        left, right = pred["args"]
+        if set(left) != {"ref"} or "op" in right:
+            return None
+        return left["ref"], E.COMPARISONS[pred["op"]], E.text(right)
+    match = CMP.match(str(pred or ""))
+    return match.groups() if match else None
+
+
 def why_undecided(pred):
     """Why this reader cannot decide `pred` as one comparison - '' when it can.
 
@@ -1065,11 +1134,23 @@ def why_undecided(pred):
     thousands separator both carry characters an expression would use - and refusing a
     falsifier that works is this same failure from the other side.
     """
-    m = CMP.match(str(pred or ""))
-    if not m or SECOND.search(QUOTED.sub("", m.group(3).strip())):
-        return "is not one comparison this reader decides (a name, an operator, one value)"
-    name, op, rhs = m.group(1), m.group(2), m.group(3).strip()
-    if BOOL.match(rhs):
+    if isinstance(pred, dict):
+        try:
+            pred = E.lower(pred, predicate=True)
+        except (ValueError, TypeError) as error:
+            return str(error)
+        parts = comparison_parts(pred)
+        if parts is None:
+            return ""
+        name, op, rhs = parts
+        boolean_literal = "bool" in pred["args"][1]
+    else:
+        m = CMP.match(str(pred or ""))
+        if not m or SECOND.search(QUOTED.sub("", m.group(3).strip())):
+            return "is not one comparison this reader decides (a name, an operator, one value)"
+        name, op, rhs = m.group(1), m.group(2), m.group(3).strip()
+        boolean_literal = bool(BOOL.match(rhs))
+    if boolean_literal:
         # a truth value is matched, and only against another truth value. A computed name
         # is a count whatever the record holds, so this one is decided here and not left
         # to a reading that would come back None and be taken for green.
@@ -1095,6 +1176,8 @@ def value_of(raw, ids, k):
     b = raw.get(k)
     if not isinstance(b, dict):
         return b if k in ids else None
+    if isinstance(b.get("rule"), dict):
+        return E.current(raw, ids, k)["value"]
     v = b.get("v")
     if v is None:                      # absent or null: the quoted text is the value
         v = b.get("quoted")
@@ -1112,9 +1195,22 @@ def evaluate(pred, raw, ids):
     A truth value is matched as one: a record writes `false` and the fact holds Python's
     False, and comparing them as text matches in neither state of the fact.
     """
+    if isinstance(pred, dict):
+        try:
+            E.validate(pred, predicate=True)
+        except (ValueError, TypeError):
+            return None
+        return E.compute(raw, ids, pred)["predicate"]["holds_on_current_values"]
     m = CMP.match(str(pred or ""))
     if not m or why_undecided(pred):
         return None
+    if any(isinstance(raw.get(k), dict) and isinstance(raw[k].get("rule"), dict)
+           for k in (m.group(1), m.group(3).strip())):
+        try:
+            expression = E.convert(pred, predicate=True)
+        except (ValueError, SyntaxError, RecursionError):
+            return None
+        return E.compute(raw, ids, expression)["predicate"]["holds_on_current_values"]
     a = value_of(raw, ids, m.group(1))
     if a is None:
         return None
@@ -1139,8 +1235,22 @@ def evaluate(pred, raw, ids):
             "==": a == b, "!=": a != b}[op]
 
 
+def computation_error(pred, raw, ids):
+    """A required evaluator failure is different from an unavailable operand."""
+    if not isinstance(pred, dict):
+        match = CMP.match(str(pred or ""))
+        if not match or not any(isinstance(raw.get(key), dict) and isinstance(raw[key].get("rule"), dict)
+                                for key in (match.group(1), match.group(3).strip())):
+            return ""
+        try:
+            pred = E.convert(pred, predicate=True)
+        except (ValueError, SyntaxError, RecursionError):
+            return ""
+    return E.compute(raw, ids, pred).get("error", "")
+
+
 def short(v, n=40):
-    s = " ".join(str(v).split())
+    s = " ".join((predicate_text(v) if isinstance(v, dict) and ('op' in v or 'expr' in v) else str(v)).split())
     return s if len(s) <= n else s[:n - 1] + "…"
 
 
@@ -1170,6 +1280,23 @@ def apart(a, b, n=40):
     return "…" + short(sa[at:], n - 1), "…" + short(sb[at:], n - 1)
 
 
+def legacy_snapshot_rule(old, current_rule):
+    """A legacy formula is historical syntax, never a historical numeric result."""
+    if not isinstance(old, str) or not isinstance(current_rule, dict):
+        return None
+    try:
+        rule = E.convert(old)
+        return rule if E.refs(rule) else None
+    except (ValueError, SyntaxError, RecursionError):
+        return None
+
+
+def formula_only_snapshots(j, raw):
+    return [dep for dep, old in j["snap"].items()
+            if isinstance(raw.get(dep), dict) and isinstance(raw[dep].get("rule"), dict)
+            and E.same(legacy_snapshot_rule(old, raw[dep]["rule"]), raw[dep]["rule"])]
+
+
 def moved_deps(j, raw, ids):
     """Dependencies whose value differs from the snapshot taken when the judgment was
     written -> [(dep, seen, now, state)]. `state` is what the predicate makes of the move:
@@ -1185,9 +1312,26 @@ def moved_deps(j, raw, ids):
         except InvalidOperation:
             return None
     out = []
-    refs = {t for t in ID.findall(j["pred"]) if t in ids}
+    refs = {t for t in predicate_refs(j["pred"]) if t in ids}
     verdict = evaluate(j["pred"], raw, ids) if refs else None
     for dep, old in j["snap"].items():
+        snapshot = old.get("computed") if isinstance(old, dict) else None
+        current_rule = raw[dep].get("rule") if isinstance(raw.get(dep), dict) else None
+        legacy_rule = legacy_snapshot_rule(old, current_rule)
+        if legacy_rule is not None:
+            if not E.same(legacy_rule, current_rule):
+                out.append((dep, old, predicate_text(current_rule), "moved"))
+            continue
+        if dep in ids and (isinstance(current_rule, dict) or isinstance(snapshot, dict)):
+            now = value_of(raw, ids, dep)
+            previous = snapshot.get("value") if isinstance(snapshot, dict) else old
+            rule_moved = isinstance(snapshot, dict) and not E.same(snapshot.get("rule"), current_rule)
+            a, b = E.number(previous), E.number(now)
+            equal = a == b if a is not None and b is not None else previous == now
+            if rule_moved or (now is not None and previous is not None and not equal):
+                state = "crossed" if dep in refs and verdict is True else "muted" if dep in refs and verdict is False and not rule_moved else "moved"
+                out.append((dep, previous, now, state))
+            continue
         if dep not in ids or isinstance(old, (list, dict)):
             continue
         now = value_of(raw, ids, dep)
@@ -1375,7 +1519,7 @@ def intents_of(j, raw):
 
 
 def is_arrangement(j, raw):
-    return bool(intents_of(j, raw)) and (any(is_builtin(t) for t in ID.findall(j["pred"]))
+    return bool(intents_of(j, raw)) and (any(is_builtin(t) for t in predicate_refs(j["pred"]))
                                           or any(is_builtin(d) for d in j["deps"]))
 
 
@@ -1384,8 +1528,8 @@ def _arrangement_shaped(body, fields, raw):
     if not _judgment_shaped(body, fields):
         return False
     deps = body[fields["deps"]]
-    pred = str(body.get(fields["predicate"]) or "") if fields["predicate"] else ""
-    return any(is_intent(d, raw) for d in deps) and (any(is_builtin(t) for t in ID.findall(pred))
+    pred = predicate_of(body, fields)
+    return any(is_intent(d, raw) for d in deps) and (any(is_builtin(t) for t in predicate_refs(pred))
                                                      or any(is_builtin(d) for d in deps))
 
 
@@ -1399,25 +1543,31 @@ def one_comparison(pred, raw=None, ids=None):
     bad = why_undecided(pred)
     if bad:
         return bad
-    m = CMP.match(str(pred or ""))
-    rhs = m.group(3).strip()
-    name, op = m.group(1), m.group(2)
+    parts = comparison_parts(pred)
+    if parts is None:  # a valid structured comparison containing arithmetic
+        return ""
+    name, op, rhs = parts
+    rhs = rhs.strip()
+    typed = isinstance(pred, dict)
+    reference_rhs = "ref" in E.lower(pred, predicate=True)["args"][1] if typed else bool(ID.fullmatch(rhs))
     # On top of the shape, a sign names its value outright. This is the arrangement's own
     # rule and not a second reading of the shape: what the reader can decide is settled in
     # why_undecided, and this asks the narrower thing a sign over a count is held to.
-    if not (NUM_VALUE.match(rhs) or ID.fullmatch(rhs) or BOOL.match(rhs)
+    if not (typed or NUM_VALUE.match(rhs) or reference_rhs or BOOL.match(rhs)
             or QUOTED.fullmatch(rhs)):
         return ("does not name one value a sign carries (a number, a truth value, a text in "
                 "quotes, or another entry)")
-    if ID.fullmatch(rhs) and raw is not None and not is_builtin(rhs) \
+    if reference_rhs and raw is not None and not is_builtin(rhs) \
             and (rhs not in (ids or ()) or value_of(raw, ids, rhs) is None):
         return f"compares against {rhs}, which holds no value the build can compare"
     # and a count held against a truth value never matches, whether the truth value is
     # written into the sign or reached through an entry - the shape alone cannot see the
     # second one, and here the value is in hand
-    if is_builtin(name) and ID.fullmatch(rhs) and raw is not None \
+    if is_builtin(name) and reference_rhs and raw is not None \
             and isinstance(value_of(raw, ids, rhs), bool):
         return f"holds a count against a truth value ({name} {op} {rhs}), which never matches"
+    if reference_rhs:
+        return ""
     try:
         x = float(rhs.replace(",", ""))
     except ValueError:
@@ -1431,7 +1581,23 @@ def one_comparison(pred, raw=None, ids=None):
     return ""
 
 
-def flags(ids, jud, fields, raw):
+def pending_counts(pred, raw, ids):
+    """Do not feed judgments about not-yet-counted builtins back into those counts."""
+    pending, seen = list(predicate_refs(pred)), set()
+    while pending:
+        key = pending.pop()
+        if key in seen:
+            continue
+        seen.add(key)
+        body = raw.get(key)
+        if is_builtin(key) and (not isinstance(body, dict) or body.get("v") is None):
+            return True
+        if isinstance(body, dict):
+            pending.extend(rule_refs(body, ids))
+    return False
+
+
+def flags(ids, jud, fields, raw, defer_counts=False):
     """Per judgment: the conditions that put it in front of a person, derived the one way
     every surface derives them. A predicate over a value `raw` does not carry - a count
     not yet taken - is left undecided, never guessed. A judgment decided with a re-opener
@@ -1444,14 +1610,18 @@ def flags(ids, jud, fields, raw):
                 f.add("blocked" if blocked else "broken")
             elif fields["snapshot"] and d not in j["seen"]:
                 f.add("unchecked")
+        if formula_only_snapshots(j, raw):
+            f.add("unchecked")
         # A predicate this reader cannot decide falsifies nothing, whatever it names: it
         # is counted where an empty field is counted, not passed over as one that holds.
-        named = bool([t for t in ID.findall(j["pred"]) if t in ids]) \
+        named = bool([t for t in predicate_refs(j["pred"]) if t in ids]) \
             and not why_undecided(j["pred"])
         if not named and not blocked and not _decided(j):
             f.add("no_predicate")
         elif named and evaluate(j["pred"], raw, ids) is True:
             f.add("falsified")
+        elif named and evaluate(j["pred"], raw, ids) is None and not (defer_counts and pending_counts(j["pred"], raw, ids)):
+            f.add("unknown")
         if any(s == "moved" for _, _, _, s in moved_deps(j, raw, ids)):
             f.add("moved")
         out[name] = f
@@ -1467,7 +1637,7 @@ def counts(doc, ids, jud, fields, raw):
     `raw` here is the record's own bodies, without the counts."""
     open_ids = {k for g in OPEN for k in (doc.get(g) or {})}
     held = [k for k in ids if k not in jud and not is_builtin(k)]
-    fl = flags(ids, jud, fields, {k: v for k, v in raw.items() if not is_builtin(k)})
+    fl = flags(ids, jud, fields, {k: v for k, v in raw.items() if not is_builtin(k)}, defer_counts=True)
 
     def count(flag):
         return sum(1 for f in fl.values() if flag in f)
@@ -1544,7 +1714,7 @@ def check(paths):
 
 
 def _fired_failure(name, judgment):
-    return f"{name}: wrong_if holds ({judgment['pred']}) - broken by its own condition"
+    return f"{name}: wrong_if holds ({predicate_text(judgment['pred'])}) - broken by its own condition"
 
 
 def check_lines(paths):
@@ -1574,6 +1744,12 @@ def check_lines(paths):
     # is read: the reader's world replaces a computed name's body with the count it took, so a
     # measure hand-written on one would never be seen through it.
     for nid, body in sorted(bodies(doc).items()):
+        problems = expression_problems(body, raw, ids, fields)
+        fail.extend(f"{nid}: {problem}" for problem in problems)
+        if not problems and isinstance(body, dict) and isinstance(body.get("rule"), dict):
+            result = E.current(raw, ids, nid)
+            if result["value"] is None:
+                (note if _blocked_text(body) else fail).append(f"{nid}: rule cannot be computed: {result['reason']}")
         bad = measure_problem(nid, body, ids, jud, fields, raw)
         if bad:
             fail.append(f"{nid}: {bad}")
@@ -1591,7 +1767,7 @@ def check_lines(paths):
                     + (f" - declared: {blocked[:90]}" if blocked else ""))
             elif fields["snapshot"] and d not in j["seen"]:
                 fail.append(f"{name}: no snapshot for {d} - never checked against it")
-        for tok in sorted(set(ID.findall(j["pred"]))):
+        for tok in sorted(set(predicate_refs(j["pred"]))):
             if tok in ids and tok not in j["deps"]:
                 fail.append(f"{name}: predicate reads {tok}, which it does not declare as a "
                             f"dependency - a change to it would never reach this")
@@ -1600,7 +1776,7 @@ def check_lines(paths):
         # So does one this reader cannot decide - a compound is read to its first operator
         # and false ever after - and it is said here rather than passed over.
         undecided = why_undecided(j["pred"]) if j["pred"] else ""
-        evaluable = bool([t for t in ID.findall(j["pred"]) if t in ids]) and not undecided
+        evaluable = bool([t for t in predicate_refs(j["pred"]) if t in ids]) and not undecided
         misfiled = _misfiled_reopener(j["body"], ids)
         if misfiled:
             fail.append(f"{name}: reopened_by reads as a comparison ({short(misfiled, 60)}) - a "
@@ -1611,7 +1787,7 @@ def check_lines(paths):
         if not evaluable and not (undecided and is_arrangement(j, raw)):
             what = ("no predicate at all" if not j["pred"] else
                     "prose, not an evaluable predicate"
-                    if not [t for t in ID.findall(j["pred"]) if t in ids] else
+                    if not [t for t in predicate_refs(j["pred"]) if t in ids] else
                     f"wrong_if {undecided}")
             reopened = _reopened_text(j["body"])
             if blocked:
@@ -1627,10 +1803,12 @@ def check_lines(paths):
             else:
                 fail.append(f"{name}: {what} - and nothing says why not, so it can never be "
                             f"re-checked")
+        elif (error := computation_error(j["pred"], raw, ids)):
+            (note if blocked else fail).append(f"{name}: condition cannot be computed: " + error)
         elif evaluate(j["pred"], raw, ids) is True:
             fail.append(_fired_failure(name, j))
-        elif [t for t in ID.findall(j["pred"]) if t in PAGE]:
-            named_page = sorted({t for t in ID.findall(j["pred"]) if t in PAGE})
+        elif [t for t in predicate_refs(j["pred"]) if t in PAGE]:
+            named_page = sorted({t for t in predicate_refs(j["pred"]) if t in PAGE})
             note.append(f"{name}: wrong_if reads {', '.join(named_page)}, which is counted "
                         f"when the page is built - `page --verify` decides it")
         elif evaluate(j["pred"], raw, ids) is None:
@@ -1769,11 +1947,11 @@ def opening(paths, budget=25, chars=None, host=None):
                              else (100, name, f"rests on {d}, which is not an entry"))
             elif fields["snapshot"] and d not in j["seen"]:
                 items.append((80, name, f"never checked against {d}"))
-        for tok in sorted(set(ID.findall(j["pred"]))):
+        for tok in sorted(set(predicate_refs(j["pred"]))):
             if tok in ids and tok not in j["deps"]:
                 items.append((100, name, f"predicate reads {tok}, which it does not declare - "
                                          f"a change to it never reaches this"))
-        evaluable = bool([t for t in ID.findall(j["pred"]) if t in ids]) \
+        evaluable = bool([t for t in predicate_refs(j["pred"]) if t in ids]) \
             and not why_undecided(j["pred"])
         if _misfiled_reopener(j["body"], ids):
             items.append((100, name, "reopened_by reads as a comparison - a predicate belongs in "
@@ -1781,7 +1959,7 @@ def opening(paths, budget=25, chars=None, host=None):
         if not evaluable and not blocked and not _decided(j):
             items.append((40, name, "nothing evaluable would falsify it"))
         elif evaluable and evaluate(j["pred"], raw, ids) is True:
-            items.append((95, name, f"wrong_if holds ({j['pred'][:60]}) - broken by its own "
+            items.append((95, name, f"wrong_if holds ({predicate_text(j['pred'])[:60]}) - broken by its own "
                                     f"condition"))
         for dep, old, now, state in moved_deps(j, raw, ids):
             if state == "moved":
@@ -1987,12 +2165,9 @@ def reach_of(ids, jud, raw, changed):
         b = raw.get(k)
         if not isinstance(b, dict):
             continue
-        for fld in ("rule", "v"):
-            s = b.get(fld)
-            if isinstance(s, str) and EXPR.search(s):
-                for t in set(ID.findall(s)):
-                    if t in ids and t != k:
-                        feeds.setdefault(t, []).append(k)
+        for t in rule_refs(b, ids):
+            if t in ids and t != k:
+                feeds.setdefault(t, []).append(k)
     # Index judgment readers once, in the same order used by the reach report. Rebuild
     # for this record so edits and hypothesis worlds never share stale dependencies.
     judgment_feeds = {}
@@ -2048,12 +2223,12 @@ def affects(paths, changed):
             hit = {k: v for k, v in hit.items() if k in doc.hypotheses[n]["ids"]}
         for name, via in hit.items():
             j = jud_w[name]
-            named = [d for d in j["deps"] if d in moved and re.search(rf"\b{re.escape(d)}\b", j["pred"])]
+            named = [d for d in j["deps"] if d in moved and d in predicate_refs(j["pred"])]
             why = ("evaluate the predicate against " + ", ".join(named)) if named else "flagged only"
             label = ('contribution ' if n and doc.hypotheses[n].get('kind') == 'contribution' else 'hypothesis ') + str(n)
             print(f"{name}" + (f" (in {label})" if n else "")
                   + f"\n    via {via} -> {why}"
-                  + (f"\n    predicate: {j['pred']}" if j["pred"] else ""))
+                  + (f"\n    predicate: {predicate_text(j['pred'])}" if j["pred"] else ""))
         total += len(hit)
     if not total:
         print("nothing rests on that")
@@ -2158,13 +2333,15 @@ def pull(paths, seeds, budget=40, doc=None):
             v, rule = None, rule or v
         return v, rule
 
-    def describe(k, b, ids_):
+    def describe(k, b, ids_, raw_):
         """-> (line, shown): an entry's line, and the value it shows."""
         v, rule = resolved(b, ids_)
+        if isinstance(rule, dict):
+            v = value_of(raw_, ids_, k)
         if v is not None:
-            shown = str(v)
+            shown = E.display_value(v) + (" = " + predicate_text(rule) if isinstance(rule, dict) else "")
         elif rule:
-            shown = "= " + str(rule)
+            shown = "= " + predicate_text(rule)
         elif b.get("quoted"):
             shown = '"' + str(b["quoted"]) + '"'
         else:
@@ -2195,7 +2372,7 @@ def pull(paths, seeds, budget=40, doc=None):
             state = (f"blocked: {blocked}" if blocked else
                      f"broken: rests on {', '.join(missing)}, which is not an entry")
         elif evaluate(j["pred"], raw_, ids_) is True:
-            state = f"broken: wrong_if holds ({j['pred']})"
+            state = f"broken: wrong_if holds ({predicate_text(j['pred'])})"
         elif fields_["snapshot"] and any(d not in j["seen"] for d in j["deps"]):
             stale = [d for d in j["deps"] if d not in j["seen"]]
             state = f"unchecked: never checked against {', '.join(stale)}"
@@ -2210,7 +2387,7 @@ def pull(paths, seeds, budget=40, doc=None):
                 out.append(("    because: " if i == 0 else "             ") + l)
 
         if j["pred"]:
-            out.append(cut(f"    wrong_if: {j['pred']}", 110))
+            out.append(cut(f"    wrong_if: {predicate_text(j['pred'])}", 110))
         reopened = _reopened_text(body)
         if reopened:
             out.append(cut(f"    reopened by: {reopened}", 110))
@@ -2241,20 +2418,20 @@ def pull(paths, seeds, budget=40, doc=None):
     for k in sorted(entries):
         holders = in_hypothesis(k)
         if k in raw:
-            line, shown = describe(k, raw.get(k) or {}, ids)
+            line, shown = describe(k, raw.get(k) or {}, ids, raw)
             lines.append(cut(line, 110))
             # what each hypothesis proposes for it - read from the record as it stands under
             # that hypothesis, so a rule or a reference resolves there; a source read again,
             # or a value re-sourced, is a proposal too
             for n, l in holders:
-                line_h, now = describe(k, l[4].get(k) or {}, l[1])
+                line_h, now = describe(k, l[4].get(k) or {}, l[1], l[4])
                 if now != shown:
                     lines.append(cut(f"    proposes {shown} -> {now}, from {n}", 110))
                 elif line_h != line:
                     lines.append(cut(f"    proposes instead, from {n}: {line_h[len(k) + 2:].strip()}", 110))
         elif holders:
             n, l = holders[0]
-            line, _ = describe(k, l[4].get(k) or {}, l[1])
+            line, _ = describe(k, l[4].get(k) or {}, l[1], l[4])
             lines.append(cut(line + " - held by " + ", ".join(n2 for n2, _ in holders), 110))
         if k in disputed:
             lines.append(dispute(k))
@@ -2391,6 +2568,10 @@ def _field_lines(field, v, ind, width=100, like="bare"):
     sequence, a mapping as a flow mapping when it fits on the line and one pair per
     line when it does not."""
     key = " " * ind + field + ": "
+    children = v.values() if isinstance(v, dict) else v if isinstance(v, list) else []
+    if any(isinstance(child, (dict, list)) for child in children):
+        dumped = yaml.safe_dump({field: v}, allow_unicode=True, sort_keys=False, width=width - ind)
+        return [" " * ind + line for line in dumped.rstrip().splitlines()]
     if isinstance(v, list):
         return [key + "[" + ", ".join(scalar(x, fold=False) for x in v) + "]"]
     if isinstance(v, dict):
@@ -2578,6 +2759,11 @@ def snapshot_value(dep, raw, ids, jud, page):
     b = raw.get(dep)
     if not isinstance(b, dict):
         return b
+    if isinstance(b.get("rule"), dict):
+        result = E.current(raw, ids, dep)
+        if result["value"] is None:
+            raise Refused("cannot snapshot " + dep + ": " + result["reason"])
+        return {"computed": {"value": result["value"], "rule": b["rule"]}}
     v = value_of(raw, ids, dep)
     if v is not None:
         return v
@@ -2664,38 +2850,50 @@ def _state(name, j, raw, ids, fields, touched=()):
     if missing:
         return (("BLOCKED", f"waiting on {', '.join(missing)} - {blocked[:70]}") if blocked
                 else ("BROKEN", f"rests on {', '.join(missing)}, which is not an entry"))
-    named_ = [t for t in ID.findall(j["pred"]) if t in ids]
+    named_ = [t for t in predicate_refs(j["pred"]) if t in ids]
     if named_ and evaluate(j["pred"], raw, ids) is True:
-        return "FIRED", f"wrong_if holds ({j['pred']}) - broken by its own condition"
+        return "FIRED", f"wrong_if holds ({predicate_text(j['pred'])}) - broken by its own condition"
     unchecked = [d for d in j["deps"] if fields["snapshot"] and d not in j["seen"]]
+    formula_only = formula_only_snapshots(j, raw)
     moves = [(d, o, n, s) for d, o, n, s in moved_deps(j, raw, ids) if not touched or d in touched]
     if any(s == "moved" for _, _, _, s in moves):
         d, o, n, _ = next(x for x in moves if x[3] == "moved")
+        snapshot = j["snap"].get(d)
+        if isinstance(snapshot, dict) and isinstance(snapshot.get("computed"), dict):
+            body = raw.get(d)
+            if not E.same(snapshot["computed"].get("rule"), body.get("rule") if isinstance(body, dict) else None):
+                return "MOVED", f"{d}: formula changed since review"
+        current_body = raw.get(d)
+        if legacy_snapshot_rule(snapshot, current_body.get("rule") if isinstance(current_body, dict) else None) is not None:
+            return "MOVED", f"{d}: formula changed since legacy review; no historical result was recorded"
         was, is_ = apart(o, n)
         return "MOVED", (f"{d} moved {was} -> {is_} since it was reviewed - "
                          f"if it still holds: review {name}")
     if unchecked:
         return "UNCHECKED", (f"never checked against {', '.join(unchecked)} - "
                              f"if it holds: review {name}")
+    if formula_only:
+        return "UNCHECKED", (f"legacy snapshot records only the formula for {', '.join(formula_only)}, "
+                             f"not a historical result; review {name} to record the current calculation")
     if any(s == "muted" for _, _, _, s in moves):
         d, o, n, _ = next(x for x in moves if x[3] == "muted")
         was, is_ = apart(o, n)
-        return "MUTED", (f"{d} moved {was} -> {is_}, inside wrong_if ({j['pred']}) - "
+        return "MUTED", (f"{d} moved {was} -> {is_}, inside wrong_if ({predicate_text(j['pred'])}) - "
                          f"nothing is asked")
     if not named_ and not blocked:
         reopened = _decided(j)
         if reopened:
             return "HOLDS", "decided; reopened by " + short(reopened, 80)
-        return "HOLDS", "nothing evaluable would say otherwise"
+        return "NO_PREDICATE", "nothing evaluable would say otherwise"
     if not named_:
-        return "HOLDS", "no predicate to evaluate; declared - " + short(blocked, 80)
+        return "DECLARED", "no predicate to evaluate; declared - " + short(blocked, 80)
     pred = short(j["pred"], 80)
     if evaluate(j["pred"], raw, ids) is None:
         if why_undecided(j["pred"]):
-            return "HOLDS", f"wrong_if is not a comparison this reader decides ({pred})"
-        if any(t in PAGE for t in ID.findall(j["pred"])):
-            return "HOLDS", f"wrong_if is counted when the page is built ({pred}) - page --verify decides it"
-        return "HOLDS", f"wrong_if compares against something with no value to compare ({pred})"
+            return "UNKNOWN", f"wrong_if is not a comparison this reader decides ({pred})"
+        if any(t in PAGE for t in predicate_refs(j["pred"])):
+            return "UNKNOWN", f"wrong_if is counted when the page is built ({pred}) - page --verify decides it"
+        return "UNKNOWN", f"wrong_if cannot currently be evaluated ({pred}); a value or the Lean core is unavailable, or types differ"
     return "HOLDS", f"wrong_if does not hold ({pred})"
 
 
@@ -2808,9 +3006,9 @@ def _sound_dependencies(a, doc, ids, jud, fields, raw):
                 and not (a.get("hypothesis") is None and _held_by(doc, d)):
             out.append(f"rests on {d}, which is not an entry - add it first, or declare it "
                        f"missing with blocked_on")
-    pred = str(body.get(fields["predicate"]) or "") if fields["predicate"] else ""
-    for tok in sorted(set(ID.findall(pred))):
-        if (tok in ids or is_builtin(tok)) and tok not in deps:
+    pred = predicate_of(body, fields)
+    for tok in sorted(set(predicate_refs(pred))):
+        if (isinstance(pred, dict) or tok in ids or is_builtin(tok)) and tok not in deps:
             out.append(f"wrong_if reads {tok}, which the judgment does not rest on")
     return out
 
@@ -2888,7 +3086,7 @@ def _arrangement_is_sound(a, doc, ids, jud, fields, raw):
         out.append("born is written by this tool - the day the arrangement is decided - leave it out")
     if "replaced" in body:
         out.append("replaced is written by this tool, when a decision replaces another - leave it out")
-    pred = str(body.get(fields["predicate"]) or "") if fields["predicate"] else ""
+    pred = predicate_of(body, fields)
     bad = one_comparison(pred, raw, ids)
     if bad:
         out.append(f"wrong_if {bad} - an arrangement's sign is decided by the build, or it is "
@@ -2924,9 +3122,9 @@ def _not_born_broken(a, doc, ids, jud, fields, raw):
         return []
     if a["id"] in jud and is_arrangement(jud[a["id"]], raw):
         return []
-    pred = str(a["body"].get(fields["predicate"]) or "") if fields["predicate"] else ""
+    pred = predicate_of(a["body"], fields)
     if pred and evaluate(pred, raw, ids) is True:
-        return [f"wrong_if already holds ({pred}) - the judgment would be born broken"]
+        return [f"wrong_if already holds ({predicate_text(pred)}) - the judgment would be born broken"]
     return []
 
 
@@ -3076,7 +3274,8 @@ def _command_of(a, name):
                 if isinstance(v, list):
                     s = "[" + ", ".join(scalar(x, fold=False) for x in v) + "]"
                 elif isinstance(v, dict):
-                    s = "{" + ", ".join(f"{k2}: {scalar(x, fold=False)}" for k2, x in v.items()) + "}"
+                    s = yaml.safe_dump(v, default_flow_style=True, allow_unicode=True,
+                                       sort_keys=False, width=1000000).strip()
                 elif isinstance(v, bool):
                     s = str(v).lower()
                 else:
@@ -3185,6 +3384,47 @@ def _measure_is_a_name(a, doc, ids, jud, fields, raw):
     return [bad] if bad else []
 
 
+def expression_problems(body, raw, ids, fields):
+    if not isinstance(body, dict):
+        return []
+    problems = []
+    for field, predicate in (("rule", False), (fields["predicate"], True)):
+        value = body.get(field)
+        if not isinstance(value, dict):
+            continue
+        try:
+            E.validate(value, predicate=predicate)
+        except (ValueError, TypeError) as error:
+            problems.append(f"{field}: {error}")
+            continue
+        refs = E.refs(value)
+        missing = [key for key in refs if key not in ids and not is_builtin(key)]
+        if missing and not _blocked_text(body):
+            problems.append(f"{field}: unknown references: " + ", ".join(missing))
+        if predicate:
+            undeclared = set(refs) - set(body.get(fields["deps"]) or [])
+            if undeclared:
+                problems.append("predicate reads undeclared references: " + ", ".join(sorted(undeclared)))
+        elif any(key in body for key in ("v", "quoted")):
+            problems.append("a structured rule cannot also store v or quoted")
+    return problems
+
+
+def _structured_is_sound(a, doc, ids, jud, fields, raw):
+    if a["kind"] != "add":
+        return []
+    body = a["body"]
+    out = expression_problems(body, raw, ids | {a["id"]}, fields)
+    if not out and isinstance(body, dict) and isinstance(body.get("rule"), dict):
+        candidate = dict(raw)
+        candidate[a["id"]] = body
+        candidate_ids = ids | {a["id"]} | {key for key in E.refs(body["rule"]) if is_builtin(key)}
+        result = E.current(candidate, candidate_ids, a["id"])
+        if result["value"] is None and not _blocked_text(body):
+            out.append("rule cannot be computed: " + result["reason"])
+    return out
+
+
 def _nearest_existing(a, doc, ids, jud, fields, raw):
     """The entries nearest a new one, said in the reply - a note, never a refusal - and a
     write under an id that was retired into another, refused and pointed at it. Both live in
@@ -3194,9 +3434,76 @@ def _nearest_existing(a, doc, ids, jud, fields, raw):
     return sameness.nearest_existing(a, doc, ids, jud, fields, raw)
 
 
+def authored_fields(action, fields):
+    """A first conventional falsifier has no existing predicate role to infer from."""
+    body = action.get('body')
+    if action['kind'] == 'add' and isinstance(body, dict) and fields['deps'] in body \
+            and fields['predicate'] is None and 'wrong_if' in body:
+        return dict(fields, predicate='wrong_if')
+    return fields
+
+
+def normalize_authored(action, ids, fields, raw):
+    """Normalize only new/changed expression fields, in their actual writing context."""
+    if action['kind'] != 'add' or not isinstance(action.get('body'), dict):
+        return action, []
+    import copy
+    action = copy.deepcopy(action)
+    body, nid = action['body'], action['id']
+    predicate = fields['deps'] in body
+    field = fields['predicate'] if predicate else 'rule'
+    source = body.get(field)
+    previous = raw.get(nid)
+    if not isinstance(source, str) or (isinstance(previous, dict) and previous.get(field) == source):
+        return action, []
+
+    def keep(reason):
+        return action, [f"NOTE {nid}.{field} kept as text: {reason}"]
+
+    if not predicate and any(key in body for key in ('v', 'quoted')):
+        return keep('a stored reading and a calculation need distinct fields/entries')
+    try:
+        comparison = CMP.match(source) if predicate else None
+        tree = E.convert_authored(source, predicate=predicate,
+            legacy_rhs=comparison.group(3) if comparison else None)
+    except (ValueError, SyntaxError, RecursionError) as error:
+        return keep(str(error))
+    # A lone unknown word may be a prose rule, not a missing graph reference.
+    if not predicate and set(tree) == {'ref'} and tree['ref'] not in ids and tree['ref'] != nid:
+        return keep('unknown or ambiguous reference; use a tagged ref for an intended dependency')
+    candidate = dict(raw)
+    candidate[nid] = dict(body, **{field: tree})
+    candidate_ids = ids | {nid} | {key for key in E.refs(tree) if is_builtin(key)}
+    result = E.compute(candidate, candidate_ids, tree if predicate else None)
+    if result.get('error'):
+        return keep(result['error'])
+    if predicate:
+        before = evaluate(source, raw, ids)
+        after = result['predicate']['holds_on_current_values']
+        # Arithmetic operands were never understood by the legacy single-value
+        # comparison reader. A new, decidable formula uses the typed semantics.
+        arithmetic = any('op' in node for node in tree['args'])
+        if after is None or (before is not None and before is not after and not arithmetic):
+            return keep('typed comparison is unavailable or changes the existing interpretation')
+        left, right = tree['args']
+        # Legacy comparisons may coerce two text readings to numbers later.
+        if 'ref' in left and 'ref' in right and any(isinstance(value_of(raw, ids, node['ref']), str) for node in (left, right)):
+            return keep('comparisons between text readings need an explicit choice of typed semantics')
+    else:
+        calculated = result['values'].get(nid, {})
+        if calculated.get('value') is None:
+            reason = calculated.get('reason', 'unavailable calculation')
+            if reason in {'division_by_zero', 'cyclic_reference', 'missing_reference'} and not _blocked_text(body):
+                raise Refused(f"refused - {nid}: rule cannot be computed: {reason}")
+            return keep(reason)
+    body[field] = {'expr': source}
+    return action, [f"{nid}.{field}: stored as a readable expression"]
+
+
 # Every refusal a write can meet, in one place. The fork on a contradiction is the last of
 # them; the entries nearest a new one are said just before it.
 VALIDATORS = [_known_key, _sound_dependencies, _sound_references, _sound_citation, _reopener_is_prose,
+              _structured_is_sound,
               _arrangement_is_sound, _request_names_the_asking, _not_born_broken,
               _measure_is_a_name, _nearest_existing, _forks_on_contradiction]
 
@@ -3659,7 +3966,7 @@ class _Reader:
     collections_of = staticmethod(collections_of)
 
 
-def apply(paths, action):
+def apply(paths, action, diagnostics=None):
     """The one write. `action` says what kind (set, add, review) and what that kind needs;
     it is validated whole before a byte is touched, applied to the file's text without
     reformatting anything else, read back, and answered with the reach. All of it under
@@ -3680,10 +3987,10 @@ def apply(paths, action):
     with _locked(paths[0], project=project):
         if project.config() != policy or list(_peer('knowledge_views').write_paths(original_paths)) != list(paths):
             raise Refused('refused - project mode or record destination changed; retry the write')
-        return _apply_unlocked(paths, action, project=project)
+        return _apply_unlocked(paths, action, diagnostics, project=project)
 
 
-def _apply_unlocked(paths, action, project=None):
+def _apply_unlocked(paths, action, diagnostics=None, *, project=None):
     """The mutation body for a caller already holding the record-directory lock."""
     # Recheck privacy inside the write lock: a source can change while a writer waits.
     private = _peer('recording').private_route(paths, action, sys.modules.get(__name__) or _Reader(), project=project)
@@ -3691,8 +3998,8 @@ def _apply_unlocked(paths, action, project=None):
         print(json.dumps(private, ensure_ascii=False))
         return 0
     if action.get("hypothesis"):
-        return _fork(paths, action)
-    return _apply(paths, action)
+        return _fork(paths, action, diagnostics)
+    return _apply(paths, action, diagnostics)
 
 
 def _ensure_collection(lines, collection):
@@ -3741,7 +4048,7 @@ def _insert_block(lines, collection, nid, block):
     return f"{nid} into {collection}, {'before' if before else 'after'} {anchor}"
 
 
-def _fork(paths, action):
+def _fork(paths, action, diagnostics=None):
     """A write into a hypothesis beside the record: the same validation and the same edits,
     on `.kpopper/hypotheses/<name>.yaml` - the base is not touched. The record is read as it stands
     under the hypothesis, so a judgment written there rests on what it proposes and its
@@ -3759,9 +4066,11 @@ def _fork(paths, action):
         doc.hypotheses = dict(doc.hypotheses, **{name: hyp})
     under = layered(doc, hyp)
     ids, jud, fields = infer(under)
+    fields = authored_fields(action, fields)
     raw = with_builtins(under, ids, jud, fields)
     for k, v in counts(under, ids, jud, fields, bodies(under)).items():
         raw.setdefault(k, {"name": COMPUTED[k], "v": v})
+    action, expression_notes = normalize_authored(action, ids, fields, raw)
     stamp = action.get("as_of") or datetime.date.today().isoformat()
     refusals = validate(action, under, ids, jud, fields, raw)
     if refusals:
@@ -3777,7 +4086,7 @@ def _fork(paths, action):
         with io.open(hyp["path"], encoding="utf-8") as fh:
             original = fh.read()
     lines = (original if original is not None else f'hypothesis: {{born: "{stamp}"}}\n').split("\n")
-    out, seen = [], {}
+    out, seen = list(expression_notes), {}
     if kind == "set":
         now = value_of(raw, ids, nid)
         if nid in hyp["ids"] and now is not None and _same(now, action["value"]) \
@@ -3853,6 +4162,8 @@ def _fork(paths, action):
         raise Refused(f"the write broke the hypothesis and was undone: {e}")
     for l in out:
         print(l)
+    if diagnostics is not None:
+        diagnostics.extend(expression_notes)
     # the reach, read with the hypothesis laid over the base: what would move if it folded.
     # Nothing in the base has.
     if kind == "review":
@@ -3942,9 +4253,10 @@ def _check_citation_readback(action, body):
         raise ValueError(f"{action['id']} did not retain the requested from/at citation")
 
 
-def _apply(paths, action):
+def _apply(paths, action, diagnostics=None):
     doc = load(paths, read_mode='frozen')
     ids, jud, fields = infer(doc)
+    fields = authored_fields(action, fields)
     raw = with_builtins(doc, ids, jud, fields)
     # every count the reader can take, whether or not the record mentions it yet: a new
     # judgment may be the first to rest on one
@@ -3971,6 +4283,7 @@ def _apply(paths, action):
         for k, v in page0.items():
             raw.setdefault(k, {"name": COMPUTED[k]})["v"] = v
         doc.page = facts
+    action, expression_notes = normalize_authored(action, ids, fields, raw)
     refusals = validate(action, doc, ids, jud, fields, raw)
     if refusals:
         raise Refused("refused - " + "\n          ".join(refusals))
@@ -3981,7 +4294,7 @@ def _apply(paths, action):
     # which file of the record holds the write: the one that holds the entry, and for a new
     # one the file its neighbours are in (_file_for)
     target = files[0] if kind == "add" else _file_for(files, nid)
-    out, seen, arrangement, supersede, arranged = [], {}, False, False, False
+    out, seen, arrangement, supersede, arranged = list(expression_notes), {}, False, False, False
     if kind == "add":
         body = action["body"]
         # a judgment under a standing judgment's id got past validation only because it may
@@ -4114,7 +4427,7 @@ def _apply(paths, action):
                     with_page[k]["v"] = v
                 pred = jud2[nid]["pred"]
                 if pred and evaluate(pred, with_page, ids2) is True:
-                    raise ValueError(f"wrong_if already holds ({pred}) once the page counts it - the "
+                    raise ValueError(f"wrong_if already holds ({predicate_text(pred)}) once the page counts it - the "
                                      f"arrangement would be born broken")
         elif arrangement and brief:
             shape, facts2 = _page_side(paths)[1:]
@@ -4140,6 +4453,8 @@ def _apply(paths, action):
     for l in out:
         print(l)
     _report(paths, kind, nid, doc2, ids2, jud2, fields2, raw2)
+    if diagnostics is not None:
+        diagnostics.extend(expression_notes)
     return 0
 
 
@@ -4330,9 +4645,10 @@ def gate(state_path, paths, turns=0, host=None, nudged_at=None):
         current = now.get(name)
         if not current or old.get("shape") != current["shape"] \
                 or old.get("arrangement") or current["arrangement"] \
-                or old.get("predicate") is not False or current["predicate"] is not True:
+                or not isinstance(old.get("inputs"), dict) \
+                or old.get("predicate") is True or current["predicate"] is not True:
             continue
-        if any(d in old.get("inputs", {}) and v != old["inputs"][d]
+        if any(d not in old.get("inputs", {}) or v != old["inputs"][d]
                for d, v in current["inputs"].items()):
             allowed[_fired_failure(name, jud[name])] = name
     if base["failures"] is not None:
@@ -4366,14 +4682,25 @@ def gate(state_path, paths, turns=0, host=None, nudged_at=None):
         new = sorted(k for k in every if k not in was)
         intents = {k for k in every if k not in jud and isinstance(raw.get(k), dict)
                    and raw[k].get("asked")}
+        # A captured external report records why its evidence entered the graph;
+        # it is not a new user request that a page must serve as a reading occasion.
+        try:
+            from .ingestion import recording_source
+        except ImportError:
+            from ingestion import recording_source
+        recordings = {k for k in every if k not in jud and isinstance(raw.get(k), dict)
+                      and isinstance(raw[k].get('recorded_for'), str) and raw[k]['recorded_for'].strip()
+                      and not any(field in raw[k] for field in ('v', 'quoted', 'rule', 'verdict'))
+                      and recording_source(k, raw[k])}
+        recording_sources = intents | recordings
 
         def attributed(k):
             b = raw.get(k)
-            if isinstance(b, dict) and str(b.get("from") or "") in intents:
+            if isinstance(b, dict) and str(b.get("from") or "") in recording_sources:
                 return True
             deps = jud[k]["deps"] if k in jud else rests.get(k, [])
-            return bool(set(deps) & intents)
-        if new and not (set(new) & intents) and not any(attributed(k) for k in new):
+            return bool(set(deps) & recording_sources)
+        if new and not (set(new) & recording_sources) and not any(attributed(k) for k in new):
             named_ = ", ".join(new[:4]) + (f" and {len(new) - 4} more" if len(new) > 4 else "")
             out.append(f"this session wrote {len(new)} {'entry' if len(new) == 1 else 'entries'} "
                        f"({named_}) and recorded no intent: add s.<date>_<slug> asked=\"...\" "
@@ -4627,6 +4954,9 @@ def _apply_first_add(action):
 
 
 if __name__ == "__main__":
+    for stream in (sys.stdin, sys.stdout, sys.stderr):
+        if hasattr(stream, 'reconfigure'):
+            stream.reconfigure(encoding='utf-8', newline='\n')
     a = [x for x in sys.argv[1:] if x != "--no-cache"]
     if len(a) != len(sys.argv[1:]):
         # the same switch as KPOPPER_NO_CACHE=1, set here so anything this run starts

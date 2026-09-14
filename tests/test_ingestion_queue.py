@@ -169,6 +169,22 @@ class IngestionQueue(unittest.TestCase):
         stored = json.loads(next((self.state / "signals").glob("*.json")).read_text())
         self.assertEqual(stored["actionable_judgments"], ["c.acceptable", "c.second"])
 
+    def test_review_clears_movement_even_when_the_missing_falsifier_is_declared(self):
+        self.write_record(moved=True)
+        doc = self.read()
+        doc["judgments"]["c.acceptable"]["blocked_on"] = "No falsifier yet"
+        self.record.write_text(yaml.safe_dump(doc, sort_keys=False))
+        event = self.capture()
+        receipt = I.process(self.record, self.state, event["event_id"])[0]
+        self.assertEqual(receipt["actionable_judgments"], ["c.acceptable"])
+        doc = self.read()
+        doc["judgments"]["c.acceptable"]["seen"]["facts.count"] = 4
+        self.record.write_text(yaml.safe_dump(doc, sort_keys=False))
+        self.assertEqual(I.pending(self.record, self.state), [])
+        ids, jud, fields = I.P.infer(I.P.load([str(self.record)]))
+        raw = I.P.bodies(I.P.load([str(self.record)]))
+        self.assertEqual(I.P._state("c.acceptable", jud["c.acceptable"], raw, ids, fields)[0], "DECLARED")
+
     def test_ambiguous_input_is_retained_and_never_guessed(self):
         envelope = self.envelope()
         envelope.pop("target")

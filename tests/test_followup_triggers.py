@@ -58,6 +58,28 @@ class FollowupTriggers(unittest.TestCase):
                                       values={'f.a': None})['value'])
         self.assertIsNone(self.evaluate({'condition': {'id': 'f.a', 'op': '==', 'value': None}})['value'])
 
+    def test_computed_values_drive_conditions_without_losing_rule_changes(self):
+        first = {'computed': {'value': 20, 'rule': {'op': 'add', 'args': [{'num': '10'}, {'num': '10'}]}}}
+        values = {'f.total': first}
+        for operator, expected in [('>', 15), ('==', 20)]:
+            self.assertTrue(self.evaluate({'condition': {'id': 'f.total', 'op': operator, 'value': expected}}, values=values)['value'])
+        second = {'computed': {'value': 20, 'rule': {'op': 'mul', 'args': [{'num': '10'}, {'num': '2'}]}}}
+        self.assertTrue(self.evaluate({'changed': 'f.total'}, baseline=values, values={'f.total': second})['value'])
+        self.assertFalse(self.evaluate({'changed': 'f.total'}, baseline=values, values=values)['value'])
+
+    def test_rational_conditions_are_exact_and_missing_computations_are_unknown(self):
+        value = {'computed': {'value': {'rational': ['1', '3']}, 'rule': {'op': 'div', 'args': [{'num': '1'}, {'num': '3'}]}}}
+        for operator, expected in [('>', 0.3), ('<', 0.34), ('==', {'rational': ['2', '6']})]:
+            self.assertTrue(self.evaluate({'condition': {'id': 'f.total', 'op': operator, 'value': expected}}, values={'f.total': value})['value'])
+        missing = {'computed': {'value': None, 'rule': value['computed']['rule']}}
+        for operator, expected in [('>', 0), ('==', None), ('!=', 20)]:
+            self.assertIsNone(self.evaluate({'condition': {'id': 'f.total', 'op': operator, 'value': expected}}, values={'f.total': missing})['value'])
+        for pair in ([1.8, 3], [True, 3], ['1', '0']):
+            with self.assertRaises(ValueError):
+                self.evaluate({'condition': {'id': 'f.total', 'op': '==', 'value': {'rational': pair}}})
+            self.assertIsNone(self.evaluate({'condition': {'id': 'f.total', 'op': '!=', 'value': 20}},
+                                           values={'f.total': {'rational': pair}})['value'])
+
     def test_three_valued_composites(self):
         yes, no, unknown = {'completed': 'done'}, {'completed': 'pending'}, {'manual': 'Ask owner'}
         for kind, children, expected in [('all', [yes, unknown], None), ('all', [no, unknown], False),

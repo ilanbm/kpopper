@@ -1,4 +1,32 @@
-# Capture now, receive only what needs attention
+# Record one source report, with one or many changes
+
+For a source report in an existing single-file record, use `kpopper update --file -` to
+send JSON directly, or `--file report.json` for a saved report. Use the same `updates`
+array for one item or many (up to 32). Send the report while its meaning is fresh; do not
+wait for more unrelated information or for the end of the session. Include every supported
+fact already identified in that report, and keep unresolved meaning explicit.
+It accepts the same report contract below, processes only that report, and returns its
+durable receipt. Exit 0 means `applied`; exit 1 means retained but needing a primary
+decision; exit 2 means an invalid request. Inspect `reason`, `diagnostics`, `reach` and
+`newly_fired_judgments` before relying on the result. A refused staged update also returns
+`validation_issues` with the actual check failures. `applied` does not review judgments.
+Use one `updates` array for related changes from one report: all changes commit together,
+share one source and are checked in their final state. Reuse `event_id` to retry the same
+envelope safely. Supported newly authored formulas normalize to structured expressions.
+
+If the result is `needs_primary`, none of that report's requested changes was applied by
+that attempt; the source was retained. Inspect the reason and resolve it while the context
+is available, or report the unresolved decision. A corrected envelope uses a new event ID;
+an exact retry reuses its old ID. After a successful correction, acknowledge the earlier
+signal if it has been resolved. Receipts describing recovery may additionally say that a
+prior commit occurred and was later changed; that is not permission to apply it again.
+
+Captured sources carry `recorded_for`, explaining why the report entered the record. They
+do not invent an `asked` work request or require a new page tab for each incoming report.
+Existing user requests, page arrangements, citations and semantic checks retain their rules.
+Neither `recorded_for` nor `asked` grants authority to replace a standing judgment.
+The recording-purpose exception is checked against the retained capture's event, envelope
+and source bytes; adding `recorded_for` to an arbitrary source does not grant it.
 
 Use the existing graph to find what new information changes while its context is still fresh.
 `kpopper ingest capture` retains a source report immediately and starts a separate worker. The
@@ -51,6 +79,75 @@ When the target or meaning is unresolved, preserve the quote without inventing a
 
 This stays as a captured report needing a decision. No fact is guessed or overwritten. This
 version does not invoke a language model to infer missing identity, intent, time, or relationships.
+
+## Several related changes from one source
+
+The primary agent can supply `updates` instead of `target`/`value`, using `update` now or
+`ingest capture` in the background. One source quotation and date ground the whole batch:
+
+For a batch with new entries, first read the relevant record with `open --json` or
+`search`, and copy its `record_sha256` into the envelope below. Use the hash returned
+with the context you actually interpreted; computing a fresh hash just before submission
+would hide a stale interpretation. Replace the placeholder before submitting.
+
+```json
+{
+  "event_id": "cedar-delivery-1",
+  "record_sha256": "RECORD_SHA256_FROM_PRIOR_READ",
+  "source_quote": "Cedar has five packages. The van capacity is ten packages.",
+  "date": "2026-09-10",
+  "updates": [
+    {"kind": "add", "id": "cedar.packages", "body": {"v": 5, "name": "Cedar packages"}},
+    {"kind": "add", "id": "cedar.capacity", "body": {"v": 10, "name": "Van capacity"}},
+    {"kind": "add", "id": "c.cedar", "body": {
+      "rests_on": ["cedar.packages", "cedar.capacity"],
+      "verdict": "Cedar fits one van",
+      "because": "The reported package count is within the reported capacity.",
+      "wrong_if": "cedar.packages > cedar.capacity"
+    }}
+  ]
+}
+```
+
+An existing reading uses `{"kind":"set","id":"cedar.packages","value":6}`. Each
+operation may specify `at` for its location within the retained quotation. There are at
+most 32 operations and one operation per ID. `add` accepts a new scalar reading (`v` or
+`quoted`), a `rule`, or a new judgment in the record's existing vocabulary. `into` can name
+an existing collection. Stored readings receive the captured source citation and date;
+judgment snapshots are filled by the canonical writer. Do not supply `from`, `at`, `of`,
+`src`, `source` or snapshot fields inside `body`.
+
+The agent supplies interpretation and declared links; the worker runs no model and adds no
+inferred relationships. Keep source speech in `source_quote` and the agent's conclusion in
+the judgment body. Search candidates are not proof that two IDs describe the same subject;
+use the existing `same`/`distinct` process for identity decisions.
+
+Existing readings are staged first; additions follow in their supplied dependency order.
+Add premises and rules before judgments. The existing writer and final gate validate the
+whole staged record, which is then replaced once. Failed operations leave the canonical
+record untouched and retain the report for review. Attention is derived from the final
+graph, so intermediate states do not produce notifications. A reading that really falsifies
+an unchanged existing judgment is preserved when no other new check failure is introduced,
+including when a previously missing input arrives. Ingestion never refreshes that judgment's
+snapshot; missing review history or a page-policy failure can still require primary handling.
+
+New entries require and bind to the record hash from the primary's read, checked both at
+capture and before commit. This binds recorded premises, not external source-file contents.
+If the hash is missing or the record changes before
+commit, the batch stays pending for primary review; it cannot silently give a conclusion
+new premises the agent never read. Reading-only batches protect all touched targets;
+conflicting queued batches require primary review. An applied batch is not reapplied after
+a recorded commit is later changed or reverted.
+
+A revised report uses a new `event_id`. Exact retries reuse the original envelope, including
+its hash; changing its content under an existing ID is refused.
+
+Existing judgments cannot be replaced or reviewed in a batch. New judgments about the
+reader's own `graph.*`/page counts also require ordinary primary authoring, as those counts
+can change during the batch itself. Structured rules are computed by the local Lean core;
+legacy textual rules retain their unevaluated status. See [expressions](EXPRESSIONS.md).
+Multi-file, pointer and hypothesis-backed records retain the
+existing review requirement. No routine user confirmation or second agent review is added.
 
 ## Status and attention
 
@@ -108,9 +205,10 @@ workspace sandbox, grant the dedicated state path through the host's supported p
 set an absolute `XDG_STATE_HOME` to an approved location. A permission error is a failed capture;
 do not report that the source was saved.
 
-This writer supports explicit `report` updates to existing stored scalar entries in one record
-file. Pointer/multi-file records, hypotheses, new entries, computed values and judgment rewrites
-remain questions for the primary or the project's own adapter. Capturing their source does not
+This writer supports explicit `report` updates to existing stored scalar entries and batches
+of readings/new grounded entries in one record file. Pointer/multi-file records, hypotheses,
+computed-value rewrites and existing judgment rewrites remain questions for the primary or
+the project's own adapter. Capturing their source does not
 silently change those layouts. Preserve a custom project's reader/writer; do not migrate or
 duplicate its record to enable this command.
 

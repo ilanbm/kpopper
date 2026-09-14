@@ -10,6 +10,7 @@
 # nothing to keep. The gate yields after one bounce, so it reminds rather than imprisons.
 # The host's hook may name itself (--host claude|codex) so the question names the host's
 # record skill.
+export PYTHONIOENCODING=utf-8
 HOST=
 while [ $# -gt 0 ]; do
   case "$1" in

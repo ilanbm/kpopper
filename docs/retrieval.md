@@ -2,6 +2,11 @@
 
 `kpopper session search` finds candidate records when a question does not map cleanly to a name in the opening. It returns references to the original records at the opening's revision. Read those references and their declared premises before relying on them. Search does not create relationships, verify claims or change the record.
 
+For retained ingestion reports and passages in local text source files, the separate
+`kpopper search` command provides source-content discovery and exact source reads. Its
+`search-corpus` revision is separate from this checked-session protocol. See the
+[local source retrieval guide](../skills/kpopper/RETRIEVAL.md).
+
 Exact identifiers are preferred over approximate matches. Lexical search covers the whole record without embedding dependencies. Optional local E5 adds semantic or hybrid ranking. A branch hint only breaks equal scores; it cannot exclude a stronger result from another branch.
 
 ## Command line

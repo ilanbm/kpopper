@@ -284,7 +284,7 @@ def _describe(k, body, raw, ids, fields, suffix=""):
     if v is not None:
         shown = str(v)
     elif body.get("rule") or (isinstance(body.get("v"), str) and P.EXPR.search(body["v"])):
-        shown = "= " + str(body.get("rule") or body.get("v"))
+        shown = "= " + P.predicate_text(body.get("rule") or body.get("v"))
     elif body.get("quoted"):
         shown = '"' + str(body["quoted"]) + '"'
     else:

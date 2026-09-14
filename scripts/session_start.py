@@ -113,6 +113,9 @@ def opening(payload, host=None):
 
 
 def main():
+    for stream in (sys.stdin, sys.stdout, sys.stderr):
+        if hasattr(stream, "reconfigure"):
+            stream.reconfigure(encoding="utf-8", newline="\n")
     args = sys.argv[1:]
     cursor = "--cursor" in args
     # the host, when the hook names it: a host with skills is told the skill for each move

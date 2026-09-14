@@ -485,7 +485,9 @@ sources:
     of: "README refinement, paraphrased: remove the worker's human avatar, use a short title about
          background saving and selective return, and add an academic example with multiple agents
          on one graph. The maintainer selected dark matter in the follow-up choice. These are design
-         requests, not evidence of improved adoption or research quality."
+         requests, not evidence of improved adoption or research quality. The maintainer later
+         found the background-saving headline unclear and requested wording about notifications
+         for important findings; the selected replacement names that selective notification."
     read: "2026-09-13"
   s.2026_09_13_worker_cleanup:
     name: "Python 3.13 CI failed while deleting a detached worker test directory"
@@ -621,6 +623,10 @@ sources:
     of: "headless Chrome, both pages, 2026-09-02; the hand-written template carries 147 live
          references and wraps 4 passages as judgments"
     read: "2026-09-02"
+  doc.graph_export:
+    name: "Focused graph export contract"
+    file: "docs/graph-export.md"
+    read: "2026-09-14"
   doc.hub_seam:
     name: "The lab's own decision on why its page stays hand-written - the argument is manual,
            the agenda is derived, and a block becomes a query once its content is anchored"
@@ -1299,7 +1305,8 @@ known:
     of: "2026-09-10"
 
   m.skill_bytes_largest:
-    v: 20625
+    v: 21281
+    # set 2026-09-14: Measured by skill_bytes_largest after the recording guidance update
     # set 2026-09-14: measured by skill_bytes_largest after updating the project-mode guidance
     # set 2026-09-12: measured by skill_bytes_largest after the skills learned the entry file and the directory beside it
     # set 2026-09-11: measured by skill_bytes_largest at a51bc75 with the working tree changed
@@ -1948,6 +1955,26 @@ judgments:
                               the page's connective text lives in the brief; both resolve references
                               at build and both carry seen"
       p.entry_names: 2
+  d.export_preserves_recorded_context:
+    name: "Focused excerpts preserve historical and current context"
+    rests_on: [doc.graph_export, goal.portable, d.moved_is_a_flag]
+    verdict: "Provide bounded Markdown excerpts by default, with optional Mermaid and original-field
+              details. Label historical and current readings separately, distinguish omitted bodies
+              from missing records, and retain simultaneous condition results and reader flags
+              without changing the record format or evaluation policy."
+    because: "A focused excerpt can omit the current bodies while still carrying historical readings
+              and a condition result computed from the full record. Explicit labels and selection
+              limits preserve those distinctions; readable text also remains useful when diagrams are
+              unavailable."
+    reopened_by: "Readers of supported excerpts confuse historical and current values, treat omitted
+                  bodies as missing records or changed premises as fired conditions, lose a
+                  simultaneous finding, or require unnecessary stops and extensive rereading to
+                  complete ordinary tasks."
+    seen:
+      doc.graph_export: "read 2026-09-14"
+      goal.portable: "usable by any session, in any project, with no author present"
+      d.moved_is_a_flag: "a dependency that moved since the snapshot flags the judgment for a
+                          person; only a predicate that holds fails the build"
   d.first_add_is_the_birth:
     verdict: "where no record resolves, the first add creates GROUNDING.yaml at the workspace root
               with that entry, under one line that says what keeps it; no other command creates one,
@@ -2822,8 +2849,9 @@ judgments:
               future work and the agent's separate act of recording outcomes. The SVG references
               describe the logic; exporting them is not how the illustrated PNGs are produced. The
               maintainer found the worker avatar misleading. The software process now has no person,
-              and the direct title Save in the background. Return when needed. replaces the
-              parallel-tracks slogan and repeated footer."
+              and its headline now says Get notified only when something needs attention. The
+              maintainer found the earlier background-saving title unclear; naming the selective
+              notification makes the user-facing benefit explicit."
     reopened_by: "Readers at ordinary phone width cannot read the primary slogan or attribution,
                   mistake the fictional attribution for a historical quotation, or misunderstand
                   process boundaries in the diagrams. Revisit the compact icon if users confuse it
@@ -2895,6 +2923,32 @@ judgments:
                                  never carries a command, and no command that reads the record runs
                                  one"
       m.blocked_on_reopeners: 53
+  d.record_scope_preserves_learning:
+    name: "Retain useful knowledge within the actual write scope"
+    rests_on: [d.record_is_code, d.gate_asks_once_after_work]
+    verdict: "Keep schema restrictions separate from record-write prohibitions. Before
+              implementation or handoff, check internally for useful unrecorded knowledge and retain
+              it only within existing write authorization."
+    because: "Knowledge about the work belongs with the work, while the reminder must leave room to
+              finish without a write. A schema-preserving update can retain a new finding; a
+              restriction inferred in a draft plan must not become a user prohibition. Existing
+              entries, explicit read-only instructions and record-write bans still govern the
+              action."
+    reopened_by: "Sessions using this guidance still omit useful authorized findings, violate
+                  explicit write prohibitions, create filler or duplicate entries, or add routine
+                  approval requests at implementation or handoff."
+    seen:
+      d.record_is_code: "the record of what is known about the code lives in the tree - committed
+                         with the work it describes, reviewed in the same pull request, checked by
+                         the same CI - and a hypothesis travels with its branch; an out-of-tree
+                         record holds only what the tree cannot hold, the world outside the code; a
+                         user-level directory is at most an index of records, never content; a
+                         session named as a source is provenance, not process"
+      d.gate_asks_once_after_work: "a session that changed files of the tree, or ran eight prompts,
+                                    with the record untouched is asked once whether there was nothing
+                                    to keep - as a line on the prompt, and as one stop on the turn
+                                    after a line went unanswered; the gate still yields after one
+                                    bounce"
   d.refutations_keep_judgment_ids:
     from: s.2026_09_04_prior_reversal_share
     rests_on: [d.prior_confidence_survives_refutation, d.refuted_hypothesis_leaves_one_finding]
@@ -3480,10 +3534,14 @@ judgments:
               and a gate that cannot be escaped teaches sessions to fight the gate instead of
               fixing the record. New failures are compared by identity so repairing one old error
               cannot hide a new one. A judgment whose body and interpretation are unchanged, whose
-              condition changed from false to true, and whose recorded scalar input changed has
+              condition became true after being false or unknown, and whose recorded input changed or arrived has
               encountered new evidence. Retaining that finding is successful recording. Structural
               errors, new or edited broken judgments and arrangement failures remain gate failures;
-              legacy marks without those observations retain the conservative count comparison."
+              legacy marks without those observations retain the conservative count comparison.
+              A retained external capture can state its recording purpose in recorded_for on its source;
+              its event, envelope and source bytes must match before it satisfies recording attribution
+              without inventing an asked reading occasion.
+              Real work requests remain subject to the page's existing coverage requirements."
     wrong_if: "p.gate_bounces > 1"
     seen: {p.gate_bounces: 1, doc.ingestion_contract: "read 2026-09-07"}
   d.one_tree_two_channels:

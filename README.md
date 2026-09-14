@@ -10,12 +10,11 @@
 
 # Your project, more self-aware.
 
-kpopper connects decisions to the evidence, assumptions and earlier decisions they
-depend on, and records what would make them worth revisiting. Your agents can follow
-that reasoning across sessions. When a recorded premise changes, kpopper traces its
-reach through the record and surfaces what needs another look.
+**Your agents reason. kpopper makes that reasoning explicit, persistent, and deterministically checkable.**
 
-**A reasoning layer your agents can inspect, carry forward, and challenge.**
+kpopper connects decisions to the evidence, assumptions and earlier decisions they
+depend on, and records what would make them worth revisiting. When a recorded premise
+changes, kpopper traces its reach through the record and surfaces what needs another look.
 
 **[Get started](#get-started)** · [Examples](#example-1-private-data-exposure-assumption-checks) ·
 [Capabilities](#what-you-can-do-with-kpopper) · [Record format](#the-knowledge-record) ·
@@ -440,7 +439,7 @@ important unresolved findings are available for delivery back to the conversatio
   <a href="assets/diagrams/conversation-flow.png">
     <picture>
       <source media="(max-width: 600px)" srcset="assets/diagrams/conversation-flow-mobile.png">
-      <img src="assets/diagrams/conversation-flow.png" width="760" alt="Save in the background. Return when needed. The main agent captures an explicit venue-cancellation report and continues with the set list. A software worker in a separate process saves the dated source, records the change from confirmed to cancelled and checks the venue-to-announcement dependency. The announcement needs review; important findings return through the configured delivery route while routine updates stay quiet.">
+      <img src="assets/diagrams/conversation-flow.png" width="760" alt="Get notified only when something needs attention. The main agent captures an explicit venue-cancellation report and continues with the set list. A software worker in a separate process saves the dated source, records the change from confirmed to cancelled and checks the venue-to-announcement dependency. The announcement needs review; important findings return through the configured delivery route while routine updates stay quiet.">
     </picture>
   </a>
 </p>
@@ -502,7 +501,7 @@ what the work needs; a source and one finding can be enough.
 |---|---|
 | Source | The document, conversation, observation or other origin of a claim, with dates and locators. |
 | Reading | A value or quotation taken from that source. |
-| Derivation | The rule relating inputs to a result. The general reader stores rules and follows their references; it does not evaluate arbitrary formulas. |
+| Derivation | A structured rule relating inputs to a result. Its references supply graph dependencies and the local Lean core computes its value. Legacy text rules remain readable and unevaluated until explicitly converted. |
 | Judgment | A conclusion, its reasoning, declared dependencies and condition for reconsideration. |
 | Review snapshot | What those dependencies held when the judgment was last reviewed: `seen`. |
 | Open question | Something unresolved, retained without inventing an answer. |

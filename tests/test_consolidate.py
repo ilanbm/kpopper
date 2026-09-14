@@ -274,9 +274,11 @@ class TheDryRunTests(unittest.TestCase):
                           "folded c_boiler_short: 0 entries and 1 judgment - 0 added, 1 replaced\n", out)
             text = rec.read_text(encoding="utf-8")
             self.assertEqual(text.count("c.boiler_short:"), 1)
-            self.assertIn("  c.boiler_short:\n    rests_on: [heat.boiler_kw, heat.loss_kw]\n"
-                          '    verdict: "the old boiler holds after all"\n    wrong_if: "heat.loss_kw > 40"\n'
-                          "    seen: {heat.boiler_kw: 24, heat.loss_kw: 31}\n", text)
+            judgment = P.bodies(P.load([str(rec)]))['c.boiler_short']
+            self.assertEqual(judgment['rests_on'], ['heat.boiler_kw', 'heat.loss_kw'])
+            self.assertEqual(judgment['verdict'], 'the old boiler holds after all')
+            self.assertEqual(P.predicate_text(judgment['wrong_if']), 'heat.loss_kw > 40')
+            self.assertEqual(judgment['seen'], {'heat.boiler_kw': 24, 'heat.loss_kw': 31})
             self.assertEqual(run(SCRIPTS / "provenance.py", "check", rec)[0], 0)
 
     def test_new_subjects_are_prefixes_the_base_lacks(self):

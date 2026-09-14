@@ -24,7 +24,7 @@ afterwards, and the whole migration is undone when it left a problem check did n
 `distinct a b "why"` writes `distinct_from: b` on a, the why beside it, and the pair returns
 as no candidate.
 """
-import io, os, re, sys, datetime, yaml
+import io, os, re, sys, datetime, yaml, json
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import provenance as P
@@ -142,6 +142,8 @@ def _rule_of(b):
     if not isinstance(b, dict):
         return None
     r = b.get("rule")
+    if isinstance(r, dict):
+        return r
     if isinstance(r, str) and r.strip():
         return r
     v = b.get("v")
@@ -151,9 +153,14 @@ def _rule_of(b):
 
 
 def canon_rule(rule, retired):
-    """A rule with every id read through what was retired into what, whitespace collapsed -
-    so a rule written before a migration compares equal to one written after it."""
-    return _norm(P.ID.sub(lambda m: retired.get(m.group(0), m.group(0)), str(rule)))
+    """Canonical expression references, with a legacy fallback for unsupported prose."""
+    try:
+        tree = P.E.lower(rule) if isinstance(rule, dict) else P.E.lower({'expr': rule})
+        for old, new in retired.items():
+            tree = P.E.rename(tree, old, new)
+        return tree
+    except ValueError:
+        return _norm(P.ID.sub(lambda m: retired.get(m.group(0), m.group(0)), str(rule)))
 
 
 def _premises(b, deps_field, raw_all):
@@ -362,11 +369,14 @@ def _merge(S, R, sb, rb, ids, jud, fields, raw, as_of):
             body = dict(sb)
     else:
         cs, cr = _claim(sb, ids, raw), _claim(rb, ids, raw)
+        rules = all(isinstance(b, dict) and b.get('rule') is not None and
+                    b.get('v') is None and b.get('quoted') is None for b in (sb, rb))
+        equal = P.E.same(cs, cr) if rules and isinstance(cs, dict) and isinstance(cr, dict) else P._same(cs, cr)
         ds, dr = _read_day(sb, raw), _read_day(rb, raw)
         winner = S
         if not sb:
             winner = R
-        elif cr is not None and (cs is None or not P._same(cs, cr)):
+        elif cr is not None and (cs is None or not equal):
             if dr is not None and (ds is None or dr >= ds):
                 ok, why = P.may_supersede(S, sb, cr, raw, ids, jud, fields, dr.isoformat())
                 if not ok:
@@ -492,14 +502,77 @@ def _remove_block(lines, nid):
     return name, block
 
 
-def _rewrite_text(text, R, S):
+def _rewrite_text(text, R, S, predicate_field="wrong_if", snapshot_field="seen"):
     """Every whole-token mention of R now names S -> (text, how many)."""
-    return _token(R).subn(S, text)
+    # Tagged expression literals are data, even when they spell an entry ID.
+    spans = []
+    seen = set()
+    def visit(node, expression=False, snapshot=False):
+        if id(node) in seen:
+            return
+        seen.add(id(node))
+        if isinstance(node, yaml.MappingNode):
+            if expression and len(node.value) == 1 and node.value[0][0].value == 'expr':
+                value = node.value[0][1]
+                original = {'expr': value.value}
+                left, right = value.start_mark.index, value.end_mark.index
+                if R in P.E.refs(original):
+                    changed = P.E.rename(original, R, S, predicate=P.E.predicate_shape(original))
+                    replacement = json.dumps(changed['expr'], ensure_ascii=False)
+                    if value.style in ('|', '>') and text[left:right].endswith('\n'):
+                        replacement += '\n'
+                    spans.append((left, right, replacement, 1))
+                else:
+                    spans.append((left, right, text[left:right], 0))
+            elif expression and len(node.value) == 1 and node.value[0][0].value in {"text", "num", "bool"}:
+                value = node.value[0][1]
+                left, right = value.start_mark.index, value.end_mark.index
+                spans.append((left, right, text[left:right], 0))
+            else:
+                for key, value in node.value:
+                    if snapshot and key.value == "computed" and isinstance(value, yaml.MappingNode):
+                        for part, payload in value.value:
+                            if part.value == "value":
+                                left, right = payload.start_mark.index, payload.end_mark.index
+                                spans.append((left, right, text[left:right], 0))
+                            elif part.value == "rule":
+                                visit(payload, True, False)
+                    else:
+                        visit(value, expression or key.value in {"rule", predicate_field}, snapshot or key.value == snapshot_field)
+        elif isinstance(node, yaml.SequenceNode):
+            for value in node.value:
+                visit(value, expression, snapshot)
+    try:
+        visit(yaml.compose(text))
+    except yaml.YAMLError:
+        pass  # Also called on diagnostic prose, not just YAML.
+    count, start, parts = 0, 0, []
+    for left, right, replacement, edits in sorted(spans):
+        changed, n = _token(R).subn(S, text[start:left])
+        parts.extend((changed, replacement)); count += n + edits; start = right
+    changed, n = _token(R).subn(S, text[start:])
+    return "".join(parts) + changed, count + n
 
 
 def _dedupe_flow_lists(text, S):
     """A flow list that came to hold S twice holds it once; every other item stays as it was."""
+    protected, visited = [], set()
+    def visit(node):
+        if id(node) in visited: return
+        visited.add(id(node))
+        if isinstance(node, yaml.ScalarNode):
+            protected.append((node.start_mark.index, node.end_mark.index))
+        elif isinstance(node, yaml.MappingNode):
+            for key, value in node.value: visit(key); visit(value)
+        elif isinstance(node, yaml.SequenceNode):
+            for value in node.value: visit(value)
+    try:
+        visit(yaml.compose(text))
+    except yaml.YAMLError:
+        return text
     def fix(m):
+        if any(left <= m.start() < right for left, right in protected):
+            return m.group(0)
         inner = m.group(1)
         if len(_token(S).findall(inner)) < 2:
             return m.group(0)
@@ -546,10 +619,10 @@ def _mentions(R, worlds, fields, brief):
             if isinstance(snap, dict) and R in snap:
                 hit(fields["snapshot"], k + tag)
             pred = b.get(fields["predicate"]) if fields["predicate"] else None
-            if isinstance(pred, str) and tok.search(pred):
+            if (isinstance(pred, dict) and R in P.E.refs(pred)) or (isinstance(pred, str) and tok.search(pred)):
                 hit(fields["predicate"], k + tag)
             rule = _rule_of(b)
-            if rule and tok.search(rule):
+            if (isinstance(rule, dict) and R in P.E.refs(rule)) or (isinstance(rule, str) and tok.search(rule)):
                 hit("rule", k + tag)
             for f, v in b.items():
                 if isinstance(v, str) and R in P.refs_in(v):
@@ -753,7 +826,7 @@ def _same_unlocked(paths, a, b, keep=None, as_of=None):
         texts[brief] = "\n".join(lines)
     counts = {}
     for f in list(texts):
-        texts[f], n = _rewrite_text(texts[f], R, S)
+        texts[f], n = _rewrite_text(texts[f], R, S, fields["predicate"], fields["snapshot"])
         if n:
             counts[f] = n
         texts[f] = _dedupe_distinct(_dedupe_flow_lists(texts[f], S), S)

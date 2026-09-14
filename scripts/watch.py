@@ -153,7 +153,7 @@ def uncertain(doc):
     for key, judgment in judgments.items():
         reasons = sorted(flags[key] & {'blocked', 'unchecked', 'broken', 'no_predicate'})
         if judgment['pred'] and P.evaluate(judgment['pred'], raw, ids) is None:
-            reasons.append('predicate cannot currently be evaluated: ' + judgment['pred'])
+            reasons.append('predicate cannot currently be evaluated: ' + P.predicate_text(judgment['pred']))
         elif not judgment['pred'] and P._blocked_text(judgment['body']):
             reasons.append('declared blocked condition')
         if reasons:
