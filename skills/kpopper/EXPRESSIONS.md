@@ -5,6 +5,23 @@ chooses its meaning; a bounded deterministic parser derives its structure and re
 and the packaged Lean core computes it. No model call or arbitrary code execution is
 involved in evaluation. The stored expression remains the source of truth.
 
+## Reader compatibility
+
+Structured rules and conditions (`expr` or tagged AST), and their `computed` review
+snapshots, require kpopper **1.6.0 or later** in every reader and writer that touches the
+record. Upgrade the standalone CLI, each host's plugin and CI together. Updating a plugin
+does not update a separately installed pip/pipx CLI; restart sessions still using an older
+plugin. For unreleased source, use the same verified revision across these entrypoints:
+the package version alone may still name the previous release.
+
+An older writer may mistake a structured rule for an ordinary entry and save an invalid
+historical reading such as `present`, or miss its dependencies. Until a compatible reader
+is available, inspect the YAML as text and leave writes, reviews, renames and consolidation
+to the compatible version. A successful old `check` does not establish compatibility.
+On each machine that computes expressions, `kpopper session status` must also report a
+ready core for that installed code; the setup requirements are below. Plain scalar reads
+do not require Lean, but missing computation must remain explicit.
+
 `add` and source-report `update` also accept a supported formula as text, such as
 `rule='order.price * order.quantity'` or `wrong_if='order.price * order.quantity > 150'`.
 The normal writer stores the corresponding `expr` expression when Lean can validate

@@ -1,5 +1,11 @@
 # Changelog
 
+Reader compatibility for 1.6.0: records containing structured expressions or computed
+snapshots require a 1.6.0-or-later CLI/plugin/CI reader and writer. Upgrade every entrypoint
+before writing or reviewing such records with another installation. Expression evaluation
+also requires a matching built Lean core; native Windows uses individual writes instead
+of durable report batching. See [compatibility details](skills/kpopper/EXPRESSIONS.md#reader-compatibility).
+
 ## 1.5.2 — 2026-09-13
 
 - Remove introductory caption and illustration-production guide (#73) — patch
