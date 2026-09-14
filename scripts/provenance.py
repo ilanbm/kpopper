@@ -3418,9 +3418,11 @@ def normalize_authored(action, ids, fields, raw):
             legacy_rhs=comparison.group(3) if comparison else None)
     except (ValueError, SyntaxError, RecursionError) as error:
         return keep(str(error))
-    # A lone unknown word may be a prose rule, not a missing graph reference.
-    if not predicate and set(tree) == {'ref'} and tree['ref'] not in ids and tree['ref'] != nid:
-        return keep('unknown or ambiguous reference; use a tagged ref for an intended dependency')
+    # Plain words joined by operators may describe qualitative work. Only explicit
+    # expressions assert that unknown names are intended graph dependencies.
+    if not predicate and any(ref not in ids and ref != nid and not is_builtin(ref)
+                             for ref in E.refs(tree)):
+        return keep('unknown or ambiguous reference; use rule={expr: "..."} for an intended calculation')
     candidate = dict(raw)
     candidate[nid] = dict(body, **{field: tree})
     candidate_ids = ids | {nid} | {key for key in E.refs(tree) if is_builtin(key)}
