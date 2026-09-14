@@ -10,7 +10,6 @@ import unittest
 from unittest.mock import patch
 
 from scripts import pending_grounding as G, project_modes as M, knowledge_views as V, recording as R
-from scripts.session.store import native_record
 from tests import test_pending_publication as F
 
 
@@ -119,6 +118,12 @@ class ReviewRegressions(unittest.TestCase):
         self.assertNotIn('fact.two', (self.root / 'GROUNDING.yaml').read_text())
 
     def test_checked_simple_sources_match_resolved_record_bytes(self):
+        try:
+            from scripts.session.store import native_record
+        except ImportError:
+            if os.environ.get('KPOPPER_REQUIRE_CORE_TESTS') == '1':
+                raise
+            self.skipTest('checked native reads require the optional session dependencies')
         self.seed()
         shared = self.base / 'shared.yaml'
         shared.write_bytes((self.root / 'GROUNDING.yaml').read_bytes())

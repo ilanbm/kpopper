@@ -138,8 +138,18 @@ class ModeAssessment(Repository):
         self.assertEqual(after['scope']['hypotheses_checked'], [])
         self.assertTrue(after['scope']['knowledge']['contributions_checked'])
         self.assertNotIn('TARGET-DETAILS-TWO', json.dumps(packet_after))
-        import jsonschema
-        jsonschema.validate(after, json.loads(Path(A.__file__).with_name('assessment.schema.json').read_text()))
+
+    def test_live_target_context_matches_the_shipped_schema(self):
+        try:
+            import jsonschema
+        except ImportError:
+            if os.environ.get('KPOPPER_REQUIRE_CORE_TESTS') == '1':
+                raise
+            self.skipTest('schema validation requires the session dependency jsonschema')
+        target, bundle = self.target_fixture()
+        self.target_version(target, bundle, 'API v1')
+        report = A.load([str(self.record)])
+        jsonschema.validate(report, json.loads(Path(A.__file__).with_name('assessment.schema.json').read_text()))
 
     def test_unavailable_configured_target_is_disclosed_as_partial_assessment(self):
         self.target_fixture()

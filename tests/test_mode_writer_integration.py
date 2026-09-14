@@ -38,6 +38,14 @@ class ModeWriters(unittest.TestCase):
     def write(self):
         self.record.write_text(I.P.yaml.safe_dump(self.doc, sort_keys=False))
 
+    def require_core(self):
+        try:
+            I.P.E._core_type()()
+        except (ValueError, ImportError):
+            if os.environ.get('KPOPPER_REQUIRE_CORE_TESTS') == '1':
+                raise
+            self.skipTest('expression integration requires the optional checked core')
+
     def report(self, **extra):
         return dict(source_quote='The authorized report changes x to 3 and y to 4.', date='2026-09-14',
                     updates=[{'kind': 'set', 'id': 'fact.x', 'value': 3},
@@ -213,6 +221,7 @@ class ModeWriters(unittest.TestCase):
         self.assertEqual(bundle['files'][entries[result['source']][1]['file']], report['source_quote'].encode())
 
     def test_simple_migration_exposes_new_contradiction_without_refreshing_seen(self):
+        self.require_core()
         self.doc['known']['fact.total'] = {'rule': 'fact.x + fact.y'}
         self.doc['judgments']['claim.good'] = {'rests_on': ['fact.total'], 'seen': {'fact.total': 0},
                                               'verdict': 'within budget', 'wrong_if': 'fact.total > 2'}
@@ -316,6 +325,7 @@ class ModeWriters(unittest.TestCase):
         self.assertEqual(I.P.yaml.safe_load(shared.read_text())['known']['fact.x']['scope'], scope)
 
     def test_simple_expression_migration_resolves_shared_record(self):
+        self.require_core()
         self.doc['known']['fact.total'] = {'rule': 'fact.x + fact.y'}; self.write()
         shared = self.base / 'shared.yaml'; shared.write_bytes(self.record.read_bytes())
         self.project.configure('simple', record=str(shared))
@@ -326,6 +336,7 @@ class ModeWriters(unittest.TestCase):
         self.assertIsInstance(I.P.yaml.safe_load(shared.read_text())['known']['fact.total']['rule'], dict)
 
     def test_project_capture_normalizes_expression_and_keeps_dependencies(self):
+        self.require_core()
         action = {'kind': 'add', 'id': 'fact.total', 'body': {'rule': 'fact.x + fact.y'},
                   'scope': 'external', 'environment': 'account A', 'shareability': 'project'}
         with contextlib.redirect_stdout(io.StringIO()):
