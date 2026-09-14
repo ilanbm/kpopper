@@ -297,6 +297,28 @@ class Assessment(unittest.TestCase):
         with self.assertRaises(ValueError):
             A.selected_attention(report, ['not.selected'])
 
+    def test_reports_match_the_shipped_json_schema(self):
+        try:
+            import jsonschema
+        except ImportError:
+            if os.environ.get('KPOPPER_REQUIRE_CORE_TESTS') == '1':
+                raise
+            self.skipTest('schema validation uses the session dependency jsonschema')
+        schema = json.loads((ROOT / 'scripts/assessment.schema.json').read_text())
+        jsonschema.Draft202012Validator.check_schema(schema)
+        del self.doc['known']['p.backup']
+        self.doc['judgments']['d.work']['wrong_if'] = 'p.load > 60'
+        report = json.loads(json.dumps(self.report(), default=str))
+        jsonschema.validate(report, schema)
+        selected = {key: value for key, value in report.items() if key != 'nodes'}
+        selected.update(selection=['d.work'], attention=A.selected_attention(report, ['d.work']))
+        jsonschema.validate(selected, schema)
+        malformed = copy.deepcopy(report)
+        malformed['nodes']['d.work']['state']['basis']['dependencies']['p.load']['current'] = {
+            'status': 'missing', 'value': 61}
+        with self.assertRaises(jsonschema.ValidationError):
+            jsonschema.validate(malformed, schema)
+
 
 if __name__ == '__main__':
     unittest.main()
