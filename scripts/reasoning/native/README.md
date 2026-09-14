@@ -52,7 +52,11 @@ The candidate CI must pass on that platform before integration/publication.
 
 The separate `reasoning-runtime` workflow builds candidates, audits proof and
 linkage behavior, and checks wheel/sdist/plugin execution with cold caches
-and no compiler on the effective runtime PATH. It uploads candidates and does
+and no compiler on the effective runtime PATH. Python3.13 runs on all five
+native targets; Python3.9 runs on both Linux CPUs, Intel macOS and Windows.
+`setup-python` does not supply a Darwin arm64 Python3.9 artifact, so that
+interpreter/CPU combination is not claimed as executed. The package's base
+Python requirement remains >=3.9. The workflow uploads candidates and does
 not publish releases. The release completeness gate must require all five
 verified archives and matching runtime source identity before publishing.
 
