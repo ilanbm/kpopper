@@ -77,7 +77,7 @@ class ModeWriters(unittest.TestCase):
         snap = G.Store(self.project).snapshot()
         self.assertEqual(len(snap['events']), 1)
         bundle = next(iter(snap['bundles'].values()))
-        self.assertEqual(set(bundle['manifest']['roots']), {'fact.x', 'fact.y'})
+        self.assertEqual(set(bundle['manifest']['roots']), {'fact.x', 'fact.y', result['source']})
         for key, value in (('fact.x', 3), ('fact.y', 4)):
             body = G.entries(bundle['manifest']['document'])[key][1]
             self.assertEqual((body['v'], body['scope']), (value, scope))
@@ -91,6 +91,127 @@ class ModeWriters(unittest.TestCase):
         second = I.update(report, self.record)
         self.assertEqual(second, first)
         self.assertEqual(len(G.Store(self.project).events()), 1)
+
+    def test_cited_project_report_preserves_both_sources_through_recovery(self):
+        original = b'The complete original document, including uncited context.\n'
+        (self.root / 'contract.txt').write_bytes(original)
+        self.doc['sources']['s.contract'] = {'file': 'contract.txt', 'from': 's.one',
+                                              'read': '2026-09-13', 'at': 'attachment A'}
+        self.write()
+        before = self.record.read_bytes()
+        scope = {'kind': 'external', 'environment': 'account A'}
+        report = self.report(event_id='cited-report', source='s.contract', at='clause 3',
+                             record_sha256=I._sha(before), shareability='project', scope=scope)
+        report['updates'][1]['at'] = 'clause 4'
+        finish = I._finish
+        def crash(root, event, envelope, state, *args, **kwargs):
+            if state == 'project_captured':
+                raise KeyboardInterrupt('after Git capture, before receipt')
+            return finish(root, event, envelope, state, *args, **kwargs)
+        with patch.object(I, '_finish', side_effect=crash), self.assertRaises(KeyboardInterrupt):
+            I.update(report, self.record)
+        self.assertEqual(self.record.read_bytes(), before)
+        store = G.Store(self.project)
+        head = store.head()
+        # Recovery must use durable evidence even if the checkout source later changes.
+        (self.root / 'contract.txt').unlink()
+        self.doc['known']['fact.x']['v'] = 8; self.write()
+        changed = self.record.read_bytes()
+        result = I.update(report, self.record)
+        self.assertEqual((result['state'], result['cited_source']), ('project_captured', 's.contract'))
+        self.assertEqual(I.update(report, self.record), result)
+        self.assertEqual(self.record.read_bytes(), changed)
+        self.assertEqual(store.head(), head)
+        self.assertEqual(len(store.events()), 1)
+        bundle = next(iter(store.snapshot()['bundles'].values()))
+        entries = G.entries(bundle['manifest']['document'])
+        self.assertEqual(entries['s.contract'][1], self.doc['sources']['s.contract'])
+        self.assertEqual(entries['s.one'][1], self.doc['sources']['s.one'])
+        captured = entries[result['source']][1]
+        self.assertEqual((captured['from'], captured['at'], captured['scope']), ('s.contract', 'clause 3', scope))
+        self.assertEqual(bundle['files'], {'contract.txt': original,
+                         captured['file']: report['source_quote'].encode()})
+        self.assertEqual(set(bundle['manifest']['roots']), {'fact.x', 'fact.y', result['source']})
+        for nid, value, at in [('fact.x', 3, 'clause 3'), ('fact.y', 4, 'clause 4')]:
+            self.assertEqual(entries[nid][1], {'v': value, 'from': 's.contract', 'at': at,
+                                             'of': report['date'], 'scope': scope})
+        self.assertNotIn(str(self.base), str(bundle['manifest']))
+
+    def test_explicit_private_citation_refuses_before_staging(self):
+        for permission in ({'private': True}, {'shareability': 'unclear'}):
+            with self.subTest(permission=permission):
+                self.doc['sources']['s.contract'] = {'file': 'private.txt', **permission}
+                self.write()
+                before = self.record.read_bytes()
+                report = self.report(source='s.contract', at='clause 3', record_sha256=I._sha(before),
+                                     shareability='project', scope={'kind': 'external', 'environment': 'account A'})
+                with patch.object(I, '_prepare', wraps=I._prepare) as prepare:
+                    result = I.update(report, self.record)
+                self.assertEqual(result['state'], 'needs_primary', result)
+                self.assertIn('original source permission', result['reason'])
+                prepare.assert_not_called()
+                self.assertEqual(self.record.read_bytes(), before)
+                self.assertIsNone(G.Store(self.project).head())
+
+    def test_report_file_collision_cannot_replace_original_document_evidence(self):
+        report = self.report(event_id='file-collision')
+        eid = I._event_id(self.record.resolve(), report)
+        portable = '.kpopper/evidence/reports/' + eid + '.txt'
+        original = self.root / portable
+        original.parent.mkdir(parents=True)
+        original.write_text('Original document, different from the report.')
+        self.doc['sources']['s.contract'] = {'file': portable, 'read': '2026-09-13'}
+        self.write()
+        before = self.record.read_bytes()
+        report.update(source='s.contract', at='clause 3', record_sha256=I._sha(before),
+                      shareability='project', scope={'kind': 'external', 'environment': 'account A'})
+        result = I.update(report, self.record)
+        self.assertEqual(result['state'], 'needs_primary', result)
+        self.assertIn('evidence path conflicts', result['reason'])
+        self.assertEqual(original.read_text(), 'Original document, different from the report.')
+        self.assertEqual(self.record.read_bytes(), before)
+        self.assertIsNone(G.Store(self.project).head())
+
+    def test_simple_cited_report_uses_shared_record_and_keeps_historical_seen(self):
+        shared = self.base / 'shared.yaml'; shared.write_bytes(self.record.read_bytes())
+        self.project.configure('simple', record=str(shared))
+        before = self.record.read_bytes()
+        result = I.update(self.report(source='s.one', at='reading 2', record_sha256=I._sha(before)), self.record)
+        self.assertEqual((result['state'], result['cited_source']), ('applied', 's.one'))
+        self.assertEqual(self.record.read_bytes(), before)
+        updated = I.P.yaml.safe_load(shared.read_text())
+        self.assertEqual(updated['known']['fact.x']['from'], 's.one')
+        self.assertEqual(updated['known']['fact.x']['at'], 'reading 2')
+        self.assertEqual(updated['judgments'], self.doc['judgments'])
+
+    def test_project_qualitative_rule_report_retains_its_evidence(self):
+        report = self.report(record_sha256=I._sha(self.record.read_bytes()), shareability='project',
+                             scope={'kind': 'project', 'environment': 'this project'})
+        report['updates'] = [{'kind': 'add', 'id': 'fact.process',
+                              'body': {'rule': 'draft + review'}}]
+        result = I.update(report, self.record)
+        self.assertEqual(result['state'], 'project_captured', result)
+        bundle = next(iter(G.Store(self.project).snapshot()['bundles'].values()))
+        entries = G.entries(bundle['manifest']['document'])
+        self.assertEqual(entries['fact.process'][1]['rule'], 'draft + review')
+        self.assertEqual(bundle['files'][entries[result['source']][1]['file']], report['source_quote'].encode())
+
+    def test_simple_migration_exposes_new_contradiction_without_refreshing_seen(self):
+        self.doc['known']['fact.total'] = {'rule': 'fact.x + fact.y'}
+        self.doc['judgments']['claim.good'] = {'rests_on': ['fact.total'], 'seen': {'fact.total': 0},
+                                              'verdict': 'within budget', 'wrong_if': 'fact.total > 2'}
+        self.write()
+        shared = self.base / 'shared.yaml'; shared.write_bytes(self.record.read_bytes())
+        self.project.configure('simple', record=str(shared))
+        before = self.record.read_bytes()
+        result = X.migrate(str(self.record), apply=True)
+        self.assertTrue(result['applied'], result)
+        self.assertEqual(result['fired'], ['claim.good'])
+        self.assertEqual(result['problems'], [])
+        self.assertEqual(self.record.read_bytes(), before)
+        updated = I.P.yaml.safe_load(shared.read_text())
+        self.assertEqual(updated['judgments']['claim.good']['seen'], {'fact.total': 0})
+        self.assertTrue(any('claim.good: wrong_if holds' in line for line in I.P.check_lines([str(shared)])[0]))
 
     def test_git_capture_recovers_after_receipt_crash_and_later_checkout_change(self):
         report = self.report(event_id='crash-report', shareability='project',

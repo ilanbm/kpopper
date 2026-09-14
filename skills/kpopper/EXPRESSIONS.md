@@ -14,11 +14,16 @@ and `ref("an opaque id")` explicitly references a reserved name or an ID contain
 or punctuation. Calls other than this reference constructor are unsupported.
 
 Unsupported syntax, date-like rules, numeric-looking quoted literals and comparisons
-depending on legacy text coercion stay text with a diagnostic. Missing Lean also produces
+depending on legacy text coercion stay text with a diagnostic. Plain rules containing
+unknown names, such as `candidates - rejected` or `מועמדים - נדחים`, also stay text:
+the operator does not establish that those words name graph entries. This applies with
+or without Lean. Use an explicit `rule: {expr: "..."}` to declare an intended calculation;
+its missing references remain errors. Missing Lean also produces
 an explicit fallback diagnostic; it never turns text into a calculated result. Report
 receipts retain these diagnostics. Existing formulas and historical `seen` fields are
-not migrated by an unrelated write. A newly authored calculation with a missing dependency,
-cycle or division by zero is refused unless its missing computation is explicitly declared.
+not migrated by an unrelated write. Explicit calculations with missing dependencies, and
+recognized calculations with cycles or division by zero, are refused unless their missing
+computation is explicitly declared.
 
 ```yaml
 order.total:
@@ -147,10 +152,19 @@ Migration uses a deterministic grammar, never a model. It converts supported rul
 predicates, including legacy expressions in `v`, and reports unconverted fields. Unknown
 names, unsupported syntax, ambiguous bare predicate operands and ambiguous escaped literals
 stay unchanged for review. It does not refresh snapshots. The whole single-file result is
-checked before one atomic replacement; new check failures prevent application. Every
-previously decidable condition must keep its result, so numeric text that the legacy
-reader coerced cannot silently become an unknown typed comparison. Record a typed numeric
-reading with its source explicitly when that is what the source means.
+checked before one atomic replacement. When an ordinary judgment's previously unknown
+falsifier becomes true, it is reported in `fired`; its discovery does not prevent application.
+For example, converting
+an old total formula can reveal that an existing budget judgment is broken. The judgment,
+its verdict and its historical `seen` remain; `check` still fails on that contradiction.
+`fired` describes the previewed result even when another problem prevents application;
+use `applied` to tell whether the record was written.
+
+Other new check failures, including arrangement failures, still prevent application. Every
+previously decidable condition must keep its result: neither true/false reversals nor a
+known result becoming unknown are safe migrations. Numeric text that the legacy reader
+coerced cannot silently become an unknown typed comparison. Record a typed numeric reading
+with its source explicitly when that is what the source means.
 
 A historical snapshot containing only a textual formula has no historical calculated value.
 After an equivalent conversion it reads `UNCHECKED`, with the original snapshot preserved,

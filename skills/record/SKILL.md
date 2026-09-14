@@ -232,7 +232,7 @@ conservative behavior until the next session opens.
 is authorized, capture a material correction or source report while your understanding is fresh.
 `update` returns the result now. Choose `ingest capture` when processing should continue in the background;
 the number of items does not choose that mode. Interpret once and keep source quotations separate.
-Additions require `record_sha256` from the primary's prior `open --json` or source-search read;
+Additions and existing-source citations require `record_sha256` from the prior `open --json` or source-search read;
 if it changes, reread the premises. `applied` means every requested change was written.
 `needs_primary` means retained for handling, not successful recording: inspect its reason and
 `validation_issues`, resolve within the existing authority, or say what remains blocked. Re-submit
