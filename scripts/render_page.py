@@ -390,7 +390,8 @@ def arrangements_of(ids, jud, raw, tabs, picks, cov, flags, doc):
                 continue
             other = h["raw"].get(v)
             if decided(other) != decided(j["body"]):
-                contested.append(("hypothesis", name, str(P.claim_of(other))))
+                contested.append(("contribution" if h.get('kind') == 'contribution' else "hypothesis",
+                                  name, str(P.claim_of(other))))
         for q, text in sorted(questions.items()):
             if v in P.ID.findall(text):
                 contested.append(("question", q, text))
@@ -1441,10 +1442,15 @@ def build(paths, brief_path=None, page_path=None):
     # hypotheses beside the record are counted under the heading and drawn nowhere: the page
     # is the base, and what a hypothesis proposes is read with pull until consolidation
     hyps = getattr(doc, "hypotheses", None) or {}
-    if hyps:
-        n, c = len(hyps), len(P.contested(doc))
+    named_hypotheses = {name: hyp for name, hyp in hyps.items() if hyp.get('kind') != 'contribution'}
+    if named_hypotheses:
+        n, c = len(named_hypotheses), len(P.contested(doc))
         h1 += (f'<p class="meta" dir="{page_dir}">' + (w["hypothesis_one"] if n == 1 else w["hypotheses"].format(n=n))
                + (w["contested"].format(n=c) if c else '') + w["base_only"] + '</p>')
+    for line in P._peer('knowledge_views').lines(doc):
+        h1 += '<p class="meta" dir="auto" lang="en">' + html.escape(line) + '</p>'
+    if getattr(doc, 'contributions', []):
+        h1 += '<p class="meta" lang="en">Project contributions are not expanded on this base page; use open, pull or knowledge snapshot.</p>'
     # what the brief declares beyond what the page draws - checked as the tabs are drawn
     contract = {"tabs": len(tabs), "bad": [], "moved": [], "stale": [], "unread": [], "coverage": []}
     # What the arrangement covers, before anything is drawn: the page's own counts have to
@@ -1524,7 +1530,7 @@ def build(paths, brief_path=None, page_path=None):
                             f'data-request="{html.escape(request)}">{html.escape(asked_of(request))}</span>')
             o.append('<p class="sub" dir="auto">' + " &middot; ".join(bits) + "</p>")
             for kind, who, claim in f["contested"]:
-                o.append(f'<p class="sub" dir="auto">{w["contests"].format(kind=w[kind])}'
+                o.append(f'<p class="sub" dir="auto">{w["contests"].format(kind=w.get(kind, kind))}'
                          + (fx(who, P.short(claim, 120)) if who in E or who in J
                             else f'{html.escape(who)}: {html.escape(P.short(claim, 120))}') + "</p>")
         was = t["shape"] or {}
