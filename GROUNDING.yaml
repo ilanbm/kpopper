@@ -485,7 +485,9 @@ sources:
     of: "README refinement, paraphrased: remove the worker's human avatar, use a short title about
          background saving and selective return, and add an academic example with multiple agents
          on one graph. The maintainer selected dark matter in the follow-up choice. These are design
-         requests, not evidence of improved adoption or research quality."
+         requests, not evidence of improved adoption or research quality. The maintainer later
+         found the background-saving headline unclear and requested wording about notifications
+         for important findings; the selected replacement names that selective notification."
     read: "2026-09-13"
   s.2026_09_13_worker_cleanup:
     name: "Python 3.13 CI failed while deleting a detached worker test directory"
@@ -2846,8 +2848,9 @@ judgments:
               future work and the agent's separate act of recording outcomes. The SVG references
               describe the logic; exporting them is not how the illustrated PNGs are produced. The
               maintainer found the worker avatar misleading. The software process now has no person,
-              and the direct title Save in the background. Return when needed. replaces the
-              parallel-tracks slogan and repeated footer."
+              and its headline now says Get notified only when something needs attention. The
+              maintainer found the earlier background-saving title unclear; naming the selective
+              notification makes the user-facing benefit explicit."
     reopened_by: "Readers at ordinary phone width cannot read the primary slogan or attribution,
                   mistake the fictional attribution for a historical quotation, or misunderstand
                   process boundaries in the diagrams. Revisit the compact icon if users confuse it
