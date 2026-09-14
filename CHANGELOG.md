@@ -1,5 +1,21 @@
 # Changelog
 
+## 1.6.0 — 2026-09-14
+
+- Document focused exports and recording scope in README (#78) — patch
+- Publish a GitHub release when a version lands (#82) — patch
+- Record that the record's form is read, its lines are judgments, and its storage stays in the reader (#61) — patch
+- Add Simple and Advanced modes with durable pending grounding (#84) — minor
+- Add shared assessment findings and scoped attention (#83) — minor
+- Scope capture exemptions and document reader compatibility (#81) — patch
+- Allow contradiction discovery and contextual followup gaps (#80) — patch
+- Preserve qualitative rules and existing document citations (#79) — minor
+- Compute readable formulas and record source reports atomically (#75) — minor
+- Clarify README reasoning and selective notifications (#74) — patch
+- Add focused graph exports and clarify knowledge recording scope (#76) — minor
+
+Decisions recorded: d.assessment_separates_findings_and_attention, d.export_preserves_recorded_context, d.github_packages_is_not_a_channel, d.merge_publishes_the_release, d.record_scope_preserves_learning, d.release_is_one_tree, d.shape_is_read_not_declared, d.storage_line_is_a_judgment, d.storage_stays_in_the_reader
+
 Reader compatibility for 1.6.0: records containing structured expressions or computed
 snapshots require a 1.6.0-or-later CLI/plugin/CI reader and writer. Upgrade every entrypoint
 before writing or reviewing such records with another installation. Expression evaluation
