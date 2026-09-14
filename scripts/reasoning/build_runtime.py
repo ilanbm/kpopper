@@ -312,7 +312,7 @@ def audit_linkage(executable, library, target, lean_root):
             raise ValueError("unexpected Windows dependencies: " + repr(deps))
         result["min_os"] = "Windows Server 2022 (CI-tested baseline)"
     result["dependencies"] = deps
-    result["inspection"] = text
+    result["inspection"] = text.replace(str(executable), Path(executable).name).replace(str(library), Path(library).name)
     return result
 
 

@@ -110,6 +110,13 @@ class ArchiveContractTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "dependencies"):
                 builder.audit_linkage("binary", "gmp", "linux-x86_64", Path("."))
 
+    def test_linkage_receipt_removes_private_build_paths(self):
+        dependency = "DLL Name: libgmp-10.dll\nDLL Name: KERNEL32.dll\n"
+        with patch.object(builder, "run", return_value="/private/build/evaluator.exe\n" + dependency):
+            receipt = builder.audit_linkage("/private/build/evaluator.exe", "/private/build/libgmp-10.dll", "windows-x86_64", Path("."))
+        self.assertNotIn("/private/build", receipt["inspection"])
+        self.assertIn("evaluator.exe", receipt["inspection"])
+
     def test_windows_audit_refuses_missing_gmp_dll(self):
         with patch.object(builder, "run", return_value="DLL Name: KERNEL32.dll"):
             with self.assertRaisesRegex(ValueError, "dependencies"):
