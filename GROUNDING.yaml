@@ -1309,7 +1309,7 @@ known:
     of: "2026-09-10"
 
   m.skill_bytes_largest:
-    v: 21301
+    v: 21668
     # set 2026-09-14: Measured by skill_bytes_largest after the recording guidance update
     # set 2026-09-12: measured by skill_bytes_largest after the skills learned the entry file and the directory beside it
     # set 2026-09-11: measured by skill_bytes_largest at a51bc75 with the working tree changed

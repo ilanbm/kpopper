@@ -891,6 +891,13 @@ localization and checks on stale explanatory text, see the [page reference](skil
 This table describes the current repository. Check the [changelog](CHANGELOG.md) when
 updating an older installation; a merged feature may still be awaiting a release.
 
+Records with structured expressions and computed snapshots require kpopper 1.6.0 or later
+across the CLI, plugins and CI. Upgrade them together before writing or reviewing those
+records with another installation; [reader compatibility](skills/kpopper/EXPRESSIONS.md#reader-compatibility)
+explains the old-writer risk and the separate Lean setup requirement. On native Windows,
+use individual `add`/`set` writes and deliberate judgment reviews; durable report batching
+requires POSIX file locking.
+
 | Status | Capability |
 |---|---|
 | Available | YAML records, source references, judgment checks, dependency tracing, review snapshots, hypotheses and consolidation. |
