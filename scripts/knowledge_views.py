@@ -50,6 +50,8 @@ def overlay(paths, doc, *, read_mode='live'):
     if read_mode != 'live':
         raise ValueError('read mode must be live or frozen')
     project = project_for(paths)
+    if G.P._CAPTURE_READS.get() is not None:
+        doc.capture_config = copy.deepcopy(project.config())
     doc.private_drafts = G.P._peer('recording').private_drafts(project)
     if not project.git or project.config()['mode'] != 'advanced':
         return doc
@@ -58,6 +60,8 @@ def overlay(paths, doc, *, read_mode='live'):
         return doc
     snap = G.Store(project).snapshot()
     doc.pending_ref = snap['ref']
+    # Preserve immutable evidence for portable strict capture.
+    doc.pending_snapshot = copy.deepcopy(snap)
     if not snap['bundles']:
         return doc
     holders = {}
