@@ -98,6 +98,13 @@ in a day fold into one release if nobody merges it in between. After it lands:
 claude plugin update kpopper@kpopper
 ```
 
+That same push tags the commit `vx.y.z` and opens a GitHub release carrying the changelog
+entry, with the `.whl` and `.tar.gz` built from that very commit attached. Those two files
+are what an upload to PyPI should use: the tag, the text and the files all come from one
+tree, which is not true of anything built by hand afterwards. Only the commit that moves the
+version publishes, so a release that failed is made by rerunning its own run rather than by
+pushing again.
+
 The pull request is opened by the workflow's own token, which runs no checks of its own, so
 the script runs `kpopper check` and `kpopper page --verify` on the release tree before pushing
 it. One repository setting must allow it, once: *Settings → Actions → General → Workflow

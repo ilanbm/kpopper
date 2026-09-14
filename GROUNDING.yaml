@@ -387,6 +387,15 @@ sources:
          the six host adapters, the root layouts of .github, .claude and .codex, the README's own
          word use, and a dry run of a judgment rewrite through the door"
     read: "2026-09-12"
+  s.2026_09_13_github_releases:
+    asked: "הPRs של הreleases ממש ממש טוב, הקונבציה של גוגל מצויינת. רק שאלה אחת, האם אפשר גם שזה
+            ישתמש בreleases שיש בריפו בגיטהב? ובpackages?"
+    name: "The session that asked whether a release could also reach GitHub's own releases and
+           packages. What it found: three versions had been released that day - 1.5.0, 1.5.1 and
+           1.5.2 - and the repository held no tag and no release for any of them, so the changelog
+           was the only place a released version was written down"
+    from: "this session"
+    of: "2026-09-13"
   s.2026_09_13_large_hero:
     asked: "1, אבל לאן העיניים שלו אמורות להסתכל עפי כללי המרקטינג?"
     name: "The maintainer chose the corrected large-portrait hero, asked about gaze direction, and
@@ -497,6 +506,15 @@ sources:
          and removes its lease after producing the receipt. The revised test passed 25 repetitions
          and the 83-test ingestion suite on Python 3.13."
     read: "2026-09-13"
+  s.2026_09_14_publish_review:
+    name: "A review of the publishing change before it landed. What it found: the first version
+           tagged the commit that moved the version while building the files and reading the
+           changelog from the checkout, so a release could carry files from a tree its tag does not
+           point at - and the concurrency group it ran under drops a pending run when a newer one
+           queues, whatever cancel-in-progress says, so two releases landing close together could
+           leave the first unpublished"
+    from: "a review of the change"
+    of: "2026-09-14"
   s.background_ingestion:
     name: "Background capture and selective delivery contract"
     file: "skills/kpopper/INGESTION.md"
@@ -948,6 +966,14 @@ known:
     from: "scripts/provenance.py"
     at: "REOPENED, ARRANGEMENT_PROSE and IDENTITIES - reopened_by, request, replaced, also"
     of: "2026-09-04"
+  p.github_python_registries:
+    v: 0
+    name: "Python registries GitHub Packages offers"
+    from: "the GitHub Packages introduction"
+    at: "the supported-formats table"
+    of: "2026-09-13"
+    distinct_from: lit.github_registries
+    # distinct 2026-09-14: one reading of the same table, two jobs: the list is what a person reads to see which ecosystems are served, the count is the one number a falsifier can compare against
   p.hypothesis_homes:
     v: 1
     name: "Places the reader reads hypothesis files from"
@@ -1043,6 +1069,13 @@ known:
     name: "The opener on the same record when clean, characters"
     from: "measured on a live record of 107 entries"
     of: "2026-09-01"
+  lit.github_registries:
+    v: "GitHub Packages hosts npm, RubyGems, Maven, Gradle, NuGet and containers; it has no Python
+        registry, so pip installs cannot come from it"
+    name: "What GitHub Packages hosts"
+    from: "the GitHub Packages introduction"
+    at: "the supported-formats table"
+    of: "2026-09-13"
   lit.name_risk:
     v: "bare-term search is owned by a fandom; the org and handle are taken; every package
         registry is free; qualified search works"
@@ -2124,6 +2157,27 @@ judgments:
                                    truth is pending - its premises in rests_on, its claim in verdict,
                                    what would refute its success in wrong_if - and the merge is its
                                    test"
+  d.github_packages_is_not_a_channel:
+    rests_on: [p.github_python_registries, lit.github_registries, d.npm_holds_the_name]
+    verdict: "GitHub Packages is not a channel for this tree - the python package cannot live there
+              at all, and an npm copy there would hold nothing the npm package exists to hold"
+    because: "The registry a person installs from is PyPI, and GitHub Packages offers no Python
+              registry to move it to - that half is not a preference. The npm half could go: a scoped
+              copy on the GitHub registry. But the npm package exists to hold a name, and a name is
+              held where people look for it; a copy under another host reserves nothing, and from a
+              closed repository it asks for a token before it will install at all. That is a second
+              place for the same files to live and drift, bought for no reach and no claim - the
+              mistake this tree already refuses for its reader. What was actually wanted here is that
+              an install stops lagging a merge, and that is the registries' own identity handshake,
+              not a second registry."
+    wrong_if: {expr: "p.github_python_registries > 0"}
+    seen:
+      p.github_python_registries: 0
+      lit.github_registries: "GitHub Packages hosts npm, RubyGems, Maven, Gradle, NuGet and
+                              containers; it has no Python registry, so pip installs cannot come from
+                              it"
+      d.npm_holds_the_name: "the npm name is held against the day this becomes a Node tool, and it
+                             is held by the browser checks rather than by a placeholder"
   d.home_beside_the_entry:
     verdict: "everything a record keeps beside itself lives in one directory, .kpopper, beside the
               file the reader opens first - hypotheses/, view.yaml, measure.yaml, session.json,
@@ -2387,6 +2441,25 @@ judgments:
                                           a coverage gap exists, or a person asks"
     distinct_from: d.minimal_repair
     # distinct 2026-09-04: minimal repair is how much structural change a fired trigger buys; this is what may fire one at all
+  d.merge_publishes_the_release:
+    rests_on: [d.release_is_its_own_pull_request, s.2026_09_13_github_releases]
+    verdict: "the push that lands a version publishes it - tagged at the commit that moved the
+              version, carrying that version's changelog entry and the files built from that commit"
+    because: "Three versions were released in one day and left nothing to point at: no tag, no
+              release, only a changelog section. And the files that reach a registry were built by
+              hand from a directory nobody clears, so what a person installs was never what any check
+              ran against. The commit that moved the version is the one place those two can be tied
+              together, and the merge is the moment it exists - a release built anywhere else is a
+              claim about a tree rather than that tree. The pull request cannot do it, because until
+              it merges its commit is not on the branch anyone installs from."
+    blocked_on: "observational: falsified if uploads to the registries keep using locally built
+                 files instead of these, or if a version lands with the publish step red and nobody
+                 notices until the next one"
+    seen:
+      d.release_is_its_own_pull_request: "the version moves in a release pull request of its own,
+                                          computed from what merged since the last release; a feature
+                                          pull request never touches it"
+      s.2026_09_13_github_releases: "read 2026-09-13"
   d.named_until_read:
     rests_on: [s.2026_09_10_skills_split, d.hooks_carry_pointers]
     verdict: "an entry is named until it is read: a read leg marks the ids that passed through a
@@ -2994,6 +3067,26 @@ judgments:
                                    truth is pending - its premises in rests_on, its claim in verdict,
                                    what would refute its success in wrong_if - and the merge is its
                                    test"
+  d.release_is_one_tree:
+    rests_on: [d.merge_publishes_the_release, s.2026_09_14_publish_review]
+    verdict: "a release is made from a single commit - the tag, the text and the attached files all
+              come from it, and only the commit that moves the version publishes"
+    because: "The first shape of this tagged the commit that moved the version while building the
+              files from whatever was checked out, which on any later push is a different tree: the
+              tag would have said one thing and the wheel beside it another, and nobody downloading
+              it could tell. Publishing only from the commit that moved the version makes the three
+              agree by construction rather than by care, and costs the ability to tag an old version
+              after the fact - which was never worth having, because the files for it would have come
+              from the wrong tree anyway. What it also costs is retrying on the next push, and that
+              is what rerunning a run is for: it replays the same commit."
+    blocked_on: "observational: falsified if a release is ever wanted for a version already behind
+                 main, or if a failed publish is left unmade because rerunning its own run is not
+                 reachable by whoever notices"
+    seen:
+      d.merge_publishes_the_release: "the push that lands a version publishes it - tagged at the
+                                      commit that moved the version, carrying that version's
+                                      changelog entry and the files built from that commit"
+      s.2026_09_14_publish_review: "read 2026-09-14"
   d.relevance_stays_declared:
     rests_on: [doc.fact_moves, m.record_scale]
     verdict: "retrieval follows declared edges and names; no learned relevance at record scale"
