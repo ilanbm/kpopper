@@ -39,9 +39,9 @@ STATE_MEANINGS = {
 def review_readings(judgment, raw, ids, judgments, selected):
     """A bounded display of the ordinary reader's comparisons, not a new evaluator.
 
-    Only selected current bodies supply displayed readings. Missing records remain
-    distinguishable from present records outside the excerpt. A source/rule can have
-    a recorded reading even when the ordinary scalar comparator cannot compare it.
+    Compare against the full record, then omit unselected current values. Missing
+    records remain distinguishable from present records outside the excerpt. A
+    source/rule can have a reading even when the scalar reader cannot compare it.
     """
     moves = {dep: state for dep, _, _, state in P.moved_deps(judgment, raw, ids)}
     rows = []
@@ -51,8 +51,6 @@ def review_readings(judgment, raw, ids, judgments, selected):
                'at_review': judgment['snap'].get(dep)}
         if dep not in ids:
             row.update(current_status='missing', comparison='unavailable')
-        elif dep not in selected:
-            row.update(current_status='omitted', comparison='not_shown')
         else:
             body = raw.get(dep)
             comparable = P.value_of(raw, ids, dep)
@@ -94,6 +92,10 @@ def review_readings(judgment, raw, ids, judgments, selected):
                 row['comparison'] = 'not_compared'
             else:
                 row['comparison'] = moves.get(dep, 'same')
+        if dep in ids and dep not in selected:
+            row['current_status'] = 'omitted'
+            for field in ('current', 'current_calculated', 'unit', 'unavailable_reason'):
+                row.pop(field, None)
         rows.append(row)
     return rows, max(0, len(deps) - PREMISE_ROWS)
 
@@ -171,12 +173,16 @@ def project(paths, seeds, direction='support', depth=1, max_nodes=12):
                       'kind': 'missing' if missing else 'judgment' if nid in judgments
                       else 'computed' if P.is_builtin(nid) else sections.get(nid, 'entry')}
         if nid in judgments:
+            if not isinstance(body.get(fields['deps']), list):
+                raise ValueError(f"{nid}: {fields['deps']} must be a list of entry IDs")
             node = nodes[nid]
             node['readings'], node['omitted_readings'] = review_readings(
                 judgments[nid], raw, ids, judgments, distances)
             predicate = judgments[nid]['pred']
             node['condition'] = {'expression': predicate,
-                                 'result': P.evaluate(predicate, raw, ids) if predicate else None}
+                                 'result': P.evaluate(predicate, raw, ids) if predicate else None,
+                                 'undeclared_reads': sorted({ref for ref in P.predicate_refs(predicate)
+                                     if ref in ids and ref not in judgments[nid]['deps']})}
         elif isinstance(body, dict) and isinstance(body.get('rule'), dict):
             nodes[nid]['calculation'] = P.E.current(raw, ids, nid)
     internal = [edge for edge in edges if edge[0] in nodes and edge[2] in nodes]
@@ -245,7 +251,7 @@ def reading_table(node):
                    'muted': 'changed; within condition; no review flag',
                    'crossed': 'changed; declared condition holds',
                    'unreviewed': 'no historical reading', 'not_compared': 'not compared by reader',
-                   'unavailable': 'not compared', 'not_shown': 'not shown',
+                   'unavailable': 'not compared',
                    'formula_only': 'historical formula only; no historical result'}
     for row in node['readings']:
         old = clipped(row['at_review'], CELL_CHARS) if row['has_review'] else 'not recorded'
@@ -330,6 +336,10 @@ def render_markdown(packet, details=False):
                              f"{clipped(P.predicate_text(condition['expression']))} → {outcome}.")
             else:
                 lines.append('- No executable condition declared.')
+            if condition['undeclared_reads']:
+                lines.append('- Condition reads undeclared dependencies: ' +
+                             clipped(', '.join(condition['undeclared_reads'])) +
+                             '. Changes to these inputs do not follow the declared dependency links.')
             lines.extend([''] + reading_table(node))
         if details:
             lines.extend(['', 'Recorded fields:'])

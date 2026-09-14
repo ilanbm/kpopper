@@ -1961,10 +1961,11 @@ judgments:
               details. Label historical and current readings separately, distinguish omitted bodies
               from missing records, and retain simultaneous condition results and reader flags
               without changing the record format or evaluation policy."
-    because: "A focused excerpt can omit the current bodies while still carrying historical readings
-              and a condition result computed from the full record. Explicit labels and selection
-              limits preserve those distinctions; readable text also remains useful when diagrams are
-              unavailable."
+    because: "A focused excerpt can omit current bodies while full-record comparisons and condition
+              results remain known. Selection limits which values are displayed, not whether their
+              comparison is reported. A condition result does not establish that its dependency links
+              are complete, and malformed dependency text must not become fabricated entry links.
+              Readable text preserves these distinctions when diagrams are unavailable."
     reopened_by: "Readers of supported excerpts confuse historical and current values, treat omitted
                   bodies as missing records or changed premises as fired conditions, lose a
                   simultaneous finding, or require unnecessary stops and extensive rereading to
