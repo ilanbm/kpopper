@@ -486,6 +486,47 @@ def _text_of(f):
         return fh.read()
 
 
+def _guard_private_hypotheses(paths, doc, hyps, action, extra_roots=()):
+    """Check original heads and relevant complete source worlds before a lossy write.
+
+    Refutation deliberately keeps only a claim; branch comparison deliberately prunes
+    unchanged entries. Neither transformation may strip the permission that governed
+    the original claim or an unchanged source it depends on.
+    """
+    R, G = P._peer('recording'), P._peer('pending_grounding')
+    combined = doc
+    for hyp in hyps:
+        combined = P.layered(combined, hyp)
+    for hyp in hyps:
+        context = hyp.get('privacy_context', P.layered(combined, hyp))
+        heads = {'hypothesis': hyp.get('head', {}),
+                 'record': context.get('meta', {}),
+                 'source_record': hyp.get('privacy_head', {})}
+        entries = G.entries(context)
+        roots = set(G.entries(hyp['doc'])) | set(extra_roots)
+        for text in G._strings(heads):
+            if text in entries:
+                roots.add(text)
+            roots.update(name for name in P.refs_in(text) if not P.is_builtin(name))
+            roots.update(name for name in P.ID.findall(text) if name in entries)
+        # The selected source of a refutation belongs to the current record even when
+        # the proposal came from another complete code-world.
+        selected = {}
+        try:
+            if roots:
+                selected = G.closure(context, sorted(roots))
+        except ValueError:
+            raise P.Refused('refused - hypothesis source closure could not be checked; original retained')
+        if R.private_marker(heads) or R.private_marker(hyp['doc']) or R.private_marker(selected):
+            retained = dict(selected, hypothesis=heads['hypothesis'],
+                            source_record_metadata=heads['source_record'],
+                            record_metadata=heads['record'])
+            intent = dict(action, hypothesis=hyp['name'])
+            receipt = R.draft(P._peer('knowledge_views').project_for(paths), intent, retained,
+                              'private hypothesis or source permission; original retained without publication')
+            raise P.Refused('private draft retained at ' + receipt['path'] + '; original hypothesis retained')
+
+
 def fold(paths, names=(), refs=(), stamp=None):
     """The union written into the base, under one lock from the reading to the deletion:
     the record and its hypotheses read, the union tested and its report printed, then -
@@ -499,13 +540,7 @@ def fold(paths, names=(), refs=(), stamp=None):
     paths = P._peer('knowledge_views').write_paths(paths)
     with P._locked(paths[0], project=project):
         doc, hyps = read(paths, names, refs)
-        R = P._peer('recording')
-        for hyp in hyps:
-            if R.private_marker(hyp['doc']):
-                receipt = R.draft(P._peer('knowledge_views').project_for(paths),
-                    {'kind': 'consolidate', 'hypothesis': hyp['name']}, hyp['doc'],
-                    'private hypothesis retained; cannot fold into the project record')
-                raise P.Refused('private draft retained at ' + receipt['path'])
+        _guard_private_hypotheses(paths, doc, hyps, {'kind': 'consolidate'})
         if not hyps:
             print("no hypotheses beside the record - nothing to consolidate")
             return 0
@@ -641,6 +676,8 @@ def refute(paths, name, why, source=None, stamp=None):
         ids, jud, fields = P.infer(doc)
         raw = P.with_builtins(doc, ids, jud, fields)
         src = _session_source(doc, ids, raw, source)
+        _guard_private_hypotheses(paths, doc, [h],
+            {'kind': 'refute', 'why': why, 'source': src}, extra_roots=[src])
         nid, n = "hyp." + re.sub(r"[^A-Za-z0-9_]", "_", name), 1
         while nid in ids:
             n += 1
@@ -793,13 +830,18 @@ def from_ref(paths, ref, doc=None):
                 pruned.setdefault(col, {})[k] = b
     head = {"claim": f"what {ref} committed ({sha[:7]}), read as a hypothesis", "born": day}
     out = [hypothesis(ref, pruned, head, None, texts)]
+    out[0]['privacy_context'] = rdoc
+    out[0]['privacy_head'] = {key: rdoc[key] for key in ('meta', 'hypothesis') if key in rdoc}
     for n, rh in sorted(rdoc.hypotheses.items()):
         if rh["error"]:
             raise P.Refused(f"refused - hypothesis {n} at {ref} could not be read: {rh['error']}")
         mine = doc.hypotheses.get(n)
         if mine and not mine["error"] and mine["doc"] == rh["doc"] and mine["head"] == rh["head"]:
             continue
-        out.append(hypothesis(f"{ref}:{n}", rh["doc"], rh["head"], None, {n: htexts.get(n, [])}))
+        imported = hypothesis(f"{ref}:{n}", rh["doc"], rh["head"], None, {n: htexts.get(n, [])})
+        imported['privacy_context'] = P.layered(rdoc, rh)
+        imported['privacy_head'] = {key: rdoc[key] for key in ('meta', 'hypothesis') if key in rdoc}
+        out.append(imported)
     return out
 
 
