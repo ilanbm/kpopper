@@ -48,6 +48,77 @@
         },
         "integrity_checks": {
           "type": "string"
+        },
+        "knowledge": {
+          "type": "object",
+          "properties": {
+            "read_mode": {
+              "enum": [
+                "live",
+                "frozen",
+                "supplied"
+              ]
+            },
+            "contributions_checked": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "conflict_sources": {
+              "type": "object",
+              "additionalProperties": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            },
+            "target": {
+              "type": "object",
+              "properties": {
+                "status": {
+                  "enum": [
+                    "observed",
+                    "unavailable",
+                    "unassessed"
+                  ]
+                },
+                "ref": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "revision": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "reason": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                }
+              },
+              "required": [
+                "status",
+                "ref",
+                "revision",
+                "reason"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "read_mode",
+            "contributions_checked",
+            "conflict_sources",
+            "target"
+          ],
+          "additionalProperties": false
         }
       },
       "required": [

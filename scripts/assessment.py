@@ -260,6 +260,12 @@ def assess(doc, ids, judgments, fields, raw, policy=POLICY):
     ids = {nid for nid in ids if nid in entries or P.is_builtin(nid)}
     hypotheses = getattr(doc, 'hypotheses', {})
     skipped = {name: hyp['error'] for name, hyp in sorted(hypotheses.items()) if hyp['error']}
+    contributions = sorted(name for name, hyp in hypotheses.items()
+                           if hyp.get('kind') == 'contribution' and name not in skipped)
+    conflicts = getattr(doc, 'knowledge_conflicts', {})
+    target = getattr(doc, 'knowledge_target', None)
+    target_error = getattr(doc, 'target_unavailable', None)
+    read_mode = getattr(doc, 'read_mode', 'supplied')
     disputed = P.contested(doc)
     nodes = {}
     for nid in sorted(ids):
@@ -273,19 +279,33 @@ def assess(doc, ids, judgments, fields, raw, policy=POLICY):
         alternatives = [{'hypothesis': name, 'id': nid} for name, hyp in sorted(hypotheses.items())
                         if not hyp['error'] and nid in hyp['ids']]
         state['contention'] = {'status': 'detected' if nid in disputed else 'none_detected',
-                               'method': 'readable_hypothesis_pairs',
+                               'method': 'readable_hypothesis_pairs_and_knowledge_identity' if nid in conflicts
+                                         else 'readable_hypothesis_pairs',
                                'alternatives': alternatives,
                                'witnesses': [{'hypothesis': name, 'claim': copy.deepcopy(claim)}
                                              for name, claim in disputed.get(nid, [])]}
         nodes[nid] = {'body': copy.deepcopy(raw.get(nid)), 'state': state,
                       'attention': attention(state, policy)}
-    scope = {'base': 'supplied_record', 'hypotheses_checked': sorted(set(hypotheses) - set(skipped)),
+    scope = {'base': 'supplied_record',
+             'hypotheses_checked': sorted(set(hypotheses) - set(skipped) - set(contributions)),
              'hypotheses_skipped': skipped, 'external_sources_fetched': False,
-             'coverage': 'partial' if skipped else 'supplied_record',
+             'coverage': 'partial' if skipped or target_error else 'supplied_record',
              'integrity_checks': 'listed per node; not a complete check or page verification'}
+    scope['knowledge'] = {'read_mode': read_mode, 'contributions_checked': contributions,
+        'conflict_sources': {nid: [name for name, _ in variants] for nid, variants in sorted(conflicts.items())},
+        'target': {'status': 'unavailable' if target_error else 'observed' if target else 'unassessed',
+                   'ref': target.get('ref') if target else None,
+                   'revision': target.get('revision') if target else None, 'reason': target_error}}
     revision_data = {'record': doc, 'hypotheses': {
         name: {key: hyp[key] for key in ('doc', 'head', 'error')}
         for name, hyp in sorted(hypotheses.items())}}
+    # Record attributes carry live knowledge context outside the authored YAML.
+    # Bind complete typed conflict bodies, while the public scope exposes only
+    # holder names and immutable target identity, never omitted evidence bodies.
+    revision_data['knowledge_context'] = P._peer('pending_grounding').identity({
+        'read_mode': read_mode,
+        'conflicts': {nid: [list(variant) for variant in variants] for nid, variants in conflicts.items()},
+        'target': target, 'target_unavailable': target_error})
     revision = _digest(revision_data)
     return {'schema_version': SCHEMA_VERSION, 'assessment_profile': PROFILE, 'attention_policy': policy,
             'record_revision': revision, 'scope': scope, 'nodes': nodes,

@@ -93,8 +93,10 @@ def overlay(paths, doc, *, read_mode='live'):
         ref = 'refs/remotes/' + publication['remote'] + '/' + publication['target']
         if observed.get('scope') == scope_identity(publication) and observed.get('target'):
             ref = observed['target']
+        doc.knowledge_target = {'ref': ref, 'revision': None}
         resolved = M.git(project.root, 'rev-parse', '--verify', ref + '^{commit}', check=False)
         if resolved.returncode == 0:
+            doc.knowledge_target['revision'] = resolved.stdout.decode().strip()
             try:
                 # The existing bounded reader follows committed pointers and named
                 # hypotheses; no private working files or target code are imported.
