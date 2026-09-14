@@ -38,7 +38,7 @@ TERMINAL = {"applied", "needs_primary", "superseded", "error"}
 ACTIONABLE = {"MOVED", "UNCHECKED", "BROKEN", "BLOCKED", "UNKNOWN"}
 AUTO_STATES = {"captured", "processing"}
 EVENT_FIELDS = {"event_id", "session_id", "source_quote", "target", "value", "date",
-                "kind", "question", "reason", "updates", "record_sha256"}
+                "kind", "question", "reason", "updates", "record_sha256", "source", "at"}
 MAX_REPREPARES = 2
 
 
@@ -197,6 +197,9 @@ def _validate_envelope(envelope):
     if not isinstance(quote, str) or not quote.strip():
         raise ValueError("source_quote must be non-empty text")
     out = dict(envelope)
+    for field in ("source", "at"):
+        if field in out and (not isinstance(out[field], str) or not out[field].strip()):
+            raise ValueError(field + " must be non-empty text")
     if out.get("record_sha256") is not None and (not isinstance(out["record_sha256"], str)
             or not re.fullmatch(r"[0-9a-f]{64}", out["record_sha256"])):
         raise ValueError("record_sha256 must be the hash returned by the prior record read")
@@ -258,7 +261,7 @@ def _record_world(record):
     return doc, ids, judgments, fields, raw
 
 
-def _target(record, name):
+def _target(record, name, source_collection=None):
     if not isinstance(name, str) or not name:
         raise ValueError("the report does not identify one existing target")
     doc, ids, judgments, fields, raw = _record_world(record)
@@ -294,12 +297,13 @@ def _target(record, name):
         if isinstance(candidate, dict) and cited not in judgments and \
                 not any(field in candidate for field in ("v", "quoted", "rule")):
             cited_homes.append(collection)
-    if len(cited_homes) == 1:
-        source_collection = cited_homes[0]
-    elif len(source_collections) == 1:
-        source_collection = source_collections[0]
-    else:
-        raise ValueError("the record does not identify one existing source collection")
+    if source_collection is None:
+        if len(cited_homes) == 1:
+            source_collection = cited_homes[0]
+        elif len(source_collections) == 1:
+            source_collection = source_collections[0]
+        else:
+            raise ValueError("the record does not identify one existing source collection")
     return {
         "id": name,
         "value": value,
@@ -325,21 +329,45 @@ def _batch_fingerprint(record, updates):
     return _body_hash({op["id"]: raw.get(op["id"]) for op in updates})
 
 
+def _cited_source_collection(doc, ids, judgments, raw, source):
+    """An explicit report citation has the same source role as ordinary set --source."""
+    body = raw.get(source)
+    if source not in ids or source in judgments or P.is_builtin(source) \
+            or not isinstance(body, dict) or any(key in body for key in ("v", "quoted", "rule")) \
+            or not any(body.get(key) for key in ("asked", "file", "url", "of", "read")):
+        raise ValueError(source + " is not a recorded source; add the source before citing it")
+    homes = [name for name, members in P.collections_of(doc).items() if source in members]
+    if len(homes) != 1:
+        raise ValueError("the recorded source must belong to one existing collection")
+    return homes[0]
+
+
 def _report_target(record, envelope):
-    """Reading updates bind their targets; new claims bind the whole interpreted record."""
+    """New claims and explicit source citations bind the whole interpreted record."""
     expected = envelope.get("record_sha256")
     has_additions = any(op["kind"] == "add" for op in envelope.get("updates", []))
     if has_additions and expected is None:
         raise ValueError("new entries require record_sha256 from the primary's prior open --json or search")
+    source = envelope.get("source")
+    if source is not None and expected is None:
+        raise ValueError("an existing source citation requires record_sha256 from the primary's prior open --json or search")
     if expected is not None and _sha(Path(record).read_bytes()) != expected:
         raise ValueError("record changed since the primary read it; reread the premises before resubmitting")
-    if "updates" not in envelope:
+    if "updates" not in envelope and source is None:
         return _target(record, envelope.get("target"))
     doc, ids, judgments, fields, raw = _record_world(record)
-    homes = set()
+    citation_home = _cited_source_collection(doc, ids, judgments, raw, source) if source is not None else None
+    if source is not None and not envelope.get("at"):
+        operations = envelope.get("updates", [{"kind": "set", "id": envelope.get("target")}])
+        if any((op["kind"] == "set" or any(key in op["body"] for key in ("v", "quoted")))
+               and not op.get("at") for op in operations):
+            raise ValueError("an existing source citation requires at for each reading, or a shared envelope.at")
+    if "updates" not in envelope:
+        return _target(record, envelope.get("target"), citation_home)
+    homes = {citation_home} if citation_home else set()
     for op in envelope["updates"]:
         if op["kind"] == "set":
-            old = _target(record, op["id"])
+            old = _target(record, op["id"], citation_home)
             if _basic_type(op["value"]) != old["type"]:
                 raise ValueError(op["id"] + " has a different scalar type")
             homes.add(old["source_collection"])
@@ -350,7 +378,7 @@ def _report_target(record, envelope):
             if fields.get("snapshot") in body or "seen" in body:
                 raise ValueError("judgment snapshots are computed by the writer")
             if any(key in body for key in ("from", "at", "of", "src", "source")):
-                raise ValueError("batch readings cite the captured report; use update.at for its location")
+                raise ValueError("batch citations use envelope.source and update.at, not citation fields inside body")
             stored = [key for key in ("v", "quoted") if key in body]
             derived = "rule" in body
             judgment = fields.get("deps") in body
@@ -552,6 +580,11 @@ def _finish(root, event, envelope, state, reason, signals=None, **extra):
     }
     if "updates" in envelope:
         receipt["updates"] = envelope["updates"]
+    if "source" in envelope:
+        receipt["cited_source"] = envelope["source"] if state == "applied" else None
+        receipt["date"] = envelope.get("date")
+    if "at" in envelope:
+        receipt["at"] = envelope["at"]
     result = {"receipt": receipt, "signals": signals}
     _save(root / "results" / (eid + ".json"), result)
     _publish(root, result)
@@ -672,18 +705,26 @@ def _prepare(rec, root, event, envelope, before_bytes):
     mark = draft / "mark.json"
     paths = [str(shadow)]
     source_id = "s.ingest_" + eid
+    cited_source = envelope.get("source", source_id)
+    if envelope.get("source") == source_id:
+        raise ValueError("a report cannot cite its own capture as an existing source")
     date = envelope["date"]
     diagnostics = []
     gate_output = io.StringIO()
     with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):
         P.mark(str(mark), paths)
         seeds = _report_seeds(envelope)
+        source_body = {"name": "Captured report", "file": event["source_file"], "read": date,
+                       "recorded_for": "Update " + (", ".join(seeds) if isinstance(seeds, list) else seeds) + " from this captured report."}
+        if "source" in envelope:
+            source_body["from"] = cited_source
+            if "at" in envelope:
+                source_body["at"] = envelope["at"]
         P.apply(paths, {
             "kind": "add", "id": source_id, "as_of": date, "why": None,
             "into": event["target_snapshot"]["source_collection"],
             "hypothesis": None, "source": None, "at": None,
-            "body": {"name": "Captured report", "file": event["source_file"], "read": date,
-                     "recorded_for": "Update " + (", ".join(seeds) if isinstance(seeds, list) else seeds) + " from this captured report."},
+            "body": source_body,
         })
         operations = envelope.get("updates", [{"kind": "set", "id": envelope.get("target"),
                                                "value": envelope.get("value")}])
@@ -693,13 +734,13 @@ def _prepare(rec, root, event, envelope, before_bytes):
         for op in operations:
             action = {"kind": op["kind"], "id": op["id"], "as_of": date, "why": None,
                       "into": op.get("into"), "hypothesis": None, "source": None, "at": None}
-            location = op.get("at", "entire captured report")
+            location = op.get("at", envelope.get("at", "entire captured report"))
             if op["kind"] == "set":
-                action.update(value=op["value"], source=source_id, at=location)
+                action.update(value=op["value"], source=cited_source, at=location)
             else:
                 body = copy.deepcopy(op["body"])
                 if "v" in body or "quoted" in body:
-                    body.update({"from": source_id, "at": location, "of": date})
+                    body.update({"from": cited_source, "at": location, "of": date})
                 action["body"] = body
             P.apply(paths, action, diagnostics=diagnostics)
         with contextlib.redirect_stdout(gate_output), contextlib.redirect_stderr(gate_output):

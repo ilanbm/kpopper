@@ -113,9 +113,47 @@ An existing reading uses `{"kind":"set","id":"cedar.packages","value":6}`. Each
 operation may specify `at` for its location within the retained quotation. There are at
 most 32 operations and one operation per ID. `add` accepts a new scalar reading (`v` or
 `quoted`), a `rule`, or a new judgment in the record's existing vocabulary. `into` can name
-an existing collection. Stored readings receive the captured source citation and date;
+an existing collection. Stored readings receive the captured source citation and date by default;
 judgment snapshots are filled by the canonical writer. Do not supply `from`, `at`, `of`,
 `src`, `source` or snapshot fields inside `body`.
+
+### Citing an existing document
+
+When a report comes from a document already recorded, supply its exact ID in the envelope's
+`source` field. Supply `at` for the location in that document, either once in the envelope
+or on each reading operation. An operation's `at` overrides the shared location. Do not
+guess a source from the target's old citation or reuse an old location without checking it.
+
+```json
+{
+  "source": "s.contract",
+  "at": "clause 3",
+  "record_sha256": "RECORD_SHA256_FROM_PRIOR_READ",
+  "source_quote": "Clause 3: shipping costs 90. Clause 4: capacity is five packages.",
+  "date": "2026-09-14",
+  "updates": [
+    {"kind": "set", "id": "shipping.cost", "value": 90},
+    {"kind": "add", "id": "shipping.capacity", "at": "clause 4", "body": {"v": 5}}
+  ]
+}
+```
+
+The readings cite `s.contract` directly, with their supplied locations and report date.
+The original source entry and prior judgment snapshots are preserved. The retained report
+still has its own source entry, linked back to `s.contract`; its exact quotation and envelope
+remain in the capture store. In the receipt, `source` continues to identify that capture,
+while `cited_source` names the existing source used by the applied readings.
+Event-bound documents check that source, the operation's effective location and the report
+date before using the receipt to describe a current reading.
+
+An explicit source must already be a recorded source, and requires `record_sha256` from
+the prior record read even for a single existing reading. A missing source, missing location,
+or changed record leaves the report needing primary handling, with no requested writes.
+This binds the source's recorded identity and metadata; it does not verify that the external
+document file or URL is unchanged or that the supplied quotation is accurate. The caller
+must read and cite the actual document. The same fields work with legacy `target`/`value`.
+Omitting `source` keeps the ordinary captured-report citation; a shared `at` then locates
+the quotation within that report.
 
 The agent supplies interpretation and declared links; the worker runs no model and adds no
 inferred relationships. Keep source speech in `source_quote` and the agent's conclusion in
@@ -131,7 +169,7 @@ an unchanged existing judgment is preserved when no other new check failure is i
 including when a previously missing input arrives. Ingestion never refreshes that judgment's
 snapshot; missing review history or a page-policy failure can still require primary handling.
 
-New entries require and bind to the record hash from the primary's read, checked both at
+New entries and explicit source citations require and bind to the record hash from the primary's read, checked both at
 capture and before commit. This binds recorded premises, not external source-file contents.
 If the hash is missing or the record changes before
 commit, the batch stays pending for primary review; it cannot silently give a conclusion

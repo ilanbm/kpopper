@@ -337,6 +337,48 @@ class RecordSources(unittest.TestCase):
         data = D.build(self.draft, self.manifest, self.root, NOW)
         self.assertEqual(data["sources"]["record"]["event"]["targets"], ["reading.reserve"])
 
+    def test_existing_source_events_bind_set_add_and_single_readings(self):
+        for kind in ('set', 'add', 'single'):
+            with self.subTest(kind=kind):
+                self.path.write_text(yaml.safe_dump(self.doc, sort_keys=False), encoding='utf-8')
+                envelope = {'event_id': kind, 'source': 's.report', 'at': 'shared line',
+                            'date': '2026-09-11', 'source_quote': 'Capacity 100; reserve 20.',
+                            'record_sha256': I._sha(self.path.read_bytes())}
+                if kind == 'single':
+                    envelope.update(target='reading.capacity', value=100)
+                else:
+                    envelope['updates'] = [{'kind': kind, 'id': 'reading.reserve' if kind == 'add' else 'reading.capacity',
+                                            'at': 'reserve line' if kind == 'add' else 'capacity line',
+                                            **({'body': {'v': 20}} if kind == 'add' else {'value': 100})}]
+                receipt = I.update(envelope, self.path, self.state)
+                self.assertEqual(receipt['state'], 'applied', receipt)
+                manifest = copy.deepcopy(self.manifest)
+                manifest['sources']['record'] = {**self.source, 'event_id': receipt['event_id'], 'state_dir': 'state'}
+                if kind == 'add':
+                    manifest['claims'][0]['inputs'][0]['pointer'] = '/reading.reserve/v'
+                data = D.build(self.draft, manifest, self.root, NOW)
+                selection = next(iter(data['sources']['record']['selections'].values()))
+                self.assertEqual(selection['citation']['source'], 's.report')
+                self.assertEqual(data['sources']['record']['event']['state'], 'applied')
+
+    def test_old_event_cannot_bind_same_value_with_a_new_location_or_date(self):
+        data = D.build(self.draft, self.manifest, self.root, NOW)
+        envelope = {'source': 's.report', 'at': 'capacity line', 'date': '2026-09-11',
+                    'source_quote': 'Capacity is 100.', 'record_sha256': I._sha(self.path.read_bytes()),
+                    'updates': [{'kind': 'set', 'id': 'reading.capacity', 'value': 100}]}
+        receipt = I.update(envelope, self.path, self.state)
+        self.assertEqual(receipt['state'], 'applied', receipt)
+        spec = {**self.source, 'event_id': receipt['event_id'], 'state_dir': 'state'}
+        updated = self.path.read_bytes()
+        self.assertEqual(D.refresh(data, {'record': spec}, self.root, LATER)['sources']['record']['event']['state'], 'applied')
+        for field, value in [('at', 'different line'), ('of', '2026-09-12')]:
+            with self.subTest(field=field):
+                changed = yaml.safe_load(updated)
+                changed['known']['reading.capacity'][field] = value
+                self.path.write_text(yaml.safe_dump(changed, sort_keys=False), encoding='utf-8')
+                with self.assertRaisesRegex(D.DocumentError, 'does not match'):
+                    D.refresh(data, {'record': spec}, self.root, LATER)
+
     def test_record_pointer_and_hypotheses_are_rejected_before_canonical_file_reads(self):
         for context in ("pointer", "hypothesis"):
             with self.subTest(context=context):

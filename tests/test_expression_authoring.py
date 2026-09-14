@@ -118,6 +118,40 @@ class Authoring(unittest.TestCase):
             self.add(nid, {'rule': rule})
             self.assertEqual(P.bodies(self.read())[nid]['rule'], rule)
 
+    def test_unknown_names_in_plain_rules_stay_text_with_or_without_lean(self):
+        original = self.path.read_bytes()
+        for rule in ('candidates - rejected', 'מועמדים - נדחים', 'order.price + unpriced'):
+            for available in (True, False):
+                with self.subTest(rule=rule, core_available=available):
+                    self.path.write_bytes(original)
+                    context = contextlib.nullcontext() if available else patch.object(
+                        P.E, '_core_type', side_effect=ValueError('core is not ready'))
+                    with context, patch.object(P.E, '_CORE', None):
+                        out = self.add('hr.shortlist', {'rule': rule})
+                    self.assertEqual(P.bodies(self.read())['hr.shortlist']['rule'], rule)
+                    self.assertIn('kept as text', out)
+                    self.assertIn('expr', out)
+                    self.assertEqual(self.read()['judgments'], self.doc['judgments'])
+
+    def test_explicit_rules_with_missing_inputs_remain_refused(self):
+        for rule in ({'expr': 'candidates - rejected'},
+                     {'op': 'sub', 'args': [{'ref': 'מועמדים'}, {'ref': 'נדחים'}]}):
+            before = self.path.read_bytes()
+            with self.assertRaises(P.Refused):
+                self.add('hr.shortlist', {'rule': rule})
+            self.assertEqual(self.path.read_bytes(), before)
+
+    @unittest.skipUnless(os.name == 'posix', 'durable ingestion requires POSIX locking')
+    def test_batch_keeps_qualitative_rules_and_returns_the_fallback_diagnostic(self):
+        report = {'date': '2026-09-14', 'source_quote': 'הכלל הוא מועמדים פחות נדחים.',
+                  'record_sha256': I._sha(self.path.read_bytes()),
+                  'updates': [{'kind': 'add', 'id': 'hr.shortlist',
+                               'body': {'rule': 'מועמדים - נדחים'}}]}
+        receipt = I.update(report, self.path, self.path.parent / 'state')
+        self.assertEqual(receipt['state'], 'applied', receipt)
+        self.assertEqual(P.bodies(self.read())['hr.shortlist']['rule'], 'מועמדים - נדחים')
+        self.assertIn('kept as text', ' '.join(receipt['diagnostics']))
+
     def test_a_hypothesis_uses_its_own_values_and_the_same_normalizer(self):
         before = self.path.read_bytes()
         with contextlib.redirect_stdout(io.StringIO()):
