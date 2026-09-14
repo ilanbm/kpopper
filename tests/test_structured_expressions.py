@@ -329,7 +329,7 @@ class StructuredRecord(unittest.TestCase):
         self.assertEqual(after["known"]["result.label"]["rule"], {"text": "old.id"})
         self.assertEqual(self.P.check_lines([str(self.path)])[0], [])
 
-    def test_migration_is_explicit_preserves_snapshots_and_refuses_new_failures(self):
+    def test_migration_is_explicit_preserves_snapshots_and_reports_newly_fired(self):
         from scripts.expression_cli import migrate
         import yaml
         self.doc["known"]["order.total"]["rule"] = "order.price * order.quantity"
@@ -345,10 +345,16 @@ class StructuredRecord(unittest.TestCase):
         self.doc["known"]["order.quantity"]["v"] = 10
         self.path.write_text(yaml.safe_dump(self.doc, sort_keys=False))
         before = self.path.read_bytes()
-        refused = migrate(self.path, apply=True)
-        self.assertFalse(refused["applied"])
-        self.assertTrue(refused["problems"])
+        preview = migrate(self.path)
+        self.assertEqual(preview["fired"], ["c.budget"])
+        self.assertEqual(preview["problems"], [])
         self.assertEqual(self.path.read_bytes(), before)
+        applied = migrate(self.path, apply=True)
+        self.assertTrue(applied["applied"], applied)
+        self.assertEqual(applied["fired"], preview["fired"])
+        after = yaml.safe_load(self.path.read_text())
+        self.assertEqual(after["judgments"]["c.budget"]["seen"], self.doc["judgments"]["c.budget"]["seen"])
+        self.assertTrue(any("c.budget: wrong_if holds" in line for line in self.P.check_lines([str(self.path)])[0]))
 
     def test_grounding_migration_preserves_the_hidden_brief(self):
         from scripts.expression_cli import migrate
