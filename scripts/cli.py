@@ -60,6 +60,7 @@ COMMANDS = {
     "review": ("ID [--as-of DATE]", "Record a judgment's review against current readings."),
     "document": ("OPERATION [OPTIONS]", "Create or refresh a standalone authored HTML document with evidence."),
     "page": ("[--open] [--out PATH] [--verify]", "Render or verify the knowledge page."),
+    "export": ("ID [ID ...] [--format FORMAT]", "Export a focused readable excerpt with optional Mermaid."),
     "where": ("", "Locate the record for this workspace."),
     "consolidate": ("[--dry-run] [NAME ...]", "Evaluate and reconcile recorded hypotheses."),
     "remeasure": ("[--run] [FILE]", "Inspect or run the record's measurement recipes."),
@@ -191,7 +192,7 @@ def main():
         root.error("Use kpopper open, kpopper map, or kpopper config; start is not a public command.")
     if cmd not in COMMANDS and cmd != "_agent":
         root.error("unknown command: " + cmd)
-    if cmd not in {"open", "map", "config", "_agent", "session", "ingest", "update", "document", "followups", "watch"} and rest in (["--help"], ["-h"]):
+    if cmd not in {"open", "map", "config", "_agent", "session", "ingest", "update", "document", "followups", "watch", "export"} and rest in (["--help"], ["-h"]):
         usage, description = COMMANDS[cmd]
         print("usage: kpopper " + cmd + (" " + usage if usage else "") + " [--json]\n\n" + description)
         if cmd in {"set", "add", "review", "same", "distinct"}:
@@ -273,8 +274,8 @@ def main():
         sys.exit(result.returncode)
     if cutoff < len(rest):
         rest = rest[:cutoff] + rest[cutoff + 1:]
-    if cmd in {"session", "ingest", "document"}:
-        script = {"session": "session_cli.py", "ingest": "ingestion.py", "document": "document_cli.py"}[cmd]
+    if cmd in {"session", "ingest", "document", "export"}:
+        script = {"session": "session_cli.py", "ingest": "ingestion.py", "document": "document_cli.py", "export": "export_graph.py"}[cmd]
         tool = [sys.executable, str(HERE / script)] + rest
         if os.name == "nt":
             sys.exit(subprocess.run(tool).returncode)

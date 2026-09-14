@@ -1,6 +1,6 @@
 ---
 name: record
-description: "Write what the work found into the project's knowledge record, so the next session inherits it instead of re-deriving it. Use the moment something worth keeping exists: a fact taken from a source, a rule worked out, a decision or conclusion, a measurement, a correction to a recorded value, or a question left open - and before finishing a session that produced any of these. The first write creates GROUNDING.yaml. Covers one-report update, add, set, review, same and distinct, judgments with a falsifier, and background capture."
+description: "Write what the work found into the project's knowledge record, so the next session inherits it instead of re-deriving it. Use the moment something worth keeping exists: a fact taken from a source, a rule worked out, a decision or conclusion, a measurement, a correction to a recorded value, or a question left open - and check for unrecorded findings before implementation, handoff (including a PR), or finishing work. Record within the user's write authorization. The first write creates GROUNDING.yaml. Covers one-report update, add, set, review, same and distinct, judgments with a falsifier, and background capture."
 ---
 
 # Record
@@ -11,24 +11,27 @@ Keep what the work produced while it is still in your hands: the source with its
 
 ## The first write
 
-Default to learning during the user's actual task. Create the record with the first useful
-finding worth revisiting, within the user's write authorization. A record containing only
-`sources`, `known` and `open` is a valid start; add judgments when there are actual conclusions.
-The reader fills `seen` when `add` creates one. Installation alone creates no file. A one-off
-can finish with no record.
+Record the first useful finding within the user's write authorization. A record with only
+`sources`, `known` and `open` is valid; add judgments for actual conclusions, with `seen` filled
+by `add`. Installation alone creates no file, and a one-off can finish without a record.
 
 Where no record resolves for the workspace, `kpopper add` creates `GROUNDING.yaml` at the repository root (the working directory outside git) with that first entry, and a later `add` extends it. A registered record that is unavailable is a location problem: restore it rather than starting another. The [shape reference](../kpopper/references/shape.md) shows the sections, pointer records and how a record lives outside a tree that cannot hold it.
 
-**Make a new record useful to its reader.** Give a short explanation and link to the saved
-finding when the `record` explanation is due. For a mapping or a record that benefits from a
-visual view, render and show the shipped page when the surface supports it. A simple first
-finding can be met in the conversation; creating a page is not an onboarding requirement.
+**Make a new record useful to its reader.** When its explanation is due, link and briefly explain
+the finding. Show the shipped page when a visual view helps and is supported; it is optional.
 
 ## Record what the work calls for
 
-During ordinary work, keep the findings and sources you actually use. A selected mapping or
-investigation makes discovery the task: follow `kpopper _agent guide`, stay inside the agreed
-scope and report its limits. The availability of more material is not a reason to survey it.
+"No schema changes" preserves format; it does not forbid authorized knowledge writes. Respect explicit
+read-only or record-write bans; do not turn a restriction inferred in a draft plan into a user prohibition.
+
+Before implementation or handoff (including a PR), check internally for useful unrecorded knowledge
+and actual write constraints. Reuse entries and authorization; do not ask routinely. If writes are
+prohibited, leave the record intact and note useful findings in the handoff. Otherwise avoid filler
+or duplicates. File changes and passing checks do not prove knowledge retention.
+
+A selected mapping or investigation makes discovery the task: follow `kpopper _agent guide`
+within its agreed scope and report its limits. More available material is not a reason to survey it.
 
 ### 1. Something you took from a source
 
@@ -58,7 +61,7 @@ on — a `prior.*` claim whose value is the confidence; see *An agent's prior as
 
 ```yaml
   date.rate_lock:
-    name: סוף שמירת הריבית באישור העקרוני
+    name: Rate lock expiry in the pre-approval
     v: 2026-09-18
     src: ...
 ```
@@ -91,10 +94,6 @@ Recommendations, assessments, comparisons — **and summaries, overviews, and an
 
 "The annual cost is $90,720" is not — check the arithmetic and you are done. "Acme is the better choice" is, and no amount of checking settles it. "The agreement is restrictive about early termination" is one too, even though it sounds like a report of what a document says — which is exactly the trap.
 
-Before recording a significant judgment, [look for a failure the current check would miss](../kpopper/references/falsifiers.md#look-for-a-failure-the-current-check-would-miss).
-Ask whether its recorded premises could all be correct while the conclusion still fails.
-Give more attention to decisions with costly consequences or many dependent conclusions.
-
 ### The trap worth naming
 
 **A characterization of a source drifts into being treated as a reading of it.** Someone writes "the contract restricts resale", a later reader takes it as quoted fact, and by the third session it has hardened into something nobody traces and nobody re-checks — while the clause it came from may say something much narrower. If you are describing what a source *means* rather than reproducing what it *says*, that is a judgment and it needs `wrong_if` like any other.
@@ -117,8 +116,9 @@ Every judgment says what would make it wrong, and the reader evaluates it where 
 A predicate that cannot be evaluated says so with `blocked_on` and why; a decision taken on a
 session's prior, or on taste, names the prose sign that would re-open it in `reopened_by`. Never
 invent a threshold to make a predicate evaluable, and never write prose in a predicate field.
-Before recording a significant judgment, look for a failure the current check would miss, and
-ask of every falsifier whether the decision itself could suppress the sign. All of it, with the
+Before recording a significant judgment, look for a failure the current check would miss:
+could its premises all be correct while its conclusion fails, or could the decision suppress its sign?
+Prioritize costly decisions and those with many dependents. All of it, with the
 table of who decides by confidence and the cost of being wrong, is in
 [falsifiers.md](../kpopper/references/falsifiers.md).
 

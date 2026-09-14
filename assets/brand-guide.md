@@ -84,8 +84,8 @@ density and visual treatment for the image's purpose.
   recording, a separate parallel worker, and selective return of important findings.
   Choose the layout for the relationship: time panels stack on a phone; parallel
   conversation tracks remain visibly separate.
-- The conversation overview uses the direct headline "Save in the background.
-  Return when needed." Human illustrations belong only in the main-session scene;
+- The conversation overview uses the direct headline "Get notified only when
+  something needs attention." Human illustrations belong only in the main-session scene;
   a software worker must not look like a second person. Remove redundant slogans
   when the title already states the benefit.
 - The knowledge-source illustration uses a deliberately busy left side to show
