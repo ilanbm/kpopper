@@ -146,7 +146,7 @@ def capture(envelope, recipient, record=None, state_dir=None, start=True):
     rec, root = I._layout(record, state_dir)
     now = time.time()
     with I._file_lock(root / "delivery.lock"):
-        captured = I.capture(envelope, rec, root, start=False)
+        captured = I.capture(envelope, record, root, start=False)
         event_id = captured["event_id"]
         job_id = _job_id(recipient, event_id)
         path = _job_path(root, job_id)

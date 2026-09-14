@@ -33,6 +33,11 @@ Work that gets revisited needs one thing sessions usually throw away: **where ea
 
 ## Three things worth keeping
 
+**Simple** shares one graph with named competing hypotheses; **Advanced** adds branch contexts and `pending_grounding` for shareable, feature-independent contributions, even with one checkout. Several sessions may work on one hypothesis.
+Non-Git projects default to Simple; new Git projects to Advanced; existing registered shared records retain their behavior. Mode changes are explicit and preserve records.
+Private or unclear permission means a structured private draft outside Git. Preserve the exact scope of measured facts. Merge incorporates content without proving truth or refreshing `seen`.
+Ordinary reads show relevant pending knowledge; committed artifacts use explicit frozen reads. See [project modes](../../docs/project-modes.md).
+
 Everything the record holds is one of three kinds, and each is written the moment it exists,
 by the session doing the work:
 

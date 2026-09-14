@@ -6,6 +6,7 @@ excerpts; exact reads are tied to the same corpus revision and can be paged expl
 import argparse
 import hashlib
 import json
+import os
 from pathlib import Path
 import re
 import sqlite3
@@ -69,27 +70,38 @@ def _record_files(record):
 
 
 def corpus(record=None, state_dir=None, source_roots=None):
-    rec = I._record_path(record)
-    if not rec.is_file():
+    views = P._peer('knowledge_views')
+    mode = 'frozen' if P._RAW_READS.get() else os.environ.get('KPOPPER_READ_MODE', 'live')
+    if mode not in ('live', 'frozen'):
+        raise ValueError('read mode must be live or frozen')
+    selected = [str(I._record_path(record))]
+    paths = views.write_paths(selected) if mode == 'live' else selected
+    rec = Path(paths[0]).resolve()
+    if not rec.is_file() and not (mode == 'live' and views.has_pending(paths)):
         raise ValueError("no record found; open or map this workspace first")
     # These grants come from the caller, never a source or a hypothesis in the record.
     roots = sorted({rec.parent.resolve(), *(Path(root).expanduser().resolve() for root in (source_roots or []))})
     if any(not root.is_dir() for root in roots):
         raise ValueError("source roots must be existing directories")
-    files = _record_files(rec)
+    files = [path for path in _record_files(rec) if path.is_file()]
     stamps = {str(path): I._sha(path.read_bytes()) for path in files}
-    doc = P.load([str(rec)])
+    doc = P.load(paths, read_mode=mode)
     origins = {}
     # Origin follows the reader's merge order, not sorted filenames. A later pointer
     # can replace a source ID, including the base directory of its relative locator.
     for filename in P._files_of([str(rec)]):
         path = Path(filename).resolve()
+        if not path.is_file():
+            continue
         body = P.parse(str(path)) or {}
         for members in P.collections_of(body).values():
             for nid in members:
                 origins[nid] = path.parent
     rows, diagnostics, captured_files, invalid_files = [], [], {}, set()
-    _, state, exists = I._existing_layout(rec, state_dir)
+    if mode == 'live':
+        _, state, exists = I._existing_layout(rec, state_dir)
+    else:
+        exists = False
     if exists:
         for path in sorted((state / "events").glob("*.json")):
             event = I._load(path)
@@ -108,29 +120,51 @@ def corpus(record=None, state_dir=None, source_roots=None):
                          "sources": [], "dependencies": [], "targets": I._report_seeds(envelope),
                          "question": envelope.get("question"), "reason": event.get("reason")})
 
-    worlds = [("record", doc, None)]
+    worlds = [("record", doc, None, None, None)]
     for name, hyp in sorted(doc.hypotheses.items()):
         if hyp["error"]:
             diagnostics.append({"ref": "hypothesis:" + name, "reason": hyp["error"]})
         else:
-            worlds.append(("hypothesis:" + name, P.layered(doc, hyp), hyp["ids"]))
-    for scope, world, own in worlds:
+            contribution = hyp.get('kind') == 'contribution'
+            publication = hyp['head']['publication'] if contribution else None
+            bundle = views.G.Store(views.project_for(selected)).read_bundle(
+                publication['revision'], publication['ledger_ref']) if contribution else None
+            # A contribution is an independent complete closure with its own field roles.
+            world = P.Record(hyp['doc']) if contribution else P.layered(doc, hyp)
+            worlds.append((("contribution:" if contribution else "hypothesis:") + name,
+                           world, hyp["ids"], publication, bundle))
+    for scope, world, own, publication, bundle in worlds:
         ids, judgments, fields = P.infer(world)
         raw = P.with_builtins(world, ids, judgments, fields)
         for nid in sorted(own if own is not None else ids):
             if nid not in raw or P.is_builtin(nid):
                 continue
             body = raw[nid]
+            if mode == 'frozen' and isinstance(body, dict):
+                filename = body.get('file')
+                directory = origins.get(nid, rec.parent) if scope == 'record' else rec.parent
+                source = (directory / Path(filename).expanduser()).resolve() if isinstance(filename, str) else None
+                try:
+                    views.G._privacy(body)
+                    if source is not None and rec.parent not in source.parents:
+                        raise ValueError('external evidence')
+                except ValueError:
+                    diagnostics.append({'ref': 'node:' + nid, 'reason': 'private or external source excluded from frozen search'})
+                    continue
             sources = _source_ids(nid, raw, judgments, ids)
             judgment = judgments.get(nid)
             tag, reason = P._state(nid, judgment, raw, ids, fields) if judgment else ("RECORDED", "")
             prefix = "node:" if scope == "record" else scope + ":node:"
             row = {"ref": prefix + nid, "id": nid, "kind": "judgment" if judgment else "entry",
-                   "scope": scope, "status": tag if scope == "record" else "HYPOTHESIS",
+                   "scope": scope, "status": "PENDING" if publication else tag if scope == "record" else "HYPOTHESIS",
                    "name": P.named(body), "sources": sources,
                    "dependencies": judgment["deps"] if judgment else [], "reason": reason,
                    "rule_dependencies": [] if judgment else _rule_ids(nid, body, ids),
                    "content": P.yaml.safe_dump(body, allow_unicode=True, sort_keys=False)}
+            if publication:
+                row.update(publication=publication, assessment=tag)
+            if nid in getattr(doc, 'knowledge_conflicts', {}):
+                row['conflict'] = True
             if judgment:
                 row.update(assessment=tag, falsifier_holds=P.evaluate(judgment["pred"], raw, ids))
             elif isinstance(body, dict) and isinstance(body.get("rule"), dict):
@@ -146,22 +180,28 @@ def corpus(record=None, state_dir=None, source_roots=None):
                     diagnostics.append({"ref": source_ref, "reason": "remote source not fetched"})
                 continue
             source = Path(filename).expanduser()
-            if not source.is_absolute():
-                directory = origins.get(nid, rec.parent) if scope == "record" else rec.parent
-                source = directory / source
-            source = source.resolve()
-            if str(source) in invalid_files:
+            if bundle is None:
+                if not source.is_absolute():
+                    directory = origins.get(nid, rec.parent) if scope == "record" else rec.parent
+                    source = directory / source
+                source = source.resolve()
+            if bundle is None and str(source) in invalid_files:
                 diagnostics.append({"ref": source_ref, "reason": "captured source integrity check failed"})
                 continue
             try:
-                if str(source) not in captured_files and not any(source == root or root in source.parents for root in roots):
+                if bundle is None and str(source) not in captured_files and not any(source == root or root in source.parents for root in roots):
                     raise ValueError("outside allowed source roots; pass --source-root for an authorized directory")
                 if source.suffix.lower() not in TEXT_SUFFIXES:
                     raise ValueError("only local UTF-8 text sources are indexed")
-                if not source.is_file():
-                    raise ValueError("local source file is unavailable")
-                with source.open("rb") as handle:
-                    data = handle.read(SOURCE_BYTES + 1)
+                if bundle is not None:
+                    if filename not in bundle['files']:
+                        raise ValueError('immutable contribution evidence is unavailable')
+                    data = bundle['files'][filename]
+                else:
+                    if not source.is_file():
+                        raise ValueError("local source file is unavailable")
+                    with source.open("rb") as handle:
+                        data = handle.read(SOURCE_BYTES + 1)
                 if len(data) > SOURCE_BYTES:
                     raise ValueError("source exceeds the 1 MiB search limit; read it directly")
                 content = data.decode("utf-8")
@@ -171,18 +211,27 @@ def corpus(record=None, state_dir=None, source_roots=None):
                 diagnostics.append({"ref": source_ref, "reason": str(error)})
                 continue
             # An applied capture also has a canonical source entry: index its quote once.
-            rows = [r for r in rows if not (r["kind"] == "capture" and r.get("file") == str(source))]
+            if bundle is None:
+                rows = [r for r in rows if not (r["kind"] == "capture" and r.get("file") == str(source))]
+            locator = 'git:' + publication['ledger_ref'] + ':' + publication['revision'] + '/' + filename if publication else str(source)
             rows.append({"ref": source_ref, "id": nid, "kind": "source", "scope": scope,
-                         "status": "SOURCE" if scope == "record" else "HYPOTHESIS",
-                         "name": P.named(body), "content": content, "file": str(source),
+                         "status": "PENDING" if publication else "SOURCE" if scope == "record" else "HYPOTHESIS",
+                         "name": P.named(body), "content": content, "file": locator,
                          "sources": [nid], "dependencies": [],
-                         "capture_state": captured_files.get(str(source))})
-    if _record_files(rec) != files or any(I._sha(Path(path).read_bytes()) != stamp for path, stamp in stamps.items()):
+                         "capture_state": captured_files.get(str(source)) if bundle is None else None,
+                         **({'publication': publication} if publication else {})})
+    if [path for path in _record_files(rec) if path.is_file()] != files or any(I._sha(Path(path).read_bytes()) != stamp for path, stamp in stamps.items()):
         raise ValueError("record changed during search; retry")
-    revision = digest(encode({"record": str(rec), "files": stamps, "rows": rows, "unindexed": diagnostics,
+    if mode == 'live' and list(views.write_paths(selected)) != list(paths):
+        raise ValueError('record path changed during search; retry')
+    context = {'read_mode': mode, 'contributions': getattr(doc, 'contributions', []),
+               'conflicts': {nid: [name for name, _ in variants] for nid, variants in
+                             getattr(doc, 'knowledge_conflicts', {}).items()},
+               'target_unavailable': getattr(doc, 'target_unavailable', None)}
+    revision = digest(encode({**context, "record": str(rec), "files": stamps, "rows": rows, "unindexed": diagnostics,
                               "source_roots": [str(root) for root in roots]}))
-    return {"record": str(rec), "revision": revision, "revision_kind": "search-corpus",
-            "record_sha256": stamps[str(rec)], "rows": rows, "unindexed": diagnostics}
+    return {**context, "record": str(rec), "revision": revision, "revision_kind": "search-corpus",
+            "record_sha256": stamps.get(str(rec)), "rows": rows, "unindexed": diagnostics}
 
 
 def _excerpt(content, terms, size=320):
@@ -257,8 +306,9 @@ def read(ref, revision, record=None, state_dir=None, offset=0, length=4000, sour
             "content": content[offset:end], "offset": offset, "next_offset": end if end < len(content) else None,
             "complete": offset == 0 and end == len(content), "total_characters": len(content),
             "sha256": digest(content)}
-    if "calculation" in row:
-        result["calculation"] = row["calculation"]
+    for key in ('calculation', 'assessment', 'publication', 'conflict'):
+        if key in row:
+            result[key] = row[key]
     return result
 
 
@@ -269,6 +319,7 @@ def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("query", nargs="?")
     parser.add_argument("--record")
+    parser.add_argument("--frozen", action="store_true", help="read only the selected artifact and portable evidence")
     parser.add_argument("--state-dir")
     parser.add_argument("--source-root", action="append", default=[], help="authorize an additional local source directory; repeat on reads")
     parser.add_argument("--limit", type=int, default=5)
@@ -279,6 +330,8 @@ def main(argv=None):
     parser.add_argument("--length", type=int, default=4000)
     parser.add_argument("--json", action="store_true")
     args = parser.parse_args(argv)
+    if args.frozen:
+        os.environ['KPOPPER_READ_MODE'] = 'frozen'
     try:
         if args.read:
             if args.query or not args.revision:

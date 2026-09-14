@@ -7,18 +7,18 @@ description: "Write what the work found into the project's knowledge record, so 
 
 Keep what the work produced while it is still in your hands: the source with its location, the rule rather than its result, the conclusion with what it rests on and what would make it wrong. It is a byproduct of the work, written when it exists and not at a ceremony. The command line is `kpopper` where it is on PATH; otherwise the `command` in the `KPOPPER_AGENT_CONTEXT` line the session opener printed (`python3 <plugin>/scripts/cli.py`) runs the same code. Do not guess a path and do not write a second reader - [the method's reference](../kpopper/references/method.md#finding-the-reader) says how to find the installed copy when neither is at hand.
 
-**For a source report in an existing single-file record, use `kpopper update --file -`.** Send one `updates` list with everything already known from that report; one item is enough. Record it while the context is fresh, without waiting to collect unrelated facts or reach session end. Read the returned state before relying on the update. [INGESTION.md](../kpopper/INGESTION.md) gives the input and supported layouts; first writes, other layouts and deliberate reviews retain their ordinary commands.
+**For a source report in an existing single-file record, use `kpopper update --file -` where POSIX file locking is available.** Send one `updates` list with everything already known from that report; one item is enough. Record it while the context is fresh, without waiting for unrelated facts or session end. Read the returned state before relying on it. **On native Windows, use ordinary `add`/`set` instead;** verify each result, since separate writes are not an atomic batch. A locking error means the report was not retained. [INGESTION.md](../kpopper/INGESTION.md) gives the contract and layouts. Structured expressions and snapshots require compatible CLI/plugin/CI versions; check [reader compatibility](../kpopper/EXPRESSIONS.md#reader-compatibility) before writing. First writes, other layouts and deliberate judgment reviews retain their ordinary commands.
 
 ## The first write
 
-Record the first useful finding within the user's write authorization. A record with only
-`sources`, `known` and `open` is valid; add judgments for actual conclusions, with `seen` filled
-by `add`. Installation alone creates no file, and a one-off can finish without a record.
+Use the project mode: Simple shares one graph and named hypotheses across sessions; Advanced keeps branch context and `pending_grounding` for shareable findings independent of a feature, even with one checkout.
+Privacy comes first: private or unclear permission means a structured private draft outside Git. Preserve exact source, scope and commit; measured unmerged facts are scoped facts, not automatically hypotheses. Capture, remote proposal and verified acceptance differ. Merge never proves truth, raises confidence or refreshes `seen`. See [project modes](../../docs/project-modes.md) for routing and publication.
+
+Record the first useful finding within the user's authorization. Sources and facts are valid alone; `add` fills `seen` for actual judgments. Installation creates no record, and a one-off can finish without one.
 
 Where no record resolves for the workspace, `kpopper add` creates `GROUNDING.yaml` at the repository root (the working directory outside git) with that first entry, and a later `add` extends it. A registered record that is unavailable is a location problem: restore it rather than starting another. The [shape reference](../kpopper/references/shape.md) shows the sections, pointer records and how a record lives outside a tree that cannot hold it.
 
-**Make a new record useful to its reader.** When its explanation is due, link and briefly explain
-the finding. Show the shipped page when a visual view helps and is supported; it is optional.
+**Make a new record useful to its reader.** Link and briefly explain the finding when its explanation is due. Showing the shipped page is optional, when a visual view helps and is supported.
 
 ## Record what the work calls for
 

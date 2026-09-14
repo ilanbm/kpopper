@@ -369,6 +369,7 @@ For a standalone CLI installation and a walkthrough of the launch-party example,
 | Return to deferred work | Followups tied to dates, recorded changes or preceding work, with configured host scheduling. [Followups](#followups-and-background-checks). |
 | Share a result people can inspect | Standalone HTML with selected evidence and review choices, plus a separate navigable page for the project record. [Documents](#share-a-document-with-its-reasons). |
 | Let the structure grow with the project | Domain-specific subjects and vocabulary within a small set of explicit relationships and checks. [Evolving structure](#a-structure-that-grows-with-the-project). |
+| Build a tool on the record | Versioned assessment JSON with independent findings, explicit scope and task-specific attention policies. [Assessment contract](docs/assessment.md). |
 | Bind a session's reads to a known version | An experimental, optional Lean-backed view checks selected session contracts and rejects reads against an outdated record revision. [Checked sessions](docs/checked-sessions.md). |
 
 Use the parts your project needs. Existing documents, tools and memory remain where
@@ -456,6 +457,40 @@ an update, inspect its outcome before relying on it. Background work is useful p
 where the conversation can safely continue without that result.
 
 ## How it works
+
+### Two working modes
+
+<picture>
+  <source media="(max-width: 640px)" srcset="assets/diagrams/two-working-modes-mobile.png">
+  <img src="assets/diagrams/two-working-modes.png" alt="Two working modes: Simple sessions share one sourced project record with competing hypotheses; Advanced branches retain their own assumptions and hypotheses, while shareable project findings follow review and acceptance into main.">
+</picture>
+
+[View the full-size illustration](assets/diagrams/two-working-modes.png) ·
+[View the vertical version](assets/diagrams/two-working-modes-mobile.png)
+
+**Simple** keeps one project graph shared by its sessions. Competing ideas are named
+hypotheses beside that graph: several sessions can examine the same proposal, and one
+session can work on several. Projects without Git start here.
+
+**Advanced** adds Git branch contexts. Each branch's record describes the version of the
+project being examined, even if the repository has only one checkout. New Git projects
+start here. Existing registered shared records keep their current location and behavior;
+changing mode requires explicit reconciliation.
+
+In Advanced, shareable findings that apply to the project independently of a feature go
+into `pending_grounding`. Other local worktrees can read them immediately with their source,
+scope and pending status. With the project's publication permission, they accumulate in
+one review PR. After accepted contributions are verified in the target branch, the same
+`pending_grounding` branch is reused for the next batch. Closing the original session or
+removing its worktree does not erase the pending work.
+
+A measurement of an unmerged commit can be a fact about that commit. A proposed conclusion
+remains a hypothesis. Merging means the team accepted the contribution; it does not prove
+the claim, increase confidence or refresh its last review. Private material and information
+whose sharing permission is unclear stay in a structured private draft.
+
+See [project modes and publication](docs/project-modes.md) for routing, reproducible reads
+and the publication lifecycle.
 
 ### The knowledge record
 
@@ -889,6 +924,13 @@ localization and checks on stale explanatory text, see the [page reference](skil
 
 This table describes the current repository. Check the [changelog](CHANGELOG.md) when
 updating an older installation; a merged feature may still be awaiting a release.
+
+Records with structured expressions and computed snapshots require kpopper 1.6.0 or later
+across the CLI, plugins and CI. Upgrade them together before writing or reviewing those
+records with another installation; [reader compatibility](skills/kpopper/EXPRESSIONS.md#reader-compatibility)
+explains the old-writer risk and the separate Lean setup requirement. On native Windows,
+use individual `add`/`set` writes and deliberate judgment reviews; durable report batching
+requires POSIX file locking.
 
 | Status | Capability |
 |---|---|

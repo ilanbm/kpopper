@@ -72,7 +72,9 @@ class View:
             'conditions_ref':'conditions:/','events':self.events,
             'orientation':self.data.get('orientation',{}),'rules':RULES,
             'links':self.data['edges'],'pending':self.pending,'stale_pending':self.stale,
-            'native_hypotheses':len(self.data.get('native_hypotheses',{}))}
+            'native_hypotheses':sum(h.get('kind') != 'contribution' for h in self.data.get('native_hypotheses',{}).values()),
+            'contributions':self.data.get('contributions',[]),
+            'read_mode':self.data.get('read_mode','frozen')}
 
     def relation_counts(self,counts):
         return ' '.join(({'rests_on':'dependency_count','from':'source_count'}.get(rel,rel+'_count'))+'='+str(n)
@@ -130,6 +132,8 @@ class View:
             'events='+str(len(self.events))+' @events:/']
         if not (self.pending or self.stale or packet['native_hypotheses']):
             lines=[line for line in lines if not line.startswith('pending=')]
+        for contribution in packet.get('contributions', []):
+            lines.append('PENDING '+contribution['revision'][:12]+' '+contribution['state']+' '+encode(contribution['scope'])+' @native')
         if events_expanded: lines.extend(self.event_line(key,row) for key,row in self.events.items())
         lines.append('MAP / — declared navigation; names do not establish claims:')
         lines.extend(self.map_lines(packet['cells']))

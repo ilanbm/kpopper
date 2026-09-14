@@ -46,6 +46,13 @@ and queued findings do not grant authority to act, refresh seen or rewrite a con
 
 ## Complete the installation
 
+Project contribution publication is separate from installing this watch routine. In
+Advanced mode, `pending_grounding` is visible through ordinary reads and checked views;
+watch is not a prerequisite. A standing publication permission permits bounded attempts
+after capture and during active sessions, and does not install a schedule. Preserve an
+existing external shared record; importing selected permitted observations into the
+project store is explicit and non-destructive. See [project modes](../../docs/project-modes.md).
+
 1. Locate the workspace and existing followup configuration with `kpopper followups status`.
    Use the CLI from the current plugin when needed: `python3 <plugin-root>/scripts/cli.py`.
    The plugin root is two directories above this skill folder. Keep its pinned record and

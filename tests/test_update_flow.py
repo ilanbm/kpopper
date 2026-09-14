@@ -138,12 +138,12 @@ class UpdateFlow(unittest.TestCase):
     def test_capture_exemption_requires_intact_evidence(self):
         result = I.update(self.report(), self.record)
         source = yaml.safe_load(self.record.read_text())['sources'][result['source']]
-        self.assertTrue(I.recording_source(result['source'], source))
+        self.assertTrue(I.recording_source(result['source'], source, self.record))
         Path(result['source_file']).write_text('Changed after capture')
-        self.assertFalse(I.recording_source(result['source'], source))
+        self.assertFalse(I.recording_source(result['source'], source, self.record))
         event = Path(result['source_file']).parent.parent / 'events' / (result['event_id'] + '.json')
         event.write_text('{broken json')
-        self.assertFalse(I.recording_source(result['source'], source))
+        self.assertFalse(I.recording_source(result['source'], source, self.record))
 
     def test_completing_a_missing_input_can_falsify_an_unchanged_judgment(self):
         self.doc['judgments']['c.shipping'] = {'rests_on': ['order.shipping'], 'seen': {'order.shipping': 10},

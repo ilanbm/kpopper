@@ -47,16 +47,24 @@ def normalize(value):
     return str(value)
 
 
-def native_record(path, reader_path):
+def native_record(path, reader_path, *, read_mode=None):
     """Use the configured product reader; do not infer semantic relationships from names."""
-    if not path.exists():
+    if not path.exists() and (read_mode or os.environ.get('KPOPPER_READ_MODE')) == 'frozen':
         return {'nodes':{},'edges':[],'topics':{},'scope':'No record yet. Material learning can be proposed.',
                 'sources':{},'native_hypotheses':{}}
     spec=importlib.util.spec_from_file_location('_configured_kpopper_reader',reader_path)
     p=importlib.util.module_from_spec(spec); spec.loader.exec_module(p)
+    project = p._peer('knowledge_views').project_for([str(path)])
+    policy = project.config()
+    if (read_mode or os.environ.get('KPOPPER_READ_MODE', 'live')) == 'live':
+        path = Path(p._peer('knowledge_views').write_paths([str(path)])[0])
     files=[Path(f).resolve() for f in p._files_of([str(path)])]
     captured={f:f.read_bytes() for f in files}
-    doc=p.load([str(path)])
+    if not path.exists() and not p._peer('knowledge_views').has_pending([str(path)]):
+        return {'nodes':{},'edges':[],'topics':{},'scope':'No record yet.', 'sources':{},'native_hypotheses':{}}
+    doc=p.load([str(path)], read_mode=read_mode)
+    if project.config() != policy:
+        raise ValueError('project mode or record destination changed during read; retry')
     if files!=[Path(f).resolve() for f in p._files_of([str(path)])] or any(f.read_bytes()!=b for f,b in captured.items()):
         raise ValueError('record sources changed during read; retry')
     sources={}; origins={}
@@ -69,6 +77,21 @@ def native_record(path, reader_path):
             if isinstance(members,dict):
                 origins.setdefault(section,{}).update({nid:handle for nid in members})
             else: origins.pop(section,None)
+    pending_nodes = set()
+    existing = p.bodies(doc)
+    for name, hyp in doc.hypotheses.items():
+        if hyp.get('kind') != 'contribution':
+            continue
+        handle = 'contribution.' + name.removeprefix('pending-')
+        text = p.yaml.safe_dump(hyp['doc'], allow_unicode=True, sort_keys=False)
+        sources[handle] = {'text': text, 'sha256': hashlib.sha256(text.encode()).hexdigest(),
+                           'location': hyp['path']}
+        for collection, members in p.collections_of(hyp['doc']).items():
+            for nid, body in members.items():
+                if nid not in existing and nid not in pending_nodes:
+                    doc.setdefault(collection, {})[nid] = body
+                    pending_nodes.add(nid)
+                    origins.setdefault(collection, {})[nid] = handle
     collections={k:v for k,v in p.collections_of(doc).items() if k!='meta'}
     try:
         all_ids,judgments,fields=p.infer(doc)
@@ -94,6 +117,7 @@ def native_record(path, reader_path):
         source_body=raw.get(nid)
         body=source_body if isinstance(source_body,dict) else {'v':source_body}
         states=set(flags.get(nid,[]))
+        if nid in pending_nodes: states.add('pending')
         if nid in questions: states.add('question')
         if nid in disputed: states.add('contested')
         if nid.startswith('prior.'): states.add('prior')
@@ -136,6 +160,9 @@ def native_record(path, reader_path):
           'scope':(doc.get('meta') or {}).get('scope','Epistemic project record.'),
           'sources':sources,
           'native_hypotheses':getattr(doc,'hypotheses',{}),
+          'contributions':getattr(doc,'contributions',[]),
+          'knowledge_conflicts':getattr(doc,'knowledge_conflicts',{}),
+          'read_mode':getattr(doc,'read_mode','frozen'),
           'origin':{'reader_sha256':hashlib.sha256(reader_path.read_bytes()).hexdigest(),
                     'flags':'record reader only; page validation not run; native hypotheses readable separately'}}
     return normalize(data)

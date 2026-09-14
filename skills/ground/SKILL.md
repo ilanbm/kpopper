@@ -84,6 +84,12 @@ the only thing this method promises to measure.
 
 ## The read commands
 
+Read in the project's mode: Simple shares one graph and named hypotheses; Advanced preserves the branch's code-world and shows project contributions alongside it, including with one checkout.
+Ordinary and checked reads show pending source, scope and publication state. Pending does not mean accepted, and another branch's measurement does not automatically describe this branch.
+Use frozen reads for committed PR/CI evidence, without moving pending refs or private files. Explicit materialization retains the complete closure and evidence.
+Compare the shared subset: extra branch entries are allowed; different source bodies or schemas can make apparently equal readings differ. Cached acceptance names last verified versions, not fresh remote evidence.
+See [project modes](../../docs/project-modes.md).
+
 ```bash
 kpopper open                             # what to read instead of the whole record
 kpopper check                            # does the record still hold together
