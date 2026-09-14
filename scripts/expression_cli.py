@@ -59,7 +59,7 @@ def migrate(record=None, apply=False, readable=False):
                 replacement[target] = converted
                 changes.append({"id": nid, "field": field, "target": target, "before": value, "after": converted})
         answer = {"record": str(rec), "before_sha256": I._sha(before), "changes": changes,
-                  "skipped": skipped, "applied": False, "problems": []}
+                  "skipped": skipped, "applied": False, "problems": [], "fired": []}
         if not changes:
             return answer
         with tempfile.TemporaryDirectory(prefix="kpopper-expression-migration-") as directory:
@@ -84,7 +84,7 @@ def migrate(record=None, apply=False, readable=False):
                 target_brief.write_bytes(Path(brief).read_bytes())
             baseline = set(P.check_lines([str(rec)])[0])
             errors = P.check_lines([str(shadow)])[0]
-            answer["problems"] = [error for error in errors if error not in baseline]
+            discovered = set()
             _, after_ids, after_judgments, _, after_raw = I._record_world(shadow)
             for nid, judgment in judgments.items():
                 old_result = P.evaluate(judgment["pred"], raw, ids)
@@ -93,6 +93,14 @@ def migrate(record=None, apply=False, readable=False):
                 # that already had a result must retain it, including false -> unknown.
                 if old_result is not None and new_result is not old_result:
                     answer["problems"].append(f"{nid}: migration changes condition result from {old_result} to {new_result}; author the typed reading explicitly")
+                elif old_result is None and new_result is True and not P.is_arrangement(judgment, raw):
+                    # A newly executable calculation can expose a contradiction.
+                    # Keep it visible in check without blocking its recording or
+                    # refreshing the judgment's historical review snapshot.
+                    answer["fired"].append(nid)
+                    discovered.add(P._fired_failure(nid, after_judgments[nid]))
+            answer["fired"].sort()
+            answer["problems"] = [error for error in errors if error not in baseline and error not in discovered] + answer["problems"]
             after = shadow.read_bytes()
             answer["after_sha256"] = I._sha(after)
             if apply and not answer["problems"]:

@@ -1,6 +1,9 @@
 """Regressions for unavailable calculations, conservative migration and evidence reads."""
 import copy
+import contextlib
 import datetime as dt
+import io
+import json
 import os
 from pathlib import Path
 import tempfile
@@ -118,8 +121,36 @@ class WithoutCore(RecordCase):
             for key, related in (("independent", "order.price"), ("dependent", "order.total")):
                 store.add({"id": key, "title": "Review", "why": "Check a reading", "how": "Read it",
                            "scope": "Read only", "related": [related], "when": {"at": "2026-01-01"}})
-            states = {row["id"]: row["state"] for row in store.scan()["items"]}
-            self.assertEqual(states, {"independent": "ready", "dependent": "unknown"})
+            rows = {row["id"]: row for row in store.scan()["items"]}
+            self.assertEqual({key: row["state"] for key, row in rows.items()},
+                             {"independent": "ready", "dependent": "ready"})
+            self.assertTrue(any("order.total" in reason and "unavailable" in reason
+                                for reason in rows["dependent"]["reasons"]))
+            before = self.path.read_bytes()
+            run = store.claim("dependent", rows["dependent"]["occurrence"], "test-session")
+            self.assertEqual(run["scope"], "Read only")
+            result = store.finish("dependent", run["claim"]["token"], "done", "Reported the missing evaluator.")
+            self.assertEqual(result["state"], "done")
+            self.assertEqual(self.path.read_bytes(), before)
+
+    @unittest.skipUnless(os.name == 'posix', 'followup writes require POSIX locking')
+    def test_followup_trigger_unknown_is_preserved_at_retry_time(self):
+        with tempfile.TemporaryDirectory() as state, patch.dict(os.environ, {"XDG_STATE_HOME": state}):
+            now = dt.datetime(2026, 9, 14, tzinfo=dt.timezone.utc)
+            store = F.Store(self.root, now=lambda: now)
+            store.setup(timezone="UTC")
+            for key, trigger in (("condition", {"condition": {"id": "order.total", "op": ">", "value": 0}}),
+                                 ("changed", {"changed": "order.total"})):
+                store.add({"id": key, "title": "Review", "why": "Check a reading", "how": "Read it",
+                           "scope": "Read only", "related": ["order.total"], "when": trigger})
+            # Retained retry dates must not manufacture knowledge of a condition.
+            with store.transaction() as data:
+                for item in data["items"].values():
+                    item["next_at"] = "2026-09-13T00:00:00Z"
+            for row in store.scan()["items"]:
+                self.assertEqual(row["state"], "unknown")
+                with self.assertRaises(F.Refused):
+                    store.claim(row["id"], row["occurrence"], "test-session")
 
     def test_structured_scalar_condition_cannot_pass_check_without_core(self):
         del self.doc["known"]["order.total"]
@@ -131,6 +162,17 @@ class WithoutCore(RecordCase):
         self.doc["judgments"]["c.budget"]["blocked_on"] = "Lean is not available on this host yet"
         self.save()
         self.assertFalse(P.check_lines([str(self.path)])[0])
+
+    def test_migration_without_core_cannot_claim_a_discovered_result(self):
+        self.doc["known"]["order.total"]["rule"] = "order.price * 10"
+        self.doc["judgments"]["c.budget"]["wrong_if"] = "order.total > 150"
+        self.save()
+        before = self.path.read_bytes()
+        result = migrate(self.path, apply=True)
+        self.assertFalse(result["applied"], result)
+        self.assertEqual(result["fired"], [])
+        self.assertTrue(result["problems"])
+        self.assertEqual(self.path.read_bytes(), before)
 
     def test_unmeasured_page_count_is_unavailable_not_recorded_null(self):
         self.doc["judgments"]["c.page"] = {"rests_on": ["page.spill"], "seen": {"page.spill": 0},
@@ -188,6 +230,82 @@ class WithCore(RecordCase):
                 self.assertFalse(result["applied"])
                 self.assertTrue(any("condition" in problem for problem in result["problems"]), result)
                 self.assertEqual(self.path.read_bytes(), before)
+
+    def test_migration_refuses_changed_decidable_results_even_with_newly_fired(self):
+        self.doc["known"]["order.total"]["rule"] = "order.price * 10"
+        self.doc["known"]["order.large"] = {"v": 9007199254740993, "from": "s.report"}
+        # The legacy float comparison loses one integer; exact arithmetic changes it.
+        for operator, old_result in ((">", False), ("==", True)):
+            with self.subTest(operator=operator):
+                self.doc["judgments"]["c.exact"] = {"rests_on": ["order.large"],
+                    "verdict": "At the threshold", "seen": {"order.large": 9007199254740993},
+                    "wrong_if": "order.large " + operator + " 9007199254740992"}
+                self.save()
+                ids, jud, _, raw = self.world()
+                self.assertIs(P.evaluate(jud["c.exact"]["pred"], raw, ids), old_result)
+                before = self.path.read_bytes()
+                result = migrate(self.path, apply=True)
+                self.assertFalse(result["applied"], result)
+                self.assertEqual(result["fired"], ["c.budget"])
+                self.assertTrue(any("c.exact: migration changes condition result" in p for p in result["problems"]))
+                self.assertEqual(self.path.read_bytes(), before)
+
+    def test_newly_fired_migration_keeps_history_in_both_output_formats(self):
+        self.doc["known"]["order.total"]["rule"] = "order.price * 10"
+        for readable in (False, True):
+            with self.subTest(readable=readable):
+                self.save()
+                before = copy.deepcopy(self.doc["judgments"])
+                result = migrate(self.path, apply=True, readable=readable)
+                self.assertTrue(result["applied"], result)
+                self.assertEqual(result["fired"], ["c.budget"])
+                self.assertEqual(result["problems"], [])
+                after = yaml.safe_load(self.path.read_text())
+                for field in ("seen", "verdict", "rests_on"):
+                    self.assertEqual(after["judgments"]["c.budget"][field], before["c.budget"][field])
+                ids, jud, fields, raw = self.world()
+                self.assertEqual(P._state("c.budget", jud["c.budget"], raw, ids, fields)[0], "FIRED")
+                self.assertTrue(P.check_lines([str(self.path)])[0])
+                self.assertEqual(migrate(self.path, readable=readable)["fired"], [])
+
+    def test_newly_fired_does_not_hide_failed_calculations(self):
+        self.doc["known"]["order.total"]["rule"] = "order.price * 10"
+        self.doc["known"]["order.invalid"] = {"rule": "order.price / 0"}
+        self.save()
+        before = self.path.read_bytes()
+        result = migrate(self.path, apply=True)
+        self.assertFalse(result["applied"], result)
+        self.assertEqual(result["fired"], ["c.budget"])
+        self.assertTrue(any("order.invalid: rule cannot be computed" in p for p in result["problems"]))
+        self.assertEqual(self.path.read_bytes(), before)
+
+    def test_newly_fired_does_not_exempt_arrangement_failures(self):
+        self.doc["known"]["order.total"]["rule"] = "order.price * 10"
+        self.doc["sources"]["s.request"] = {"asked": "Show the order totals", "read": "2026-09-14"}
+        self.doc["judgments"]["c.layout"] = {
+            "rests_on": ["s.request", "graph.entries", "order.price"], "verdict": "The view fits",
+            "wrong_if": "graph.entries + order.price > 1",
+            "seen": {"s.request": "read 2026-09-14", "graph.entries": 8, "order.price": 20}}
+        self.save()
+        before = self.path.read_bytes()
+        result = migrate(self.path, apply=True)
+        self.assertFalse(result["applied"], result)
+        self.assertEqual(result["fired"], ["c.budget"])
+        self.assertTrue(any("c.layout: wrong_if holds" in p for p in result["problems"]), result)
+        self.assertEqual(self.path.read_bytes(), before)
+
+    def test_migration_cli_succeeds_while_check_keeps_the_contradiction(self):
+        from scripts.expression_cli import main
+        self.doc["known"]["order.total"]["rule"] = "order.price * 10"
+        self.save()
+        output = io.StringIO()
+        with contextlib.redirect_stdout(output):
+            code = main(["migrate", "--record", str(self.path), "--apply", "--json"])
+        result = json.loads(output.getvalue())
+        self.assertEqual(code, 0, result)
+        self.assertTrue(result["applied"])
+        self.assertEqual(result["fired"], ["c.budget"])
+        self.assertTrue(any("c.budget: wrong_if holds" in p for p in P.check_lines([str(self.path)])[0]))
 
     def test_structured_numeric_text_is_unknown_without_coercing_text_literals(self):
         raw = {"input.text": {"quoted": "120"}}
