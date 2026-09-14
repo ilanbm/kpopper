@@ -13,7 +13,7 @@ from tests.test_pending_grounding import Repository, fixture_bundle
 def source():
     return {'schema': {'deps': 'rests_on', 'snapshot': 'reviewed', 'predicate': 'wrong_if'},
             'items': {'a': {'v': 1}, 'b': {'v': 2}},
-            'scopes': {'scope.items': {'collection_scope': {'collection': 'items', 'fields': ['v', 'absent']},
+            'scopes': {'scope.items': {'collection_scope': {'collection': 'items', 'fields': ['absent', 'v']},
                                        'scope': {'kind': 'project', 'environment': 'fixture', 'commit': 'abc'}}}}
 
 
@@ -37,6 +37,57 @@ class SnapshotTests(unittest.TestCase):
         data['nodes']['a']['body']['v'] = 100
         with self.assertRaisesRegex(SnapshotError, 'snapshot'):
             Snapshot.from_snapshot(data)
+
+    def test_completed_format_rewrite_keeps_semantic_identity_separate(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / 'GROUNDING.yaml'
+            path.write_text('known:\n  a: {v: 1}\n')
+            before = Snapshot.capture([str(path)], read_mode='frozen')
+            path.write_text('# comment and layout only\nknown: {a: {v: 1}}\n')
+            after = Snapshot.capture([str(path)], read_mode='frozen')
+            self.assertEqual(before.snapshot_id, after.snapshot_id)
+            self.assertNotEqual(before.to_data()['authored_revision']['digest'],
+                                after.to_data()['authored_revision']['digest'])
+
+    def test_authored_revision_is_independently_validated_on_replay(self):
+        from scripts.reasoning.contract import digest
+        supplied = Snapshot.from_data(source()).to_data()
+        valid = {'files': [{'origin': 'origin:GROUNDING.yaml', 'status': 'read', 'sha256': 'a' * 64}]}
+        valid['digest'] = digest(valid)
+        supplied['authored_revision'] = valid
+        self.assertEqual(Snapshot.from_snapshot(supplied).snapshot_id, supplied['snapshot_id'])
+        invalid_revisions = [False, {}, {'files': [], 'digest': 'a' * 64},
+                             dict(valid, extra=True), dict(valid, files='invalid'),
+                             {'files': [{'origin': 'origin:GROUNDING.yaml', 'status': 'read', 'sha256': None}]}]
+        malformed = copy.deepcopy(valid)
+        malformed['files'][0]['status'] = 'unknown'
+        malformed['digest'] = digest({'files': malformed['files']})
+        invalid_revisions.append(malformed)
+        stale = copy.deepcopy(valid)
+        stale['files'][0]['sha256'] = 'b' * 64
+        invalid_revisions.append(stale)
+        for revision in invalid_revisions:
+            with self.subTest(revision=revision):
+                invalid = copy.deepcopy(supplied)
+                invalid['authored_revision'] = revision
+                with self.assertRaisesRegex(SnapshotError, 'revision'):
+                    Snapshot.from_snapshot(invalid)
+
+    def test_snapshot_identity_still_binds_history_and_context(self):
+        document = source()
+        original = Snapshot.from_data(document).snapshot_id
+        document['items']['a']['reviewed'] = {'prior': 1}
+        history = Snapshot.from_data(document).snapshot_id
+        self.assertNotEqual(original, history)
+        self.assertNotEqual(history, Snapshot.from_data(document, context={
+            'read_mode': 'supplied', 'generation': 1}).snapshot_id)
+
+    def test_scope_definition_fields_must_be_sorted_and_unique(self):
+        for fields in (['v', 'absent'], ['v', 'v']):
+            document = source()
+            document['scopes']['scope.items']['collection_scope']['fields'] = fields
+            with self.assertRaisesRegex(SnapshotError, 'invalid_scope'):
+                Snapshot.from_data(document).capture_scope('scope.items')
 
     def test_scope_candidate_membership_fields_and_grants(self):
         data = source()

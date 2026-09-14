@@ -93,6 +93,44 @@ def _hypothesis_conflicts(hypotheses):
             if len({digest(P.claim_of(body)) for _, body in variants}) > 1}
 
 
+def _validate_authored_revision(revision):
+    """Validate byte-concurrency evidence separately from normalized input identity.
+
+    This checks internal consistency, not source authenticity. A writer must still
+    revalidate the real files before using an inventory as a concurrency guard.
+    """
+    if revision is None:
+        return
+    if not isinstance(revision, dict) or set(revision) != {'files', 'digest'} \
+            or not isinstance(revision['files'], list):
+        raise SnapshotError('invalid_authored_revision', 'revision needs files and digest')
+    origins = []
+    for item in revision['files']:
+        if not isinstance(item, dict) or not isinstance(item.get('origin'), str) or not item['origin']:
+            raise SnapshotError('invalid_authored_revision', 'revision file needs an origin label')
+        origins.append(item['origin'])
+        if item.get('status') == 'read':
+            value = item.get('sha256')
+            if set(item) != {'origin', 'status', 'sha256'} or not isinstance(value, str) \
+                    or len(value) != 64 or any(char not in '0123456789abcdef' for char in value):
+                raise SnapshotError('invalid_authored_revision', 'read file needs a SHA-256 digest')
+        elif item.get('status') == 'unreadable':
+            if set(item) != {'origin', 'status', 'sha256', 'error'} or item['sha256'] is not None \
+                    or not isinstance(item['error'], str) or not item['error']:
+                raise SnapshotError('invalid_authored_revision', 'unreadable file needs an error')
+        else:
+            raise SnapshotError('invalid_authored_revision', 'unknown revision file status')
+    if origins != sorted(set(origins)):
+        raise SnapshotError('invalid_authored_revision', 'revision files must have sorted unique origins')
+    if digest({'files': revision['files']}) != revision['digest']:
+        raise SnapshotError('stale_authored_revision', 'revision digest does not match')
+
+
+def _snapshot_preimage(data):
+    # Exact source bytes guard writes, while normalized typed inputs identify reads.
+    return {key: value for key, value in data.items() if key not in ('snapshot_id', 'authored_revision')}
+
+
 class Snapshot:
     __slots__ = ('__data',)
 
@@ -107,8 +145,8 @@ class Snapshot:
         if not isinstance(data['document'], dict) or not isinstance(data['context'], dict) \
                 or not isinstance(data['hypotheses'], dict):
             raise SnapshotError('invalid_snapshot', 'invalid snapshot structure')
-        body = {key: value for key, value in data.items() if key != 'snapshot_id'}
-        if digest(body) != data['snapshot_id']:
+        _validate_authored_revision(data['authored_revision'])
+        if digest(_snapshot_preimage(data)) != data['snapshot_id']:
             raise SnapshotError('stale_snapshot', 'snapshot digest does not match')
         if normalize_as_of(data['as_of']) != data['as_of'] or digest(_nodes(data['document'])) != digest(data['nodes']):
             raise SnapshotError('invalid_snapshot', 'snapshot normalization does not match')
@@ -134,7 +172,7 @@ class Snapshot:
                 'nodes': _nodes(document), 'hypotheses': normalized_hypotheses,
                 'context': context, 'as_of': normalize_as_of(as_of),
                 'authored_revision': copy.deepcopy(authored_revision)}
-        data['snapshot_id'] = digest(data)
+        data['snapshot_id'] = digest(_snapshot_preimage(data))
         return cls(data)
 
     @classmethod
@@ -172,7 +210,9 @@ class ScopeCapture:
         if data['context'].get('conflicts', {}).get(scope_id):
             raise SnapshotError('scope_unavailable', 'scope definition is contested')
         collection = definition['collection']
-        fields = sorted(set(definition['fields']))
+        fields = definition['fields']
+        if fields != sorted(set(fields)):
+            raise SnapshotError('invalid_scope', 'scope fields must be sorted and unique')
         normalized = {'collection': collection, 'fields': fields}
         source = data['document'].get(collection)
         if not isinstance(source, dict) or collection in ('meta', 'schema', 'record', 'also'):
