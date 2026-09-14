@@ -350,6 +350,7 @@ class Record(dict):
     def __init__(self, *a, **k):
         super().__init__(*a, **k)
         self.hypotheses = {}
+        self.origins = {}  # collection -> member -> file; reader metadata, never YAML
 
 
 def hypothesis_dir(paths):
@@ -802,6 +803,12 @@ def load(paths, *, read_mode=None):
     def merge(f, d):
         seen.add(os.path.abspath(f))
         for k, v in d.items():
+            if isinstance(v, dict):
+                if not isinstance(doc.get(k), dict):
+                    doc.origins[k] = {}
+                doc.origins.setdefault(k, {}).update(dict.fromkeys(v, os.path.abspath(f)))
+            else:
+                doc.origins.pop(k, None)
             if isinstance(v, dict) and isinstance(doc.get(k), dict):
                 # a legend is declared per file, and a record split across files keeps
                 # every file's letters rather than the last file's
@@ -4633,7 +4640,7 @@ def _marked(state_path):
             "tree": state.get("tree"), "nudged": bool(state.get("nudged"))}
 
 
-def gate(state_path, paths, turns=0, host=None, nudged_at=None):
+def gate(state_path, paths, turns=0, host=None, nudged_at=None, *, _recording_context=None):
     """What a session hears before it can finish, against the mark its opener left: the
     record failing worse than it found it; an intent the session left unserved; entries it
     wrote with no intent recorded; and, once, real work that left the record untouched.
@@ -4692,10 +4699,14 @@ def gate(state_path, paths, turns=0, host=None, nudged_at=None):
             from .ingestion import recording_source
         except ImportError:
             from ingestion import recording_source
+        # Match bodies(doc)'s collection order, including overrides reached through
+        # pointers. Another checked file cannot lend ownership to an effective copy.
+        origins = {nid: doc.origins.get(section, {}).get(nid)
+                   for section, members in doc.items() if isinstance(members, dict) for nid in members}
         recordings = {k for k in every if k not in jud and isinstance(raw.get(k), dict)
                       and isinstance(raw[k].get('recorded_for'), str) and raw[k]['recorded_for'].strip()
                       and not any(field in raw[k] for field in ('v', 'quoted', 'rule', 'verdict'))
-                      and recording_source(k, raw[k])}
+                      and recording_source(k, raw[k], origins.get(k), _preparing=_recording_context)}
         recording_sources = intents | recordings
 
         def attributed(k):

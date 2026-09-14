@@ -700,9 +700,9 @@ def _capture_payload(root, event):
         return None, "captured envelope cannot be read: " + " ".join(str(exc).split())
 
 
-def recording_source(nid, body):
-    """A recording-purpose exemption belongs only to a retained, intact capture."""
-    if not isinstance(nid, str) or not nid.startswith('s.ingest_'):
+def recording_source(nid, body, record=None, *, _preparing=None):
+    """Scope the purpose exemption to an applied capture, or this worker's staged one."""
+    if record is None or not isinstance(body, dict) or not isinstance(nid, str) or not nid.startswith('s.ingest_'):
         return False
     eid = nid[len('s.ingest_'):]
     if not re.fullmatch(r'[A-Za-z0-9_-]{1,128}', eid) or not isinstance(body.get('file'), str):
@@ -712,13 +712,40 @@ def recording_source(nid, body):
         return False
     root = source.parent.parent
     try:
+        owner = Path(record).expanduser().resolve()
+        preparing_root = None
+        if _preparing is not None:
+            if not isinstance(_preparing, dict) or set(_preparing) != {'record', 'state_dir', 'event_id', 'shadow'}:
+                return False
+            preparing_root = Path(_preparing['state_dir']).resolve()
+            shadow = Path(_preparing['shadow']).resolve()
+            if owner != shadow or shadow.parent.parent != preparing_root / 'drafts' \
+                    or not shadow.parent.name.startswith(_preparing['event_id'] + '-'):
+                return False
+            owner = Path(_preparing['record']).resolve()
+        # A caller may choose --state-dir. Its ownership marker, rather than the
+        # current machine's default state path, binds it to the checked record.
+        if _load(root / 'record.json') != {'record': str(owner)}:
+            return False
         event = _load(_event_file(root, eid))
         if not isinstance(event, dict) or event.get('event_id') != eid or event.get('source_file') != str(source):
             return False
         _, error = _capture_payload(root, event)
-    except (OSError, ValueError):
+        if error:
+            return False
+        receipt = _load(root / 'receipts' / (eid + '.json'))
+        if isinstance(receipt, dict) and receipt.get('state') == 'applied' \
+                and receipt.get('event_id') == eid and receipt.get('source') == nid \
+                and all(receipt.get(key) == event.get(key) for key in
+                        ('source_file', 'source_sha256', 'envelope_sha256')):
+            return True
+        # This context comes only from _prepare's call, not YAML or a CLI flag.
+        # The final receipt cannot exist yet; the commit still checks the record
+        # and input hashes after this gate accepts the isolated staged record.
+        return bool(_preparing is not None and root.resolve() == preparing_root
+                    and _preparing['event_id'] == eid and event.get('state') == 'processing')
+    except (OSError, ValueError, TypeError, KeyError, RuntimeError):
         return False
-    return error is None
 
 
 def _integrity_question(root, event, reason, record_committed=False):
@@ -832,7 +859,8 @@ def _prepare(rec, root, event, envelope, before_bytes):
             elif not isinstance(saved, dict):
                 raise ValueError('report entry was not retained: ' + op['id'])
         with contextlib.redirect_stdout(gate_output), contextlib.redirect_stderr(gate_output):
-            gate = P.gate(str(mark), paths)
+            gate = P.gate(str(mark), paths, _recording_context={
+                'record': str(rec), 'state_dir': str(root), 'event_id': eid, 'shadow': str(shadow)})
     if gate:
         issues = [line.replace(str(shadow), str(rec)) for line in gate_output.getvalue().splitlines() if line.strip()]
         raise PreparationRefused(issues or ['the canonical gate refused the prepared record'], diagnostics)

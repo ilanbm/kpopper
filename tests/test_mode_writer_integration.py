@@ -184,6 +184,22 @@ class ModeWriters(unittest.TestCase):
         self.assertEqual(updated['known']['fact.x']['at'], 'reading 2')
         self.assertEqual(updated['judgments'], self.doc['judgments'])
 
+    def test_simple_applied_capture_exemption_follows_shared_record_origin(self):
+        shared = self.base / 'shared.yaml'; shared.write_bytes(self.record.read_bytes())
+        self.project.configure('simple', record=str(shared))
+        mark = self.base / 'mark.json'
+        with contextlib.redirect_stdout(io.StringIO()):
+            I.P.mark(str(mark), [str(self.record)])
+        result = I.update(self.report(), self.record)
+        self.assertEqual(result['state'], 'applied', result)
+        for selected in (self.record, shared):
+            with self.subTest(selected=selected), contextlib.redirect_stdout(io.StringIO()) as output:
+                code = I.P.gate(str(mark), [str(selected)])
+            self.assertEqual(code, 0, output.getvalue())
+            document = I.P.load([str(selected)])
+            self.assertEqual(document.origins['sources'][result['source']], str(shared))
+        self.assertNotIn('origins', I.P.yaml.safe_load(shared.read_text()))
+
     def test_project_qualitative_rule_report_retains_its_evidence(self):
         report = self.report(record_sha256=I._sha(self.record.read_bytes()), shareability='project',
                              scope={'kind': 'project', 'environment': 'this project'})

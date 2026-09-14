@@ -25,8 +25,17 @@ Captured sources carry `recorded_for`, explaining why the report entered the rec
 do not invent an `asked` work request or require a new page tab for each incoming report.
 Existing user requests, page arrangements, citations and semantic checks retain their rules.
 Neither `recorded_for` nor `asked` grants authority to replace a standing judgment.
-The recording-purpose exception is checked against the retained capture's event, envelope
-and source bytes; adding `recorded_for` to an arbitrary source does not grant it.
+The recording-purpose exception requires the state directory's ownership marker to match
+the record being checked, intact event/envelope/source bytes, and an applied receipt for
+that exact capture. Ownership follows the effective source body's file through `record`
+and `also` pointers; a copied or overridden body cannot borrow another file's receipt.
+Custom `--state-dir` locations retain the same ownership check. A
+capture from another record, or one still pending or refused, does not qualify. During
+`update`'s internal preparation only, its current processing event can qualify for its
+own staged record; the worker passes this context directly, before an applied receipt
+can exist. Record metadata and CLI flags cannot grant that preparation context. The
+normal checks and commit-time conflict checks still apply. Adding `recorded_for` to an
+arbitrary source does not grant the exception.
 
 Use the existing graph to find what new information changes while its context is still fresh.
 `kpopper ingest capture` retains a source report immediately and starts a separate worker. The
@@ -256,3 +265,8 @@ canonical writer adjudicates those dates and conflicts, including after an earli
 was applied. External changes to that target require review. A commit journal prevents a worker restart from
 applying the same write twice. Background execution requires POSIX file locking; unsupported
 platforms fail closed rather than pretend that writes are serialized.
+
+On native Windows, use the ordinary `add`, `set` and deliberate `review` commands instead
+of `update`/`ingest capture`. These are individual writes: check each result, retain the
+actual source and location, and do not claim all-or-nothing batch application. A locking
+error occurs before durable ingestion capture, so it does not mean the report was saved.
