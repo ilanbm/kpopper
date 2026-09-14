@@ -1834,7 +1834,7 @@ def measured_build(paths, brief_path=None, page_path=None):
     mode = _read_mode()
     paths = record_paths(selected, read_mode=mode)
     brief_path = P.brief_for(paths, brief_path)
-    before = MEASUREMENTS.snapshot(paths, brief_path)
+    before = MEASUREMENTS.snapshot(selected, brief_path)
     result = build(paths, brief_path, page_path, read_mode=mode)
     if _read_mode() != mode or record_paths(selected, read_mode=mode) != paths:
         raise ValueError('selected record or read mode changed during page measurement; build again')

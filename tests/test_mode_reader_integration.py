@@ -170,6 +170,38 @@ class ModeReaders(Repository):
         (shared.parent / '.kpopper/view.yaml').write_text('title: Changed shared view\n')
         self.assertIn('stale', PM.read(PM.snapshot([str(shared)]))[1])
 
+    def test_simple_measurement_alias_and_shared_consumers_agree_end_to_end(self):
+        from scripts import render_page as R, followups as F
+        shared = self.simple_page_fixture()
+        doc = P.yaml.safe_load(shared.read_text())
+        doc['judgments'] = {'c.page': {'rests_on': ['page.spill'], 'seen': {'page.spill': 0},
+                                     'verdict': 'Covered', 'wrong_if': 'page.spill > 0'}}
+        shared.write_text(P.yaml.safe_dump(doc))
+        result = R.measured_build([str(self.record)])
+        alias, direct = PM.snapshot([str(self.record)]), PM.snapshot([str(shared)])
+        self.assertEqual(alias['scope'], direct['scope'])
+        self.assertEqual(alias['identity'], direct['identity'])
+        counts = {key: value for key, value in result[4]['page'].items() if value is not None}
+        self.assertEqual(PM.read(alias)[0], counts)
+        self.assertEqual(PM.read(direct)[0], counts)
+        for record in (self.record, shared):
+            values, _, error = F.graph(str(record))
+            self.assertIsNone(error)
+            self.assertEqual(values['page.spill'], result[4]['page']['page.spill'])
+        with patch.dict(os.environ, {'KPOPPER_READ_MODE': 'frozen'}):
+            self.assertNotEqual(PM.snapshot([str(self.record)])['scope'], PM.snapshot([str(shared)])['scope'])
+            self.assertEqual(PM.read(PM.snapshot([str(self.record)]))[0], {})
+
+    def test_simple_measurement_publication_rechecks_original_alias_route(self):
+        shared = self.simple_page_fixture()
+        before = PM.snapshot([str(self.record)])
+        replacement = self.base / 'replacement.yaml'
+        replacement.write_text(shared.read_text())
+        M.Project(self.root).configure('simple', record=str(replacement))
+        with self.assertRaisesRegex(ValueError, 'changed'):
+            PM.publish(before, {'page.spill': 0})
+        self.assertFalse(PM.cache_path(before['scope']).exists())
+
     def test_frozen_page_keeps_checkout_brief_sources_and_measurement(self):
         from scripts import render_page as R
         self.simple_page_fixture()
