@@ -89,6 +89,50 @@ class ExportGraph(unittest.TestCase):
         self.assertNotIn('MOVED', out)
         self.assertNotIn('absence of a flag', out.lower())
 
+    def test_omitting_current_values_preserves_comparison_results(self):
+        self.doc['judgments']['d.same'] = {
+            'verdict': 'Continue', 'rests_on': ['m.cost'],
+            'seen': {'m.cost': 12}, 'wrong_if': 'm.cost > 20'}
+        self.doc['judgments']['d.unreviewed'] = {
+            'verdict': 'Pending', 'rests_on': ['m.cost'], 'wrong_if': 'm.cost > 20'}
+        self.save()
+        for nid in ['d.choice', 'd.moved', 'd.false', 'd.same', 'd.unreviewed']:
+            with self.subTest(nid=nid):
+                full = self.packet(nid)['nodes'][nid]
+                bounded = self.packet(nid, depth=0)['nodes'][nid]
+                self.assertEqual(bounded['readings'][0]['comparison'], full['readings'][0]['comparison'])
+                self.assertEqual(bounded['condition'], full['condition'])
+                self.assertEqual(bounded['readings'][0]['current_status'], 'omitted')
+                self.assertNotIn('current', bounded['readings'][0])
+        text = self.cli('d.choice', '--depth', '0').stdout
+        self.assertIn('changed; within condition; no review flag', text)
+        self.assertIn('not included in this excerpt', text)
+
+    def test_selected_malformed_dependencies_are_not_exported_as_character_ids(self):
+        self.doc['judgments']['d.choice']['rests_on'] = 'm.cost'
+        self.save()
+        before = self.record.read_bytes()
+        out = self.cli('d.choice')
+        self.assertNotEqual(out.returncode, 0)
+        self.assertEqual(out.stdout, '')
+        self.assertIn('d.choice', out.stderr)
+        self.assertIn('rests_on must be a list', out.stderr)
+        self.assertEqual(self.record.read_bytes(), before)
+        # An unrelated valid entry can still be read from the same record.
+        self.assertEqual(self.cli('s.note').returncode, 0)
+
+    def test_undeclared_condition_input_is_visible_without_erasing_its_result(self):
+        self.doc['judgments']['d.choice']['rests_on'] = ['m.other']
+        self.doc['judgments']['d.choice']['seen'] = {'m.other': 3}
+        self.save()
+        for predicate, outcome in [('m.cost > 20', 'false'), ('m.cost > 11', 'true')]:
+            with self.subTest(predicate=predicate):
+                self.doc['judgments']['d.choice']['wrong_if'] = predicate
+                self.save()
+                text = self.cli('d.choice', '--depth', '0').stdout
+                self.assertIn(outcome + ' on current recorded values', text)
+                self.assertIn('Condition reads undeclared dependencies: m.cost', text)
+
     def test_fired_condition_survives_another_missing_dependency(self):
         body = self.doc['judgments']['d.false']
         body['rests_on'].append('missing.backup')

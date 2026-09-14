@@ -263,6 +263,10 @@ sources:
             counts for coverage but no longer silences a flagged item"
     of: "2026-09-04, given the written layer at 2e5f4f3 and what four pieces since then built on it"
     read: "2026-09-04"
+  doc.assessment_contract:
+    name: "Recorded assessment API and policy contract"
+    file: "docs/assessment.md"
+    read: "2026-09-14"
   doc.checked_retrieval:
     name: "Checked-session search continuation and explicit context contract"
     file: "docs/retrieval.md"
@@ -1625,6 +1629,25 @@ judgments:
       d.metrics_derived_builtin: "graph.* and page.* are derived entries the reader computes itself
                                   - counts and shares, never stored, thresholds only inside
                                   falsifiers"
+  d.assessment_separates_findings_and_attention:
+    name: "Assessment findings remain independent of attention and display"
+    rests_on: [doc.assessment_contract, d.moved_is_a_flag, goal.portable]
+    verdict: "Expose versioned recorded findings through one assessment contract, preserve the
+              source body and evaluation scope, and derive task-scoped attention separately. Keep
+              existing reader flags as a compatibility policy and identify the optional typed session
+              semantics separately."
+    because: "Consumers need to combine changed premises, fired or unknown conditions, alternatives
+              and structural issues without parsing prose or losing independent findings. A display
+              selection or attention policy can change what is shown or acted on while leaving the
+              assessed evidence intact."
+    reopened_by: "A supported consumer must reinterpret prose to use a finding, policy selection
+                  changes assessed evidence, display truncation erases a known result, or the named
+                  profile hides a material difference between evaluators."
+    seen:
+      doc.assessment_contract: "read 2026-09-14"
+      d.moved_is_a_flag: "a dependency that moved since the snapshot flags the judgment for a
+                          person; only a predicate that holds fails the build"
+      goal.portable: "usable by any session, in any project, with no author present"
   d.brand_on_the_directory:
     verdict: "the brand goes on the directory, the verbs, the check's name and the head line of a
               born record; the concept goes on the entry file's name"
@@ -1964,10 +1987,11 @@ judgments:
               details. Label historical and current readings separately, distinguish omitted bodies
               from missing records, and retain simultaneous condition results and reader flags
               without changing the record format or evaluation policy."
-    because: "A focused excerpt can omit the current bodies while still carrying historical readings
-              and a condition result computed from the full record. Explicit labels and selection
-              limits preserve those distinctions; readable text also remains useful when diagrams are
-              unavailable."
+    because: "A focused excerpt can omit current bodies while full-record comparisons and condition
+              results remain known. Selection limits which values are displayed, not whether their
+              comparison is reported. A condition result does not establish that its dependency links
+              are complete, and malformed dependency text must not become fabricated entry links.
+              Readable text preserves these distinctions when diagrams are unavailable."
     reopened_by: "Readers of supported excerpts confuse historical and current values, treat omitted
                   bodies as missing records or changed premises as fired conditions, lose a
                   simultaneous finding, or require unnecessary stops and extensive rereading to

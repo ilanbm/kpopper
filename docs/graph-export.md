@@ -4,6 +4,8 @@
 shows its historical dependency readings as `at_review`, current selected readings as
 `current`, and the ordinary reader's condition result. These are output labels;
 `GROUNDING.yaml` and custom snapshot field names are unchanged.
+The comparison and condition findings come from the [shared assessment contract](assessment.md),
+also available directly through `kpopper assess`. The exporter only selects and formats them.
 
 ```sh
 kpopper export d.choice
@@ -32,10 +34,16 @@ A dependency table distinguishes:
 - A changed value inside a false declared condition from a change requiring review.
 - A recorded source/rule reading from a comparison the ordinary reader actually performs.
 
-Conditions are evaluated against the full base record before selection. A true condition
-therefore stays true even if the excerpt omits its current inputs, or another dependency
-is missing. A missing current value is not replaced by its historical value. The exporter
+Comparisons and conditions are evaluated against the full base record before selection.
+Omitting a current value does not hide whether it changed, including a change within a
+false condition that requires no review. A true condition stays true even if the excerpt
+omits its current inputs, or another dependency is missing. A missing current value is
+not replaced by its historical value. The exporter
 does not refresh snapshots, fetch external sources or run page-only checks.
+
+When a condition reads an existing entry outside the judgment's declared dependencies,
+the text names that gap alongside the condition result. Such a result does not establish
+that the dependency links are complete. Use `kpopper check` for record diagnostics.
 
 Structured rules retain their input links in both traversal directions. Supported rules and
 conditions are displayed as readable expressions; calculated values are labeled separately
@@ -58,6 +66,8 @@ It is available with text formats. To obtain an omitted current entry, use
 
 Supply 1–8 exact entry IDs. Entry and dependency IDs must be strings; quote numeric-looking
 IDs in YAML. Unsupported IDs produce a diagnostic rather than a partial export.
+A selected judgment with a text dependency field is rejected rather than displaying its
+characters as missing entries; dependencies must be written as a list.
 Depth is 0–4 (default 1); `--max-nodes` is 1–32
 (default 12), including seeds. Selection follows recorded links breadth first and handles
 cycles once. `support` follows outgoing links; `impact` traverses them backwards while

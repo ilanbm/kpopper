@@ -51,6 +51,7 @@ limited to numerical thresholds.
 | `kpopper affects <entry>` | Follow the downstream reach of an entry through judgments and rule references. |
 | `kpopper export <entry> [entries...]` | Export a focused excerpt with historical/current readings and optional Mermaid. See [graph export](graph-export.md). |
 | `kpopper check` | Report structural problems, declared gaps, movement and fired conditions. |
+| `kpopper assess <entry> [entries...]` | Read versioned findings and scoped attention as JSON. See [assessment contract](assessment.md). |
 
 The legacy opener uses line and character budgets; its output reports omitted attention
 items. It is not a complete read of every entry. The optional

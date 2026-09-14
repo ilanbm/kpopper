@@ -52,6 +52,7 @@ COMMANDS = {
     "map": ("[--deep]", "Map the work through an available host agent."),
     "config": ("[--mode simple|advanced] [--record PATH] [--check] [--guidance on|off]", "Inspect the project mode or change local preferences."),
     "check": ("[FILE ...]", "Check the record's consistency and declared conditions."),
+    "assess": ("ID [ID ...] [--attention-only]", "Read versioned assessment findings and scoped attention as JSON."),
     "pull": ("SUBJECT [SUBJECT ...] [--from REF]", "Read a subject and the evidence behind it."),
     "affects": ("SUBJECT [SUBJECT ...]", "Trace what a change reaches."),
     "add": ("ID FIELD=VALUE ...", "Add a grounded entry or judgment."),
@@ -198,7 +199,7 @@ def main():
         root.error("Use kpopper open, kpopper map, or kpopper config; start is not a public command.")
     if cmd not in COMMANDS and cmd != "_agent":
         root.error("unknown command: " + cmd)
-    if cmd not in {"open", "map", "config", "_agent", "session", "ingest", "update", "document", "followups", "watch", "export"} and rest in (["--help"], ["-h"]):
+    if cmd not in {"open", "map", "config", "_agent", "session", "ingest", "update", "document", "followups", "watch", "export", "assess"} and rest in (["--help"], ["-h"]):
         usage, description = COMMANDS[cmd]
         print("usage: kpopper " + cmd + (" " + usage if usage else "") + " [--json]\n\n" + description)
         if cmd in {"set", "add", "review", "same", "distinct"}:
@@ -235,6 +236,12 @@ def main():
         except ImportError:
             from pending_cli import main as pending_main
         sys.exit(pending_main((["--json"] if options.json else []) + rest))
+    if cmd == "assess":
+        try:
+            from .assessment import main as assess_main
+        except ImportError:
+            from assessment import main as assess_main
+        sys.exit(assess_main([arg for arg in rest if arg != "--json"]))
     if cmd == "followups":
         try:
             from .followups_cli import main as followups_main
