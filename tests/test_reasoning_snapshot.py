@@ -89,6 +89,48 @@ class SnapshotTests(unittest.TestCase):
             with self.assertRaisesRegex(SnapshotError, 'invalid_scope'):
                 Snapshot.from_data(document).capture_scope('scope.items')
 
+    def test_node_view_copies_snapshot_once_and_keeps_returned_values_detached(self):
+        from scripts.reasoning import contract
+        snapshot = Snapshot.from_data(source())
+        original_to_data = Snapshot.to_data
+        with mock.patch.object(Snapshot, 'to_data', autospec=True, side_effect=original_to_data) as copies, \
+                mock.patch.object(contract, 'node_basis', wraps=contract.node_basis) as bases:
+            view = SnapshotView(snapshot, nodes=['a', 'b'])
+            first = view.read_node('a')
+            first['body']['v'] = 99
+            first['fields']['snapshot'] = 'changed'
+            snapshot.to_data()['nodes']['a']['body']['v'] = 88
+            repeated = view.read_node('a')
+            view.read_node('b')
+            self.assertEqual(repeated['body']['v'], 1)
+            self.assertEqual(repeated['fields']['snapshot'], 'reviewed')
+            # One view initialization copy plus the explicit caller export above.
+            self.assertEqual(copies.call_count, 2)
+            self.assertEqual(bases.call_count, 2)
+            witnesses = view.executed_reads
+            witnesses[0]['fingerprint'] = 'changed'
+            self.assertNotIn('changed', [item['fingerprint'] for item in view.executed_reads])
+            self.assertEqual(len(view.executed_reads), 2)
+
+    def test_scope_view_reuses_capture_and_detaches_each_field_read(self):
+        document = source()
+        document['items']['a']['v'] = {'nested': [1]}
+        snapshot = Snapshot.from_data(document)
+        original_capture = Snapshot.capture_scope
+        with mock.patch.object(Snapshot, 'capture_scope', autospec=True, side_effect=original_capture) as captures:
+            view = SnapshotView(snapshot, scopes=['scope.items'])
+            first = view.read_scope('scope.items', 'v')
+            first[0]['value']['nested'][0] = 99
+            missing = view.read_scope('scope.items', 'absent')
+            repeated = view.read_scope('scope.items', 'v')
+            self.assertEqual(repeated[0]['value']['nested'], [1])
+            self.assertEqual(missing[0]['status'], 'missing')
+            self.assertEqual(captures.call_count, 1)
+            self.assertEqual(len(view.executed_reads), 1)
+            with self.assertRaisesRegex(SnapshotError, 'undeclared_dependency'):
+                view.read_scope('scope.items', 'secret')
+            self.assertEqual(captures.call_count, 1)
+
     def test_scope_candidate_membership_fields_and_grants(self):
         data = source()
         initial = Snapshot.from_data(data).capture_scope('scope.items')

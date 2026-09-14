@@ -295,13 +295,24 @@ class ScopeCapture:
     def view(self):
         return SnapshotView(self.__snapshot, scopes=[self.__data['scope_id']])
 
+    def _read_field(self, field):
+        # Internal view boundary: copy only the selected field, never the full scope.
+        if field not in self.__data['definition']['fields']:
+            raise SnapshotError('undeclared_dependency', self.__data['scope_id'] + ':' + field)
+        return [dict(id=member, **copy.deepcopy(values[field]))
+                for member, values in self.__data['candidates'].items()]
+
 
 class SnapshotView:
     """Exact grants; returned values are detached and never mutable snapshot state."""
-    __slots__ = ('__snapshot', '__nodes', '__scopes', '__reads', '__limits')
+    __slots__ = ('__snapshot', '__data', '__nodes', '__scopes', '__reads', '__limits',
+                 '__node_bases', '__scope_captures')
 
     def __init__(self, snapshot, *, nodes=(), scopes=(), limits=None):
         self.__snapshot = snapshot
+        self.__data = snapshot.to_data()
+        self.__node_bases = {}
+        self.__scope_captures = {}
         self.__nodes = frozenset(nodes)
         self.__scopes = frozenset(scopes)
         self.__reads = {}
@@ -310,22 +321,24 @@ class SnapshotView:
     def read_node(self, node_id):
         if node_id not in self.__nodes:
             raise SnapshotError('undeclared_dependency', node_id)
-        data = self.__snapshot.to_data()
         from .contract import node_basis
-        basis = node_basis(data, node_id)
+        if node_id not in self.__node_bases:
+            self.__node_bases[node_id] = node_basis(self.__data, node_id)
+        basis = self.__node_bases[node_id]
         witness = {'kind': 'node', 'id': node_id, 'fingerprint': basis['fingerprint']}
         self.__reads[digest(witness)] = witness
-        return copy.deepcopy(data['nodes'].get(node_id))
+        return copy.deepcopy(self.__data['nodes'].get(node_id))
 
     def read_scope(self, scope_id, field):
         if scope_id not in self.__scopes:
             raise SnapshotError('undeclared_dependency', scope_id)
-        capture = self.__snapshot.capture_scope(scope_id, limits=self.__limits)
-        data = capture.to_data()
-        if field not in data['definition']['fields']:
-            raise SnapshotError('undeclared_dependency', scope_id + ':' + field)
-        self.__reads[digest(data['witness'])] = data['witness']
-        return [dict(id=member, **values[field]) for member, values in data['candidates'].items()]
+        if scope_id not in self.__scope_captures:
+            self.__scope_captures[scope_id] = self.__snapshot.capture_scope(scope_id, limits=self.__limits)
+        capture = self.__scope_captures[scope_id]
+        values = capture._read_field(field)
+        witness = capture.witness
+        self.__reads[digest(witness)] = witness
+        return values
 
     @property
     def executed_reads(self):
