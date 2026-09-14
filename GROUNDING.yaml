@@ -846,11 +846,12 @@ known:
          half drifts while the total holds"
     measure: blocked_on_implementation
   m.blocked_on_reopeners:
-    v: 61
+    v: 63
+    # set 2026-09-14: this branch added two judgments that declare an observational hole
     # set 2026-09-11: measured by blocked_on_reopeners at a51bc75 with the working tree changed
     # reconciled 2026-09-05 after the same-day write rule refused a second reading: this tree adds
     # five observational declarations to the 55 measured earlier that day
-    of: "2026-09-11"
+    of: "2026-09-14"
     name: "Judgments that declare a hole with blocked_on - the count. Whether each names a sign
            that would re-open the decision, or an input the record lacks, is read by hand and said
            beside it"
@@ -2170,7 +2171,7 @@ judgments:
               mistake this tree already refuses for its reader. What was actually wanted here is that
               an install stops lagging a merge, and that is the registries' own identity handshake,
               not a second registry."
-    wrong_if: {expr: "p.github_python_registries > 0"}
+    wrong_if: "p.github_python_registries > 0"
     seen:
       p.github_python_registries: 0
       lit.github_registries: "GitHub Packages hosts npm, RubyGems, Maven, Gradle, NuGet and
