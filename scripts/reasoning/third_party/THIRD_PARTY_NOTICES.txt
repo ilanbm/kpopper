@@ -1,0 +1,19 @@
+The kpopper native arithmetic runtime uses Lean 4.33.1 (Apache-2.0),
+GMP 6.3.0 (LGPL-3.0-or-later), libuv 1.52.1 (MIT and additional notices),
+and mimalloc 2.2.3 (MIT). LLVM runtime/header notices are included
+conservatively. The licenses in this directory retain the upstream notices.
+
+GMP is a separate, replaceable shared library. You may modify or replace
+GMP and reverse engineer this combined work to debug those modifications.
+The GMP source and build instructions are supplied in the same distribution
+at reasoning/native/gmp-source-and-build.tar.gz. This source archive contains
+the exact upstream GMP 6.3.0 tarball, build script and source provenance.
+The LGPL and GPL license texts included here apply as described by each
+component; their inclusion does not change kpopper's own MIT license.
+
+To rebuild GMP, extract the source/build archive, read SOURCE-BUILD.md,
+and run its build instructions for your target. Replace the extracted
+runtime library with your ABI-compatible version. A modified library is
+reported as replaced in implementation identity; it must remain usable.
+On macOS an ad-hoc signature (codesign --force --sign - FILE) may be
+needed after rebuilding. No distributor signing key is required.
