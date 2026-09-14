@@ -1,6 +1,7 @@
 """Explicit local contribution status, portable snapshots and legacy import."""
 import argparse
 import json
+import os
 from pathlib import Path
 import uuid
 
@@ -34,11 +35,15 @@ def main(argv):
             result = V.materialize(project, args.revision, args.out, ref=args.ref)
         elif args.command == 'status':
             path = project.record()
-            doc = G.P.load([str(path)]) if path.exists() else V.overlay([str(path)], G.P.Record())
+            doc = G.P.load([str(path)]) if path.exists() else V.overlay(
+                [str(path)], G.P.Record(), read_mode=os.environ.get('KPOPPER_READ_MODE', 'live'))
             result = {'mode': project.config()['mode'], 'record': str(path),
                       'read_mode': getattr(doc, 'read_mode', 'live'),
                       'contributions': getattr(doc, 'contributions', []),
-                      'conflicts': getattr(doc, 'knowledge_conflicts', {})}
+                      'conflicts': getattr(doc, 'knowledge_conflicts', {}),
+                      'publication': getattr(doc, 'publication', None),
+                      'private_drafts': getattr(doc, 'private_drafts', []),
+                      'target_unavailable': getattr(doc, 'target_unavailable', None)}
         else:
             doc = G.P.load([str(Path(args.file).resolve())], read_mode='frozen')
             scope = {'kind': args.scope, 'environment': args.environment}

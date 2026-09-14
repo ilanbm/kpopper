@@ -50,6 +50,7 @@ def overlay(paths, doc, *, read_mode='live'):
     if read_mode != 'live':
         raise ValueError('read mode must be live or frozen')
     project = project_for(paths)
+    doc.private_drafts = G.P._peer('recording').private_drafts(project)
     if not project.git or project.config()['mode'] != 'advanced':
         return doc
     # Explicit unrelated files are frozen artifacts, never an implicit overlay target.
@@ -61,11 +62,13 @@ def overlay(paths, doc, *, read_mode='live'):
         return doc
     holders = {}
     meanings = {}
+    active_ids = set()
     def meaning(document, name):
-        try:
-            _, judgments, fields = G.P.infer(document)
+        result = G.semantic_roles(document)
+        if result is not None:
+            judgments, fields = result
             roles = {'judgment': name in judgments, 'fields': fields if name in judgments else {}}
-        except SystemExit:
+        else:
             roles = {'unreadable': True}
         return G.identity({'schema': {k: document[k] for k in ('schema',) if k in document}, 'roles': roles})
     for nid, pair in G.entries(doc).items():
@@ -78,14 +81,41 @@ def overlay(paths, doc, *, read_mode='live'):
                 meanings.setdefault(nid, set()).add(meaning(G.P.layered(doc, hyp), nid))
     # Compare a configured target when locally available, without overlaying its code facts.
     publication = project.config().get('publication')
+    cache = {}
+    if __package__:
+        from .pending_publication import Publisher, scope_identity
+    else:
+        from pending_publication import Publisher, scope_identity
+    cache = Publisher(project).status()
+    doc.publication = cache
+    observed = cache.get('last_verified') or {}
     if publication:
         ref = 'refs/remotes/' + publication['remote'] + '/' + publication['target']
-        result = M.git(project.root, 'show', ref + ':' + project.config()['record'], check=False)
-        if result.returncode == 0:
-            target = G.P.yaml.safe_load(result.stdout) or {}
-            for nid, pair in G.entries(target).items():
-                holders.setdefault(nid, []).append(('target:' + ref, pair))
-                meanings.setdefault(nid, set()).add(meaning(target, nid))
+        if observed.get('scope') == scope_identity(publication) and observed.get('target'):
+            ref = observed['target']
+        resolved = M.git(project.root, 'rev-parse', '--verify', ref + '^{commit}', check=False)
+        if resolved.returncode == 0:
+            try:
+                # The existing bounded reader follows committed pointers and named
+                # hypotheses; no private working files or target code are imported.
+                W = G.P._peer('watch')
+                target = W._records(project.root, project.config()['record'], resolved.stdout.decode().strip())
+                target_docs = [('target:' + ref, target['doc'])]
+                for hyp in target['hypotheses']:
+                    layered = copy.deepcopy(target['doc'])
+                    for collection, members in G.P.collections_of(hyp['doc']).items():
+                        layered.setdefault(collection, {}).update(copy.deepcopy(members))
+                    if 'schema' in hyp['doc']:
+                        layered['schema'] = copy.deepcopy(hyp['doc']['schema'])
+                    target_docs.append(('target:' + ref + ':hypothesis:' + hyp['name'], layered))
+                for label, target_doc in target_docs:
+                    for nid, pair in G.entries(target_doc).items():
+                        holders.setdefault(nid, []).append((label, pair))
+                        meanings.setdefault(nid, set()).add(meaning(target_doc, nid))
+            except (ValueError, OSError, SystemExit) as error:
+                doc.target_unavailable = str(error)
+        else:
+            doc.target_unavailable = 'configured target has no locally available observation'
     for revision, bundle in snap['bundles'].items():
         manifest = bundle['manifest']
         name = 'pending-' + revision
@@ -94,19 +124,29 @@ def overlay(paths, doc, *, read_mode='live'):
         events = [dict(e) for e in snap['events'] if e['revision'] == revision]
         status = {'revision': revision, 'state': 'captured locally', 'scope': manifest['scope'],
                   'roots': manifest['roots'], 'events': events, 'ledger_ref': snap['ref']}
+        state = cache.get('states', {}).get(revision, 'captured')
+        status.update(publication_state=state, verified=False,
+                      last_verified=observed or None, pr=cache.get('pr'))
+        if state != 'captured':
+            status['state'] = state + (' (last observed)' if state in ('accepted', 'proposed', 'closed') else '')
         doc.contributions.append(status)
+        decision = cache.get('decisions', {}).get(revision, {})
+        if decision.get('state') in ('withdrawn', 'rejected', 'superseded'):
+            # Explicit decisions retire an active proposal, not its immutable
+            # evidence or publication history. Sequence alone never retires it.
+            continue
+        active_ids.update(entry_map)
         doc.hypotheses[name] = {
             'kind': 'contribution',
             'name': name, 'path': 'git:' + snap['ref'] + ':' + revision,
-            'head': {'claim': 'Captured project contribution; acceptance has not been verified',
+            'head': {'claim': 'Project contribution: ' + status['state'] + '; current remote acceptance is unverified',
                      'folds': 'never', 'scope': manifest['scope'], 'publication': status},
             'doc': body, 'ids': set(entry_map),
             'raw': {nid: pair[1] for nid, pair in entry_map.items()}, 'error': None}
         for nid, pair in entry_map.items():
             holders.setdefault(nid, []).append((name, pair))
             meanings.setdefault(nid, set()).add(meaning(body, nid))
-    pending_ids = {nid for b in snap['bundles'].values() for nid in G.entries(b['manifest']['document'])}
-    for nid in pending_ids:
+    for nid in active_ids:
         variants = holders.get(nid, [])
         if len({G.identity(list(pair)) for _, pair in variants}) > 1 or len(meanings.get(nid, ())) > 1:
             doc.knowledge_conflicts[nid] = [(name, copy.deepcopy(pair[1])) for name, pair in variants]
@@ -120,6 +160,10 @@ def lines(doc):
               for c in contributions]
     result.extend('CONFLICT ' + nid + ': ' + ', '.join(name for name, _ in variants)
                   for nid, variants in sorted(getattr(doc, 'knowledge_conflicts', {}).items()))
+    if getattr(doc, 'target_unavailable', None):
+        result.append('TARGET UNVERIFIED: ' + doc.target_unavailable)
+    if getattr(doc, 'private_drafts', None):
+        result.append(str(len(doc.private_drafts)) + ' private drafts retained; inspect `kpopper knowledge status`')
     return result
 
 

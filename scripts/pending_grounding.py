@@ -216,6 +216,20 @@ def prepare(doc, roots, *, scope, shareability, evidence=None):
                 'evidence': {path: hashlib.sha256(data).hexdigest() for path, data in sorted(files.items())}}
     return {'revision': identity(manifest), 'manifest': manifest, 'files': files}
 
+def semantic_roles(document):
+    """Infer roles consistently for a full graph or an explicit-schema closure."""
+    try:
+        _, judgments, fields = P.infer(document)
+        return judgments, fields
+    except SystemExit:
+        # A selected source/fact closure can keep its parent record's explicit
+        # schema without including any downstream judgment using that schema.
+        deps = (document.get('schema') or {}).get('deps')
+        if deps and not any(isinstance(body, dict) and deps in body
+                            for _, body in entries(document).values()):
+            return {}, {}
+        return None
+
 
 def equivalent(bundle, doc, evidence):
     """Content-based acceptance: shared subset must match; extra local IDs are fine."""
@@ -227,19 +241,7 @@ def equivalent(bundle, doc, evidence):
     for name, body in entries(expected['document']).items():
         if name not in actual or identity(list(body)) != identity(list(actual[name])):
             return False
-    def roles(document):
-        try:
-            _, judgments, fields = P.infer(document)
-            return judgments, fields
-        except SystemExit:
-            # A selected source/fact closure can keep its parent record's explicit
-            # schema without including any downstream judgment using that schema.
-            deps = (document.get('schema') or {}).get('deps')
-            if deps and not any(isinstance(body, dict) and deps in body
-                                for _, body in entries(document).values()):
-                return {}, {}
-            return None
-    source_roles, target_roles = roles(expected['document']), roles(doc)
+    source_roles, target_roles = semantic_roles(expected['document']), semantic_roles(doc)
     if source_roles is None or target_roles is None:
         return False
     for name in entries(expected['document']):

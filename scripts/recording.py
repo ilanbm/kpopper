@@ -15,6 +15,14 @@ except ImportError:
 ROUTING = {'shareability', 'scope', 'environment', 'commit', 'event_id', 'contribution_id', 'evidence', 'evidence_root'}
 
 
+def private_drafts(project):
+    """Discover retained private obligations without reading or exposing their bodies."""
+    key = hashlib.sha256(str(project.common or project.root).encode()).hexdigest()
+    home = Path(os.environ.get('KPOPPER_PRIVATE_HOME', Path.home() / '.local/share/kpopper/private'))
+    return [{'event_id': path.stem, 'state': 'private draft', 'path': str(path)}
+            for path in sorted((home / key).glob('*.json')) if path.is_file()]
+
+
 def private_marker(value):
     if isinstance(value, dict):
         for key, item in value.items():

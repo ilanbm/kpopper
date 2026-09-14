@@ -218,7 +218,14 @@ class Project:
             # Remote verification finishes before the policy lock is acquired.
             # Retain publisher ownership so a terminal decision cannot be resumed
             # between verification and the local transition.
-            guard = Publisher(self).transition_guard()
+            @contextlib.contextmanager
+            def verified_guard():
+                try:
+                    with Publisher(self).transition_guard() as proof:
+                        yield proof
+                except (ValueError, RuntimeError) as error:
+                    raise ValueError('durable contributions need reconciliation: ' + str(error)) from error
+            guard = verified_guard()
         return guard
 
     def preview_transition(self, mode=None, record=None):

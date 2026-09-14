@@ -19,6 +19,29 @@ the previous policy are retained as rollback evidence.
 
 ## Record a finding in its scope
 
+Inspect the project and its current obligations:
+
+```sh
+kpopper config --json
+kpopper knowledge status
+kpopper pending status
+```
+
+`knowledge status` includes local routing, conflicts, retained private drafts and cached
+publication state. `pending status --verify` checks current incorporation in the configured
+target without publishing. Both identify unverified state explicitly.
+
+To change modes, first prepare the intended destination with the reconciled record:
+
+```sh
+kpopper config --mode simple --record /path/to/shared/GROUNDING.yaml --check
+kpopper config --mode simple --record /path/to/shared/GROUNDING.yaml
+```
+
+The check is read-only. The actual change rechecks its evidence; a new arrival between
+the two commands can require reconciliation again. Use `--expected-generation N` when
+applying a previously inspected configuration.
+
 Start with the source and sharing permission. A private source or unclear permission goes
 into a structured private draft outside publishable Git objects. Declaring an enclosing
 contribution shareable cannot override a private source inside it. No publication grant
@@ -44,6 +67,21 @@ Existing explicit local-record writes retain their file-writing behavior when no
 fields are supplied. They never become remote project contributions automatically.
 Explicit private or unclear sharing declarations take priority on every write path.
 
+For example, this authorized external observation is independent of the current feature:
+
+```sh
+kpopper add vendor.limit v=25 'from=Approved vendor bulletin, account A row' \
+  --scope external --environment 'Vendor API v2, account A' \
+  --shareability project --event-id vendor-bulletin-2026-09-14
+```
+
+Keep an event ID stable when retrying the same capture. Reusing it with different content
+is refused. Use `--evidence-root DIR` to explicitly supply the permitted files referenced
+by a contribution; the complete closure must be portable. For private input use
+`--shareability private`; an explicitly routed write without sharing permission is kept
+as a private draft. `--scope code --commit COMMIT --environment ENVIRONMENT` retains an
+exact measured code scope. Feature-only knowledge uses `--scope feature`.
+
 ## Read what is known here
 
 Ordinary `open`, `pull` and `check`, and checked session views, include relevant pending
@@ -57,6 +95,15 @@ selected record and its portable evidence, without another user's private files 
 moving local pending ref. Materializing a contribution into a branch is a separate,
 validated operation that copies its required closure and evidence. This allows a feature
 PR to carry a contribution without waiting for a separate knowledge PR first.
+
+```sh
+kpopper --frozen check
+kpopper knowledge materialize REVISION --out snapshots/vendor-bulletin
+kpopper --frozen pull vendor.limit snapshots/vendor-bulletin/GROUNDING.yaml
+```
+
+Materialization writes a new snapshot directory and refuses an existing destination. Review
+the exported record and evidence before including it in a feature's committed record.
 
 ## One publication branch, repeated review cycles
 
@@ -77,6 +124,20 @@ Configuration records the exact remote repository, target branch and publication
 A standing project permission authorizes managed push and PR creation/update for that
 scope. Capture and local reads work without it. Permission is never inferred from a
 successful login or an existing Git remote.
+
+For a project whose owner authorizes this scope:
+
+```sh
+kpopper pending configure --remote team --target trunk --grant
+kpopper pending publish
+```
+
+The first command grants standing push and PR creation/update authority to that exact
+destination; it does not publish immediately. Omit `--grant` to retain the destination
+without standing permission, then use `pending publish --authorize` for one authorized
+attempt. `pending configure --revoke` removes standing permission. `pending pause` pauses
+attempts and `pending resume` resumes them subject to existing authority. Terminal actions
+name immutable revisions: for example `pending withdraw REVISION --reason "Reason"`.
 
 With permission, capture starts a nonblocking publication attempt. Active session openings
 retry with bounded backoff. A stopped host is not a running service; background queues do
@@ -107,6 +168,11 @@ Closed, rejected, withdrawn and superseded contributions are not silently reopen
 republished. A cached receipt describes its last verified versions; it is not a fresh
 assertion about the remote target. Merging follows the repository's existing review and
 protection policy.
+
+Publication currently stops with explicit attention for a target whose record is split
+across pointer files; it does not publish from a partial graph. Ordinary target comparison
+does follow the committed pointer and hypothesis closure. Prepare a reconciled single
+publication record before authorizing publication for such a project.
 
 ## Existing shared observations
 

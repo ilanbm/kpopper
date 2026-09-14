@@ -1,5 +1,8 @@
 """Public commands, opening and transitions use the same durable boundaries."""
 import json
+import copy
+import contextlib
+import io
 import multiprocessing
 import os
 from pathlib import Path
@@ -151,3 +154,51 @@ class IntegrationTests(unittest.TestCase):
                 self.project.configure('simple', record=str(shared))
         self.assertEqual(self.project.config()['mode'], 'advanced')
         self.assertEqual(len(self.store.snapshot()['bundles']), 2)
+
+    def test_source_only_schema_closure_keeps_its_role_in_live_view(self):
+        doc = F.fixture_bundle()['manifest']['document']
+        doc['schema'] = {'deps': 'rests_on', 'snapshot': 'seen', 'predicate': 'wrong_if'}
+        doc['sources']['s.vendor']['labels'] = ['shareable']
+        bundle = G.prepare(doc, ['api.limit'], scope={'kind': 'external', 'environment': 'API v2'},
+                           shareability='project', evidence={'evidence/vendor.txt': b'The limit is 10.\n'})
+        self.store.capture(bundle, event_id='explicit-schema', contribution_id='limit', shareability='project')
+        graph = copy.deepcopy(doc)
+        graph['judgments'] = {'plan.ready': {'rests_on': ['api.limit'], 'seen': {'api.limit': 10},
+                                           'verdict': 'ready', 'wrong_if': 'api.limit < 1'}}
+        (self.root / 'GROUNDING.yaml').write_text(G.P.yaml.safe_dump(graph))
+        live = G.P.load([str(self.root / 'GROUNDING.yaml')])
+        self.assertFalse(live.knowledge_conflicts)
+
+    def test_committed_target_pointers_and_target_only_hypotheses_are_compared(self):
+        bundle = F.fixture_bundle()
+        self.store.capture(bundle, event_id='target-hypothesis', contribution_id='limit', shareability='project')
+        (self.root / 'facts.yaml').write_text(G.P.yaml.safe_dump(bundle['manifest']['document']))
+        (self.root / 'GROUNDING.yaml').write_text('record: facts.yaml\n')
+        hypothesis = self.root / '.kpopper/hypotheses/alternative.yaml'
+        hypothesis.parent.mkdir(parents=True)
+        hypothesis.write_text('hypothesis: {claim: "Different limit"}\nknown:\n  api.limit: {v: 30, from: s.vendor}\n')
+        M.git(self.root, 'add', '.')
+        M.git(self.root, '-c', 'commit.gpgsign=false', 'commit', '-m', 'Target split record with proposal')
+        M.git(self.root, 'push', 'team', 'trunk')
+        hypothesis.unlink()
+        (self.root / 'GROUNDING.yaml').write_text(G.P.yaml.safe_dump(bundle['manifest']['document']))
+        live = G.P.load([str(self.root / 'GROUNDING.yaml')])
+        self.assertIn('api.limit', live.knowledge_conflicts)
+        self.assertTrue(any('target:' in label and ':hypothesis:alternative' in label
+                            for label, _ in live.knowledge_conflicts['api.limit']))
+
+    def test_private_drafts_are_discoverable_but_frozen_status_excludes_them(self):
+        with patch.dict(os.environ, {'KPOPPER_PRIVATE_HOME': str(self.base / 'private-drafts')}):
+            output = io.StringIO()
+            with contextlib.redirect_stdout(output):
+                code = G.P.apply([str(self.root / 'GROUNDING.yaml')],
+                                 {'kind': 'add', 'id': 'private.limit', 'body': {'v': 71, 'from': 'private note'},
+                                  'shareability': 'private', 'event_id': 'retained-private'})
+            self.assertEqual(code, 0)
+            receipt = json.loads(output.getvalue())
+            self.assertTrue(Path(receipt['path']).is_file())
+            live = json.loads(self.cli('knowledge', 'status').stdout)
+            frozen = json.loads(self.cli('--frozen', 'knowledge', 'status').stdout)
+        self.assertEqual(live['private_drafts'][0]['event_id'], 'retained-private')
+        self.assertEqual(frozen['private_drafts'], [])
+        self.assertIsNone(self.store.head())

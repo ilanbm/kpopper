@@ -3991,7 +3991,8 @@ def _apply(paths, action):
         else:
             collection = _collection_for(doc, ids, jud, fields, nid, body, action.get("into"))
             target = _file_for(files, nid, collection)
-    original = io.open(target, encoding="utf-8").read()
+        with io.open(target, encoding="utf-8") as source:
+            original = source.read()
     lines = original.split("\n")
     if kind == "set":
         now = value_of(raw, ids, nid)
