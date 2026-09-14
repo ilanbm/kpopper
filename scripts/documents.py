@@ -339,28 +339,36 @@ def _event_binding(path, spec, selections, root):
         raise DocumentError("The ingestion outcome could not be read; inspect or recover the event before refreshing") from error
     if not receipt or receipt.get("state") != "applied":
         raise DocumentError("The ingestion event is not durably applied; inspect it by event ID")
+    def citation(operation):
+        expected = {"source": receipt.get("cited_source", receipt.get("source"))}
+        if "cited_source" in receipt:
+            # A document ID is shared across events. Bind the authored location and
+            # date too, so an old receipt cannot describe a later re-citation.
+            expected.update(at=operation.get("at", receipt.get("at")), date=receipt.get("date"))
+        return expected
     readings = []
     if "updates" in receipt:
         for operation in receipt["updates"]:
             if operation["kind"] == "set":
-                readings.append((operation["id"], operation["value"], ("v", "quoted")))
+                readings.append((operation["id"], operation["value"], ("v", "quoted"), citation(operation)))
             elif operation["kind"] == "add":
                 body = operation["body"]
                 for field in ("v", "quoted"):
                     if field in body:
-                        readings.append((operation["id"], body[field], (field,)))
+                        readings.append((operation["id"], body[field], (field,), citation(operation)))
     else:
-        readings.append((receipt.get("target"), receipt.get("value"), ("v", "quoted")))
+        readings.append((receipt.get("target"), receipt.get("value"), ("v", "quoted"), citation({})))
     selected, targets = [], set()
-    for target, value, fields in readings:
+    for target, value, fields, expected_citation in readings:
         wanted = "/" + str(target).replace("~", "~0").replace("/", "~1")
         pointers = {wanted + "/" + field for field in fields}
         for selection in selections.values():
             if selection["selector"].get("pointer") in pointers:
-                selected.append((selection, value))
+                selected.append((selection, value, expected_citation))
                 targets.add(target)
     if not selected or any(v.get("status") != "available" or v.get("value") != _atom(value) or
-                           v.get("citation", {}).get("source") != receipt.get("source") for v, value in selected):
+                           any(v.get("citation", {}).get(key) != expected for key, expected in cited.items())
+                           for v, value, cited in selected):
         raise DocumentError("Applied event does not match the selected current reading and citation")
     binding = {k: receipt.get(k) for k in ("event_id", "state", "target", "source_sha256", "envelope_sha256")}
     if "updates" in receipt:

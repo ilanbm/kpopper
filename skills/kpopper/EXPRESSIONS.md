@@ -14,11 +14,16 @@ and `ref("an opaque id")` explicitly references a reserved name or an ID contain
 or punctuation. Calls other than this reference constructor are unsupported.
 
 Unsupported syntax, date-like rules, numeric-looking quoted literals and comparisons
-depending on legacy text coercion stay text with a diagnostic. Missing Lean also produces
+depending on legacy text coercion stay text with a diagnostic. Plain rules containing
+unknown names, such as `candidates - rejected` or `מועמדים - נדחים`, also stay text:
+the operator does not establish that those words name graph entries. This applies with
+or without Lean. Use an explicit `rule: {expr: "..."}` to declare an intended calculation;
+its missing references remain errors. Missing Lean also produces
 an explicit fallback diagnostic; it never turns text into a calculated result. Report
 receipts retain these diagnostics. Existing formulas and historical `seen` fields are
-not migrated by an unrelated write. A newly authored calculation with a missing dependency,
-cycle or division by zero is refused unless its missing computation is explicitly declared.
+not migrated by an unrelated write. Explicit calculations with missing dependencies, and
+recognized calculations with cycles or division by zero, are refused unless their missing
+computation is explicitly declared.
 
 ```yaml
 order.total:
