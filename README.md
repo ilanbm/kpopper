@@ -355,6 +355,11 @@ with the project open, start with:
 Installation creates no record. Start with the first finding worth carrying into another
 session. A one-off question may need no record at all.
 
+Keep useful findings within the existing schema and your write permissions. The
+[recording guidance](skills/record/SKILL.md#record-what-the-work-calls-for) includes an
+internal check before implementation or handoff, reusing existing entries and respecting
+explicit read-only instructions.
+
 For a standalone CLI installation and a walkthrough of the launch-party example, see
 [Try it from the command line](docs/reference.md#try-it-from-the-command-line).
 
@@ -369,6 +374,7 @@ For a standalone CLI installation and a walkthrough of the launch-party example,
 | Work across branches | Combined-record checks in CI and optional background compatibility checks while work continues. [Coding and CI](docs/coding-and-ci.md). |
 | Return to deferred work | Followups tied to dates, recorded changes or preceding work, with configured host scheduling. [Followups](#followups-and-background-checks). |
 | Share a result people can inspect | Standalone HTML with selected evidence and review choices, plus a separate navigable page for the project record. [Documents](#share-a-document-with-its-reasons). |
+| Share part of the record | A bounded Markdown excerpt with historical and current readings, omitted values marked, and optional Mermaid diagrams. [Focused exports](docs/graph-export.md). |
 | Let the structure grow with the project | Domain-specific subjects and vocabulary within a small set of explicit relationships and checks. [Evolving structure](#a-structure-that-grows-with-the-project). |
 | Bind a session's reads to a known version | An experimental, optional Lean-backed view checks selected session contracts and rejects reads against an outdated record revision. [Checked sessions](docs/checked-sessions.md). |
 
@@ -886,6 +892,19 @@ chosen layout. **Now** and other project tabs can present reports, plans or comp
 is a rendered snapshot—regenerate it after the record changes. For layouts, components,
 localization and checks on stale explanatory text, see the [page reference](skills/kpopper/PAGE.md).
 
+To share a small part of the record in a task, document or pull request, use
+`kpopper export`. The excerpt separates readings captured at review from current recorded
+readings and marks values omitted from the selection. From a source checkout:
+
+```sh
+python3 scripts/cli.py export launch.announcement \
+  --record examples/launch-party/GROUNDING.yaml
+```
+
+Add `--format markdown-mermaid` to keep the text and append a diagram for destinations
+that support Mermaid. See [focused exports](docs/graph-export.md) for selection limits,
+original-field details and output options.
+
 ## What is available, and what is next
 
 This table describes the current repository. Check the [changelog](CHANGELOG.md) when
@@ -894,7 +913,7 @@ updating an older installation; a merged feature may still be awaiting a release
 | Status | Capability |
 |---|---|
 | Available | YAML records, source references, judgment checks, dependency tracing, review snapshots, hypotheses and consolidation. |
-| Available | CLI, HTML record page and agent integrations, with host-specific setup and limits. |
+| Available | CLI, focused Markdown exports with optional Mermaid, HTML record page and agent integrations, with host-specific setup and limits. |
 | Available | Standalone HTML authoring with contextual explanations, selected source snapshots and grouped corrections saved in the document copy. |
 | Available | Checks on combined records and hypotheses in CI, including before-merge inspection of another branch's record. |
 | Available within stated limits | Background processing of explicit reports and selective delivery of important findings. |
