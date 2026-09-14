@@ -138,18 +138,27 @@ def _record_path(record=None):
 
 def state_path(record=None, state_dir=None):
     """Return the private state directory for a record without creating it."""
-    rec = _record_path(record)
     if state_dir is not None:
         return Path(state_dir).expanduser().resolve()
+    rec = _routed_record(record)[0]
     configured = os.environ.get("XDG_STATE_HOME")
     base = Path(configured) if configured and Path(configured).is_absolute() \
         else Path.home() / ".local" / "state"
     return (base / "kpopper" / "ingestion" / _sha(str(rec).encode("utf-8"))).resolve()
 
 
+def _storage_record(record, state_dir):
+    raw = _record_path(record)
+    # An explicitly addressed historical store remains inspectable after a mode
+    # transition. Processing still checks its captured policy before any write.
+    if state_dir is not None and _load(Path(state_dir).expanduser().resolve() / 'record.json') == {'record': str(raw)}:
+        return raw
+    return _routed_record(raw)[0]
+
+
 def _layout(record=None, state_dir=None):
     _require_locking()  # Fail before creating/chmod'ing state on unsupported platforms.
-    rec = _record_path(record)
+    rec = _storage_record(record, state_dir)
     root = state_path(rec, state_dir)
     try:
         rec.relative_to(root)
@@ -178,7 +187,7 @@ def _layout(record=None, state_dir=None):
 
 def _existing_layout(record=None, state_dir=None):
     """Resolve state for read APIs without creating private storage."""
-    rec = _record_path(record)
+    rec = _storage_record(record, state_dir)
     root = state_path(rec, state_dir)
     marker = root / "record.json"
     if not marker.is_file():
@@ -419,6 +428,8 @@ def _event_lock(rec, event):
     with P._locked(str(rec), project=project):
         if event.get('project_policy') is not None and project.config() != event['project_policy']:
             raise ValueError('project policy changed after report capture; review the retained report')
+        if event.get('project_policy') is None and Path(P._peer('knowledge_views').write_paths([str(rec)])[0]).resolve() != rec:
+            raise ValueError('record destination changed since legacy capture; review the retained report')
         yield project
 
 

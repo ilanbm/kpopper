@@ -1854,7 +1854,7 @@ def check_lines(paths):
     # that never builds the page still hears them. The page decides its own falsifiers; the
     # brief held against the arrangements that stand is the record's own claim, so a brief
     # that no longer carries what an arrangement decided fails here too.
-    info = _page_or_error(paths)
+    info = _page_or_error(paths, read_mode=getattr(doc, 'read_mode', None))
     if info and "error" in info:
         note.append(f"the brief beside the record could not be built: {info['error']}")
     elif info:
@@ -2081,7 +2081,7 @@ def opening(paths, budget=25, chars=None, host=None):
     # already about what to do next: the newest first and how many more, never the list -
     # the slot is for what needs a person, and check names the rest with a hint each. An
     # arrangement whose sign appeared comes first: it is the gap read by a decision.
-    info = _page_or_error(paths)
+    info = _page_or_error(paths, read_mode=getattr(doc, 'read_mode', None))
     facts = (info.get("arrangements") or {}) if info and "error" not in info else {}
     fired = sorted(k for k, f in facts.items() if f["fired"])
     cov = info.get("coverage") if info and "error" not in info else None
@@ -2699,34 +2699,36 @@ def _brief_beside(path):
     return b if os.path.exists(b) else None
 
 
-def _page_info(paths):
+def _page_info(paths, read_mode=None):
     """What the page knows when it is built beside this record - its counts, its shape, the
     coverage report - or None when no brief sits beside the record."""
-    brief = _brief_beside(paths[0])
-    if not brief:
-        return None
     sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
     import render_page as R
-    return R.build(paths, brief)[4]
+    mode = read_mode or ('frozen' if _RAW_READS.get() else os.environ.get('KPOPPER_READ_MODE', 'live'))
+    paths = R.record_paths(paths, read_mode=mode)
+    brief = R.find_brief(paths, read_mode=mode)
+    if not brief:
+        return None
+    return R.build(paths, brief, read_mode=mode)[4]
 
 
-def _page_side(paths):
+def _page_side(paths, read_mode=None):
     """page.* as the page counts them - every name, mentioned or not, since a new judgment
     may be the first to rest on one - the record's shape, and every arrangement held against
     the brief: -> (values, shape, arrangements). ({}, None, {}) without a brief; a count the
     page could not take is left out."""
-    info = _page_info(paths)
+    info = _page_info(paths) if read_mode is None else _page_info(paths, read_mode=read_mode)
     if info is None:
         return {}, None, {}
     return ({k: v for k, v in info["page"].items() if v is not None}, info["shape"],
             info.get("arrangements") or {})
 
 
-def _page_or_error(paths):
+def _page_or_error(paths, read_mode=None):
     """What the page knows, or None without a brief, or {"error": why} when the brief cannot
     be built - the reader never fails on the page's account, it says so in a line."""
     try:
-        return _page_info(paths)
+        return _page_info(paths) if read_mode is None else _page_info(paths, read_mode=read_mode)
     except (Exception, SystemExit) as e:
         return {"error": str(e)}
 

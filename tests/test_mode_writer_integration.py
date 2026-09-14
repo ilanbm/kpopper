@@ -119,6 +119,36 @@ class ModeWriters(unittest.TestCase):
         self.assertEqual(result['state'], 'needs_primary', result)
         self.assertIn('policy changed', result['reason'])
         self.assertEqual(self.record.read_bytes(), before)
+        self.assertEqual(I.status(event['event_id'], self.record, event['state_dir'])['state'], 'needs_primary')
+
+    def test_simple_capture_process_status_and_delivery_share_the_resolved_store(self):
+        from scripts import ingestion_delivery as delivery
+        shared = self.base / 'shared.yaml'; shared.write_bytes(self.record.read_bytes())
+        self.project.configure('simple', record=str(shared))
+        event = I.capture(self.report(), self.record, start=False)
+        self.assertEqual(I.status(event['event_id'], self.record)['state'], 'captured')
+        self.assertEqual(I.process(self.record, event_id=event['event_id'])[0]['state'], 'applied')
+        self.assertEqual(I.status(event['event_id'], self.record)['state'], 'applied')
+        self.assertEqual(I.state_path(self.record), I.state_path(shared))
+        queued = delivery.capture(dict(self.report(), event_id='notify'), 'fixture-task', self.record, start=False)
+        self.assertTrue(queued)
+        _, state, exists = I._existing_layout(shared)
+        self.assertTrue(exists)
+        events = [I._load(p) for p in (state / 'events').glob('*.json')]
+        self.assertTrue(all(e['project_root'] == str(self.root) for e in events))
+
+    def test_locked_formula_write_rechecks_newly_private_dependencies(self):
+        R = I.P._peer('recording')
+        route = R.route
+        def change_source(*args, **kwargs):
+            receipt = route(*args, **kwargs)
+            self.doc['sources']['s.one']['private'] = True; self.write()
+            return receipt
+        action = {'kind': 'add', 'id': 'fact.total', 'body': {'rule': 'fact.x + fact.y'}}
+        with patch.object(R, 'route', side_effect=change_source), contextlib.redirect_stdout(io.StringIO()) as output:
+            I.P.apply([str(self.record)], action)
+        self.assertEqual(json.loads(output.getvalue())['state'], 'private draft')
+        self.assertNotIn('fact.total', self.record.read_text())
 
     def test_source_permission_change_before_git_capture_is_not_published(self):
         G_runtime = I.P._peer('pending_grounding')

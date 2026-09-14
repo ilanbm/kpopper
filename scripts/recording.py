@@ -99,6 +99,7 @@ def private_route(paths, action, reader, project=None):
     for text in G._strings(value):
         if text in existing:
             referenced.add(text)
+    referenced.update(name for name in G.P._mentioned(value) if name in existing)
     if action.get('source') in existing:
         referenced.add(action['source'])
     selected = G.closure(doc, sorted(referenced)) if referenced else {}
