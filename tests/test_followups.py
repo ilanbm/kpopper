@@ -187,6 +187,71 @@ class Followups(unittest.TestCase):
         self.assertEqual(scan['record'], str(self.record))
         self.assertFalse(self.record.exists())
 
+    def test_unavailable_context_does_not_override_trigger_logic(self):
+        missing = {'condition': {'id': 'facts.other', 'op': '>', 'value': 0}}
+        known = {'condition': {'id': 'facts.count', 'op': '>', 'value': 0}}
+        due = {'at': '2026-09-10'}
+        cases = ((due, 'ready'), ({'at': '2026-09-11'}, 'waiting'), (known, 'ready'),
+                 (missing, 'unknown'), ({'changed': 'facts.other'}, 'unknown'),
+                 ({'any': [due, missing]}, 'ready'), ({'all': [due, missing]}, 'unknown'),
+                 ({'manual': 'Confirm authority'}, 'unknown'))
+        values, flags, error = F.graph(str(self.record))
+        values['facts.other'] = {'unavailable': 'The calculation has no result'}
+        with mock.patch.object(F, 'graph', return_value=(values, flags, error)):
+            for index, (trigger, expected) in enumerate(cases):
+                with self.subTest(trigger=trigger):
+                    key = 'task' + str(index)
+                    self.add(key, trigger, related=['facts.count', 'facts.other'])
+                    row = self.row(key)
+                    self.assertEqual(row['state'], expected)
+                    self.assertTrue(any('facts.other' in reason and 'unavailable' in reason
+                                        for reason in row['reasons']))
+
+    def test_unavailable_context_preserves_execution_boundaries(self):
+        values, flags, error = F.graph(str(self.record))
+        values['facts.count'] = {'unavailable': 'Install the evaluator to check this reading'}
+        with mock.patch.object(F, 'graph', return_value=(values, flags, error)):
+            local = self.add('local', title='Diagnose the missing evaluator')
+            self.add('remote', task='https://tasks.example.test/items/repair')
+            self.add('owned', executor='another-routine')
+            self.assertEqual(self.row('local')['state'], 'ready')
+            self.assertEqual(self.row('remote')['state'], 'unknown')
+            self.assertEqual(self.row('owned')['state'], 'delegated')
+            for key in ('remote', 'owned'):
+                with self.assertRaises(F.Refused):
+                    self.claim(key)
+            claim = self.claim('local')
+            self.assertEqual(self.row('local')['state'], 'claimed')
+            self.store.finish('local', claim['token'], 'needs_user', 'Installation requires a user decision.')
+            self.assertEqual(self.row('local')['state'], 'needs_user')
+            with self.assertRaises(F.Refused):
+                self.claim('local')
+            self.store.resume('local', 'The owner authorized the existing diagnostic scope.')
+            Path(local['task']).write_text('A different task scope')
+            self.assertEqual(self.row('local')['state'], 'unknown')
+            with self.assertRaises(F.Refused):
+                self.claim('local')
+
+    def test_retry_does_not_override_unknown_trigger_or_baseline(self):
+        for key, trigger in (('changed', {'changed': 'facts.count'}),
+                             ('condition', {'condition': {'id': 'facts.count', 'op': '>', 'value': 0}})):
+            self.add(key, trigger)
+        self.change_count(2)
+        for key in ('changed', 'condition'):
+            run = self.claim(key)
+            self.store.finish(key, run['token'], 'checked', 'The report is due tomorrow.',
+                              F.stamp(self.clock + dt.timedelta(days=1)))
+        self.advance(days=1)
+        # Unknown can come from the baseline or from a nonnumeric comparison,
+        # even when every current related value is available.
+        with self.store.transaction() as data:
+            data['items']['changed']['baseline']['facts.count'] = {'unavailable': 'No earlier calculation'}
+        self.change_count('pending')
+        for key in ('changed', 'condition'):
+            self.assertEqual(self.row(key)['state'], 'unknown')
+            with self.assertRaises(F.Refused):
+                self.claim(key)
+
     def test_edited_and_missing_canonical_file_require_attention(self):
         canonical = self.root / 'existing-task.md'
         canonical.write_text('# Existing task\nOriginal scope.\n')

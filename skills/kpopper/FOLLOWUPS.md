@@ -72,8 +72,16 @@ exact rational numbers. `changed` retains the complete snapshot, so a changed fo
 trigger review even when its result is unchanged. An unavailable calculation stays unknown.
 An unreadable value does not disable unrelated followups. Its ID stays visible with an
 `unavailable` reason, distinct from a recorded null. Both a condition and a change trigger
-over that value remain unknown; a followup listing it in `related` cannot become ready
-merely because its date arrived. A missing historical baseline requires an explicit refresh.
+over that value remain unknown. `related` also links context that the trigger need not read:
+an unavailable value there adds a reason without overriding the trigger's result. A dated
+task to diagnose a missing calculation can therefore become ready; a task whose condition
+requires that calculation remains unknown. `all` and `any` keep their three-valued meaning:
+a due date suffices for `any: [date, unknown condition]`, but not for `all` of those leaves.
+A missing historical baseline requires an explicit refresh. A missing related ID or an
+unreadable record still requires reconciliation: the connection to the intended knowledge
+is no longer established. Task content, ownership, remote-task evidence, claims and the
+user's authorized scope still govern execution. Readiness does not establish the missing
+value, and a calculation becoming available during a claim still counts as changed input.
 An explicit `kpopper page` or `page --verify` publishes measured page counts outside the
 record. Followups can read those counts for the same record, shards, hypotheses, canonical
 view and evaluator version. Changed inputs, missing or corrupt measurements stay unknown
@@ -241,7 +249,9 @@ work that occurred later; reconcile against canonical tasks before reopening any
 
 `next_at` is the explicitly requested retry time. `wake_hint` is the evaluator's next possible
 time boundary (including evidence expiry); it never postpones a currently ready item. A
-checked outcome advances its baseline to the inputs actually read. A new relevant graph or
+due retry can rearm an unchanged, decidable trigger; it cannot override an unknown trigger,
+including an unavailable current value or historical baseline. A checked outcome advances
+its baseline to the inputs actually read. A new relevant graph or
 external event can trigger a check earlier, while an unchanged item waits for its retry time.
 Refreshing the timestamp of the same external value does not manufacture a new occurrence.
 

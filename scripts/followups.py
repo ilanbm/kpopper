@@ -410,7 +410,8 @@ class Store:
         state = "ready" if assessment["value"] is True else "waiting" if assessment["value"] is False else "unknown"
         if item["next_at"]:
             if T.parse_time(item["next_at"]) <= now:
-                state = "ready"
+                if assessment["value"] is not None:
+                    state = "ready"
                 reasons.append("The explicitly requested followup check is due")
             elif digest({key: values.get(key) for key in spec["related"]}) == digest(item["baseline"]) \
                     and digest(event_values(spec, data)) == digest(item.get("baseline_events", {})):
@@ -438,7 +439,8 @@ class Store:
             reasons.append(graph_error or "A related graph entry is missing")
         unavailable = [key for key in spec["related"] if T.unavailable(values.get(key))]
         if unavailable:
-            state = "unknown"
+            # related links context; when decides which values readiness needs.
+            # A scheduled diagnostic may be the work that resolves this absence.
             reasons.append("Related values are unavailable: " + ", ".join(unavailable))
         claim = item["claim"]
         if claim:
