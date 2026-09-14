@@ -198,6 +198,7 @@ def prepare(doc, roots, *, scope, shareability, evidence=None):
         raise ValueError('code-scoped knowledge needs its exact commit')
     if not isinstance(roots, (list, tuple)) or not roots or any(not isinstance(x, str) for x in roots):
         raise ValueError('contribution needs explicit root entry IDs')
+    _privacy({k: doc[k] for k in ('meta', 'privacy', 'visibility', 'private', 'shareability') if k in doc})
     document = closure(doc, roots)
     if scope['kind'] == 'code':
         for root in roots:
@@ -327,9 +328,10 @@ class Store:
         zero = '0' * len(new)
         return M.git(self.root, 'update-ref', REF, new, old or zero, check=False).returncode == 0
 
-    def capture(self, bundle, *, event_id, contribution_id, shareability, expected_generation=None):
+    def capture(self, bundle, *, event_id, contribution_id, shareability, expected_generation=None, expected_policy=None):
         receipt = self._capture(bundle, event_id=event_id, contribution_id=contribution_id,
-                                shareability=shareability, expected_generation=expected_generation)
+                                shareability=shareability, expected_generation=expected_generation,
+                                expected_policy=expected_policy)
         # The durable acknowledgement is established and the policy lock released
         # before a publisher is even started. Publication failure cannot erase or
         # turn a successfully retained contribution into a failed capture.
@@ -343,7 +345,7 @@ class Store:
             receipt['publication_attempt'] = {'started': False, 'reason': str(error)}
         return receipt
 
-    def _capture(self, bundle, *, event_id, contribution_id, shareability, expected_generation=None):
+    def _capture(self, bundle, *, event_id, contribution_id, shareability, expected_generation=None, expected_policy=None):
         # Validate again at the object-write boundary, including supplied identity.
         if shareability != 'project':
             raise ValueError('private or unclear sharing permission belongs in a private draft')
@@ -359,6 +361,8 @@ class Store:
         event = {'event_id': event_id, 'contribution_id': contribution_id, 'revision': revision}
         event_path = 'events/' + event_id + '.json'
         with self.project.lock():
+            if expected_policy is not None and self.project.config() != expected_policy:
+                raise ValueError('project policy or destination changed before capture; retry')
             if expected_generation is not None and self.project.config()['generation'] != expected_generation:
                 raise ValueError('project policy changed before capture; retry with the current mode and record')
             if self.project.config()['mode'] == 'simple':

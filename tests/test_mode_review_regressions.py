@@ -130,6 +130,49 @@ class ReviewRegressions(unittest.TestCase):
         self.assertEqual(result['sources']['record']['text'], shared.read_text())
         self.assertEqual(result['sources']['record']['location'], str(shared))
 
+    def test_mode_change_before_route_cannot_capture_from_retired_path(self):
+        self.seed()
+        shared = self.base / 'shared.yaml'
+        shared.write_bytes((self.root / 'GROUNDING.yaml').read_bytes())
+        self.project.configure('simple', record=str(shared))
+        routing = G.P._peer('recording')
+        route = routing.route
+
+        def change_before_route(*args, **kwargs):
+            self.project.configure('advanced', record='GROUNDING.yaml')
+            return route(*args, **kwargs)
+
+        with patch.object(routing, 'route', side_effect=change_before_route):
+            with self.assertRaisesRegex(G.P.Refused, 'destination changed'):
+                self.apply({'kind': 'add', 'id': 'fact.two', 'body': {'v': 2, 'from': 'source'},
+                            'scope': 'project', 'environment': 'project', 'shareability': 'project'})
+        self.assertIsNone(self.store.head())
+
+    def test_custom_schema_cannot_hide_a_missing_dependency_declaration(self):
+        for body in ({'depends_on': ['missing.fact'], 'reviewed': {}, 'invalid_when': 'missing.fact < 1', 'v': 'holds'},
+                     {'depends_on': ['missing.fact'], 'v': 'holds'}):
+            doc = {'schema': {'deps': 'relies_on', 'snapshot': 'reviewed', 'predicate': 'invalid_when'},
+                   'known': {'claim.one': body}}
+            with self.assertRaisesRegex(SystemExit, 'nothing this reader'):
+                G.P.infer(doc)
+
+    def test_record_level_private_permission_survives_selected_closure(self):
+        scope = {'kind': 'project', 'environment': 'project'}
+        doc = {'meta': {'privacy': 'private'},
+               'known': {'fact.one': {'v': 'PRIVATE-RECORD-SECRET', 'from': 'source', 'scope': scope}}}
+        (self.root / 'GROUNDING.yaml').write_text(G.P.yaml.safe_dump(doc))
+        with self.assertRaisesRegex(ValueError, 'private'):
+            G.prepare(doc, ['fact.one'], scope=scope, shareability='project')
+        with patch.dict(os.environ, {'KPOPPER_PRIVATE_HOME': str(self.base / 'private-drafts')}):
+            code, output = self.apply({'kind': 'set', 'id': 'fact.one', 'value': 'PRIVATE-RECORD-SECRET',
+                                      'scope': scope, 'shareability': 'project'})
+            self.assertEqual(code, 0)
+            receipt = json.loads(output)
+            self.assertEqual(receipt['state'], 'private draft')
+            payload = G._decode(json.loads(Path(receipt['path']).read_text()))
+            self.assertEqual(payload['document']['meta']['privacy'], 'private')
+        self.assertIsNone(self.store.head())
+
     def test_affects_names_reached_hypotheses_and_contributions(self):
         doc = self.seed()
         path = self.root / '.kpopper/hypotheses/proposal.yaml'

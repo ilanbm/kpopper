@@ -80,17 +80,10 @@ the only thing this method promises to measure.
 
 ## The read commands
 
-Read in the project's declared mode. Simple shares one graph and named hypotheses across
-sessions; Advanced preserves this branch's code-world and shows project contributions
-alongside it, including when only one checkout exists. Ordinary reads and checked session
-views show pending source, scope and publication state. Pending does not mean accepted,
-and another branch's measured result does not describe this branch automatically.
-
-Use a frozen read for committed PR/CI evidence. It must not depend on a moving pending ref
-or someone else's private files. An explicit materialization retains the complete required
-closure and evidence. Compare the shared subset: extra branch entries are allowed, while
-different source bodies or schemas can make apparently equal readings differ. Publication
-receipts name the versions actually checked; cached acceptance is not fresh remote evidence.
+Read in the project's mode: Simple shares one graph and named hypotheses; Advanced preserves the branch's code-world and shows project contributions alongside it, including with one checkout.
+Ordinary and checked reads show pending source, scope and publication state. Pending does not mean accepted, and another branch's measurement does not automatically describe this branch.
+Use frozen reads for committed PR/CI evidence, without moving pending refs or private files. Explicit materialization retains the complete closure and evidence.
+Compare the shared subset: extra branch entries are allowed; different source bodies or schemas can make apparently equal readings differ. Cached acceptance names last verified versions, not fresh remote evidence.
 See [project modes](../../docs/project-modes.md).
 
 ```bash

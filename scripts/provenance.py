@@ -876,9 +876,12 @@ def infer(doc):
             # method refuses. A snapshot or predicate named the same way costs one check.
             if role == "deps" and sch[role] not in present:
                 source_collections = {k: v for k, v in collections.items() if k != 'meta'}
-                judgment_fields = {'rests_on', 'wrong_if', 'seen', 'verdict', 'reopened_by', 'blocked_on'}
+                judgment_fields = {'rests_on', 'wrong_if', 'seen', 'verdict', 'reopened_by', 'blocked_on'} | \
+                                  {sch[k] for k in ('deps', 'snapshot', 'predicate') if sch.get(k)}
                 if source_collections and set(source_collections) <= {'known', 'sources', 'open', 'questions'} \
-                        and not cand['deps'] and not any(judgment_fields.intersection(body)
+                        and all(sch.get(k) for k in ('deps', 'snapshot', 'predicate')) \
+                        and not cand['deps'] and set(unresolved) <= {'labels', 'tags', 'v', 'quoted'} \
+                        and not any(judgment_fields.intersection(body)
                             for group in source_collections.values() for body in group.values()
                             if isinstance(body, dict)):
                     # A portable source/fact closure may retain the explicit parent
@@ -3667,7 +3670,8 @@ def apply(paths, action):
     original_paths = list(paths)
     paths = _peer('knowledge_views').write_paths(paths)
     try:
-        receipt = _peer('recording').route(paths, action, sys.modules.get(__name__) or _Reader(), project=project)
+        receipt = _peer('recording').route(paths, action, sys.modules.get(__name__) or _Reader(),
+                                          project=project, expected_policy=policy)
     except ValueError as error:
         raise Refused('refused - ' + str(error))
     if receipt is not None:
@@ -4054,10 +4058,15 @@ def _apply(paths, action):
             elif d not in was and d in seen:
                 out.append(f"  {d}: {short(seen[d])} (never checked against it before)")
     if '_record_scope' in action and kind != 'add':
-        written = yaml.safe_load('\n'.join(lines))
-        entry = copy.deepcopy(bodies(written)[nid])
+        entry = copy.deepcopy(raw[nid])
         if not isinstance(entry, dict):
             raise Refused('refused - scoped writes need a complete entry body')
+        if kind == 'set':
+            entry = _peer('recording').set_body(entry, action)
+        elif kind == 'review':
+            entry[snapshot_field] = seen
+            if 'reviewed' in entry:
+                entry['reviewed'] = stamp
         entry['scope'] = copy.deepcopy(action['_record_scope'])
         _replace_in(lines, nid, entry)
     _bump_updated(lines, stamp)
@@ -4578,10 +4587,11 @@ def _apply_first_add(action):
     if location["status"] == "unavailable":
         raise SystemExit(location["reason"] + " " + location["record"])
     path = location["record"]
-    project = _peer('project_modes').Project(location['workspace'])
+    project = _peer('project_modes').Project(location.get('workspace', os.path.dirname(path)))
     policy = project.config()
     try:
-        receipt = _peer('recording').route([path], action, sys.modules.get(__name__) or _Reader(), project=project)
+        receipt = _peer('recording').route([path], action, sys.modules.get(__name__) or _Reader(),
+                                          project=project, expected_policy=policy)
     except ValueError as error:
         raise Refused('refused - ' + str(error))
     if receipt is not None:

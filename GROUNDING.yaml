@@ -1,5 +1,5 @@
 meta:
-  updated: 2026-09-13
+  updated: 2026-09-14
   name: kpopper
   scope: "What this plugin is for and the decisions that shaped it, kept in its own format -
           the tools eat their own cooking, and every session here opens grounded."
@@ -1299,13 +1299,14 @@ known:
     of: "2026-09-10"
 
   m.skill_bytes_largest:
-    v: 20003
+    v: 20625
+    # set 2026-09-14: measured by skill_bytes_largest after updating the project-mode guidance
     # set 2026-09-12: measured by skill_bytes_largest after the skills learned the entry file and the directory beside it
     # set 2026-09-11: measured by skill_bytes_largest at a51bc75 with the working tree changed
     name: "The largest skill body a session can be handed now, bytes"
     from: "skills/*/SKILL.md"
     at: "bytes of the largest body"
-    of: "2026-09-12"
+    of: "2026-09-14"
     measure: skill_bytes_largest
 
   m.unasked.question_filler:

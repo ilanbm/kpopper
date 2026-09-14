@@ -102,12 +102,33 @@ def private_route(paths, action, reader, project=None):
     if action.get('source') in existing:
         referenced.add(action['source'])
     selected = G.closure(doc, sorted(referenced)) if referenced else {}
+    controls = {k: doc[k] for k in ('meta', 'privacy', 'visibility', 'private', 'shareability') if k in doc}
+    if private_marker(controls):
+        selected.update(copy.deepcopy(controls))
+        return draft(project or V.project_for(paths), action, selected, 'private or unclear record permission')
     if private_marker(action) or private_marker(selected):
         return draft(project or V.project_for(paths), action, selected, 'private or unclear source permission')
     return None
 
 
-def route(paths, action, reader, project=None):
+def set_body(old, action):
+    """The complete semantic set edit, shared by capture and scoped local writes."""
+    body = copy.deepcopy(old)
+    field = 'v' if 'v' in body else 'quoted' if 'quoted' in body else None
+    if field is None:
+        raise ValueError('set needs an entry with v or quoted')
+    body[field] = action['value']
+    body['of'] = action.get('as_of') or datetime.date.today().isoformat()
+    if action.get('source') is not None:
+        if action.get('at') is None:
+            raise ValueError('a changed source needs its exact at location')
+        body['from'], body['at'] = action['source'], action['at']
+    if '_record_scope' in action:
+        body['scope'] = copy.deepcopy(action['_record_scope'])
+    return body
+
+
+def route(paths, action, reader, project=None, expected_policy=None):
     """Return a durable receipt or None for an intentional local-file mutation.
 
     Legacy unannotated writes retain local semantics, never implicit publication.
@@ -116,6 +137,8 @@ def route(paths, action, reader, project=None):
     """
     project = project or V.project_for(paths)
     policy = project.config()
+    if expected_policy is not None and policy != expected_policy:
+        raise ValueError('project policy or destination changed before routing; retry')
     explicit = bool(ROUTING.intersection(action))
     if action.get('shareability') not in (None, 'project', 'private', 'unclear'):
         raise ValueError('shareability must be project, private or unclear')
@@ -131,36 +154,30 @@ def route(paths, action, reader, project=None):
     if explicit and action.get('shareability') == 'project':
         if scope.get('kind') not in ('project', 'external', 'code', 'feature', 'unclear'):
             raise ValueError('scope must be project, external, code, feature or unclear')
-        action['_record_scope'] = scope
+        declared_scope = any(k in action for k in ('scope', 'environment', 'commit'))
+        if declared_scope:
+            action['_record_scope'] = scope
         if action.get('kind') == 'add':
             if not isinstance(action.get('body'), dict):
                 raise ValueError('scoped writes need a complete entry body')
-            if 'scope' in action['body'] and G.identity(action['body']['scope']) != G.identity(scope):
+            if declared_scope and 'scope' in action['body'] and G.identity(action['body']['scope']) != G.identity(scope):
                 raise ValueError('entry body scope differs from the requested scope')
-            action['body']['scope'] = copy.deepcopy(scope)
+            if declared_scope:
+                action['body']['scope'] = copy.deepcopy(scope)
     candidate = copy.deepcopy(doc)
     nid = action.get('id')
     if action.get('kind') == 'add':
         for group in reader.collections_of(candidate).values():
             group.pop(nid, None)
-        candidate.setdefault(action.get('into') or 'known', {})[nid] = copy.deepcopy(action['body'])
+        collection = action.get('into') or 'known'
+        if candidate.get(collection) is None:
+            candidate[collection] = {}
+        candidate[collection][nid] = copy.deepcopy(action['body'])
     elif action.get('kind') == 'set' and nid in G.entries(candidate):
         collection, old = G.entries(candidate)[nid]
         if isinstance(old, dict):
-            body = copy.deepcopy(old)
-            field = 'v' if 'v' in body else 'quoted' if 'quoted' in body else None
-            if field is None:
-                raise ValueError('set needs an entry with v or quoted')
-            body[field] = action['value']
-            body['of'] = action.get('as_of') or datetime.date.today().isoformat()
-            if action.get('source') is not None:
-                if action.get('at') is None:
-                    raise ValueError('a changed source needs its exact at location')
-                body['from'] = action['source']
-                body['at'] = action['at']
-            if '_record_scope' in action:
-                body['scope'] = copy.deepcopy(scope)
-            candidate[collection][nid] = body
+            if explicit or 'v' in old or 'quoted' in old:
+                candidate[collection][nid] = set_body(old, action)
         elif explicit:
             raise ValueError('scoped set needs a complete entry body')
     # Inspect only the selected closure, so unrelated private entries do not taint a
@@ -209,4 +226,4 @@ def route(paths, action, reader, project=None):
     bundle = G.prepare(candidate, [nid], scope=scope, shareability='project', evidence=action.get('evidence'))
     return G.Store(project).capture(bundle, event_id=action.get('event_id') or uuid.uuid4().hex,
                                    contribution_id=action.get('contribution_id') or nid,
-                                   shareability='project', expected_generation=policy['generation'])
+                                   shareability='project', expected_generation=policy['generation'], expected_policy=policy)

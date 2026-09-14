@@ -26,8 +26,8 @@ def _first_add(directory, entry, pause_birth, publish_before_wait, attempted,
         under_lock = [False]
 
         @contextlib.contextmanager
-        def observed_lock(path):
-            with locked(path):
+        def observed_lock(path, **kwargs):
+            with locked(path, **kwargs):
                 under_lock[0] = True
                 try:
                     yield
@@ -58,13 +58,13 @@ def _first_add(directory, entry, pause_birth, publish_before_wait, attempted,
         locked = P._locked
 
         @contextlib.contextmanager
-        def announced_lock(path):
+        def announced_lock(path, **kwargs):
             # The attempted event releases a first writer that already owns the fixed
             # birth lock. The finished event releases a historical first writer whose
             # newborn replace still sits outside the lock.
             started.set()
             attempted.set()
-            with locked(path):
+            with locked(path, **kwargs):
                 yield
             finished_locked_write.set()
 
