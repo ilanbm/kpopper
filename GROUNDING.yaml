@@ -1,5 +1,5 @@
 meta:
-  updated: 2026-09-14
+  updated: 2026-09-11
   name: kpopper
   scope: "What this plugin is for and the decisions that shaped it, kept in its own format -
           the tools eat their own cooking, and every session here opens grounded."
@@ -347,6 +347,30 @@ sources:
     of: "2026-09-11, given the reader at 1.4.0 parsing the record at every command and both hooks, a
          synthetic record ten times this one's measured at 3 MB/s, the pointer form that merges
          shards on read, and d.scale_by_federation's answer to a record that outgrows one file"
+    read: "2026-09-11"
+  s.2026_09_11_shape_core:
+    asked: "יש לי תהיות ומחשבות שונות על איך אפשר לייצר db או data structure שמתחיל פשוט ולאט לאט עם
+            הזמן מתעצב לפי הצרכים\nכמו שלא צריך להתחיל פרויקט עם דאטהבסייס רלציוני ואפשר עם סתם
+            nosql, אם תרצה, אבל עם בנייה די אגנוסטית (עד כדי כללים בסיסיים או הכרחיים שהגיוני שיהיו
+            למטרת הפרויקט), אבל כן להתחיל פשוט ביותר עם קצת דאטה עם סכמה שממציאה את עצמה לפי הצורך,
+            ומתאזנת ומשתנה אבל גם data structures ואינדקסים שמשתנים ומתאזנים ומתחלפים בנקודות
+            מסויימות כי ניתוח עלות תועלת של אופטימזציה עלה על סף מסויים אל מול סוג הפרויקט והבקשות
+            שלו וכו׳\nאז אני תוהה אם אנחנו רוצים אולי להוסיף לפרויקט את היכולת הזו לבניית הגרף, ואולי
+            אפילו כריפו נפרד שהוא ישתמש בו (כי אולי זה פרויקט בפני עצמו)\n\nאולי kpopper צריך איזו
+            שהוא הגדרת הcore שלו שמכיל הגדרות של סכמא, אינדוקס, וdata structures, אם יש או אין
+            אמבדינגז, איזה אמבדינגז, על מה ומתי, איזה עוד שירותי אכסון או db מעורבים וכו... כל מה
+            שיכול להתפתח עם הזמן, יהיה בstate שם, והריפו יידע לבוא עם הוראות מתאימות ותזמונים למתי
+            פותחים ובודקים ועושים שינויים ומיגרציות וכו\n\nהגיוני?\n\nמצויין, אז מה הצעדים להמשך?"
+    name: "The session that asked whether the record's own form - schema, indexes, data structures,
+           embeddings, storage - should be declared as a core that grows with the project, and what
+           it was given. Its reading: the form is read by a command and never declared; a line at
+           which it changes is a judgment over a measured entry; the storage layer stays in the
+           reader until a third consumer asks"
+    of: "2026-09-11, given this record and the history of its fields, each born by a trigger with a
+         migration; the ladder and the list of what an agent must not do; d.scale_by_federation still
+         untested; the parse kept and the write placed by its shard the same day; the retrieval
+         documents' derived index that is never written into a project; and two records of 260 and
+         511 entries each opening in well under a second"
     read: "2026-09-11"
   s.2026_09_12_first_readings:
     asked: "זהו, צריך לעבד ולהבין כאן את העיקר ולראות איך מתקדמים ומשפרים"
@@ -3320,6 +3344,45 @@ judgments:
       s.2026_09_03_coverage: "read 2026-09-03"
       d.intent_is_a_source: "a session records what it was for as a source; a tab is a reading
                              occasion that serves intents, and serving is earned by picks"
+  d.shape_is_read_not_declared:
+    rests_on: [s.2026_09_11_shape_core, d.record_is_code, d.checked_session_is_optional, d.parse_kept_by_file_identity, d.relevance_stays_declared, doc.agent_graph]
+    verdict: "what the record's physical form is - its files and shards, the field each role is read
+              from, its sidecars, the stores derived from it and what reads it - is computed by a
+              read command whenever asked and never kept as a declaration; the only declared parts
+              are the choices no shape can infer, each a judgment with a sign, and the bindings of
+              one machine, which stay in that machine's state"
+    because: "A core file that declares the schema, the indexes and the stores would be the ontology
+              interview {{doc.agent_graph}} forbids, metadata a person maintains by hand, and a
+              second shape beside the files that drifts from them in silence - the mistake
+              {{d.record_is_code}} refuses at the user level. The reader already infers roles from
+              shape and asks for a schema line only on a tie; the parse it keeps is derived and
+              dropped by every write ({{d.parse_kept_by_file_identity}}); similarity is discovery and
+              never an edge ({{d.relevance_stays_declared}}); a checked session is enabled per
+              project or machine ({{d.checked_session_is_optional}}). What can be generated is not
+              stored, so the form is a report; what cannot be inferred is a decision with a sign, or
+              a binding of one machine."
+    reopened_by: "a field of the shape report a person must maintain by hand, or a declared shard,
+                  store or model directory that check and open never verify against the files"
+    seen:
+      s.2026_09_11_shape_core: "read 2026-09-11"
+      d.record_is_code: "the record of what is known about the code lives in the tree - committed
+                         with the work it describes, reviewed in the same pull request, checked by
+                         the same CI - and a hypothesis travels with its branch; an out-of-tree
+                         record holds only what the tree cannot hold, the world outside the code; a
+                         user-level directory is at most an index of records, never content; a
+                         session named as a source is provenance, not process"
+      d.checked_session_is_optional: "Offer the checked session transport alongside the legacy
+                                      reader, enabled explicitly per project or machine; keep each
+                                      judgment's source body alongside its computed card, exact raw
+                                      reads and a reversible hook choice."
+      d.parse_kept_by_file_identity: "a file of the record is parsed when it changes, not when it is
+                                      read: its parsed document is kept under the user's own state
+                                      directory against what the file is - its path, its length, its
+                                      last write and the digest of the bytes that were parsed - and
+                                      every write drops the entry for the file it wrote"
+      d.relevance_stays_declared: "retrieval follows declared edges and names; no learned relevance
+                                   at record scale"
+      doc.agent_graph: "read 2026-09-01"
   d.shape_move_read_by_its_sign:
     rests_on: [s.2026_09_03_arrangements, d.arrangement_replaced_by_trigger, d.coverage_printed_never_acted, p.coverage_thresholds]
     verdict: "a tab's shape move is muted or fired by its arrangement's own sign, with the counts
@@ -3407,6 +3470,65 @@ judgments:
       d.minimal_repair: "seniority is evidence, never a threshold; a trigger is cleared by the
                          smallest structural change that suffices"
       p.fields_a_build_writes: 0
+  d.storage_line_is_a_judgment:
+    rests_on: [s.2026_09_11_shape_core, d.scale_by_federation, d.hypothesis_is_a_judgment, d.open_is_a_slot, p.coverage_thresholds, p.hypothesis_thresholds]
+    verdict: "the line at which the record's physical form changes - one file to shards, no index to
+              a derived one - is drawn inside a judgment over a measured entry, never in code; open
+              reports the crossing, the change it asks for is proposed as a hypothesis, and it is
+              carried out as a migration that leaves the build green"
+    because: "{{d.scale_by_federation}} names the form a record grows into but not the moment, and a
+              moment written into code is a threshold nobody can read or refute - this record keeps
+              {{p.coverage_thresholds}} and {{p.hypothesis_thresholds}} of those for the same reason.
+              A judgment with wrong_if over a measured entry is evaluated by every check and reported
+              by the opener the day it holds ({{d.open_is_a_slot}}), which is the observed trigger
+              the ladder asks for; the proposal is a hypothesis because
+              {{d.hypothesis_is_a_judgment}} makes the merge its test; and the migration rule keeps
+              two forms from standing side by side."
+    reopened_by: "a threshold on the record's size, its file count or a hook's time written into the
+                  scripts rather than into a judgment, or a change of form applied without a
+                  hypothesis and a green build"
+    seen:
+      s.2026_09_11_shape_core: "read 2026-09-11"
+      d.scale_by_federation: "a record scales by sharding into domain records under a pointer index,
+                              never by growing one file"
+      d.hypothesis_is_a_judgment: "a task, a branch and a what-if are one thing: a judgment whose
+                                   truth is pending - its premises in rests_on, its claim in verdict,
+                                   what would refute its success in wrong_if - and the merge is its
+                                   test"
+      d.open_is_a_slot: "the session opener fills a fixed character slot, highest value per
+                         character first; values never preload"
+      p.coverage_thresholds: 0
+      p.hypothesis_thresholds: 0
+  d.storage_stays_in_the_reader:
+    rests_on: [s.2026_09_11_shape_core, d.one_tree_two_channels, d.record_is_code, doc.agent_graph, d.a_write_joins_its_own_shard]
+    verdict: "the storage layer - the pointer index, the placement of a write, the stores derived
+              from the files - stays inside the reader and this repository; it becomes a thing of its
+              own only when a third consumer that is not a record this reader reads asks for it"
+    because: "A general mechanism is built on the third case, not the second ({{doc.agent_graph}}),
+              and today the layer has one consumer. A second repository would be a second place every
+              reader must know - what {{d.one_tree_two_channels}} refuses for the reader and
+              {{d.record_is_code}} for a directory of records - and the layer's pieces are landing as
+              bounded changes to the reader, each bought by a measurement
+              ({{d.a_write_joins_its_own_shard}}). A project's own facts file kept in another shape,
+              or any knowledge store that is not a record of this shape, is what would count."
+    reopened_by: "a second and a third consumer of the pointer index, the placement rule or the
+                  derived stores that is not a record this reader reads - a knowledge store of
+                  another shape asking for them"
+    seen:
+      s.2026_09_11_shape_core: "read 2026-09-11"
+      d.one_tree_two_channels: "the command line and the plugin ship the same files - packaging maps
+                                the script directory rather than copying it"
+      d.record_is_code: "the record of what is known about the code lives in the tree - committed
+                         with the work it describes, reviewed in the same pull request, checked by
+                         the same CI - and a hypothesis travels with its branch; an out-of-tree
+                         record holds only what the tree cannot hold, the world outside the code; a
+                         user-level directory is at most an index of records, never content; a
+                         session named as a source is provenance, not process"
+      doc.agent_graph: "read 2026-09-01"
+      d.a_write_joins_its_own_shard: "a new entry goes into the file whose collection already holds
+                                      its neighbours - the entries whose ids share its head - and a
+                                      write to an entry goes into the file that holds it; a record in
+                                      one file answers that file to all of it"
   d.text_holds_the_prose_it_places:
     rests_on: [s.2026_09_04_signals, d.reasoning_in_record, d.moved_is_a_flag]
     verdict: "a section's text is held to the sentence it draws - a judgment placed for its
