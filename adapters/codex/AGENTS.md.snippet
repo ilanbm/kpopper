@@ -36,6 +36,15 @@ and execute the task using its internal protocol. A ready task is not completed 
 Use `kpopper config --guidance off` to disable explanations. Without `kpopper` on PATH,
 run `<plugin>/scripts/cli.py` with Python and the same arguments.
 Ground a subject with `pull`, trace what a change reaches with `affects`, gate on `check`.
+
+Use the project's mode: Simple shares one graph with named hypotheses across sessions;
+Advanced adds branch contexts and `pending_grounding` for shareable findings independent
+of a feature, even with one checkout. Several sessions may work on the same hypothesis.
+Private or unclear sharing permission means a structured private draft outside Git.
+Ordinary reads include relevant pending contributions with their scope and state; use an
+explicit frozen read for committed PR/CI evidence. A measurement of an unmerged commit is
+a fact only in its stated scope. Merge accepts content; it never proves truth, increases
+confidence or refreshes `seen`. Remote publication needs explicit project authority.
 <!-- /kpopper:method -->
 
 If the hook supplied no opening or first-use context, run:

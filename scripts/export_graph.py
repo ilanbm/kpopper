@@ -1,7 +1,6 @@
 """A bounded, read-only projection. Text is portable; Mermaid is explicitly optional."""
 import argparse
 from collections import defaultdict, deque
-import hashlib
 import json
 import re
 import textwrap
@@ -112,6 +111,9 @@ def project(paths, seeds, direction='support', depth=1, max_nodes=12):
     raw = P.with_builtins(doc, ids, judgments, fields)
     unknown = [nid for nid in seeds if nid not in ids]
     if unknown:
+        pending = {nid for hyp in doc.hypotheses.values() if hyp.get('kind') == 'contribution' for nid in hyp.get('ids', ())}
+        if any(nid in pending for nid in unknown):
+            raise ValueError('pending contribution IDs are not expanded by export; use open, pull or knowledge snapshot')
         raise ValueError('unknown exact ID(s): ' + ', '.join(unknown) + '; use kpopper open or pull')
     flags = P.flags(ids, judgments, fields, raw)
     assessment = P.assessment_module().assess(doc, ids, judgments, fields, raw)
@@ -186,24 +188,13 @@ def project(paths, seeds, direction='support', depth=1, max_nodes=12):
             nodes[nid]['calculation'] = P.E.current(raw, ids, nid)
     internal = [edge for edge in edges if edge[0] in nodes and edge[2] in nodes]
     frontier = [edge for edge in edges if (edge[0] in nodes) != (edge[2] in nodes)]
-    revision_data = {'record': doc, 'hypotheses': {
-        name: {'doc': hyp['doc'], 'head': hyp['head'], 'error': hyp['error']}
-        for name, hyp in sorted(doc.hypotheses.items())}}
-    try:
-        stamp = json.dumps(revision_data, ensure_ascii=False, sort_keys=True, default=str)
-    except TypeError:
-        # Non-ID metadata can contain mixed JSON-compatible keys. Preserve its
-        # source order rather than coercing distinct keys to one identity.
-        try:
-            stamp = json.dumps(revision_data, ensure_ascii=False, sort_keys=False, default=str)
-        except TypeError as error:
-            raise ValueError('record contains mapping keys unsupported by export') from error
     return {'nodes': nodes, 'edges': internal[:MAX_EDGES], 'seeds': seeds,
             'direction': direction, 'depth': depth, 'max_nodes': max_nodes,
-            'snapshot': hashlib.sha256(stamp.encode()).hexdigest()[:16],
+            'snapshot': assessment['record_revision'][:16],
             'outside_nodes': len(set(ids) - set(nodes)), 'frontier_edges': len(frontier),
             'omitted_edges': max(0, len(internal) - MAX_EDGES),
-            'hypotheses': len(doc.hypotheses),
+            'hypotheses': sum(hyp.get('kind') != 'contribution' for hyp in doc.hypotheses.values()),
+            'contributions': len(getattr(doc, 'contributions', [])),
             'hypothesis_errors': {name: hyp['error'] for name, hyp in doc.hypotheses.items() if hyp['error']},
             'fields': fields,
             'assessment': {key: value for key, value in assessment.items() if key != 'nodes'}}
@@ -297,6 +288,8 @@ def render_markdown(packet, details=False):
     if packet['hypotheses']:
         lines.extend([f"Base record; {packet['hypotheses']} hypotheses are not expanded. "
                       'Conflict flags compare readable hypotheses, not every possible alternative.', ''])
+    if packet.get('contributions'):
+        lines.extend([f"{packet['contributions']} project contributions are not expanded; use open, pull or knowledge snapshot.", ''])
     for name, error in packet['hypothesis_errors'].items():
         lines.extend([f'Unreadable hypothesis {markdown(name)}: {markdown(error)}', ''])
     for nid, node in packet['nodes'].items():
@@ -414,6 +407,7 @@ def render_mermaid(packet):
             f"{packet['omitted_edges']} internal links omitted",
             f'{clipped} labels shortened ({LABEL_CHARS} chars)',
             f"{packet['hypotheses']} hypotheses not expanded",
+            f"{packet.get('contributions', 0)} project contributions not expanded",
             f"{len(packet['hypothesis_errors'])} unreadable hypotheses",
             'Details: read the text export']
     text = '<br/>'.join(mermaid_text(part) for part in note)

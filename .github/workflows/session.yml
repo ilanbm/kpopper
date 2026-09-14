@@ -58,6 +58,13 @@ jobs:
           python -m unittest discover -s tests -p test_process_boundaries.py -v
           python -m unittest discover -s tests -p 'test_export*.py' -v
           python -m unittest discover -s tests -p test_assessment.py -v
+      - name: Check POSIX project modes with the required core
+        if: runner.os != 'Windows'
+        run: |
+          python -m unittest discover -s tests -p test_mode_writer_integration.py -v
+          python -m unittest discover -s tests -p test_mode_reader_integration.py -v
+          python -m unittest discover -s tests -p test_mode_review_regressions.py -v
+          python -m unittest discover -s tests -p test_mode_assessment_integration.py -v
       - name: Audit the named theorem dependencies
         shell: bash
         run: |

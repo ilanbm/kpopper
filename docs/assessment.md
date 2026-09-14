@@ -57,6 +57,14 @@ One proposal different from the base is an alternative, not automatically contes
 scope lists checked and skipped hypotheses. `none_detected` means none detected within that
 scope and method; unreadable hypotheses remain disclosed even when other conflicts are found.
 
+In Advanced mode, `scope.knowledge` separately names checked pending contributions, conflict
+holders and the locally observed target revision. Complete source, schema and scope differences
+can create a knowledge conflict even when scalar claims agree; these findings identify their
+method as `readable_hypothesis_pairs_and_knowledge_identity`. A configured target that cannot
+be read makes coverage partial and carries a reason. An unassessed target is not verified.
+The scope reports the selected live or frozen read mode. Simple aliases resolve to the same
+shared record, while frozen reads use only their explicitly selected record files.
+
 ## Attention is a separate policy
 
 `focused-review/v1` derives actions from the findings:
@@ -105,7 +113,10 @@ quoted literal does not silence a changed dependency. Neither policy replaces th
 The optional checked-session core still has its own typed comparison and review semantics; this
 release does not claim those semantics have been unified with the ordinary profile.
 
-`record_revision` binds the supplied record and hypothesis contents. `assessment_revision` also
+`record_revision` binds the supplied record and hypothesis contents, complete typed live
+conflict bodies, and the observed target revision or its unavailability. Export snapshot identity
+uses the same record revision; target citation or scope changes cannot leave it unchanged.
+Conflict bodies outside an export selection are bound without displaying their values. `assessment_revision` also
 binds the profile, scope and findings, including unavailable computations. This can change when
 an evaluator becomes available without any record edit. Policy selection and display clipping
 do not change either identity. These revisions are not `record_sha256` byte hashes used to

@@ -15,8 +15,10 @@ P = I.P
 
 
 def migrate(record=None, apply=False, readable=False):
-    rec = I._record_path(record)
-    with P._locked(str(rec)):
+    rec, project, policy = I._routed_record(record)
+    with P._locked(str(rec), project=project):
+        if project.config() != policy:
+            raise ValueError('project mode or record destination changed; retry migration')
         doc, ids, judgments, fields, raw = I._record_world(rec)
         before = rec.read_bytes()
         changes, skipped, bodies = [], [], {}
@@ -104,6 +106,9 @@ def migrate(record=None, apply=False, readable=False):
             after = shadow.read_bytes()
             answer["after_sha256"] = I._sha(after)
             if apply and not answer["problems"]:
+                report = {'updates': [{'kind': 'add', 'id': nid, 'body': body} for nid, body in bodies.items()]}
+                if I._report_private(doc, report):
+                    raise ValueError('private or unclear source permission; migration left the record unchanged')
                 if rec.read_bytes() != before:
                     raise ValueError("record changed during migration; retry")
                 I._replace_record(rec, after)

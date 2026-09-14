@@ -92,6 +92,28 @@ def rule_refs(body, ids):
             refs.update(ref for ref in ID.findall(value) if ref in ids)
     return sorted(refs)
 
+def _peer(name):
+    """Load sibling modules even when a configured reader was imported by file path."""
+    import importlib
+    import importlib.util
+    package = __package__
+    if not package:
+        package = '_kpopper_runtime'
+        if package not in sys.modules:
+            spec = importlib.util.spec_from_file_location(package,
+                os.path.join(os.path.dirname(__file__), '__init__.py'),
+                submodule_search_locations=[os.path.dirname(__file__)])
+            module = importlib.util.module_from_spec(spec)
+            sys.modules[package] = module
+            spec.loader.exec_module(module)
+    return importlib.import_module(package + '.' + name)
+
+
+import contextvars
+import copy
+_RAW_READS = contextvars.ContextVar('raw_record_reads', default=False)
+
+
 ID = re.compile(r"[A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z0-9_]+)+")
 EXPR = re.compile(r"[<>=!+\-*/()]|\bor\b|\band\b|\bnot\b")
 # A reference: an entry named inside prose, `{{heat.loss_kw}}`, resolved wherever the text is
@@ -191,9 +213,6 @@ def registered_record():
 
 def default_paths():
     """Use the same bounded discovery as the opener, including non-Git workspaces."""
-    for name in ENTRY_NAMES:
-        if os.path.exists(name):
-            return [name]
     try:
         from .workspace import locate
     except ImportError:
@@ -208,7 +227,7 @@ def default_paths():
     location = locate()
     if location["status"] == "unavailable":
         raise SystemExit(location["reason"] + " " + location["record"])
-    return [location["record"]] if location["status"] == "found" else DEFAULT
+    return [location["record"]] if location["status"] in ("found", "pending") else DEFAULT
 
 
 HYPOTHESES = "PROVENANCE.d"      # the hypotheses of a record under the old name, beside it
@@ -722,6 +741,8 @@ def contested(doc):
     for k, hs in sorted(holders.items()):
         if len(hs) > 1 and any(not _same_claim(hs[0][1], c) for _, c in hs[1:]):
             out[k] = hs
+    for nid, variants in getattr(doc, 'knowledge_conflicts', {}).items():
+        out[nid] = [(name, claim_of(body)) for name, body in variants]
     return out
 
 
@@ -738,7 +759,8 @@ def hypothesis_line(doc, today=None, width=110):
     could not read first, then the oldest first - its age and how many judgments rest on what
     it holds. Facts, no threshold: when one has waited too long is a person's reading of the
     line."""
-    hyps = getattr(doc, "hypotheses", None) or {}
+    hyps = {name: hyp for name, hyp in (getattr(doc, 'hypotheses', None) or {}).items()
+            if hyp.get('kind') != 'contribution'}
     if not hyps:
         return ""
     today = today or datetime.date.today()
@@ -772,7 +794,10 @@ def _every_id(doc, ids):
     return out
 
 
-def load(paths):
+def load(paths, *, read_mode=None):
+    mode = read_mode or ('frozen' if _RAW_READS.get() else os.environ.get('KPOPPER_READ_MODE', 'live'))
+    if mode == 'live':
+        paths = _peer('knowledge_views').write_paths(paths)
     doc, seen = Record(), set()
 
     def merge(f, d):
@@ -810,11 +835,15 @@ def load(paths):
     for p in paths:
         for f in sorted(glob.glob(p)) or [p]:
             if not os.path.exists(f):
+                if not _RAW_READS.get() and (read_mode or os.environ.get('KPOPPER_READ_MODE', 'live')) == 'live' and _peer('knowledge_views').has_pending(paths):
+                    doc['meta'] = {}
+                    continue
                 sys.exit(f"{f}: no record here. Run this from the directory the record sits "
                          "in, or name the record file as an argument.")
             merge(f, parse(f) or {})
     doc.hypotheses = load_hypotheses(paths)
-    return doc
+    mode = read_mode or ('frozen' if _RAW_READS.get() else os.environ.get('KPOPPER_READ_MODE', 'live'))
+    return _peer('knowledge_views').overlay(paths, doc, read_mode=mode)
 
 
 def collections_of(doc):
@@ -903,6 +932,19 @@ def infer(doc):
             # nothing to check and the record passes by default - the quiet pass this
             # method refuses. A snapshot or predicate named the same way costs one check.
             if role == "deps" and sch[role] not in present:
+                source_collections = {k: v for k, v in collections.items() if k != 'meta'}
+                judgment_fields = {'rests_on', 'wrong_if', 'seen', 'verdict', 'reopened_by', 'blocked_on'} | \
+                                  {sch[k] for k in ('deps', 'snapshot', 'predicate') if sch.get(k)}
+                if source_collections and set(source_collections) <= {'known', 'sources', 'open', 'questions'} \
+                        and all(sch.get(k) for k in ('deps', 'snapshot', 'predicate')) \
+                        and not cand['deps'] and set(unresolved) <= {'labels', 'tags', 'v', 'quoted'} \
+                        and not any(judgment_fields.intersection(body)
+                            for group in source_collections.values() for body in group.values()
+                            if isinstance(body, dict)):
+                    # A portable source/fact closure may retain the explicit parent
+                    # schema without retaining a downstream judgment. An actual
+                    # dependency declaration or judgment shape still cannot vanish.
+                    return sch[role]
                 seen = ", ".join(sorted(str(x) for x in present))
                 raise SystemExit(
                     f"schema names '{sch[role]}' for 'deps', and nothing this reader can "
@@ -1630,7 +1672,7 @@ def counts(doc, ids, jud, fields, raw):
         "graph.blocked": count("blocked"), "graph.broken": count("broken"),
         "graph.unchecked": count("unchecked"), "graph.moved": count("moved"),
         "graph.falsified": count("falsified"), "graph.no_predicate": count("no_predicate"),
-        "graph.hypotheses": len(getattr(doc, "hypotheses", None) or {}),
+        "graph.hypotheses": sum(h.get('kind') != 'contribution' for h in (getattr(doc, "hypotheses", None) or {}).values()),
         "graph.contested": len(contested(doc)),
         "graph.prior_reversal_rate": len(refuted) / len(high) if high else 0.0,
     }
@@ -1689,7 +1731,7 @@ def check_lines(paths):
     ids, jud, fields = infer(doc)
     raw = with_builtins(doc, ids, jud, fields)
     open_ids = {k for g in OPEN for k in (doc.get(g) or {})}
-    fail, note, moved = [], [], []
+    fail, note, moved = [], _peer('knowledge_views').lines(doc), []
     # A reference in prose is a dependency the sentence declares by naming it: it must be
     # an entry, and inside a judgment it must be one the judgment rests on - or a move in
     # it would never reach the sentence that quotes it.
@@ -1821,7 +1863,7 @@ def check_lines(paths):
     # that never builds the page still hears them. The page decides its own falsifiers; the
     # brief held against the arrangements that stand is the record's own claim, so a brief
     # that no longer carries what an arrangement decided fails here too.
-    info = _page_or_error(paths)
+    info = _page_or_error(paths, read_mode=getattr(doc, 'read_mode', None))
     if info and "error" in info:
         note.append(f"the brief beside the record could not be built: {info['error']}")
     elif info:
@@ -1843,15 +1885,17 @@ def check_lines(paths):
     # is decided at consolidation, where the union is tested.
     cont = []
     for name, h in sorted(doc.hypotheses.items()):
+        label = 'contribution' if h.get('kind') == 'contribution' else 'hypothesis'
         if h["error"]:
-            fail.append(f"hypothesis {name} could not be read: {h['error']}")
+            fail.append(f"{label} {name} could not be read: {h['error']}")
             continue
         got, why = _layer_view(doc, h)
         if got is None:
-            fail.append(f"hypothesis {name} cannot be read over the base: {why}")
+            fail.append(f"{label} {name} cannot be read over the base: {why}")
     for k, hs in contested(doc).items():
         cont.append(f"{k}: " + ", ".join(f"{n} says {short(c)}" for n, c in hs)
-                    + " - one of them folds, or neither; a person decides")
+                    + (" - contribution versions need explicit reconciliation" if k in getattr(doc, 'knowledge_conflicts', {})
+                       else " - one of them folds, or neither; a person decides"))
     # Files of the other layout beside the entry file: a record moved by half. Nothing reads
     # them, and a checker that passes over what it cannot read is the failure this method
     # exists to refuse.
@@ -1990,6 +2034,7 @@ def opening(paths, budget=25, chars=None, host=None):
         head.append(priors)
     # hypotheses beside the record: one line, how many wait and for how long - nothing of what
     # they claim, which is pulled by seed or met as a collision on an id
+    head.extend(_peer('knowledge_views').lines(doc))
     waiting = hypothesis_line(doc)
     if waiting:
         head.append(waiting)
@@ -2045,7 +2090,7 @@ def opening(paths, budget=25, chars=None, host=None):
     # already about what to do next: the newest first and how many more, never the list -
     # the slot is for what needs a person, and check names the rest with a hint each. An
     # arrangement whose sign appeared comes first: it is the gap read by a decision.
-    info = _page_or_error(paths)
+    info = _page_or_error(paths, read_mode=getattr(doc, 'read_mode', None))
     facts = (info.get("arrangements") or {}) if info and "error" not in info else {}
     fired = sorted(k for k, f in facts.items() if f["fired"])
     cov = info.get("coverage") if info and "error" not in info else None
@@ -2189,7 +2234,8 @@ def affects(paths, changed):
             j = jud_w[name]
             named = [d for d in j["deps"] if d in moved and d in predicate_refs(j["pred"])]
             why = ("evaluate the predicate against " + ", ".join(named)) if named else "flagged only"
-            print(f"{name}" + (f" (in hypothesis {n})" if n else "")
+            label = ('contribution ' if n and doc.hypotheses[n].get('kind') == 'contribution' else 'hypothesis ') + str(n)
+            print(f"{name}" + (f" (in {label})" if n else "")
                   + f"\n    via {via} -> {why}"
                   + (f"\n    predicate: {predicate_text(j['pred'])}" if j["pred"] else ""))
         total += len(hit)
@@ -2279,6 +2325,9 @@ def pull(paths, seeds, budget=40, doc=None):
     judgments |= {name for name, j in jud.items() if set(j["deps"]) & entries}
     for n, (h, ids_h, jud_h, fields_h, raw_h) in layers.items():
         judgments |= {name for name, j in jud_h.items() if name in h["ids"] and set(j["deps"]) & entries}
+
+    def layer_label(name):
+        return ('contribution ' if doc.hypotheses[name].get('kind') == 'contribution' else 'hypothesis ') + name
 
     def cut(line, n):
         return line if len(line) < n else line[:n] + " ..."
@@ -2408,10 +2457,11 @@ def pull(paths, seeds, budget=40, doc=None):
         elif holders:
             n, l = holders[0]
             lines += judgment_lines(name, l[2][name], l[4], l[1], l[2], l[3],
-                                    tag=f" (in hypothesis {n})")
+                                    tag=f" (in {layer_label(n)})")
         if name in disputed:
             lines.append(dispute(name))
 
+    lines = _peer('knowledge_views').lines(doc) + lines
     kept, remain = lines[:budget], max(0, len(lines) - budget)
     for l in kept:
         print(l)
@@ -2658,34 +2708,36 @@ def _brief_beside(path):
     return b if os.path.exists(b) else None
 
 
-def _page_info(paths):
+def _page_info(paths, read_mode=None):
     """What the page knows when it is built beside this record - its counts, its shape, the
     coverage report - or None when no brief sits beside the record."""
-    brief = _brief_beside(paths[0])
-    if not brief:
-        return None
     sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
     import render_page as R
-    return R.build(paths, brief)[4]
+    mode = read_mode or ('frozen' if _RAW_READS.get() else os.environ.get('KPOPPER_READ_MODE', 'live'))
+    paths = R.record_paths(paths, read_mode=mode)
+    brief = R.find_brief(paths, read_mode=mode)
+    if not brief:
+        return None
+    return R.build(paths, brief, read_mode=mode)[4]
 
 
-def _page_side(paths):
+def _page_side(paths, read_mode=None):
     """page.* as the page counts them - every name, mentioned or not, since a new judgment
     may be the first to rest on one - the record's shape, and every arrangement held against
     the brief: -> (values, shape, arrangements). ({}, None, {}) without a brief; a count the
     page could not take is left out."""
-    info = _page_info(paths)
+    info = _page_info(paths) if read_mode is None else _page_info(paths, read_mode=read_mode)
     if info is None:
         return {}, None, {}
     return ({k: v for k, v in info["page"].items() if v is not None}, info["shape"],
             info.get("arrangements") or {})
 
 
-def _page_or_error(paths):
+def _page_or_error(paths, read_mode=None):
     """What the page knows, or None without a brief, or {"error": why} when the brief cannot
     be built - the reader never fails on the page's account, it says so in a line."""
     try:
-        return _page_info(paths)
+        return _page_info(paths) if read_mode is None else _page_info(paths, read_mode=read_mode)
     except (Exception, SystemExit) as e:
         return {"error": str(e)}
 
@@ -3755,23 +3807,34 @@ def _write_text(path, text):
 
 
 @contextlib.contextmanager
-def _locked(path):
+def _locked(path, *, project=None):
     """One writer at a time on a record: the whole write - load, validate, edit, replace -
     runs under an exclusive lock on the record's directory, so two sessions on one file
     take turns instead of the last one silently discarding the first. Where the platform
     offers no such lock the write is unguarded."""
+    project = project or _peer('knowledge_views').project_for([path])
+    # All direct writers share this boundary. Policy precedes the directory lock;
+    # capture/configuration own their locks and are never called inside this scope.
+    with project.lock():
+        with _directory_locked(path):
+            yield
+
+
+@contextlib.contextmanager
+def _directory_locked(path):
+    """Directory-only lock for policy owners; never captures or configures."""
+    token = _RAW_READS.set(True)
     try:
         import fcntl
-    except ImportError:
-        yield
-        return
-    fd = os.open(os.path.dirname(os.path.abspath(path)), os.O_RDONLY)
-    try:
-        fcntl.flock(fd, fcntl.LOCK_EX)
-        yield
+        fd = os.open(os.path.dirname(os.path.abspath(path)), os.O_RDONLY)
+        try:
+            fcntl.flock(fd, fcntl.LOCK_EX)
+            yield
+        finally:
+            fcntl.flock(fd, fcntl.LOCK_UN)
+            os.close(fd)
     finally:
-        fcntl.flock(fd, fcntl.LOCK_UN)
-        os.close(fd)
+        _RAW_READS.reset(token)
 
 
 def _files_of(paths):
@@ -3910,18 +3973,43 @@ def _collection_for(doc, ids, jud, fields, nid, body, explicit):
     return valued[0] if counted(valued[0]) else "known"
 
 
+class _Reader:
+    load = staticmethod(load)
+    Record = Record
+    collections_of = staticmethod(collections_of)
+
+
 def apply(paths, action, diagnostics=None):
     """The one write. `action` says what kind (set, add, review) and what that kind needs;
     it is validated whole before a byte is touched, applied to the file's text without
     reformatting anything else, read back, and answered with the reach. All of it under
     one lock, so a second writer waits rather than overwrites. Aimed at a hypothesis, the
     same write lands in the file beside the record and the base is not touched."""
-    with _locked(paths[0]):
-        return _apply_unlocked(paths, action, diagnostics)
+    project = _peer('knowledge_views').project_for(paths)
+    policy = project.config()
+    original_paths = list(paths)
+    paths = _peer('knowledge_views').write_paths(paths)
+    try:
+        receipt = _peer('recording').route(paths, action, sys.modules.get(__name__) or _Reader(),
+                                          project=project, expected_policy=policy)
+    except ValueError as error:
+        raise Refused('refused - ' + str(error))
+    if receipt is not None:
+        print(json.dumps(receipt, ensure_ascii=False))
+        return 0
+    with _locked(paths[0], project=project):
+        if project.config() != policy or list(_peer('knowledge_views').write_paths(original_paths)) != list(paths):
+            raise Refused('refused - project mode or record destination changed; retry the write')
+        return _apply_unlocked(paths, action, diagnostics, project=project)
 
 
-def _apply_unlocked(paths, action, diagnostics=None):
+def _apply_unlocked(paths, action, diagnostics=None, *, project=None):
     """The mutation body for a caller already holding the record-directory lock."""
+    # Recheck privacy inside the write lock: a source can change while a writer waits.
+    private = _peer('recording').private_route(paths, action, sys.modules.get(__name__) or _Reader(), project=project)
+    if private is not None:
+        print(json.dumps(private, ensure_ascii=False))
+        return 0
     if action.get("hypothesis"):
         return _fork(paths, action, diagnostics)
     return _apply(paths, action, diagnostics)
@@ -3980,7 +4068,7 @@ def _fork(paths, action, diagnostics=None):
     snapshot says so. A hypothesis that does not exist yet is opened by its first write, with
     the day it was born in its head; an entry the base holds is carried over whole and set
     there."""
-    doc = load(paths)
+    doc = load(paths, read_mode='frozen')
     name, kind, nid = action["hypothesis"], action["kind"], action["id"]
     hyp = doc.hypotheses.get(name)
     if hyp and hyp["error"]:
@@ -4179,7 +4267,7 @@ def _check_citation_readback(action, body):
 
 
 def _apply(paths, action, diagnostics=None):
-    doc = load(paths)
+    doc = load(paths, read_mode='frozen')
     ids, jud, fields = infer(doc)
     fields = authored_fields(action, fields)
     raw = with_builtins(doc, ids, jud, fields)
@@ -4249,12 +4337,14 @@ def _apply(paths, action, diagnostics=None):
         else:
             collection = _collection_for(doc, ids, jud, fields, nid, body, action.get("into"))
             target = _file_for(files, nid, collection)
-    original = io.open(target, encoding="utf-8").read()
+    with io.open(target, encoding="utf-8") as source:
+        original = source.read()
     lines = original.split("\n")
     if kind == "set":
         now = value_of(raw, ids, nid)
         if now is not None and _same(now, action["value"]) and not action.get("as_of") \
-                and action.get("source") is None:
+                and action.get("source") is None and ('_record_scope' not in action or
+                    _same(action['_record_scope'], raw[nid].get('scope') if isinstance(raw[nid], dict) else None)):
             print(f"{nid} is already {scalar(action['value'], fold=False)}; nothing written")
             return 0
         old, field = _set_in(lines, nid, action["value"], stamp, action.get("why"),
@@ -4293,6 +4383,18 @@ def _apply(paths, action, diagnostics=None):
                 out.append("  {}: {} -> {}".format(d, *apart(was[d], seen[d])))
             elif d not in was and d in seen:
                 out.append(f"  {d}: {short(seen[d])} (never checked against it before)")
+    if '_record_scope' in action and kind != 'add':
+        entry = copy.deepcopy(raw[nid])
+        if not isinstance(entry, dict):
+            raise Refused('refused - scoped writes need a complete entry body')
+        if kind == 'set':
+            entry = _peer('recording').set_body(entry, action)
+        elif kind == 'review':
+            entry[snapshot_field] = seen
+            if 'reviewed' in entry:
+                entry['reviewed'] = stamp
+        entry['scope'] = copy.deepcopy(action['_record_scope'])
+        _replace_in(lines, nid, entry)
     _bump_updated(lines, stamp)
     _write_text(target, "\n".join(lines))
 
@@ -4713,7 +4815,7 @@ def write_command(cmd, rest):
     i = 0
     while i < len(rest):
         a = rest[i]
-        if a in ("--why", "--as-of", "--in", "--hypothesis", "--source", "--at"):
+        if a in ("--why", "--as-of", "--in", "--hypothesis", "--source", "--at", "--shareability", "--scope", "--environment", "--commit", "--event-id", "--contribution-id", "--evidence-root"):
             if i + 1 >= len(rest):
                 raise Refused(f"{a} needs a value")
             opts[a[2:].replace("-", "_")] = rest[i + 1]
@@ -4771,6 +4873,7 @@ def write_command(cmd, rest):
         action["body"] = body
     else:
         files = [x for x in args if x.endswith((".yaml", ".yml"))]
+    action.update({key: opts[key] for key in _peer('recording').ROUTING if key in opts})
     if cmd == "add" and not files:
         code, born = _apply_first_add(action)
     else:
@@ -4828,8 +4931,20 @@ def _apply_first_add(action):
     if location["status"] == "unavailable":
         raise SystemExit(location["reason"] + " " + location["record"])
     path = location["record"]
+    project = _peer('project_modes').Project(location.get('workspace', os.path.dirname(path)))
+    policy = project.config()
+    try:
+        receipt = _peer('recording').route([path], action, sys.modules.get(__name__) or _Reader(),
+                                          project=project, expected_policy=policy)
+    except ValueError as error:
+        raise Refused('refused - ' + str(error))
+    if receipt is not None:
+        print(json.dumps(receipt, ensure_ascii=False))
+        return 0, []
     while True:
-        with _locked(path):
+        with _locked(path, project=project):
+            if project.config() != policy:
+                raise Refused('refused - project mode or record destination changed; retry the write')
             # Resolve again only after owning the directory. Another first writer may have
             # completed, or may have removed its refused newborn, while this writer waited.
             location = _workspace_location()
@@ -4843,10 +4958,10 @@ def _apply_first_add(action):
                 path = current
                 continue
             if location["status"] == "found":
-                return _apply_unlocked([current], action), []
+                return _apply_unlocked([current], action, project=project), []
             _newborn(action, current)
             try:
-                return _apply_unlocked([current], action), [current]
+                return _apply_unlocked([current], action, project=project), [current]
             except BaseException:
                 # Still inside the birth lock: no successful waiter can be removed between
                 # this exact-content check and unlink.
@@ -4864,6 +4979,9 @@ if __name__ == "__main__":
         # the same switch as KPOPPER_NO_CACHE=1, set here so anything this run starts
         # parses the record too, and nothing reads a kept parse
         os.environ[NO_CACHE] = "1"
+    if '--frozen' in a:
+        a.remove('--frozen')
+        os.environ['KPOPPER_READ_MODE'] = 'frozen'
     a = a or ["check"]
     cmd, rest = a[0], a[1:]
     if cmd == "where":

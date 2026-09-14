@@ -458,6 +458,40 @@ where the conversation can safely continue without that result.
 
 ## How it works
 
+### Two working modes
+
+<picture>
+  <source media="(max-width: 640px)" srcset="assets/diagrams/two-working-modes-mobile.png">
+  <img src="assets/diagrams/two-working-modes.png" alt="Two working modes: Simple sessions share one sourced project record with competing hypotheses; Advanced branches retain their own assumptions and hypotheses, while shareable project findings follow review and acceptance into main.">
+</picture>
+
+[View the full-size illustration](assets/diagrams/two-working-modes.png) ·
+[View the vertical version](assets/diagrams/two-working-modes-mobile.png)
+
+**Simple** keeps one project graph shared by its sessions. Competing ideas are named
+hypotheses beside that graph: several sessions can examine the same proposal, and one
+session can work on several. Projects without Git start here.
+
+**Advanced** adds Git branch contexts. Each branch's record describes the version of the
+project being examined, even if the repository has only one checkout. New Git projects
+start here. Existing registered shared records keep their current location and behavior;
+changing mode requires explicit reconciliation.
+
+In Advanced, shareable findings that apply to the project independently of a feature go
+into `pending_grounding`. Other local worktrees can read them immediately with their source,
+scope and pending status. With the project's publication permission, they accumulate in
+one review PR. After accepted contributions are verified in the target branch, the same
+`pending_grounding` branch is reused for the next batch. Closing the original session or
+removing its worktree does not erase the pending work.
+
+A measurement of an unmerged commit can be a fact about that commit. A proposed conclusion
+remains a hypothesis. Merging means the team accepted the contribution; it does not prove
+the claim, increase confidence or refresh its last review. Private material and information
+whose sharing permission is unclear stay in a structured private draft.
+
+See [project modes and publication](docs/project-modes.md) for routing, reproducible reads
+and the publication lifecycle.
+
 ### The knowledge record
 
 The technical term is an **epistemic record**: a record of what is known and how it is

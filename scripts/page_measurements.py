@@ -23,6 +23,7 @@ ROOT = Path(__file__).resolve().parent
 MAX_BYTES = 256 * 1024
 CODE = [ROOT / name for name in ('page_measurements.py', 'provenance.py', 'expressions.py', 'assessment.py',
         'render_page.py', 'page_words.py', 'page_lint.py', 'sameness.py',
+        'knowledge_views.py', 'project_modes.py', 'pending_grounding.py', 'pending_publication.py',
         'session/core.py', 'session/model.py', 'session/lean/Main.lean')]
 CODE += sorted((ROOT / 'page').glob('*'))
 CODE = [path for path in CODE if path.is_file()]
@@ -73,10 +74,33 @@ def snapshot(paths, brief=DEFAULT):
     roots = [os.path.abspath(str(path)) for path in paths]
     if not roots:
         raise ValueError('page measurement needs a record')
+    selected = list(roots)
+    mode = 'frozen' if P._RAW_READS.get() else os.environ.get('KPOPPER_READ_MODE', 'live')
+    if mode not in ('live', 'frozen'):
+        raise ValueError('read mode must be live or frozen')
+    views = P._peer('knowledge_views')
+    context = {'read_mode': mode}
+    doc = P.Record()
+    if mode == 'live':
+        policy = views.project_for(selected).config()
+        roots = [os.path.abspath(path) for path in views.write_paths(selected)]
+        context['mode'] = policy['mode']
+        # Simple aliases select the same graph even when a direct shared-path caller
+        # is outside the owning Git project. Owner policy is routing, not graph identity.
+        if policy['mode'] == 'advanced':
+            context['policy'] = policy
+            # Bind the moving overlay independently; checkout documents are hashed below.
+            # Do not insert an extra semantic read into callers' measurement boundary.
+            doc = views.overlay(roots, P.Record(), read_mode=mode)
+            context.update({key: getattr(doc, key, None) for key in (
+                'pending_ref', 'contributions', 'publication', 'knowledge_conflicts',
+                'target_unavailable', 'private_drafts')})
+            context['knowledge_conflicts'] = {nid: [list(variant) for variant in variants]
+                for nid, variants in getattr(doc, 'knowledge_conflicts', {}).items()}
     if brief is DEFAULT:
         brief = P._brief_beside(P._first_of(roots))
     brief = os.path.abspath(str(brief)) if brief is not None else None
-    scope = {'records': roots, 'brief': brief}
+    scope = {'records': roots, 'brief': brief, 'read_mode': mode}
     code = _code_identity()
     if code != LOADED_CODE:
         raise ValueError('page measurement code changed; restart the reader and build the page again')
@@ -86,6 +110,8 @@ def snapshot(paths, brief=DEFAULT):
     if P.assessment_module().LOADED_SOURCE_HASH != code['assessment.py']:
         raise ValueError('loaded assessment changed; restart it before using page measurements')
     paths_read = _paths(roots, brief)
+    if mode == 'live' and getattr(doc, 'pending_ref', None):
+        paths_read = [name for name in paths_read if Path(name).exists()]
     files, stamps = {}, {}
     for name in paths_read:
         path = Path(name)
@@ -96,11 +122,14 @@ def snapshot(paths, brief=DEFAULT):
             raise ValueError('page inputs changed while being read; retry')
         files[name] = {'sha256': hashlib.sha256(data).hexdigest(), 'resolved': str(path.resolve())}
         stamps[name] = after
-    if paths_read != _paths(roots, brief):
+    current_paths = _paths(roots, brief)
+    if mode == 'live' and getattr(doc, 'pending_ref', None):
+        current_paths = [name for name in current_paths if Path(name).exists()]
+    if paths_read != current_paths:
         raise ValueError('page inputs changed while being read; retry')
-    identity = digest({'scope': scope, 'files': files, 'code': code, 'core': _core_identity(),
+    identity = digest({'context': views.G.identity(context), 'resolved_records': roots, 'scope': scope, 'files': files, 'code': code, 'core': _core_identity(),
                        'python': list(sys.version_info[:3]), 'yaml': P.yaml.__version__})
-    return {'scope': scope, 'identity': identity, 'stamps': stamps}
+    return {'scope': scope, 'identity': identity, 'stamps': stamps, 'requested_records': selected}
 
 
 def unchanged(before, after):
@@ -130,7 +159,7 @@ def _counts(value):
 def publish(before, counts):
     """Publish the counts from the original build, never a second rendering."""
     counts = _counts({key: value for key, value in counts.items() if value is not None})
-    after = snapshot(before['scope']['records'], before['scope']['brief'])
+    after = snapshot(before.get('requested_records', before['scope']['records']), before['scope']['brief'])
     if not unchanged(before, after):
         raise ValueError('record or view changed during page measurement; build again')
     payload = {'schema': 1, 'scope': before['scope'], 'inputs': before['identity'], 'counts': counts,

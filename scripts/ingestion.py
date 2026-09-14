@@ -34,11 +34,12 @@ _SPEC = importlib.util.spec_from_file_location("kpopper_ingestion_provenance", H
 P = importlib.util.module_from_spec(_SPEC)
 _SPEC.loader.exec_module(P)
 
-TERMINAL = {"applied", "needs_primary", "superseded", "error"}
+TERMINAL = {"applied", "project_captured", "needs_primary", "superseded", "error"}
 ACTIONABLE = {"MOVED", "UNCHECKED", "BROKEN", "BLOCKED", "UNKNOWN"}
 AUTO_STATES = {"captured", "processing"}
 EVENT_FIELDS = {"event_id", "session_id", "source_quote", "target", "value", "date",
-                "kind", "question", "reason", "updates", "record_sha256", "source", "at"}
+                "kind", "question", "reason", "updates", "record_sha256",
+                "shareability", "privacy", "scope", "source", "at"}
 MAX_REPREPARES = 2
 
 
@@ -137,18 +138,27 @@ def _record_path(record=None):
 
 def state_path(record=None, state_dir=None):
     """Return the private state directory for a record without creating it."""
-    rec = _record_path(record)
     if state_dir is not None:
         return Path(state_dir).expanduser().resolve()
+    rec = _routed_record(record)[0]
     configured = os.environ.get("XDG_STATE_HOME")
     base = Path(configured) if configured and Path(configured).is_absolute() \
         else Path.home() / ".local" / "state"
     return (base / "kpopper" / "ingestion" / _sha(str(rec).encode("utf-8"))).resolve()
 
 
+def _storage_record(record, state_dir):
+    raw = _record_path(record)
+    # An explicitly addressed historical store remains inspectable after a mode
+    # transition. Processing still checks its captured policy before any write.
+    if state_dir is not None and _load(Path(state_dir).expanduser().resolve() / 'record.json') == {'record': str(raw)}:
+        return raw
+    return _routed_record(raw)[0]
+
+
 def _layout(record=None, state_dir=None):
     _require_locking()  # Fail before creating/chmod'ing state on unsupported platforms.
-    rec = _record_path(record)
+    rec = _storage_record(record, state_dir)
     root = state_path(rec, state_dir)
     try:
         rec.relative_to(root)
@@ -177,7 +187,7 @@ def _layout(record=None, state_dir=None):
 
 def _existing_layout(record=None, state_dir=None):
     """Resolve state for read APIs without creating private storage."""
-    rec = _record_path(record)
+    rec = _storage_record(record, state_dir)
     root = state_path(rec, state_dir)
     marker = root / "record.json"
     if not marker.is_file():
@@ -197,6 +207,15 @@ def _validate_envelope(envelope):
     if not isinstance(quote, str) or not quote.strip():
         raise ValueError("source_quote must be non-empty text")
     out = dict(envelope)
+    scope = out.get('scope')
+    if scope is not None:
+        if not isinstance(scope, dict) or scope.get('kind') not in ('project', 'external', 'code', 'feature', 'unclear'):
+            raise ValueError('report scope needs an explicit supported kind')
+        if scope['kind'] in ('project', 'external', 'code') and (not isinstance(scope.get('environment'), str)
+                                                               or not scope['environment'].strip()):
+            raise ValueError('report scope needs an exact environment')
+        if scope['kind'] == 'code' and not re.fullmatch(r'[0-9a-f]{40}|[0-9a-f]{64}', str(scope.get('commit', ''))):
+            raise ValueError('code-scoped report needs an exact commit')
     for field in ("source", "at"):
         if field in out and (not isinstance(out[field], str) or not out[field].strip()):
             raise ValueError(field + " must be non-empty text")
@@ -253,7 +272,7 @@ def _record_world(record):
     files = [Path(x).resolve() for x in P._files_of(paths)]
     if len(files) != 1 or files[0] != record.resolve():
         raise ValueError("multi-file and pointer records require primary review")
-    doc = P.load(paths)
+    doc = P.load(paths, read_mode='frozen')
     if doc.hypotheses:
         raise ValueError("a record with hypothesis context requires primary review")
     ids, judgments, fields = P.infer(doc)
@@ -419,13 +438,54 @@ def _event_file(root, eid):
 
 def _summary(event):
     return {k: event.get(k) for k in
-            ("event_id", "state", "target", "captured_at", "finished_at", "reason")}
+            ("event_id", "state", "target", "captured_at", "finished_at", "reason", "record", "state_dir")}
+
+
+def _routed_record(record):
+    original = _record_path(record)
+    views = P._peer('knowledge_views')
+    project = views.project_for([str(original)])
+    policy = project.config()
+    rec = Path(views.write_paths([str(original)])[0]).resolve()
+    return rec, project, policy
+
+
+@contextlib.contextmanager
+def _event_lock(rec, event):
+    project = P._peer('project_modes').Project(event.get('project_root', rec.parent))
+    with P._locked(str(rec), project=project):
+        if event.get('project_policy') is not None and project.config() != event['project_policy']:
+            raise ValueError('project policy changed after report capture; review the retained report')
+        if event.get('project_policy') is None and Path(P._peer('knowledge_views').write_paths([str(rec)])[0]).resolve() != rec:
+            raise ValueError('record destination changed since legacy capture; review the retained report')
+        yield project
+
+
+def _report_private(doc, envelope):
+    """Check the original permissions before a synthetic source replaces citations."""
+    R, G = P._peer('recording'), P._peer('pending_grounding')
+    controls = {k: doc[k] for k in ('meta', 'private', 'privacy', 'visibility', 'shareability') if k in doc}
+    if R.private_marker(controls) or R.private_marker(envelope):
+        return True
+    entries = G.entries(doc)
+    roots = set()
+    if envelope.get('source') in entries:
+        roots.add(envelope['source'])
+    operations = envelope.get('updates', [{'id': envelope.get('target')}])
+    for operation in operations:
+        if operation.get('id') in entries:
+            roots.add(operation['id'])
+        body = operation.get('body') or {}
+        roots.update(x for x in G._strings(body) if x in entries)
+        roots.update(x for x in P._mentioned(body) if x in entries)
+    return bool(roots and R.private_marker(G.closure(doc, sorted(roots))))
 
 
 def capture(envelope, record=None, state_dir=None, start=True):
     """Durably retain one explicit report and optionally start a finite worker."""
     envelope = _validate_envelope(envelope)
-    rec, root = _layout(record, state_dir)
+    selected, project, policy = _routed_record(record)
+    rec, root = _layout(selected, state_dir)
     eid = _event_id(rec, envelope)
     encoded = _json_bytes(envelope)
     with _file_lock(root / "capture.lock"):
@@ -435,8 +495,10 @@ def capture(envelope, record=None, state_dir=None, start=True):
                 raise ValueError("event_id was reused for different input")
             if start and prior.get("state") in AUTO_STATES:
                 _start_worker_locked(rec, root)
-            return _summary(prior)
-        with P._locked(str(rec)):
+            return status(eid, rec, root) if prior.get('state') in TERMINAL else _summary(prior)
+        with P._locked(str(rec), project=project):
+            if project.config() != policy:
+                raise ValueError('project policy changed while capturing report; retry')
             record_hash = _sha(rec.read_bytes()) if rec.is_file() else None
             issue = None
             snapshot = None
@@ -452,6 +514,7 @@ def capture(envelope, record=None, state_dir=None, start=True):
         _atomic(source, source_bytes)
         _atomic(root / "envelopes" / (eid + ".json"), encoded)
         event = {
+            'record': str(rec), 'state_dir': str(root), 'project_root': str(project.root), 'project_policy': policy,
             "event_id": eid, "state": "captured", "target": envelope.get("target"),
             "captured_at": time.time(), "order": counter, "record_hash": record_hash,
             "target_snapshot": snapshot, "capture_issue": issue,
@@ -459,8 +522,16 @@ def capture(envelope, record=None, state_dir=None, start=True):
             "envelope_sha256": _sha(encoded), "attempts": 0,
         }
         _save(_event_file(root, eid), event)
-        if start:
+        project_report = (policy['mode'] == 'advanced' and envelope.get('shareability') == 'project'
+                          and isinstance(envelope.get('scope'), dict)
+                          and envelope['scope'].get('kind') in ('project', 'external'))
+        if start and not project_report:
             _start_worker_locked(rec, root)
+    if project_report:
+        # Explicit project-wide capture is acknowledged only after the Git ledger
+        # commits; the ingestion journal retains staging/recovery, not a YAML copy.
+        process(rec, root, event_id=eid)
+        return status(eid, rec, root)
     return _summary(event)
 
 
@@ -568,6 +639,7 @@ def _finish(root, event, envelope, state, reason, signals=None, **extra):
     signals = list(signals or [])
     eid = event["event_id"]
     receipt = {
+        'record': str(event.get('record', '')), 'state_dir': str(root),
         "id": _sha(("receipt\0" + eid).encode("utf-8"))[:32],
         "event_id": eid, "state": state, "target": envelope.get("target"),
         "value": envelope.get("value"),
@@ -581,7 +653,7 @@ def _finish(root, event, envelope, state, reason, signals=None, **extra):
     if "updates" in envelope:
         receipt["updates"] = envelope["updates"]
     if "source" in envelope:
-        receipt["cited_source"] = envelope["source"] if state == "applied" else None
+        receipt["cited_source"] = envelope["source"] if state in ("applied", "project_captured") else None
         receipt["date"] = envelope.get("date")
     if "at" in envelope:
         receipt["at"] = envelope["at"]
@@ -761,15 +833,31 @@ def _prepare(rec, root, event, envelope, before_bytes):
         for op in operations:
             action = {"kind": op["kind"], "id": op["id"], "as_of": date, "why": None,
                       "into": op.get("into"), "hypothesis": None, "source": None, "at": None}
+            if envelope.get('scope') is not None:
+                action['_record_scope'] = copy.deepcopy(envelope['scope'])
             location = op.get("at", envelope.get("at", "entire captured report"))
             if op["kind"] == "set":
                 action.update(value=op["value"], source=cited_source, at=location)
             else:
                 body = copy.deepcopy(op["body"])
+                if envelope.get('scope') is not None:
+                    if 'scope' in body and body['scope'] != envelope['scope']:
+                        raise ValueError('entry scope differs from report scope: ' + op['id'])
+                    body['scope'] = copy.deepcopy(envelope['scope'])
                 if "v" in body or "quoted" in body:
                     body.update({"from": cited_source, "at": location, "of": date})
                 action["body"] = body
             P.apply(paths, action, diagnostics=diagnostics)
+            # A privacy route can return success for retaining a private draft.
+            # Batch atomicity requires an actual authored entry for every item.
+            saved = P.bodies(P.load(paths, read_mode='frozen')).get(op['id'])
+            if op['kind'] == 'set' or 'v' in op.get('body', {}) or 'quoted' in op.get('body', {}):
+                wanted = op.get('value') if op['kind'] == 'set' else op['body'].get('v', op['body'].get('quoted'))
+                actual = saved.get('v', saved.get('quoted')) if isinstance(saved, dict) else None
+                if type(actual) is not type(wanted) or actual != wanted or saved.get('from') != cited_source:
+                    raise ValueError('report operation was not applied: ' + op['id'])
+            elif not isinstance(saved, dict):
+                raise ValueError('report entry was not retained: ' + op['id'])
         with contextlib.redirect_stdout(gate_output), contextlib.redirect_stderr(gate_output):
             gate = P.gate(str(mark), paths, _recording_context={
                 'record': str(rec), 'state_dir': str(root), 'event_id': eid, 'shadow': str(shadow)})
@@ -880,6 +968,14 @@ def _process_event(rec, root, event, crash_after_commit=False):
             except (OSError, KeyError):
                 pass
         return _integrity_question(root, event, integrity, committed)
+    if journal and journal.get('pending_event_id'):
+        G = P._peer('pending_grounding')
+        pending = G.Store(event['project_root']).receipt(journal['pending_event_id'])
+        if pending is not None:
+            if pending['revision'] != journal['pending_revision']:
+                return _question(root, event, envelope, 'captured contribution differs from the prepared report')
+            return _finish(root, event, envelope, 'project_captured', 'Complete report captured in pending_grounding',
+                           pending=pending, source=journal['source_id'], diagnostics=journal.get('diagnostics', []))
     if journal and journal.get("phase") in ("prepared", "record_committed"):
         recovered = _recover(rec, root, event, envelope, journal)
         if recovered is not None:
@@ -891,6 +987,8 @@ def _process_event(rec, root, event, crash_after_commit=False):
     issue = event.get("capture_issue")
     if issue:
         return _question(root, event, envelope, issue)
+    if P._peer('recording').private_marker(envelope) or ('scope' in envelope and envelope.get('shareability') != 'project'):
+        return _question(root, event, envelope, 'private or unclear report permission; retained privately')
     if envelope.get("kind", "report") != "report":
         return _question(root, event, envelope, "only kind=report can update an existing reading")
     if "updates" not in envelope and "value" not in envelope:
@@ -907,8 +1005,11 @@ def _process_event(rec, root, event, crash_after_commit=False):
     if parsed_date is None or parsed_date.isoformat() != date:
         return _question(root, event, envelope, "the report needs an ISO date (YYYY-MM-DD)")
     for attempt in range(MAX_REPREPARES + 1):
-        with P._locked(str(rec)):
+        with _event_lock(rec, event) as project:
             try:
+                original_doc = P.load([str(rec)], read_mode='frozen')
+                if _report_private(original_doc, envelope):
+                    return _question(root, event, envelope, 'private or unclear original source permission; entire report retained privately')
                 current_target = _report_target(rec, envelope)
             except (Exception, SystemExit) as exc:
                 return _question(root, event, envelope, "target conflict: " + " ".join(str(exc).split()))
@@ -941,7 +1042,7 @@ def _process_event(rec, root, event, crash_after_commit=False):
             "diagnostics": diagnostics,
         }
         _save(journal_path, journal)
-        with P._locked(str(rec)):
+        with _event_lock(rec, event) as project:
             _, integrity = _capture_payload(root, event)
             if integrity:
                 return _integrity_question(root, event, integrity)
@@ -955,10 +1056,48 @@ def _process_event(rec, root, event, crash_after_commit=False):
                                  "target or record layout changed while the report was prepared; it was not overwritten")
             if _sha(current) != journal["before_hash"] or _brief_fingerprint(rec) != journal["brief_hash"]:
                 continue
-            _replace_record(rec, after_bytes)
-            journal["phase"] = "record_committed"
-            journal["committed_at"] = time.time()
+            scope = envelope.get('scope')
+            project_capture = (project.config()['mode'] == 'advanced' and envelope.get('shareability') == 'project'
+                               and isinstance(scope, dict) and scope.get('kind') in ('project', 'external'))
+            # Store.capture owns the policy lock; project capture follows outside it.
+            if not project_capture:
+                _replace_record(rec, after_bytes)
+                journal["phase"] = "record_committed"
+                journal["committed_at"] = time.time()
+                _save(journal_path, journal)
+        if project_capture:
+            G = P._peer('pending_grounding')
+            document = P.load([str(shadow)], read_mode='frozen')
+            roots = _report_seeds(envelope)
+            roots = [roots] if isinstance(roots, str) else roots
+            # The report is independently retained evidence, including when the
+            # readings cite an existing source or contain only qualitative rules.
+            source_id = 's.ingest_' + eid
+            roots = [*roots, source_id]
+            for name in roots:
+                G.entries(document)[name][1]['scope'] = copy.deepcopy(scope)
+            portable = '.kpopper/evidence/reports/' + eid + '.txt'
+            G.entries(document)[source_id][1]['file'] = portable
+            closure = G.closure(document, roots)
+            if any(portable in set(G._files(body)) for name, (_, body) in G.entries(closure).items()
+                   if name != source_id):
+                raise ValueError('captured report evidence path conflicts with an existing source')
+            evidence = {}
+            for name in G._files(closure):
+                if name == portable:
+                    evidence[name] = envelope['source_quote'].encode('utf-8')
+                else:
+                    location = (rec.parent / G.M.relative_path(name)).resolve()
+                    location.relative_to(rec.parent.resolve())
+                    evidence[name] = location.read_bytes()
+            bundle = G.prepare(document, roots, scope=scope, shareability='project', evidence=evidence)
+            journal.update(pending_event_id='report-' + eid, pending_revision=bundle['revision'])
             _save(journal_path, journal)
+            captured = G.Store(project).capture(bundle, event_id='report-' + eid, contribution_id='report-' + eid,
+                                                 shareability='project', expected_policy=event.get('project_policy'),
+                                                 expected_sources={str(rec): journal['before_hash']})
+            return _finish(root, event, envelope, 'project_captured', 'Complete report captured in pending_grounding',
+                           pending=captured, source=source_id, diagnostics=diagnostics)
         if crash_after_commit:
             raise _CrashAfterCommit("simulated interruption after record commit")
         after = _graph(rec, _report_seeds(envelope))
@@ -988,7 +1127,12 @@ def process(record=None, state_dir=None, event_id=None, max_events=32,
                   and e.get("state") not in TERMINAL]
         events.sort(key=lambda e: e.get("order", 0))
         for event in events[:max_events]:
-            out.append(_process_event(rec, root, event, _crash_after_commit))
+            try:
+                out.append(_process_event(rec, root, event, _crash_after_commit))
+            except (ValueError, OSError) as error:
+                envelope, integrity = _capture_payload(root, event)
+                out.append(_integrity_question(root, event, integrity) if integrity else
+                           _question(root, event, envelope, str(error)))
     return out
 
 
@@ -1007,8 +1151,10 @@ def status(event_id=None, record=None, state_dir=None):
 
 def update(envelope, record=None, state_dir=None):
     """Apply one source report now, using the same durable atomic ingestion path."""
-    rec, root = _layout(record, state_dir)
-    event = capture(envelope, rec, root, start=False)
+    event = capture(envelope, record, state_dir, start=False)
+    if event.get('state') == 'project_captured':
+        return event
+    rec, root = _layout(event.get('record') or _routed_record(record)[0], event.get('state_dir') or state_dir)
     process(rec, root, event_id=event['event_id'])
     return status(event['event_id'], rec, root)
 
@@ -1026,7 +1172,7 @@ def update_main(argv=None):
         print(json.dumps({'error': str(error)}, ensure_ascii=False))
         return 2
     print(json.dumps(answer, ensure_ascii=False, sort_keys=True))
-    return 0 if answer and answer.get('state') == 'applied' else 1
+    return 0 if answer and answer.get('state') in ('applied', 'project_captured') else 1
 
 
 def pending(record=None, state_dir=None, include_handled=False):

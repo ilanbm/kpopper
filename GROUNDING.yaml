@@ -1309,8 +1309,11 @@ known:
     of: "2026-09-10"
 
   m.skill_bytes_largest:
-    v: 21668
+    v: 22224
+    # Measured on the integrated source at 2218aa3; earlier same-day values describe its parents.
+    scope: {kind: code, environment: kpopper skill sources, commit: 2218aa345c292eef51c4205c5437dd1fa93d56c3}
     # set 2026-09-14: Measured by skill_bytes_largest after the recording guidance update
+    # set 2026-09-14: measured by skill_bytes_largest after updating the project-mode guidance
     # set 2026-09-12: measured by skill_bytes_largest after the skills learned the entry file and the directory beside it
     # set 2026-09-11: measured by skill_bytes_largest at a51bc75 with the working tree changed
     name: "The largest skill body a session can be handed now, bytes"

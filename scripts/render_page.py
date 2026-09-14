@@ -134,10 +134,22 @@ def shape_of(ids, jud, flags):
 
 
 # ── the brief ────────────────────────────────────────────────────────────────
-def find_brief(paths, explicit=None):
+def _read_mode(read_mode=None):
+    mode = read_mode or ('frozen' if P._RAW_READS.get() else os.environ.get('KPOPPER_READ_MODE', 'live'))
+    if mode not in ('live', 'frozen'):
+        raise ValueError('read mode must be live or frozen')
+    return mode
+
+
+def record_paths(paths, *, read_mode=None):
+    """Resolve the selected knowledge world before deriving its brief or evidence roots."""
+    return list(P._peer('knowledge_views').write_paths(paths)) if _read_mode(read_mode) == 'live' else list(paths)
+
+
+def find_brief(paths, explicit=None, *, read_mode=None):
     """The brief given, else the record's own: `.kpopper/view.yaml` beside a record under the
     new name, `<file>.view.yaml` beside a record - or a file it points at - under the old."""
-    return P.brief_for(paths, explicit)
+    return P.brief_for(record_paths(paths, read_mode=read_mode), explicit)
 
 
 def same_value(old, now):
@@ -390,7 +402,8 @@ def arrangements_of(ids, jud, raw, tabs, picks, cov, flags, doc):
                 continue
             other = h["raw"].get(v)
             if decided(other) != decided(j["body"]):
-                contested.append(("hypothesis", name, str(P.claim_of(other))))
+                contested.append(("contribution" if h.get('kind') == 'contribution' else "hypothesis",
+                                  name, str(P.claim_of(other))))
         for q, text in sorted(questions.items()):
             if v in P.ID.findall(text):
                 contested.append(("question", q, text))
@@ -876,8 +889,10 @@ def tree_svg(ids, jud, E, J, flags, words=None, label=None):
     return "".join(o)
 
 
-def build(paths, brief_path=None, page_path=None):
-    doc = P.load(paths)
+def build(paths, brief_path=None, page_path=None, *, read_mode=None):
+    mode = _read_mode(read_mode)
+    paths = record_paths(paths, read_mode=mode)
+    doc = P.load(paths, read_mode=mode)
     record_root = os.path.dirname(P.layout_of(paths)["entry"])
     ids, jud, fields = P.infer(doc)
     meta = doc.get("meta") or {}
@@ -1441,10 +1456,15 @@ def build(paths, brief_path=None, page_path=None):
     # hypotheses beside the record are counted under the heading and drawn nowhere: the page
     # is the base, and what a hypothesis proposes is read with pull until consolidation
     hyps = getattr(doc, "hypotheses", None) or {}
-    if hyps:
-        n, c = len(hyps), len(P.contested(doc))
+    named_hypotheses = {name: hyp for name, hyp in hyps.items() if hyp.get('kind') != 'contribution'}
+    if named_hypotheses:
+        n, c = len(named_hypotheses), len(P.contested(doc))
         h1 += (f'<p class="meta" dir="{page_dir}">' + (w["hypothesis_one"] if n == 1 else w["hypotheses"].format(n=n))
                + (w["contested"].format(n=c) if c else '') + w["base_only"] + '</p>')
+    for line in P._peer('knowledge_views').lines(doc):
+        h1 += '<p class="meta" dir="auto" lang="en">' + html.escape(line) + '</p>'
+    if getattr(doc, 'contributions', []):
+        h1 += '<p class="meta" lang="en">Project contributions are not expanded on this base page; use open, pull or knowledge snapshot.</p>'
     # what the brief declares beyond what the page draws - checked as the tabs are drawn
     contract = {"tabs": len(tabs), "bad": [], "moved": [], "stale": [], "unread": [], "coverage": []}
     # What the arrangement covers, before anything is drawn: the page's own counts have to
@@ -1524,7 +1544,7 @@ def build(paths, brief_path=None, page_path=None):
                             f'data-request="{html.escape(request)}">{html.escape(asked_of(request))}</span>')
             o.append('<p class="sub" dir="auto">' + " &middot; ".join(bits) + "</p>")
             for kind, who, claim in f["contested"]:
-                o.append(f'<p class="sub" dir="auto">{w["contests"].format(kind=w[kind])}'
+                o.append(f'<p class="sub" dir="auto">{w["contests"].format(kind=w.get(kind, kind))}'
                          + (fx(who, P.short(claim, 120)) if who in E or who in J
                             else f'{html.escape(who)}: {html.escape(P.short(claim, 120))}') + "</p>")
         was = t["shape"] or {}
@@ -1810,8 +1830,14 @@ def measured_build(paths, brief_path=None, page_path=None):
     """Explicit page construction publishes counts for the exact inputs it read."""
     if LOADED_SOURCE_HASH != MEASUREMENTS.LOADED_CODE['render_page.py']:
         raise ValueError('loaded renderer changed; restart it before measuring')
-    before = MEASUREMENTS.snapshot(paths, brief_path)
-    result = build(paths, brief_path, page_path)
+    selected = list(paths)
+    mode = _read_mode()
+    paths = record_paths(selected, read_mode=mode)
+    brief_path = P.brief_for(paths, brief_path)
+    before = MEASUREMENTS.snapshot(selected, brief_path)
+    result = build(paths, brief_path, page_path, read_mode=mode)
+    if _read_mode() != mode or record_paths(selected, read_mode=mode) != paths:
+        raise ValueError('selected record or read mode changed during page measurement; build again')
     try:
         MEASUREMENTS.publish(before, result[4]['page'])
     except OSError as error:
@@ -1921,9 +1947,11 @@ if __name__ == "__main__":
             page_path, i = supplied[i + 1], i + 2
         else:
             a.append(supplied[i]); i += 1
+    if '--frozen' in a:
+        a.remove('--frozen')
+        os.environ['KPOPPER_READ_MODE'] = 'frozen'
     brief = a[a.index("--brief") + 1] if "--brief" in a else None
     files = [x for x in a if x.endswith((".yaml", ".yml")) and x != brief] or P.default_paths()
-    brief = find_brief(files, brief)
     if "--verify" in a:
         sys.exit(verify(files, brief))
     page, _, _, _, info = measured_build(files, brief, page_path)
