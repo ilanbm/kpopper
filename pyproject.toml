@@ -55,5 +55,5 @@ package-dir = { kpopper = "scripts" }
 # The page's own files ship with the renderer that reads them, and the browser checks ship
 # with the command line that runs them - `kpopper page --checks` is only as installable as
 # the file it hands to node.
-kpopper = ["page/*.css", "page/*.js", "verify_page.js", "start-guide.md", "document-guide.md", "document/*.css", "document/*.js"]
+kpopper = ["page/*.css", "page/*.js", "verify_page.js", "start-guide.md", "document-guide.md", "document/*.css", "document/*.js", "assessment.schema.json"]
 "kpopper.session" = ["rules.txt", "bootstrap.txt", "lean/*.lean", "lean/lean-toolchain"]

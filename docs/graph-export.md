@@ -4,6 +4,8 @@
 shows its historical dependency readings as `at_review`, current selected readings as
 `current`, and the ordinary reader's condition result. These are output labels;
 `GROUNDING.yaml` and custom snapshot field names are unchanged.
+The comparison and condition findings come from the [shared assessment contract](assessment.md),
+also available directly through `kpopper assess`. The exporter only selects and formats them.
 
 ```sh
 kpopper export d.choice
