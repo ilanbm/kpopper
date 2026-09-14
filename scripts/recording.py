@@ -1,6 +1,7 @@
 """Privacy-first explicit routing at the common record mutation boundary."""
 import base64
 import copy
+import datetime
 import hashlib
 import os
 from pathlib import Path
@@ -85,7 +86,7 @@ def draft(project, action, doc, reason):
     return {'state': 'private draft', 'path': str(path), 'reason': reason}
 
 
-def private_route(paths, action, reader):
+def private_route(paths, action, reader, project=None):
     doc = reader.load(paths, read_mode='frozen')
     # This locked check is conservative: entry/source privacy cannot be weakened by
     # an edit while a routed local writer waits to acquire the directory.
@@ -102,25 +103,41 @@ def private_route(paths, action, reader):
         referenced.add(action['source'])
     selected = G.closure(doc, sorted(referenced)) if referenced else {}
     if private_marker(action) or private_marker(selected):
-        return draft(V.project_for(paths), action, selected, 'private or unclear source permission')
+        return draft(project or V.project_for(paths), action, selected, 'private or unclear source permission')
     return None
 
 
-def route(paths, action, reader):
+def route(paths, action, reader, project=None):
     """Return a durable receipt or None for an intentional local-file mutation.
 
     Legacy unannotated writes retain local semantics, never implicit publication.
     Explicit routing with missing permission is private. Private closure markers
     override a caller's project-level declaration.
     """
-    project = V.project_for(paths)
+    project = project or V.project_for(paths)
+    policy = project.config()
     explicit = bool(ROUTING.intersection(action))
     if action.get('shareability') not in (None, 'project', 'private', 'unclear'):
         raise ValueError('shareability must be project, private or unclear')
     doc = reader.load(paths, read_mode='frozen') if Path(paths[0]).exists() else reader.Record()
-    existing_private = private_route(paths, action, reader) if Path(paths[0]).exists() else None
+    existing_private = private_route(paths, action, reader, project) if Path(paths[0]).exists() else None
     if existing_private is not None:
         return existing_private
+    scope = action.get('scope', 'unclear')
+    scope = copy.deepcopy(scope) if isinstance(scope, dict) else {
+        'kind': scope, 'environment': action.get('environment', '')}
+    if action.get('commit'):
+        scope['commit'] = action['commit']
+    if explicit and action.get('shareability') == 'project':
+        if scope.get('kind') not in ('project', 'external', 'code', 'feature', 'unclear'):
+            raise ValueError('scope must be project, external, code, feature or unclear')
+        action['_record_scope'] = scope
+        if action.get('kind') == 'add':
+            if not isinstance(action.get('body'), dict):
+                raise ValueError('scoped writes need a complete entry body')
+            if 'scope' in action['body'] and G.identity(action['body']['scope']) != G.identity(scope):
+                raise ValueError('entry body scope differs from the requested scope')
+            action['body']['scope'] = copy.deepcopy(scope)
     candidate = copy.deepcopy(doc)
     nid = action.get('id')
     if action.get('kind') == 'add':
@@ -131,10 +148,21 @@ def route(paths, action, reader):
         collection, old = G.entries(candidate)[nid]
         if isinstance(old, dict):
             body = copy.deepcopy(old)
-            body['v'] = action['value']
-            if action.get('source'):
+            field = 'v' if 'v' in body else 'quoted' if 'quoted' in body else None
+            if field is None:
+                raise ValueError('set needs an entry with v or quoted')
+            body[field] = action['value']
+            body['of'] = action.get('as_of') or datetime.date.today().isoformat()
+            if action.get('source') is not None:
+                if action.get('at') is None:
+                    raise ValueError('a changed source needs its exact at location')
                 body['from'] = action['source']
+                body['at'] = action['at']
+            if '_record_scope' in action:
+                body['scope'] = copy.deepcopy(scope)
             candidate[collection][nid] = body
+        elif explicit:
+            raise ValueError('scoped set needs a complete entry body')
     # Inspect only the selected closure, so unrelated private entries do not taint a
     # permitted independent contribution. Failure to resolve a closure cannot allow it.
     selected = candidate
@@ -152,11 +180,6 @@ def route(paths, action, reader):
         return draft(project, action, selected, 'private source locator needs explicit portable evidence reconciliation')
     if action.get('shareability') != 'project':
         return draft(project, action, selected, 'sharing permission is private or unclear')
-    scope = action.get('scope', 'unclear')
-    scope = copy.deepcopy(scope) if isinstance(scope, dict) else {
-        'kind': scope, 'environment': action.get('environment', '')}
-    if action.get('commit'):
-        scope['commit'] = action['commit']
     if scope.get('kind') not in ('project', 'external', 'code', 'feature', 'unclear'):
         raise ValueError('scope must be project, external, code, feature or unclear')
     if action.get('evidence_root'):
@@ -177,7 +200,7 @@ def route(paths, action, reader):
         body['scope'] = scope
         G.prepare(candidate, [nid], scope=scope, shareability='project', evidence=action.get('evidence'))
         return None
-    if project.config()['mode'] == 'simple' or scope['kind'] in ('feature', 'unclear'):
+    if policy['mode'] == 'simple' or scope['kind'] in ('feature', 'unclear'):
         return None
     if action.get('hypothesis'):
         raise ValueError('named hypotheses stay in the local record; use feature scope')
@@ -186,4 +209,4 @@ def route(paths, action, reader):
     bundle = G.prepare(candidate, [nid], scope=scope, shareability='project', evidence=action.get('evidence'))
     return G.Store(project).capture(bundle, event_id=action.get('event_id') or uuid.uuid4().hex,
                                    contribution_id=action.get('contribution_id') or nid,
-                                   shareability='project')
+                                   shareability='project', expected_generation=policy['generation'])

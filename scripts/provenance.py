@@ -68,6 +68,7 @@ def _peer(name):
 
 
 import contextvars
+import copy
 _RAW_READS = contextvars.ContextVar('raw_record_reads', default=False)
 
 
@@ -874,6 +875,16 @@ def infer(doc):
             # nothing to check and the record passes by default - the quiet pass this
             # method refuses. A snapshot or predicate named the same way costs one check.
             if role == "deps" and sch[role] not in present:
+                source_collections = {k: v for k, v in collections.items() if k != 'meta'}
+                judgment_fields = {'rests_on', 'wrong_if', 'seen', 'verdict', 'reopened_by', 'blocked_on'}
+                if source_collections and set(source_collections) <= {'known', 'sources', 'open', 'questions'} \
+                        and not cand['deps'] and not any(judgment_fields.intersection(body)
+                            for group in source_collections.values() for body in group.values()
+                            if isinstance(body, dict)):
+                    # A portable source/fact closure may retain the explicit parent
+                    # schema without retaining a downstream judgment. An actual
+                    # dependency declaration or judgment shape still cannot vanish.
+                    return sch[role]
                 seen = ", ".join(sorted(str(x) for x in present))
                 raise SystemExit(
                     f"schema names '{sch[role]}' for 'deps', and nothing this reader can "
@@ -2036,7 +2047,8 @@ def affects(paths, changed):
             j = jud_w[name]
             named = [d for d in j["deps"] if d in moved and re.search(rf"\b{re.escape(d)}\b", j["pred"])]
             why = ("evaluate the predicate against " + ", ".join(named)) if named else "flagged only"
-            print(f"{name}" + (f" (in {layer_label(n)})" if n else "")
+            label = ('contribution ' if n and doc.hypotheses[n].get('kind') == 'contribution' else 'hypothesis ') + str(n)
+            print(f"{name}" + (f" (in {label})" if n else "")
                   + f"\n    via {via} -> {why}"
                   + (f"\n    predicate: {j['pred']}" if j["pred"] else ""))
         total += len(hit)
@@ -3651,22 +3663,26 @@ def apply(paths, action):
     one lock, so a second writer waits rather than overwrites. Aimed at a hypothesis, the
     same write lands in the file beside the record and the base is not touched."""
     project = _peer('knowledge_views').project_for(paths)
+    policy = project.config()
+    original_paths = list(paths)
     paths = _peer('knowledge_views').write_paths(paths)
     try:
-        receipt = _peer('recording').route(paths, action, sys.modules.get(__name__) or _Reader())
+        receipt = _peer('recording').route(paths, action, sys.modules.get(__name__) or _Reader(), project=project)
     except ValueError as error:
         raise Refused('refused - ' + str(error))
     if receipt is not None:
         print(json.dumps(receipt, ensure_ascii=False))
         return 0
     with _locked(paths[0], project=project):
-        return _apply_unlocked(paths, action)
+        if project.config() != policy or list(_peer('knowledge_views').write_paths(original_paths)) != list(paths):
+            raise Refused('refused - project mode or record destination changed; retry the write')
+        return _apply_unlocked(paths, action, project=project)
 
 
-def _apply_unlocked(paths, action):
+def _apply_unlocked(paths, action, project=None):
     """The mutation body for a caller already holding the record-directory lock."""
     # Recheck privacy inside the write lock: a source can change while a writer waits.
-    private = _peer('recording').private_route(paths, action, sys.modules.get(__name__) or _Reader())
+    private = _peer('recording').private_route(paths, action, sys.modules.get(__name__) or _Reader(), project=project)
     if private is not None:
         print(json.dumps(private, ensure_ascii=False))
         return 0
@@ -3991,13 +4007,14 @@ def _apply(paths, action):
         else:
             collection = _collection_for(doc, ids, jud, fields, nid, body, action.get("into"))
             target = _file_for(files, nid, collection)
-        with io.open(target, encoding="utf-8") as source:
-            original = source.read()
+    with io.open(target, encoding="utf-8") as source:
+        original = source.read()
     lines = original.split("\n")
     if kind == "set":
         now = value_of(raw, ids, nid)
         if now is not None and _same(now, action["value"]) and not action.get("as_of") \
-                and action.get("source") is None:
+                and action.get("source") is None and ('_record_scope' not in action or
+                    _same(action['_record_scope'], raw[nid].get('scope') if isinstance(raw[nid], dict) else None)):
             print(f"{nid} is already {scalar(action['value'], fold=False)}; nothing written")
             return 0
         old, field = _set_in(lines, nid, action["value"], stamp, action.get("why"),
@@ -4036,6 +4053,13 @@ def _apply(paths, action):
                 out.append("  {}: {} -> {}".format(d, *apart(was[d], seen[d])))
             elif d not in was and d in seen:
                 out.append(f"  {d}: {short(seen[d])} (never checked against it before)")
+    if '_record_scope' in action and kind != 'add':
+        written = yaml.safe_load('\n'.join(lines))
+        entry = copy.deepcopy(bodies(written)[nid])
+        if not isinstance(entry, dict):
+            raise Refused('refused - scoped writes need a complete entry body')
+        entry['scope'] = copy.deepcopy(action['_record_scope'])
+        _replace_in(lines, nid, entry)
     _bump_updated(lines, stamp)
     _write_text(target, "\n".join(lines))
 
@@ -4554,15 +4578,19 @@ def _apply_first_add(action):
     if location["status"] == "unavailable":
         raise SystemExit(location["reason"] + " " + location["record"])
     path = location["record"]
+    project = _peer('project_modes').Project(location['workspace'])
+    policy = project.config()
     try:
-        receipt = _peer('recording').route([path], action, sys.modules.get(__name__) or _Reader())
+        receipt = _peer('recording').route([path], action, sys.modules.get(__name__) or _Reader(), project=project)
     except ValueError as error:
         raise Refused('refused - ' + str(error))
     if receipt is not None:
         print(json.dumps(receipt, ensure_ascii=False))
         return 0, []
     while True:
-        with _locked(path):
+        with _locked(path, project=project):
+            if project.config() != policy:
+                raise Refused('refused - project mode or record destination changed; retry the write')
             # Resolve again only after owning the directory. Another first writer may have
             # completed, or may have removed its refused newborn, while this writer waited.
             location = _workspace_location()
@@ -4576,10 +4604,10 @@ def _apply_first_add(action):
                 path = current
                 continue
             if location["status"] == "found":
-                return _apply_unlocked([current], action), []
+                return _apply_unlocked([current], action, project=project), []
             _newborn(action, current)
             try:
-                return _apply_unlocked([current], action), [current]
+                return _apply_unlocked([current], action, project=project), [current]
             except BaseException:
                 # Still inside the birth lock: no successful waiter can be removed between
                 # this exact-content check and unlink.

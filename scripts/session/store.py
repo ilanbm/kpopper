@@ -54,11 +54,17 @@ def native_record(path, reader_path, *, read_mode=None):
                 'sources':{},'native_hypotheses':{}}
     spec=importlib.util.spec_from_file_location('_configured_kpopper_reader',reader_path)
     p=importlib.util.module_from_spec(spec); spec.loader.exec_module(p)
+    project = p._peer('knowledge_views').project_for([str(path)])
+    policy = project.config()
+    if (read_mode or os.environ.get('KPOPPER_READ_MODE', 'live')) == 'live':
+        path = Path(p._peer('knowledge_views').write_paths([str(path)])[0])
     files=[Path(f).resolve() for f in p._files_of([str(path)])]
     captured={f:f.read_bytes() for f in files}
     if not path.exists() and not p._peer('knowledge_views').has_pending([str(path)]):
         return {'nodes':{},'edges':[],'topics':{},'scope':'No record yet.', 'sources':{},'native_hypotheses':{}}
     doc=p.load([str(path)], read_mode=read_mode)
+    if project.config() != policy:
+        raise ValueError('project mode or record destination changed during read; retry')
     if files!=[Path(f).resolve() for f in p._files_of([str(path)])] or any(f.read_bytes()!=b for f,b in captured.items()):
         raise ValueError('record sources changed during read; retry')
     sources={}; origins={}

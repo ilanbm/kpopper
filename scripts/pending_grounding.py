@@ -211,6 +211,10 @@ def prepare(doc, roots, *, scope, shareability, evidence=None):
     if set(files) != required:
         raise ValueError('evidence allowlist must contain exactly the files referenced by the selected closure')
     _portable_files(files)
+    for root in roots:
+        body = entries(document)[root][1]
+        if not isinstance(body, dict) or identity(body.get('scope')) != identity(scope):
+            raise ValueError('contribution roots must retain their exact scope in the portable body')
     manifest = {'version': 1, 'roots': sorted(set(roots)), 'document': document,
                 'scope': copy.deepcopy(scope),
                 'evidence': {path: hashlib.sha256(data).hexdigest() for path, data in sorted(files.items())}}
@@ -235,6 +239,10 @@ def equivalent(bundle, doc, evidence):
     """Content-based acceptance: shared subset must match; extra local IDs are fine."""
     expected = bundle['manifest']
     actual = entries(doc)
+    for root in expected['roots']:
+        body = actual.get(root, (None, None))[1]
+        if not isinstance(body, dict) or identity(body.get('scope')) != identity(expected['scope']):
+            return False
     if identity({k: expected['document'][k] for k in ('schema',) if k in expected['document']}) != \
             identity({k: doc[k] for k in ('schema',) if k in doc}):
         return False
@@ -319,9 +327,9 @@ class Store:
         zero = '0' * len(new)
         return M.git(self.root, 'update-ref', REF, new, old or zero, check=False).returncode == 0
 
-    def capture(self, bundle, *, event_id, contribution_id, shareability):
+    def capture(self, bundle, *, event_id, contribution_id, shareability, expected_generation=None):
         receipt = self._capture(bundle, event_id=event_id, contribution_id=contribution_id,
-                                shareability=shareability)
+                                shareability=shareability, expected_generation=expected_generation)
         # The durable acknowledgement is established and the policy lock released
         # before a publisher is even started. Publication failure cannot erase or
         # turn a successfully retained contribution into a failed capture.
@@ -335,7 +343,7 @@ class Store:
             receipt['publication_attempt'] = {'started': False, 'reason': str(error)}
         return receipt
 
-    def _capture(self, bundle, *, event_id, contribution_id, shareability):
+    def _capture(self, bundle, *, event_id, contribution_id, shareability, expected_generation=None):
         # Validate again at the object-write boundary, including supplied identity.
         if shareability != 'project':
             raise ValueError('private or unclear sharing permission belongs in a private draft')
@@ -351,6 +359,8 @@ class Store:
         event = {'event_id': event_id, 'contribution_id': contribution_id, 'revision': revision}
         event_path = 'events/' + event_id + '.json'
         with self.project.lock():
+            if expected_generation is not None and self.project.config()['generation'] != expected_generation:
+                raise ValueError('project policy changed before capture; retry with the current mode and record')
             if self.project.config()['mode'] == 'simple':
                 raise ValueError('Simple uses its shared record, not a Git contribution queue')
             # Freeze legacy/new defaults before acknowledging the first Git capture.

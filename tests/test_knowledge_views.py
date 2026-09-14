@@ -70,7 +70,8 @@ class Views(Repository):
     def test_identical_entry_body_with_different_schema_remains_visible_conflict(self):
         doc = {'known': {'fact.one': {'v': 1, 'from': 'source'}},
                'judgments': {'claim.one': {'rests_on': ['fact.one'], 'seen': {'fact.one': 1},
-                                           'wrong_if': 'fact.one < 0', 'verdict': 'holds'}}}
+                                           'wrong_if': 'fact.one < 0', 'verdict': 'holds',
+                                           'scope': {'kind': 'project', 'environment': 'shared'}}}}
         bundle = G.prepare(doc, ['claim.one'], scope={'kind': 'project', 'environment': 'shared'},
                            shareability='project')
         self.capture(bundle)

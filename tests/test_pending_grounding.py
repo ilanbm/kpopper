@@ -139,7 +139,8 @@ class IdentityTests(unittest.TestCase):
 
     def test_equivalence_rejects_explicit_or_inferred_changes_to_judgment_roles(self):
         source = {'known': {'api.limit': {'v': 1}}, 'judgments': {'c.fits': {
-            'rests_on': ['api.limit'], 'seen': {'api.limit': 1}, 'wrong_if': 'api.limit > 2'}}}
+            'rests_on': ['api.limit'], 'seen': {'api.limit': 1}, 'wrong_if': 'api.limit > 2',
+            'scope': {'kind': 'project', 'environment': 'all'}}}}
         bundle = G.prepare(source, ['c.fits'], scope={'kind': 'project', 'environment': 'all'}, shareability='project')
         for explicit in (False, True):
             target = copy.deepcopy(source)
@@ -353,7 +354,8 @@ class StoreTests(Repository):
                 self.store._write_tree(paths)
 
     def test_evidence_filename_does_not_become_a_privacy_policy(self):
-        bundle = G.prepare({'sources': {'s.example': {'file': 'shareability'}}}, ['s.example'],
+        bundle = G.prepare({'sources': {'s.example': {'file': 'shareability',
+                           'scope': {'kind': 'project', 'environment': 'all'}}}}, ['s.example'],
                            scope={'kind': 'project', 'environment': 'all'}, shareability='project',
                            evidence={'shareability': b'public evidence'})
         receipt = self.capture(bundle)

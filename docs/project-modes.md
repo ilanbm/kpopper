@@ -82,6 +82,12 @@ by a contribution; the complete closure must be portable. For private input use
 as a private draft. `--scope code --commit COMMIT --environment ENVIRONMENT` retains an
 exact measured code scope. Feature-only knowledge uses `--scope feature`.
 
+Scope stays in the portable root entry body in every mode. Direct store callers and
+explicit imports must supply complete root bodies with that exact `scope`; a manifest
+alone cannot make an unscoped target count as accepted. Referenced source bodies are
+retained unchanged. Source-only snapshots may keep their parent's explicit schema without
+inventing downstream judgments; real missing dependency declarations still fail checks.
+
 ## Read what is known here
 
 Ordinary `open`, `pull` and `check`, and checked session views, include relevant pending

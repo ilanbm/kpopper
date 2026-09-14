@@ -61,7 +61,13 @@ def main(argv):
                     path = (root / name).resolve()
                     path.relative_to(root)
                     files[name] = path.read_bytes()
-                bundle = G.prepare(doc, list(G.entries(doc)), scope=scope,
+                entries = G.entries(doc)
+                cited = {source for _, body in entries.values() if isinstance(body, dict)
+                         for source in ([body.get('from')] if isinstance(body.get('from'), str)
+                                        else body.get('from', []) if isinstance(body.get('from'), list) else [])
+                         if source in entries}
+                roots = sorted(set(entries) - cited)
+                bundle = G.prepare(doc, roots, scope=scope,
                                    shareability='project', evidence=files)
                 result = G.Store(project).capture(bundle, event_id=action['event_id'],
                     contribution_id='import-' + bundle['revision'], shareability='project')
