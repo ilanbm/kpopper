@@ -113,6 +113,21 @@ the exported record and evidence before including it in a feature's committed re
 
 ## One publication branch, repeated review cycles
 
+`kpopper update --file REPORT.json` follows the same project policy. Add explicit
+`shareability: "project"` and a `scope` mapping to the report to capture a project-wide
+batch in Advanced mode. The result is `project_captured` with a complete pending receipt;
+the branch YAML stays unchanged. In Simple, the report updates the shared record and
+retains the declared scope. Ordinary unannotated reports keep their local-record behavior.
+Private or unclear input, including an original source's permission, retains the whole
+report for review and applies none of its operations. Retrying an event returns its
+existing receipt. Changing modes after intake requires reviewing the retained report.
+
+Search resolves sources in the selected context. Live pending evidence comes from its
+immutable contribution, even if a checkout has a file with the same name. Frozen search
+excludes live contributions and private capture caches. Page measurements are bound to
+the selected mode and graph version. A focused export and the base page disclose when
+pending contribution bodies are not expanded; use `pull` or `search` to inspect them.
+
 ```mermaid
 flowchart LR
   capture[Captured locally] --> permission{Publication authorized?}

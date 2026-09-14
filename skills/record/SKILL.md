@@ -14,14 +14,11 @@ Keep what the work produced while it is still in your hands: the source with its
 Use the project mode: Simple shares one graph and named hypotheses across sessions; Advanced keeps branch context and `pending_grounding` for shareable findings independent of a feature, even with one checkout.
 Privacy comes first: private or unclear permission means a structured private draft outside Git. Preserve exact source, scope and commit; measured unmerged facts are scoped facts, not automatically hypotheses. Capture, remote proposal and verified acceptance differ. Merge never proves truth, raises confidence or refreshes `seen`. See [project modes](../../docs/project-modes.md) for routing and publication.
 
-Record the first useful finding within the user's write authorization. A record with only
-`sources`, `known` and `open` is valid; add judgments for actual conclusions, with `seen` filled
-by `add`. Installation alone creates no file, and a one-off can finish without a record.
+Record the first useful finding within the user's authorization. Sources and facts are valid alone; `add` fills `seen` for actual judgments. Installation creates no record, and a one-off can finish without one.
 
 Where no record resolves for the workspace, `kpopper add` creates `GROUNDING.yaml` at the repository root (the working directory outside git) with that first entry, and a later `add` extends it. A registered record that is unavailable is a location problem: restore it rather than starting another. The [shape reference](../kpopper/references/shape.md) shows the sections, pointer records and how a record lives outside a tree that cannot hold it.
 
-**Make a new record useful to its reader.** When its explanation is due, link and briefly explain
-the finding. Show the shipped page when a visual view helps and is supported; it is optional.
+**Make a new record useful to its reader.** Link and briefly explain the finding when its explanation is due. Showing the shipped page is optional, when a visual view helps and is supported.
 
 ## Record what the work calls for
 

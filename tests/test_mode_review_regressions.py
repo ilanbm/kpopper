@@ -45,6 +45,7 @@ class ReviewRegressions(unittest.TestCase):
     def test_routed_set_preserves_value_kind_citation_date_and_scope(self):
         doc = self.seed()
         doc['known']['fact.one'] = {'quoted': 'old quotation', 'from': 'old', 'at': 'old-section'}
+        doc.setdefault('sources', {})['new'] = {'name': 'New source', 'url': 'https://example.test/new'}
         doc.pop('judgments')
         (self.root / 'GROUNDING.yaml').write_text(G.P.yaml.safe_dump(doc))
         code, output = self.apply({'kind': 'set', 'id': 'fact.one', 'value': 'new quotation',

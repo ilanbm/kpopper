@@ -328,10 +328,11 @@ class Store:
         zero = '0' * len(new)
         return M.git(self.root, 'update-ref', REF, new, old or zero, check=False).returncode == 0
 
-    def capture(self, bundle, *, event_id, contribution_id, shareability, expected_generation=None, expected_policy=None):
+    def capture(self, bundle, *, event_id, contribution_id, shareability, expected_generation=None, expected_policy=None,
+                expected_sources=None):
         receipt = self._capture(bundle, event_id=event_id, contribution_id=contribution_id,
                                 shareability=shareability, expected_generation=expected_generation,
-                                expected_policy=expected_policy)
+                                expected_policy=expected_policy, expected_sources=expected_sources)
         # The durable acknowledgement is established and the policy lock released
         # before a publisher is even started. Publication failure cannot erase or
         # turn a successfully retained contribution into a failed capture.
@@ -345,7 +346,8 @@ class Store:
             receipt['publication_attempt'] = {'started': False, 'reason': str(error)}
         return receipt
 
-    def _capture(self, bundle, *, event_id, contribution_id, shareability, expected_generation=None, expected_policy=None):
+    def _capture(self, bundle, *, event_id, contribution_id, shareability, expected_generation=None, expected_policy=None,
+                 expected_sources=None):
         # Validate again at the object-write boundary, including supplied identity.
         if shareability != 'project':
             raise ValueError('private or unclear sharing permission belongs in a private draft')
@@ -361,6 +363,12 @@ class Store:
         event = {'event_id': event_id, 'contribution_id': contribution_id, 'revision': revision}
         event_path = 'events/' + event_id + '.json'
         with self.project.lock():
+            # Coordinated source writers also hold this policy lock. A prepared
+            # contribution cannot outlive a permission/body change in its inputs.
+            if expected_sources is not None and any(
+                    (hashlib.sha256(Path(path).read_bytes()).hexdigest() if Path(path).is_file() else None) != digest
+                    for path, digest in expected_sources.items()):
+                raise ValueError('record source changed before capture; reread its current scope and permissions')
             if expected_policy is not None and self.project.config() != expected_policy:
                 raise ValueError('project policy or destination changed before capture; retry')
             if expected_generation is not None and self.project.config()['generation'] != expected_generation:
@@ -377,9 +385,7 @@ class Store:
                     existing = json.loads(self.blob(files[event_path]))
                     if {k: existing.get(k) for k in event} != event:
                         raise ValueError('event ID was already used with different content or target')
-                    self.read_bundle(revision, old)
-                    first = M.git(self.root, 'log', '--diff-filter=A', '--format=%H', old, '--', event_path).stdout.decode().splitlines()
-                    return dict(existing, state='captured', commit=first[-1], ledger_commit=old, ref=REF, replay=True)
+                    return self.receipt(event_id, old)
                 prefix = 'contributions/' + revision + '/'
                 retained_event = dict(event, sequence=len([p for p in files if p.startswith('events/')]) + 1,
                                       captured_at_ns=time.time_ns())
@@ -394,6 +400,22 @@ class Store:
                     # This ref is the receipt; crashing now only causes an identical replay.
                     return dict(retained_event, state='captured', commit=new, ledger_commit=new, ref=REF, replay=False)
             raise ValueError('pending ref kept changing; retry capture with the same event ID')
+
+    def receipt(self, event_id, ref=None):
+        """Recover a durable acknowledgement without another capture or publication."""
+        if not isinstance(event_id, str) or not TOKEN.fullmatch(event_id):
+            raise ValueError('invalid contribution event ID')
+        head = ref or self.head()
+        if not head:
+            return None
+        path = 'events/' + event_id + '.json'
+        files = self.tree(head)
+        if path not in files:
+            return None
+        event = json.loads(self.blob(files[path]))
+        self.read_bundle(event['revision'], head)
+        first = M.git(self.root, 'log', '--diff-filter=A', '--format=%H', head, '--', path).stdout.decode().splitlines()
+        return dict(event, state='captured', commit=first[-1], ledger_commit=head, ref=REF, replay=True)
 
     def events(self, ref=None):
         head = ref or self.head()
