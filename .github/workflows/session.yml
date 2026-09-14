@@ -52,6 +52,11 @@ jobs:
           kpopper session status
           python -m unittest discover -s tests -p 'test_session*.py' -v
           python -m unittest discover -s tests -p test_predicate_literals.py -v
+          python -m unittest discover -s tests -p 'test_structured*.py' -v
+          python -m unittest discover -s tests -p test_expression_authoring.py -v
+          python -m unittest discover -s tests -p test_readable_expressions.py -v
+          python -m unittest discover -s tests -p test_process_boundaries.py -v
+          python -m unittest discover -s tests -p 'test_export*.py' -v
       - name: Audit the named theorem dependencies
         shell: bash
         run: |

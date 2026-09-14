@@ -47,6 +47,7 @@ limited to numerical thresholds.
 | `kpopper where` | Locate the record for this directory. |
 | `kpopper open` | Read a bounded project orientation, namespace and attention report. |
 | `kpopper pull <entry-or-prefix>` | Retrieve a subject's entries, sources and changed premises. |
+| `kpopper search "terms"` | Find matching claims, native hypotheses and local source passages with their status. |
 | `kpopper affects <entry>` | Follow the downstream reach of an entry through judgments and rule references. |
 | `kpopper export <entry> [entries...]` | Export a focused excerpt with historical/current readings and optional Mermaid. See [graph export](graph-export.md). |
 | `kpopper check` | Report structural problems, declared gaps, movement and fired conditions. |
@@ -55,6 +56,15 @@ The legacy opener uses line and character budgets; its output reports omitted at
 items. It is not a complete read of every entry. The optional
 [checked session mode](checked-sessions.md) provides complete branch accounting, exact
 field references and reads bound to a record revision under a token budget.
+
+Search uses a temporary local FTS5 index and calls no model. Results include source anchors,
+scope, status, explicit omission counts and a `search-corpus` revision for exact source
+reads. Use `--limit` and `--chars` to bound output; `--read REF --revision REV` reads a hit,
+with `--offset`/`--length` for long text. It supports local UTF-8 text sources up to 1 MiB,
+reports unindexed sources and never fetches remote material. See [retrieval](../skills/kpopper/RETRIEVAL.md).
+
+Both search and `open --json` return `record_sha256`, which binds additions to the primary
+record bytes the agent read. It is distinct from checked-session and search-corpus revisions.
 
 ## Record location and shape
 
@@ -114,14 +124,18 @@ Derived entries store their rules:
 ```yaml
 known:
   workshop.spare_packs:
-    rule: "stock.packages - workshop.guests"
+    rule: {expr: "stock.packages - workshop.guests"}
 ```
 
 Here the two inputs refer to the [workshop example](../examples/workshop/GROUNDING.yaml).
-The reader follows those references for dependency reach and displays the rule. It does
-not evaluate arbitrary arithmetic formulas into current values. A predicate over an
-unevaluated derived value cannot be treated as a successful check. The core also has
-specific built-in counts; those do not make it a general formula engine.
+The reader parses the stored formula, derives dependency links and uses the packaged Lean core
+to compute the value. A missing core or unavailable input is explicit. Legacy text rules
+remain unevaluated until an explicit conversion. Normal `add` and report `update` writes
+store supported new formula strings in this readable structure, with diagnostics for text
+fallbacks. The old tagged trees stay supported; changing only representation or whitespace
+does not reopen a judgment. Parsed formulas are cached independently of changing values.
+See [structured expressions](../skills/kpopper/EXPRESSIONS.md)
+for supported operators, exact fractions, snapshots and checked migration commands.
 
 ## What check means
 
@@ -131,10 +145,17 @@ specific built-in counts; those do not make it a general formula engine.
 | Failure: structural or undeclared gap | Examples include unresolved dependencies, missing dependency snapshots within an inferred snapshot field, undeclared predicate references, or unsupported predicates without an explanation. |
 | `MOVED` | A comparable dependency differs from the last-review snapshot. This calls for attention and does not itself fail the check. |
 | Movement inside a condition | A changed dependency is named by a predicate that still evaluates false; the movement is muted. |
+| `UNKNOWN` | A named condition currently has no result because an input or the Lean core is unavailable, or the operand types differ. This does not mean the judgment holds. |
+| `NO_PREDICATE` / `DECLARED` | No executable condition was recorded, with `DECLARED` indicating an explained gap. Reviewing a changed premise can settle its movement alert without inventing a falsifier. |
+| `UNCHECKED` after formula conversion | The old snapshot recorded formula text only; an explicit review is needed to capture a calculated result. Historical snapshots are preserved. |
 | Declared gap | `blocked_on` explains why a condition cannot currently be checked. This is reported as a note. |
 | Human re-opener | `reopened_by` names a sign a person must interpret. It is reported, not mechanically evaluated. |
 
 A record with no inferred snapshot field is reported as lacking a basis for drift detection.
+`graph.flagged` and `page.spill` count attention, including unknown results. An unavailable
+core can increase them even when the stored record has not changed. A condition on those
+counts reports that attention threshold; it does not establish that the original judgments
+are false. Conditions waiting on builtin counts do not feed back into those same counts.
 Keep a `seen` value for every declared dependency so later checks have a meaningful before.
 Legacy scalar comparison skips dependencies without comparable current values, including
 general rules. Use `affects` to inspect their declared reach; reach alone is not evidence
@@ -238,6 +259,7 @@ Python alone cannot call host tools. Persistent writes require POSIX locking. Se
 ## Background capture
 
 ```sh
+kpopper update --file report.json        # apply one report now and return its receipt
 kpopper ingest capture --file report.json
 kpopper ingest status --event-id EVENT_ID
 kpopper ingest pending
@@ -246,11 +268,23 @@ kpopper ingest pending
 Capture retains the supplied report and normally starts a separate worker. Supported
 updates pass through the canonical writer. Raw reports, journals and receipts live in a
 private state directory outside the repository, keyed by the canonical record path.
+`update` uses the same atomic path synchronously for the one supplied report. Its receipt
+includes normalization diagnostics and affected judgments; exit 0 means applied, exit 1
+means retained for a decision, and exit 2 means an invalid request. Existing judgments are
+not reviewed by applying new readings.
+Use an `updates` list for one or many changes already known from the same source; there is
+no need to wait for a larger batch. Refused prepared updates retain their actual
+`validation_issues`. Captured sources record their purpose in `recorded_for`, so ordinary
+evidence ingestion does not create a new `asked` reading occasion that needs its own tab.
 
-Automatic writes currently require explicit reports targeting existing scalar entries in
-a single file. New entries, computed values, judgment rewrites, pointer records and
-ambiguous messages require further handling. Delivery acknowledgment does not approve
-a change or clear a failed condition.
+Automatic writes require explicit reports in a single file. An `updates` list can combine
+existing scalar updates with new grounded facts, rules and judgments in one atomic write.
+The primary agent supplies their meaning; the worker preserves citations and checks the
+final graph. New entries and judgments require `record_sha256` from the primary's prior
+read; they cannot silently adopt changed premises. Existing judgment rewrites,
+reader/page-count judgments, pointer records and ambiguous messages
+require further handling. Delivery acknowledgment does not approve a change or clear a
+failed condition.
 
 Use the [capture guide](../skills/kpopper/INGESTION.md) for report envelopes, state paths,
 permissions and host behavior, and [native delivery](../skills/kpopper/DELIVERY.md) for

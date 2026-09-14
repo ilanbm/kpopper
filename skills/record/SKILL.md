@@ -1,11 +1,13 @@
 ---
 name: record
-description: "Write what the work found into the project's knowledge record, so the next session inherits it instead of re-deriving it. Use the moment something worth keeping exists: a fact taken from a source, a rule worked out, a decision or conclusion, a measurement, a correction to a recorded value, or a question left open - and check for unrecorded findings before implementation, handoff (including a PR), or finishing work. Record within the user's write authorization. The first write creates GROUNDING.yaml. Covers add, set, review, same and distinct, judgments with a falsifier, and background capture."
+description: "Write what the work found into the project's knowledge record, so the next session inherits it instead of re-deriving it. Use the moment something worth keeping exists: a fact taken from a source, a rule worked out, a decision or conclusion, a measurement, a correction to a recorded value, or a question left open - and check for unrecorded findings before implementation, handoff (including a PR), or finishing work. Record within the user's write authorization. The first write creates GROUNDING.yaml. Covers one-report update, add, set, review, same and distinct, judgments with a falsifier, and background capture."
 ---
 
 # Record
 
 Keep what the work produced while it is still in your hands: the source with its location, the rule rather than its result, the conclusion with what it rests on and what would make it wrong. It is a byproduct of the work, written when it exists and not at a ceremony. The command line is `kpopper` where it is on PATH; otherwise the `command` in the `KPOPPER_AGENT_CONTEXT` line the session opener printed (`python3 <plugin>/scripts/cli.py`) runs the same code. Do not guess a path and do not write a second reader - [the method's reference](../kpopper/references/method.md#finding-the-reader) says how to find the installed copy when neither is at hand.
+
+**For a source report in an existing single-file record, use `kpopper update --file -`.** Send one `updates` list with everything already known from that report; one item is enough. Record it while the context is fresh, without waiting to collect unrelated facts or reach session end. Read the returned state before relying on the update. [INGESTION.md](../kpopper/INGESTION.md) gives the input and supported layouts; first writes, other layouts and deliberate reviews retain their ordinary commands.
 
 ## The first write
 
@@ -15,21 +17,18 @@ by `add`. Installation alone creates no file, and a one-off can finish without a
 
 Where no record resolves for the workspace, `kpopper add` creates `GROUNDING.yaml` at the repository root (the working directory outside git) with that first entry, and a later `add` extends it. A registered record that is unavailable is a location problem: restore it rather than starting another. The [shape reference](../kpopper/references/shape.md) shows the sections, pointer records and how a record lives outside a tree that cannot hold it.
 
-**Make a new record useful to its reader.** When its explanation is due, briefly explain and link
-to the finding. For a mapping or a record that benefits from a visual view, show the shipped page
-when supported. A simple first finding can be met in conversation; a page is not required.
+**Make a new record useful to its reader.** When its explanation is due, link and briefly explain
+the finding. Show the shipped page when a visual view helps and is supported; it is optional.
 
 ## Record what the work calls for
 
-"No schema changes" preserves the format; it does not itself prohibit adding knowledge within
-existing write authorization. Explicit read-only instructions or a record-write ban still apply.
-Do not turn a restriction inferred in a draft plan into a user prohibition.
+"No schema changes" preserves format; it does not forbid authorized knowledge writes. Respect explicit
+read-only or record-write bans; do not turn a restriction inferred in a draft plan into a user prohibition.
 
-Before implementation or handoff, including a PR, check internally: what useful knowledge emerged,
-is it already recorded, and what actual instruction limits recording it? Reuse existing entries
-and authorization; this is not a routine approval request. If writing is prohibited, leave the
-record intact and note useful unrecorded findings in the handoff. If nothing new merits retention,
-finish without filler or duplicates. File changes or passing checks do not prove knowledge retention.
+Before implementation or handoff (including a PR), check internally for useful unrecorded knowledge
+and actual write constraints. Reuse entries and authorization; do not ask routinely. If writes are
+prohibited, leave the record intact and note useful findings in the handoff. Otherwise avoid filler
+or duplicates. File changes and passing checks do not prove knowledge retention.
 
 A selected mapping or investigation makes discovery the task: follow `kpopper _agent guide`
 within its agreed scope and report its limits. More available material is not a reason to survey it.
@@ -85,7 +84,7 @@ the surface.
 
 ### 2. Something you worked out
 
-Record the rule, never the result. `subtotal * 0.17`, not `4,250`. The same applies to non-numeric work: if you derived a list by filtering another, record the filter.
+Record the rule, never the result. The same applies to non-numeric work: if you derive a list by filtering another, record the filter as a textual `rule`. Keep its inputs and limits explicit. For supported calculations, use `rule={expr: "order.price * order.quantity"}` and executable `wrong_if={expr: "order.total > order.limit"}`. `add` and `update` also store supported plain formula strings in this readable form; the local Lean core computes them. Keep `rests_on` explicit and historical snapshots intact. Inside `expr`, quoted text is literal; `ref("an opaque id")` names a reference. Read fallback diagnostics: text retained without Lean is not a calculated result. [EXPRESSIONS.md](../kpopper/EXPRESSIONS.md) covers syntax and migration; unsupported work needs its declared limit.
 
 ### 3. Something you concluded or composed
 
@@ -112,8 +111,8 @@ that unrelated entry does. If a rendered number is not exactly one reference, it
 ## The sign that would make it wrong
 
 Every judgment says what would make it wrong, and the reader evaluates it where it honestly can:
-`wrong_if` is one comparison over an entry the judgment rests on - `acme.seats < 150`,
-`flue.clear == false` - and nothing richer; a second comparison on the right-hand side is unread.
+`wrong_if` is one comparison over entries the judgment rests on - `acme.seats < 150`,
+`flue.clear == false`, or supported arithmetic operands. Compound comparisons are unsupported.
 A predicate that cannot be evaluated says so with `blocked_on` and why; a decision taken on a
 session's prior, or on taste, names the prose sign that would re-open it in `reopened_by`. Never
 invent a threshold to make a predicate evaluable, and never write prose in a predicate field.
@@ -196,7 +195,7 @@ kpopper set <key> <value> [--why "..."]  # change one value; the reply is the re
 kpopper set <key> <value> --source <id> --at "..."  # a new reading with its new citation
 kpopper review <id | "section title">    # it still holds: seen rewritten from the record
 kpopper same <a> <b> | distinct <a> <b> "why"   # one subject under two ids, or two that only look alike
-kpopper ingest capture --file report.json   # retain a source report, processed in the background
+kpopper update --file report.json        # apply related source changes together; return the result
 kpopper followups add ...                # deferred work, linked to the knowledge it waits on
 ```
 
@@ -231,13 +230,14 @@ conservative behavior until the next session opens.
 
 **New information is useful when you can see what it changes.** When ongoing record maintenance
 is authorized, capture a material correction or source report while your understanding is fresh.
-For an explicit update that can be checked in the background, use `kpopper ingest capture` and
-continue unrelated work. Supply what you already know; leave an unknown target or meaning open.
-The worker uses the existing writer and returns an attention signal only when a declared
-condition fires or a new review question needs focus. Routine completion requires no waiting or
-ACK. [INGESTION.md](../kpopper/INGESTION.md) gives the small input contract, supported record layouts, and
-the different idle-delivery behavior in Claude Code and Codex. Notification content is a result,
-not a new user report: never capture it again as fresh evidence.
+`update` returns the result now. Choose `ingest capture` when processing should continue in the background;
+the number of items does not choose that mode. Interpret once and keep source quotations separate.
+Additions require `record_sha256` from the primary's prior `open --json` or source-search read;
+if it changes, reread the premises. `applied` means every requested change was written.
+`needs_primary` means retained for handling, not successful recording: inspect its reason and
+`validation_issues`, resolve within the existing authority, or say what remains blocked. Re-submit
+a corrected report under a new event ID; acknowledge an old signal only after resolving it.
+Routine success needs no ACK. Notifications are results, never fresh source reports to capture again.
 
 In Codex hosts with native background agents and `send_message_to_thread`, use
 `capture --notify-task` and dispatch its returned delivery job so an important finding can also

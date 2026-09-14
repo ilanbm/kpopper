@@ -1,5 +1,8 @@
 """The public CLI describes user operations, not onboarding bookkeeping."""
 import json
+import hashlib
+import contextlib
+import io
 import os
 from pathlib import Path
 import subprocess
@@ -87,6 +90,8 @@ class PublicCLI(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual(json.loads(result.stdout)["record"], str(self.workspace / "work.yaml"))
         self.assertIn("Weekly time", json.loads(result.stdout)["view"])
+        self.assertEqual(json.loads(result.stdout)["record_sha256"],
+                         hashlib.sha256((self.workspace / "work.yaml").read_bytes()).hexdigest())
 
     def test_json_legacy_operations_preserve_their_exit_code(self):
         result = self.cli("--workspace", str(self.workspace), "check", "--json")
@@ -94,6 +99,22 @@ class PublicCLI(unittest.TestCase):
         value = json.loads(result.stdout)
         self.assertEqual(value["exit_code"], 1)
         self.assertIn("no record", value["error"])
+
+    def test_open_rejects_a_hash_from_a_different_record_than_its_view(self):
+        from scripts import workspace_cli as C
+        record = self.root / "PROVENANCE.yaml"
+        record.write_text("known:\n  price: {v: 10}\n")
+        location = {"workspace": str(self.root), "record": str(record), "status": "found", "key": "test"}
+        def changing_view(*args):
+            record.write_text("known:\n  price: {v: 100}\n")
+            return subprocess.CompletedProcess([], 0, "price: 10", ""), False
+        output = io.StringIO()
+        with patch.object(C.W, "locate", return_value=location), \
+                patch.object(C.S, "read_view", side_effect=changing_view), \
+                contextlib.redirect_stdout(output):
+            code = C.open_context(["--json"])
+        self.assertEqual(code, 2)
+        self.assertIn("changed", json.loads(output.getvalue())["error"])
 
     def test_json_flag_does_not_consume_a_value_after_the_separator(self):
         record = self.workspace / "PROVENANCE.yaml"

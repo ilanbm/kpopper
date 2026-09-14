@@ -472,7 +472,7 @@ def measure(paths, run=False, timeout=None, cap=None, today=None):
     page_bound = []
     if c.jud:
         for name_, j in sorted(c.jud.items()):
-            toks = set(P.ID.findall(j["pred"]))
+            toks = set(P.predicate_refs(j["pred"]))
             pages = sorted(t for t in toks if t in P.PAGE)
             mine = sorted(t for t in toks if t in differing)
             if pages and mine:

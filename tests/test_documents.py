@@ -298,6 +298,45 @@ class RecordSources(unittest.TestCase):
             {"id": "capacity", "label": "Capacity", "kind": "value", "inputs": [{"source": "record", "pointer": "/reading.capacity/v"}]}]}
         self.draft = html('<p>' + span('capacity', '80') + '</p>')
 
+    def apply_batch(self, updates):
+        envelope = {"source_quote": "Capacity 100; reserve 20.", "date": "2026-09-11",
+                    "record_sha256": I._sha(self.path.read_bytes()), "updates": updates}
+        event = I.capture(envelope, self.path, self.state, start=False)
+        result = I.process(self.path, self.state, event_id=event["event_id"])[0]
+        self.assertEqual(result["state"], "applied", result)
+        return {**self.source, "event_id": event["event_id"], "state_dir": "state"}
+
+    def test_applied_set_batch_can_refresh_document(self):
+        data = D.build(self.draft, self.manifest, self.root, NOW)
+        spec = self.apply_batch([{"kind": "set", "id": "reading.capacity", "value": 100}])
+        after = D.refresh(data, {"record": spec}, self.root, LATER)
+        self.assertEqual(after["groups"][0]["edits"][0]["after"], "100")
+        self.assertEqual(after["sources"]["record"]["event"]["targets"], ["reading.capacity"])
+
+    def test_batch_checks_every_selected_reading_and_its_citation(self):
+        self.doc["known"]["reading.reserve"] = {"v": 10, "from": "s.report"}
+        self.path.write_text(yaml.safe_dump(self.doc, sort_keys=False))
+        self.manifest["claims"].append({"id": "reserve", "label": "Reserve", "kind": "value",
+            "inputs": [{"source": "record", "pointer": "/reading.reserve/v"}]})
+        self.draft = html('<p>' + span('capacity', '80') + ' ' + span('reserve', '10') + '</p>')
+        data = D.build(self.draft, self.manifest, self.root, NOW)
+        spec = self.apply_batch([{"kind": "set", "id": "reading.capacity", "value": 100},
+                                 {"kind": "set", "id": "reading.reserve", "value": 20}])
+        after = D.refresh(data, {"record": spec}, self.root, LATER)
+        self.assertEqual(after["sources"]["record"]["event"]["targets"], ["reading.capacity", "reading.reserve"])
+        changed = yaml.safe_load(self.path.read_text())
+        changed["known"]["reading.reserve"]["from"] = "s.report"
+        self.path.write_text(yaml.safe_dump(changed, sort_keys=False))
+        with self.assertRaisesRegex(D.DocumentError, "does not match"):
+            D.refresh(data, {"record": spec}, self.root, LATER)
+
+    def test_batch_new_reading_can_bind_a_document_source(self):
+        spec = self.apply_batch([{"kind": "add", "id": "reading.reserve", "body": {"v": 20}}])
+        self.manifest["sources"]["record"] = spec
+        self.manifest["claims"][0]["inputs"][0]["pointer"] = "/reading.reserve/v"
+        data = D.build(self.draft, self.manifest, self.root, NOW)
+        self.assertEqual(data["sources"]["record"]["event"]["targets"], ["reading.reserve"])
+
     def test_record_pointer_and_hypotheses_are_rejected_before_canonical_file_reads(self):
         for context in ("pointer", "hypothesis"):
             with self.subTest(context=context):

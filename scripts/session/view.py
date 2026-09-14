@@ -95,13 +95,15 @@ class View:
         if row['kind']=='premise_change':
             line+=row['id']+' '
             values='seen='+encode(row['value_at_review'])+' current='+encode(row['current_recorded_value'])
+            if row['value_at_review']==row['current_recorded_value']: values='formula changed'
             if len(self.encoder.encode(values))>32:
                 values='text changed' if row['role']=='recorded_judgment_claim' else 'recorded value changed'
             line+=values
         elif row['kind'] in {'contested','unreadable'}: line+=row['id']+' '+row['kind'].upper()
         else:
             predicate=row['falsifier']; state={True:'TRIGGERED',False:'NOT_TRIGGERED',None:'UNKNOWN'}[predicate['holds_on_current_values']]
-            detail=row['id']+' '+predicate['expression']+' '+state
+            from ..expressions import text as expression_text
+            detail=row['id']+' '+expression_text(predicate['expression'])+' '+state
             line+=detail if len(self.encoder.encode(detail))<=48 else row['id']+' '+row['kind'].upper()
         return line
 
@@ -267,6 +269,7 @@ class GroundingService(CheckedSessionService):
         data=apply_profile(graph.data,profile)
         data['project_context']=self.project
         data['epistemic_core_source']=self.core.build['source_sha256']
+        data['expression_parser_source']=self.core.expression_source_hash
         routes=MapTree(data)
         data['navigation_routes']={path:sorted(members) for path,members in routes.groups.items()}
         data['navigation_leaf_routes']=routes.leaves

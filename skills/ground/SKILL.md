@@ -47,8 +47,8 @@ cannot tell bookkeeping from a change to their project, and the repair's minutes
 the method's cost.
 
 `open` also prints **what the record holds** — the namespace, not the values: `mtg (11) ·
-pay (4) · c50 (9) · …`. That one line is the whole link between a question in plain language
-and the graph. "What is happening with the mortgage" has no meaning to a file; `mtg` does.
+pay (4) · c50 (9) · …`. Use a known namespace directly; otherwise discover candidates
+with the checked-session search below or local source search.
 A record kept under letters says what they stand for in its head (`meta.prefixes`), and the
 opener prints that legend beside the namespace - `prefixes: d=decision · m=measurement` - as
 the page's namespace bar shows the words.
@@ -68,6 +68,10 @@ When evidence is still missing, continue a returned `next_cursor` with the same 
 one page is not a coverage boundary. Use `kpopper_context` for explicit support or impact reads
 around relevant IDs. Read its omitted values and incident-edge frontier as needed, and keep
 global search available for unlinked qualifications. Declared paths do not prove claims.
+For retained reports and local UTF-8 source passages, use `kpopper search "terms" --chars 4000`;
+[RETRIEVAL.md](../kpopper/RETRIEVAL.md) covers scopes and exact source reads. Its `search-corpus`
+revision is distinct from a checked-session revision. Preserve source-language names and
+try alternate terms when needed; the search does not translate or infer relationships.
 Expand relevant branches or inspect source
 content before claiming that the record does not cover it. A missing exact ID establishes
 only that the ID is absent. If relevant evidence remains unfound, say so and continue the

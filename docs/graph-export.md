@@ -26,7 +26,7 @@ readings and detailed condition results remain in the text output.
 
 A dependency table distinguishes:
 
-- A historical value from a current recorded reading.
+- A historical value from a current recorded or calculated reading.
 - A current body outside the excerpt from a reference missing from the base record.
 - An absent historical snapshot from a recorded null, false, zero or empty string.
 - A changed value inside a false declared condition from a change requiring review.
@@ -36,6 +36,13 @@ Conditions are evaluated against the full base record before selection. A true c
 therefore stays true even if the excerpt omits its current inputs, or another dependency
 is missing. A missing current value is not replaced by its historical value. The exporter
 does not refresh snapshots, fetch external sources or run page-only checks.
+
+Structured rules retain their input links in both traversal directions. Supported rules and
+conditions are displayed as readable expressions; calculated values are labeled separately
+from stored readings. Historical computed values remain historical, and a changed formula can
+require review even when its result is unchanged. A legacy snapshot containing only a formula
+does not supply a historical numeric result. Missing Lean or an unavailable calculation stays
+unknown in the excerpt; it does not prevent exporting the other recorded context.
 
 The reader's flags are retained. `MOVED` identifies a changed premise requiring review;
 `FALSIFIED` means a declared condition is true on recorded values. They can coexist.
@@ -64,7 +71,7 @@ retains the full content. Missing references can occupy a node slot. Metadata is
 selectable entry.
 
 Links distinguish `rests_on`, `from`, `rule_reads` and historical `refutes`. A rule link
-records which entries its text names; it does not evaluate an arbitrary formula. A
+records which entries its expression names; it does not evaluate an arbitrary formula. A
 `refutes` link is historical evidence, not a new condition result.
 
 Output goes to stdout. Redirect it to a separate file, leaving the source record intact.

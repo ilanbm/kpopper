@@ -1,6 +1,7 @@
 """Public workspace operations: open context, map the work, and configure guidance."""
 import argparse
 import glob
+import hashlib
 import json
 from pathlib import Path
 import sys
@@ -77,7 +78,13 @@ def open_context(argv):
                     if value < 1:
                         raise ValueError("--" + flag + " must be positive")
                     legacy += ["--" + flag, str(value)]
+        record_path = Path(files[0]) if args.json and len(files) == 1 else None
+        before_hash = hashlib.sha256(record_path.read_bytes()).hexdigest() if record_path else None
         result, checked = S.read_view(location, legacy)
+        if record_path:
+            if hashlib.sha256(record_path.read_bytes()).hexdigest() != before_hash:
+                raise ValueError("record changed while opening it; retry")
+            data["record_sha256"] = before_hash
         data.update(view=result.stdout, checked=checked)
         if result.returncode:
             message = result.stderr.strip() or result.stdout.strip() or "The record could not be opened."

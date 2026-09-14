@@ -7,6 +7,10 @@ import datetime as dt
 import math
 import re
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
+try:
+    from .expressions import number as _exact_number, same as _same_expression
+except ImportError:
+    from expressions import number as _exact_number, same as _same_expression
 
 
 UTC = dt.timezone.utc
@@ -135,9 +139,9 @@ def _validate(trigger, related):
             if type(value['op']) is not str or value['op'] not in _OPS:
                 raise ValueError('unknown condition operator')
             scalar = normalize(value['value'])
-            if isinstance(scalar, (dict, list)):
+            if isinstance(scalar, (dict, list)) and _exact_number(scalar) is None:
                 raise ValueError('condition comparison value must be scalar')
-            if value['op'] in ('<', '<=', '>', '>=') and not _number(scalar):
+            if value['op'] in ('<', '<=', '>', '>=') and _exact_number(scalar) is None:
                 raise ValueError('ordering requires a finite numeric comparison value')
         elif kind == 'external':
             if (type(value) is not dict or not {'ref', 'equals'} <= set(value)
@@ -189,15 +193,46 @@ def referenced_external(trigger):
 
 
 def _equal(left, right):
-    if _number(left) and _number(right):
-        return left == right
+    left_number, right_number = _exact_number(left), _exact_number(right)
+    if left_number is not None and right_number is not None:
+        return left_number == right_number
     if type(left) is not type(right):
         return False
     if isinstance(left, dict):
+        if left.keys() == right.keys() == {'computed'}:
+            a, b = left['computed'], right['computed']
+            if isinstance(a, dict) and isinstance(b, dict) and a.keys() == b.keys() and {'rule', 'value'} <= a.keys():
+                return all(_same_expression(a[key], b[key]) if key == 'rule' else _equal(a[key], b[key]) for key in a)
         return left.keys() == right.keys() and all(_equal(left[key], right[key]) for key in left)
     if isinstance(left, list):
         return len(left) == len(right) and all(_equal(a, b) for a, b in zip(left, right))
     return left == right
+
+
+def _condition_scalar(value):
+    """Conditions read the result; changed triggers retain the full historical basis."""
+    if isinstance(value, dict) and set(value) == {'computed'}:
+        calculated = value['computed']
+        if not isinstance(calculated, dict) or not {'value', 'rule'} <= set(calculated):
+            return _MISSING
+        value = calculated['value']
+        if value is None:
+            return _MISSING
+    if isinstance(value, dict) and set(value) == {'rational'} and _exact_number(value) is None:
+        return _MISSING
+    return value
+
+
+def unavailable(value):
+    """A failed read is distinct from a recorded null, for conditions and changes."""
+    if not isinstance(value, dict):
+        return False
+    if set(value) == {'unavailable'} and isinstance(value['unavailable'], str):
+        return True
+    if set(value) == {'computed'}:
+        computed = value['computed']
+        return not isinstance(computed, dict) or computed.get('value') is None
+    return False
 
 
 def evaluate(trigger, values, baseline, completed, observations, now, zone='UTC'):
@@ -212,8 +247,10 @@ def evaluate(trigger, values, baseline, completed, observations, now, zone='UTC'
 
     def snapshot(group, mapping, identity):
         raw = mapping.get(identity, _MISSING)
-        if raw is _MISSING:
+        if raw is _MISSING or unavailable(raw):
             state = {'available': False}
+            if raw is not _MISSING:
+                state['detail'] = raw
             result = _MISSING
         else:
             try:
@@ -257,7 +294,7 @@ def evaluate(trigger, values, baseline, completed, observations, now, zone='UTC'
                                            ('changed' if result else 'matches baseline')))
             return result
         if kind == 'condition':
-            current = snapshot('graph', values, spec['id'])
+            current = _condition_scalar(snapshot('graph', values, spec['id']))
             expected = normalize(spec['value'])
             op = spec['op']
             if current is _MISSING:
@@ -266,11 +303,12 @@ def evaluate(trigger, values, baseline, completed, observations, now, zone='UTC'
                 result = _equal(current, expected)
                 if op == '!=':
                     result = not result
-            elif not _number(current):
+            elif _exact_number(current) is None:
                 result = None
             else:
-                result = {'<': lambda: current < expected, '<=': lambda: current <= expected,
-                          '>': lambda: current > expected, '>=': lambda: current >= expected}[op]()
+                left, right = _exact_number(current), _exact_number(expected)
+                result = {'<': lambda: left < right, '<=': lambda: left <= right,
+                          '>': lambda: left > right, '>=': lambda: left >= right}[op]()
             inputs.setdefault('condition', {})[path] = {'id': spec['id'], 'op': op, 'value': expected, 'state': result}
             reasons.append('Condition on {} is {}'.format(spec['id'], 'unknown' if result is None else str(result).lower()))
             return result

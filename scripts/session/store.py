@@ -121,11 +121,14 @@ def native_record(path, reader_path):
         if isinstance(body.get('from'),str) and body['from'] in ids:
             edges.append({'from':nid,'rel':'from','to':body['from']})
         if nid not in judgments:
-            for field in ['rule','v']:
-                value=body.get(field)
-                if isinstance(value,str) and p.EXPR.search(value):
-                    edges.extend({'from':nid,'rel':'rule_reads','to':ref}
-                                 for ref in sorted(set(p.ID.findall(value))) if ref in ids and ref!=nid)
+            if hasattr(p, 'rule_refs'):
+                references = p.rule_refs(body, ids)
+            else:
+                references = {ref for field in ['rule', 'v']
+                              if isinstance(body.get(field), str) and p.EXPR.search(body[field])
+                              for ref in p.ID.findall(body[field]) if ref in ids}
+            edges.extend({'from':nid,'rel':'rule_reads','to':ref}
+                         for ref in references if ref != nid)
     # Relations are a set; process-specific hash order must not change a revision.
     unique_edges={encode(edge):edge for edge in edges}
     data={'nodes':nodes,'edges':[unique_edges[key] for key in sorted(unique_edges)],

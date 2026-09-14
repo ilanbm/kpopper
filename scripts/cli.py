@@ -6,12 +6,14 @@ straight through to provenance.py; page renders the record and can open what it 
   kpopper check   [file ...]              does the record still hold together
   kpopper affects <entry> [entry ...]     what a change reaches
   kpopper pull    <entry|prefix> [...]    values and sources for a subject
+  kpopper search  "query"               find claims and source passages with their status
   kpopper where                           the record this directory answers for
   kpopper map [--deep]                  map the work through an available agent
   kpopper config [--guidance on|off]     inspect or change local preferences
   kpopper session <setup|status|open|read|search|context|propose|serve>  checked, revision-bound session views
   kpopper set     <key> <value> [--why "..."] [--as-of DATE]   change one value; the reply is the reach
   kpopper add     <id> field=value ...    a new entry or judgment, in id order, its seen filled
+  kpopper update  --file JSON            apply one source report atomically and return its receipt
   kpopper ingest  capture --file JSON    retain a report and process it in the background
                   add --notify-task TASK_ID to return a native Codex delivery job
   kpopper ingest  pending                important findings still needing attention
@@ -44,6 +46,8 @@ import argparse, json, os, shutil, sys, pathlib, subprocess, webbrowser
 HERE = pathlib.Path(__file__).resolve().parent
 READ = ("open", "check", "affects", "pull", "where", "set", "add", "review", "same", "distinct")
 COMMANDS = {
+    "expressions": ('convert TEXT [--predicate] | migrate [--record FILE] [--apply]', "Convert explicit formulas to structured data; preview checked record migration."),
+    "search": ('"QUERY" [--record FILE] [--limit N] [--chars N]', "Find local source evidence; read a hit with --read REF --revision REV."),
     "open": ("[FILE ...] [--chars N] [--budget N]", "Open the current knowledge context."),
     "map": ("[--deep]", "Map the work through an available host agent."),
     "config": ("[--guidance on|off]", "Read or change local user preferences."),
@@ -52,6 +56,7 @@ COMMANDS = {
     "affects": ("SUBJECT [SUBJECT ...]", "Trace what a change reaches."),
     "add": ("ID FIELD=VALUE ...", "Add a grounded entry or judgment."),
     "set": ("ID VALUE [--why TEXT] [--as-of DATE]", "Update a reading and see what it affects."),
+    "update": ("--file JSON|- [--record FILE] [--state-dir PATH]", "Record one or many changes from a source report now; return applied or retained status."),
     "review": ("ID [--as-of DATE]", "Record a judgment's review against current readings."),
     "document": ("OPERATION [OPTIONS]", "Create or refresh a standalone authored HTML document with evidence."),
     "page": ("[--open] [--out PATH] [--verify]", "Render or verify the knowledge page."),
@@ -151,7 +156,7 @@ def do_page(args):
         sys.exit(do_checks(rest))
     script = str(HERE / "render_page.py")
     if "--verify" in rest:
-        # nothing is written in this mode; the exit code is the whole answer.
+        # No HTML is written; derived measurements are retained outside the record.
         sys.exit(subprocess.run([sys.executable, script] + rest).returncode)
     # The renderer reads the record, but this dispatcher owns the destination. Give it the
     # absolute page path so record-relative source files can stay correct wherever --out puts
@@ -170,6 +175,10 @@ def do_page(args):
 
 
 def main():
+    for stream in (sys.stdin, sys.stdout, sys.stderr):
+        if hasattr(stream, 'reconfigure'):
+            stream.reconfigure(encoding='utf-8', newline='\n')
+    os.environ['PYTHONIOENCODING'] = 'utf-8'
     root = parser()
     options = root.parse_args()
     if options.command is None:
@@ -183,7 +192,7 @@ def main():
         root.error("Use kpopper open, kpopper map, or kpopper config; start is not a public command.")
     if cmd not in COMMANDS and cmd != "_agent":
         root.error("unknown command: " + cmd)
-    if cmd not in {"open", "map", "config", "_agent", "session", "ingest", "document", "followups", "watch", "export"} and rest in (["--help"], ["-h"]):
+    if cmd not in {"open", "map", "config", "_agent", "session", "ingest", "update", "document", "followups", "watch", "export"} and rest in (["--help"], ["-h"]):
         usage, description = COMMANDS[cmd]
         print("usage: kpopper " + cmd + (" " + usage if usage else "") + " [--json]\n\n" + description)
         if cmd in {"set", "add", "review", "same", "distinct"}:
@@ -232,6 +241,26 @@ def main():
         except ImportError:
             from onboarding import main as start
         sys.exit(start(rest))
+    if cmd == "expressions":
+        try:
+            from . import expression_cli
+        except ImportError:
+            import expression_cli
+        # Expressions already return structured data; a global JSON option needs
+        # no legacy-output wrapper or second subprocess.
+        sys.exit(expression_cli.main(rest))
+    if cmd == "update":
+        try:
+            from .ingestion import update_main
+        except ImportError:
+            from ingestion import update_main
+        sys.exit(update_main(rest))
+    if cmd == "search":
+        try:
+            from . import search
+        except ImportError:
+            import search
+        sys.exit(search.main((["--json"] if options.json else []) + rest))
     # Existing operations retain their exit codes and text. JSON wraps that output
     # without reparsing it as evidence or changing what the operation does.
     cutoff = rest.index("--") if "--" in rest else len(rest)

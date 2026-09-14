@@ -217,7 +217,7 @@ class TheCandidatesAMergerWalks(unittest.TestCase):
 
     def test_a_rule_is_read_through_what_was_retired(self):
         self.assertEqual(S.canon_rule("heat.loss_kw  -  heat.output_kw", {"heat.output_kw": "heat.boiler_kw"}),
-                         "heat.loss_kw - heat.boiler_kw")
+                         P.E.convert("heat.loss_kw - heat.boiler_kw"))
         self.assertEqual(S.retired_into([{"a.x": {"v": 1, "also": ["a.y", "not an id", "a.x"]}, "b.z": {"v": 2}}],
                                         {"a.x", "b.z"}), {"a.y": "a.x"})
         self.assertEqual(S.distinct_pairs([{"a.x": {"distinct_from": "b.z, c.w"}}]),

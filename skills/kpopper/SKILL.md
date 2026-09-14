@@ -39,7 +39,7 @@ by the session doing the work:
 1. **Something taken from a source** - a number, a date, a quoted clause, a position someone
    stated. Recorded with the source *and the location within it*, and with how faithful the
    text is: quoted, paraphrased, or your reading of it.
-2. **Something worked out** - the rule, never the result.
+2. **Something worked out** - the rule, never the result. New calculations use [structured expressions](EXPRESSIONS.md), computed by the local Lean core.
 3. **Something concluded or composed** - a recommendation, a comparison, a summary. It says what
    it rests on, carries `seen` (what those held when it was written) and `wrong_if` (what would
    make it wrong). A judgment that cannot be wrong is an opinion.

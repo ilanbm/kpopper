@@ -339,12 +339,34 @@ def _event_binding(path, spec, selections, root):
         raise DocumentError("The ingestion outcome could not be read; inspect or recover the event before refreshing") from error
     if not receipt or receipt.get("state") != "applied":
         raise DocumentError("The ingestion event is not durably applied; inspect it by event ID")
-    wanted = "/" + str(receipt.get("target", "")).replace("~", "~0").replace("/", "~1")
-    selected = [v for v in selections.values() if v["selector"].get("pointer") in {wanted + "/v", wanted + "/quoted"}]
-    if not selected or any(v.get("status") != "available" or v.get("value") != _atom(receipt.get("value")) or
-                           v.get("citation", {}).get("source") != receipt.get("source") for v in selected):
+    readings = []
+    if "updates" in receipt:
+        for operation in receipt["updates"]:
+            if operation["kind"] == "set":
+                readings.append((operation["id"], operation["value"], ("v", "quoted")))
+            elif operation["kind"] == "add":
+                body = operation["body"]
+                for field in ("v", "quoted"):
+                    if field in body:
+                        readings.append((operation["id"], body[field], (field,)))
+    else:
+        readings.append((receipt.get("target"), receipt.get("value"), ("v", "quoted")))
+    selected, targets = [], set()
+    for target, value, fields in readings:
+        wanted = "/" + str(target).replace("~", "~0").replace("/", "~1")
+        pointers = {wanted + "/" + field for field in fields}
+        for selection in selections.values():
+            if selection["selector"].get("pointer") in pointers:
+                selected.append((selection, value))
+                targets.add(target)
+    if not selected or any(v.get("status") != "available" or v.get("value") != _atom(value) or
+                           v.get("citation", {}).get("source") != receipt.get("source") for v, value in selected):
         raise DocumentError("Applied event does not match the selected current reading and citation")
-    return {k: receipt.get(k) for k in ("event_id", "state", "target", "source_sha256", "envelope_sha256")}
+    binding = {k: receipt.get(k) for k in ("event_id", "state", "target", "source_sha256", "envelope_sha256")}
+    if "updates" in receipt:
+        binding["targets"] = sorted(targets)
+        binding["target"] = next(iter(targets)) if len(targets) == 1 else None
+    return binding
 
 
 def capture_sources(specs, claims, root, now=None, previous=None):

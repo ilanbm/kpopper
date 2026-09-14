@@ -467,7 +467,7 @@ what the work needs; a source and one finding can be enough.
 |---|---|
 | Source | The document, conversation, observation or other origin of a claim, with dates and locators. |
 | Reading | A value or quotation taken from that source. |
-| Derivation | The rule relating inputs to a result. The general reader stores rules and follows their references; it does not evaluate arbitrary formulas. |
+| Derivation | A structured rule relating inputs to a result. Its references supply graph dependencies and the local Lean core computes its value. Legacy text rules remain readable and unevaluated until explicitly converted. |
 | Judgment | A conclusion, its reasoning, declared dependencies and condition for reconsideration. |
 | Review snapshot | What those dependencies held when the judgment was last reviewed: `seen`. |
 | Open question | Something unresolved, retained without inventing an answer. |
