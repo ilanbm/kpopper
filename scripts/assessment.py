@@ -354,7 +354,14 @@ def main(argv=None):
             del report['nodes']
         else:
             report['nodes'] = {nid: report['nodes'][nid] for nid in dict.fromkeys(args.ids)}
-        print(json.dumps(report, ensure_ascii=False, default=str, indent=2))
+        if args.profile == 'core/v1':
+            # Account for the final selection/attention projection too. Compact
+            # output keeps emitted UTF-8 within the compact ASCII JSON budget.
+            contract = P._peer('reasoning.contract')
+            contract.OutputBudget(report['operational_limits']['output_bytes'] - 1).add(report)
+            print(json.dumps(report, ensure_ascii=False, default=str, separators=(',', ':')))
+        else:
+            print(json.dumps(report, ensure_ascii=False, default=str, indent=2))
     except (ValueError, OSError, P.yaml.YAMLError) as error:
         parser.error(str(error))
     return 0

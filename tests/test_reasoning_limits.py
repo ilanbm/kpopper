@@ -109,6 +109,20 @@ class OperationalBoundaryTests(unittest.TestCase):
         with self.assertRaises(OperationalLimit):
             OutputBudget(size - 1).add(value)
 
+    def test_cli_refuses_final_oversized_projection_without_partial_output(self):
+        import contextlib
+        import io
+        from scripts import assessment
+        report = assess(Snapshot.from_data(record()), ['m.total'], runtime=NativeStub())
+        report['operational_limits']['output_bytes'] = 20
+        output = io.StringIO()
+        with patch.object(assessment, 'load', return_value=report), \
+                contextlib.redirect_stdout(output), contextlib.redirect_stderr(io.StringIO()):
+            with self.assertRaises(SystemExit) as error:
+                assessment.main(['m.total', '--profile', 'core/v1'])
+        self.assertEqual(error.exception.code, 2)
+        self.assertEqual(output.getvalue(), '')
+
     def test_real_process_output_and_stderr_are_bounded(self):
         from scripts.reasoning.runtime import _run_bounded
         from scripts.reasoning.contract import OperationalLimit
