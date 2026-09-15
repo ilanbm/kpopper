@@ -378,7 +378,10 @@ def audit_linkage(executable, library, target, lean_root):
         tool = str(objdump) if objdump.exists() else "objdump"
         text = run([tool, "-p", executable]) + run([tool, "-p", library])
         deps = re.findall(r"DLL Name: (\S+)", text, re.I)
-        allowed = {"libgmp-10.dll", "kernel32.dll", "msvcrt.dll", "ucrtbase.dll", "advapi32.dll", "user32.dll", "userenv.dll", "ws2_32.dll", "shell32.dll", "ole32.dll", "iphlpapi.dll", "psapi.dll", "ntdll.dll", "bcrypt.dll", "dbghelp.dll", "secur32.dll"}
+        # Windows supplies ICU as a system component. The compiler links it
+        # through an import library and ships no copy of its own, so it is an
+        # operating system dependency like the entries beside it.
+        allowed = {"libgmp-10.dll", "kernel32.dll", "msvcrt.dll", "ucrtbase.dll", "advapi32.dll", "user32.dll", "userenv.dll", "ws2_32.dll", "shell32.dll", "ole32.dll", "iphlpapi.dll", "psapi.dll", "ntdll.dll", "bcrypt.dll", "dbghelp.dll", "secur32.dll", "icu.dll"}
         if "libgmp-10.dll" not in [x.lower() for x in deps] or any(x.lower() not in allowed and not x.lower().startswith("api-ms-win-") for x in deps):
             raise ValueError("unexpected Windows dependencies: " + repr(deps))
         result["min_os"] = "Windows Server 2022 (CI-tested baseline)"
