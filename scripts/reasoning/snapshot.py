@@ -335,6 +335,11 @@ class ScopeCapture:
         source = data['document'].get(collection)
         if not isinstance(source, dict) or collection in ('meta', 'schema', 'record', 'also'):
             raise SnapshotError('scope_unavailable', 'collection membership unavailable')
+        # Field authority belongs to the collection's schema, including when no
+        # member exists. Validate it before projecting any candidate values.
+        mapped_seen = _fields(data['document'])['snapshot']
+        if any(field == mapped_seen or field in ('assessment', 'current_assessment') for field in fields):
+            raise SnapshotError('invalid_scope', 'historical or assessment fields cannot be computational inputs')
         members = sorted(source)
         bound = MAX_COLLECTION
         if limits is not None:
@@ -353,11 +358,8 @@ class ScopeCapture:
             if member not in nodes or nodes[member]['collection'] != collection:
                 raise SnapshotError('scope_unavailable', 'collection member not captured')
             body = nodes[member]['body']
-            mapped_seen = nodes[member]['fields']['snapshot']
             candidates[member] = {}
             for field in fields:
-                if field == mapped_seen or field in ('assessment', 'current_assessment'):
-                    raise SnapshotError('invalid_scope', 'historical or assessment fields cannot be computational inputs')
                 conflicts = data['context'].get('conflicts', {}).get(member)
                 present = isinstance(body, dict) and field in body
                 observation = {'status': 'contested' if conflicts else ('known' if present else 'missing')}

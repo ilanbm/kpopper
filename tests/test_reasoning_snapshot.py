@@ -91,6 +91,19 @@ class SnapshotTests(unittest.TestCase):
             with self.assertRaisesRegex(SnapshotError, 'invalid_scope'):
                 Snapshot.from_data(document).capture_scope('scope.items')
 
+    def test_reserved_scope_fields_refuse_for_empty_and_nonempty_collections(self):
+        for empty in (False, True):
+            for mapped_seen in ('seen', 'reviewed'):
+                for field in (mapped_seen, 'assessment', 'current_assessment'):
+                    with self.subTest(empty=empty, mapped_seen=mapped_seen, field=field):
+                        document = source()
+                        document['schema']['snapshot'] = mapped_seen
+                        if empty:
+                            document['items'] = {}
+                        document['scopes']['scope.items']['collection_scope']['fields'] = [field]
+                        with self.assertRaisesRegex(SnapshotError, 'invalid_scope'):
+                            Snapshot.from_data(document).capture_scope('scope.items')
+
     def test_node_view_copies_snapshot_once_and_keeps_returned_values_detached(self):
         from scripts.reasoning import contract
         snapshot = Snapshot.from_data(source())
