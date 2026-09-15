@@ -3,14 +3,17 @@
 Capture brackets the entire source closure (including directory membership and failed
 reads), routing configuration, pinned pending history and local target observations.
 Replay never resolves a source path or grants publication authority.
+Use Snapshot.to_json()/from_json() for portable typed JSON; to_data() remains
+a Python mapping with authored date/datetime objects intact.
 """
 import copy
 import glob
 import hashlib
+import json
 import os
 from pathlib import Path
 
-from .contract import digest, normalize_as_of, MAX_NODES, MAX_COLLECTION, MAX_EDGES
+from .contract import digest, normalize_as_of, MAX_NODES, MAX_COLLECTION, MAX_EDGES, MAX_REQUEST_BYTES, MAX_LIMITS
 
 
 class SnapshotError(ValueError):
@@ -131,6 +134,60 @@ def _snapshot_preimage(data):
     return {key: value for key, value in data.items() if key not in ('snapshot_id', 'authored_revision')}
 
 
+def _check_typed_json(value, depth=0):
+    """Check exact encoder shapes before the legacy typed decoder can consume them."""
+    if depth > 128:
+        raise SnapshotError('limit', 'snapshot JSON nesting exceeds 128 levels')
+    if not isinstance(value, list) or not value or not isinstance(value[0], str):
+        raise SnapshotError('invalid_snapshot_json', 'expected a typed value')
+    tag = value[0]
+    if tag == 'null':
+        if len(value) != 1:
+            raise SnapshotError('invalid_snapshot_json', 'null has no payload')
+        return
+    if len(value) != 2:
+        raise SnapshotError('invalid_snapshot_json', 'typed value needs one payload')
+    payload = value[1]
+    if tag == 'bool':
+        if type(payload) is not bool:
+            raise SnapshotError('invalid_snapshot_json', 'boolean payload must be boolean')
+    elif tag in ('text', 'int', 'float', 'date', 'datetime'):
+        if not isinstance(payload, str):
+            raise SnapshotError('invalid_snapshot_json', 'scalar payload must be text')
+        if tag == 'int' and len(payload) - int(payload.startswith('-')) > MAX_LIMITS['digits']:
+            raise SnapshotError('limit', 'snapshot JSON integer exceeds digit limit')
+    elif tag == 'list':
+        if not isinstance(payload, list):
+            raise SnapshotError('invalid_snapshot_json', 'list payload must be a list')
+        for child in payload:
+            _check_typed_json(child, depth + 1)
+    elif tag == 'map':
+        if not isinstance(payload, list):
+            raise SnapshotError('invalid_snapshot_json', 'map payload must be entry pairs')
+        names = set()
+        for pair in payload:
+            if not isinstance(pair, list) or len(pair) != 2 or not isinstance(pair[0], str) \
+                    or pair[0] in names:
+                raise SnapshotError('invalid_snapshot_json', 'malformed or duplicate map key')
+            names.add(pair[0])
+            _check_typed_json(pair[1], depth + 1)
+    else:
+        raise SnapshotError('invalid_snapshot_json', 'unknown typed value tag')
+
+
+def _json_object(pairs):
+    result = {}
+    for key, value in pairs:
+        if key in result:
+            raise SnapshotError('invalid_snapshot_json', 'duplicate JSON object key')
+        result[key] = value
+    return result
+
+
+def _json_constant(value):
+    raise SnapshotError('invalid_snapshot_json', 'nonfinite JSON constant')
+
+
 class Snapshot:
     __slots__ = ('__data',)
 
@@ -179,6 +236,45 @@ class Snapshot:
     def from_snapshot(cls, data):
         """Verify and replay an exported observation without ambient reads."""
         return cls(data)
+
+    @classmethod
+    def from_json(cls, serialized):
+        """Replay canonical pending-grounding typed JSON (UTF-8 text or bytes).
+
+        The 16MiB transport, 128-level data and 4096-digit integer bounds apply
+        before decoding. No source paths, configuration or Git refs are consulted.
+        """
+        from ..pending_grounding import _decode, _encode
+        if not isinstance(serialized, (str, bytes)):
+            raise SnapshotError('invalid_snapshot_json', 'expected UTF-8 JSON text or bytes')
+        try:
+            encoded_bytes = serialized.encode('utf-8') if isinstance(serialized, str) else serialized
+            if len(encoded_bytes) > MAX_REQUEST_BYTES:
+                raise SnapshotError('limit', 'snapshot JSON exceeds transport byte limit')
+            encoded = json.loads(encoded_bytes.decode('utf-8'), object_pairs_hook=_json_object,
+                                 parse_constant=_json_constant)
+            _check_typed_json(encoded)
+            data = _decode(encoded)
+            # Reject noncanonical numeric/date encodings and altered decoder shapes.
+            if _encode(data) != encoded:
+                raise SnapshotError('invalid_snapshot_json', 'noncanonical typed encoding')
+            return cls(data)
+        except SnapshotError:
+            raise
+        except RecursionError:
+            raise SnapshotError('limit', 'snapshot JSON nesting limit exceeded') from None
+        except (ValueError, TypeError, OverflowError):
+            raise SnapshotError('invalid_snapshot_json', 'malformed typed snapshot JSON') from None
+
+    def to_json(self):
+        """Return portable typed JSON without coercing authored dates into text."""
+        from ..pending_grounding import _encode, json_bytes
+        typed = _encode(self.__data)
+        _check_typed_json(typed)
+        encoded = json_bytes(typed)
+        if len(encoded) > MAX_REQUEST_BYTES:
+            raise SnapshotError('limit', 'snapshot JSON exceeds transport byte limit')
+        return encoded.decode('utf-8')
 
     @classmethod
     def capture(cls, paths, *, read_mode=None, as_of=None):

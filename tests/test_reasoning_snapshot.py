@@ -1,5 +1,7 @@
 """Strict capture witnesses the whole source closure and portable read context."""
 import copy
+import datetime
+import json
 import tempfile
 import unittest
 from pathlib import Path
@@ -130,6 +132,62 @@ class SnapshotTests(unittest.TestCase):
             with self.assertRaisesRegex(SnapshotError, 'undeclared_dependency'):
                 view.read_scope('scope.items', 'secret')
             self.assertEqual(captures.call_count, 1)
+
+    def test_typed_json_roundtrip_preserves_yaml_types_without_source_io(self):
+        from scripts.reasoning import snapshot as S
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / 'GROUNDING.yaml'
+            path.write_text("known:\n  p.date: {v: 2026-09-15}\n"
+                            "  p.timestamp: {v: 2026-09-15T12:34:56+03:00}\n"
+                            "  p.bool: {v: false}\n  p.int: {v: 0}\n  p.float: {v: 0.0}\n"
+                            "  p.null: {v: null}\n  p.text: {v: '2026-09-15'}\n")
+            snapshot = Snapshot.capture([str(path)], read_mode='frozen')
+            serialized = snapshot.to_json()
+            self.assertIsInstance(serialized, str)
+            path.unlink()
+            with mock.patch.object(P, 'load', side_effect=AssertionError('must not read')), \
+                    mock.patch.object(S, '_observation', side_effect=AssertionError('must not observe')):
+                replay = Snapshot.from_json(serialized)
+                binary_replay = Snapshot.from_json(serialized.encode('utf-8'))
+            self.assertEqual(snapshot.snapshot_id, replay.snapshot_id)
+            self.assertEqual(snapshot.to_data(), binary_replay.to_data())
+            expected = {'p.date': datetime.date, 'p.timestamp': datetime.datetime,
+                        'p.bool': bool, 'p.int': int, 'p.float': float, 'p.null': type(None), 'p.text': str}
+            for name, kind in expected.items():
+                self.assertIs(type(replay.to_data()['nodes'][name]['body']['v']), kind)
+
+    def test_typed_json_rejects_duplicate_keys_malformed_tags_and_limits(self):
+        from scripts.reasoning import snapshot as S
+        malformed = ['{"x":1,"x":2}', '["map",[["x",["null"]],["x",["null"]]]]',
+                     '["bool",0]', '["null",0]', '["text",1]', '["int","01"]',
+                     '["float","nan"]', '["date","2026-99-99"]', '["list",{}]',
+                     '["map",[["x"]]]', '["unknown",0]', '["int"]', 'NaN', '[']
+        for serialized in malformed:
+            with self.subTest(serialized=serialized), self.assertRaises(SnapshotError):
+                Snapshot.from_json(serialized)
+        with self.assertRaises(SnapshotError):
+            Snapshot.from_json(b'\xff')
+        oversized = Snapshot.from_data(source())
+        with mock.patch.object(S, 'MAX_REQUEST_BYTES', 16):
+            with self.assertRaisesRegex(SnapshotError, 'limit'):
+                Snapshot.from_json(' ' * 17)
+            with self.assertRaisesRegex(SnapshotError, 'limit'):
+                oversized.to_json()
+        with self.assertRaisesRegex(SnapshotError, 'limit'):
+            Snapshot.from_json(json.dumps(['int', '1' * 4097]))
+        deep = '["null"]'
+        for _ in range(130):
+            deep = '["list",[' + deep + ']]'
+        with self.assertRaisesRegex(SnapshotError, 'limit'):
+            Snapshot.from_json(deep)
+
+    def test_typed_json_replay_still_rejects_stale_snapshot_digest(self):
+        from scripts.pending_grounding import _encode
+        data = Snapshot.from_data(source()).to_data()
+        data['document']['items']['a']['v'] = 99
+        data['nodes']['a']['body']['v'] = 99
+        with self.assertRaisesRegex(SnapshotError, 'stale_snapshot'):
+            Snapshot.from_json(json.dumps(_encode(data)))
 
     def test_scope_candidate_membership_fields_and_grants(self):
         data = source()
@@ -330,7 +388,9 @@ class LiveCaptureTests(Repository):
         self.capture(fixture_bundle(value=20), event_id='second')
         with mock.patch.object(P, 'load', side_effect=AssertionError('must not read')):
             replayed = Snapshot.from_snapshot(data)
+            portable_replay = Snapshot.from_json(live.to_json())
         self.assertEqual(replayed.snapshot_id, live.snapshot_id)
+        self.assertEqual(portable_replay.to_data(), data)
 
 
 
