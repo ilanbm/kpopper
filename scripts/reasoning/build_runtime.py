@@ -12,6 +12,7 @@ import re
 import shutil
 import stat
 import subprocess
+import sys
 import tarfile
 import tempfile
 import urllib.request
@@ -580,6 +581,11 @@ def check_bundles(native_dir=None, source_root=None):
 
 
 def main():
+    # Build diagnostics quote Lean proof statements, which are UTF-8. A
+    # redirected stream on Windows would otherwise encode them as cp1252.
+    for stream in (sys.stdout, sys.stderr):
+        if hasattr(stream, "reconfigure"):
+            stream.reconfigure(encoding="utf-8", errors="replace")
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--source-root", type=Path, default=Path(__file__).parent / "lean")
     parser.add_argument("--lean-root", type=Path)
