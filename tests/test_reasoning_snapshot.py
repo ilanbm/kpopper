@@ -248,11 +248,15 @@ class SnapshotTests(unittest.TestCase):
         document = source()
         context = {'read_mode': 'supplied', 'conflicts': {'a': [
             ['left', {'v': 1, 'reviewed': {'old': 0}}], ['right', {'v': 2}]]}}
-        before = Snapshot.from_data(document, context=context).capture_scope('scope.items')
+        before_snapshot = Snapshot.from_data(document, context=context)
+        before = before_snapshot.capture_scope('scope.items')
         context['conflicts']['a'][0][1]['reviewed']['old'] = 99
-        after = Snapshot.from_data(document, context=context).capture_scope('scope.items')
+        after_snapshot = Snapshot.from_data(document, context=context)
+        after = after_snapshot.capture_scope('scope.items')
         self.assertEqual(before.witness, after.witness)
-        self.assertNotEqual(before.candidates, after.candidates)
+        self.assertEqual(before.candidates, after.candidates)
+        self.assertNotEqual(before_snapshot.to_data()['context']['conflicts'],
+                            after_snapshot.to_data()['context']['conflicts'])
 
     def test_computed_field_basis_changes_with_transitive_input(self):
         document = source()

@@ -364,7 +364,12 @@ class ScopeCapture:
                 if present:
                     observation['value'] = copy.deepcopy(body[field])
                 if conflicts:
-                    observation['alternatives'] = copy.deepcopy(conflicts)
+                    # Full conflict bodies remain in the snapshot. A scope grant
+                    # exposes this field only, including in alternative readings.
+                    observation['alternatives'] = [
+                        [name, {field: copy.deepcopy(variant[field])}
+                         if isinstance(variant, dict) and field in variant else {}]
+                        for name, variant in conflicts]
                 if field in ('v', 'rule') and isinstance(body, dict) and 'rule' in body:
                     observation['computed_basis'] = snapshot._input_basis().summary(member)
                 fingerprint_input = {key: value for key, value in observation.items() if key != 'alternatives'}

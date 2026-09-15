@@ -34,12 +34,16 @@
         },
         "external_sources_fetched": {
           "const": false
+        },
+        "evidence": {
+          "type": "string"
         }
       },
       "required": [
         "context",
         "hypotheses",
-        "external_sources_fetched"
+        "external_sources_fetched",
+        "evidence"
       ],
       "additionalProperties": false
     },

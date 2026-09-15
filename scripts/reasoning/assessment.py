@@ -21,6 +21,37 @@ def _historical_value(value):
     return None
 
 
+def _scope_projection(data, visible):
+    """Bind the full captured world by snapshot ID; display only relevant bodies."""
+    original = data['context']
+    context = {key: copy.deepcopy(original[key]) for key in (
+        'read_mode', 'original_read_mode', 'project', 'target', 'source_collection') if key in original}
+    if isinstance(context.get('project'), dict):
+        context['project'] = {key: context['project'][key] for key in (
+            'mode', 'generation', 'routing_identity') if key in context['project']}
+    context['conflicts'] = {nid: copy.deepcopy(variants)
+                            for nid, variants in original.get('conflicts', {}).items() if nid in visible}
+    pending = original.get('pending', {})
+    context['pending'] = {'ref': pending.get('ref'),
+                          'bundle_revisions': sorted(pending.get('bundles', {})),
+                          'observations': 'bound_in_snapshot', 'remote_acceptance': 'unassessed'}
+    hypotheses = {}
+    for name, hyp in data['hypotheses'].items():
+        document = {}
+        for collection, entries in hyp['document'].items():
+            if collection in ('meta', 'schema', 'record', 'also') or not isinstance(entries, dict):
+                continue
+            selected = {nid: copy.deepcopy(body) for nid, body in entries.items() if nid in visible}
+            if selected:
+                document[collection] = selected
+        if document and 'schema' in hyp['document']:
+            document['schema'] = copy.deepcopy(hyp['document']['schema'])
+        hypotheses[name] = {'kind': hyp.get('kind', 'hypothesis'), 'document': document,
+                            'status': 'unreadable' if hyp['error'] else 'inspected'}
+    return {'context': context, 'hypotheses': hypotheses, 'external_sources_fetched': False,
+            'evidence': 'full input remains bound by snapshot_id; bodies are projected to the selected dependency closure'}
+
+
 def assess(snapshot, selection=None, *, policy='focused-review/v1', runtime=None):
     data = snapshot.to_data()
     selected = sorted(data['nodes']) if selection is None else list(dict.fromkeys(selection))
@@ -40,6 +71,9 @@ def assess(snapshot, selection=None, *, policy='focused-review/v1', runtime=None
         if not isinstance(body, dict) or fields['deps'] not in body or 'rule' in body:
             tasks[('value', nid)] = ({'ref': nid}, [nid])
     computed = dict(zip(tasks, engine.evaluate_many(list(tasks.values()))))
+    visible = set(selected)
+    for result in computed.values():
+        visible.update(result['potential_ids'])
     nodes = {}
     conflicts = data['context'].get('conflicts', {})
     for nid in selected:
@@ -118,7 +152,6 @@ def assess(snapshot, selection=None, *, policy='focused-review/v1', runtime=None
                       'attention': attention, 'computation': computed.get(('value', nid))}
     report = {'schema_version': 2, 'assessment_profile': PROFILE, 'attention_policy': policy,
               'snapshot_id': snapshot.snapshot_id, 'as_of': data['as_of'],
-              'scope': {'context': data['context'], 'hypotheses': data['hypotheses'],
-                        'external_sources_fetched': False}, 'selection': selected, 'nodes': nodes}
+              'scope': _scope_projection(data, visible), 'selection': selected, 'nodes': nodes}
     report['assessment_revision'] = digest(report)
     return report
