@@ -5095,7 +5095,9 @@ with asked/file/url/of/read and no v/quoted/rule, not a judgment or computed val
 checks the recorded source identity, not the contents or availability of an external source. Omitting
 these options retains the existing citation. A citation-only change is written even
 when the value is unchanged. This option uses from/at; entries with src/source fields
-must reconcile those fields first. Judgment snapshots are never refreshed by set.
+must reconcile those fields first. Judgment snapshots are never refreshed by set. A reading dated
+after today is refused: a day is the record's clock, and a day ahead would outrank every reading
+of today.
 
 A reading newer than the one the base holds - its `of:`, else its source's read date -
 updates it. One of the same day or earlier that differs is a contradiction: refused into

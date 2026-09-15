@@ -14,7 +14,14 @@ refused - two readings of one day that disagree are two writers, not the world m
 reading updates the base and flags what rests on it. `add` of an id the base holds is refused, and
 with a different value or verdict it is a contradiction: a standing judgment is replaced in the base
 only when its own `wrong_if` holds now, and otherwise the rewrite waits beside the record until a
-person folds it. Nothing written into the body opens that door - every session's first write is a
+person takes it by name at the fold (`--take <id>`). The same verdict on other grounds - another
+why, other dependencies, another condition - is a decision written again and goes the same way. A
+replacement that rests on less names each dependency it drops, with the reason: `--drop "<id>:
+<why>"`. Every replacement leaves a trail - one `replaced:` line on the judgment, and the body it
+replaced kept whole in `.kpopper/replaced.yaml` - so `open` and `check` say *reversed on <day>*
+until someone reviews it, `set` of a reading only a replaced judgment listened to says so, and
+`pull <id> --history` shows what stood before. A reading dated after today is refused: a day is
+the record's clock. Nothing written into the body opens that door - every session's first write is a
 source carrying what it was asked, so a field read as a person's authority would be a key every
 session already holds. `request: s.<date>_<slug>` - a session source whose `asked:` is the person's
 request verbatim, rested on - still names whose asking the change was taken from, said *on the word
@@ -29,8 +36,10 @@ travels with the branch; a what-if, `folds: never`, evaluated at every dry run a
 
 **The consolidation walk.** `consolidate --dry-run` lays the hypotheses named - every one, when none
 is - over the base by id and runs the reader's own `check` on it, reported in a fixed order:
-arrived, updates (what a hypothesis replaces, and what rests on it), moved / falsified, contested,
-candidates, new subjects. Three lists ask three answers, each recorded by a command so the question
+arrived, updates (the readings a hypothesis replaces, and what rests on each), reversed (a verdict,
+or other grounds, over a standing judgment - both sides' because, rests_on and wrong_if beside each
+other), moved / falsified, contested, candidates, new subjects. Three lists ask three answers, each
+recorded by a command so the question
 never returns: a candidate pair is the **same** subject (`same a b`) or **different** (`distinct a b
 "why"`); a **contradictory** id - two hypotheses on one, or a reading the door refuses - is read
 again on a later day, `set` in the base, or in the hypothesis that read it when the newer reading
@@ -39,11 +48,19 @@ refuted. The run exits non-zero on a contested id, a falsifier that holds, a hol
 `wrong_if` it cannot decide; a premise that moved under a judgment leaves it green and blocks only
 the fold, and `review <id> --hypothesis NAME` refreshes the snapshot against the record as it stands
 under the hypothesis. `consolidate` runs the same test and, only when it is clean, writes the union
-through the write path: every replacement passes the one door a `set` passes, so a reading born of a
-same-day refusal waits until someone reads again on a later day - while a verdict over a standing
-judgment the record's own sign has not broken passes here and nowhere else, because the fold is the
-person's act and says so in the line above it; the result is read back and undone whole if `check`
-then says anything new; the folded files go, and what to commit is printed.
+through the write path: every replacement passes the one door a `set` passes, asked with the base's
+own readings, so a reading born of a same-day refusal waits until someone reads again on a later
+day. A verdict, or other grounds, over a standing judgment is **reversed**: it folds when the base's
+own condition has broken the judgment on what the base holds - a hypothesis that brings the reading
+that breaks a judgment together with the verdict that repairs it has not broken it here, and the
+report says its readings would - or when a person names it, `consolidate NAME --take <id>`; until
+then the run is red and nothing folds. Report that command; never run it on the session's own word,
+since taking by name is the person's act, the way the refusal into a hypothesis was built for. Across
+the branch line a reading from another source than the base's, with another value, is contested the
+same way; a review - the same decision, its seen refreshed - does not travel; a branch's record folds
+onto a committed base only, and the fold ends with the commit that makes it a commit of its own. The
+result is read back and undone whole if `check` then says anything new; what the fold replaced is
+kept beside the record; the folded files go, and what to commit is printed.
 
 Before accepting a material consolidation, examine affected judgments for a failure that arises
 only when the changes are combined, even if each change passes separately. Use the same
@@ -97,8 +114,10 @@ with its date.
 ```bash
 kpopper consolidate --dry-run [NAME ...]     # the union, tested; every hypothesis when none is named
 kpopper consolidate [NAME ...]               # folded into the base when the test is clean
+kpopper consolidate NAME --take <id>         # a reversal the person names, folded with its trail
 kpopper consolidate --refute NAME "why"      # one negative finding stays; the file goes
 kpopper consolidate --from <ref> --dry-run   # another branch's committed record as one more hypothesis
+kpopper pull <id> --history                  # the versions a judgment's replacements kept
 kpopper same <a> <b> | distinct <a> <b> "why"   # the two answers the candidates list asks for
 kpopper remeasure [--run]                    # the entries that name a recipe, taken again from the tree
 ```

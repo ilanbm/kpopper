@@ -168,6 +168,37 @@ class AcrossTheBranchLine(unittest.TestCase):
                           "  heat.loss_kw: a reading from 2026-09-02 that is older than the base's\n", out)
             self.assertIn("not clean: a contested reading, 1 reversal to take by name", out)
 
+    def test_a_second_flip_over_a_taken_first_is_reversed_again(self):
+        with tempfile.TemporaryDirectory() as d:
+            rec = repo(d)
+            base = git(d, "rev-parse", "HEAD").strip()
+            branch(d, rec, "flip", edits=[(VERDICT, FLIPPED)])
+            code, out, err = kp("consolidate", "--from", "flip", "--take", "c.boiler_short",
+                                "--as-of", "2026-09-05", rec)
+            self.assertEqual(code, 0, out + err)
+            git(d, "add", "-A")
+            git(d, "commit", "-qm", "fold flip")
+            git(d, "switch", "-qc", "third", base)
+            edit(rec, VERDICT, 'verdict: "a third opinion"')
+            git(d, "add", "-A")
+            git(d, "commit", "-qm", "third")
+            git(d, "switch", "-q", "main")
+            code, out, err = kp("consolidate", "--dry-run", "--from", "third", rec)
+            self.assertEqual(code, 1, out + err)
+            self.assertIn("  c.boiler_short: the old boiler holds after all -> a third opinion, from third\n"
+                          "    the standing judgment holds, and its wrong_if has not fired - take it by "
+                          "name: consolidate third --take c.boiler_short\n", out)
+            code, out, err = kp("consolidate", "--from", "third", "--take", "c.boiler_short",
+                                "--as-of", "2026-09-06", rec)
+            self.assertEqual(code, 0, out + err)
+            body = P.bodies(P.load([str(rec)]))["c.boiler_short"]
+            self.assertEqual(body["replaced"], [
+                "the standing judgment holds, and a person takes this over it by name on 2026-09-05",
+                "the standing judgment holds, and a person takes this over it by name on 2026-09-06"])
+            self.assertEqual([v.get("verdict") for v in P.read_replaced([str(rec)])["c.boiler_short"]],
+                             ["the old boiler cannot hold 12°C on the coldest February night",
+                              "the old boiler holds after all"])
+
     def test_the_same_verdict_on_other_grounds_travels_as_a_reversal(self):
         with tempfile.TemporaryDirectory() as d:
             rec = repo(d)
