@@ -1,5 +1,5 @@
 meta:
-  updated: 2026-09-14
+  updated: 2026-09-15
   name: kpopper
   scope: "What this plugin is for and the decisions that shaped it, kept in its own format -
           the tools eat their own cooking, and every session here opens grounded."
@@ -549,6 +549,35 @@ sources:
     of: "Clarification to the approved README text and illustration update: explain the shared
          pending findings path and make consolidation visible in both working modes."
     read: "2026-09-14"
+  s.2026_09_15_batch_test_race:
+    asked: "In the kpopper repo, the test
+            test_ingestion_batch.BatchIngestion.test_public_capture_runs_batch_in_native_background_processor
+            is flaky on CI. … the 'native background processor' the test starts is still creating
+            files under <tmpdir>/state after the test body returns, while tempfile.TemporaryDirectory
+            is removing the tree. … Make the test wait for the processor to finish … Do not paper
+            over it with ignore_cleanup_errors=True: a processor that outlives its test can also
+            outlive a real session's directory. Run the test in a loop (e.g. 30 times on Python 3.13)
+            to confirm it no longer races, and run the whole suite once."
+    name: "The session that fixed the batch capture test's race with its detached worker. What it
+           found: the receipt turns terminal before the worker releases its lease, so a test that
+           polls the receipt alone can return while the worker still writes into the state directory;
+           the queue test already waited for the lease and the batch test did not"
+    of: "tests/test_ingestion_batch.py now waits for worker.lease to vanish before its temporary
+         directory is cleaned, the way tests/test_ingestion_queue.py already does."
+    read: "2026-09-15"
+  s.2026_09_15_batch_worker_cleanup:
+    from: s.2026_09_15_batch_test_race
+    name: "Python 3.13 CI failed again while deleting a detached worker test directory, this time in
+           the batch capture test"
+    url: "https://github.com/ilanbm/kpopper/actions/runs/34842008730/job/103968928887"
+    of: "The batch capture test polled the receipt to a terminal state and returned while the worker
+         could still hold its lease; TemporaryDirectory cleanup then failed with Directory not empty
+         on the state directory. A probe of the unrevised path found the worker still holding its
+         lease in 1 of 30 runs at the moment the receipt first read terminal, releasing it 0.7 ms
+         later. The revised test waits for the lease as the queue test does; it passed 30 repetitions
+         on Python 3.13, and the full suite passed on 3.13 except one page-links test that fails in
+         this checkout and passed in that CI run."
+    read: "2026-09-15"
   s.background_ingestion:
     name: "Background capture and selective delivery contract"
     file: "skills/kpopper/INGESTION.md"
@@ -2051,6 +2080,31 @@ judgments:
                               the page's connective text lives in the brief; both resolve references
                               at build and both carry seen"
       p.entry_names: 2
+  d.every_worker_test_waits_for_the_lease:
+    from: s.2026_09_15_batch_test_race
+    name: "Every test that starts the detached worker waits for its lease"
+    rests_on: [s.2026_09_13_worker_cleanup, s.2026_09_15_batch_worker_cleanup, d.detached_worker_test_cleanup]
+    verdict: "a test that starts the detached capture worker waits for worker.lease to vanish, not
+              only for a terminal receipt, before its directory is cleaned - the rule of the queue
+              test holds for every test that starts the worker"
+    because: "The receipt is published before the worker's final queue scan and lease release, so a
+              terminal state is visible while the worker still writes into the state directory. The
+              queue test learned this and was revised alone; the batch capture test starts the same
+              worker through the command line, polled the receipt alone, and failed the same way on
+              the next Python 3.13 run. The probe recorded with that failure found the worker still
+              holding its lease at that moment in a minority of quiet local runs, a window a loaded
+              runner widens. Waiting for the lease costs one file check per poll and hides nothing: a
+              worker that never releases it fails the test loudly instead of racing the cleanup."
+    reopened_by: "a third test starts the worker and polls only the receipt, or the worker's
+                  lifecycle changes so that its lease is removed before its last write into the state
+                  directory"
+    seen:
+      s.2026_09_13_worker_cleanup: "read 2026-09-13"
+      s.2026_09_15_batch_worker_cleanup: "read 2026-09-15"
+      d.detached_worker_test_cleanup: "The detached-capture test waits for both a terminal receipt
+                                       and removal of worker.lease before cleaning its directory."
+    distinct_from: d.detached_worker_test_cleanup
+    # distinct 2026-09-15: the older judgment decides how one test waits for the worker; this one says the wait belongs to every test that starts the worker, and rests on the older one
   d.export_preserves_recorded_context:
     name: "Focused excerpts preserve historical and current context"
     rests_on: [doc.graph_export, goal.portable, d.moved_is_a_flag]

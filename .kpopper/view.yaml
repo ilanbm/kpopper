@@ -83,7 +83,7 @@ tabs:
              s.2026_09_13_more_self_aware_tagline, s.2026_09_13_process_illustrations,
              s.2026_09_13_worker_and_research, s.2026_09_13_reasoning_overview,
              s.2026_09_13_remove_duplicate_overview, s.2026_09_13_github_releases,
-             s.2026_09_14_working_modes]
+             s.2026_09_14_working_modes, s.2026_09_15_batch_test_race]
     sections:
       - title: How to read what follows
         why: a wall of cards is not an argument until you know what separates them
