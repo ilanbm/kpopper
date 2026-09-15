@@ -1854,6 +1854,12 @@ def check_lines(paths):
                 was, is_ = apart(old, now)
                 moved.append(f"{name}: {dep} differs from its snapshot "
                              f"({was} -> {is_}) - re-review, or refresh seen")
+        # A verdict replaced under its id is a question for a person, not a failure: the
+        # replacement passed the door, and the trail says so until someone reviews it
+        day = reversal_pending(j["body"]) if not is_arrangement(j, raw) else None
+        if day:
+            note.append(f"{name}: reversed on {day} - the verdict under this id changed; review it "
+                        f"once read, or pull {name} --history")
     # What the record stands on: one line, printed and never failed on - the confidences are
     # the record's to defend, and a count of them is not a problem with it.
     priors = priors_line(ids, jud, raw)
@@ -1977,6 +1983,10 @@ def opening(paths, budget=25, chars=None, host=None):
             if state == "moved":
                 was, is_ = apart(old, now, 28)
                 items.append((70, name, f"{dep} differs from what it last saw: {was} -> {is_}"))
+        day = reversal_pending(j["body"]) if not is_arrangement(j, raw) else None
+        if day:
+            items.append((75, name, f"reversed on {day} - the verdict under this id changed; review "
+                                    f"it once read, or pull {name} --history"))
     # an id two hypotheses disagree on is ranked above everything: nothing decides it but a
     # person, and consolidation will refuse to run over it
     for k, hs in contested(doc).items():
@@ -2041,6 +2051,15 @@ def opening(paths, budget=25, chars=None, host=None):
     waiting = hypothesis_line(doc)
     if waiting:
         head.append(waiting)
+    # readings that moved while only a replaced judgment listened: nothing standing will
+    # ever flag them, so the opener says how many and names the first
+    lost = lost_ears(paths, ids, jud, raw)
+    if lost:
+        k, jid, day = lost[0]
+        head.append(f"{len(lost)} reading{'s' if len(lost) != 1 else ''} moved that only a replaced "
+                    f"judgment listened to: {k} ({jid} until {day})"
+                    + (f" and {len(lost) - 1} more" if len(lost) > 1 else "")
+                    + f" - pull {jid} --history")
     # a record moved by half: what sits beside the entry file under the other layout is
     # read by nothing, and this is where a session would otherwise never learn it
     left = leftover_head(paths)
@@ -3256,6 +3275,96 @@ def returns_to(paths, nid, body):
         if isinstance(v, dict) and _verdict_of(v) is not None and _same(_verdict_of(v), want):
             return n, versions[n - 1]
     return None
+
+
+REPLACED_DAY = re.compile(r" on (\d{4}-\d{2}-\d{2})$")
+
+
+def reversal_pending(body):
+    """The day a judgment's verdict was last replaced under its id, when nobody has reviewed
+    it since -> "YYYY-MM-DD", else None. The trail line carries the day; `reviewed:` is
+    what clears it, and review writes that field on a judgment that carries a trail."""
+    if not isinstance(body, dict):
+        return None
+    lines = body.get("replaced") or []
+    lines = [lines] if isinstance(lines, str) else list(lines)
+    if not lines:
+        return None
+    m = REPLACED_DAY.search(str(lines[-1]))
+    if not m:
+        return None
+    day = m.group(1)
+    seen = _as_day(body.get("reviewed"))
+    return None if seen and seen.isoformat() >= day else day
+
+
+def listened_until(paths, dep):
+    """The replaced judgments that rested on `dep` where nothing standing does now ->
+    [(judgment id, day it stopped listening, what it saw)], latest version per judgment."""
+    out = []
+    for jid, versions in sorted(read_replaced(paths).items()):
+        last = None
+        for n in range(1, len(versions) + 1):
+            v = version_at(versions, n)
+            deps = v.get("rests_on") if isinstance(v, dict) else None
+            if isinstance(deps, list) and dep in deps:
+                seen = v.get("seen") if isinstance(v.get("seen"), dict) else {}
+                last = (jid, versions[n - 1].get("day"), seen.get(dep))
+        if last:
+            out.append(last)
+    return out
+
+
+def lost_ears(paths, ids, jud, raw):
+    """Readings that moved while only a replaced judgment listened to them -> [(id, judgment,
+    day)]: no standing judgment rests on the reading, a kept version did, and the value now
+    differs from what that version saw. Said once in the opener, in one line."""
+    kept = read_replaced(paths)
+    if not kept:
+        return []
+    listened = {d for j in jud.values() for d in j["deps"]}
+    out = []
+    for k in sorted(ids):
+        if k in jud or k in listened or is_builtin(k):
+            continue
+        now = value_of(raw, ids, k)
+        for jid, day, saw in listened_until(paths, k):
+            if saw is not None and now is not None and not _same(saw, now):
+                out.append((k, jid, day))
+                break
+    return out
+
+
+def history_lines(paths, names):
+    """The kept versions of the judgments named, oldest first, for `pull --history`."""
+    kept = read_replaced(paths)
+    where = os.path.relpath(replaced_path(paths), os.path.dirname(_first_of(paths)))
+    out = []
+    for nid in names:
+        versions = kept.get(nid) or []
+        if not versions:
+            continue
+        out.append(f"history of {nid}: {len(versions)} version{'s' if len(versions) != 1 else ''} "
+                   f"kept in {where}")
+        for n, v in enumerate(versions, 1):
+            head = f"  {n}. until {v.get('day')} - {v.get('ended')}"
+            if "same_as" in v:
+                out.append(head + f" (the same decision as version {v['same_as']})")
+                continue
+            out.append(head)
+            for f in ("verdict", "because"):
+                if v.get(f):
+                    out.append(f"     {f}: {short(str(v[f]), 100)}")
+            deps = v.get("rests_on")
+            if isinstance(deps, list):
+                out.append("     rests_on: [" + ", ".join(str(d) for d in deps) + "]")
+            if v.get("wrong_if"):
+                out.append(f"     wrong_if: {predicate_text(v['wrong_if'])}")
+            if v.get("request"):
+                out.append(f"     request: {v['request']}")
+            for d, why in (v.get("dropped") or {}).items():
+                out.append(f"     no longer rested on {d}: {why}")
+    return out
 
 
 def dropped_deps(old, new, fields):
@@ -4580,6 +4689,10 @@ def _apply(paths, action, diagnostics=None):
             e = _seen_lines(lines, s, e, snapshot_field, seen)
         if _field_span(lines, s, e, "reviewed"):
             _stamp_field(lines, s, e, "reviewed", stamp, None)
+        elif "replaced" in j["body"]:
+            # a judgment that carries a trail keeps the day it was last read, so the
+            # reversal the trail records stops asking once someone has reviewed it
+            _stamp_field(lines, s, e, "reviewed", stamp, "replaced")
         out.append(f"review {nid}: " + (f"seen rewritten from what the record holds ({stamp})"
                                         if changed else f"what it saw is what the record holds ({stamp})"))
         for d in j["deps"]:
@@ -4704,6 +4817,8 @@ def _report(paths, kind, nid, doc, ids, jud, fields, raw):
             print("  " + _state_line(name, jud[name], raw, ids, fields, touched=moved))
     elif kind == "set":
         print("nothing rests on it")
+        for jid, day, _ in listened_until(paths, nid):
+            print(f"  listened to by nothing standing - {jid} listened until {day}: pull {jid} --history")
     texts = _texts_that_saw(paths, [nid] + derived)
     if texts:
         print("text that saw it:")
@@ -5242,14 +5357,22 @@ if __name__ == "__main__":
         files = [x for x in rest if x.endswith((".yaml", ".yml"))] or default_paths()
         sys.exit(affects(files, [x for x in rest if not x.endswith((".yaml", ".yml"))]))
     if cmd == "pull":
-        b, seeds, files = 40, [], []
+        b, seeds, files, history = 40, [], [], False
         i = 0
         while i < len(rest):
             if rest[i] == "--budget":
                 b = int(rest[i + 1]); i += 2; continue
+            if rest[i] == "--history":
+                history = True; i += 1; continue
             (files if rest[i].endswith((".yaml", ".yml")) else seeds).append(rest[i])
             i += 1
-        sys.exit(pull(files or default_paths(), seeds, b))
+        code = pull(files or default_paths(), seeds, b)
+        if history:
+            lines = history_lines(files or default_paths(), seeds)
+            print()
+            for l in lines or ["no replaced version is kept for " + ", ".join(seeds)]:
+                print(l)
+        sys.exit(code)
     files = [x for x in rest if x.lower().endswith((".yaml", ".yml"))] or default_paths()
     if cmd == "open":
         b = int(rest[rest.index("--budget") + 1]) if "--budget" in rest else 25

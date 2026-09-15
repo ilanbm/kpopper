@@ -175,3 +175,64 @@ class TheLayout(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class WhatTheTrailAsks(unittest.TestCase):
+    """A reversal is a question for a person until reviewed; a reading only a replaced
+    judgment listened to is said when it moves; the kept versions read on demand."""
+
+    def test_a_reversal_is_listed_until_reviewed_and_review_clears_it(self):
+        with tempfile.TemporaryDirectory() as d:
+            rec = copy_fixture(pathlib.Path(d))
+            run(SCRIPTS / "provenance.py", "set", "heat.loss_kw", "20", "--as-of", "2026-09-04", rec)
+            code, out, err = run(SCRIPTS / "provenance.py", "add", "c.boiler_short", *OPPOSITE,
+                                 "--as-of", "2026-09-04", *DROP, rec)
+            self.assertEqual(code, 0, out + err)
+            self.assertIn("the record needs a person on 1 judgment", out)
+            code, out, err = run(SCRIPTS / "provenance.py", "open", rec)
+            self.assertEqual(code, 0, out + err)
+            self.assertIn("\n  c.boiler_short: reversed on 2026-09-04 - the verdict under this id changed; "
+                          "review it once read, or pull c.boiler_short --history\n", out)
+            code, out, err = run(SCRIPTS / "provenance.py", "check", rec)
+            self.assertEqual(code, 0, out + err)
+            self.assertIn("NOTE c.boiler_short: reversed on 2026-09-04 - the verdict under this id changed; "
+                          "review it once read, or pull c.boiler_short --history\n", out)
+            code, out, err = run(SCRIPTS / "provenance.py", "review", "c.boiler_short", "--as-of",
+                                 "2026-09-05", rec)
+            self.assertEqual(code, 0, out + err)
+            self.assertIn('    reviewed: "2026-09-05"\n', rec.read_text(encoding="utf-8"))
+            code, out, err = run(SCRIPTS / "provenance.py", "open", rec)
+            self.assertNotIn("reversed on", out)
+            self.assertNotIn("reversed on", run(SCRIPTS / "provenance.py", "check", rec)[1])
+
+    def test_a_reading_only_a_replaced_judgment_listened_to_is_said_when_it_moves(self):
+        with tempfile.TemporaryDirectory() as d:
+            rec = copy_fixture(pathlib.Path(d))
+            run(SCRIPTS / "provenance.py", "set", "heat.loss_kw", "20", "--as-of", "2026-09-04", rec)
+            code, out, err = run(SCRIPTS / "provenance.py", "add", "c.boiler_short", "rests_on=[heat.loss_kw]",
+                                 "verdict=the old boiler holds on the coldest night", "wrong_if=heat.loss_kw > 24",
+                                 "--as-of", "2026-09-04", *DROP, "--drop", "heat.boiler_kw: the boiler is a "
+                                 "constant now", rec)
+            self.assertEqual(code, 0, out + err)
+            run(SCRIPTS / "provenance.py", "review", "c.boiler_short", "--as-of", "2026-09-04", rec)
+            code, out, err = run(SCRIPTS / "provenance.py", "set", "heat.boiler_kw", "30", "--as-of",
+                                 "2026-09-05", rec)
+            self.assertEqual(code, 0, out + err)
+            self.assertIn("nothing rests on it\n"
+                          "  listened to by nothing standing - c.boiler_short listened until 2026-09-04: "
+                          "pull c.boiler_short --history\n", out)
+            code, out, err = run(SCRIPTS / "provenance.py", "open", rec)
+            self.assertEqual(code, 0, out + err)
+            self.assertIn("1 reading moved that only a replaced judgment listened to: heat.boiler_kw "
+                          "(c.boiler_short until 2026-09-04) - pull c.boiler_short --history\n", out)
+            code, out, err = run(SCRIPTS / "provenance.py", "pull", "c.boiler_short", "--history", rec)
+            self.assertEqual(code, 0, out + err)
+            self.assertIn("history of c.boiler_short: 1 version kept in PROVENANCE.replaced.yaml\n"
+                          "  1. until 2026-09-04 - its wrong_if holds (heat.loss_kw <= heat.boiler_kw)\n"
+                          "     verdict: the old boiler cannot hold 12°C on the coldest February night\n", out)
+            self.assertIn("     rests_on: [heat.boiler_kw, heat.loss_kw, heat.deficit_kw]\n"
+                          "     wrong_if: heat.loss_kw <= heat.boiler_kw\n"
+                          "     no longer rested on heat.deficit_kw: worked out from the two it rests on\n"
+                          "     no longer rested on heat.boiler_kw: the boiler is a constant now\n", out)
+            code, out, err = run(SCRIPTS / "provenance.py", "pull", "heat.loss_kw", "--history", rec)
+            self.assertIn("no replaced version is kept for heat.loss_kw", out)
