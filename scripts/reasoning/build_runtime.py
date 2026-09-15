@@ -6,7 +6,7 @@ import gzip
 import io
 import json
 import os
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 import platform
 import re
 import shutil
@@ -316,10 +316,9 @@ def audit_linkage(executable, library, target, lean_root):
     return result
 
 
-def source_bundle(gmp_archive, output):
-    """Ship exact corresponding GMP source with all maintained platform recipes."""
-    gmp_archive, output = Path(gmp_archive), Path(output)
-    if sha256(gmp_archive) != GMP_SHA256:
+def _source_bundle_files(gmp_bytes):
+    """The complete corresponding-source contents for this maintained recipe."""
+    if hashlib.sha256(gmp_bytes).hexdigest() != GMP_SHA256:
         raise ValueError("GMP source hash mismatch")
     here = Path(__file__).resolve().parent
     readme = """# GMP 6.3.0 corresponding source and build instructions
@@ -360,7 +359,7 @@ replacement-constructor.txt to version.c before building. This separately
 identified test change prints KPOPPER_GMP_REPLACEMENT_PROBE to stderr.
 It is never applied to production GMP archives.
 """
-    files = {"gmp-6.3.0.tar.xz": gmp_archive.read_bytes(),
+    files = {"gmp-6.3.0.tar.xz": gmp_bytes,
              "build_runtime.py": Path(__file__).read_bytes(),
              "SOURCE-BUILD.md": readme.encode(),
              "replacement-constructor.txt": GMP_REPLACEMENT_PATCH.encode(),
@@ -371,6 +370,13 @@ It is never applied to production GMP archives.
     files["reasoning-runtime.yml"] = workflow.read_bytes()
     for name in ("COPYING.LESSERv3", "COPYINGv3", "THIRD_PARTY_NOTICES.txt"):
         files[name] = (here / "third_party" / name).read_bytes()
+    return files
+
+
+def source_bundle(gmp_archive, output):
+    """Ship exact corresponding GMP source with all maintained platform recipes."""
+    output = Path(output)
+    files = _source_bundle_files(Path(gmp_archive).read_bytes())
     output.parent.mkdir(parents=True, exist_ok=True)
     with output.open("wb") as raw, gzip.GzipFile(filename="", mode="wb", fileobj=raw, mtime=0) as zipped:
         with tarfile.open(fileobj=zipped, mode="w") as tf:
@@ -381,18 +387,147 @@ It is never applied to production GMP archives.
     return sha256(output)
 
 
+def _safe_member(name):
+    if not isinstance(name, str) or not name or "\\" in name or ":" in name:
+        raise ValueError("unsafe archive path")
+    path = PurePosixPath(name)
+    if path.is_absolute() or str(path) != name or any(x in (".", "..") for x in path.parts):
+        raise ValueError("unsafe archive path: " + name)
+    return name
+
+
+def _json_object(data):
+    def unique(pairs):
+        result = {}
+        for key, value in pairs:
+            if key in result:
+                raise ValueError("duplicate JSON key: " + key)
+            result[key] = value
+        return result
+    return json.loads(data, object_pairs_hook=unique)
+
+
+def check_bundles(native_dir=None, source_root=None):
+    """Read-only completeness/integrity gate for the files that will be shipped.
+
+    Does not build, download, extract or execute any runtime or source archive.
+    Execution evidence belongs to the separately named candidate/install jobs.
+    """
+    here = Path(__file__).resolve().parent
+    native = Path(native_dir) if native_dir is not None else here / "native"
+    source = Path(source_root) if source_root is not None else here / "lean"
+    if not list(source.glob("*.lean")):
+        raise ValueError("runtime source identity is unavailable")
+    expected_source = source_hash(source)
+    expected_names = {target + ".zip" for target in TARGETS}
+    actual_names = {path.name for path in native.glob("*.zip")}
+    if actual_names != expected_names:
+        raise ValueError("runtime archive inventory mismatch: missing=" + repr(sorted(expected_names - actual_names))
+                         + "; unexpected=" + repr(sorted(actual_names - expected_names)))
+    receipts = {}
+    notice_files = {"licenses/" + p.name: p.read_bytes()
+                    for p in (here / "third_party").iterdir() if p.is_file()}
+    notice_files["THIRD_PARTY_NOTICES.txt"] = (here / "third_party/THIRD_PARTY_NOTICES.txt").read_bytes()
+    for target in sorted(TARGETS):
+        archive = native / (target + ".zip")
+        if archive.is_symlink() or not archive.is_file():
+            raise ValueError("runtime archive must be a regular file: " + archive.name)
+        try:
+            with zipfile.ZipFile(archive) as zf:
+                entries = zf.infolist()
+                names = [entry.filename for entry in entries]
+                if len(entries) > 256 or len(names) != len(set(names)) or "manifest.json" not in names:
+                    raise ValueError("malformed runtime archive inventory: " + target)
+                if sum(entry.file_size for entry in entries) > 512 * 1024 * 1024:
+                    raise ValueError("runtime archive payload limit")
+                for entry in entries:
+                    _safe_member(entry.filename)
+                    mode = entry.external_attr >> 16
+                    if entry.is_dir() or stat.S_ISLNK(mode) or (stat.S_IFMT(mode) not in (0, stat.S_IFREG)) \
+                            or entry.file_size > 128 * 1024 * 1024:
+                        raise ValueError("unsupported runtime archive member")
+                if zf.getinfo("manifest.json").file_size > 1024 * 1024:
+                    raise ValueError("runtime manifest size limit")
+                manifest = _json_object(zf.read("manifest.json"))
+                required = {"version", "protocol", "target", "min_os", "lean_version", "source_sha256",
+                            "files", "executable", "libraries", "modules"}
+                if not isinstance(manifest, dict) or set(manifest) != required \
+                        or type(manifest["version"]) is not int or manifest["version"] != 1 \
+                        or manifest["protocol"] != "KP1" or manifest["target"] != target \
+                        or manifest["lean_version"] != LEAN_VERSION or manifest["modules"] != ["arithmetic/v1"] \
+                        or not isinstance(manifest["min_os"], str) or not manifest["min_os"].strip() \
+                        or not isinstance(manifest["files"], dict):
+                    raise ValueError("malformed runtime manifest: " + target)
+                if manifest["source_sha256"] != expected_source:
+                    raise ValueError("stale runtime source identity: " + target)
+                files = manifest["files"]
+                exe, libs = manifest["executable"], manifest["libraries"]
+                if not isinstance(exe, str) or exe not in files or not isinstance(libs, list) \
+                        or not libs or any(not isinstance(x, str) or x not in files or x == exe for x in libs) \
+                        or len(libs) != len(set(libs)) or set(names) != set(files) | {"manifest.json"}:
+                    raise ValueError("malformed runtime executable/library inventory")
+                if zf.getinfo(exe).external_attr >> 16 & 0o111 != 0o111:
+                    raise ValueError("runtime executable mode is missing")
+                for name, digest in files.items():
+                    _safe_member(name)
+                    if not isinstance(digest, str) or not re.fullmatch(r"[0-9a-f]{64}", digest):
+                        raise ValueError("malformed runtime payload digest")
+                    data = zf.read(name)
+                    if hashlib.sha256(data).hexdigest() != digest:
+                        raise ValueError("runtime payload hash mismatch: " + target + "/" + name)
+                    if name in notice_files and data != notice_files[name]:
+                        raise ValueError("runtime notices mismatch: " + name)
+                if not set(notice_files) <= set(files):
+                    raise ValueError("runtime notices are incomplete")
+            digest = sha256(archive)
+            sidecar = archive.with_suffix(".zip.sha256")
+            if sidecar.exists() and sidecar.read_text(encoding="ascii").strip() != digest + "  " + archive.name:
+                raise ValueError("runtime archive sidecar hash mismatch")
+            receipts[target] = digest
+        except (OSError, zipfile.BadZipFile, KeyError, TypeError, UnicodeError, json.JSONDecodeError) as error:
+            raise ValueError("invalid runtime archive " + target + ": " + str(error)) from error
+    source_archive = native / "gmp-source-and-build.tar.gz"
+    if source_archive.is_symlink() or not source_archive.is_file():
+        raise ValueError("missing regular GMP corresponding-source archive")
+    try:
+        contents = {}
+        total = 0
+        with tarfile.open(source_archive, "r:gz") as tf:
+            for entry in tf:
+                _safe_member(entry.name)
+                total += entry.size
+                if not entry.isfile() or entry.name in contents or len(contents) >= 32 \
+                        or entry.size > 16 * 1024 * 1024 or total > 32 * 1024 * 1024:
+                    raise ValueError("malformed GMP corresponding-source inventory")
+                contents[entry.name] = tf.extractfile(entry).read()
+        expected = _source_bundle_files(contents.get("gmp-6.3.0.tar.xz", b""))
+        if contents != expected:
+            raise ValueError("GMP corresponding-source recipe or inventory mismatch")
+    except (OSError, tarfile.TarError, UnicodeError) as error:
+        raise ValueError("invalid GMP corresponding-source archive: " + str(error)) from error
+    return {"runtime_source_sha256": expected_source, "archives": receipts,
+            "corresponding_source_sha256": sha256(source_archive)}
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--source-root", type=Path, default=Path(__file__).parent / "lean")
     parser.add_argument("--lean-root", type=Path)
     parser.add_argument("--target", choices=sorted(TARGETS), default=host_target())
     parser.add_argument("--output", type=Path)
-    parser.add_argument("--work-dir", type=Path, required=True)
+    parser.add_argument("--work-dir", type=Path)
+    parser.add_argument("--check-bundles", action="store_true")
+    parser.add_argument("--bundle-dir", type=Path)
     parser.add_argument("--gmp-source", type=Path)
     parser.add_argument("--gmp-prefix", type=Path)
     parser.add_argument("--source-bundle", type=Path)
     parser.add_argument("--replacement-library", type=Path)
     args = parser.parse_args()
+    if args.check_bundles:
+        print(json.dumps(check_bundles(args.bundle_dir, args.source_root), sort_keys=True, indent=2))
+        return
+    if args.work_dir is None:
+        parser.error("--work-dir is required for a maintainer build")
     args.work_dir.mkdir(parents=True, exist_ok=True)
     lean = args.lean_root or prepare_toolchain(args.target, args.work_dir / "toolchain")
     if args.gmp_prefix:

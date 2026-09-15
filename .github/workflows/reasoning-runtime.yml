@@ -55,6 +55,8 @@ jobs:
           --replacement-library '${{ runner.temp }}/replacement/${{ matrix.target }}.library'
       - name: Check archive boundaries
         run: python -m unittest tests.test_reasoning_distribution -v
+      - name: Execute the freshly built archive against the source scalar corpus
+        run: python tests/test_reasoning_distribution.py --archive scripts/reasoning/native/${{ matrix.target }}.zip
       - name: Upload immutable target candidate
         uses: actions/upload-artifact@v4
         with:
@@ -94,11 +96,10 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python }}
-      - uses: actions/download-artifact@v4
-        with:
-          pattern: reasoning-*
-          merge-multiple: true
-          path: scripts/reasoning/native
+      # Test the committed package data. Fresh candidate artifacts must first be
+      # reviewed and copied into source; downloads cannot substitute their bytes.
+      - name: Check completeness and integrity of committed runtime bundles
+        run: python scripts/reasoning/build_runtime.py --check-bundles
       - uses: actions/download-artifact@v4
         with:
           pattern: gmp-replacement-*
