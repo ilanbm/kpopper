@@ -270,12 +270,19 @@ class TheDryRunTests(unittest.TestCase):
             code, out, err = kp("consolidate", "c_boiler_short", "--as-of", "2026-09-04", rec)
             self.assertEqual(code, 0, out + err)
             self.assertIn("    its wrong_if holds (heat.loss_kw <= heat.boiler_kw)\n", out)
-            self.assertIn("replace c.boiler_short with what c_boiler_short holds, where it stands\n"
-                          "folded c_boiler_short: 0 entries and 1 judgment - 0 added, 1 replaced\n", out)
+            self.assertIn("replace c.boiler_short with what c_boiler_short holds, where it stands - what it "
+                          "replaced kept\n"
+                          "  kept: the replaced verdict, because, in PROVENANCE.replaced.yaml\n"
+                          "  no longer rests on heat.deficit_kw\n"
+                          "folded c_boiler_short: 0 entries and 1 judgment - 0 added, 1 replaced\n"
+                          "files to commit: PROVENANCE.yaml, PROVENANCE.replaced.yaml, "
+                          "PROVENANCE.d/c_boiler_short.yaml (deleted)\n", out)
             text = rec.read_text(encoding="utf-8")
             self.assertEqual(text.count("c.boiler_short:"), 1)
             judgment = P.bodies(P.load([str(rec)]))['c.boiler_short']
             self.assertEqual(judgment['rests_on'], ['heat.boiler_kw', 'heat.loss_kw'])
+            self.assertEqual(judgment['replaced'],
+                             ['its wrong_if holds (heat.loss_kw <= heat.boiler_kw) on 2026-09-04'])
             self.assertEqual(judgment['verdict'], 'the old boiler holds after all')
             self.assertEqual(P.predicate_text(judgment['wrong_if']), 'heat.loss_kw > 40')
             self.assertEqual(judgment['seen'], {'heat.boiler_kw': 24, 'heat.loss_kw': 31})

@@ -255,10 +255,11 @@ def hypotheses_rel(entry):
 def layout(first):
     """Where a record keeps what sits beside it, decided by the name of the file the reader
     opens first. GROUNDING.yaml keeps everything under .kpopper/ beside it - hypotheses/,
-    view.yaml, measure.yaml, session.json, and build/ for what is rebuilt. Records under the
-    earlier default name or a custom name keep PROVENANCE.d/, <record>.view.yaml,
-    PROVENANCE.measure.yaml and PROVENANCE.session.json beside them, as they always did. One
-    home per record: the reader never looks in both."""
+    view.yaml, measure.yaml, session.json, replaced.yaml, and build/ for what is rebuilt.
+    Records under the earlier default name or a custom name keep PROVENANCE.d/,
+    <record>.view.yaml, PROVENANCE.measure.yaml, PROVENANCE.session.json and
+    PROVENANCE.replaced.yaml beside them, as they always did. One home per record: the reader
+    never looks in both."""
     first = os.path.abspath(str(first))
     d = os.path.dirname(first)
     if is_legacy(first):
@@ -268,6 +269,7 @@ def layout(first):
                 "measure": os.path.join(d, "PROVENANCE.measure.yaml"),
                 "measure_name": "PROVENANCE.measure.yaml",
                 "session": os.path.join(d, "PROVENANCE.session.json"),
+                "replaced": os.path.join(d, "PROVENANCE.replaced.yaml"),
                 "build": None, "page": "record.html"}
     home = os.path.join(d, HOME)
     return {"legacy": False, "entry": first, "home": home,
@@ -276,6 +278,7 @@ def layout(first):
             "view": os.path.join(home, "view.yaml"),
             "measure": os.path.join(home, "measure.yaml"), "measure_name": HOME + "/measure.yaml",
             "session": os.path.join(home, "session.json"),
+            "replaced": os.path.join(home, "replaced.yaml"),
             "build": os.path.join(home, "build"), "page": os.path.join(home, "build", "page.html")}
 
 
@@ -294,7 +297,7 @@ def leftovers(paths):
     d = os.path.dirname(lay["entry"])
     other = layout(os.path.join(d, ENTRY if lay["legacy"] else LEGACY_ENTRY))
     out = []
-    for role in ("hypotheses", "view", "measure", "session"):
+    for role in ("hypotheses", "view", "measure", "session", "replaced"):
         there = other[role]
         if not os.path.exists(there):
             continue
@@ -3155,6 +3158,131 @@ def arrangement_renewal(old, ended, stamp, stood=None):
                                  + f"; {ended} on {stamp}"]}
 
 
+def judgment_renewal(old, ended, stamp, carried=None):
+    """What a write leaves on a judgment it replaces in place -> the one field: one line
+    appended to `replaced:` naming what ended the decision it replaces and the day, so the
+    sequence of decisions reads from the record alone; the body it replaced is kept whole
+    beside the record (`keep_replaced`). `carried` is the replacing body's own `replaced:`
+    lines - a branch's history - merged in ahead of the new line, so a fold loses neither
+    side's trail. Written by `add` when the door admits the replacement, and by the fold."""
+    prior = old.get("replaced") or []
+    prior = [prior] if isinstance(prior, str) else list(prior)
+    carried = [carried] if isinstance(carried, str) else list(carried or [])
+    prior += [l for l in carried if l not in prior]
+    return {"replaced": prior + [f"{ended} on {stamp}"]}
+
+
+TRAIL_FIELDS = ("replaced",)          # written by this tool on the judgment that replaced
+
+
+def replaced_path(paths):
+    """Where the record keeps the judgments its writes replaced: `.kpopper/replaced.yaml`
+    beside a record under the new name, `PROVENANCE.replaced.yaml` beside one under the old."""
+    return layout_of(paths)["replaced"]
+
+
+def read_replaced(paths):
+    """The kept versions of every replaced judgment -> {id: [version, ...]}, oldest first;
+    {} when nothing was ever replaced. A version is the body a replacement removed, whole,
+    with `ended` (what admitted the replacement) and `day`; one equal to an earlier version
+    is kept as {same_as: <version number, from 1>, ended, day} - a return, not a copy."""
+    p = replaced_path(paths)
+    if not os.path.isfile(p):
+        return {}
+    try:
+        data = parse(p) or {}          # the reader's one parser: kept against the file's identity
+    except yaml.YAMLError:
+        return {}
+    return {k: v for k, v in data.items() if isinstance(v, list)} if isinstance(data, dict) else {}
+
+
+def _version_core(v):
+    """What tells two kept versions apart: the decision itself, not what it saw or when."""
+    return {k: x for k, x in v.items()
+            if k not in ("seen", "reviewed", "born", "replaced", "ended", "day", "same_as", "dropped")}
+
+
+def version_at(versions, n):
+    """Kept version n, counted from 1, with a pointer followed -> the body it stands for."""
+    v = versions[n - 1]
+    while isinstance(v, dict) and "same_as" in v:
+        v = versions[int(v["same_as"]) - 1]
+    return v
+
+
+def keep_replaced(paths, nid, old, ended, stamp, dropped=None):
+    """One version kept beside the record: the body a replacement removed - its verdict, its
+    why, whose asking it answered, what it rested on, its condition, what it saw - with what
+    ended it and the day; the dependencies the replacement dropped, each with its reason
+    when one was given. A body equal to a version already kept is kept as a pointer to it.
+    Written at the moment of replacement and read only when asked, so the file grows with
+    reversals and never with the record. -> the version's index."""
+    kept = read_replaced(paths)
+    versions = kept.setdefault(nid, [])
+    body = {k: copy.deepcopy(v) for k, v in old.items() if k not in TRAIL_FIELDS}
+    if isinstance(body.get("wrong_if"), dict):
+        body["wrong_if"] = predicate_text(body["wrong_if"])
+    core = _version_core(body)
+    version = None
+    for n in range(1, len(versions) + 1):
+        if _version_core(version_at(versions, n)) == core:
+            version = {"same_as": n}
+            break
+    if version is None:
+        version = body
+    version["ended"] = ended
+    version["day"] = stamp
+    if dropped:
+        version["dropped"] = dict(dropped)
+    versions.append(version)
+    p = replaced_path(paths)
+    os.makedirs(os.path.dirname(p), exist_ok=True)
+    text = yaml.safe_dump(kept, allow_unicode=True, sort_keys=False, width=100)
+    _write_text(p, "# Judgments this record's writes replaced, kept whole - read with "
+                   "`kpopper pull <id> --history`.\n" + text)
+    return len(versions)
+
+
+def returns_to(paths, nid, body):
+    """A kept version the body being written returns to - same verdict - -> (number from 1,
+    version) or None. A decision that stood before and fell is not a fresh decision, and the
+    write that brings it back is told so."""
+    versions = read_replaced(paths).get(nid) or []
+    want = _verdict_of(body)
+    if want is None:
+        return None
+    for n in range(1, len(versions) + 1):
+        v = version_at(versions, n)
+        if isinstance(v, dict) and _verdict_of(v) is not None and _same(_verdict_of(v), want):
+            return n, versions[n - 1]
+    return None
+
+
+def dropped_deps(old, new, fields):
+    """The dependencies the replacing body no longer rests on -> [id]."""
+    was = old.get(fields["deps"]) if fields["deps"] else None
+    now = new.get(fields["deps"]) if fields["deps"] else None
+    was = [d for d in was if isinstance(d, str)] if isinstance(was, list) else []
+    now = [d for d in now if isinstance(d, str)] if isinstance(now, list) else []
+    return [d for d in was if d not in now]
+
+
+def trail_lines(paths, nid, old, new, fields, drops=None, index=None):
+    """What the reply says about a replacement: what was kept, what the new decision no
+    longer rests on and why, and whether it returns to a decision that stood before."""
+    out = []
+    gone = [f for f in ("verdict", "because", "request") if f in old]
+    where = os.path.relpath(replaced_path(paths), os.path.dirname(_first_of(paths)))
+    out.append(f"  kept: the replaced {', '.join(gone) if gone else 'body'}, in {where}"
+               + (f" (version {index})" if index is not None else ""))
+    dropped = dropped_deps(old, new, fields)
+    if dropped:
+        drops = drops or {}
+        out.append("  no longer rests on " + "; ".join(
+            f"{d}: {drops[d]}" if drops.get(d) else d for d in dropped))
+    return out
+
+
 def _read_on(body, raw):
     """The day an entry's value was read: its own `of` or `read`, else its source's read date -
     a day is the finest clock the record keeps. None when nothing dates it."""
@@ -3298,6 +3426,8 @@ def _command_of(a, name):
                      ("--source", "source"), ("--at", "at")):
         if a.get(key):
             parts += [opt, str(a[key])]
+    for d, why in (a.get("drops") or {}).items():
+        parts += ["--drop", f"{d}: {why}"]
     parts += ["--hypothesis", name]
     return " ".join(p if p.startswith("--") else shlex.quote(p) for p in parts)
 
@@ -3383,6 +3513,49 @@ def _forks_on_contradiction(a, doc, ids, jud, fields, raw):
             out.append(f"{how} {dep}, which only hypothes{'is' if len(held) == 1 else 'es'} "
                        f"{', '.join(held)} hold{'s' if len(held) == 1 else ''} - what rests on a "
                        f"hypothesis goes into it: {_command_of(a, held[0])}")
+    return out
+
+
+def _trail_is_tool_written(a, doc, ids, jud, fields, raw):
+    """`replaced:` is the trail this tool leaves on a judgment that replaced another - on
+    every judgment, not only an arrangement - and a session cannot write a history."""
+    if a["kind"] != "add" or not isinstance(a.get("body"), dict):
+        return []
+    if _arrangement_shaped(a["body"], fields, raw):
+        return []                                    # _arrangement_is_sound says it
+    if "replaced" in a["body"]:
+        return ["replaced is written by this tool, when a decision replaces another - leave it out"]
+    return []
+
+
+def _drops_are_named(a, doc, ids, jud, fields, raw):
+    """A replacement that rests on less than the judgment it replaces stops listening to
+    something - a decision, not a side effect - so each dependency dropped is named with
+    its reason (--drop "<id>: <why>"), and the reason is kept with the replaced version."""
+    if a["kind"] != "add" or not isinstance(a.get("body"), dict) or a.get("hypothesis"):
+        return []
+    k = a["id"]
+    if k not in jud or not _judgment_shaped(a["body"], fields):
+        return []
+    if _arrangement_shaped(a["body"], fields, raw) or is_arrangement(jud[k], raw):
+        return []          # an arrangement re-decided changes the count its sign is over
+    d = _disagreement(a, raw.get(k), raw, ids, jud, fields, getattr(doc, "page", None))
+    if not d or not (d[0] == "verdict" and d[3]):
+        return []                                    # refused anyway, or nothing replaces
+    drops = a.get("drops") or {}
+    old = jud[k]["body"]
+    gone = dropped_deps(old, a["body"], fields)
+    out = []
+    unnamed = [x for x in gone if x not in drops]
+    if unnamed:
+        cmd = " ".join(["add", k] + [p for p in _command_of(a, "_").split(" --hypothesis ")[0].split(" ")[2:]]
+                       + [f"--drop {shlex.quote(x + ': <why>')}" for x in unnamed])
+        out.append(f"the new judgment no longer rests on {', '.join(unnamed)} - a dependency "
+                   f"dropped is a decision with a reason: {cmd}")
+    stray = [x for x in drops if x not in gone]
+    if stray:
+        out.append(f"--drop names {', '.join(stray)}, which the new judgment "
+                   f"{'still rests on' if any(x in (a['body'].get(fields['deps']) or []) for x in stray) else 'never rested on here'}")
     return out
 
 
@@ -3517,8 +3690,9 @@ def normalize_authored(action, ids, fields, raw):
 # them; the entries nearest a new one are said just before it.
 VALIDATORS = [_known_key, _sound_dependencies, _sound_references, _sound_citation, _reopener_is_prose,
               _structured_is_sound,
-              _arrangement_is_sound, _request_names_the_asking, _not_born_broken,
-              _measure_is_a_name, _nearest_existing, _forks_on_contradiction]
+              _arrangement_is_sound, _trail_is_tool_written, _request_names_the_asking,
+              _not_born_broken, _measure_is_a_name, _nearest_existing, _forks_on_contradiction,
+              _drops_are_named]
 
 
 def validate(action, doc, ids, jud, fields, raw):
@@ -4353,12 +4527,27 @@ def _apply(paths, action, diagnostics=None):
         if action.get("source") is not None:
             out.append(f"source: {action['source']}, at {action['at']}")
     elif kind == "add" and supersede:
-        _, why = may_supersede(nid, jud[nid]["body"], body, raw, ids, jud, fields, action.get("as_of"),
-                               facts)
-        was = str(_verdict_of(jud[nid]["body"]) or nid)
+        old = jud[nid]["body"]
+        _, why = may_supersede(nid, old, body, raw, ids, jud, fields, action.get("as_of"), facts)
+        was = str(_verdict_of(old) or nid)
+        if not arranged:
+            # the trail an arrangement already carries, on every judgment: one line on the
+            # judgment, the body it replaced kept whole beside the record
+            extra = judgment_renewal(old, why, stamp, body.get("replaced"))
+            body = {k: v for k, v in body.items() if k not in extra and k != snapshot_field}
+            body.update(extra)
+            body[snapshot_field] = seen
+            action["body"] = body
+        back = returns_to(paths, nid, body)
+        index = keep_replaced(paths, nid, old, why, stamp, action.get("drops"))
         _replace_in(lines, nid, body)
         out.append("supersede {}: {} -> {} - {}".format(
             nid, *apart(was, _verdict_of(body), 60), why))
+        out += trail_lines(paths, nid, old, body, fields, action.get("drops"), index)
+        if back:
+            n, v = back
+            out.append(f"  returns to version {n}, which stood until {v.get('day')} and fell because "
+                       f"{v.get('ended')}")
     elif kind == "add":
         # a collection the file lacks - the first judgment, a newborn record's first
         # section - is opened at the end, and the entry is its first member
@@ -4792,8 +4981,18 @@ takes - is born when it is written: `born` is stamped like `seen`, and its sign 
 comparison that can hold. Written again under its own id it is re-decided: admitted when its
 sign holds with its tabs intact; refused twice in a day, once the brief no longer carries
 what it decided, or while the sign has not fired - and a refusal names the hypothesis a
-person folds; `replaced:` keeps each decision it replaced, one line. `request:
-s.<date>_<slug>` names whose asking any judgment was taken from, and admits nothing.""",
+person folds. `request: s.<date>_<slug>` names whose asking any judgment was taken from,
+and admits nothing.
+
+A judgment written under a standing judgment's id, once the standing one is broken by its
+own condition, replaces it in place - and the replacement leaves a trail: one line appended
+to `replaced:` on the judgment, saying what ended the decision it replaced and the day, and
+the replaced body kept whole in `.kpopper/replaced.yaml` beside the record (its verdict,
+because, request, rests_on, wrong_if, seen). The reply says what was kept and what the new
+judgment no longer rests on. A replacement that drops a dependency is refused until each
+dropped id is named with its reason: `--drop "<id>: <why>"`, kept with the version. One
+whose verdict a kept version already held is told that it returns to it. `replaced:` is
+written by this tool on every judgment; a write that carries one is refused.""",
     "review": """  review <id> [--as-of YYYY-MM-DD] [--hypothesis NAME] [file]
   review "<section title>"
 
@@ -4811,7 +5010,7 @@ def write_command(cmd, rest):
     if "--help" in rest or "-h" in rest:
         print(HELP[cmd].strip("\n"))
         return 0
-    opts, args = {}, []
+    opts, args, drops = {}, [], {}
     i = 0
     while i < len(rest):
         a = rest[i]
@@ -4819,6 +5018,16 @@ def write_command(cmd, rest):
             if i + 1 >= len(rest):
                 raise Refused(f"{a} needs a value")
             opts[a[2:].replace("-", "_")] = rest[i + 1]
+            i += 2
+            continue
+        if a == "--drop":
+            if i + 1 >= len(rest) or ":" not in rest[i + 1]:
+                raise Refused('--drop takes "<id>: <why>" - the dependency the new judgment no '
+                              'longer rests on, and the reason')
+            d, why = rest[i + 1].split(":", 1)
+            if not d.strip() or not why.strip():
+                raise Refused('--drop takes "<id>: <why>" - both halves')
+            drops[d.strip()] = why.strip()
             i += 2
             continue
         args.append(a)
@@ -4836,6 +5045,10 @@ def write_command(cmd, rest):
                       "becomes <name>.yaml in the hypotheses directory beside the record")
     action = {"kind": cmd, "id": nid, "as_of": as_of, "why": opts.get("why"), "into": opts.get("in"),
               "hypothesis": opts.get("hypothesis"), "source": opts.get("source"), "at": opts.get("at")}
+    if drops:
+        if cmd != "add":
+            raise Refused("--drop goes with add, on a judgment that replaces a standing one")
+        action["drops"] = drops
     if cmd == "set":
         if not args:
             raise Refused("set needs a value: set <key> <value>")

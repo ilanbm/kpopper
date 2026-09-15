@@ -418,21 +418,27 @@ def report(c, today=None):
 
 # ── the fold ─────────────────────────────────────────────────────────────────
 def _renewed(k, c, h, page, stamp, why):
-    """An arrangement the fold lays over a standing one, as a body -> the hypothesis's own
-    fields with what a build writes for a re-decision put back: `born` renewed to the day of
-    the fold, and one line appended to `replaced:` naming what ended the decision it
-    replaces. None for everything else, which the fold carries over as the text it is - only
-    a decision replacing a decision has a trail to keep, and the trail is the same one `add`
-    leaves when the door admits the re-decision in place."""
+    """A judgment the fold lays over a standing one, as a body -> the hypothesis's own fields
+    with the trail a replacement leaves put back: for an arrangement, `born` renewed to the
+    day of the fold and one line appended to `replaced:`; for every other judgment, the one
+    line. None for an entry, which the fold carries over as the text it is - only a decision
+    replacing a decision has a trail to keep, and the trail is the same one `add` leaves when
+    the door admits the replacement in place. The body replaced is kept beside the record by
+    the fold once the record reads back whole."""
     _, bids, bjud, bfields, braw = c.base
-    if k not in bjud or not P.is_arrangement(bjud[k], braw):
+    if k not in bjud:
         return None
     body = h["raw"].get(k)
-    if not isinstance(body, dict) or not P._arrangement_shaped(body, bfields, braw):
+    if not isinstance(body, dict):
         return None
     snap = bfields["snapshot"] or "seen"
-    extra = P.arrangement_renewal(bjud[k]["body"], why, stamp,
-                                  ((page or {}).get(k) or {}).get("stood"))
+    if P.is_arrangement(bjud[k], braw):
+        if not P._arrangement_shaped(body, bfields, braw):
+            return None
+        extra = P.arrangement_renewal(bjud[k]["body"], why, stamp,
+                                      ((page or {}).get(k) or {}).get("stood"))
+    else:
+        extra = P.judgment_renewal(bjud[k]["body"], why, stamp, body.get("replaced"))
     out = {f: v for f, v in body.items() if f not in extra and f != snap}
     out.update(extra)
     if snap in body:
@@ -585,7 +591,10 @@ def fold(paths, names=(), refs=(), stamp=None):
                     P._replace_in(texts[target], k, renewed)
                 replaced += 1
                 out.append(f"replace {k} with what {h['name']} holds, where it stands"
-                           + (" - born renewed, and what it replaced kept" if renewed else ""))
+                           + (" - born renewed, and what it replaced kept" if renewed and "born" in renewed
+                              else " - what it replaced kept" if renewed else ""))
+                if renewed is not None:
+                    out += P.trail_lines(paths, k, c.base[2][k]["body"], renewed, c.fields)
             else:
                 target = P._file_for(files, k, collection, texts)
                 where = P._insert_block(texts[target], collection, k, block)
@@ -616,6 +625,13 @@ def fold(paths, names=(), refs=(), stamp=None):
             for f in changed:
                 P._write_text(f, originals[f])
             raise P.Refused(f"the fold broke the record and was undone: {e}")
+        # the bodies the fold replaced, kept whole beside the record - once the record is
+        # safely written, so a fold undone leaves no version of what never left
+        kept = []
+        for k, h, replace in writes:
+            if replace and k in c.base[2] and isinstance(h["raw"].get(k), dict):
+                P.keep_replaced(paths, k, c.base[2][k]["body"], whys.get(k, ""), stamp)
+                kept = [P.replaced_path(paths)]
         deleted = []
         for h in c.hyps:
             if h.get("path") and os.path.isfile(h["path"]):
@@ -635,6 +651,7 @@ def fold(paths, names=(), refs=(), stamp=None):
         out.append(f"folded {names_}: {ne} entr{'y' if ne == 1 else 'ies'} and {nj} judgment"
                    f"{'' if nj == 1 else 's'} - {added} added, {replaced} replaced")
     out.append("files to commit: " + (", ".join([_rel(paths, f) for f in changed]
+                                                 + [_rel(paths, f) for f in kept]
                                                  + [_rel(paths, p) + " (deleted)" for p in deleted])
                                        or "none"))
     for h in c.hyps:
