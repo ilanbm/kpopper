@@ -594,6 +594,22 @@ sources:
            decided: the base's condition evaluated on the base, an unfired flip contested and folded
            only by name, every replacement traced beside the record, and a source's own clock in
            place of the day."
+  s.2026_09_15_verdict_conflicts_decided:
+    asked: "Closed: implement the rule shaped for issues #98 and #99 and see how it behaves,
+            following the delivery workflow - a verdict, or other grounds, laid over a standing
+            judgment folds only when the base's own condition has broken it on the base's readings or
+            when a person names it; every replacement leaves a trail beside the record; a reading
+            dated ahead of today is refused; across the branch line a reading from another source is
+            named by a person; the dry run says reversed and open says so until reviewed."
+    name: "The session that implemented the verdict-conflicts rule as four features on one branch,
+           each with tests: the trail a replacement leaves (one line on the judgment, the body kept
+           in .kpopper/replaced.yaml, dropped dependencies named with a reason, a return to a kept
+           version said), the fold's door asked with the base's readings and by name (--take), the
+           reversal said by open and check until reviewed with pull --history, and readings dated
+           ahead refused with another source named across the branch line. The door was mutated back
+           to by-hand once to show the tests fail. The rule itself went into the record as a
+           hypothesis for a person to take by name - the new door deciding its own re-decision."
+    read: "2026-09-15"
   s.background_ingestion:
     name: "Background capture and selective delivery contract"
     file: "skills/kpopper/INGESTION.md"
@@ -815,6 +831,16 @@ sources:
          repository, 2026-09-03"
     read: "2026-09-03"
 
+  run.verdict_conflicts_tests:
+    from: s.2026_09_15_verdict_conflicts_decided
+    name: "The sequence of issues #98 and #99 and the four extra branches, replayed as the test
+           suite's own cases against this tree, plus the door mutated back to by-hand as the default
+           and run once to show those cases fail"
+    of: "2026-09-15, this tree at e819a6d: python3 -m unittest tests.test_reversals
+         tests.test_replaced - 20 cases; the mutation: consolidate.py's judgment door called with
+         by_hand=True, tests.test_reversals run, 4 of 12 failed, then restored"
+    read: "2026-09-15"
+
 known:
   alt.drop_shape_line:
     v: rejected
@@ -979,6 +1005,23 @@ known:
            written on 2026-09-15 entered the base and fired the falsifier resting on it"
     from: run.branch_verdict_conflicts
     at: "transcript.txt, section repro.sh, branch future: set p.runs 5 --as-of 2026-12-01"
+  m.door.future_dated_readings_refused:
+    v: 3
+    name: "Places a reading dated after today is refused, of 3 - --as-of on a write, of: and read:
+           on an entry"
+    from: run.verdict_conflicts_tests
+    at: "tests/test_reversals.py: test_a_day_ahead_of_today_is_refused_wherever_a_reading_is_dated"
+    of: "2026-09-15"
+  m.door.grounds_changes_named:
+    v: 2
+    name: "Changes of a judgment's grounds with its verdict kept that the doors now name, of 2 - in
+           one tree, refused into a hypothesis and taken at the fold; across a branch, carried as a
+           reversal"
+    from: run.verdict_conflicts_tests
+    at: "tests/test_reversals.py:
+         test_the_same_verdict_on_other_grounds_is_refused_into_a_hypothesis,
+         test_the_same_verdict_on_other_grounds_travels_as_a_reversal"
+    of: "2026-09-15"
   m.door.grounds_changes_through:
     v: "0 of 2"
     name: "Changes of a judgment's grounds with its verdict kept - a different because and a
@@ -998,6 +1041,26 @@ known:
     from: run.branch_verdict_conflicts
     at: "transcript.txt, section repro.sh: dry run and fold of contra-a, then the dry run of
          contra-b over the base that took it"
+  m.door.opposed_verdicts_named_reversed:
+    v: 2
+    name: "Opposed verdicts on one id that the cross-branch dry run named reversed in the sequence
+           of issues #98 and #99, of 2 - the first branch's flip, and the second branch's flip over
+           the base that took the first, with the line saying its own readings would fire the
+           condition"
+    from: run.verdict_conflicts_tests
+    at: "tests/test_reversals.py:
+         test_a_branch_that_brings_the_reading_and_the_verdict_has_not_fired_the_base"
+    of: "2026-09-15"
+  m.door.replaced_fields_kept:
+    v: 6
+    name: "Fields of a replaced judgment the trail keeps beside the record, of the 6 a judgment
+           carries - verdict, because, request, rests_on, wrong_if, seen - with what ended it and the
+           day"
+    from: run.verdict_conflicts_tests
+    at: "tests/test_replaced.py:
+         test_a_supersede_keeps_the_body_it_replaced_and_names_what_it_dropped,
+         test_the_fold_keeps_what_it_replaced"
+    of: "2026-09-15"
   m.door.supersede_fields_kept:
     v: 0
     name: "Fields of a replaced judgment the in-place supersede keeps once its falsifier fired -
@@ -1015,6 +1078,18 @@ known:
     from: run.branch_verdict_conflicts
     at: "transcript.txt, sections repro_c.sh C1, repro_c2.sh and repro_order.sh: consolidate --from
          <branch> --dry-run from the untouched base"
+  m.door.unfired_flips_named_reversed:
+    v: 3
+    name: "Verdict flips whose standing falsifier had not fired that the dry run named reversed and
+           left red until a person took them by name, of 3 tried - a flip hand-edited on a branch
+           with no evidence, the hypothesis an in-tree add refusal created, and a second flip over a
+           taken first"
+    from: run.verdict_conflicts_tests
+    at: "tests/test_reversals.py:
+         test_a_verdict_flipped_on_a_branch_without_evidence_waits_for_a_name,
+         test_the_same_verdict_on_other_grounds_is_refused_into_a_hypothesis,
+         test_a_second_flip_over_a_taken_first_is_reversed_again"
+    of: "2026-09-15"
   m.entry_name.false_reads:
     v: 8
     unit: trials
@@ -3363,6 +3438,51 @@ judgments:
       m.older_records_changed: 0
       d.declared_hole_is_a_note: "check fails only an undeclared gap; a hole declared with
                                   blocked_on is a note"
+  d.replacement_leaves_a_trail:
+    rests_on: [s.2026_09_15_verdict_conflicts_decided, s.2026_09_15_branch_verdict_conflicts, m.door.replaced_fields_kept, m.door.supersede_fields_kept, d.refuted_hypothesis_leaves_one_finding, p.supersede_doors]
+    verdict: "every replacement of a judgment - by add once the standing one's condition fired, or
+              by the fold - keeps one line on the judgment saying what ended the decision it replaced
+              and the day, and the replaced body whole beside the record; a dependency dropped is
+              named with its reason, and a write that returns to a kept version is told so"
+    because: "The in-place supersede kept {{m.door.supersede_fields_kept}} fields of what it
+              replaced: the verdict, its why, whose asking it answered and two of four dependencies
+              were gone, and only git remembered - which squash merges forget and a record outside
+              git never had. The method's own rule keeps a refuted hypothesis as one finding; a
+              standing judgment that fell got less. What the file the reader opens holds is read at
+              every open, so the body goes beside the record in .kpopper/replaced.yaml, written at
+              the moment of replacement and read only when asked - pull --history, the loop signal at
+              write time, the lost ear at set - and the judgment carries one line per replacement,
+              the shape arrangements already had. A body equal to a kept version is a pointer, so a
+              record that flips back and forth stores each position once. A dependency dropped is the
+              new decision no longer listening, which is a decision, not a side effect: named with
+              its reason, kept with the version. {{m.door.replaced_fields_kept}} is what the trail
+              keeps."
+    wrong_if: {expr: "m.door.replaced_fields_kept < 6"}
+    seen:
+      s.2026_09_15_verdict_conflicts_decided: "read 2026-09-15"
+      s.2026_09_15_branch_verdict_conflicts: "The session that replayed the two-branch verdict
+                                              conflict of issues #98 and #99 on this tree and probed
+                                              four cases the issues did not try. Its reading:
+                                              readings pass the day rule, a judgment in one tree is
+                                              replaced only when its own falsifier fires, but the
+                                              fold - local hypothesis or another branch - lays any
+                                              verdict over a standing judgment by hand and calls it
+                                              clean, so the write that add refuses in one tree passes
+                                              across the branch line; the in-place supersede keeps
+                                              nothing of what it replaced; a judgment's grounds are
+                                              invisible to both doors; a future-dated reading enters.
+                                              The rule it shaped, not yet decided: the base's
+                                              condition evaluated on the base, an unfired flip
+                                              contested and folded only by name, every replacement
+                                              traced beside the record, and a source's own clock in
+                                              place of the day."
+      m.door.replaced_fields_kept: 6
+      m.door.supersede_fields_kept: 0
+      d.refuted_hypothesis_leaves_one_finding: "a refuted hypothesis leaves one entry in the base -
+                                                hyp.<name> with v: refuted, its claim as the name,
+                                                the why as at, from the session that refuted it,
+                                                dated - and nothing else of it enters"
+      p.supersede_doors: 1
   d.request_is_a_visible_claim:
     rests_on: [s.2026_09_04_minted_permission, s.2026_09_03_arrangements, d.reversal_is_a_redecision]
     verdict: "request: names whose asking a judgment was taken from - a session source whose asked:

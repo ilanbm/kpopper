@@ -1,0 +1,123 @@
+hypothesis: {born: "2026-09-15"}
+
+judgments:
+  d.contradiction_by_id_and_day:
+    rests_on: [s.2026_09_04_minted_permission, s.2026_09_03_hypotheses, s.2026_09_15_verdict_conflicts_decided, s.2026_09_15_branch_verdict_conflicts, d.base_shared_forks_on_contradiction, d.write_path_returns_reach, p.supersede_doors, m.door.opposed_verdicts_named_reversed, m.door.grounds_changes_named, m.door.future_dated_readings_refused]
+    verdict: "a contradiction is told by the id, the day and the base's own readings: the same id
+              with a value read no later than the base's own reading, or with a different verdict, or
+              with the same verdict on other grounds, is refused into the base and named a
+              hypothesis; a newer reading supersedes and one dated after today is refused; a standing
+              judgment is superseded only when its wrong_if holds on what the base holds; across the
+              branch line a reading from another source with another value waits for a person to name
+              the source; the same premises under different ids are different subjects"
+    because: "set is the update path - the world moving - so a differing value alone cannot be the
+              contradiction; what the record can tell apart is time, and the day is its clock: a
+              reading newer than the base's supersedes, one of the same day or older that disagrees
+              is two writers. A day ahead of today would outrank every reading of today, so it is
+              refused - {{m.door.future_dated_readings_refused}} places a reading is dated. A
+              judgment has no clock and a session's word admits nothing, so a standing judgment is
+              replaced only when its own condition holds - on what the base holds, since a reading
+              that arrives together with the verdict has not been accepted yet - and every other
+              rewrite waits beside the record for a person to take by name. The same verdict on other
+              grounds is a decision written again and goes the same way, since the grounds are what
+              the verdict answers to; {{m.door.grounds_changes_named}} such changes are named where
+              both doors were blind. Across the branch line two sources for one id that disagree are
+              two instruments, and no day orders instruments, so a person names which the id follows.
+              The two-branch test of issues #98 and #99 named none of its opposed verdicts;
+              {{m.door.opposed_verdicts_named_reversed}} are named now. The same premises under
+              different ids stay different subjects until someone says otherwise. One function
+              decides all of it; {{p.supersede_doors}} is the count that would show a second one
+              creeping in."
+    wrong_if: "p.supersede_doors > 1"
+    seen:
+      s.2026_09_04_minted_permission: "read 2026-09-04"
+      s.2026_09_03_hypotheses: "read 2026-09-03"
+      s.2026_09_15_verdict_conflicts_decided: "read 2026-09-15"
+      s.2026_09_15_branch_verdict_conflicts: "The session that replayed the two-branch verdict
+                                              conflict of issues #98 and #99 on this tree and probed
+                                              four cases the issues did not try. Its reading:
+                                              readings pass the day rule, a judgment in one tree is
+                                              replaced only when its own falsifier fires, but the
+                                              fold - local hypothesis or another branch - lays any
+                                              verdict over a standing judgment by hand and calls it
+                                              clean, so the write that add refuses in one tree passes
+                                              across the branch line; the in-place supersede keeps
+                                              nothing of what it replaced; a judgment's grounds are
+                                              invisible to both doors; a future-dated reading enters.
+                                              The rule it shaped, not yet decided: the base's
+                                              condition evaluated on the base, an unfired flip
+                                              contested and folded only by name, every replacement
+                                              traced beside the record, and a source's own clock in
+                                              place of the day."
+      d.base_shared_forks_on_contradiction: "a consistent addition goes straight to the shared
+                                             record from any session or branch; a write that
+                                             contradicts the record opens a named hypothesis, and
+                                             whatever later rests on the contradiction goes there - a
+                                             session is never the unit"
+      d.write_path_returns_reach: "the record changes from the command line through set, add and
+                                   review; each edits the file in place, writes seen itself, and
+                                   answers with the reach - what rests on the write, what is MOVED
+                                   now, which predicate fired; set can replace from and at together
+                                   with a value using --source and --at, without reviewing dependent
+                                   judgments"
+      p.supersede_doors: 1
+      m.door.opposed_verdicts_named_reversed: 2
+      m.door.grounds_changes_named: 2
+      m.door.future_dated_readings_refused: 3
+
+  d.fold_passes_the_one_door:
+    rests_on: [s.2026_09_04_minted_permission, s.2026_09_04_consolidate, s.2026_09_15_verdict_conflicts_decided, s.2026_09_15_branch_verdict_conflicts, d.contradiction_by_id_and_day, p.supersede_doors, m.door.unfired_flips_named_reversed, m.door.unfired_flips_folded_clean]
+    verdict: "a folded reading passes the one door a written one does, asked with the base's own
+              readings: a reading newer than the base's enters and a same-day or older one is
+              contested; a verdict, or other grounds, laid over a standing judgment folds only when
+              the base's own condition has broken it on what the base holds, or when a person names
+              the id at the fold; a reversal nobody named is red, and the trail says which of the two
+              admitted it"
+    because: "The fold asked the door with the union's readings and by hand, so any verdict laid
+              over a standing judgment folded as clean - {{m.door.unfired_flips_folded_clean}} of the
+              flips tried, each with no evidence - and a hypothesis that brought the reading that
+              breaks a judgment together with the verdict that repairs it had certified itself: the
+              write add refuses in one tree passed across the branch line, where contributors
+              actually meet. A person's hand was the design, but the report listed the flip among
+              updates under clean, so the hand never read it. Asked with the base's readings, the
+              base's condition fires only on what the base already accepted; a branch's reading is a
+              proposal like its verdict, and the report says when that reading would fire it, so the
+              person deciding knows. Naming the id is one flag per reversal per fold - the price a
+              reversal should cost - and the sequence is the one tree's own, reading, red, repair,
+              with the integrator as the one who repairs. {{m.door.unfired_flips_named_reversed}} of
+              the same flips are now reversed and red until named; {{p.supersede_doors}} is still the
+              count that would show a second door."
+    wrong_if: {expr: "m.door.unfired_flips_named_reversed < 3"}
+    seen:
+      s.2026_09_04_minted_permission: "read 2026-09-04"
+      s.2026_09_04_consolidate: "read 2026-09-04"
+      s.2026_09_15_verdict_conflicts_decided: "read 2026-09-15"
+      s.2026_09_15_branch_verdict_conflicts: "The session that replayed the two-branch verdict
+                                              conflict of issues #98 and #99 on this tree and probed
+                                              four cases the issues did not try. Its reading:
+                                              readings pass the day rule, a judgment in one tree is
+                                              replaced only when its own falsifier fires, but the
+                                              fold - local hypothesis or another branch - lays any
+                                              verdict over a standing judgment by hand and calls it
+                                              clean, so the write that add refuses in one tree passes
+                                              across the branch line; the in-place supersede keeps
+                                              nothing of what it replaced; a judgment's grounds are
+                                              invisible to both doors; a future-dated reading enters.
+                                              The rule it shaped, not yet decided: the base's
+                                              condition evaluated on the base, an unfired flip
+                                              contested and folded only by name, every replacement
+                                              traced beside the record, and a source's own clock in
+                                              place of the day."
+      d.contradiction_by_id_and_day: "a contradiction is told by the id, the day and the base's own
+                                      readings: the same id with a value read no later than the
+                                      base's own reading, or with a different verdict, or with the
+                                      same verdict on other grounds, is refused into the base and
+                                      named a hypothesis; a newer reading supersedes and one dated
+                                      after today is refused; a standing judgment is superseded only
+                                      when its wrong_if holds on what the base holds; across the
+                                      branch line a reading from another source with another value
+                                      waits for a person to name the source; the same premises under
+                                      different ids are different subjects"
+      p.supersede_doors: 1
+      m.door.unfired_flips_named_reversed: 3
+      m.door.unfired_flips_folded_clean: "3 of 3"
