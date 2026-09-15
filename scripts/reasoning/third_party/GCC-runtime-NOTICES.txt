@@ -1,0 +1,95 @@
+GCC runtime source notices
+
+The following upstream source headers are retained for the GCC startup
+and support code that the native builds may include. These notices do
+not establish which individual functions a particular binary contains.
+See GCC-COPYING.RUNTIME for the full exception and COPYINGv3 for GPLv3.
+
+GCC 13.3.0: libgcc/crtstuff.c
+Source: https://raw.githubusercontent.com/gcc-mirror/gcc/releases/gcc-13.3.0/libgcc/crtstuff.c
+Source file SHA-256: aae037dc5d57342cfad14bbd951fd68527a0521d3196f6909cbfe7f03540818b
+
+/* Specialized bits of code needed to support construction and
+   destruction of file-scope objects in C++ code.
+   Copyright (C) 1991-2023 Free Software Foundation, Inc.
+   Contributed by Ron Guilmette (rfg@monkeys.com).
+
+This file is part of GCC.
+
+GCC is free software; you can redistribute it and/or modify it under
+the terms of the GNU General Public License as published by the Free
+Software Foundation; either version 3, or (at your option) any later
+version.
+
+GCC is distributed in the hope that it will be useful, but WITHOUT ANY
+WARRANTY; without even the implied warranty of MERCHANTABILITY or
+FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License
+for more details.
+
+Under Section 7 of GPL version 3, you are granted additional
+permissions described in the GCC Runtime Library Exception, version
+3.1, as published by the Free Software Foundation.
+
+You should have received a copy of the GNU General Public License and
+a copy of the GCC Runtime Library Exception along with this program;
+see the files COPYING3 and COPYING.RUNTIME respectively.  If not, see
+<http://www.gnu.org/licenses/>.  */
+
+GCC 16.1.0: libgcc/crtstuff.c
+Source: https://raw.githubusercontent.com/gcc-mirror/gcc/releases/gcc-16.1.0/libgcc/crtstuff.c
+Source file SHA-256: fa00143fa2d869d542d20b73cf94cd326b1c52786d39fb12bf21319581d848eb
+
+/* Specialized bits of code needed to support construction and
+   destruction of file-scope objects in C++ code.
+   Copyright (C) 1991-2026 Free Software Foundation, Inc.
+   Contributed by Ron Guilmette (rfg@monkeys.com).
+
+This file is part of GCC.
+
+GCC is free software; you can redistribute it and/or modify it under
+the terms of the GNU General Public License as published by the Free
+Software Foundation; either version 3, or (at your option) any later
+version.
+
+GCC is distributed in the hope that it will be useful, but WITHOUT ANY
+WARRANTY; without even the implied warranty of MERCHANTABILITY or
+FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License
+for more details.
+
+Under Section 7 of GPL version 3, you are granted additional
+permissions described in the GCC Runtime Library Exception, version
+3.1, as published by the Free Software Foundation.
+
+You should have received a copy of the GNU General Public License and
+a copy of the GCC Runtime Library Exception along with this program;
+see the files COPYING3 and COPYING.RUNTIME respectively.  If not, see
+<http://www.gnu.org/licenses/>.  */
+
+GCC 16.1.0: libgcc/libgcc2.c
+Source: https://raw.githubusercontent.com/gcc-mirror/gcc/releases/gcc-16.1.0/libgcc/libgcc2.c
+Source file SHA-256: 83e1247be3f78dd8c70d32c4df95f04161c0f47838cf62be8cdb5b9eb2f06c34
+
+/* More subroutines needed by GCC output code on some machines.  */
+/* Compile this one with gcc.  */
+/* Copyright (C) 1989-2026 Free Software Foundation, Inc.
+
+This file is part of GCC.
+
+GCC is free software; you can redistribute it and/or modify it under
+the terms of the GNU General Public License as published by the Free
+Software Foundation; either version 3, or (at your option) any later
+version.
+
+GCC is distributed in the hope that it will be useful, but WITHOUT ANY
+WARRANTY; without even the implied warranty of MERCHANTABILITY or
+FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License
+for more details.
+
+Under Section 7 of GPL version 3, you are granted additional
+permissions described in the GCC Runtime Library Exception, version
+3.1, as published by the Free Software Foundation.
+
+You should have received a copy of the GNU General Public License and
+a copy of the GCC Runtime Library Exception along with this program;
+see the files COPYING3 and COPYING.RUNTIME respectively.  If not, see
+<http://www.gnu.org/licenses/>.  */
