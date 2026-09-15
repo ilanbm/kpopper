@@ -89,7 +89,7 @@ class TheTrailOfAReplacement(unittest.TestCase):
             code, out, err = run(SCRIPTS / "provenance.py", "add", "c.boiler_short", *back,
                                  "--as-of", "2026-09-05", rec)
             self.assertEqual(code, 0, out + err)
-            self.assertIn("  returns to version 1, which stood until 2026-09-04 and fell because its "
+            self.assertIn("  returns to version 1 - it stood until 2026-09-04 and fell because its "
                           "wrong_if holds (heat.loss_kw <= heat.boiler_kw)\n", out)
             body = P.bodies(P.load([str(rec)]))["c.boiler_short"]
             self.assertEqual(body["replaced"],
@@ -104,13 +104,22 @@ class TheTrailOfAReplacement(unittest.TestCase):
             code, out, err = run(SCRIPTS / "provenance.py", "add", "c.boiler_short", *OPPOSITE,
                                  "--as-of", "2026-09-06", *DROP, rec)
             self.assertEqual(code, 0, out + err)
-            self.assertIn("  returns to version 2, which stood until 2026-09-05", out)
+            self.assertIn("  returns to version 2 - it stood until 2026-09-05", out)
             versions = kept(rec)["c.boiler_short"]
             self.assertEqual(len(versions), 3)
             self.assertEqual({k: versions[2][k] for k in ("same_as", "day")}, {"same_as": 1, "day": "2026-09-06"})
             self.assertNotIn("verdict", versions[2])
             self.assertEqual(P.version_at(versions, 3)["verdict"],
                              "the old boiler cannot hold 12°C on the coldest February night")
+            # the verdict alone, on other grounds, is said as that - and kept whole
+            run(SCRIPTS / "provenance.py", "set", "heat.loss_kw", "45", "--as-of", "2026-09-07", rec)
+            code, out, err = run(SCRIPTS / "provenance.py", "add", "c.boiler_short", back[0], back[1],
+                                 "because=the wind alone takes the margin", back[3], "--as-of", "2026-09-07", rec)
+            self.assertEqual(code, 0, out + err)
+            self.assertIn("  returns to the verdict of version 1, on other grounds - it stood until 2026-09-04",
+                          out)
+            # the body that left is the one version 2 already keeps
+            self.assertEqual(kept(rec)["c.boiler_short"][3]["same_as"], 2)
 
     def test_the_trail_is_written_by_the_tool_and_drop_is_shaped(self):
         with tempfile.TemporaryDirectory() as d:
@@ -147,10 +156,24 @@ class TheTrailOfAFold(unittest.TestCase):
             self.assertEqual(code, 0, out + err)
             self.assertEqual(kept(rec), {})
             code, out, err = run(SCRIPTS / "consolidate.py", "repair", "--as-of", "2026-09-04", rec)
+            self.assertEqual(code, 1, out + err)
+            self.assertIn("    no longer rests on heat.deficit_kw - name the reason at the fold: --drop "
+                          "'heat.deficit_kw: <why>'\n", out)
+            self.assertIn("not clean: a dropped dependency to name - a dependency dropped is a decision with "
+                          "a reason, named at the fold\n  consolidate repair --drop 'heat.deficit_kw: <why>'\n",
+                          out)
+            self.assertIn("refused - a replacement no longer rests on what the judgment it replaces rested "
+                          "on, and a dependency dropped is a decision with a reason: consolidate repair --drop "
+                          "'heat.deficit_kw: <why>'", out + err)
+            self.assertEqual(kept(rec), {})
+            code, out, err = run(SCRIPTS / "consolidate.py", "repair", "--as-of", "2026-09-04",
+                                 "--drop", "heat.deficit_kw: worked out from the two it rests on", rec)
             self.assertEqual(code, 0, out + err)
             self.assertIn("replace c.boiler_short with what repair holds, where it stands - what it replaced "
                           "kept\n  kept: the replaced verdict, because, in PROVENANCE.replaced.yaml\n"
                           "  no longer rests on heat.deficit_kw\n", out)
+            self.assertEqual(kept(rec)["c.boiler_short"][0]["dropped"],
+                             {"heat.deficit_kw": "worked out from the two it rests on"})
             self.assertIn("files to commit: PROVENANCE.yaml, PROVENANCE.replaced.yaml, "
                           "PROVENANCE.d/repair.yaml (deleted)\n", out)
             body = P.bodies(P.load([str(rec)]))["c.boiler_short"]
@@ -172,9 +195,6 @@ class TheLayout(unittest.TestCase):
             (pathlib.Path(d) / ".kpopper" / "replaced.yaml").write_text("c.x: []\n", encoding="utf-8")
             self.assertIn((".kpopper/replaced.yaml", "PROVENANCE.replaced.yaml"), P.leftovers([str(rec)]))
 
-
-if __name__ == "__main__":
-    unittest.main()
 
 
 class WhatTheTrailAsks(unittest.TestCase):
@@ -204,6 +224,20 @@ class WhatTheTrailAsks(unittest.TestCase):
             code, out, err = run(SCRIPTS / "provenance.py", "open", rec)
             self.assertNotIn("reversed on", out)
             self.assertNotIn("reversed on", run(SCRIPTS / "provenance.py", "check", rec)[1])
+
+    def test_the_page_renders_a_reversal(self):
+        with tempfile.TemporaryDirectory() as d:
+            rec = copy_fixture(pathlib.Path(d))
+            run(SCRIPTS / "provenance.py", "set", "heat.loss_kw", "20", "--as-of", "2026-09-04", rec)
+            code, out, err = run(SCRIPTS / "provenance.py", "add", "c.boiler_short", *OPPOSITE,
+                                 "--as-of", "2026-09-04", *DROP, rec)
+            self.assertEqual(code, 0, out + err)
+            code, out, err = run(SCRIPTS / "render_page.py", "--verify", rec)
+            self.assertEqual(code, 0, out + err)
+            self.assertNotIn("Traceback", out + err)
+            code, out, err = run(SCRIPTS / "render_page.py", rec)
+            self.assertEqual(code, 0, err)
+            self.assertIn("its verdict was replaced under this id and nobody has reviewed it since", out)
 
     def test_a_reading_only_a_replaced_judgment_listened_to_is_said_when_it_moves(self):
         with tempfile.TemporaryDirectory() as d:
@@ -236,3 +270,7 @@ class WhatTheTrailAsks(unittest.TestCase):
                           "     no longer rested on heat.boiler_kw: the boiler is a constant now\n", out)
             code, out, err = run(SCRIPTS / "provenance.py", "pull", "heat.loss_kw", "--history", rec)
             self.assertIn("no replaced version is kept for heat.loss_kw", out)
+
+
+if __name__ == "__main__":
+    unittest.main()

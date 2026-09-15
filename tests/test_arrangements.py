@@ -459,6 +459,26 @@ class TheReDecision(unittest.TestCase):
             self.assertEqual(run(SCRIPTS / "provenance.py", "check", rec)[0], 0)
             self.assertEqual(run(SCRIPTS / "render_page.py", "--verify", rec)[0], 0)
 
+    def test_no_name_takes_a_body_that_is_not_an_arrangement_over_one(self):
+        with tempfile.TemporaryDirectory() as d:
+            rec = copy_fixture(pathlib.Path(d))
+            (pathlib.Path(d) / "PROVENANCE.d").mkdir(exist_ok=True)
+            (pathlib.Path(d) / "PROVENANCE.d" / "flat.yaml").write_text(
+                'hypothesis:\n  claim: "one tab is enough"\n  born: "2026-09-05"\n\n'
+                'judgments:\n  v.glazing_tab:\n    rests_on: [heat.loss_kw]\n'
+                '    verdict: "one tab is enough"\n    wrong_if: "heat.loss_kw > 40"\n'
+                '    seen: {heat.loss_kw: 31}\n', encoding="utf-8")
+            code, out, err = run(SCRIPTS / "consolidate.py", "--dry-run", "flat", *AS_OF, rec)
+            self.assertEqual(code, 1, out + err)
+            self.assertIn("what replaces an arrangement is an arrangement - rest on the session sources of "
+                          "the occasion it decides and give it a sign over a count; no name takes a body that "
+                          "drops them", out)
+            code, out, err = run(SCRIPTS / "consolidate.py", "flat", "--take", "v.glazing_tab", *AS_OF, rec)
+            self.assertEqual(code, 1, out + err)
+            self.assertIn("refused - no name takes v.glazing_tab: what replaces an arrangement is an "
+                          "arrangement", out + err)
+            self.assertIn('born: "2026-09-03"', entry(rec, "v.glazing_tab"))
+
     def test_a_cut_tab_refuses_the_fold_as_it_refuses_the_write(self):
         with tempfile.TemporaryDirectory() as d:
             rec = copy_fixture(pathlib.Path(d))

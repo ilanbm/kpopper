@@ -285,9 +285,12 @@ class TheDryRunTests(unittest.TestCase):
             run(SCRIPTS / "provenance.py", "set", "heat.loss_kw", "20", "--as-of", "2026-09-04", rec)
             self.assertEqual(run(SCRIPTS / "provenance.py", "check", rec)[0], 1)
             code, out, err = kp("consolidate", "--dry-run", "c_boiler_short", "--as-of", "2026-09-04", rec)
-            self.assertEqual(code, 0, out + err)
-            self.assertIn("    by its own condition - its wrong_if holds (heat.loss_kw <= heat.boiler_kw)\n", out)
-            code, out, err = kp("consolidate", "c_boiler_short", "--as-of", "2026-09-04", rec)
+            self.assertEqual(code, 1, out + err)
+            self.assertIn("    by its own condition - its wrong_if holds (heat.loss_kw <= heat.boiler_kw)\n"
+                          "    no longer rests on heat.deficit_kw - name the reason at the fold: --drop "
+                          "'heat.deficit_kw: <why>'\n", out)
+            code, out, err = kp("consolidate", "c_boiler_short", "--as-of", "2026-09-04",
+                                "--drop", "heat.deficit_kw: worked out from the two", rec)
             self.assertEqual(code, 0, out + err)
             self.assertIn("replace c.boiler_short with what c_boiler_short holds, where it stands - what it "
                           "replaced kept\n"
@@ -406,7 +409,7 @@ class TheFold(unittest.TestCase):
                           "carry s.2026_09_03_recount from glazing_redo into sources, after s.2026_09_02_heating\n"
                           "folded glazing_redo: 2 entries and 0 judgments - 1 added, 1 replaced\n"
                           "files to commit: PROVENANCE.yaml, PROVENANCE.d/glazing_redo.yaml (deleted)\n"
-                          "next: git add PROVENANCE.yaml && git commit\n\n"
+                          "next: git add PROVENANCE.yaml PROVENANCE.d/glazing_redo.yaml && git commit\n\n"
                           "the record needs a person on 0 judgments - check says the rest\n", out)
             expected = before.replace("  updated: 2026-09-03\n", "  updated: 2026-09-04\n", 1)
             expected = expected.replace(LOSS_BEFORE, LOSS_AFTER, 1)
@@ -417,6 +420,10 @@ class TheFold(unittest.TestCase):
             self.assertTrue((pathlib.Path(d) / "PROVENANCE.d" / "bigger_boiler.yaml").exists())
             self.assertEqual(sorted(git(d, "status", "--short").split("\n")),
                              ["", " D PROVENANCE.d/glazing_redo.yaml", " M PROVENANCE.yaml"])
+            # the printed commit stages everything the fold touched, the deletion included
+            git(d, "add", "PROVENANCE.yaml", "PROVENANCE.d/glazing_redo.yaml")
+            git(d, "commit", "-qm", "fold")
+            self.assertEqual(git(d, "status", "--porcelain").strip(), "")
             code, out, _ = run(SCRIPTS / "provenance.py", "check", rec)
             self.assertEqual(code, 0, out)
             self.assertIn("1 judgments, 9 entries, 0 problems", out)

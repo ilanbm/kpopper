@@ -367,6 +367,13 @@ def hypothesis_path(paths, name):
     return os.path.join(hypothesis_dir(paths), name + ".yaml")
 
 
+def latest_today():
+    """Today, as the later of the local day and the UTC day: a reading is dated no later than
+    this. A host behind UTC in its evening already has readings dated tomorrow by UTC - the
+    pull request's re-measurement stamps its day in UTC - and those are not from the future."""
+    return max(datetime.date.today(), datetime.datetime.now(datetime.timezone.utc).date())
+
+
 def _as_day(v):
     """A date the record wrote - a bare date, an ISO string, or a text that opens with one."""
     if isinstance(v, datetime.datetime):
@@ -3177,17 +3184,16 @@ def arrangement_renewal(old, ended, stamp, stood=None):
                                  + f"; {ended} on {stamp}"]}
 
 
-def judgment_renewal(old, ended, stamp, carried=None):
+def judgment_renewal(old, ended, stamp):
     """What a write leaves on a judgment it replaces in place -> the one field: one line
     appended to `replaced:` naming what ended the decision it replaces and the day, so the
     sequence of decisions reads from the record alone; the body it replaced is kept whole
-    beside the record (`keep_replaced`). `carried` is the replacing body's own `replaced:`
-    lines - a branch's history - merged in ahead of the new line, so a fold loses neither
-    side's trail. Written by `add` when the door admits the replacement, and by the fold."""
+    beside the record (`keep_replaced`), one version per line. The replacing body's own
+    lines - a branch's history - are not carried: the base's trail is the base's, and the
+    branch keeps its own. Written by `add` when the door admits the replacement, and by
+    the fold."""
     prior = old.get("replaced") or []
     prior = [prior] if isinstance(prior, str) else list(prior)
-    carried = [carried] if isinstance(carried, str) else list(carried or [])
-    prior += [l for l in carried if l not in prior]
     return {"replaced": prior + [f"{ended} on {stamp}"]}
 
 
@@ -3222,10 +3228,16 @@ def _version_core(v):
 
 
 def version_at(versions, n):
-    """Kept version n, counted from 1, with a pointer followed -> the body it stands for."""
+    """Kept version n, counted from 1, with a pointer followed -> the body it stands for. A
+    pointer that leads nowhere - out of range, or round in a circle - stands for itself."""
     v = versions[n - 1]
-    while isinstance(v, dict) and "same_as" in v:
-        v = versions[int(v["same_as"]) - 1]
+    hops = 0
+    while isinstance(v, dict) and "same_as" in v and hops < len(versions):
+        try:
+            v = versions[int(v["same_as"]) - 1]
+        except (ValueError, TypeError, IndexError):
+            break
+        hops += 1
     return v
 
 
@@ -3263,18 +3275,33 @@ def keep_replaced(paths, nid, old, ended, stamp, dropped=None):
 
 
 def returns_to(paths, nid, body):
-    """A kept version the body being written returns to - same verdict - -> (number from 1,
-    version) or None. A decision that stood before and fell is not a fresh decision, and the
-    write that brings it back is told so."""
+    """A kept version the body being written returns to -> (number from 1, version, exact) or
+    None: exact when the decision is the one kept - verdict, why, dependencies, condition -
+    else the verdict alone, on other grounds. A decision that stood before and fell is not a
+    fresh decision, and the write that brings it back is told so."""
     versions = read_replaced(paths).get(nid) or []
     want = _verdict_of(body)
     if want is None:
         return None
+    core = _version_core({k: v for k, v in body.items() if k not in TRAIL_FIELDS})
+    if isinstance(core.get("wrong_if"), dict):
+        core["wrong_if"] = predicate_text(core["wrong_if"])
+    found = None
     for n in range(1, len(versions) + 1):
         v = version_at(versions, n)
-        if isinstance(v, dict) and _verdict_of(v) is not None and _same(_verdict_of(v), want):
-            return n, versions[n - 1]
-    return None
+        if not isinstance(v, dict) or _verdict_of(v) is None or not _same(_verdict_of(v), want):
+            continue
+        if _version_core(v) == core:
+            return n, versions[n - 1], True
+        found = found or (n, versions[n - 1], False)
+    return found
+
+
+def _text_of_or_none(path):
+    if not os.path.isfile(path):
+        return None
+    with io.open(path, encoding="utf-8") as f:
+        return f.read()
 
 
 REPLACED_DAY = re.compile(r" on (\d{4}-\d{2}-\d{2})$")
@@ -3298,11 +3325,12 @@ def reversal_pending(body):
     return None if seen and seen.isoformat() >= day else day
 
 
-def listened_until(paths, dep):
+def listened_until(kept, dep):
     """The replaced judgments that rested on `dep` where nothing standing does now ->
-    [(judgment id, day it stopped listening, what it saw)], latest version per judgment."""
+    [(judgment id, day it stopped listening, what it saw)], latest version per judgment;
+    `kept` is what `read_replaced` returned, read once by the caller."""
     out = []
-    for jid, versions in sorted(read_replaced(paths).items()):
+    for jid, versions in sorted(kept.items()):
         last = None
         for n in range(1, len(versions) + 1):
             v = version_at(versions, n)
@@ -3328,7 +3356,7 @@ def lost_ears(paths, ids, jud, raw):
         if k in jud or k in listened or is_builtin(k):
             continue
         now = value_of(raw, ids, k)
-        for jid, day, saw in listened_until(paths, k):
+        for jid, day, saw in listened_until(kept, k):
             if saw is not None and now is not None and not _same(saw, now):
                 out.append((k, jid, day))
                 break
@@ -3483,7 +3511,7 @@ def _disagreement(a, body, raw, ids, jud, fields, page=None):
             return None
         kind = "verdict"
         if _same(old, new):
-            skip = ("born", "replaced")
+            skip = ("born", "replaced", "reviewed")
             was = {f: v for f, v in jud[k]["body"].items()
                    if f not in skip and f != fields["snapshot"]}
             now = {f: v for f, v in a["body"].items() if f not in skip and f != fields["snapshot"]}
@@ -3642,7 +3670,7 @@ def _not_from_the_future(a, doc, ids, jud, fields, raw):
     day ahead of today would outrank every reading of today: refused, dated when read."""
     if a["kind"] != "add" or not isinstance(a.get("body"), dict):
         return []
-    today = datetime.date.today()
+    today = latest_today()
     out = []
     for f in ("of", "read"):
         day = _as_day(a["body"].get(f))
@@ -4590,6 +4618,7 @@ def _apply(paths, action, diagnostics=None):
     stamp = action.get("as_of") or datetime.date.today().isoformat()
     kind, nid = action["kind"], action["id"]
     brief = _brief_beside(paths[0])
+    side, side_before = replaced_path(paths), None     # the kept versions, restored with the record
     if kind == "review" and nid not in jud and brief:
         action["section"] = nid
     # an arrangement's write is held against the page - its counts, and what the brief
@@ -4670,12 +4699,13 @@ def _apply(paths, action, diagnostics=None):
         if not arranged:
             # the trail an arrangement already carries, on every judgment: one line on the
             # judgment, the body it replaced kept whole beside the record
-            extra = judgment_renewal(old, why, stamp, body.get("replaced"))
+            extra = judgment_renewal(old, why, stamp)
             body = {k: v for k, v in body.items() if k not in extra and k != snapshot_field}
             body.update(extra)
             body[snapshot_field] = seen
             action["body"] = body
         back = returns_to(paths, nid, body)
+        side_before = _text_of_or_none(side)
         index = keep_replaced(paths, nid, old, why, stamp, action.get("drops"))
         _replace_in(lines, nid, body)
         if _same(was, str(_verdict_of(body) or nid)):
@@ -4685,9 +4715,10 @@ def _apply(paths, action, diagnostics=None):
                 nid, *apart(was, _verdict_of(body), 60), why))
         out += trail_lines(paths, nid, old, body, fields, action.get("drops"), index)
         if back:
-            n, v = back
-            out.append(f"  returns to version {n}, which stood until {v.get('day')} and fell because "
-                       f"{v.get('ended')}")
+            n, v, exact = back
+            out.append(f"  returns to {'version' if exact else 'the verdict of version'} {n}"
+                       + ("" if exact else ", on other grounds")
+                       + f" - it stood until {v.get('day')} and fell because {v.get('ended')}")
     elif kind == "add":
         # a collection the file lacks - the first judgment, a newborn record's first
         # section - is opened at the end, and the entry is its first member
@@ -4705,9 +4736,10 @@ def _apply(paths, action, diagnostics=None):
             e = _seen_lines(lines, s, e, snapshot_field, seen)
         if _field_span(lines, s, e, "reviewed"):
             _stamp_field(lines, s, e, "reviewed", stamp, None)
-        elif "replaced" in j["body"]:
+        elif "replaced" in j["body"] and not arrangement:
             # a judgment that carries a trail keeps the day it was last read, so the
-            # reversal the trail records stops asking once someone has reviewed it
+            # reversal the trail records stops asking once someone has reviewed it; an
+            # arrangement's day is its born, renewed by the re-decision itself
             _stamp_field(lines, s, e, "reviewed", stamp, "replaced")
         out.append(f"review {nid}: " + (f"seen rewritten from what the record holds ({stamp})"
                                         if changed else f"what it saw is what the record holds ({stamp})"))
@@ -4779,6 +4811,12 @@ def _apply(paths, action, diagnostics=None):
             shape, facts2 = _page_side(paths)[1:]
     except (Exception, SystemExit) as e:
         _write_text(target, original)
+        if side_before is not None or os.path.isfile(side):
+            if side_before is None:
+                os.remove(side)
+                forget(side)
+            else:
+                _write_text(side, side_before)
         raise Refused(f"the write broke the record and was undone: {e}")
     # an arrangement's review also rewrites the shape it stood on - every tab it governs -
     # once the record is safely written, so a failed write leaves the brief as it was
@@ -4833,7 +4871,7 @@ def _report(paths, kind, nid, doc, ids, jud, fields, raw):
             print("  " + _state_line(name, jud[name], raw, ids, fields, touched=moved))
     elif kind == "set":
         print("nothing rests on it")
-        for jid, day, _ in listened_until(paths, nid):
+        for jid, day, _ in listened_until(read_replaced(paths), nid):
             print(f"  listened to by nothing standing - {jid} listened until {day}: pull {jid} --history")
     texts = _texts_that_saw(paths, [nid] + derived)
     if texts:
@@ -5186,8 +5224,8 @@ def write_command(cmd, rest):
     as_of = opts.get("as_of")
     if as_of and not re.match(r"^\d{4}-\d{2}-\d{2}$", as_of):
         raise Refused("--as-of takes a date, YYYY-MM-DD")
-    if as_of and _as_day(as_of) and _as_day(as_of) > datetime.date.today():
-        raise Refused(f"--as-of {as_of} is after today ({datetime.date.today().isoformat()}) - a day is "
+    if as_of and _as_day(as_of) and _as_day(as_of) > latest_today():
+        raise Refused(f"--as-of {as_of} is after today ({latest_today().isoformat()}) - a day is "
                       f"the record's clock, and a reading dated ahead would outrank every reading of "
                       f"today; date it the day it was read")
     if opts.get("why") and "\n" in opts["why"]:

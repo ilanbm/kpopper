@@ -23,7 +23,7 @@ record, with one line on the judgment.
 file; nothing else of it enters. `--from <ref>` reads another branch's committed record and lays
 it over this base as hypotheses named after the ref - a pull, never a push.
 """
-import contextlib, datetime, glob, io, os, posixpath, re, subprocess, sys, tempfile
+import contextlib, datetime, glob, io, os, posixpath, re, shlex, subprocess, sys, tempfile
 import yaml
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -115,6 +115,10 @@ class Consolidation(object):
       untaken                     the reversed ones nobody named: the run is red on them
       sourced                     [(id, hypothesis, why)] - readings from another source than
                                   the base's, with another value: refused until named
+      drops_needed                {id: [dependency]} - what a replacement no longer rests on,
+                                  each to be named with its reason at the fold (--drop)
+      untakeable                  ids a name cannot take: a kind changed, an arrangement
+                                  replaced by something that is not one
       new_subjects                prefixes the base does not hold
       candidates                  pairs for a person to judge as the same subject or distinct
 
@@ -126,6 +130,7 @@ class Consolidation(object):
         self.moved, self.falsified, self.holes, self.head_falsified = [], [], [], []
         self.contested, self.new_subjects, self.candidates = {}, [], []
         self.reversed, self.untaken, self.sourced = [], [], []
+        self.drops_needed, self.untakeable = {}, set()
         self.doc = self.base = None
         self.ids = self.jud = self.fields = self.raw = None
 
@@ -172,7 +177,7 @@ def page_of(paths):
         return {}
 
 
-def union_of(doc, hyps, base_check=None, as_of=None, page=None, take=()):
+def union_of(doc, hyps, base_check=None, as_of=None, page=None, take=(), drops=None):
     """The union and its test -> Consolidation. `doc` is the record as `provenance.load` returns
     it; `hyps` the hypotheses to lay over it, in the order given - in name order, as the
     command does, unless the caller has a reason. `base_check` is the base's own (fail, moved)
@@ -219,28 +224,64 @@ def union_of(doc, hyps, base_check=None, as_of=None, page=None, take=()):
             continue
         if k in bjud:
             if same and isinstance(old, dict) and isinstance(new, dict) \
-                    and P._version_core(old) == P._version_core(new):
+                    and P._version_core(old) == P._version_core(new) \
+                    and not (P.is_arrangement(bjud[k], braw) and old.get("born") != new.get("born")):
                 continue        # the same decision, its seen refreshed: a review does not travel
-            # the base's own condition, on the base's own readings: a hypothesis that brings
-            # the reading that breaks a judgment and the verdict that repairs it would have
-            # certified itself on the union, so the door is asked with what the base holds.
-            # A verdict the base's own sign has not broken waits for a person to take it by
-            # name - the day and the page still bind an arrangement either way
-            may, why = P.may_supersede(k, old, new, braw, bids, bjud, bfields, as_of,
-                                       page=page, by_hand=(k in take))
-            if not may and bjud[k]["pred"] and P.evaluate(bjud[k]["pred"], c.raw, c.ids) is True:
-                why += (f" - it would hold with {h['name']}'s readings "
-                        f"({P.short(bjud[k]['pred'], 60)})")
+            # a subject does not change kind at the fold, and what replaces an arrangement is
+            # an arrangement - and a judgment does not become one here, since an arrangement
+            # is born when it is written: none of these is a person's to take by name
+            if not isinstance(new, dict) or not P._judgment_shaped(new, bfields):
+                may, why = False, ("the base holds a judgment under this id and the hypothesis an "
+                                   "entry - a subject does not change kind at the fold, and no name "
+                                   "takes this: give it what it rests on and a verdict, or a new id")
+                c.untakeable.add(k)
+            elif P.is_arrangement(bjud[k], braw) and not P._arrangement_shaped(new, bfields, braw):
+                may, why = False, ("what replaces an arrangement is an arrangement - rest on the "
+                                   "session sources of the occasion it decides and give it a sign "
+                                   "over a count; no name takes a body that drops them")
+                c.untakeable.add(k)
+            elif not P.is_arrangement(bjud[k], braw) and P._arrangement_shaped(new, bfields, braw):
+                may, why = False, ("the base holds a judgment under this id and the hypothesis an "
+                                   "arrangement - an arrangement is born when it is written in place, "
+                                   "and no name takes one over a judgment: write it as its own decision")
+                c.untakeable.add(k)
+            else:
+                # the base's own condition, on the base's own readings: a hypothesis that
+                # brings the reading that breaks a judgment and the verdict that repairs it
+                # would have certified itself on the union, so the door is asked with what
+                # the base holds. A verdict the base's own sign has not broken waits for a
+                # person to take it by name - the day and the page still bind an arrangement
+                may, why = P.may_supersede(k, old, new, braw, bids, bjud, bfields, as_of,
+                                           page=page, by_hand=(k in take))
+                if not may and bjud[k]["pred"] and P.evaluate(bjud[k]["pred"], c.raw, c.ids) is True:
+                    why += (f" - it would hold with {h['name']}'s readings "
+                            f"({P.short(bjud[k]['pred'], 60)})")
+                # what the replacement no longer rests on is a decision with a reason, named
+                # at the fold as it is named at a write - never an arrangement's count
+                if may and not P.is_arrangement(bjud[k], braw):
+                    gone = [d for d in P.dropped_deps(old, new, bfields) if d not in (drops or {})]
+                    if gone:
+                        c.drops_needed[k] = gone
             c.reversed.append((k, h, old, new, may, why))
             if not may:
                 c.untaken.append((k, h, why))
         else:
             day = _read_day(new, c.raw) if isinstance(new, dict) else None
             base_day = P._read_on(old, braw) if isinstance(old, dict) else None
+            today = P._as_day(as_of) or P.latest_today()
+            kind_changed = isinstance(new, dict) and P._judgment_shaped(new, bfields)
+            future = P._as_day(day) if day else None
             other = (not h.get("path") and isinstance(new, dict) and isinstance(old, dict)
                      and new.get("from") and old.get("from") and str(new["from"]) != str(old["from"])
                      and not same)
-            if other:
+            if kind_changed:
+                may, why = False, ("the base holds an entry under this id and the hypothesis a "
+                                   "judgment - a subject does not change kind at the fold: set the "
+                                   "entry, or give the judgment a new id")
+            elif future and future > today:
+                may, why = False, (f"a reading dated {day}, after today ({today.isoformat()}) - a day "
+                                   f"is the record's clock, and a day ahead is not read")
+            elif other:
                 # across the branch line, two sources for one id that disagree are two
                 # instruments, and no day orders them: one id follows one source, and a person
                 # names which. A hypothesis beside the record is this checkout's own reading
@@ -428,8 +469,13 @@ def report(c, today=None):
             out.append(f"    taken by name - {why}")
         elif may:
             out.append(f"    by its own condition - {why}")
+        elif k in c.untakeable:
+            out.append(f"    {why}")
         else:
             out.append(f"    {why} - take it by name: consolidate {h['name']} --take {k}")
+        for d in c.drops_needed.get(k, []):
+            out.append(f"    no longer rests on {d} - name the reason at the fold: --drop "
+                       f"{shlex.quote(d + ': <why>')}")
         for who, body, world, world_ids, world_jud in (("base", old, braw, bids, bjud),
                                                        (h["name"], new, raw, ids, jud)):
             out += _side_lines(who, body, world, world_ids, world_jud, bfields)
@@ -466,7 +512,7 @@ def report(c, today=None):
         out.append(_cut(f"  {p}: " + ", ".join(held)))
     out.append("")
     foldable = [h["name"] for h in c.hyps if str(h["head"].get("folds") or "") != NEVER]
-    if c.red:
+    if c.red or c.drops_needed:
         what = []
         if c.falsified or c.head_falsified:
             what.append("a falsifier holds")
@@ -476,16 +522,24 @@ def report(c, today=None):
             what.append("a contested reading")
         if c.untaken:
             what.append(f"{len(c.untaken)} reversal{'s' if len(c.untaken) != 1 else ''} to take by name")
+        if c.drops_needed:
+            what.append("a dropped dependency to name")
+        other = bool(c.falsified or c.head_falsified or c.holes or c.refused or c.contested)
         out.append("not clean: " + ", ".join(what)
-                   + (" - nothing folds until it is read again" if what[:-1] or not c.untaken
+                   + (" - nothing folds until it is read again" if other
                       else " - a verdict the base's own condition has not broken folds only when a "
-                           "person names it"))
-        if c.untaken:
+                           "person names it" if c.untaken
+                      else " - a dependency dropped is a decision with a reason, named at the fold"))
+        if c.untaken or c.drops_needed:
             by_hyp = {}
             for k, h, _ in c.untaken:
-                by_hyp.setdefault(h["name"], []).append(k)
-            for name, ks in by_hyp.items():
-                out.append(f"  consolidate {name} " + " ".join(f"--take {k}" for k in ks))
+                if k not in c.untakeable:
+                    by_hyp.setdefault(h["name"], []).append(f"--take {k}")
+            for k, h, _, _, _, _ in c.reversed:
+                for d in c.drops_needed.get(k, []):
+                    by_hyp.setdefault(h["name"], []).append("--drop " + shlex.quote(d + ": <why>"))
+            for name, args in by_hyp.items():
+                out.append(f"  consolidate {name} " + " ".join(args))
     elif c.moved:
         out.append(f"moved: {len(c.moved)} judgment{'s' if len(c.moved) != 1 else ''} to re-review "
                    f"before the fold - a premise moved under {'them' if len(c.moved) != 1 else 'it'}")
@@ -524,7 +578,7 @@ def _renewed(k, c, h, page, stamp, why):
         extra = P.arrangement_renewal(bjud[k]["body"], why, stamp,
                                       ((page or {}).get(k) or {}).get("stood"))
     else:
-        extra = P.judgment_renewal(bjud[k]["body"], why, stamp, body.get("replaced"))
+        extra = P.judgment_renewal(bjud[k]["body"], why, stamp)
     out = {f: v for f, v in body.items() if f not in extra and f != snap}
     out.update(extra)
     if snap in body:
@@ -632,6 +686,25 @@ def bjud_of(c):
     return c.base[2]
 
 
+def _stray(c, take):
+    """What is wrong with the ids --take names, as one refusal, or None: an id nothing lays
+    over a standing judgment or reads from another source, or one no name can take. A run
+    that stopped on a contested id read no reversal, and says that instead."""
+    if c.contested:
+        return None
+    named = {r[0] for r in c.reversed} | {u[0] for u in c.updates if u[0] not in bjud_of(c)
+                                             and "taken by name" in u[5]}
+    stray = [k for k in take if k not in named]
+    if stray:
+        return (f"refused - --take names {', '.join(stray)}, which no hypothesis here lays over a "
+                f"standing judgment, or reads from another source than the base")
+    cannot = [k for k in take if k in c.untakeable]
+    if cannot:
+        return "refused - no name takes " + ", ".join(cannot) + ": " + "; ".join(
+            why for k, _, why in c.untaken if k in cannot)
+    return None
+
+
 def _dirty(paths, files):
     """The record files a fold would write that carry uncommitted changes -> [relative
     path], empty outside a checkout. A branch's record folds onto a committed base, so the
@@ -642,6 +715,7 @@ def _dirty(paths, files):
         return []
     out = []
     for f in list(files) + [P.replaced_path(paths)]:
+        f = os.path.abspath(f)
         if not os.path.exists(f):
             continue
         code, status, _ = _git(here, "status", "--porcelain", "--", f)
@@ -665,7 +739,7 @@ def _next_command(paths, files, refs):
     return out
 
 
-def fold(paths, names=(), refs=(), stamp=None, take=()):
+def fold(paths, names=(), refs=(), stamp=None, take=(), drops=None):
     """The union written into the base, under one lock from the reading to the deletion:
     the record and its hypotheses read, the union tested and its report printed, then -
     only when the test is clean - every id that arrived or was replaced carried over whole
@@ -692,19 +766,26 @@ def fold(paths, names=(), refs=(), stamp=None, take=()):
                                 f"again")
         fail_b, _, moved_b, _, _ = P.check_lines(paths)
         page = page_of(paths)
-        c = union_of(doc, hyps, (fail_b, moved_b), stamp, page, take)
+        c = union_of(doc, hyps, (fail_b, moved_b), stamp, page, take, drops)
         for l in report(c):
             print(l)
         print()
-        named = {r[0] for r in c.reversed} | {u[0] for u in c.updates if u[0] not in bjud_of(c)
-                                                 and "taken by name" in u[5]}
-        stray = [k for k in take if k not in named]
-        if stray:
-            raise P.Refused(f"refused - --take names {', '.join(stray)}, which no hypothesis here lays "
-                            f"over a standing judgment, or reads from another source than the base")
         if c.contested:
             raise P.Refused("refused - a contested id stops the fold: " + ", ".join(c.contested))
+        stray = _stray(c, take)
+        if stray:
+            raise P.Refused(stray)
+        if c.drops_needed and not c.blocked:
+            raise P.Refused("refused - a replacement no longer rests on what the judgment it replaces "
+                            "rested on, and a dependency dropped is a decision with a reason: "
+                            + "; ".join(f"consolidate {h['name']} " + " ".join(
+                                f"--drop {shlex.quote(d + ': <why>')}" for d in c.drops_needed[k])
+                                for k, h, _, _, _, _ in c.reversed if k in c.drops_needed))
         if c.untaken and not (c.falsified or c.holes or c.head_falsified or c.refused):
+            cannot = [k for k, _, _ in c.untaken if k in c.untakeable]
+            if cannot:
+                raise P.Refused("refused - no name takes " + ", ".join(cannot) + ": "
+                                + "; ".join(why for k, _, why in c.untaken if k in cannot))
             raise P.Refused("refused - a verdict the base's own condition has not broken folds only "
                             "when a person names it: " + "; ".join(
                                 f"consolidate {h['name']} --take {k}" for k, h, _ in c.untaken))
@@ -719,7 +800,7 @@ def fold(paths, names=(), refs=(), stamp=None, take=()):
         writes = [(k, h, False) for k, h in c.arrived] + [(k, h, True) for k, h, _, _, _, _ in c.updates]
         writes.sort(key=lambda w: (w[0] in c.jud, w[0]))
         whys = {k: why for k, _, _, _, _, why in c.updates}
-        out, added, replaced = [], 0, 0
+        out, added, replaced, trailed = [], 0, 0, set()
         for k, h, replace in writes:
             collection, block = _block_of(h, k, c.ids, c.jud, c.fields, doc)
             if replace:
@@ -729,6 +810,7 @@ def fold(paths, names=(), refs=(), stamp=None, take=()):
                     _replace_block(texts[target], k, block)
                 else:
                     P._replace_in(texts[target], k, renewed)
+                    trailed.add(k)
                 replaced += 1
                 out.append(f"replace {k} with what {h['name']} holds, where it stands"
                            + (" - born renewed, and what it replaced kept" if renewed and "born" in renewed
@@ -766,12 +848,27 @@ def fold(paths, names=(), refs=(), stamp=None, take=()):
                 P._write_text(f, originals[f])
             raise P.Refused(f"the fold broke the record and was undone: {e}")
         # the bodies the fold replaced, kept whole beside the record - once the record is
-        # safely written, so a fold undone leaves no version of what never left
-        kept = []
-        for k, h, replace in writes:
-            if replace and k in c.base[2] and isinstance(h["raw"].get(k), dict):
-                P.keep_replaced(paths, k, c.base[2][k]["body"], whys.get(k, ""), stamp)
-                kept = [P.replaced_path(paths)]
+        # safely written; a keeping that fails undoes the record too, so the trail on a
+        # judgment and the version beside the record never disagree
+        kept, side = [], P.replaced_path(paths)
+        side_before = _text_of(side) if os.path.isfile(side) else None
+        try:
+            for k, h, replace in writes:
+                if replace and k in trailed and isinstance(h["raw"].get(k), dict):
+                    old_body = c.base[2][k]["body"]
+                    named_drops = {d: (drops or {})[d] for d in P.dropped_deps(old_body, h["raw"][k], c.fields)
+                                   if d in (drops or {})}
+                    P.keep_replaced(paths, k, old_body, whys.get(k, ""), stamp, named_drops or None)
+                    kept = [side]
+        except (Exception, SystemExit) as e:
+            for f in changed:
+                P._write_text(f, originals[f])
+            if side_before is None:
+                if os.path.isfile(side):
+                    os.remove(side)
+            else:
+                P._write_text(side, side_before)
+            raise P.Refused(f"the fold could not keep what it replaced and was undone: {e}")
         deleted = []
         for h in c.hyps:
             if h.get("path") and os.path.isfile(h["path"]):
@@ -797,7 +894,8 @@ def fold(paths, names=(), refs=(), stamp=None, take=()):
     for h in c.hyps:
         if not h.get("path"):
             out.append(f"  nothing to delete for {h['name']}: another branch keeps its own record")
-    out += _next_command(paths, [_rel(paths, f) for f in changed] + [_rel(paths, f) for f in kept], refs)
+    out += _next_command(paths, [_rel(paths, f) for f in changed] + [_rel(paths, f) for f in kept]
+                         + [_rel(paths, p) for p in deleted], refs)
     n = P.counts(doc2, ids2, jud2, fields2, raw2)["graph.flagged"]
     out.append("")
     out.append(f"the record needs a person on {n} judgment{'s' if n != 1 else ''} - check says the rest")
@@ -991,9 +1089,11 @@ def from_ref(paths, ref, doc=None):
             if not keep:
                 keep = not P._same_claim(P.claim_of(b), P.claim_of(braw.get(k)))
             if not keep and k in bjud and isinstance(b, dict) and isinstance(braw.get(k), dict):
-                # the same verdict on other grounds is a decision written again; the same
-                # decision with its seen refreshed is the branch's own review, which stays
-                keep = P._version_core(b) != P._version_core(braw[k])
+                # the same verdict on other grounds is a decision written again, and an
+                # arrangement re-decided in place carries a new born; the same decision with
+                # its seen refreshed is the branch's own review, which stays
+                keep = P._version_core(b) != P._version_core(braw[k]) or (
+                    P.is_arrangement(bjud[k], braw) and b.get("born") != braw[k].get("born"))
             if not keep and k not in bjud and isinstance(b, dict):
                 dr, db = P._read_on(b, rraw), P._read_on(braw.get(k), braw)
                 keep = bool(dr) and (db is None or dr > db)
@@ -1027,7 +1127,7 @@ def pull_from(paths, ref, seeds, budget=40):
 
 
 # ── the command ──────────────────────────────────────────────────────────────
-HELP = """  consolidate [--dry-run] [<hypothesis> ...] [--from <ref>] [--take <id>] [--as-of YYYY-MM-DD] [file]
+HELP = """  consolidate [--dry-run] [<hypothesis> ...] [--from <ref>] [--take <id>] [--drop "<id>: <why>"] [--as-of YYYY-MM-DD] [file]
   consolidate --refute <hypothesis> "<why>" [--as s.<source>] [--as-of YYYY-MM-DD] [file]
   pull <seed> [...] --from <ref> [--budget N] [file]
 
@@ -1054,7 +1154,11 @@ nothing dates is not compared with a dated one, and is contested until --as-of d
 judgment when the standing one is broken by its own condition on what the base holds - a
 hypothesis that brings both the reading that breaks a judgment and the verdict that repairs
 it has not broken it here - or when a person names the id: `--take <id>` folds that reversal
-by name, and the trail says so. Nothing written inside a hypothesis opens the door; the
+by name, and the trail says so. A replacement that rests on less names each dependency it
+drops with its reason, `--drop "<id>: <why>"`, kept with the replaced version. A subject does
+not change kind at the fold - an entry under a judgment's id, or a judgment under an entry's -
+and what replaces an arrangement is an arrangement; no name takes either. A reading dated
+after today is not read. Nothing written inside a hypothesis opens the door; the
 report says when the hypothesis's own readings would fire the base's condition, so the
 person deciding knows. What a fold replaces is kept whole in .kpopper/replaced.yaml, with
 one line on the judgment. A judgment's review - the same decision, its seen refreshed -
@@ -1114,13 +1218,13 @@ def main(argv=None):
             raise P.Refused("pull needs a seed: an entry, or a prefix")
         return pull_from(files or P.default_paths(), ref, seeds, budget)
     dry, refs, refute_, source, as_of, names, files, why = False, [], None, None, None, [], [], None
-    take = []
+    take, drops = [], {}
     i = 0
     while i < len(argv):
         a = argv[i]
         if a == "--dry-run":
             dry = True; i += 1
-        elif a in ("--from", "--refute", "--as", "--as-of", "--take"):
+        elif a in ("--from", "--refute", "--as", "--as-of", "--take", "--drop"):
             if i + 1 >= len(argv):
                 raise P.Refused(f"{a} needs a value")
             v = argv[i + 1]
@@ -1132,6 +1236,12 @@ def main(argv=None):
                 source = v
             elif a == "--take":
                 take.append(v)
+            elif a == "--drop":
+                if ":" not in v or not v.split(":", 1)[0].strip() or not v.split(":", 1)[1].strip():
+                    raise P.Refused('--drop takes "<id>: <why>" - the dependency the replacement no '
+                                    'longer rests on, and the reason')
+                d, w = v.split(":", 1)
+                drops[d.strip()] = w.strip()
             else:
                 as_of = v
             i += 2
@@ -1145,6 +1255,9 @@ def main(argv=None):
             names.append(a); i += 1
     if as_of and not re.match(r"^\d{4}-\d{2}-\d{2}$", as_of):
         raise P.Refused("--as-of takes a date, YYYY-MM-DD")
+    if as_of and P._as_day(as_of) and P._as_day(as_of) > P.latest_today():
+        raise P.Refused(f"--as-of {as_of} is after today ({P.latest_today().isoformat()}) - a day "
+                        f"is the record's clock, and a fold is not dated ahead")
     paths = files or P.default_paths()
     if refute_:
         if refs or names or dry:
@@ -1155,16 +1268,21 @@ def main(argv=None):
     if source:
         raise P.Refused("--as names the session source of a refutation: it goes with --refute")
     if not dry:
-        return fold(paths, names, refs, as_of, take)
+        return fold(paths, names, refs, as_of, take, drops)
     doc, hyps = read(paths, names, refs)
     if not hyps:
         print("no hypotheses beside the record - nothing to consolidate")
         return 0
     fail_b, _, moved_b, _, _ = P.check_lines(paths)
-    c = union_of(doc, hyps, (fail_b, moved_b), as_of, page_of(paths), take)
+    c = union_of(doc, hyps, (fail_b, moved_b), as_of, page_of(paths), take, drops)
     for l in report(c):
         print(l)
-    return 1 if c.red else 0
+    stray = _stray(c, take)
+    if stray:
+        print()
+        print(stray)
+        return 1
+    return 1 if c.red or c.drops_needed else 0
 
 
 if __name__ == "__main__":

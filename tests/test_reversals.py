@@ -141,9 +141,18 @@ class AcrossTheBranchLine(unittest.TestCase):
                           "consolidate contra-a --take c.boiler_short\n", out)
             code, out, err = kp("consolidate", "--from", "contra-a", "--take", "c.boiler_short",
                                 "--as-of", "2026-09-04", rec)
+            self.assertEqual(code, 1, out + err)
+            self.assertIn("consolidate contra-a --drop 'heat.deficit_kw: <why>'", out + err)
+            code, out, err = kp("consolidate", "--from", "contra-a", "--take", "c.boiler_short",
+                                "--drop", "heat.deficit_kw: worked out from the two", "--as-of", "2026-09-04", rec)
             self.assertEqual(code, 0, out + err)
             git(d, "add", "-A")
             git(d, "commit", "-qm", "fold contra-a")
+            # the trail on the base counts the base's replacements only: the branch's own
+            # line stays with the branch, and the kept versions match the lines
+            body = P.bodies(P.load([str(rec)]))["c.boiler_short"]
+            self.assertEqual(len(body["replaced"]), 1)
+            self.assertEqual(len(P.read_replaced([str(rec)])["c.boiler_short"]), 1)
             # the other branch kept the verdict and read something else: over the base that
             # took contra-a, its old reading is contested and its verdict is a reversal that
             # its own readings would fire - both said, nothing folded
@@ -258,6 +267,108 @@ class AcrossTheBranchLine(unittest.TestCase):
                           "standing judgment", out + err)
 
 
+class WhatNoNameTakes(unittest.TestCase):
+    """A subject does not change kind at the fold, an arrangement is replaced only by one,
+    a reading dated ahead is not read, and --take is checked by the dry run too."""
+
+    ENTRY = ("  heat.loss_kw:\n    v: 31\n    unit: kW\n    name: \"heat loss on a -5°C night\"\n"
+             "    from: s.2026_09_02_heating\n    at: \"worked out from the glazing area during the session\"\n"
+             "    of: \"2026-09-02\"\n")
+    AS_JUDGMENT = ("  heat.loss_kw:\n    rests_on: [heat.boiler_kw]\n"
+                   "    verdict: \"the loss is whatever the boiler gives\"\n    wrong_if: \"heat.boiler_kw > 40\"\n"
+                   "    seen: {heat.boiler_kw: 24}\n")
+    JUDGMENT_HEAD = "  c.boiler_short:\n    rests_on: [heat.boiler_kw, heat.loss_kw, heat.deficit_kw]\n"
+
+    def test_a_judgment_under_an_entry_id_and_an_entry_under_a_judgment_id_are_refused(self):
+        with tempfile.TemporaryDirectory() as d:
+            rec = repo(d)
+            branch(d, rec, "kind", edits=[(self.ENTRY, self.AS_JUDGMENT)])
+            code, out, err = kp("consolidate", "--dry-run", "--from", "kind", rec)
+            self.assertEqual(code, 1, out + err)
+            self.assertIn("the base holds an entry under this id and the hypothesis a judgment - a subject "
+                          "does not change kind at the fold: set the entry, or give the judgment a new id",
+                          out)
+            code, out, err = kp("consolidate", "--from", "kind", "--take", "heat.loss_kw", rec)
+            self.assertEqual(code, 1, out + err)
+            self.assertIn("refused - --take names heat.loss_kw, which no hypothesis here lays over a standing "
+                          "judgment", out + err)
+            # a record keeps a judgment somewhere, so the branch gets another before this
+            # one becomes a number
+            git(d, "switch", "-qc", "flat")
+            code, out, err = run(SCRIPTS / "provenance.py", "add", "c.margin", "rests_on=[heat.boiler_kw, heat.loss_kw]",
+                                 "verdict=there is a margin", "wrong_if=heat.loss_kw > 40", "--as-of", "2026-09-03", rec)
+            self.assertEqual(code, 0, out + err)
+            text = rec.read_text(encoding="utf-8")
+            start = text.index("  c.boiler_short:\n")
+            end = text.index("\n  c.margin:", start)
+            edit(rec, text[start:end], "  c.boiler_short:\n    v: 1\n    name: \"a number\"")
+            git(d, "add", "-A")
+            git(d, "commit", "-qm", "flat")
+            git(d, "switch", "-q", "main")
+            code, out, err = kp("consolidate", "--dry-run", "--from", "flat", rec)
+            self.assertEqual(code, 1, out + err)
+            self.assertIn("    the base holds a judgment under this id and the hypothesis an entry - a subject "
+                          "does not change kind at the fold, and no name takes this", out)
+            code, out, err = kp("consolidate", "--from", "flat", "--take", "c.boiler_short", rec)
+            self.assertEqual(code, 1, out + err)
+            self.assertIn("refused - no name takes c.boiler_short: the base holds a judgment under this id",
+                          out + err)
+
+    def test_a_reading_dated_ahead_on_a_branch_is_not_read_and_a_fold_is_not_dated_ahead(self):
+        with tempfile.TemporaryDirectory() as d:
+            rec = repo(d)
+            import datetime
+            ahead = (datetime.date.today() + datetime.timedelta(days=3)).isoformat()
+            today = datetime.date.today().isoformat()
+            branch(d, rec, "ahead", edits=[("    v: 31\n    unit: kW", "    v: 28\n    unit: kW"),
+                                           ("    of: \"2026-09-02\"\n  heat.deficit_kw",
+                                            "    of: \"" + ahead + "\"\n  heat.deficit_kw")])
+            code, out, err = kp("consolidate", "--dry-run", "--from", "ahead", rec)
+            self.assertEqual(code, 1, out + err)
+            self.assertIn("  heat.loss_kw: a reading dated " + ahead + ", after today (" + today + ") - a day "
+                          "is the record's clock, and a day ahead is not read\n", out)
+            code, out, err = kp("consolidate", "--from", "ahead", "--as-of", ahead, rec)
+            self.assertEqual(code, 1, out + err)
+            self.assertIn("--as-of " + ahead + " is after today", out + err)
+
+    def test_a_judgment_does_not_become_an_arrangement_at_the_fold(self):
+        with tempfile.TemporaryDirectory() as d:
+            rec = pathlib.Path(d) / "PROVENANCE.yaml"
+            shutil.copytree(FIXTURE, d, dirs_exist_ok=True)
+            (pathlib.Path(d) / "PROVENANCE.d" / "arranged.yaml").write_text(
+                'hypothesis:\n  claim: "the boiler question is a tab"\n  born: "2026-09-05"\n\n'
+                'judgments:\n  c.boiler_short:\n    rests_on: [s.2026_09_02_heating, graph.judgments]\n'
+                '    verdict: "a tab for the boiler"\n    wrong_if: "graph.judgments > 5"\n'
+                '    seen: {s.2026_09_02_heating: "read 2026-09-02", graph.judgments: 1}\n', encoding="utf-8")
+            code, out, err = run(SCRIPTS / "consolidate.py", "--dry-run", "arranged", "--as-of", "2026-09-05", rec)
+            self.assertEqual(code, 1, out + err)
+            self.assertIn("the base holds a judgment under this id and the hypothesis an arrangement - an "
+                          "arrangement is born when it is written in place, and no name takes one over a "
+                          "judgment", out)
+            code, out, err = run(SCRIPTS / "consolidate.py", "arranged", "--take", "c.boiler_short",
+                                 "--as-of", "2026-09-05", rec)
+            self.assertEqual(code, 1, out + err)
+            self.assertIn("refused - no name takes c.boiler_short", out + err)
+
+    def test_a_contested_id_is_said_before_a_take_is_judged(self):
+        with tempfile.TemporaryDirectory() as d:
+            rec = pathlib.Path(d) / "PROVENANCE.yaml"
+            shutil.copytree(FIXTURE, d, dirs_exist_ok=True)
+            code, out, err = run(SCRIPTS / "consolidate.py", "--take", "c.boiler_short", rec)
+            self.assertEqual(code, 1, out + err)
+            self.assertIn("refused - a contested id stops the fold: heat.loss_kw", out + err)
+            self.assertNotIn("--take names", out + err)
+
+    def test_the_dry_run_checks_take_as_the_fold_does(self):
+        with tempfile.TemporaryDirectory() as d:
+            rec = repo(d)
+            branch(d, rec, "flip", edits=[(VERDICT, FLIPPED)])
+            code, out, err = kp("consolidate", "--dry-run", "--from", "flip", "--take", "heat.loss_kw", rec)
+            self.assertEqual(code, 1, out + err)
+            self.assertIn("refused - --take names heat.loss_kw, which no hypothesis here lays over a standing "
+                          "judgment", out)
+
+
 class InOneTree(unittest.TestCase):
 
     def test_the_same_verdict_on_other_grounds_is_refused_into_a_hypothesis(self):
@@ -314,9 +425,6 @@ class TheHelp(unittest.TestCase):
         self.assertIn("does not travel", out)
         self.assertIn("folds onto a committed base only", out)
 
-
-if __name__ == "__main__":
-    unittest.main()
 
 
 class AReadingFromAnotherSource(unittest.TestCase):
@@ -388,3 +496,7 @@ class AReadingFromTheFuture(unittest.TestCase):
             today = datetime.date.today().isoformat()
             code, out, err = run(SCRIPTS / "provenance.py", "set", "heat.loss_kw", "20", "--as-of", today, rec)
             self.assertEqual(code, 0, out + err)
+
+
+if __name__ == "__main__":
+    unittest.main()
