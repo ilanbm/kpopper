@@ -164,11 +164,13 @@ structure TypeState where
 abbrev TypeM := ExceptT String (StateM TypeState)
 
 /-- Unknown inputs and cycles assert no scalar type. Known types are checked
-before evaluation; unavailable data never acquire an invented null type. -/
-def inferType : Nat → Std.HashMap String Expr → Expr → TypeM (Option ValueType)
-  | 0, _, _ => throw "depth_limit"
-  | fuel + 1, nodes, expr => do
-    if (← get).visits >= 1000000 then throw "step_limit"
+before evaluation; unavailable data never acquire an invented null type.
+Each entered expression, including a memo-hit reference, consumes one preflight
+visit. This budget uses limits.steps independently of evaluator State.steps. -/
+def inferType : Nat → Std.HashMap String Expr → Limits → Expr → TypeM (Option ValueType)
+  | 0, _, _, _ => throw "depth_limit"
+  | fuel + 1, nodes, limits, expr => do
+    if (← get).visits >= limits.steps then throw "step_limit"
     modify fun st => { st with visits := st.visits + 1 }
     match expr with
     | .literal v => return some (valueType v)
@@ -178,12 +180,12 @@ def inferType : Nat → Std.HashMap String Expr → Expr → TypeM (Option Value
       if (← get).active.contains id then return none
       let some body := nodes[id]? | return none
       modify fun st => { st with active := st.active.insert id }
-      let result ← inferType fuel nodes body
+      let result ← inferType fuel nodes limits body
       modify fun st => { st with active := st.active.erase id, memo := st.memo.insert id result }
       return result
     | .binary op left right =>
-      let a ← inferType fuel nodes left
-      let b ← inferType fuel nodes right
+      let a ← inferType fuel nodes limits left
+      let b ← inferType fuel nodes limits right
       if op == .eq || op == .ne then
         if let some x := a then
           if let some y := b then

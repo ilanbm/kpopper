@@ -143,7 +143,7 @@ structure Request where
   root : Expr
 
 def parseRequest : ParseM Request := do
-  if (← takeToken) != "KP1" then throw "invalid_transport"
+  if (← takeToken) != "KP2" then throw "invalid_transport"
   let steps ← takeBounded 10000000 "invalid_limits"
   let depth ← takeBounded 4096 "invalid_limits"
   let digits ← takeBounded 4096 "invalid_limits"
@@ -174,14 +174,15 @@ def valueTokens : Value → List String
   | .null => ["z"]
 
 def response (status : String) (value : Option Value) (potential : Std.HashSet String)
-    (st : State) : String :=
+    (preflightSteps : Nat) (st : State) : String :=
   let diagnostics := sorted st.diagnostics
   let potential := sorted potential
   let reads := sorted st.reads
   let counts := st.counts.toList.mergeSort (fun a b => a.1 ≤ b.1)
-  String.intercalate "\t" <| ["KR1", status] ++ (value.map valueTokens).getD ["u"] ++
+  String.intercalate "\t" <| ["KR2", status] ++ (value.map valueTokens).getD ["u"] ++
     [toString diagnostics.length] ++ diagnostics ++ [toString potential.length] ++ potential.map hex ++
-    [toString reads.length] ++ reads.map hex ++ [toString st.steps, toString counts.length] ++
+    [toString reads.length] ++ reads.map hex ++
+    [toString st.steps, toString preflightSteps, toString counts.length] ++
     counts.flatMap (fun (id, count) => [hex id, toString count])
 
 def errorStatus (code : String) : String :=
@@ -190,8 +191,10 @@ def errorStatus (code : String) : String :=
             "expression_limit", "transport_limit", "node_limit"] : List String).contains code then "limit"
   else "error"
 
-def errorResponse (code : String) (potential : Std.HashSet String := {}) : String :=
-  response (errorStatus code) none potential { diagnostics := ({} : Std.HashSet String).insert code }
+def errorResponse (code : String) (potential : Std.HashSet String := {})
+    (preflightSteps : Nat := 0) : String :=
+  response (errorStatus code) none potential preflightSteps
+    { diagnostics := ({} : Std.HashSet String).insert code }
 
 def handle (line : String) : String := Id.run do
   if line.utf8ByteSize > 16777216 then return errorResponse "transport_limit"
@@ -205,14 +208,18 @@ def handle (line : String) : String := Id.run do
     | .error (code, potential) => return errorResponse code potential
   if !(potential.toList.all request.declared.contains) then
     return errorResponse "undeclared_dependency" potential
-  let (typed, _) := ((inferType (request.limits.depth + 1) request.nodes request.root).run).run {}
-  if let .error code := typed then return errorResponse code potential
+  let (typed, typeState) :=
+    ((inferType (request.limits.depth + 1) request.nodes request.limits request.root).run).run {}
+  if let .error code := typed then return errorResponse code potential typeState.visits
   let (result, st) := ((evaluate (request.limits.depth + 1) request.nodes request.limits 0 request.root).run).run {}
-  if !(st.reads.toList.all potential.contains) then return errorResponse "undeclared_dependency" potential
+  if !(st.reads.toList.all potential.contains) then
+    return errorResponse "undeclared_dependency" potential typeState.visits
   match result with
-  | .error code => return response "limit" none potential { st with diagnostics := st.diagnostics.insert code }
-  | .ok (.known value) => return response "ok" (some value) potential st
-  | .ok .unknown => return response "unknown" none potential st
-  | .ok .error => return response "error" none potential st
+  | .error code =>
+    return response "limit" none potential typeState.visits
+      { st with diagnostics := st.diagnostics.insert code }
+  | .ok (.known value) => return response "ok" (some value) potential typeState.visits st
+  | .ok .unknown => return response "unknown" none potential typeState.visits st
+  | .ok .error => return response "error" none potential typeState.visits st
 
 end Kpopper

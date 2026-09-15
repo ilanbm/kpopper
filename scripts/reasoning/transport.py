@@ -1,4 +1,4 @@
-"""Strict, data-only KP1/KR1 transport for the packaged scalar kernel.
+"""Strict, data-only KP2/KR2 transport for the packaged scalar kernel.
 
 This module validates framing and tags; it does not evaluate expressions, locate
 or build executables, download artifacts, or supply a semantic fallback.
@@ -53,7 +53,7 @@ def encode_request(request):
         raise ValueError("invalid declared IDs")
     if not isinstance(nodes, dict) or len(nodes) > 20_000 or not all(isinstance(x, str) for x in nodes):
         raise ValueError("invalid nodes")
-    tokens = ["KP1", str(bounds["steps"]), str(bounds["depth"]), str(bounds["digits"]), str(len(declared))]
+    tokens = ["KP2", str(bounds["steps"]), str(bounds["depth"]), str(bounds["digits"]), str(len(declared))]
     tokens.extend(_text(x) for x in sorted(declared))
     tokens.append(str(len(nodes)))
     expression_count = 0
@@ -108,7 +108,7 @@ def encode_request(request):
 
 
 def decode_response(line):
-    """Decode one canonical KR1 response, refusing ambiguous or forged framing."""
+    """Decode one canonical KR2 response, refusing ambiguous or forged framing."""
     if not isinstance(line, str) or len(line) > MAX_RESPONSE_BYTES:
         raise ValueError("invalid response")
     if line.endswith("\n"):
@@ -146,7 +146,7 @@ def decode_response(line):
             raise ValueError("noncanonical or duplicate response fields")
         return items
 
-    if take() != "KR1":
+    if take() != "KR2":
         raise ValueError("unsupported response protocol")
     status = take()
     if status not in ("ok", "unknown", "error", "limit", "unsupported_capability"):
@@ -182,6 +182,7 @@ def decode_response(line):
     if not set(executed) <= set(potential):
         raise ValueError("executed reads outside potential closure")
     steps = natural(10_000_000)
+    preflight_steps = natural(10_000_000)
     counts = [(text(), natural(1)) for _ in range(natural(20_000))]
     ordered([node for node, _ in counts])
     executed_set = set(executed)
@@ -191,4 +192,5 @@ def decode_response(line):
         raise ValueError("trailing response data")
     return {"status": status, "value": value, "diagnostics": diagnostics,
             "potential_reads": potential, "executed_reads": executed,
-            "steps": steps, "node_evaluations": dict(counts)}
+            "steps": steps, "preflight_steps": preflight_steps,
+            "node_evaluations": dict(counts)}

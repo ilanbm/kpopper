@@ -54,22 +54,29 @@ class TransportTests(unittest.TestCase):
                 encode_request(item)
 
     def test_response_framing_types_counts_and_canonicalization(self):
-        good = "KR1\tok\tn\t3\t10\t0\t0\t0\t3\t0"
-        self.assertEqual(decode_response(good + "\n")["value"]["numerator"], "3")
-        invalid = ["", good + "\tx", good + "\n\n", good.replace("KR1", "KR2"),
+        good = "KR2\tok\tn\t3\t10\t0\t0\t0\t3\t3\t0"
+        decoded = decode_response(good + "\n")
+        self.assertEqual(decoded["value"]["numerator"], "3")
+        self.assertEqual((decoded["steps"], decoded["preflight_steps"]), (3, 3))
+        invalid = ["", good + "\tx", good + "\n\n", good.replace("KR2", "KR1"),
                    good.replace("\tn\t3\t10", "\tn\t6\t20"),
                    good.replace("\tn\t3\t10", "\tn\t-0\t1"),
                    good.replace("\tn\t3\t10", "\tn\t1\t0"),
                    good.replace("\tn\t3\t10", "\tb\ttrue"),
                    good.replace("\tn\t3\t10", "\ts\tff"),
                    good.replace("\tok\t", "\tunknown\t"),
-                   "KR1\tok\tu\t0\t0\t0\t0\t0",
-                   "KR1\terror\tu\t1\tinvented\t0\t0\t0\t0",
-                   "KR1\terror\tu\t2\ttype_error\ttype_error\t0\t0\t0\t0",
-                   "KR1\tok\tz\t0\t2\t62\t61\t0\t1\t0",
-                   "KR1\tok\tz\t0\t1\t61\t1\t62\t1\t0",
-                   "KR1\tok\tz\t0\t1\t61\t1\t61\t1\t1\t61\t2",
-                   "KR1\tok\tz\t0\t00\t0\t1\t0"]
+                   "KR2\tok\tu\t0\t0\t0\t0\t0\t0",
+                   "KR2\terror\tu\t1\tinvented\t0\t0\t0\t0\t0",
+                   "KR2\terror\tu\t2\ttype_error\ttype_error\t0\t0\t0\t0\t0",
+                   "KR2\tok\tz\t0\t2\t62\t61\t0\t1\t1\t0",
+                   "KR2\tok\tz\t0\t1\t61\t1\t62\t1\t1\t0",
+                   "KR2\tok\tz\t0\t1\t61\t1\t61\t1\t1\t1\t61\t2",
+                   "KR2\tok\tz\t0\t00\t0\t1\t1\t0",
+                   # The preflight counter is mandatory, canonical, and bounded.
+                   "KR2\terror\tu\t1\ttype_error\t0\t0\t0\t0",
+                   "KR2\terror\tu\t1\ttype_error\t0\t0\t0\t01\t0",
+                   "KR2\terror\tu\t1\ttype_error\t0\t0\t0\t-1\t0",
+                   "KR2\terror\tu\t1\ttype_error\t0\t0\t0\t10000001\t0"]
         for item in invalid:
             with self.subTest(item=item), self.assertRaises(ValueError):
                 decode_response(item)
@@ -83,7 +90,12 @@ class NativeKernelTests(unittest.TestCase):
         self.assertEqual(run.stderr, "")
         lines = run.stdout.splitlines()
         self.assertEqual(len(lines), len(requests))
-        return [decode_response(line) for line in lines]
+        results = [decode_response(line) for line in lines]
+        for req, result in zip(requests, results):
+            step_bound = (req.get("limits") or {}).get("steps", 1_000_000)
+            self.assertLessEqual(result["preflight_steps"], step_bound)
+            self.assertLessEqual(result["steps"], step_bound)
+        return results
 
     def evaluate(self, expression, **kwargs):
         return self.batch([request(expression, **kwargs)])[0]
@@ -108,6 +120,7 @@ class NativeKernelTests(unittest.TestCase):
         for left, right in [(num(0), {"bool": False}), (num(1), {"text": "1"}), ({"null": True}, num(0))]:
             result = self.evaluate(op("eq", left, right))
             self.assertEqual((result["status"], result["steps"]), ("error", 0))
+            self.assertEqual(result["preflight_steps"], 3)
             self.assertEqual(result["diagnostics"], ["type_error"])
         for code in ["missing_reference", "missing_input", "contested", "unavailable_input"]:
             result = self.evaluate(op("add", num(2), {"unavailable": code}))
@@ -115,6 +128,7 @@ class NativeKernelTests(unittest.TestCase):
         # Known type errors are found before a sibling arithmetic error can run.
         result = self.evaluate(op("add", op("div", num(1), num(0)), {"text": "bad"}))
         self.assertEqual((result["diagnostics"], result["steps"]), (["type_error"], 0))
+        self.assertEqual(result["preflight_steps"], 5)
         result = self.evaluate(op("add", {"unavailable": "contested"}, {"text": "1"}))
         self.assertEqual((result["status"], result["steps"]), ("error", 0))
 
@@ -126,9 +140,37 @@ class NativeKernelTests(unittest.TestCase):
         self.assertEqual(result["executed_reads"], result["potential_reads"])
         refused = self.evaluate({"ref": "חישוב🙂"}, nodes=nodes, declared=["חישוב🙂", "élève"])
         self.assertEqual((refused["status"], refused["steps"]), ("error", 0))
+        self.assertEqual(refused["preflight_steps"], 0)
         self.assertEqual(refused["diagnostics"], ["undeclared_dependency"])
         self.assertEqual(refused["potential_reads"], result["potential_reads"])
         self.assertEqual(self.evaluate({"text": "missing"})["executed_reads"], [])
+
+    def test_preflight_budget_limits_work_without_evaluation_reads(self):
+        expression = op("eq", {"ref": "a"}, {"bool": False})
+        result = self.evaluate(expression, nodes={"a": num(0)}, declared=["a"], limits={"steps": 2})
+        self.assertEqual((result["status"], result["diagnostics"]), ("limit", ["step_limit"]))
+        self.assertEqual((result["preflight_steps"], result["steps"]), (2, 0))
+        self.assertEqual(result["potential_reads"], ["a"])
+        self.assertEqual(result["executed_reads"], [])
+        self.assertEqual(result["node_evaluations"], {})
+
+        # With enough preflight budget, the type error is reached without
+        # falsely recording the inspected node as an executed evaluation read.
+        result = self.evaluate(expression, nodes={"a": num(0)}, declared=["a"], limits={"steps": 4})
+        self.assertEqual((result["status"], result["diagnostics"]), ("error", ["type_error"]))
+        self.assertEqual((result["preflight_steps"], result["steps"]), (4, 0))
+        self.assertEqual(result["potential_reads"], ["a"])
+        self.assertEqual(result["executed_reads"], [])
+        self.assertEqual(result["node_evaluations"], {})
+
+    def test_preflight_and_evaluation_have_independent_step_budgets(self):
+        expression = op("add", {"ref": "a"}, {"ref": "a"})
+        result = self.evaluate(expression, nodes={"a": num(2)}, declared=["a"], limits={"steps": 4})
+        self.assertNumber(result, Fraction(4))
+        # Both traversals count the second reference, but memoize its body.
+        self.assertEqual((result["preflight_steps"], result["steps"]), (4, 4))
+        self.assertEqual(result["executed_reads"], ["a"])
+        self.assertEqual(result["node_evaluations"], {"a": 1})
 
     def test_cycles_errors_and_memoized_shared_nodes(self):
         result = self.evaluate({"ref": "a"}, nodes={"a": {"ref": "b"}, "b": {"ref": "a"}}, declared=["a", "b"])
@@ -139,8 +181,10 @@ class NativeKernelTests(unittest.TestCase):
         self.assertNumber(result, Fraction(16))
         self.assertEqual(result["node_evaluations"], {"a": 1, "b": 1})
         self.assertEqual(result["steps"], 7)
+        self.assertEqual(result["preflight_steps"], 7)
         results = self.batch([request(op("div", num(1), num(0))), request(num(42))])
         self.assertEqual(results[0]["diagnostics"], ["division_by_zero"])
+        self.assertEqual((results[0]["preflight_steps"], results[0]["steps"]), (3, 3))
         self.assertNumber(results[1], Fraction(42))
 
     def test_limits_preserve_potential_and_never_approximate(self):
@@ -152,29 +196,35 @@ class NativeKernelTests(unittest.TestCase):
         result = self.evaluate({"ref": "a"}, nodes={"a": {"ref": "b"}, "b": num(1)}, declared=["a", "b"], limits={"depth": 1})
         self.assertEqual(result["diagnostics"], ["depth_limit"])
         self.assertEqual(result["potential_reads"], ["a", "b"])
+        self.assertEqual((result["preflight_steps"], result["steps"]), (2, 0))
+        self.assertEqual(result["executed_reads"], [])
+        self.assertEqual(result["node_evaluations"], {})
 
     def test_unknown_operations_and_malformed_native_requests(self):
         unsupported = self.evaluate(op("and", {"bool": True}, {"bool": False}))
         self.assertEqual(unsupported["status"], "unsupported_capability")
-        base = "KP1\t1000\t128\t256\t0\t0\t"
-        invalid = ["", "KP2\t1", base + "b\t2", base + "n\t01", base + "n\t+1", base + "n\t1.",
+        self.assertEqual((unsupported["preflight_steps"], unsupported["steps"]), (0, 0))
+        base = "KP2\t1000\t128\t256\t0\t0\t"
+        invalid = ["", base.replace("KP2", "KP1") + "n\t1", base + "b\t2", base + "n\t01", base + "n\t+1", base + "n\t1.",
                    base + "n\t1e", base + "z\tz", base + "s\tf", base + "s\tFF", base + "s\tff",
                    base + "s\tc080", base + "s\teda080", base + "u\tforged", base + "o\tadd\t1\tn\t1",
                    base + "o\tadd\t3\tn\t1\tn\t2\tn\t3", base + "r", base.replace("1000", "00") + "z",
                    base.replace("1000", "10000001") + "z", base.replace("128", "0") + "z",
-                   "KP1\t1000\t128\t256\t2\t61\t61\t0\tz",
-                   "KP1\t1000\t128\t256\t0\t2\t61\tn\t1\t61\tn\t2\tz"]
+                   "KP2\t1000\t128\t256\t2\t61\t61\t0\tz",
+                   "KP2\t1000\t128\t256\t0\t2\t61\tn\t1\t61\tn\t2\tz"]
         run = subprocess.run([BINARY], input="\n".join(invalid) + "\n", text=True, capture_output=True, check=True, timeout=15)
         outputs = [decode_response(line) for line in run.stdout.splitlines()]
         self.assertEqual(len(outputs), len(invalid))
         for result in outputs:
             self.assertEqual((result["status"], result["value"], result["steps"]), ("error", None, 0), result)
-        for raw, code in [("KP1\t1000\t128\t256\t0\t20001", "node_limit"),
-                          ("KP1\t1000\t128\t256\t100001", "edge_limit"),
+            self.assertEqual(result["preflight_steps"], 0)
+        for raw, code in [("KP2\t1000\t128\t256\t0\t20001", "node_limit"),
+                          ("KP2\t1000\t128\t256\t100001", "edge_limit"),
                           (base + "o\tadd\t2\tn\t1\t" * 129 + "n\t1", "parser_depth_limit")]:
             run = subprocess.run([BINARY], input=raw + "\n", text=True, capture_output=True, check=True, timeout=15)
             result = decode_response(run.stdout)
             self.assertEqual((result["status"], result["diagnostics"]), ("limit", [code]))
+            self.assertEqual((result["preflight_steps"], result["steps"]), (0, 0))
         # Invalid raw bytes cannot be accepted as an ID or text token.
         run = subprocess.run([BINARY], input=base.encode() + b"s\t\xff\n", capture_output=True, check=True, timeout=15)
         self.assertEqual(decode_response(run.stdout.decode())["status"], "error")
