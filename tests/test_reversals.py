@@ -286,3 +286,74 @@ class TheHelp(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class AReadingFromAnotherSource(unittest.TestCase):
+    """Two sources for one id that disagree are two instruments: no day orders them across
+    the branch line, and a person names which the id follows."""
+
+    def test_a_branch_reading_from_another_source_waits_for_a_name(self):
+        with tempfile.TemporaryDirectory() as d:
+            rec = repo(d)
+            branch(d, rec, "meter", commands=[
+                ["add", "doc.meter", "name=the heat meter", "url=https://example.test/meter",
+                 "read=2026-09-04"],
+                ["set", "heat.loss_kw", "29", "--source", "doc.meter", "--at", "the night of the 3rd",
+                 "--as-of", "2026-09-04"]])
+            code, out, err = kp("consolidate", "--dry-run", "--from", "meter", rec)
+            self.assertEqual(code, 1, out + err)
+            self.assertIn("  heat.loss_kw: 31 -> 29, from meter\n"
+                          "    a reading from doc.meter where the base reads from s.2026_09_02_heating - one "
+                          "id follows one source; take it by name: consolidate meter --take heat.loss_kw - "
+                          "the base keeps what it holds\n", out)
+            self.assertIn("contested (1): the door refuses the reading, so the base keeps what it holds\n"
+                          "  heat.loss_kw: a reading from doc.meter where the base reads from "
+                          "s.2026_09_02_heating - one id follows one source; take it by name: consolidate "
+                          "meter --take heat.loss_kw\n", out)
+            self.assertNotIn("read again on a later day", out)
+            code, out, err = kp("consolidate", "--from", "meter", "--take", "heat.loss_kw",
+                                "--as-of", "2026-09-05", rec)
+            self.assertEqual(code, 0, out + err)
+            self.assertIn("    a reading from doc.meter where the base reads from s.2026_09_02_heating - "
+                          "taken by name\n", out)
+            body = P.bodies(P.load([str(rec)]))["heat.loss_kw"]
+            self.assertEqual((body["v"], body["from"], body["at"]), (29, "doc.meter", "the night of the 3rd"))
+
+    def test_the_same_value_from_another_source_is_a_citation_change(self):
+        with tempfile.TemporaryDirectory() as d:
+            rec = repo(d)
+            branch(d, rec, "meter", commands=[
+                ["add", "doc.meter", "name=the heat meter", "url=https://example.test/meter",
+                 "read=2026-09-04"],
+                ["set", "heat.loss_kw", "31", "--source", "doc.meter", "--at", "the night of the 3rd",
+                 "--as-of", "2026-09-04"]])
+            code, out, err = kp("consolidate", "--dry-run", "--from", "meter", rec)
+            self.assertEqual(code, 0, out + err)
+            self.assertNotIn("one id follows one source", out)
+
+
+class AReadingFromTheFuture(unittest.TestCase):
+
+    def test_a_day_ahead_of_today_is_refused_wherever_a_reading_is_dated(self):
+        with tempfile.TemporaryDirectory() as d:
+            rec = pathlib.Path(d) / "PROVENANCE.yaml"
+            shutil.copytree(FIXTURE, d, dirs_exist_ok=True)
+            before = rec.read_text(encoding="utf-8")
+            import datetime
+            ahead = (datetime.date.today() + datetime.timedelta(days=2)).isoformat()
+            code, out, err = run(SCRIPTS / "provenance.py", "set", "heat.loss_kw", "20", "--as-of", ahead, rec)
+            self.assertEqual(code, 1)
+            self.assertIn(f"--as-of {ahead} is after today", out + err)
+            self.assertIn("date it the day it was read", out + err)
+            code, out, err = run(SCRIPTS / "provenance.py", "add", "heat.note", "v=1", "name=a note",
+                                 "from=doc.boiler_sheet", "at=its margin", f"of={ahead}", rec)
+            self.assertEqual(code, 1)
+            self.assertIn(f"of: {ahead} is after today", out + err)
+            code, out, err = run(SCRIPTS / "provenance.py", "add", "doc.later", "name=a document",
+                                 "url=https://example.test/later", f"read={ahead}", rec)
+            self.assertEqual(code, 1)
+            self.assertIn(f"read: {ahead} is after today", out + err)
+            self.assertEqual(rec.read_text(encoding="utf-8"), before)
+            today = datetime.date.today().isoformat()
+            code, out, err = run(SCRIPTS / "provenance.py", "set", "heat.loss_kw", "20", "--as-of", today, rec)
+            self.assertEqual(code, 0, out + err)

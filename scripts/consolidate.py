@@ -113,6 +113,8 @@ class Consolidation(object):
                                   grounds, over: by the base's own condition, by a person's
                                   name, or - untaken - waiting for one
       untaken                     the reversed ones nobody named: the run is red on them
+      sourced                     [(id, hypothesis, why)] - readings from another source than
+                                  the base's, with another value: refused until named
       new_subjects                prefixes the base does not hold
       candidates                  pairs for a person to judge as the same subject or distinct
 
@@ -123,7 +125,7 @@ class Consolidation(object):
         self.hyps, self.arrived, self.updates, self.refused = [], [], [], []
         self.moved, self.falsified, self.holes, self.head_falsified = [], [], [], []
         self.contested, self.new_subjects, self.candidates = {}, [], []
-        self.reversed, self.untaken = [], []
+        self.reversed, self.untaken, self.sourced = [], [], []
         self.doc = self.base = None
         self.ids = self.jud = self.fields = self.raw = None
 
@@ -235,7 +237,23 @@ def union_of(doc, hyps, base_check=None, as_of=None, page=None, take=()):
         else:
             day = _read_day(new, c.raw) if isinstance(new, dict) else None
             base_day = P._read_on(old, braw) if isinstance(old, dict) else None
-            if day is None and base_day is not None:
+            other = (not h.get("path") and isinstance(new, dict) and isinstance(old, dict)
+                     and new.get("from") and old.get("from") and str(new["from"]) != str(old["from"])
+                     and not same)
+            if other:
+                # across the branch line, two sources for one id that disagree are two
+                # instruments, and no day orders them: one id follows one source, and a person
+                # names which. A hypothesis beside the record is this checkout's own reading
+                # of another source - a what-if - and keeps the day rule
+                if k in take:
+                    may, why = True, (f"a reading from {new['from']} where the base reads from "
+                                      f"{old['from']} - taken by name")
+                else:
+                    may, why = False, (f"a reading from {new['from']} where the base reads from "
+                                       f"{old['from']} - one id follows one source; take it by "
+                                       f"name: consolidate {h['name']} --take {k}")
+                    c.sourced.append((k, h, why))
+            elif day is None and base_day is not None:
                 # the door tells readings apart by the day; one nothing dates cannot be asked
                 # about, and the day of the fold is not the day it was read
                 may, why = False, f"the reading is undated, and the base's is from {base_day}"
@@ -435,7 +453,7 @@ def report(c, today=None):
         out.append(f"  {k}: {why}")
         out.append("    the base holds " + _describe(k, braw.get(k), braw, bids, bfields))
         out.append(f"    {h['name']} says " + _sources_of(k, h, doc, bids, bfields))
-    if c.refused:
+    if [r for r in c.refused if r[0] not in {s[0] for s in c.sourced}]:
         out.append("  read again on a later day - set it in the base or in the hypothesis with "
                    "--as-of - or refute the hypothesis")
     out.append(f"candidates ({len(c.candidates)}): pairs for a person to judge as the same subject "
@@ -610,6 +628,10 @@ def _guard_private_hypotheses(paths, doc, hyps, action, extra_roots=()):
             raise P.Refused('private draft retained at ' + receipt['path'] + '; original hypothesis retained')
 
 
+def bjud_of(c):
+    return c.base[2]
+
+
 def _dirty(paths, files):
     """The record files a fold would write that carry uncommitted changes -> [relative
     path], empty outside a checkout. A branch's record folds onto a committed base, so the
@@ -674,10 +696,12 @@ def fold(paths, names=(), refs=(), stamp=None, take=()):
         for l in report(c):
             print(l)
         print()
-        stray = [k for k in take if k not in {r[0] for r in c.reversed}]
+        named = {r[0] for r in c.reversed} | {u[0] for u in c.updates if u[0] not in bjud_of(c)
+                                                 and "taken by name" in u[5]}
+        stray = [k for k in take if k not in named]
         if stray:
             raise P.Refused(f"refused - --take names {', '.join(stray)}, which no hypothesis here lays "
-                            f"over a standing judgment")
+                            f"over a standing judgment, or reads from another source than the base")
         if c.contested:
             raise P.Refused("refused - a contested id stops the fold: " + ", ".join(c.contested))
         if c.untaken and not (c.falsified or c.holes or c.head_falsified or c.refused):

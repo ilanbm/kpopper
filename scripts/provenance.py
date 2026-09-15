@@ -3637,6 +3637,21 @@ def _forks_on_contradiction(a, doc, ids, jud, fields, raw):
     return out
 
 
+def _not_from_the_future(a, doc, ids, jud, fields, raw):
+    """An entry's own day - of:, read: - is a reading's place in the record's clock, and a
+    day ahead of today would outrank every reading of today: refused, dated when read."""
+    if a["kind"] != "add" or not isinstance(a.get("body"), dict):
+        return []
+    today = datetime.date.today()
+    out = []
+    for f in ("of", "read"):
+        day = _as_day(a["body"].get(f))
+        if day and day > today:
+            out.append(f"{f}: {a['body'][f]} is after today ({today.isoformat()}) - a reading is dated "
+                       f"the day it was read, never ahead")
+    return out
+
+
 def _trail_is_tool_written(a, doc, ids, jud, fields, raw):
     """`replaced:` is the trail this tool leaves on a judgment that replaced another - on
     every judgment, not only an arrangement - and a session cannot write a history."""
@@ -3811,7 +3826,8 @@ def normalize_authored(action, ids, fields, raw):
 # them; the entries nearest a new one are said just before it.
 VALIDATORS = [_known_key, _sound_dependencies, _sound_references, _sound_citation, _reopener_is_prose,
               _structured_is_sound,
-              _arrangement_is_sound, _trail_is_tool_written, _request_names_the_asking,
+              _arrangement_is_sound, _not_from_the_future, _trail_is_tool_written,
+              _request_names_the_asking,
               _not_born_broken, _measure_is_a_name, _nearest_existing, _forks_on_contradiction,
               _drops_are_named]
 
@@ -5168,6 +5184,10 @@ def write_command(cmd, rest):
     as_of = opts.get("as_of")
     if as_of and not re.match(r"^\d{4}-\d{2}-\d{2}$", as_of):
         raise Refused("--as-of takes a date, YYYY-MM-DD")
+    if as_of and _as_day(as_of) and _as_day(as_of) > datetime.date.today():
+        raise Refused(f"--as-of {as_of} is after today ({datetime.date.today().isoformat()}) - a day is "
+                      f"the record's clock, and a reading dated ahead would outrank every reading of "
+                      f"today; date it the day it was read")
     if opts.get("why") and "\n" in opts["why"]:
         raise Refused("--why is one line: a second line would be a line of the record")
     if opts.get("hypothesis") and not HYPOTHESIS_NAME.match(opts["hypothesis"]):
