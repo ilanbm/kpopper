@@ -21,6 +21,37 @@ spec.loader.exec_module(builder)
 
 
 class ArchiveContractTests(unittest.TestCase):
+    def test_both_pinned_linux_gmp_flags_select_replaceable_library(self):
+        flags = ['--sysroot', '/lean', '-Wl,-Bstatic', '-lgmp', '-lunwind',
+                 '-Wl,-Bdynamic', '-lleanrt', '-lgmp', '-luv']
+        linked = builder.dynamic_gmp_flags(flags, '/bundle/libgmp.so.10')
+        self.assertEqual(linked.count('/bundle/libgmp.so.10'), 2)
+        self.assertNotIn('-lgmp', linked)
+        mode = 'dynamic'
+        for flag in linked:
+            if flag == '-Wl,-Bstatic': mode = 'static'
+            if flag == '-Wl,-Bdynamic': mode = 'dynamic'
+            if flag == '/bundle/libgmp.so.10': self.assertEqual(mode, 'dynamic')
+            if flag == '-lunwind': self.assertEqual(mode, 'static')
+        self.assertEqual(builder.dynamic_gmp_flags(['-lgmp'], '/bundle/gmp.dylib'), ['/bundle/gmp.dylib'])
+        for unexpected in ([], ['-lgmp'] * 3):
+            with self.assertRaisesRegex(ValueError, 'configuration'):
+                builder.dynamic_gmp_flags(unexpected, '/bundle/gmp')
+
+    def test_windows_gmp_tools_do_not_resolve_the_system_wsl_shim(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / 'usr/bin').mkdir(parents=True)
+            for name in ('bash.exe', 'make.exe'):
+                (root / 'usr/bin' / name).write_bytes(b'fixture')
+            env = {'KPOPPER_MSYS2_ROOT': str(root), 'PATH': 'C:/Windows/System32'}
+            bash, make = builder.gmp_tools('windows-x86_64', env)
+            self.assertEqual(bash, root.resolve() / 'usr/bin/bash.exe')
+            self.assertEqual(make, root.resolve() / 'usr/bin/make.exe')
+            self.assertEqual(env['CONFIG_SHELL'], bash.as_posix())
+        with self.assertRaisesRegex(ValueError, 'KPOPPER_MSYS2_ROOT'):
+            builder.gmp_tools('windows-x86_64', {'PATH': 'C:/Windows/System32'})
+
     def test_named_proof_audit_rejects_admissions_and_missing_targets(self):
         names = ['Kpopper.evaluate', 'Kpopper.arithmetic', 'Kpopper.Proof.binary_sound',
                  'Kpopper.Proof.evaluate_closedRat_sound', 'Kpopper.Proof.evaluate_literal_success']

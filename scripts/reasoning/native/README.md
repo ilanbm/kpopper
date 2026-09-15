@@ -29,6 +29,11 @@ the distributed runtime ZIP. `--lean-root`, `--gmp-source`, and `--gmp-prefix` p
 of private build inputs. `build_archive(source_root, lean_root, output, target)`
 uses `KPOPPER_GMP_PREFIX` unless passed `gmp_prefix=`. The prefix must contain
 the builder's source/target provenance. No build step runs during installation.
+On Windows invoke the builder from MSYS2 with
+`KPOPPER_MSYS2_ROOT="$(cygpath -m /)"` so subprocesses use its absolute bash/make
+paths. This avoids Windows selecting the WSL bash shim. Compiler-supplied GMP
+flags are replaced in both internal and public linker lists, temporarily leaving
+static-link mode for the replaceable library and restoring it for other libraries.
 
 Each ZIP contains `manifest.json`, `evaluator` (Windows: `evaluator.exe`),
 GMP, linkage evidence, and full notices. GMP lives at

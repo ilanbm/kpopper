@@ -48,6 +48,7 @@ jobs:
         if: runner.os == 'Windows'
         shell: msys2 {0}
         run: >-
+          KPOPPER_MSYS2_ROOT="$(cygpath -m /)"
           python scripts/reasoning/build_runtime.py
           --target ${{ matrix.target }}
           --work-dir '${{ runner.temp }}/reasoning-build'

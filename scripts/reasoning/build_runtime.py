@@ -120,6 +120,46 @@ def validate_axiom_audit(output):
     return sorted(found)
 
 
+def dynamic_gmp_flags(flags, library):
+    """Replace both internal and public GMP flags from the pinned toolchain.
+
+    Linux/Windows internal flags put GMP under -Bstatic. Select our exact shared
+    library there while restoring that mode for Lean's other bundled libraries.
+    Link-map and symbol audits below still reject accidentally embedded GMP.
+    """
+    if flags.count('-lgmp') not in (1, 2):
+        raise ValueError('unexpected compiler GMP link configuration: ' + repr(flags))
+    result, static = [], False
+    for flag in flags:
+        if flag == '-lgmp':
+            result.extend(['-Wl,-Bdynamic', str(library), '-Wl,-Bstatic'] if static else [str(library)])
+        else:
+            result.append(flag)
+            if flag in ('-Wl,-Bstatic', '-Wl,-static'):
+                static = True
+            elif flag in ('-Wl,-Bdynamic', '-Wl,-call_shared'):
+                static = False
+    return result
+
+
+def gmp_tools(target, env):
+    if not target.startswith('windows'):
+        return 'bash', 'make'
+    # Windows CreateProcess searches system directories before PATH and can pick
+    # the WSL bash shim. The invoking MSYS2 shell supplies its actual root.
+    root = env.get('KPOPPER_MSYS2_ROOT')
+    if not root:
+        raise ValueError('Windows GMP builds require KPOPPER_MSYS2_ROOT from cygpath -m /')
+    root = Path(root).resolve()
+    bash, make = root / 'usr/bin/bash.exe', root / 'usr/bin/make.exe'
+    if not bash.is_file() or not make.is_file():
+        raise ValueError('MSYS2 bash and make are unavailable at the configured root')
+    env['PATH'] = os.pathsep.join([str(root / 'mingw64/bin'), str(root / 'usr/bin'), env.get('PATH', '')])
+    env['CONFIG_SHELL'] = bash.as_posix()
+    env['SHELL'] = bash.as_posix()
+    return bash, make
+
+
 def build_gmp(archive, directory, target, *, replacement_probe=False):
     """Build exact upstream GMP privately; run its upstream test suite."""
     archive, directory = Path(archive).resolve(), Path(directory).resolve()
@@ -140,16 +180,17 @@ def build_gmp(archive, directory, target, *, replacement_probe=False):
     build.mkdir(exist_ok=True)
     prefix = directory / "install"
     env = dict(os.environ)
+    bash, make = gmp_tools(target, env)
     flags = "-O2"
     if target.startswith("darwin"):
         flags += " -mmacosx-version-min=15.0"
         env["MACOSX_DEPLOYMENT_TARGET"] = "15.0"
     # Portable generic C avoids build-host-specific GMP assembler/CPU tuning.
-    args = ["bash", source / "configure", "--prefix=" + prefix.as_posix(),
+    args = [bash, (source / "configure").as_posix(), "--prefix=" + prefix.as_posix(),
             "--enable-shared", "--disable-static", "--disable-cxx", "--disable-assembly", "CFLAGS=" + flags]
     if target.startswith("windows"):
         args += ["--host=x86_64-w64-mingw32", "CC=gcc", "LDFLAGS=-static-libgcc"]
-    for argv in (args, ["make", "-j2"], ["make", "-j2", "check"], ["make", "install"]):
+    for argv in (args, [make, "-j2"], [make, "-j2", "check"], [make, "install"]):
         print(run(argv, cwd=build, env=env), flush=True)
     (prefix / "kpopper-gmp-provenance.json").write_text(json.dumps({
         "source_sha256": GMP_SHA256, "target": target, "configure": [str(x) for x in args],
@@ -247,8 +288,6 @@ def build_archive(source_root, lean_root, output, target, *, gmp_prefix=None):
                           '  for arg in getCFlags root ++ getInternalCFlags root ++ getInternalLinkerFlags root ++ getLinkerFlags root true do\n'
                           '    IO.println arg\n')
         flags = run([lean, "--run", helper], env=env).splitlines()
-        if flags.count("-lgmp") != 1:
-            raise ValueError("unexpected compiler GMP link configuration")
         if target.startswith("darwin"):
             library = ".dylibs/libgmp.10.dylib"
             supplied = gmp_prefix / "lib/libgmp.10.dylib"
@@ -265,7 +304,7 @@ def build_archive(source_root, lean_root, output, target, *, gmp_prefix=None):
             run(["install_name_tool", "-id", "@loader_path/" + library, dest])
             run(["codesign", "--force", "--sign", "-", dest])
         linked = gmp_prefix / "lib/libgmp.dll.a" if target.startswith("windows") else dest
-        flags = [str(linked) if x == "-lgmp" else x for x in flags]
+        flags = dynamic_gmp_flags(flags, linked)
         if target.startswith("linux"):
             flags += ["-Wl,-rpath,$ORIGIN/.libs"]
         if target.startswith("windows"):
