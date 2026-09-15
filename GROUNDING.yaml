@@ -578,6 +578,25 @@ sources:
          on Python 3.13, and the full suite passed on 3.13 except one page-links test that fails in
          this checkout and passed in that CI run."
     read: "2026-09-15"
+  s.2026_09_15_link_spelling:
+    name: "The session that found a source link measured between two spellings of one place"
+    asked: "tests/test_page_links.py ... fails deterministically on macOS ... while it passes on the
+            Linux CI runner ... find where the renderer builds the relative href for an absolute
+            evidence file, and make the page location and the evidence path use one consistent
+            spelling (both resolved, or both as written) so a browser opening the page at the
+            spelling the CLI writes reaches the file on macOS as well as Linux. Decide whether the
+            test assumption or the renderer is the one to change"
+    of: "The Absolute evidence link on the rendered page left its directory with ten steps where
+         three reach the directory the two files share: it was measured from the resolved location of
+         the page to the source under the name the record spells it with. A temporary directory on
+         macOS is reached as both /var/folders/... and /private/var/folders/..., so the two ends
+         counted different numbers of levels and the link climbed past the root. The test that
+         catches it reads its verdict through urljoin, which discards a step past the root on some
+         versions and not on others: it failed on Python 3.13.13 and passed on 3.9.6 and 3.14.5, so
+         the runs that guard the tree stayed green while the link was wrong on every platform. Both
+         ends are resolved before the subtraction now; a path with no directory link in it produces
+         the same link as before, and the 1327-test suite passes."
+    read: "2026-09-15"
   s.background_ingestion:
     name: "Background capture and selective delivery contract"
     file: "skills/kpopper/INGESTION.md"
@@ -1513,6 +1532,14 @@ open:
                          how is opposite told from merely different?"
   q.hypothesis_lifetime: "when is an untested hypothesis stale enough for the opener to say so -
                           by age, by how much rests on it, or only when a person asks?"
+
+  q.verdict_through_a_library: "does a test that follows a link the way a reader would tell a
+                                malformed link from a sound one on every version it runs on - the
+                                page-links test reads its verdict through urljoin, whose treatment of
+                                a step past the root differs by version, and so passed on two of the
+                                three tried while the link was wrong on all of them; would asserting
+                                the shape of the link catch it everywhere, and what else in the suite
+                                takes its verdict from a library that is free to differ?"
 
 judgments:
   d.a_comparison_shows_where_it_parts:
@@ -2462,6 +2489,24 @@ judgments:
     seen:
       s.2026_09_13_readme_direction: "read 2026-09-13"
       s.2026_09_13_reasoning_overview: "read 2026-09-13"
+  d.link_ends_share_one_spelling:
+    from: s.2026_09_15_link_spelling
+    name: "A source link is measured between two paths spelled the same way"
+    rests_on: [s.2026_09_15_link_spelling]
+    verdict: "Both ends are resolved before one is subtracted from the other, and the page is opened
+              under the name it resolves to."
+    because: "One directory is reachable under more than one name, and the two ends arrive from
+              different places: a record names its sources under whichever name a person typed, while
+              the location of the page is found by walking up from where the command ran. Subtracting
+              one spelling from the other counts levels that do not correspond, so the link climbs
+              past the root and arrives nowhere - and it arrives nowhere quietly, because a link that
+              escapes the root is discarded by some readers and kept by others. Resolved on both
+              sides the link stays inside the directory the two files share, which holds under either
+              name, so a path with no directory link in it is unaffected."
+    reopened_by: "A record needs its links to keep the name a person typed rather than the one it
+                  resolves to - a page whose readers must see the authored path, or a place where the
+                  resolved name is not reachable."
+    seen: {s.2026_09_15_link_spelling: "read 2026-09-15"}
   d.local_claims_want_a_run:
     rests_on: [s.2026_09_04_calibration, prior.local_needs_a_run, m.claims.general_held,
                m.claims.local_checked_held, m.claims.local_assumed_held, m.reach.general_held,

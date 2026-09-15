@@ -174,7 +174,10 @@ def do_page(args):
         out = default_page(rest)
     pathlib.Path(out).write_bytes(proc.stdout)
     if after:
-        webbrowser.open("file://" + os.path.abspath(out) + ("#tree" if tree else ""))
+        # The page's source links are relative to where the page resolves to, so it is opened
+        # under that same name: a record reached through a directory link would otherwise start
+        # its links one place and finish them in another.
+        webbrowser.open("file://" + os.path.realpath(out) + ("#tree" if tree else ""))
     sys.exit(0)
 
 
