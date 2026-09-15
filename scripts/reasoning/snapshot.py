@@ -52,10 +52,10 @@ def _fields(document):
         raise SnapshotError('invalid_snapshot', str(error)) from None
 
 
-def _nodes(document):
+def _nodes(document, *, copy_bodies=True):
     from ..pending_grounding import entries
     fields = _fields(document)
-    result = {name: {'body': copy.deepcopy(body), 'collection': collection,
+    result = {name: {'body': copy.deepcopy(body) if copy_bodies else body, 'collection': collection,
                      'fields': dict(fields)}
               for name, (collection, body) in entries(document).items()}
     if len(result) > MAX_NODES:
@@ -189,7 +189,7 @@ def _json_constant(value):
 
 
 class Snapshot:
-    __slots__ = ('__data',)
+    __slots__ = ('__data', '__basis')
 
     def __init__(self, data):
         # Construction through this public entry point validates replay too.
@@ -211,26 +211,41 @@ class Snapshot:
         if mode not in ('supplied', 'live', 'frozen', 'captured-live'):
             raise SnapshotError('invalid_snapshot', 'unknown captured read mode')
         self.__data = copy.deepcopy(data)
+        self.__basis = None
 
     @classmethod
     def from_data(cls, document, *, context=None, hypotheses=None, as_of=None, authored_revision=None):
         if not isinstance(document, dict):
             raise SnapshotError('invalid_snapshot', 'document must be a mapping')
         # Validate before deepcopy, which otherwise preserves cycles.
-        digest(document)
+        from .contract import _check_finite
+        _check_finite(document)
+        if context is not None and not isinstance(context, dict) \
+                or hypotheses is not None and not isinstance(hypotheses, dict):
+            raise SnapshotError('invalid_snapshot', 'context and hypotheses must be mappings')
         context = copy.deepcopy(context) if context is not None else {
             'read_mode': 'supplied', 'source_collection': 'caller-owned'}
         context.setdefault('read_mode', 'supplied')
+        if context['read_mode'] not in ('supplied', 'live', 'frozen', 'captured-live'):
+            raise SnapshotError('invalid_snapshot', 'unknown captured read mode')
+        _validate_authored_revision(authored_revision)
         normalized_hypotheses = _hypotheses(hypotheses)
         derived_conflicts = _hypothesis_conflicts(normalized_hypotheses)
         if derived_conflicts:
             context['conflicts'] = {**derived_conflicts, **context.get('conflicts', {})}
-        data = {'schema_version': 1, 'document': copy.deepcopy(dict(document)),
-                'nodes': _nodes(document), 'hypotheses': normalized_hypotheses,
+        owned_document = copy.deepcopy(dict(document))
+        data = {'schema_version': 1, 'document': owned_document,
+                'nodes': _nodes(owned_document, copy_bodies=False), 'hypotheses': normalized_hypotheses,
                 'context': context, 'as_of': normalize_as_of(as_of),
                 'authored_revision': copy.deepcopy(authored_revision)}
         data['snapshot_id'] = digest(_snapshot_preimage(data))
-        return cls(data)
+        # These fields were just normalized, validated and detached here. Public
+        # replay still uses __init__ to verify untrusted serialized snapshots;
+        # rebuilding the same node map and hashes here would duplicate capture.
+        result = object.__new__(cls)
+        result.__data = data
+        result.__basis = None
+        return result
 
     @classmethod
     def from_snapshot(cls, data):
@@ -286,6 +301,13 @@ class Snapshot:
 
     def to_data(self):
         return copy.deepcopy(self.__data)
+
+    def _input_basis(self):
+        """Internal derived cache; source data and snapshot identity stay immutable."""
+        if self.__basis is None:
+            from .basis import InputBasis
+            self.__basis = InputBasis(self.__data)
+        return self.__basis
 
     def capture_scope(self, scope_id, *, limits=None):
         return ScopeCapture(self, scope_id, limits=limits)
@@ -344,8 +366,7 @@ class ScopeCapture:
                 if conflicts:
                     observation['alternatives'] = copy.deepcopy(conflicts)
                 if field in ('v', 'rule') and isinstance(body, dict) and 'rule' in body:
-                    from .contract import node_basis
-                    observation['computed_basis'] = node_basis(data, member)
+                    observation['computed_basis'] = snapshot._input_basis().summary(member)
                 fingerprint_input = {key: value for key, value in observation.items() if key != 'alternatives'}
                 if conflicts:
                     # Retain full alternatives as evidence, but only projected
@@ -406,7 +427,9 @@ class SnapshotView:
 
     def __init__(self, snapshot, *, nodes=(), scopes=(), limits=None):
         self.__snapshot = snapshot
-        self.__data = snapshot.to_data()
+        # Both classes own this module's immutable backing data. Only detached
+        # node/field values leave the view; no full copy is needed per request.
+        self.__data = snapshot._Snapshot__data
         self.__node_bases = {}
         self.__scope_captures = {}
         self.__nodes = frozenset(nodes)
@@ -417,9 +440,8 @@ class SnapshotView:
     def read_node(self, node_id):
         if node_id not in self.__nodes:
             raise SnapshotError('undeclared_dependency', node_id)
-        from .contract import node_basis
         if node_id not in self.__node_bases:
-            self.__node_bases[node_id] = node_basis(self.__data, node_id)
+            self.__node_bases[node_id] = self.__snapshot._input_basis().summary(node_id)
         basis = self.__node_bases[node_id]
         witness = {'kind': 'node', 'id': node_id, 'fingerprint': basis['fingerprint']}
         self.__reads[digest(witness)] = witness

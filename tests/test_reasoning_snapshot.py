@@ -106,9 +106,10 @@ class SnapshotTests(unittest.TestCase):
             view.read_node('b')
             self.assertEqual(repeated['body']['v'], 1)
             self.assertEqual(repeated['fields']['snapshot'], 'reviewed')
-            # One view initialization copy plus the explicit caller export above.
-            self.assertEqual(copies.call_count, 2)
-            self.assertEqual(bases.call_count, 2)
+            # At most one initialization copy plus the explicit caller export;
+            # repeating a read must not rebuild the complete source or ancestry.
+            self.assertLessEqual(copies.call_count, 2)
+            self.assertLessEqual(bases.call_count, 2)
             witnesses = view.executed_reads
             witnesses[0]['fingerprint'] = 'changed'
             self.assertNotIn('changed', [item['fingerprint'] for item in view.executed_reads])

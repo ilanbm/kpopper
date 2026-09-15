@@ -215,4 +215,10 @@ class InputBasis:
         return {'status': 'unavailable' if self._problems[nid] else 'available',
                 'diagnostics': sorted(self._problems[nid]),
                 'fingerprint': self._fingerprints[nid], 'dependencies': dependencies,
-                'basis': envelope}
+            'basis': envelope}
+
+    def summary(self, nid):
+        """A constant-time identity/availability view without copying ancestors."""
+        self._ensure_node(nid)
+        return {'status': 'unavailable' if self._problems[nid] else 'available',
+                'diagnostics': sorted(self._problems[nid]), 'fingerprint': self._fingerprints[nid]}

@@ -138,6 +138,12 @@ result = runtime.request({"nodes": {}, "declared": [], "expression": {"op": "div
 assert result["status"] == "ok", result
 assert result["value"] == {"type": "number", "numerator": "1", "denominator": "3"}, result
 print(json.dumps({"result": result, "implementation": runtime.implementation}, sort_keys=True))
+corpus = json.loads(pathlib.Path(os.environ["KPOPPER_TEST_CORPUS"]).read_text())
+responses = runtime.request_many([case["request"] for case in corpus["cases"]])
+for case, actual in zip(corpus["cases"], responses):
+    for key, expected in case["expected"].items():
+        assert actual[key] == expected, (case["id"], key, actual[key], expected)
+print(json.dumps({"installed_scalar_cases_passed": len(responses)}, sort_keys=True))
 replacement_root = os.environ.get("KPOPPER_TEST_REPLACEMENT_ROOT")
 if replacement_root:
     library = pathlib.Path(replacement_root) / (runtime.implementation["target"] + ".library")
@@ -157,18 +163,32 @@ if replacement_root:
 
 def check_distribution(python, plugin_root=None):
     """Exercise actual installed runtime and normal CLI with empty compiler PATH."""
-    python = Path(python).resolve()
+    # Keep the venv invocation path: resolving its symlink can silently select
+    # the host interpreter instead of the package installed in this environment.
+    python = Path(python).absolute()
     with tempfile.TemporaryDirectory(prefix="kpopper-installed-") as directory:
         root = Path(directory)
         record = root / "GROUNDING.yaml"
         record.write_text("meta:\n  reasoning: {version: 1, profile: core/v1, requires: [arithmetic/v1]}\nknown:\n  a: {v: 1}\n  b: {v: 3}\n  ratio: {rule: {expr: 'a / b'}}\ndecisions:\n  d: {rests_on: [ratio], wrong_if: {expr: 'ratio > 1'}, seen: {ratio: 0}}\n")
         empty_path = root / "empty-path"
         empty_path.mkdir()
+        # Git is an existing record-reader dependency. Keep that one executable
+        # available while excluding compilers; otherwise Advanced context could
+        # not be captured and the probe would test an unrelated missing tool.
+        git = shutil.which('git')
+        if not git:
+            raise RuntimeError('installed CLI probe needs the existing Git dependency')
+        runtime_path = str(empty_path)
+        if os.name == 'nt':
+            runtime_path += os.pathsep + str(Path(git).parent)
+        else:
+            (empty_path / 'git').symlink_to(git)
         env = {k: v for k, v in os.environ.items()
                if k not in ("PYTHONPATH", "LEAN_PATH", "LEAN_SYSROOT", "LEAN_CC", "KPOPPER_LEAN_ROOT", "KPOPPER_RUNTIME_ARCHIVE", "LD_LIBRARY_PATH", "DYLD_LIBRARY_PATH")}
-        env.update(PATH=str(empty_path), XDG_CACHE_HOME=str(root / "cache"),
-                   HOME=str(root / "home"), LOCALAPPDATA=str(root / "local"),
-                   KPOPPER_RUNTIME_CACHE=str(root / "runtime-cache"))
+        env.update(PATH=runtime_path, XDG_CACHE_HOME=str(root / "cache"),
+                   LOCALAPPDATA=str(root / "local"),
+                   KPOPPER_RUNTIME_CACHE=str(root / "runtime-cache"),
+                   KPOPPER_TEST_CORPUS=str(ROOT / 'tests/reasoning/t0-scalar-slice.json'))
         probe = root / "probe.py"
         probe.write_text(INSTALLED_PROBE)
         argv = [str(python), str(probe)]
