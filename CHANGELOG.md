@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.6.1 — 2026-09-15
+
+- Wait for the worker lease in the batch capture test before cleanup (#97) — patch
+- Clarify working modes and show consolidation in README (#85) — patch
+
+Decisions recorded: d.every_worker_test_waits_for_the_lease, d.readme_working_modes
+
 ## 1.6.0 — 2026-09-14
 
 - Document focused exports and recording scope in README (#78) — patch
