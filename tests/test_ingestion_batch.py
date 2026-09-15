@@ -215,12 +215,16 @@ class BatchIngestion(unittest.TestCase):
                                     "--file", str(payload)], capture_output=True, text=True)
         self.assertEqual(completed.returncode, 0, completed.stdout + completed.stderr)
         event = json.loads(completed.stdout)
+        lease = self.state / "worker.lease"
         deadline = time.monotonic() + 10
         while time.monotonic() < deadline:
             state = I.status(event["event_id"], self.rec, self.state)
-            if state["state"] in I.TERMINAL:
+            # The receipt is terminal before the worker's final queue scan and
+            # lease release. Keep its directory alive until that work is done.
+            if state["state"] in I.TERMINAL and not lease.exists():
                 break
             time.sleep(0.03)
+        self.assertFalse(lease.exists(), "The detached worker did not finish before cleanup")
         self.assertEqual(state["state"], "applied", state)
         self.assertEqual(yaml.safe_load(self.rec.read_text())["known"]["order.price"]["v"], 20)
 
