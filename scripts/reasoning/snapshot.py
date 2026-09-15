@@ -532,9 +532,11 @@ def capture(paths, *, read_mode=None, as_of=None):
     for _ in range(2):
         inventory = _Inventory()
         token = P._CAPTURE_READS.set(inventory)
+        core_token = P._CORE_READS.set(True)
         try:
             documents.append(P.load(paths, read_mode=mode))
         finally:
+            P._CORE_READS.reset(core_token)
             P._CAPTURE_READS.reset(token)
         inventory.verify()
         loaded = documents[-1]

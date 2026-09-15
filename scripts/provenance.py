@@ -112,6 +112,8 @@ def _peer(name):
 import contextvars
 import copy
 _RAW_READS = contextvars.ContextVar('raw_record_reads', default=False)
+# Only the common core loader may consume a declared reasoning profile.
+_CORE_READS = contextvars.ContextVar('core_record_reads', default=False)
 # Strict capture observes actual reads, including cache hits; ordinary reads are inert.
 _CAPTURE_READS = contextvars.ContextVar('record_capture_reads', default=None)
 
@@ -870,7 +872,20 @@ def load(paths, *, read_mode=None):
             merge(f, parse(f) or {})
     doc.hypotheses = load_hypotheses(paths)
     mode = read_mode or ('frozen' if _RAW_READS.get() else os.environ.get('KPOPPER_READ_MODE', 'live'))
-    return _peer('knowledge_views').overlay(paths, doc, read_mode=mode)
+    doc = _peer('knowledge_views').overlay(paths, doc, read_mode=mode)
+    # A dormant profile must not be interpreted by legacy check/page/session paths.
+    # Attached proposals retain their own declared semantics as well as the base.
+    for document in [doc, *(hyp['doc'] for hyp in doc.hypotheses.values())]:
+        meta = document.get('meta')
+        if isinstance(meta, dict) and 'reasoning' in meta:
+            contract = _peer('reasoning.contract')
+            try:
+                contract.capabilities(document)
+            except contract.CapabilityError as error:
+                raise Refused(error.code + ': ' + str(error)) from None
+            if not _CORE_READS.get():
+                raise Refused('unsupported_capability: use core/v1 consumer')
+    return doc
 
 
 def collections_of(doc):

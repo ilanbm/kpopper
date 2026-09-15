@@ -359,6 +359,50 @@ class SnapshotTests(unittest.TestCase):
                     Snapshot.capture([str(path)], read_mode='frozen')
 
 
+class ReaderCapabilityTests(unittest.TestCase):
+    def test_ordinary_reader_refuses_declared_core_but_capture_succeeds(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / 'GROUNDING.yaml'
+            doc = {'meta': {'reasoning': {'version': 1, 'profile': 'core/v1', 'requires': ['arithmetic/v1']}},
+                   'known': {'p.one': {'v': 1}}}
+            path.write_text(P.yaml.safe_dump(doc))
+            for read in (lambda: P.load([str(path)], read_mode='frozen'), lambda: P.check([str(path)])):
+                with self.assertRaisesRegex(P.Refused, 'unsupported_capability: use core/v1 consumer'):
+                    read()
+            self.assertEqual(Snapshot.capture([str(path)], read_mode='frozen').to_data()['document'], doc)
+            self.assertFalse(P._CORE_READS.get())
+            with self.assertRaisesRegex(P.Refused, 'unsupported_capability'):
+                P.load([str(path)], read_mode='frozen')
+
+    def test_unknown_and_malformed_declarations_remain_raw_but_reads_refuse(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / 'GROUNDING.yaml'
+            for declaration, code in [(None, 'invalid_capability'),
+                    ({'version': 1, 'profile': 'core/v900', 'requires': ['arithmetic/v1']}, 'unsupported_capability')]:
+                doc = {'meta': {'reasoning': declaration}, 'known': {'p.one': {'v': 1}}}
+                path.write_text(P.yaml.safe_dump(doc))
+                self.assertEqual(P.parse(path), doc)
+                with self.assertRaisesRegex(P.Refused, code):
+                    P.load([str(path)], read_mode='frozen')
+                with self.assertRaisesRegex(P.Refused, code):
+                    Snapshot.capture([str(path)], read_mode='frozen')
+                self.assertFalse(P._CORE_READS.get())
+                self.assertIsNone(P._CAPTURE_READS.get())
+
+    def test_tagged_hypothesis_cannot_enter_ordinary_reader(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / 'GROUNDING.yaml'
+            path.write_text('known: {p.one: {v: 1}}')
+            self.assertEqual(P.load([str(path)], read_mode='frozen')['known']['p.one']['v'], 1)
+            hypothesis = path.parent / '.kpopper/hypotheses/core.yaml'
+            hypothesis.parent.mkdir(parents=True)
+            hypothesis.write_text('meta: {reasoning: {version: 1, profile: core/v1, requires: [arithmetic/v1]}}\n'
+                                  'known: {p.one: {v: 2}}\n')
+            with self.assertRaisesRegex(P.Refused, 'unsupported_capability'):
+                P.load([str(path)], read_mode='frozen')
+            self.assertIn('core', Snapshot.capture([str(path)], read_mode='frozen').to_data()['hypotheses'])
+
+
 class LiveCaptureTests(Repository):
     def test_portable_metadata_does_not_rewrite_authored_evidence(self):
         from scripts.reasoning.snapshot import _portable
