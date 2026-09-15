@@ -578,6 +578,22 @@ sources:
          on Python 3.13, and the full suite passed on 3.13 except one page-links test that fails in
          this checkout and passed in that CI run."
     read: "2026-09-15"
+  s.2026_09_15_branch_verdict_conflicts:
+    asked: "Explain and diagnose issues #98 and #99: a two-branch test on a real record where each
+            branch reached the opposite verdict on one judgment, and the cross-branch fold took the
+            overlay's side, said clean, kept nothing of the replaced judgment and left the tree
+            uncommitted. Reproduce on this tree, say which behaviour is a rule and which a gap, and
+            shape the rule that should replace it."
+    name: "The session that replayed the two-branch verdict conflict of issues #98 and #99 on this
+           tree and probed four cases the issues did not try. Its reading: readings pass the day
+           rule, a judgment in one tree is replaced only when its own falsifier fires, but the fold -
+           local hypothesis or another branch - lays any verdict over a standing judgment by hand and
+           calls it clean, so the write that add refuses in one tree passes across the branch line;
+           the in-place supersede keeps nothing of what it replaced; a judgment's grounds are
+           invisible to both doors; a future-dated reading enters. The rule it shaped, not yet
+           decided: the base's condition evaluated on the base, an unfired flip contested and folded
+           only by name, every replacement traced beside the record, and a source's own clock in
+           place of the day."
   s.background_ingestion:
     name: "Background capture and selective delivery contract"
     file: "skills/kpopper/INGESTION.md"
@@ -652,6 +668,18 @@ sources:
          shipped rests on a prior; of the six judgments that do rest on one, four carry
          reopened_by and two put their sign in wrong_if alone"
     read: "2026-09-04"
+  run.branch_verdict_conflicts:
+    from: s.2026_09_15_branch_verdict_conflicts
+    name: "The two-branch verdict conflict of issues #98 and #99 replayed on this tree, with four
+           branches the issues did not try - a verdict flipped by hand with no evidence, the
+           hypothesis an in-tree refusal created, a second flip folded over the first, and a change
+           of grounds under a kept verdict"
+    of: "2026-09-15, a scratch git repository outside this tree: a three-entry record - a session
+         source, one reading dated 2026-09-13, one judgment resting on it with wrong_if p.runs > 0 -
+         the sequence of the issues replayed against this tree at 1631fe3 through scripts/cli.py,
+         then the four extra branches; scripts and transcript at
+         ~/docs/kpopper/branch-conflicts-2026-09-15/"
+    read: "2026-09-15"
   run.claims_by_reach:
     from: s.2026_09_04_calibration
     name: "A bank of claims about two projects and about how things usually work, answered twice
@@ -945,6 +973,48 @@ known:
     name: "Claims about this project that held - checked with a run before they were asserted"
     from: run.claims_scored
     at: "of 6"
+  m.door.future_dated_readings_accepted:
+    v: "1 of 1"
+    name: "Readings dated after the day of writing that set accepted - a reading as of 2026-12-01
+           written on 2026-09-15 entered the base and fired the falsifier resting on it"
+    from: run.branch_verdict_conflicts
+    at: "transcript.txt, section repro.sh, branch future: set p.runs 5 --as-of 2026-12-01"
+  m.door.grounds_changes_through:
+    v: "0 of 2"
+    name: "Changes of a judgment's grounds with its verdict kept - a different because and a
+           narrower rests_on - that either door let through: add refuses in one tree, and a branch
+           that made the change by hand folds as nothing to write, since the overlay carries only
+           what differs in its claim"
+    from: run.branch_verdict_conflicts
+    at: "transcript.txt, section repro_grounds.sh: add answered 'already an entry - set changes its
+         value, review its snapshot'; the dry run answered 'nothing to write: the base already holds
+         everything'"
+  m.door.opposed_verdicts_named_contested:
+    v: "0 of 2"
+    name: "Opposed verdicts on one id that the cross-branch dry run named contested, in the sequence
+           of issues #98 and #99 - the first branch's flip was listed under updates and folded as
+           clean, the second branch's flip was listed under updates again, and the only contested
+           line was a reading refused by its date"
+    from: run.branch_verdict_conflicts
+    at: "transcript.txt, section repro.sh: dry run and fold of contra-a, then the dry run of
+         contra-b over the base that took it"
+  m.door.supersede_fields_kept:
+    v: 0
+    name: "Fields of a replaced judgment the in-place supersede keeps once its falsifier fired -
+           verdict, because and request dropped, rests_on narrowed to the new judgment's, seen
+           rewritten, and no replaced: line, which only an arrangement gets"
+    from: run.branch_verdict_conflicts
+    at: "transcript.txt, section repro.sh, branch A: set p.runs 1 then add d.not_done with the
+         opposite verdict, and the git diff of GROUNDING.yaml that follows"
+  m.door.unfired_flips_folded_clean:
+    v: "3 of 3"
+    name: "Verdict flips whose standing falsifier had not fired that the fold called clean - a flip
+           hand-edited on a branch with no evidence, the hypothesis file an in-tree add refusal
+           created, and a second flip folded over the first; each with the reason 'the standing
+           judgment holds, and a person folds this over it'"
+    from: run.branch_verdict_conflicts
+    at: "transcript.txt, sections repro_c.sh C1, repro_c2.sh and repro_order.sh: consolidate --from
+         <branch> --dry-run from the untouched base"
   m.entry_name.false_reads:
     v: 8
     unit: trials
