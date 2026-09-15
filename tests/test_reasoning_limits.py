@@ -137,6 +137,16 @@ class OperationalBoundaryTests(unittest.TestCase):
             _run_bounded([sys.executable, '-c', 'import time; time.sleep(5)'],
                          b'', timeout=0.1, output_bytes=128)
 
+    def test_timeout_covers_inherited_pipes_after_parent_exit(self):
+        import time
+        from scripts.reasoning.runtime import _run_bounded
+        child = ('import subprocess,sys; subprocess.Popen([sys.executable,"-c",'
+                 '"import time; time.sleep(2)"])')
+        started = time.monotonic()
+        with self.assertRaises(subprocess.TimeoutExpired):
+            _run_bounded([sys.executable, '-c', child], b'', timeout=0.15, output_bytes=128)
+        self.assertLess(time.monotonic() - started, 1.5)
+
     def test_real_process_drains_input_and_captures_output(self):
         from scripts.reasoning.runtime import _run_bounded
         output = _run_bounded([sys.executable, '-c', 'import sys; sys.stdout.buffer.write(sys.stdin.buffer.read())'],

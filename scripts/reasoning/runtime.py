@@ -5,10 +5,12 @@ import os
 from pathlib import Path, PurePosixPath
 import platform
 import shutil
+import signal
 import stat
 import subprocess
 import tempfile
 import threading
+import time
 import zipfile
 
 from .contract import MAX_REQUEST_BYTES, validate_value, operational_bounds, OperationalLimit
@@ -25,13 +27,34 @@ def _run_bounded(command, payload, *, timeout, output_bytes):
     Threads support native Windows pipes too. Only stdout is retained; stderr
     consumes the same budget and never leaks native host details into findings.
     """
+    deadline = time.monotonic() + timeout
     process = subprocess.Popen(command, stdin=subprocess.PIPE, stdout=subprocess.PIPE,
-                               stderr=subprocess.PIPE)
+                               stderr=subprocess.PIPE, start_new_session=os.name != 'nt')
     output = bytearray()
     lock = threading.Lock()
     used = 0
     exceeded = threading.Event()
     failures = []
+
+    def remaining():
+        return max(0, deadline - time.monotonic())
+
+    def terminate():
+        try:
+            if os.name == 'nt':
+                process.kill()
+            else:
+                # Only the isolated session created above belongs to this call.
+                os.killpg(process.pid, signal.SIGKILL)
+        except ProcessLookupError:
+            pass
+        except PermissionError:
+            # Some hosts permit terminating the owned child but prohibit group
+            # signals. Keep cleanup scoped to that child and retain the deadline.
+            try:
+                process.kill()
+            except ProcessLookupError:
+                pass
 
     def read(stream, retain):
         nonlocal used
@@ -44,7 +67,7 @@ def _run_bounded(command, payload, *, timeout, output_bytes):
                     used += len(chunk)
                     if used > output_bytes:
                         exceeded.set()
-                        process.kill()
+                        terminate()
                         break
                     if retain:
                         output.extend(chunk)
@@ -67,19 +90,29 @@ def _run_bounded(command, payload, *, timeout, output_bytes):
             except BrokenPipeError:
                 pass
 
-    threads = [threading.Thread(target=read, args=(process.stdout, True)),
-               threading.Thread(target=read, args=(process.stderr, False)),
-               threading.Thread(target=write)]
+    # A modified library may leave inherited pipes open after its process exits.
+    # Bound joins too; daemon readers are the portable fallback for handles held
+    # outside the direct process (Windows has no POSIX process-group kill).
+    threads = [threading.Thread(target=read, args=(process.stdout, True), daemon=True),
+               threading.Thread(target=read, args=(process.stderr, False), daemon=True),
+               threading.Thread(target=write, daemon=True)]
     for thread in threads:
         thread.start()
     try:
-        process.wait(timeout=timeout)
+        process.wait(timeout=remaining())
+        for thread in threads:
+            thread.join(timeout=remaining())
+        if any(thread.is_alive() for thread in threads):
+            raise subprocess.TimeoutExpired(command, timeout)
+    except BaseException:
+        terminate()
+        raise
     finally:
         if process.poll() is None:
-            process.kill()
+            terminate()
         process.wait()
         for thread in threads:
-            thread.join()
+            thread.join(timeout=remaining())
     if exceeded.is_set():
         raise OperationalLimit('output_limit')
     if failures or process.returncode:
