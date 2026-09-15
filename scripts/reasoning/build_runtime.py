@@ -181,7 +181,9 @@ def build_gmp(archive, directory, target, *, replacement_probe=False):
     prefix = directory / "install"
     env = dict(os.environ)
     bash, make = gmp_tools(target, env)
-    flags = "-O2"
+    # GMP 6.3.0's compiler probes use pre-C23 empty parameter lists. GCC 15+
+    # defaults to C23, which changes those declarations to zero-argument types.
+    flags = "-O2 -std=gnu17"
     if target.startswith("darwin"):
         flags += " -mmacosx-version-min=15.0"
         env["MACOSX_DEPLOYMENT_TARGET"] = "15.0"
@@ -306,7 +308,10 @@ def build_archive(source_root, lean_root, output, target, *, gmp_prefix=None):
         linked = gmp_prefix / "lib/libgmp.dll.a" if target.startswith("windows") else dest
         flags = dynamic_gmp_flags(flags, linked)
         if target.startswith("linux"):
-            flags += ["-Wl,-rpath,$ORIGIN/.libs"]
+            # Lean's link-only glibc is older than the build host used for GMP.
+            # Resolve the shared library against the host loader below, and bind
+            # its actual GLIBC requirements in min_os. Never skip that audit.
+            flags += ["-Wl,-rpath,$ORIGIN/.libs", "-Wl,--allow-shlib-undefined"]
         if target.startswith("windows"):
             flags += ["-Wl,--whole-archive", "-lleanmanifest", "-Wl,--no-whole-archive"]
         executable = bundle / ("evaluator" + ext)
@@ -356,6 +361,10 @@ def audit_linkage(executable, library, target, lean_root):
         allowed = {"libgmp.so.10", "libc.so.6", "libm.so.6", "libpthread.so.0", "libdl.so.2", "librt.so.1", "ld-linux-x86-64.so.2", "ld-linux-aarch64.so.1"}
         if "libgmp.so.10" not in deps or set(deps) - allowed:
             raise ValueError("unexpected Linux dependencies: " + repr(deps))
+        relocations = run(["ldd", "-r", executable]) + run(["ldd", "-r", library])
+        if re.search(r"undefined symbol|not found", relocations, re.I):
+            raise ValueError("unresolved Linux runtime dependency: " + relocations)
+        result["runtime_relocations_verified"] = True
         symbols = run(["nm", "-D", executable])
         if not re.search(r"\bU __gmp", symbols) or re.search(r"\b[TDB] __gmp", symbols):
             raise ValueError("GMP must remain dynamically imported")

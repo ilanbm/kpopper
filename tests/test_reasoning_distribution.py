@@ -152,6 +152,24 @@ class ArchiveContractTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "dependencies"):
                 builder.audit_linkage("binary", "gmp", "linux-x86_64", Path("."))
 
+    def test_linux_audit_requires_host_resolution_of_shared_library_symbols(self):
+        def outputs(argv):
+            if argv[0] == 'readelf' and argv[1] == '-d':
+                return 'Shared library: [libgmp.so.10]\nShared library: [libc.so.6]'
+            if argv[0] == 'ldd':
+                return 'libc.so.6 => /host/libc.so.6\n'
+            if argv[0] == 'nm':
+                return ' U __gmpz_init\n'
+            return 'Name: GLIBC_2.38\n'
+        with patch.object(builder, 'run', side_effect=outputs):
+            result = builder.audit_linkage('binary', 'gmp', 'linux-x86_64', Path('.'))
+            self.assertTrue(result['runtime_relocations_verified'])
+            self.assertEqual(result['min_os'], 'glibc 2.38')
+        for failure in ('undefined symbol: missing_function', 'libgmp.so.10 => not found'):
+            with patch.object(builder, 'run', side_effect=lambda argv: failure if argv[0] == 'ldd' else outputs(argv)):
+                with self.assertRaisesRegex(ValueError, 'unresolved Linux'):
+                    builder.audit_linkage('binary', 'gmp', 'linux-x86_64', Path('.'))
+
     def test_linkage_receipt_removes_private_build_paths(self):
         dependency = "DLL Name: libgmp-10.dll\nDLL Name: KERNEL32.dll\n"
         with patch.object(builder, "run", return_value="/private/build/evaluator.exe\n" + dependency):

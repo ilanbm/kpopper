@@ -34,6 +34,11 @@ On Windows invoke the builder from MSYS2 with
 paths. This avoids Windows selecting the WSL bash shim. Compiler-supplied GMP
 flags are replaced in both internal and public linker lists, temporarily leaving
 static-link mode for the replaceable library and restoring it for other libraries.
+GMP is compiled explicitly as GNU C17, including its pre-C23 configure probes.
+On Linux its shared-library symbols resolve against the build host's glibc,
+which may be newer than Lean's link-only sysroot. An `ldd -r` audit must resolve
+every runtime dependency before packaging; the manifest records the highest
+GLIBC symbol version required by the executable and GMP together.
 
 Each ZIP contains `manifest.json`, `evaluator` (Windows: `evaluator.exe`),
 GMP, linkage evidence, and full notices. GMP lives at
