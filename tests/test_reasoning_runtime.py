@@ -25,7 +25,7 @@ class RuntimeBoundaryTests(unittest.TestCase):
     def archive(self, *, source=None, extra=None):
         files = {'evaluator': b'original executable', 'library': b'original shared library',
                  'licenses/NOTICE': b'redistribution notices'}
-        manifest = {'version': 1, 'protocol': 'KP1', 'target': target_name(), 'lean_version': '4.33.1',
+        manifest = {'version': 1, 'protocol': 'KP2', 'target': target_name(), 'lean_version': '4.33.1',
                     'source_sha256': source or source_hash(ROOT / 'lean'), 'modules': ['arithmetic/v1'],
                     'executable': 'evaluator', 'libraries': ['library'],
                     'files': {name: hashlib.sha256(data).hexdigest() for name, data in files.items()}}
@@ -60,8 +60,9 @@ class RuntimeBoundaryTests(unittest.TestCase):
             Runtime(self.archive(source='0' * 64))
 
     def test_archive_cannot_write_outside_its_cache(self):
-        with self.assertRaises(RuntimeUnavailable):
-            Runtime(self.archive(extra='../outside'))
+        for path in ('../outside', 'C:/outside', 'licenses/NOTICE:stream'):
+            with self.subTest(path=path), self.assertRaises(RuntimeUnavailable):
+                Runtime(self.archive(extra=path))
         self.assertFalse((self.root / 'outside').exists())
 
 

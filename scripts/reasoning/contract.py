@@ -14,7 +14,7 @@ MODULES = MappingProxyType({
         'arity': 2,
         'inputs': ('number', 'boolean', 'text', 'null'),
         'discovery': 'transitive-node-closure/v1',
-        'executor': 'KP1',
+        'executor': 'KP2',
     }),
 })
 DEFAULT_LIMITS = MappingProxyType({'steps': 1000000, 'depth': 128, 'digits': 256})
@@ -23,6 +23,72 @@ MAX_NODES = 20000
 MAX_EDGES = 100000
 MAX_COLLECTION = 10000
 MAX_REQUEST_BYTES = 16 * 1024 * 1024
+OPERATIONAL_LIMITS = MappingProxyType({
+    'timeout_seconds': 30, 'batch_requests': 1000,
+    'input_bytes': MAX_REQUEST_BYTES, 'output_bytes': 64 * 1024 * 1024,
+})
+
+
+class OperationalLimit(ValueError):
+    """Refuse the complete batch/report; never return clipped witnesses."""
+    def __init__(self, code):
+        self.code = code
+        super().__init__(code + ': operational budget exceeded; select fewer results or smaller inputs')
+
+
+def operational_bounds(limits=None):
+    result = dict(OPERATIONAL_LIMITS)
+    if limits is not None:
+        if not isinstance(limits, dict) or set(limits) - set(result):
+            raise ValueError('unknown operational limits')
+        for key, value in limits.items():
+            if type(value) is not int or not 0 < value <= result[key]:
+                raise ValueError('invalid operational limit: ' + key)
+            result[key] = value
+    return result
+
+
+class OutputBudget:
+    """Count every serialized occurrence, including shared evidence, incrementally.
+
+    Compact ASCII JSON is the accounting format. Dates use their explicit ISO
+    representation. No complete serialized report is allocated just to size it.
+    """
+    def __init__(self, maximum, code='output_limit'):
+        self.remaining = maximum
+        self.code = code
+
+    def charge(self, count):
+        self.remaining -= count
+        if self.remaining < 0:
+            raise OperationalLimit(self.code)
+
+    def add(self, value):
+        def mapping_items(item):
+            for key, child in item.items():
+                yield key
+                yield child
+        pending = [iter((value,))]
+        while pending:
+            try:
+                item = next(pending[-1])
+            except StopIteration:
+                pending.pop()
+                continue
+            if type(item) in (datetime.date, datetime.datetime):
+                item = item.isoformat()
+            if isinstance(item, str):
+                self.charge(2)
+                for offset in range(0, len(item), 4096):
+                    self.charge(len(json.dumps(item[offset:offset + 4096], ensure_ascii=True)) - 2)
+            elif isinstance(item, dict):
+                self.charge(2 + max(0, len(item) - 1) + len(item))
+                pending.append(iter(mapping_items(item)))
+            elif isinstance(item, (list, tuple)):
+                self.charge(2 + max(0, len(item) - 1))
+                pending.append(iter(item))
+            else:
+                self.charge(len(json.dumps(item, allow_nan=False, separators=(',', ':'))))
 
 
 class CapabilityError(ValueError):

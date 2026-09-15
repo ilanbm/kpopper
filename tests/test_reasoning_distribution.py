@@ -157,7 +157,7 @@ class CommittedBundleTests(unittest.TestCase):
             shutil.copytree(ROOT / "scripts/reasoning/third_party", payload / "licenses")
             shutil.copyfile(payload / "licenses/THIRD_PARTY_NOTICES.txt", payload / "THIRD_PARTY_NOTICES.txt")
             builder.archive_payload(payload, self.native / (target + ".zip"), {
-                "version": 1, "protocol": "KP1", "target": target, "min_os": "test fixture",
+                "version": 1, "protocol": "KP2", "target": target, "min_os": "test fixture",
                 "lean_version": builder.LEAN_VERSION, "source_sha256": builder.source_hash(self.source),
                 "files": {}, "executable": "evaluator", "libraries": ["libgmp"], "modules": ["arithmetic/v1"]})
         builder.source_bundle(self.upstream, self.native / "gmp-source-and-build.tar.gz")
@@ -285,7 +285,7 @@ if replacement_root:
     assert hashlib.sha256(modified.binary.read_bytes()).hexdigest() == before
     changed = modified.request({"nodes": {}, "declared": [], "expression": {"op": "div", "args": [{"num": "1"}, {"num": "3"}]}})
     assert changed == result, changed
-    receipt = subprocess.run([str(modified.binary)], input="KP1\t1000\t128\t256\t0\t0\tn\t1\n", text=True, capture_output=True, check=True)
+    receipt = subprocess.run([str(modified.binary)], input="KP2\t1000\t128\t256\t0\t0\tn\t1\n", text=True, capture_output=True, check=True)
     assert "KPOPPER_GMP_REPLACEMENT_PROBE" in receipt.stderr, receipt
     print(json.dumps({"replacement": modified.implementation}, sort_keys=True))
 '''

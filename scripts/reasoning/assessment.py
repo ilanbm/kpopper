@@ -3,7 +3,7 @@ import copy
 
 from .. import assessment as legacy_assessment
 from .. import expressions as E
-from .contract import PROFILE, digest
+from .contract import PROFILE, digest, operational_bounds, OperationalLimit, OutputBudget
 from .evaluate import Evaluator, compare_basis
 from .language import literal, lower
 
@@ -21,15 +21,15 @@ def _historical_value(value):
     return None
 
 
-def _scope_projection(data, visible):
+def _scope_projection(data, visible, budget):
     """Bind the full captured world by snapshot ID; display only relevant bodies."""
     original = data['context']
-    context = {key: copy.deepcopy(original[key]) for key in (
+    context = {key: original[key] for key in (
         'read_mode', 'original_read_mode', 'project', 'target', 'source_collection') if key in original}
     if isinstance(context.get('project'), dict):
         context['project'] = {key: context['project'][key] for key in (
             'version', 'mode', 'generation', 'routing_identity', 'publication_identity') if key in context['project']}
-    context['conflicts'] = {nid: copy.deepcopy(variants)
+    context['conflicts'] = {nid: variants
                             for nid, variants in original.get('conflicts', {}).items() if nid in visible}
     pending = original.get('pending', {})
     context['pending'] = {'ref': pending.get('ref'),
@@ -41,35 +41,54 @@ def _scope_projection(data, visible):
         for collection, entries in hyp['document'].items():
             if collection in ('meta', 'schema', 'record', 'also') or not isinstance(entries, dict):
                 continue
-            selected = {nid: copy.deepcopy(body) for nid, body in entries.items() if nid in visible}
+            selected = {nid: body for nid, body in entries.items() if nid in visible}
             if selected:
                 document[collection] = selected
         if document and 'schema' in hyp['document']:
-            document['schema'] = copy.deepcopy(hyp['document']['schema'])
+            document['schema'] = hyp['document']['schema']
         hypotheses[name] = {'kind': hyp.get('kind', 'hypothesis'), 'document': document,
                             'status': 'unreadable' if hyp['error'] else 'inspected'}
-    return {'context': context, 'hypotheses': hypotheses, 'external_sources_fetched': False,
+    scope = {'context': context, 'hypotheses': hypotheses, 'external_sources_fetched': False,
             'evidence': 'full input remains bound by snapshot_id; bodies are projected to the selected dependency closure'}
+    budget.add(scope)
+    return copy.deepcopy(scope)
 
 
-def assess(snapshot, selection=None, *, policy='focused-review/v1', runtime=None):
+def assess(snapshot, selection=None, *, policy='focused-review/v1', runtime=None, operational_limits=None):
+    bounds = operational_bounds(operational_limits)
+    budget = OutputBudget(bounds['output_bytes'])
     data = snapshot.to_data()
-    selected = sorted(data['nodes']) if selection is None else list(dict.fromkeys(selection))
+    selected = []
+    selected_set = set()
+    for index, nid in enumerate(sorted(data['nodes']) if selection is None else selection):
+        if index >= bounds['batch_requests']:
+            raise OperationalLimit('batch_request_limit')
+        if nid in selected_set:
+            continue
+        if len(selected) >= bounds['batch_requests']:
+            raise OperationalLimit('batch_request_limit')
+        selected.append(nid)
+        selected_set.add(nid)
     if set(selected) - set(data['nodes']):
         raise ValueError('unknown assessment ID')
-    engine = Evaluator(snapshot, runtime=runtime)
+    engine = Evaluator(snapshot, runtime=runtime, operational_limits=bounds)
     tasks = {}
+    def task(key, value):
+        if key not in tasks and len(tasks) >= bounds['batch_requests']:
+            raise OperationalLimit('batch_request_limit')
+        tasks[key] = value
     for nid in selected:
         node = data['nodes'][nid]
         body, fields = node['body'], node['fields']
+        OutputBudget(budget.remaining).add(body)
         deps = body.get(fields['deps']) if isinstance(body, dict) else None
         if isinstance(deps, list) and all(isinstance(dep, str) for dep in deps):
             for dep in deps:
-                tasks[('value', dep)] = ({'ref': dep}, [dep])
+                task(('value', dep), ({'ref': dep}, [dep]))
         if isinstance(body, dict) and isinstance(body.get(fields['predicate']), dict):
-            tasks[('predicate', nid)] = (body[fields['predicate']], deps if isinstance(deps, list) else [])
+            task(('predicate', nid), (body[fields['predicate']], deps if isinstance(deps, list) else []))
         if not isinstance(body, dict) or fields['deps'] not in body or 'rule' in body:
-            tasks[('value', nid)] = ({'ref': nid}, [nid])
+            task(('value', nid), ({'ref': nid}, [nid]))
     computed = dict(zip(tasks, engine.evaluate_many(list(tasks.values()))))
     visible = set(selected)
     for result in computed.values():
@@ -148,10 +167,16 @@ def assess(snapshot, selection=None, *, policy='focused-review/v1', runtime=None
         if changed_basis and policy == 'focused-review/v1':
             attention.append({'action': 'review', 'reasons': [
                 {'code': 'computational_basis_changed', 'related_ids': changed_basis}]})
-        nodes[nid] = {'body': copy.deepcopy(body), 'fields': fields, 'state': state,
-                      'attention': attention, 'computation': computed.get(('value', nid))}
+        result_node = {'body': body, 'fields': fields, 'state': state,
+                       'attention': attention, 'computation': computed.get(('value', nid))}
+        budget.add({nid: result_node})
+        result_node['body'] = copy.deepcopy(body)
+        nodes[nid] = result_node
     report = {'schema_version': 2, 'assessment_profile': PROFILE, 'attention_policy': policy,
               'snapshot_id': snapshot.snapshot_id, 'as_of': data['as_of'],
-              'scope': _scope_projection(data, visible), 'selection': selected, 'nodes': nodes}
+              'scope': _scope_projection(data, visible, budget), 'selection': selected, 'nodes': nodes,
+              'operational_limits': bounds}
+    OutputBudget(bounds['output_bytes']).add(report)
     report['assessment_revision'] = digest(report)
+    OutputBudget(bounds['output_bytes']).add(report)
     return report

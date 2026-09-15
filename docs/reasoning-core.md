@@ -46,11 +46,37 @@ Quoted numbers remain text; booleans, numeric zero, null and missing inputs rema
 distinct. A YAML float has already lost its original lexeme: the adapter uses its
 round-trip decimal representation, not a claim of recovered precision.
 
-The default resource profile bounds 20,000 nodes, 100,000 potential edges,
-1,000,000 expression steps, evaluator depth 128 and 256-digit rational parts.
+The default `resources/v2` profile bounds 20,000 nodes, 100,000 potential edges,
+1,000,000 expression steps in each of type preflight and evaluation separately,
+evaluator depth 128 and 256-digit rational parts. `cost.preflight_steps` counts
+expressions entered during type checking, including references to cached types;
+`cost.steps` and `executed_reads` count only actual evaluation. If preflight
+exhausts the step budget, evaluation has zero steps and no executed reads.
+Potential witnesses remain complete on that failure. The resource version
+binds this accounting change in computation identity.
 Limits are explicit results. These differ from the legacy checked executor's
 64-level expression parser and 1024-digit numeric bound. Selecting a profile can
 therefore change a limit result; installing an executor does not migrate meaning.
+
+Operational limits are separate from arithmetic meaning and appear in results
+and assessment reports: 30 seconds per native batch, 1,000 requests (and at most
+1,000 selected assessment entries), 16 MiB aggregate native input and 64 MiB
+aggregate native output, including stderr. Evaluation envelopes and assessment
+reports also have a 64 MiB compact ASCII JSON budget, counting every occurrence
+of shared evidence. Requests are checked as they are prepared and report entries
+as they are assembled, before retaining more closures. Output is never clipped.
+An oversized batch/report raises `OperationalLimit` (`batch_request_limit`,
+`batch_input_limit`, or `output_limit`); the CLI reports the refusal. Select fewer
+entries to continue. A native timeout returns `operational_error` with diagnostic
+`runtime_timeout`; loading or process failures use `runtime_unavailable`.
+Neither failure is a semantic false value or a cached arithmetic negative.
+
+Python callers can lower these bounds with `operational_limits={...}` on
+`evaluate`, `Evaluator`, `assess` or `Runtime`; the keys are `timeout_seconds`,
+`batch_requests`, `input_bytes` and `output_bytes`. Operational settings do not
+change `computation_id`. Actual reads carry the same `{kind, id, fingerprint}`
+witness as the corresponding potential dependency, binding transitive input
+identity even when changed inputs produce the same value.
 
 ## Snapshot and extension API
 
@@ -68,6 +94,19 @@ explicit `as_of`. No clock or network read occurs inside evaluation. The
 normalized snapshot identity is separate from the authored file-hash revision.
 Returned data is detached. Historical `seen` is evidence, never current input.
 
+Comparison targets retain their declared reasoning version, profile and required
+modules. Before using target entries, the reader checks the target and all its
+hypotheses. Unsupported or malformed requirements make the target unavailable.
+The ordinary reader still refuses declared core targets; missing metadata keeps
+ordinary-reader/v1 semantics.
+
+Supplied snapshots and live pending contributions retain their existing
+contention policies. In a supplied snapshot, two disagreeing hypothesis claims
+are contested; a single alternative remains a proposal. Live pending reads also
+compare proposals against the checkout and locally observed target, so one
+proposal differing from the checkout can be contested. Neither path adopts an
+alternative as a base fact.
+
 Generated basis fingerprints bind rules and their transitive inputs, including
 changes whose numeric effects cancel. Missing old basis is `not_recorded`, not
 an automatic request to review. New history is not written by assessment.
@@ -77,6 +116,8 @@ Its members are derived from the captured collection. `snapshot.capture_scope(id
 returns member count, complete membership/projected-field witnesses and a limited
 view. `SnapshotView` grants exact nodes and fields and refuses undeclared reads.
 The separate `scope` field retains its existing contribution-provenance meaning.
+Scopes cannot grant the mapped historical snapshot field, `assessment`, or
+`current_assessment`, including when the collection is empty.
 
 First-party module preparation receives a limited snapshot view and normalized
 IR; the compiled registry computes the result. Arithmetic consumes this boundary

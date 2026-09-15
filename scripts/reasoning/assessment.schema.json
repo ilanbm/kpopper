@@ -254,6 +254,9 @@
           "additionalProperties": false
         }
       }
+    },
+    "operational_limits": {
+      "$ref": "#/$defs/operational_limits"
     }
   },
   "required": [
@@ -264,7 +267,8 @@
     "as_of",
     "scope",
     "selection",
-    "assessment_revision"
+    "assessment_revision",
+    "operational_limits"
   ],
   "additionalProperties": false,
   "oneOf": [
@@ -432,7 +436,7 @@
           "type": "object",
           "properties": {
             "version": {
-              "const": "resources/v1"
+              "const": "resources/v2"
             },
             "steps": {
               "type": "integer",
@@ -507,11 +511,16 @@
               },
               "id": {
                 "type": "string"
+              },
+              "fingerprint": {
+                "type": "string",
+                "pattern": "^[0-9a-f]{64}$"
               }
             },
             "required": [
               "kind",
-              "id"
+              "id",
+              "fingerprint"
             ],
             "additionalProperties": false
           }
@@ -580,11 +589,16 @@
                 "type": "integer",
                 "minimum": 0
               }
+            },
+            "preflight_steps": {
+              "type": "integer",
+              "minimum": 0
             }
           },
           "required": [
             "steps",
-            "node_evaluations"
+            "node_evaluations",
+            "preflight_steps"
           ],
           "additionalProperties": false
         },
@@ -603,6 +617,9 @@
             "explicit_override"
           ],
           "additionalProperties": false
+        },
+        "operational_limits": {
+          "$ref": "#/$defs/operational_limits"
         }
       },
       "required": [
@@ -621,7 +638,8 @@
         "potential_ids",
         "basis",
         "assurance",
-        "cost"
+        "cost",
+        "operational_limits"
       ],
       "additionalProperties": false,
       "allOf": [
@@ -649,6 +667,38 @@
           }
         }
       ]
+    },
+    "operational_limits": {
+      "type": "object",
+      "properties": {
+        "timeout_seconds": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 30
+        },
+        "batch_requests": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 1000
+        },
+        "input_bytes": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 16777216
+        },
+        "output_bytes": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 67108864
+        }
+      },
+      "required": [
+        "timeout_seconds",
+        "batch_requests",
+        "input_bytes",
+        "output_bytes"
+      ],
+      "additionalProperties": false
     }
   }
 }

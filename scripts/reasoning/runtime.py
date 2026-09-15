@@ -8,14 +8,83 @@ import shutil
 import stat
 import subprocess
 import tempfile
+import threading
 import zipfile
 
-from .contract import MAX_REQUEST_BYTES, validate_value
+from .contract import MAX_REQUEST_BYTES, validate_value, operational_bounds, OperationalLimit
 from . import adapter_identity
 
 
 class RuntimeUnavailable(ValueError):
     pass
+
+
+def _run_bounded(command, payload, *, timeout, output_bytes):
+    """Drain both pipes with a shared hard cap; no unbounded communicate buffer.
+
+    Threads support native Windows pipes too. Only stdout is retained; stderr
+    consumes the same budget and never leaks native host details into findings.
+    """
+    process = subprocess.Popen(command, stdin=subprocess.PIPE, stdout=subprocess.PIPE,
+                               stderr=subprocess.PIPE)
+    output = bytearray()
+    lock = threading.Lock()
+    used = 0
+    exceeded = threading.Event()
+    failures = []
+
+    def read(stream, retain):
+        nonlocal used
+        try:
+            while True:
+                chunk = stream.read(8192)
+                if not chunk:
+                    break
+                with lock:
+                    used += len(chunk)
+                    if used > output_bytes:
+                        exceeded.set()
+                        process.kill()
+                        break
+                    if retain:
+                        output.extend(chunk)
+        except OSError as error:
+            failures.append(error)
+        finally:
+            stream.close()
+
+    def write():
+        try:
+            process.stdin.write(payload)
+            process.stdin.flush()
+        except BrokenPipeError:
+            pass
+        except OSError as error:
+            failures.append(error)
+        finally:
+            try:
+                process.stdin.close()
+            except BrokenPipeError:
+                pass
+
+    threads = [threading.Thread(target=read, args=(process.stdout, True)),
+               threading.Thread(target=read, args=(process.stderr, False)),
+               threading.Thread(target=write)]
+    for thread in threads:
+        thread.start()
+    try:
+        process.wait(timeout=timeout)
+    finally:
+        if process.poll() is None:
+            process.kill()
+        process.wait()
+        for thread in threads:
+            thread.join()
+    if exceeded.is_set():
+        raise OperationalLimit('output_limit')
+    if failures or process.returncode:
+        raise RuntimeUnavailable('native reasoning process failed')
+    return bytes(output)
 
 
 def source_hash(lean_dir):
@@ -41,7 +110,7 @@ def target_name():
 
 
 def _relative(name):
-    if not isinstance(name, str) or not name or '\\' in name:
+    if not isinstance(name, str) or not name or '\\' in name or ':' in name:
         raise RuntimeUnavailable('invalid runtime archive path')
     path = PurePosixPath(name)
     if path.is_absolute() or str(path) != name or any(p in ('.', '..') for p in path.parts):
@@ -54,7 +123,8 @@ def _sha(path):
 
 
 class Runtime:
-    def __init__(self, archive=None):
+    def __init__(self, archive=None, *, operational_limits=None):
+        self.operational_limits = operational_bounds(operational_limits)
         source = Path(__file__).resolve().parent
         target = target_name()
         self.archive = Path(archive) if archive is not None else source / 'native' / (target + '.zip')
@@ -99,7 +169,7 @@ class Runtime:
         self.binary = self.root / self.manifest['executable']
         self._observed = self._verify_files()
         self.implementation = {
-            'protocol': 'KP1', 'lean_version': self.manifest['lean_version'],
+            'protocol': 'KP2', 'lean_version': self.manifest['lean_version'],
             'adapter_source_sha256': adapter_identity(),
             'source_sha256': self.manifest['source_sha256'],
             'archive_sha256': archive_digest, 'binary_sha256': self._observed[self.manifest['executable']],
@@ -112,7 +182,7 @@ class Runtime:
     def _validate_manifest(self, target, source):
         data = self.manifest
         if not isinstance(data, dict) or type(data.get('version')) is not int or data['version'] != 1 \
-                or data.get('protocol') != 'KP1' or data.get('target') != target \
+                or data.get('protocol') != 'KP2' or data.get('target') != target \
                 or data.get('lean_version') != '4.33.1' or data.get('modules') != ['arithmetic/v1'] \
                 or not isinstance(data.get('files'), dict) or not isinstance(data.get('libraries'), list):
             raise RuntimeUnavailable('unsupported runtime manifest')
@@ -144,25 +214,33 @@ class Runtime:
     def request(self, request):
         return self.request_many([request])[0]
 
-    def request_many(self, requests):
+    def request_many(self, requests, *, operational_limits=None):
         from .transport import encode_request, decode_response
+        requested = operational_bounds(operational_limits)
+        bounds = {key: min(value, requested[key]) for key, value in self.operational_limits.items()}
         if not requests:
             return []
         adapter_identity()
         if self._verify_files() != self._observed:
             raise RuntimeUnavailable('runtime changed; reopen before evaluating')
-        lines = [encode_request(request).rstrip('\n') for request in requests]
-        if any(len(line.encode('utf-8')) > MAX_REQUEST_BYTES for line in lines):
-            raise RuntimeUnavailable('native request exceeds transport limit')
-        result = subprocess.run([str(self.binary)], input='\n'.join(lines) + '\n',
-                                text=True, encoding='utf-8', capture_output=True, timeout=30)
+        payload = bytearray()
+        count = 0
+        for request in requests:
+            count += 1
+            if count > bounds['batch_requests']:
+                raise OperationalLimit('batch_request_limit')
+            line = encode_request(request).rstrip('\n').encode('utf-8') + b'\n'
+            if len(line) > MAX_REQUEST_BYTES or len(payload) + len(line) > bounds['input_bytes']:
+                raise OperationalLimit('batch_input_limit')
+            payload.extend(line)
+        output = _run_bounded([str(self.binary)], payload,
+                              timeout=bounds['timeout_seconds'],
+                              output_bytes=bounds['output_bytes'])
         adapter_identity()
         if self._verify_files() != self._observed:
             raise RuntimeUnavailable('runtime changed during evaluation')
-        if result.returncode != 0:
-            raise RuntimeUnavailable('native reasoning process failed')
-        output = result.stdout.splitlines()
-        if len(output) != len(requests):
+        output = output.decode('utf-8').splitlines()
+        if len(output) != count:
             raise RuntimeUnavailable('native response count does not match requests')
         decoded = [decode_response(line) for line in output]
         for value in decoded:

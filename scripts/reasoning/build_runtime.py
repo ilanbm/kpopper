@@ -286,7 +286,7 @@ def build_archive(source_root, lean_root, output, target, *, gmp_prefix=None):
         (bundle / "linkage.json").write_text(json.dumps(audit, indent=2, sort_keys=True) + "\n")
         if source_hash(source_root) != source_digest:
             raise ValueError("runtime sources changed during build")
-        return archive_payload(bundle, output, {"version": 1, "protocol": "KP1", "target": target,
+        return archive_payload(bundle, output, {"version": 1, "protocol": "KP2", "target": target,
             "min_os": audit["min_os"], "lean_version": LEAN_VERSION,
             "source_sha256": source_digest, "executable": executable.name,
             "libraries": [library], "modules": ["arithmetic/v1"]})
@@ -474,7 +474,7 @@ def check_bundles(native_dir=None, source_root=None):
                             "files", "executable", "libraries", "modules"}
                 if not isinstance(manifest, dict) or set(manifest) != required \
                         or type(manifest["version"]) is not int or manifest["version"] != 1 \
-                        or manifest["protocol"] != "KP1" or manifest["target"] != target \
+                        or manifest["protocol"] != "KP2" or manifest["target"] != target \
                         or manifest["lean_version"] != LEAN_VERSION or manifest["modules"] != ["arithmetic/v1"] \
                         or not isinstance(manifest["min_os"], str) or not manifest["min_os"].strip() \
                         or not isinstance(manifest["files"], dict):

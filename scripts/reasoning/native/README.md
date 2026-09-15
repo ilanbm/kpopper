@@ -5,6 +5,11 @@ profile. A normal pip or plugin installation uses it offline: no compiler,
 network download, or checked-session setup is needed. The Python wrapper is
 portable; native computation requires a matching verified archive.
 
+The current data-only transport is KP2/KR2. KP2 retains the scalar request fields;
+KR2 adds `preflight_steps` after evaluation `steps`, before node-evaluation counts.
+Both phases independently use the requested step bound. Old KP1/KR1 archives are
+refused; source/protocol changes require rebuilt archives for every target.
+
 Maintainers build each archive on its target host with pinned Lean 4.33.1
 and the exact GMP 6.3.0 source archive:
 
