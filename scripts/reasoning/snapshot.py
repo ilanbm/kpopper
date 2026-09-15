@@ -587,6 +587,8 @@ def capture(paths, *, read_mode=None, as_of=None):
         except ValueError:
             return 'external:' + _sha(str(path).encode())[:24] + '/' + path.name
     config = initial['config']
+    from ..pending_publication import scope_identity
+    publication = config.get('publication')
     target = copy.deepcopy(getattr(doc, 'knowledge_target', initial.get('target', {})))
     reason = getattr(doc, 'target_unavailable', None)
     observed_target = hasattr(doc, 'knowledge_target') and target.get('revision')
@@ -594,9 +596,9 @@ def capture(paths, *, read_mode=None, as_of=None):
                   reason=reason, ref=target.get('ref'), revision=target.get('revision'))
     context = {'read_mode': 'captured-live' if mode == 'live' else 'frozen',
                'original_read_mode': mode,
-               'project': {'mode': config['mode'], 'generation': config['generation'],
+               'project': {'version': config['version'], 'mode': config['mode'], 'generation': config['generation'],
                            'routing_identity': _portable(initial['record'], origin),
-                           'configuration': _portable(config, origin)},
+                           'publication_identity': scope_identity(publication) if publication else None},
                'pending': _portable(getattr(doc, 'pending_snapshot', {'ref': None, 'bundles': {}, 'events': []}), origin),
                'conflicts': _portable(getattr(doc, 'knowledge_conflicts', {}), origin, authored=True),
                'target': _portable(target, origin)}

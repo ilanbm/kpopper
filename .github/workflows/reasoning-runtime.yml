@@ -114,7 +114,7 @@ jobs:
         env:
           KPOPPER_TEST_REPLACEMENT_ROOT: ${{ runner.temp }}/replacement
         run: |
-          import pathlib, shutil, subprocess, sys, tempfile, zipfile
+          import os, pathlib, shutil, subprocess, sys, tempfile, zipfile
           root = pathlib.Path.cwd()
           work = pathlib.Path(tempfile.mkdtemp(prefix='reasoning-install-'))
           for kind, artifact in [('wheel', next((root/'dist').glob('*.whl'))), ('sdist', next((root/'dist').glob('*.tar.gz')))]:
@@ -132,3 +132,13 @@ jobs:
           with zipfile.ZipFile(archive) as zf:
               zf.extractall(plugin)
           subprocess.run([sys.executable, 'tests/test_reasoning_distribution.py', '--installed-python', str(python), str(plugin)], check=True)
+          # Make the native oracle/framing suites and schema validation mandatory.
+          # The executable comes from the installed, committed package payload.
+          subprocess.run([str(python), '-m', 'pip', 'install', 'jsonschema'], check=True)
+          suite_env = dict(os.environ, XDG_CACHE_HOME=str(work/'native-suite-cache'),
+                           KPOPPER_REQUIRE_REASONING_TESTS='1', KPOPPER_REQUIRE_CORE_TESTS='1')
+          binary = subprocess.check_output([str(python), '-c', 'from kpopper.reasoning.runtime import Runtime; print(Runtime().binary)'],
+                                           env=suite_env, text=True).strip()
+          suite_env['KPOPPER_REASONING_TEST_BINARY'] = binary
+          subprocess.run([str(python), '-m', 'unittest', 'discover', '-s', 'tests', '-p', 'test_reasoning*.py'],
+                         cwd=root, env=suite_env, check=True)

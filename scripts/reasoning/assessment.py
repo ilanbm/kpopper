@@ -28,7 +28,7 @@ def _scope_projection(data, visible):
         'read_mode', 'original_read_mode', 'project', 'target', 'source_collection') if key in original}
     if isinstance(context.get('project'), dict):
         context['project'] = {key: context['project'][key] for key in (
-            'mode', 'generation', 'routing_identity') if key in context['project']}
+            'version', 'mode', 'generation', 'routing_identity', 'publication_identity') if key in context['project']}
     context['conflicts'] = {nid: copy.deepcopy(variants)
                             for nid, variants in original.get('conflicts', {}).items() if nid in visible}
     pending = original.get('pending', {})

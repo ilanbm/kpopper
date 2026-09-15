@@ -104,6 +104,22 @@ __attribute__((constructor)) static void kpopper_gmp_replacement_probe(void) {
 """
 
 
+def validate_axiom_audit(output):
+    """Compiling a proof is insufficient: Lean also accepts admitted axioms."""
+    required = {'Kpopper.evaluate', 'Kpopper.arithmetic', 'Kpopper.Proof.binary_sound',
+                'Kpopper.Proof.evaluate_closedRat_sound', 'Kpopper.Proof.evaluate_literal_success'}
+    allowed = {'propext', 'Classical.choice', 'Quot.sound'}
+    found = set()
+    for name, names in re.findall(r"'([^']+)'\s+depends on axioms:\s*\[([^\]]*)\]", output):
+        axioms = {item.strip() for item in names.split(',') if item.strip()}
+        if axioms - allowed:
+            raise ValueError('unapproved proof axiom: ' + ', '.join(sorted(axioms - allowed)))
+        found.add(name)
+    if required - found:
+        raise ValueError('proof audit omitted required declarations: ' + ', '.join(sorted(required - found)))
+    return sorted(found)
+
+
 def build_gmp(archive, directory, target, *, replacement_probe=False):
     """Build exact upstream GMP privately; run its upstream test suite."""
     archive, directory = Path(archive).resolve(), Path(directory).resolve()
@@ -210,7 +226,10 @@ def build_archive(source_root, lean_root, output, target, *, gmp_prefix=None):
             argv = [lean, "-o", work / (name + ".olean")]
             if runtime:
                 argv += ["-c", work / (name + ".c")]
-            print(run(argv + [work / path.name], cwd=work, env=env), flush=True)
+            compiled_output = run(argv + [work / path.name], cwd=work, env=env)
+            print(compiled_output, flush=True)
+            if name == 'Audit':
+                validate_axiom_audit(compiled_output)
             if runtime:
                 obj = work / (name + ".o")
                 print(run([leanc, "-O3", "-c", "-o", obj, work / (name + ".c")], env=env), flush=True)
@@ -220,6 +239,8 @@ def build_archive(source_root, lean_root, output, target, *, gmp_prefix=None):
         for name in sorted(sources):
             if name.startswith(("Proof", "Audit")):
                 compile_module(name, runtime=False)
+        if 'Audit' not in compiled:
+            raise ValueError('required proof audit module is missing')
         helper = work / "Flags.lean"
         helper.write_text('import Lean.Compiler.FFI\nopen Lean.Compiler.FFI\ndef main : IO Unit := do\n'
                           '  let root := System.FilePath.mk "' + lean_root.as_posix() + '"\n'

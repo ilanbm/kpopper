@@ -409,6 +409,22 @@ class ReaderCapabilityTests(unittest.TestCase):
 
 
 class LiveCaptureTests(Repository):
+    def test_portable_capture_hashes_private_publication_destination(self):
+        from scripts.project_modes import Project
+        from scripts.pending_publication import scope_identity
+        path = self.root / 'GROUNDING.yaml'
+        path.write_text('known:\n  local.one: {v: 1}\n', encoding='utf-8')
+        project = Project(self.root)
+        scope = {'remote': 'origin', 'repository': 'https://user:EXAMPLE_PRIVATE_TOKEN@example.test/repo.git',
+                 'target': 'trunk', 'branch': 'pending', 'standing_permission': True}
+        config = {**project.config(), 'publication': scope, 'generation': 1}
+        project.state.mkdir(parents=True, exist_ok=True)
+        project.config_path.write_text(json.dumps(config), encoding='utf-8')
+        snapshot = Snapshot.capture([str(path)], read_mode='frozen')
+        self.assertNotIn('EXAMPLE_PRIVATE_TOKEN', snapshot.to_json())
+        self.assertNotIn('repository', snapshot.to_json())
+        self.assertEqual(snapshot.to_data()['context']['project']['publication_identity'], scope_identity(scope))
+
     def test_portable_metadata_does_not_rewrite_authored_evidence(self):
         from scripts.reasoning.snapshot import _portable
         value = {'standing_permission': True, 'record': '/private/record.yaml',

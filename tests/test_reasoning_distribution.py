@@ -21,6 +21,16 @@ spec.loader.exec_module(builder)
 
 
 class ArchiveContractTests(unittest.TestCase):
+    def test_named_proof_audit_rejects_admissions_and_missing_targets(self):
+        names = ['Kpopper.evaluate', 'Kpopper.arithmetic', 'Kpopper.Proof.binary_sound',
+                 'Kpopper.Proof.evaluate_closedRat_sound', 'Kpopper.Proof.evaluate_literal_success']
+        clean = '\n'.join("'" + name + "' depends on axioms: [propext, Classical.choice, Quot.sound]" for name in names)
+        self.assertEqual(builder.validate_axiom_audit(clean), sorted(names))
+        for invalid in (clean.replace('propext', 'sorryAx'), clean.replace('propext', 'custom_unproved_axiom'),
+                        '\n'.join(clean.splitlines()[:-1]), ''):
+            with self.assertRaises(ValueError):
+                builder.validate_axiom_audit(invalid)
+
     def test_source_identity_excludes_proofs_and_binds_runtime_paths(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
