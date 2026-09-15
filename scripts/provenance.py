@@ -3310,7 +3310,7 @@ def may_supersede(nid, existing, new, raw, ids, jud, fields, as_of=None, page=No
     else its source's read date; a day is the finest clock the record keeps, and a value
     nothing dates is superseded by one something does. A judgment: when the standing one's
     wrong_if holds now - it is broken, and the new verdict is its repair - or when
-    `by_hand`, the fold a person runs. Nothing inside the write itself opens it: every
+    `by_hand`, a fold in which a person named the id (`--take`). Nothing inside the write itself opens it: every
     session's first write is a source carrying what it was asked, so a field that read a
     person's authority off one would hand every session the key to every standing judgment.
     Everything else contradicts, and a contradiction forks - into a hypothesis a person
@@ -3343,7 +3343,7 @@ def may_supersede(nid, existing, new, raw, ids, jud, fields, as_of=None, page=No
         if evaluate(jud[nid]["pred"], raw, ids) is True:
             return True, f"its wrong_if holds ({short(jud[nid]['pred'], 60)})"
         if by_hand:
-            return True, "the standing judgment holds, and a person folds this over it"
+            return True, "the standing judgment holds, and a person takes this over it by name"
         return False, "the standing judgment holds, and its wrong_if has not fired"
     when = _read_on(existing, raw)
     stamp = _as_day(as_of) or datetime.date.today()
@@ -3353,6 +3353,9 @@ def may_supersede(nid, existing, new, raw, ids, jud, fields, as_of=None, page=No
         return True, f"a reading from {stamp} that is newer than the base's"
     return False, ("a reading of the same day" if stamp == when
                    else f"a reading from {stamp} that is older than the base's")
+
+
+JUDGMENT_KINDS = ("verdict", "grounds", "arrangement")   # what _disagreement says of a judgment
 
 
 def _disagreement(a, body, raw, ids, jud, fields, page=None):
@@ -3369,18 +3372,20 @@ def _disagreement(a, body, raw, ids, jud, fields, page=None):
         old, new = _verdict_of(jud[k]["body"]), _verdict_of(a["body"])
         if old is None or new is None:
             return None
+        kind = "verdict"
         if _same(old, new):
-            if not is_arrangement(jud[k], raw):
-                return None
             skip = ("born", "replaced")
             was = {f: v for f, v in jud[k]["body"].items()
                    if f not in skip and f != fields["snapshot"]}
             now = {f: v for f, v in a["body"].items() if f not in skip and f != fields["snapshot"]}
             if was == now:
                 return None
+            # the same verdict on other grounds - another why, other dependencies, another
+            # condition - is a decision written again, and the same door decides it
+            kind = "arrangement" if is_arrangement(jud[k], raw) else "grounds"
         may, why = may_supersede(k, jud[k]["body"], a["body"], raw, ids, jud, fields,
                                  a.get("as_of"), page)
-        return "verdict", old, new, may, why, None
+        return kind, old, new, may, why, None
     if not isinstance(body, dict):
         return None
     old = value_of(raw, ids, k)
@@ -3479,13 +3484,20 @@ def _forks_on_contradiction(a, doc, ids, jud, fields, raw):
         return out
     if k in ids:
         d = _disagreement(a, raw.get(k), raw, ids, jud, fields, getattr(doc, "page", None))
-        if d and not (d[0] == "verdict" and d[3]):        # a verdict that may supersede replaces
+        if d and not (d[0] in JUDGMENT_KINDS and d[3]):   # a judgment that may supersede replaces
             kind, old, new, newer, why, when = d
-            name = _hypothesis_name(doc, k, new)
+            name = _hypothesis_name(doc, k, str(new) + " (regrounded)" if kind == "grounds" else new)
             if kind == "verdict":
                 out.append(f"{k} is already a judgment, concluding {short(old, 60)!r} - {why}, so a "
                            f"different verdict under the same id contradicts it, and a hypothesis "
                            f"holds the other: {_command_of(a, name)}")
+            elif kind == "grounds":
+                out.append(f"{k} is already a judgment concluding the same, on other grounds - {why}, "
+                           f"so the same verdict on other grounds is a decision written again, and a "
+                           f"hypothesis holds it until a person takes it: {_command_of(a, name)}")
+            elif kind == "arrangement":
+                out.append(f"{k} is already this arrangement - {why}, so a hypothesis holds the "
+                           f"re-decision: {_command_of(a, name)}")
             elif newer:
                 out.append(f"{k} is already an entry, holding {short(old)}"
                            + (f" as of {when}" if when else "")
@@ -3540,7 +3552,7 @@ def _drops_are_named(a, doc, ids, jud, fields, raw):
     if _arrangement_shaped(a["body"], fields, raw) or is_arrangement(jud[k], raw):
         return []          # an arrangement re-decided changes the count its sign is over
     d = _disagreement(a, raw.get(k), raw, ids, jud, fields, getattr(doc, "page", None))
-    if not d or not (d[0] == "verdict" and d[3]):
+    if not d or not (d[0] in JUDGMENT_KINDS and d[3]):
         return []                                    # refused anyway, or nothing replaces
     drops = a.get("drops") or {}
     old = jud[k]["body"]
@@ -4541,8 +4553,11 @@ def _apply(paths, action, diagnostics=None):
         back = returns_to(paths, nid, body)
         index = keep_replaced(paths, nid, old, why, stamp, action.get("drops"))
         _replace_in(lines, nid, body)
-        out.append("supersede {}: {} -> {} - {}".format(
-            nid, *apart(was, _verdict_of(body), 60), why))
+        if _same(was, str(_verdict_of(body) or nid)):
+            out.append(f"supersede {nid}: the same verdict on other grounds - {why}")
+        else:
+            out.append("supersede {}: {} -> {} - {}".format(
+                nid, *apart(was, _verdict_of(body), 60), why))
         out += trail_lines(paths, nid, old, body, fields, action.get("drops"), index)
         if back:
             n, v = back

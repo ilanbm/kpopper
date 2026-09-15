@@ -591,9 +591,18 @@ class TheWritePathForks(unittest.TestCase):
             self.assertIn("    request: s.2026_09_04_ask\n",
                           (pathlib.Path(d) / "PROVENANCE.d" / f"{name}.yaml").read_text(encoding="utf-8"))
             code, out, err = run(SCRIPTS / "consolidate.py", name, "--as-of", "2026-09-04", rec)
+            self.assertEqual(code, 1, out + err)
+            self.assertIn(f"refused - a verdict the base's own condition has not broken folds only when a "
+                          f"person names it: consolidate {name} --take c.boiler_short", out + err)
+            self.assertEqual(rec.read_text(encoding="utf-8"), before)
+            code, out, err = run(SCRIPTS / "consolidate.py", name, "--take", "c.boiler_short",
+                                 "--as-of", "2026-09-04", rec)
             self.assertEqual(code, 0, out + err)
-            self.assertIn("    the standing judgment holds, and a person folds this over it\n", out)
+            self.assertIn("    taken by name - the standing judgment holds, and a person takes this over it "
+                          "by name\n", out)
             text = rec.read_text(encoding="utf-8")
+            self.assertIn('    replaced: ["the standing judgment holds, and a person takes this over it by '
+                          'name on 2026-09-04"]\n', text)
             self.assertIn('    verdict: "the old boiler is short by {{heat.deficit_kw}} kW on the coldest '
                           'night"\n', text)
             self.assertIn("    request: s.2026_09_04_ask\n", text)

@@ -443,14 +443,19 @@ class TheReDecision(unittest.TestCase):
             self.assertEqual(code, 1, out + err)
             self.assertIn("it was decided on 2026-09-05 - a second decision on the same day is a "
                           "contradiction, not a change", out)
-            # a day later it folds, and leaves the trail a re-decision in place leaves
+            # a day later it still waits for a person's name - its sign has not fired - and
+            # taken by name it folds, and leaves the trail a re-decision in place leaves
             code, out, err = run(SCRIPTS / "consolidate.py", "flip", "--as-of", "2026-09-06", rec)
+            self.assertEqual(code, 1, out + err)
+            self.assertIn("consolidate flip --take v.glazing_tab", out + err)
+            code, out, err = run(SCRIPTS / "consolidate.py", "flip", "--take", "v.glazing_tab",
+                                 "--as-of", "2026-09-06", rec)
             self.assertEqual(code, 0, out + err)
             self.assertIn("born renewed, and what it replaced kept", out)
             text = entry(rec, "v.glazing_tab")
             self.assertIn('born: "2026-09-06"', text)
             self.assertIn('"born 2026-09-05, stood 0 sessions; the standing judgment holds, and a '
-                          'person folds this over it on 2026-09-06"', text)
+                          'person takes this over it by name on 2026-09-06"', text)
             self.assertEqual(run(SCRIPTS / "provenance.py", "check", rec)[0], 0)
             self.assertEqual(run(SCRIPTS / "render_page.py", "--verify", rec)[0], 0)
 

@@ -38,8 +38,8 @@ LOSS_BEFORE = ('  heat.loss_kw:\n    v: 31\n    unit: kW\n    name: "heat loss o
 LOSS_AFTER = ('  heat.loss_kw:\n    v: 28\n    unit: kW\n    name: "heat loss on a -5°C night"\n'
               '    from: s.2026_09_03_recount\n    at: "the north wall at its measured U-value"\n'
               '    of: "2026-09-03"\n')
-HEADINGS = ("arrived (", "updates (", "moved / falsified (", "contested (", "candidates (",
-            "new subjects (")
+HEADINGS = ("arrived (", "updates (", "reversed (", "moved / falsified (", "contested (",
+            "candidates (", "new subjects (")
 
 
 def run(*args, cwd=None):
@@ -117,6 +117,8 @@ class TheDryRunTests(unittest.TestCase):
                       "    worked out from it: heat.deficit_kw\n"
                       "    MUTED     c.boiler_short: heat.loss_kw moved 31 -> 28, inside wrong_if "
                       "(heat.loss_kw <= heat.boiler_kw) - nothing is asked\n"
+                      "reversed (0): a verdict, or other grounds, laid over a standing judgment - by its own "
+                      "condition, by a person's name, or waiting for one\n"
                       "moved / falsified (0): what the union moves or breaks\n"
                       "contested (0)\n"
                       "candidates (0): pairs for a person to judge as the same subject or distinct\n"
@@ -256,20 +258,37 @@ class TheDryRunTests(unittest.TestCase):
                                  "verdict=the old boiler holds after all", "wrong_if=heat.loss_kw > 40",
                                  "--as-of", "2026-09-03", "--hypothesis", "c_boiler_short", rec)
             self.assertEqual(code, 0, out + err)
-            # the session's own write was refused; the fold is where it is decided, and the
-            # dry run says so in the one line the person reads before running it
+            # the session's own write was refused; the fold is where it is decided - and the
+            # dry run names it a reversal, red until a person takes it by name
             code, out, err = kp("consolidate", "--dry-run", "c_boiler_short", rec)
-            self.assertEqual(code, 0, out + err)
-            self.assertIn("  c.boiler_short: the old boiler cannot hold 12°C on … -> the old boiler holds "
+            self.assertEqual(code, 1, out + err)
+            self.assertIn("reversed (1): a verdict, or other grounds, laid over a standing judgment - by its "
+                          "own condition, by a person's name, or waiting for one\n"
+                          "  c.boiler_short: the old boiler cannot hold 12°C on … -> the old boiler holds "
                           "after all, from c_boiler_short\n"
-                          "    the standing judgment holds, and a person folds this over it\n", out)
-            self.assertIn("clean: c_boiler_short may fold", out)
+                          "    the standing judgment holds, and its wrong_if has not fired - take it by "
+                          "name: consolidate c_boiler_short --take c.boiler_short\n"
+                          "    base: because: It gives 24 kW against a loss of 31 kW - a shortfall of "
+                          "shortfall on the coldest night kW b ...\n"
+                          "    base: rests_on: [heat.boiler_kw, heat.loss_kw, heat.deficit_kw]\n"
+                          "    base: wrong_if: heat.loss_kw <= heat.boiler_kw\n"
+                          "    c_boiler_short: rests_on: [heat.boiler_kw, heat.loss_kw]\n"
+                          "    c_boiler_short: wrong_if: heat.loss_kw > 40\n", out)
+            self.assertIn("not clean: 1 reversal to take by name - a verdict the base's own condition has "
+                          "not broken folds only when a person names it\n"
+                          "  consolidate c_boiler_short --take c.boiler_short\n", out)
+            code, out, err = kp("consolidate", "c_boiler_short", "--as-of", "2026-09-04", rec)
+            self.assertEqual(code, 1, out + err)
+            self.assertIn("refused - a verdict the base's own condition has not broken folds only when a "
+                          "person names it: consolidate c_boiler_short --take c.boiler_short", out + err)
             # the standing judgment broken by a newer reading says so instead: the sign fired
             run(SCRIPTS / "provenance.py", "set", "heat.loss_kw", "20", "--as-of", "2026-09-04", rec)
             self.assertEqual(run(SCRIPTS / "provenance.py", "check", rec)[0], 1)
+            code, out, err = kp("consolidate", "--dry-run", "c_boiler_short", "--as-of", "2026-09-04", rec)
+            self.assertEqual(code, 0, out + err)
+            self.assertIn("    by its own condition - its wrong_if holds (heat.loss_kw <= heat.boiler_kw)\n", out)
             code, out, err = kp("consolidate", "c_boiler_short", "--as-of", "2026-09-04", rec)
             self.assertEqual(code, 0, out + err)
-            self.assertIn("    its wrong_if holds (heat.loss_kw <= heat.boiler_kw)\n", out)
             self.assertIn("replace c.boiler_short with what c_boiler_short holds, where it stands - what it "
                           "replaced kept\n"
                           "  kept: the replaced verdict, because, in PROVENANCE.replaced.yaml\n"
@@ -386,7 +405,8 @@ class TheFold(unittest.TestCase):
                           "replace heat.loss_kw with what glazing_redo holds, where it stands\n"
                           "carry s.2026_09_03_recount from glazing_redo into sources, after s.2026_09_02_heating\n"
                           "folded glazing_redo: 2 entries and 0 judgments - 1 added, 1 replaced\n"
-                          "files to commit: PROVENANCE.yaml, PROVENANCE.d/glazing_redo.yaml (deleted)\n\n"
+                          "files to commit: PROVENANCE.yaml, PROVENANCE.d/glazing_redo.yaml (deleted)\n"
+                          "next: git add PROVENANCE.yaml && git commit\n\n"
                           "the record needs a person on 0 judgments - check says the rest\n", out)
             expected = before.replace("  updated: 2026-09-03\n", "  updated: 2026-09-04\n", 1)
             expected = expected.replace(LOSS_BEFORE, LOSS_AFTER, 1)
