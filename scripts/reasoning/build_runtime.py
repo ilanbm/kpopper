@@ -44,7 +44,7 @@ def source_hash(lean_dir):
 def run(argv, cwd=None, env=None):
     print("+ " + json.dumps([str(x) for x in argv]), flush=True)
     return subprocess.check_output([str(x) for x in argv], cwd=cwd, env=env,
-                                   stderr=subprocess.STDOUT, text=True)
+                                   stderr=subprocess.STDOUT, text=True, encoding="utf-8")
 
 
 def host_target():
@@ -175,7 +175,7 @@ def build_gmp(archive, directory, target, *, replacement_probe=False):
     source = directory / "gmp-6.3.0"
     if replacement_probe:
         marker = source / "version.c"
-        marker.write_text(marker.read_text() + GMP_REPLACEMENT_PATCH)
+        marker.write_bytes(marker.read_bytes() + GMP_REPLACEMENT_PATCH.encode())
     build = directory / "build"
     build.mkdir(exist_ok=True)
     prefix = directory / "install"
@@ -196,7 +196,8 @@ def build_gmp(archive, directory, target, *, replacement_probe=False):
         print(run(argv, cwd=build, env=env), flush=True)
     (prefix / "kpopper-gmp-provenance.json").write_text(json.dumps({
         "source_sha256": GMP_SHA256, "target": target, "configure": [str(x) for x in args],
-        "patches": ["replacement-constructor.patch"] if replacement_probe else [], "tests": "make check passed"}, sort_keys=True) + "\n")
+        "patches": ["replacement-constructor.patch"] if replacement_probe else [], "tests": "make check passed"},
+        sort_keys=True) + "\n", encoding="utf-8")
     return prefix
 
 
@@ -218,7 +219,7 @@ def archive_payload(bundle, output, manifest):
             entry.external_attr = (stat.S_IFREG | mode) << 16
             entry.compress_type = zipfile.ZIP_DEFLATED
             zf.writestr(entry, data, compresslevel=9)
-    output.with_suffix(".zip.sha256").write_text(sha256(output) + "  " + output.name + "\n")
+    output.with_suffix(".zip.sha256").write_bytes((sha256(output) + "  " + output.name + "\n").encode())
     return manifest
 
 
@@ -232,7 +233,7 @@ def build_archive(source_root, lean_root, output, target, *, gmp_prefix=None):
     if not gmp_prefix:
         raise ValueError("a privately built GMP prefix is required")
     gmp_prefix = Path(gmp_prefix).resolve()
-    provenance = json.loads((gmp_prefix / "kpopper-gmp-provenance.json").read_text())
+    provenance = json.loads((gmp_prefix / "kpopper-gmp-provenance.json").read_text(encoding="utf-8"))
     if (provenance.get("source_sha256") != GMP_SHA256 or provenance.get("target") != target
             or provenance.get("patches", []) or provenance.get("tests") != "make check passed"):
         raise ValueError("GMP build provenance mismatch")
@@ -260,7 +261,7 @@ def build_archive(source_root, lean_root, output, target, *, gmp_prefix=None):
             if name in compiled:
                 return
             path = sources[name]
-            for imported in re.findall(r"^import\s+(\w+)", path.read_text(), re.M):
+            for imported in re.findall(r"^import\s+(\w+)", path.read_text(encoding="utf-8"), re.M):
                 if imported in sources:
                     if runtime and imported.startswith(("Proof", "Audit")):
                         raise ValueError("runtime imports proof-only module")
@@ -288,7 +289,7 @@ def build_archive(source_root, lean_root, output, target, *, gmp_prefix=None):
         helper.write_text('import Lean.Compiler.FFI\nopen Lean.Compiler.FFI\ndef main : IO Unit := do\n'
                           '  let root := System.FilePath.mk "' + lean_root.as_posix() + '"\n'
                           '  for arg in getCFlags root ++ getInternalCFlags root ++ getInternalLinkerFlags root ++ getLinkerFlags root true do\n'
-                          '    IO.println arg\n')
+                          '    IO.println arg\n', encoding="utf-8")
         flags = run([lean, "--run", helper], env=env).splitlines()
         if target.startswith("darwin"):
             library = ".dylibs/libgmp.10.dylib"
@@ -318,7 +319,7 @@ def build_archive(source_root, lean_root, output, target, *, gmp_prefix=None):
         mapfile = work / "link.map"
         mapflag = "-Wl,-map," if target.startswith("darwin") else "-Wl,-Map,"
         print(run([lean_root / ("bin/clang" + ext), "-O3", "-o", executable] + objects + flags + [mapflag + str(mapfile)], env=env), flush=True)
-        if "libgmp.a(" in mapfile.read_text(errors="replace"):
+        if "libgmp.a(" in mapfile.read_text(encoding="utf-8", errors="replace"):
             raise ValueError("static GMP entered linker map")
         audit = audit_linkage(executable, dest, target, lean_root)
         run(["strip", executable])
@@ -326,8 +327,8 @@ def build_archive(source_root, lean_root, output, target, *, gmp_prefix=None):
             run(["codesign", "--force", "--sign", "-", executable])
         notices = Path(__file__).parent / "third_party"
         shutil.copytree(notices, bundle / "licenses")
-        (bundle / "THIRD_PARTY_NOTICES.txt").write_text((notices / "THIRD_PARTY_NOTICES.txt").read_text())
-        (bundle / "linkage.json").write_text(json.dumps(audit, indent=2, sort_keys=True) + "\n")
+        shutil.copyfile(notices / "THIRD_PARTY_NOTICES.txt", bundle / "THIRD_PARTY_NOTICES.txt")
+        (bundle / "linkage.json").write_bytes((json.dumps(audit, indent=2, sort_keys=True) + "\n").encode())
         if source_hash(source_root) != source_digest:
             raise ValueError("runtime sources changed during build")
         return archive_payload(bundle, output, {"version": 1, "protocol": "KP2", "target": target,

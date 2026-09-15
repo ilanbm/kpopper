@@ -1,0 +1,11 @@
+# Source bytes are hashed and compared byte for byte between platforms: the
+# runtime source identity, the bundled notices and every archive digest are
+# derived from the working tree. Check out one set of line endings everywhere.
+* text=auto eol=lf
+
+# Prebuilt payloads and images are never line-ending converted.
+*.zip binary
+*.gz binary
+*.xz binary
+*.png binary
+*.svg text eol=lf
