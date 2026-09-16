@@ -5,7 +5,7 @@ is a complete JSON scalar literal, a single-quoted string, or one declared bare
 reference. Single quotes decode only escaped apostrophe and escaped backslash;
 JSON strings retain JSON escapes. Raw U+0000..U+001F, malformed/trailing syntax,
 and unsupported JSON values stay unknown. These tests do not build on reads:
-run `kpopper session setup` explicitly for this checkout before integration tests.
+run `kpop session setup` explicitly for this checkout before integration tests.
 """
 import json
 import os

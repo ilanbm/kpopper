@@ -1,10 +1,12 @@
 name: checked-session
 
 on:
-  pull_request:
-    branches: [main]
-  push:
-    branches: [main]
+  workflow_call:
+  workflow_dispatch:
+
+concurrency:
+  group: checked-session-${{ github.ref }}
+  cancel-in-progress: true
 
 permissions:
   contents: read
@@ -46,10 +48,10 @@ jobs:
       - name: Install the session transport
         run: python -m pip install ".[session]"
       - name: Build the package's reviewed kernel
-        run: kpopper session setup
+        run: kpop session setup
       - name: Check installed runtime and integration contracts
         run: |
-          kpopper session status
+          kpop session status
           python -m unittest discover -s tests -p 'test_session*.py' -v
           python -m unittest discover -s tests -p test_predicate_literals.py -v
           python -m unittest discover -s tests -p 'test_structured*.py' -v

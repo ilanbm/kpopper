@@ -38,7 +38,7 @@ check, not a silent fork. Run it after touching any embed:
 
 | harness | opener (session start) | gate (session end) | skill / rule placement | page viewing |
 |---|---|---|---|---|
-| Claude Code *(baseline, unchanged)* | `SessionStart` hook, blocking-capable | `Stop` hook, exit 2 blocks, bounces once | `skills/*/` - one skill per occasion - loaded natively by the plugin engine | `kpopper page` writes `.kpopper/build/page.html`; open in any browser |
+| Claude Code *(baseline, unchanged)* | `SessionStart` hook, blocking-capable | `Stop` hook, exit 2 blocks, bounces once | `skills/*/` - one skill per occasion - loaded natively by the plugin engine | `kpop page` writes `.kpopper/build/page.html`; open in any browser |
 | **Codex CLI** | `SessionStart` hook — reuses `session_open.sh` as-is; the grounding line and its read leg are registered, the edit-time citation nudge is not (no `PreToolUse` in the adapter's hook set) | `Stop` hook — reuses `session_gate.sh` as-is, exit 2 blocks | `AGENTS.md` snippet + every `skills/*/` directory symlinked into `.agents/skills` | same page, opened by hand |
 | **Cursor** | `sessionStart` hook, translating wrapper (fire-and-forget by design) | `stop` hook, translating wrapper — no true block; `followup_message` bounces once, then yields | `rules/kpopper.mdc` — agent-requested + auto-attached on `GROUNDING.yaml` | same, opened by hand |
 | **Gemini CLI** | `SessionStart` hook (extension-bundled) — reuses `session_open.sh` as-is | `SessionEnd` hook — advisory only, cannot block by design | `GEMINI.md`, the extension's context file | same, opened by hand |

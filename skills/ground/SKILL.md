@@ -5,7 +5,7 @@ description: "Read the project's knowledge record before answering from memory o
 
 # Ground
 
-The record answers two questions a session cannot answer reliably in its head: what is known here now, with its sources, and what a change reaches. Ask it before restating a value, a date or a decision from memory, and before changing one. The command line is `kpopper` where it is on PATH; otherwise the `command` in the `KPOPPER_AGENT_CONTEXT` line the session opener printed (`python3 <plugin>/scripts/cli.py`) runs the same code. Do not guess a path and do not write a second reader - [the method's reference](../kpopper/references/method.md#finding-the-reader) says how to find the installed copy when neither is at hand.
+The record answers two questions a session cannot answer reliably in its head: what is known here now, with its sources, and what a change reaches. Ask it before restating a value, a date or a decision from memory, and before changing one. The command line is `kpop` where it is on PATH; otherwise the `command` in the `KPOPPER_AGENT_CONTEXT` line the session opener printed (`python3 <plugin>/scripts/cli.py`) runs the same code. Do not guess a path and do not write a second reader - [the method's reference](../kpopper/references/method.md#finding-the-reader) says how to find the installed copy when neither is at hand.
 
 When mentioning this skill to the user, include the plugin name: `kpopper:ground` or "ground from the kpopper plugin". Use the user's language and fold it into the explanation of the action; no extra announcement is needed.
 
@@ -16,7 +16,7 @@ created again. What the record keeps beside itself - hypotheses, the brief, the 
 `ls -a .kpopper` or `rg --files --hidden`, and never conclude from a listing that skipped it that
 there are no hypotheses. A record moved by half, its files left under the earlier names, fails
 `check` and is named in the opener's head.
-Git is optional. Use the location resolved by the opener or `kpopper open --json`: it checks
+Git is optional. Use the location resolved by the opener or `kpop open --json`: it checks
 the current directory and ancestors within the workspace boundary, then Git's registered
 external location. Do not start a duplicate because the file is outside the current directory.
 
@@ -70,7 +70,7 @@ When evidence is still missing, continue a returned `next_cursor` with the same 
 one page is not a coverage boundary. Use `kpopper_context` for explicit support or impact reads
 around relevant IDs. Read its omitted values and incident-edge frontier as needed, and keep
 global search available for unlinked qualifications. Declared paths do not prove claims.
-For retained reports and local UTF-8 source passages, use `kpopper search "terms" --chars 4000`;
+For retained reports and local UTF-8 source passages, use `kpop search "terms" --chars 4000`;
 [RETRIEVAL.md](../kpopper/RETRIEVAL.md) covers scopes and exact source reads. Its `search-corpus`
 revision is distinct from a checked-session revision. Preserve source-language names and
 try alternate terms when needed; the search does not translate or infer relationships.
@@ -93,12 +93,12 @@ Compare the shared subset: extra branch entries are allowed; different source bo
 See [project modes](../../docs/project-modes.md).
 
 ```bash
-kpopper open                             # what to read instead of the whole record
-kpopper check                            # does the record still hold together
-kpopper affects <entry> [entry ...]      # what a change reaches
-kpopper pull <entry|prefix> [...]        # values with sources, and what rests on them
-kpopper pull <seed> --from <ref>         # what another branch's record proposes, beside
-kpopper watch shared                     # shared external observations, from any branch
+kpop open                             # what to read instead of the whole record
+kpop check                            # does the record still hold together
+kpop affects <entry> [entry ...]      # what a change reaches
+kpop pull <entry|prefix> [...]        # values with sources, and what rests on them
+kpop pull <seed> --from <ref>         # what another branch's record proposes, beside
+kpop watch shared                     # shared external observations, from any branch
 ```
 
 `check` enforces every invariant of the shape and **exits non-zero** when one fails: a dependency that is
@@ -154,7 +154,7 @@ NAME "why"` - one negative finding stays, `hyp.<name>: refuted`, its claim as th
 its place and the judgments it held in `refutes:`, and nothing else of it - or it stays
 **untested**, counted at every open until someone does one.
 
-Shared external observations captured through the [watch skill](../watch/SKILL.md) are read with `kpopper watch shared` from any branch; absence from the branch record alone does not establish absence. Comparison never changes `main` or a judgment's `seen`.
+Shared external observations captured through the [watch skill](../watch/SKILL.md) are read with `kpop watch shared` from any branch; absence from the branch record alone does not establish absence. Comparison never changes `main` or a judgment's `seen`.
 
 ## Then reference, never retype
 

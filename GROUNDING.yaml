@@ -1,5 +1,5 @@
 meta:
-  updated: 2026-09-16
+  updated: 2026-09-17
   name: kpopper
   scope: "What this plugin is for and the decisions that shaped it, kept in its own format -
           the tools eat their own cooking, and every session here opens grounded."
@@ -677,6 +677,10 @@ sources:
     file: "scripts/consolidate.py"
     read: "2026-09-10"
     revision: d17225095c856b147d03522981f2c639e57f73e1
+  s.ci_selection:
+    name: "CI family selection and required-results policy"
+    file: ".github/scripts/ci_selection.py"
+    read: "2026-09-17"
   s.followups_contract:
     name: "Followup task and authority contract"
     file: "skills/kpopper/FOLLOWUPS.md"
@@ -1314,6 +1318,14 @@ known:
     at: "near - the reasons a pair is named; overlap only orders"
     of: "2026-09-04"
     also: [p.sameness_reasons]
+  p.ci_native_build_inputs:
+    name: "Inputs requiring the five-target native build and modified-GMP audit"
+    v: "Native sources, builder, bundled runtime, native loader and replacement probe, notices, and
+        CI selection/native-workflow changes; unknown paths select all checks. Packaging metadata
+        alone tests installation without recompiling native source."
+    from: s.ci_selection
+    at: "families(path) and select(paths), branch codex/selective-ci"
+    as_of: "2026-09-17"
   p.contested_meanings:
     v: 1
     name: "Meanings the reader gives the word contested - a rival claim laid against what the record
@@ -2232,6 +2244,24 @@ judgments:
       s.2026_09_04_components: "read 2026-09-04"
       d.author_free_build_guarantees: "the session composes freely and the build enforces the
                                        element rules on the output"
+  d.ci_selects_families:
+    name: "Select PR checks by declared input families and require selected work to succeed"
+    rests_on: [p.ci_native_build_inputs]
+    verdict: "Keep record and cheap contracts unconditional; select expensive families
+              conservatively from the full PR diff, cancel superseded runs, and retain broad consumer
+              checks on main."
+    because: "Skills and prose do not require native compilation. Packaging needs evidence about the
+              installed committed payload, while changed native inputs need compilation and
+              replacement-library integration. Unknown paths select all checks; the aggregate gate
+              refuses an unexpected skip so selecting less cannot silently convert missing work into
+              success."
+    reopened_by: "A changed input affects a skipped family; a selected job is skipped or fails while
+                  ci-required passes; or main no longer exercises all consumer families."
+    seen:
+      p.ci_native_build_inputs: "Native sources, builder, bundled runtime, native loader and
+                                 replacement probe, notices, and CI selection/native-workflow
+                                 changes; unknown paths select all checks. Packaging metadata alone
+                                 tests installation without recompiling native source."
   d.components_follow_shape:
     rests_on: [s.2026_09_04_components, d.groupings_declared, doc.hub_seam]
     verdict: "The existing shapes carry the hub components; an axis is reviewed text with signed

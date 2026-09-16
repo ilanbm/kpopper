@@ -205,7 +205,7 @@ def _message(notices, record=None):
             notice["id"], notice.get("category", "attention"),
             target, affected or "unresolved", reason, quote or "(unavailable)"))
     if len(notices) > MAX_NOTICES:
-        lines.append("More findings remain in `kpopper ingest pending`.")
+        lines.append("More findings remain in `kpop ingest pending`.")
     # Each item is bounded above. Do not cut off a signal ID we will confirm as sent.
     return "\n".join(lines)
 

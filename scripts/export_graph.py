@@ -114,7 +114,7 @@ def project(paths, seeds, direction='support', depth=1, max_nodes=12):
         pending = {nid for hyp in doc.hypotheses.values() if hyp.get('kind') == 'contribution' for nid in hyp.get('ids', ())}
         if any(nid in pending for nid in unknown):
             raise ValueError('pending contribution IDs are not expanded by export; use open, pull or knowledge snapshot')
-        raise ValueError('unknown exact ID(s): ' + ', '.join(unknown) + '; use kpopper open or pull')
+        raise ValueError('unknown exact ID(s): ' + ', '.join(unknown) + '; use kpop open or pull')
     flags = P.flags(ids, judgments, fields, raw)
     assessment = P.assessment_module().assess(doc, ids, judgments, fields, raw)
     disputed = P.contested(doc)
@@ -354,7 +354,7 @@ def render_markdown(packet, details=False):
         lines.append('No links shown within this selection.')
     lines.extend(['', 'Conditions use the full base record; current readings outside this excerpt are marked. '
                   'External source contents and page-only checks are not evaluated here. '
-                  'Read an entry with kpopper pull ID; kpopper export ID --details shows recorded fields. '
+                  'Read an entry with kpop pull ID; kpop export ID --details shows recorded fields. '
                   'The source YAML remains authoritative.', ''])
     return '\n'.join(lines)
 
@@ -416,7 +416,7 @@ def render_mermaid(packet):
 
 
 def main(argv=None):
-    parser = argparse.ArgumentParser(prog='kpopper export', description=__doc__)
+    parser = argparse.ArgumentParser(prog='kpop export', description=__doc__)
     parser.add_argument('ids', nargs='+', help='1..8 exact record IDs; no whole-record default')
     parser.add_argument('--record', action='append', help='record path; repeat for multiple inputs')
     parser.add_argument('--format', choices=('markdown', 'markdown-mermaid', 'mermaid'),

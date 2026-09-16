@@ -180,7 +180,7 @@ class Authoring(unittest.TestCase):
         self.assertEqual(raw['c.total']['seen']['order.total']['computed']['value'], 80)
 
     def test_missing_core_keeps_text_with_a_diagnostic(self):
-        with patch.object(P.E, '_CORE', None), patch.object(P.E, '_core_type', side_effect=ValueError('core is not ready; run kpopper session setup')):
+        with patch.object(P.E, '_CORE', None), patch.object(P.E, '_core_type', side_effect=ValueError('core is not ready; run kpop session setup')):
             out = self.add('order.total', {'rule': 'order.price * order.quantity'})
         self.assertEqual(P.bodies(self.read())['order.total']['rule'], 'order.price * order.quantity')
         self.assertIn('kept as text', out)
@@ -192,7 +192,7 @@ class Authoring(unittest.TestCase):
                   'record_sha256': I._sha(self.path.read_bytes()),
                   'updates': [{'kind': 'add', 'id': 'order.double', 'body': {'rule': 'order.price * 2'}}]}
         state = self.path.parent / 'state'
-        with patch.object(P.E, '_CORE', None), patch.object(P.E, '_core_type', side_effect=ValueError('core is not ready; run kpopper session setup')):
+        with patch.object(P.E, '_CORE', None), patch.object(P.E, '_core_type', side_effect=ValueError('core is not ready; run kpop session setup')):
             event = I.capture(report, self.path, state, start=False)
             with self.assertRaises(I._CrashAfterCommit):
                 I.process(self.path, state, event_id=event['event_id'], _crash_after_commit=True)

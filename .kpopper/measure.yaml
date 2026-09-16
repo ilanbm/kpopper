@@ -1,4 +1,4 @@
-# How the entries that name a measure are taken from this tree. Read by `kpopper remeasure`
+# How the entries that name a measure are taken from this tree. Read by `kpop remeasure`
 # alone - the pull request runs it with --run; no command that reads the record does. A recipe
 # is an argument list, never a line for a shell: it runs from the checkout's root, without a
 # shell, with its streams capped and its time bounded, and the one line it prints is the value.

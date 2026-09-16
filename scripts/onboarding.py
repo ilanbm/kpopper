@@ -121,7 +121,7 @@ def moves(host):
     form = SKILL_FORMS.get(host or "")
     if form:
         return form.format("record"), form.format("map")
-    return "`kpopper add`", "`kpopper map`"
+    return "`kpop add`", "`kpop map`"
 
 
 def context(location, host=None):
@@ -138,7 +138,7 @@ def context(location, host=None):
                      % (current["mapping"], current["owner"], current["request"]))
     elif current["mapping"] == "requested":
         lines.append("An older mapping preference was saved but never dispatched. "
-                     "Run `kpopper map` in an active session if the user still wants that work.")
+                     "Run `kpop map` in an active session if the user still wants that work.")
     if current["status"] == "missing":
         # Two lines, and no script: the starting offer and its timing live in the map skill,
         # the first write in the record skill. A hook that carries the offer carries it onto
@@ -188,7 +188,7 @@ def context(location, host=None):
 
 
 def main(argv=None):
-    parser = argparse.ArgumentParser(prog="kpopper _agent", description="Internal host-agent protocol.")
+    parser = argparse.ArgumentParser(prog="kpop _agent", description="Internal host-agent protocol.")
     parser.add_argument("--workspace")
     actions = parser.add_subparsers(dest="action")
     for name in ("status", "guide", "task"):

@@ -14,7 +14,7 @@ except ImportError:
 
 
 def main(argv=None):
-    parser = argparse.ArgumentParser(prog="kpopper followups", description=__doc__)
+    parser = argparse.ArgumentParser(prog="kpop followups", description=__doc__)
     parser.add_argument("--json", action="store_true", help="structured output (also the default)")
     commands = parser.add_subparsers(dest="command", required=True)
     setup = commands.add_parser("setup", help="choose an existing task destination or create a private fallback")

@@ -1,19 +1,19 @@
 # Recorded assessment contract
 
-`kpopper assess` returns recorded findings as JSON so tools can use them without interpreting
+`kpop assess` returns recorded findings as JSON so tools can use them without interpreting
 prose. The ordinary reader's flags and `check` condition results consume the shared assessment;
 the focused exporter projects the same findings before limiting displayed values. Reading an
 assessment does not update the record, apply proposals, or refresh review snapshots.
 
 ```sh
-kpopper assess launch.announcement --record examples/launch-party/GROUNDING.yaml
-kpopper assess launch.announcement --attention-only \
+kpop assess launch.announcement --record examples/launch-party/GROUNDING.yaml
+kpop assess launch.announcement --attention-only \
   --record examples/launch-party/GROUNDING.yaml
-kpopper assess launch.announcement --policy falsifiers-only/v1 --attention-only \
+kpop assess launch.announcement --policy falsifiers-only/v1 --attention-only \
   --record examples/launch-party/GROUNDING.yaml
 ```
 
-Replace `kpopper` with `python3 scripts/cli.py` in a source checkout. Exact IDs select the
+Replace `kpop` with `python3 scripts/cli.py` in a source checkout. Exact IDs select the
 returned entries; assessment uses the full supplied base record. `--record` can be repeated.
 `--json` is accepted but unnecessary: this command returns JSON directly. Exit 0 means the
 assessment was read successfully, including when a condition holds or attention is present.

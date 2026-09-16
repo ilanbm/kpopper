@@ -84,22 +84,22 @@ prevent change; it prevents *half* a change, which is what actually kills record
 
 ## Finding the reader
 
-A reader ships with this plugin at `scripts/provenance.py`, and the `kpopper` command line is the
+A reader ships with this plugin at `scripts/provenance.py`, and the `kpop` command line is the
 same code with a shorter name. Run it from the directory the record sits in — it needs only
 Python and PyYAML:
 
 ```bash
-kpopper open                             # what to read instead of the whole record
-kpopper check
-kpopper affects <entry> [entry ...]
-kpopper pull <entry> [entry ...] [--from <ref>]   # --from: what another branch proposes, beside
-kpopper set <key> <value> [--why "..."]  # change one value; the reply is the reach
-kpopper set <key> <value> --source <id> --at "..."  # a new reading with its new citation
-kpopper add <id> field=value ...         # a new entry or judgment, in id order, seen filled
-kpopper review <id | "section title">    # it still holds: seen rewritten from the record
-kpopper consolidate [--dry-run] [NAME ...]   # the union, tested; then folded (--refute NAME "why")
-kpopper remeasure [--run]                # the entries that name a recipe, taken again from the tree
-kpopper same <a> <b> | distinct <a> <b> "why"   # one subject under two ids, or two that only look alike
+kpop open                             # what to read instead of the whole record
+kpop check
+kpop affects <entry> [entry ...]
+kpop pull <entry> [entry ...] [--from <ref>]   # --from: what another branch proposes, beside
+kpop set <key> <value> [--why "..."]  # change one value; the reply is the reach
+kpop set <key> <value> --source <id> --at "..."  # a new reading with its new citation
+kpop add <id> field=value ...         # a new entry or judgment, in id order, seen filled
+kpop review <id | "section title">    # it still holds: seen rewritten from the record
+kpop consolidate [--dry-run] [NAME ...]   # the union, tested; then folded (--refute NAME "why")
+kpop remeasure [--run]                # the entries that name a recipe, taken again from the tree
+kpop same <a> <b> | distinct <a> <b> "why"   # one subject under two ids, or two that only look alike
 ```
 
 Where that command is not on the path, the reader still ships inside the plugin — but **do not

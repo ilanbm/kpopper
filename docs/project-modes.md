@@ -22,9 +22,9 @@ the previous policy are retained as rollback evidence.
 Inspect the project and its current obligations:
 
 ```sh
-kpopper config --json
-kpopper knowledge status
-kpopper pending status
+kpop config --json
+kpop knowledge status
+kpop pending status
 ```
 
 `knowledge status` includes local routing, conflicts, retained private drafts and cached
@@ -34,8 +34,8 @@ target without publishing. Both identify unverified state explicitly.
 To change modes, first prepare the intended destination with the reconciled record:
 
 ```sh
-kpopper config --mode simple --record /path/to/shared/GROUNDING.yaml --check
-kpopper config --mode simple --record /path/to/shared/GROUNDING.yaml
+kpop config --mode simple --record /path/to/shared/GROUNDING.yaml --check
+kpop config --mode simple --record /path/to/shared/GROUNDING.yaml
 ```
 
 The check is read-only. The actual change rechecks its evidence; a new arrival between
@@ -70,7 +70,7 @@ Explicit private or unclear sharing declarations take priority on every write pa
 For example, this authorized external observation is independent of the current feature:
 
 ```sh
-kpopper add vendor.limit v=25 'from=Approved vendor bulletin, account A row' \
+kpop add vendor.limit v=25 'from=Approved vendor bulletin, account A row' \
   --scope external --environment 'Vendor API v2, account A' \
   --shareability project --event-id vendor-bulletin-2026-09-14
 ```
@@ -103,9 +103,9 @@ validated operation that copies its required closure and evidence. This allows a
 PR to carry a contribution without waiting for a separate knowledge PR first.
 
 ```sh
-kpopper --frozen check
-kpopper knowledge materialize REVISION --out snapshots/vendor-bulletin
-kpopper --frozen pull vendor.limit snapshots/vendor-bulletin/GROUNDING.yaml
+kpop --frozen check
+kpop knowledge materialize REVISION --out snapshots/vendor-bulletin
+kpop --frozen pull vendor.limit snapshots/vendor-bulletin/GROUNDING.yaml
 ```
 
 Materialization writes a new snapshot directory and refuses an existing destination. Review
@@ -113,7 +113,7 @@ the exported record and evidence before including it in a feature's committed re
 
 ## One publication branch, repeated review cycles
 
-`kpopper update --file REPORT.json` follows the same project policy. Add explicit
+`kpop update --file REPORT.json` follows the same project policy. Add explicit
 `shareability: "project"` and a `scope` mapping to the report to capture a project-wide
 batch in Advanced mode. The result is `project_captured` with a complete pending receipt;
 the branch YAML stays unchanged. In Simple, the report updates the shared record and
@@ -149,8 +149,8 @@ successful login or an existing Git remote.
 For a project whose owner authorizes this scope:
 
 ```sh
-kpopper pending configure --remote team --target trunk --grant
-kpopper pending publish
+kpop pending configure --remote team --target trunk --grant
+kpop pending publish
 ```
 
 The first command grants standing push and PR creation/update authority to that exact

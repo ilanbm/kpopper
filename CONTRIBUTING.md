@@ -12,12 +12,38 @@ git push -u origin HEAD
 gh pr create
 ```
 
-Every pull request runs the tests, then `kpopper check`, `kpopper consolidate --dry-run`,
-`kpopper remeasure --run` and `kpopper page --verify` on the two Python versions the package
-claims to support, and fails if `.kpopper/view.yaml` no longer matches the record it renders
-from — the record moved, the view did not. The tests run against the fixture record in
-`tests/fixtures/page`, which exercises every field the reader and the page accept; a new field
-goes there first.
+Every pull request runs the skill/release contracts, CI selection tests, `kpop check`,
+`kpop consolidate --dry-run`, `kpop remeasure --run` and `kpop page --verify` on
+Python 3.13. It fails if `.kpopper/view.yaml` no longer matches the record it renders from.
+The checkout remains GitHub's proposed merge result.
+
+The `changes` job selects the other checks from the entire PR's diff against its merge
+base, including deleted files and both sides of renames. The selection and changed files
+are printed in its log; the job summary lists the selected families.
+
+| Change | Additional checks |
+|---|---|
+| Skills, Markdown documentation or the project's record | None: their contracts and record checks already run. |
+| Standalone-document code, assets or tests | Document Python tests on 3.9 and 3.13, and the offline DOM suite. |
+| Shared Python code, other tests/fixtures, adapters, hooks, packaging metadata, or the check/session workflows | Full Python suite on 3.9 and 3.13, document tests, session checks on three operating systems, and installed-distribution checks. |
+| Native sources, build recipes, bundled runtimes, loader, notices or the distribution probe | All checks, including native compilation and modified-GMP replacement checks on five targets. |
+| The CI selector, native workflow, other CI configuration, an unclassified path, an empty diff or unavailable Git history | All checks. |
+
+The selector lives in `.github/scripts/ci_selection.py`. Keep shared inputs broad and add a
+regression case to `tests/test_ci_selection.py` when changing a classification. It does not
+infer Python dependencies. A change to `pyproject.toml` verifies packaging and installation;
+it does not by itself rebuild unchanged native sources.
+
+Every push to `main` runs all test families, with native compilation selected from the push
+diff. Manual dispatch forces the complete native audit. New commits cancel older checks for
+the same ref. Release and publish workflows keep their own cancellation policies.
+
+`ci-required` runs even if another job fails or is skipped. It requires every selected job
+to succeed and accepts skips only for unselected jobs. This is the aggregate status to use
+when configuring branch protection; changing a workflow does not change repository rules.
+
+The full Python suite uses the fixture record in `tests/fixtures/page`, which exercises
+every field the reader and the page accept; a new field goes there first.
 
 Standalone-document changes also run the offline UI suite with Node 22 or later:
 
@@ -52,14 +78,14 @@ What differs from the record is laid over it as the hypothesis `tree/<commit>` t
 dry run: red on a falsifier that holds on the measured value, a hole (a recipe the file lacks, or
 one that fails), or a reading the tree contests — a reading of the same day that disagrees, which
 the author corrects in the pull request; an older reading that moved is green, and the log carries
-the `kpopper set … --why "measured by …" --as-of <the day it was measured>` that refreshes it, or
+the `kpop set … --why "measured by …" --as-of <the day it was measured>` that refreshes it, or
 says to edit the value by hand where no command carries it as it was measured. Nothing writes the
 record but that command, run by a person or a session.
 
 A hypothesis that replaces a measured entry carries the `measure:` line with it: the fold takes
 the hypothesis's block over whole, so a replacement that says nothing about the recipe would drop
 it and nothing would take that reading again — the step refuses that rather than going quiet.
-Locally `kpopper remeasure` prints the plan and runs nothing; add `--run` to reproduce a red step
+Locally `kpop remeasure` prints the plan and runs nothing; add `--run` to reproduce a red step
 at your keyboard. Name a recipe only where a command honestly takes the count the entry's `at:`
 describes — `python3 -I` for the Python ones, so a file in the checkout cannot stand in for a
 module they import.
@@ -106,7 +132,7 @@ version publishes, so a release that failed is made by rerunning its own run rat
 pushing again.
 
 The pull request is opened by the workflow's own token, which runs no checks of its own, so
-the script runs `kpopper check` and `kpopper page --verify` on the release tree before pushing
+the script runs `kpop check` and `kpop page --verify` on the release tree before pushing
 it. One repository setting must allow it, once: *Settings → Actions → General → Workflow
 permissions → Allow GitHub Actions to create and approve pull requests*. Until then the branch
 is pushed and the run says which command opens the pull request by hand.
@@ -132,16 +158,16 @@ every channel, but the driver that drives the browser ships with none of them, s
 local step:
 
 ```
-kpopper page
+kpop page
 npm i --no-save playwright-core
-kpopper page --checks .kpopper/build/page.html
+kpop page --checks .kpopper/build/page.html
 ```
 
 `--checks` runs the copy of the checker that came with the reader, so it works the same from a
 checkout and from an installed command. The driver is found in the `node_modules` beside the
 page; point `NODE_PATH` at another one to use a project's own.
 
-None of that is a substitute for looking. `kpopper page --open` renders the page and opens it in
+None of that is a substitute for looking. `kpop page --open` renders the page and opens it in
 your own browser, and `--tree` lands on the tree. It has to be a real browser: the provenance
 layer is all JavaScript, so a preview pane or a viewer that does not run the page's scripts shows
 every word of it and none of its behaviour.

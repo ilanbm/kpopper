@@ -4,11 +4,11 @@
 are about to build or change a page; it is not part of what a session reads to start.*
 
 `render_page.py` turns any record into one self-contained HTML file — no domain knowledge,
-nothing typed twice. The first two are what `kpopper page` runs for you:
+nothing typed twice. The first two are what `kpop page` runs for you:
 
 ```bash
-kpopper page                                                # the page, at .kpopper/build/page.html
-kpopper page --verify                                       # deterministic, no browser
+kpop page                                                # the page, at .kpopper/build/page.html
+kpop page --verify                                       # deterministic, no browser
 ```
 
 The third has no wrapper, so it needs the directory the scripts sit in. Locate that the same way
@@ -37,7 +37,7 @@ when you supply no brief.
 
 When hypotheses wait beside the record (`.kpopper/hypotheses/`), one line under the heading says how
 many, and how many are contested; the page draws the base alone - what a hypothesis proposes is
-read with `kpopper pull`.
+read with `kpop pull`.
 
 **Now** is the tab *you* write, and you are the only one who can: the arrangement of this record
 aimed at what this session is for. Intent is the one input the record cannot derive — it lives
@@ -172,7 +172,7 @@ scrolls within its frame on narrow screens and updates the today marker while th
 **Written axis (`axis`).** Each nonempty line of `text` is one step in a sequence. Its references
 resolve through the written layer, and positive numeric values gain a plus sign. Dates, amounts
 and explanations remain in the sentence; no finance-specific computation is inferred. Review
-it with `kpopper review "<section title>"` just like other section text.
+it with `kpop review "<section title>"` just like other section text.
 
 **Links (`links`).** Pick entries with `url` or `file`; the name and note form a link card whose
 reference still opens the provenance layer. HTTP, HTTPS, mail and local-file destinations are
@@ -254,7 +254,7 @@ were reviewed: a tint, the moved value marked in place with what it was, and one
 what moved — a judgment's dependencies against its `seen`, a text's references against its own.
 It is in the markup, not applied by script, so it shows in a host that strips scripts too, and
 it is a warning rather than a correction: nothing on the page rewrites the sentence. `kpopper
-review <judgment>` or `kpopper review "<section title>"` clears it, after someone has read the
+review <judgment>` or `kpop review "<section title>"` clears it, after someone has read the
 sentence against the new value.
 
 Two properties keep an opinionated tab honest, and both are mechanical rather than remembered:
@@ -273,7 +273,7 @@ Two properties keep an opinionated tab honest, and both are mechanical rather th
 - **The arrangement itself can be wrong.** `shape:` is the brief's own `seen` — over the
   record's *shape*, not its values, because a date moving does not make a layout wrong but a
   fourth blocked judgment might. Render with no `shape:` and the command prints the block to
-  paste; render after the shape moved and the tab says so at the top. `kpopper review` of the
+  paste; render after the shape moved and the tab says so at the top. `kpop review` of the
   arrangement judgment rewrites it from the record — the one tab's shape, or the shape of the
   tab serving a session source the arrangement rests on — and nothing refreshes it by itself.
 
@@ -385,7 +385,7 @@ matches the record and an arrangement governs the tab, the move is *fired* if th
 `wrong_if` holds - the banner, the failure at `--verify`, the `next:` line at `open` - and *muted*
 otherwise: said quietly with the counts beside it as facts (spill, unserved, drift, and the share
 of what sessions recorded since *this* arrangement was born that nothing picks), and settled by
-`kpopper review` whenever a session next reads it. The mechanism draws no line of its own. A tab
+`kpop review` whenever a session next reads it. The mechanism draws no line of its own. A tab
 no arrangement governs keeps the plain banner.
 
 **The brief is held against the decisions that stand**, not against its own last version - an
@@ -501,7 +501,7 @@ record in `tests/fixtures/page` first, so the reader, the page and the tests agr
 | `groups:` | top level | grouping schemes, any number, each a mapping of group name → selectors under the session's own names; a flat mapping is one scheme. `fronts:` still reads as one scheme. |
 | `by:` | on a section | the scheme this section reads by — one the brief declares, or one the record carries by its own shape: `prefix`, or any field the entries carry (`from`, `unit`, `kind`), whose value names the group. |
 | `text:` | on a section | connective prose with `{{id}}` references, drawn where the section stands with every reference resolved — the value, a rule's name, a judgment's verdict — and `{{c.id}}` placing that judgment's reasoning at that spot, marked as a judgment and hoverable as one. A judgment placed this way that carries no reasoning is drawn as its verdict, and `--verify` says so: the sentence a reader meets is then the record's and not yours. A section may be text alone. What a text names counts as covered and never as accounted for — see **It may order** below. Every reference must be an entry. |
-| `reviewed:`, `seen:` | on a section with `text` | when the text was last read against what it references, and what it saw. A placed judgment is recorded by **both** halves it puts on the page, its verdict and its reasoning, so an argument rewritten under a placement moves the same way a value does — a judgment's own `seen` still keeps the verdict alone, because what rests on a judgment rests on its conclusion. `--verify` compares them with the record and names which half moved; the page tints the text and marks the reference in place. `kpopper review "<section title>"` rewrites both from the record. A reference the `seen` does not carry is noted: the text was never read against it. |
+| `reviewed:`, `seen:` | on a section with `text` | when the text was last read against what it references, and what it saw. A placed judgment is recorded by **both** halves it puts on the page, its verdict and its reasoning, so an argument rewritten under a placement moves the same way a value does — a judgment's own `seen` still keeps the verdict alone, because what rests on a judgment rests on its conclusion. `--verify` compares them with the record and names which half moved; the page tints the text and marks the reference in place. `kpop review "<section title>"` rewrites both from the record. A reference the `seen` does not carry is noted: the text was never read against it. |
 
 Every tab is checked the same way: its picks must pick something, its shapes must fit what they
 pick, its `serves` must name session sources and be earned by its picks, and its own `shape` is
@@ -518,7 +518,7 @@ compared with the record's - a tab whose shape moved says so at its top, and `--
 | `replaced:` | on an arrangement | written by `add` when a decision replaces another under the same id, one line each, oldest first: the born of what it replaced, how many sessions it stood, and the sign that ended it - so the sequence of decisions reads from the record alone. |
 | `graph.*`, `page.*` | as a dependency, or inside a falsifier | names the reader computes; see below. |
 | `reopened_by:` | on a judgment | the prose sign that re-opens a judgment decided on a session's prior — a `prior.*` claim whose value is the confidence — or on taste. `blocked_on` keeps its meaning: the predicate cannot be evaluated, and why. Not a hole and not waiting: the judgment needs no person, `check` counts it among the declared, and the card shows it in a row of its own. |
-| `measure:` | on an entry | the name of the recipe that takes the value again from the tree - a bare name, never a command. `.kpopper/measure.yaml` beside the record maps it to an argument list, and only `kpopper remeasure --run` - the pull request's step - runs it; what differs is laid over the record as the hypothesis `tree/<commit>` through the same dry run. Stands on a stored scalar reading alone: `check` fails it on a judgment, a rule, a source, a computed name, or a name that is not one; a hypothesis replacing a measured entry carries the line with it. `pull` says *measured by*; the page carries the name into the entry payload and displays it in the hover. |
+| `measure:` | on an entry | the name of the recipe that takes the value again from the tree - a bare name, never a command. `.kpopper/measure.yaml` beside the record maps it to an argument list, and only `kpop remeasure --run` - the pull request's step - runs it; what differs is laid over the record as the hypothesis `tree/<commit>` through the same dry run. Stands on a stored scalar reading alone: `check` fails it on a judgment, a rule, a source, a computed name, or a name that is not one; a hypothesis replacing a measured entry carries the line with it. `pull` says *measured by*; the page carries the name into the entry payload and displays it in the hover. |
 
 **Computed names**
 

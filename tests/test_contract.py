@@ -1196,7 +1196,7 @@ class TheWritePath(unittest.TestCase):
         self.assertEqual(code, 0, out)
         self.assertIn("in id order", out)
         code, out, _ = run(SCRIPTS / "kpopper")
-        self.assertIn("kpopper review", out)
+        self.assertIn("kpop review", out)
 
 
 def before_second_session(d):

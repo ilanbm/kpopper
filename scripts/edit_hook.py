@@ -75,14 +75,14 @@ def context(payload, host):
     if not sources and not measured:
         return ""
     form = SKILL_FORMS.get(host or "")
-    ground = form.format("ground") if form else "kpopper affects"
+    ground = form.format("ground") if form else "kpop affects"
     parts = []
     if sources:
         n = len(sources)
         parts.append("%d %s cite %s (%s) - after the edit, %s %s says what the change reaches"
                      % (n, "entry" if n == 1 else "entries", rel, ", ".join(sources), ground, sources[0]))
     if measured:
-        parts.append("%s measured from it (recipe %s) - `kpopper remeasure --run` takes the reading again"
+        parts.append("%s measured from it (recipe %s) - `kpop remeasure --run` takes the reading again"
                      % (", ".join(k for k, _ in measured), ", ".join(sorted({r for _, r in measured}))))
     if state_file:
         state.setdefault("cited", {})[rel] = True

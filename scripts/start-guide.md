@@ -1,10 +1,10 @@
 # Starting with the user's work
 
 Use this guide when a workspace has no knowledge record, when the user asks to map existing
-materials, or when a contextual explanation is due. `kpopper open` gives the current knowledge context;
+materials, or when a contextual explanation is due. `kpop open` gives the current knowledge context;
 `kpopper _agent status` reports saved choices and unseen explanations. Neither scans materials
 nor writes state. The session carries out this workflow with its available tools.
-If `kpopper` is not on PATH, the hook's `agent_command` gives an argument array for the
+If `kpop` is not on PATH, the hook's `agent_command` gives an argument array for the
 installed dispatcher; append `guide`, `status`, or another subcommand to that array.
 
 A project is work around a goal: planning a week, coordinating people, preparing a launch,
@@ -40,9 +40,9 @@ continue the task; silence does not authorize scanning or additional writes.
 
 After actually displaying the offer, run `kpopper _agent shown welcome`. This remembers the offer
 for this project and the introduction for this user. Do not acknowledge it merely because the
-hook supplied it. Learning while working needs no configuration. For an explicit mapping request, run `kpopper map --json`
-or `kpopper map --deep --json` and execute the returned task. Do not ask again if the request is already clear.
-`kpopper config --guidance off` remembers a request to skip explanations; `kpopper config --guidance on` restores
+hook supplied it. Learning while working needs no configuration. For an explicit mapping request, run `kpop map --json`
+or `kpop map --deep --json` and execute the returned task. Do not ask again if the request is already clear.
+`kpop config --guidance off` remembers a request to skip explanations; `kpop config --guidance on` restores
 them. These preferences live locally outside the record; they are not project evidence.
 
 ## Learn while working
@@ -58,8 +58,8 @@ Name each entry `<prefix>.<name>` with the prefix a word a question would use - 
 (`venue.`, `heat.`) or the kind (`decision.`, `session.`) - never a letter.
 For a small record with no judgments yet, use `sources`, `known` and `open` with their ordinary
 source/value/question fields; the reader accepts this starting shape without a `schema` block.
-Use `kpopper add` for judgments so the tool fills their `seen` snapshots. Do not invent a conclusion,
-date, threshold or confidence to make the record look complete. Run `kpopper check` before relying
+Use `kpop add` for judgments so the tool fills their `seen` snapshots. Do not invent a conclusion,
+date, threshold or confidence to make the record look complete. Run `kpop check` before relying
 on the new entries.
 
 For significant conclusions, make a focused attempt to find a plausible failure that the current
@@ -116,7 +116,7 @@ relevant entries first and preserve current judgments when historical accounts d
 5. **Return the map and its limits.** Show useful findings, open questions, sources reviewed and
    scope not covered. Link the knowledge view, record and sources where supported. Use the
    shipped page renderer when a page helps, following PAGE.md; keep the outcome accessible in
-   the conversation too. Run `kpopper check` and use the returned completion protocol with the real report or record
+   the conversation too. Run `kpop check` and use the returned completion protocol with the real report or record
    path when the agreed mapping is finished. A completed map is not a standing instruction to survey again.
 
 The initial map prioritizes the present situation and evidence behind important decisions.

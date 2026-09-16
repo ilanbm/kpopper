@@ -37,7 +37,7 @@ class DocumentCLI(unittest.TestCase):
 
     def test_help_and_packaged_guide_explain_the_author_flow(self):
         public = self.cli("--help")
-        self.assertIn("kpopper document", public.stdout)
+        self.assertIn("kpop document", public.stdout)
         help_result = self.cli("document", "--help")
         self.assertEqual(help_result.returncode, 0, help_result.stderr)
         self.assertIn("refresh", help_result.stdout)

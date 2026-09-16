@@ -2,38 +2,38 @@
 """One entry point instead of three full paths. The reading and writing commands pass
 straight through to provenance.py; page renders the record and can open what it writes.
 
-  kpopper open    [file ...]              what a session should read instead of the whole record
-  kpopper check   [file ...]              does the record still hold together
-  kpopper affects <entry> [entry ...]     what a change reaches
-  kpopper pull    <entry|prefix> [...]    values and sources for a subject
-  kpopper search  "query"               find claims and source passages with their status
-  kpopper where                           the record this directory answers for
-  kpopper map [--deep]                  map the work through an available agent
-  kpopper config [--guidance on|off]     inspect or change local preferences
-  kpopper session <setup|status|open|read|search|context|propose|serve>  checked, revision-bound session views
-  kpopper set     <key> <value> [--why "..."] [--as-of DATE]   change one value; the reply is the reach
-  kpopper add     <id> field=value ...    a new entry or judgment, in id order, its seen filled
-  kpopper update  --file JSON            apply one source report atomically and return its receipt
-  kpopper ingest  capture --file JSON    retain a report and process it in the background
+  kpop open    [file ...]              what a session should read instead of the whole record
+  kpop check   [file ...]              does the record still hold together
+  kpop affects <entry> [entry ...]     what a change reaches
+  kpop pull    <entry|prefix> [...]    values and sources for a subject
+  kpop search  "query"               find claims and source passages with their status
+  kpop where                           the record this directory answers for
+  kpop map [--deep]                  map the work through an available agent
+  kpop config [--guidance on|off]     inspect or change local preferences
+  kpop session <setup|status|open|read|search|context|propose|serve>  checked, revision-bound session views
+  kpop set     <key> <value> [--why "..."] [--as-of DATE]   change one value; the reply is the reach
+  kpop add     <id> field=value ...    a new entry or judgment, in id order, its seen filled
+  kpop update  --file JSON            apply one source report atomically and return its receipt
+  kpop ingest  capture --file JSON    retain a report and process it in the background
                   add --notify-task TASK_ID to return a native Codex delivery job
-  kpopper ingest  pending                important findings still needing attention
-  kpopper review  <id | "section title">  it still holds: seen rewritten from what the record holds
+  kpop ingest  pending                important findings still needing attention
+  kpop review  <id | "section title">  it still holds: seen rewritten from what the record holds
                   add --hypothesis NAME to any of the three: the write lands in
                   .kpopper/hypotheses/NAME.yaml beside the record and the base is not touched -
                   where a write contradicts the base, the refusal names this command
-  kpopper consolidate [--dry-run] [<hypothesis> ...]   the record with its hypotheses laid over
+  kpop consolidate [--dry-run] [<hypothesis> ...]   the record with its hypotheses laid over
                   it, tested with the reader's own check - and, without --dry-run, folded into the
                   base when the test is clean; --refute NAME "why" leaves one negative finding and
                   deletes the file; --from REF reads another branch's committed record as one more
                   hypothesis, and pull <seed> --from REF shows what it proposes
-  kpopper remeasure [--run] [file]        the entries that name a recipe, taken again from the
+  kpop remeasure [--run] [file]        the entries that name a recipe, taken again from the
                   tree: the plan alone until --run; what differs is laid over the record as one
                   more hypothesis and tested by the dry run - the pull request runs it
-  kpopper same    <a> <b> [--keep a|b]    one subject under two ids: b retired into a, every
+  kpop same    <a> <b> [--keep a|b]    one subject under two ids: b retired into a, every
                   reference rewritten across the record, its hypotheses and the brief
-  kpopper distinct <a> <b> "<why>"        two subjects that look alike: recorded on a, so the
+  kpop distinct <a> <b> "<why>"        two subjects that look alike: recorded on a, so the
                   pair never returns as a candidate
-  kpopper page    [--out PATH] [args...]  the record as one page, .kpopper/build/page.html by default
+  kpop page    [--out PATH] [args...]  the record as one page, .kpopper/build/page.html by default
                   add --open to look at it in your own browser, --tree to land there
                   add --verify to check the page instead of writing one
                   add --checks [PAGE] for the browser checks on a page already written
@@ -78,9 +78,9 @@ COMMANDS = {
 
 def parser():
     help_text = "Commands:\n" + "\n".join(
-        "  kpopper %-13s %s" % (name, description) for name, (_, description) in COMMANDS.items())
+        "  kpop %-13s %s" % (name, description) for name, (_, description) in COMMANDS.items())
     help_text += "\n\nUse COMMAND --help for details. --json returns structured output."
-    result = argparse.ArgumentParser(prog="kpopper", usage="kpopper [--workspace PATH] [--no-cache] COMMAND [OPTIONS]",
+    result = argparse.ArgumentParser(prog="kpop", usage="kpop [--workspace PATH] [--no-cache] COMMAND [OPTIONS]",
                                      description="Keep what you know, its grounds, and what needs another look.",
                                      epilog=help_text, formatter_class=argparse.RawDescriptionHelpFormatter)
     result.add_argument('--frozen', action='store_true', help='read committed files without live pending contributions')
@@ -204,12 +204,12 @@ def main():
         # every command below runs as another process: the switch travels in the environment
         os.environ["KPOPPER_NO_CACHE"] = "1"
     if cmd == "start":
-        root.error("Use kpopper open, kpopper map, or kpopper config; start is not a public command.")
+        root.error("Use kpop open, kpop map, or kpop config; start is not a public command.")
     if cmd not in COMMANDS and cmd != "_agent":
         root.error("unknown command: " + cmd)
     if cmd not in {"open", "map", "config", "_agent", "session", "ingest", "update", "document", "followups", "watch", "export", "assess"} and rest in (["--help"], ["-h"]):
         usage, description = COMMANDS[cmd]
-        print("usage: kpopper " + cmd + (" " + usage if usage else "") + " [--json]\n\n" + description)
+        print("usage: kpop " + cmd + (" " + usage if usage else "") + " [--json]\n\n" + description)
         if cmd in {"set", "add", "review", "same", "distinct"}:
             print()
             sys.stdout.flush()
