@@ -101,6 +101,9 @@ def tag_elsewhere(tag):
 def build(version):
     """-> the wheel and the sdist for `version`, built from this commit into an empty
     directory."""
+    # Verify the exact committed package data before touching distribution output.
+    # Candidate build artifacts are not a substitute for the files in this tree.
+    release.sh(sys.executable, str(ROOT / "scripts/reasoning/build_runtime.py"), "--check-bundles")
     if DIST.is_symlink():
         raise SystemExit(f"{DIST} is a link; refusing to build through it")
     shutil.rmtree(DIST, ignore_errors=True)

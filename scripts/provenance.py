@@ -112,6 +112,23 @@ def _peer(name):
 import contextvars
 import copy
 _RAW_READS = contextvars.ContextVar('raw_record_reads', default=False)
+# Only the common core loader may consume a declared reasoning profile.
+_CORE_READS = contextvars.ContextVar('core_record_reads', default=False)
+# Strict capture observes actual reads, including cache hits; ordinary reads are inert.
+_CAPTURE_READS = contextvars.ContextVar('record_capture_reads', default=None)
+
+
+def _capture_event(kind, path, value):
+    observer = _CAPTURE_READS.get()
+    if observer is not None:
+        observer(kind, os.path.abspath(path), value)
+
+
+def _capture_glob(pattern):
+    found = glob.glob(pattern)
+    _capture_event('glob', pattern, sorted(map(os.path.abspath, found)))
+    return found
+
 
 
 ID = re.compile(r"[A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z0-9_]+)+")
@@ -576,8 +593,13 @@ def parse(path):
     be served the parse of a file as it no longer is: what comes back is the parse of the bytes
     that are there now, or those bytes parsed again."""
     path = os.path.abspath(path)
-    with io.open(path, "rb") as f:
-        data = f.read()
+    try:
+        with io.open(path, "rb") as f:
+            data = f.read()
+    except OSError as error:
+        _capture_event('unreadable', path, type(error).__name__)
+        raise
+    _capture_event('bytes', path, data)
     if os.environ.get(NO_CACHE, "") not in ("", "0"):
         return yaml.safe_load(data.decode("utf-8"))
     try:
@@ -604,9 +626,10 @@ def load_hypotheses(paths):
     fails it and nothing passes over it in silence."""
     out = {}
     d = hypothesis_dir(paths)
+    _capture_event('directory', d, os.path.isdir(d))
     if not os.path.isdir(d):
         return out
-    for f in sorted(glob.glob(os.path.join(d, "*.yaml")) + glob.glob(os.path.join(d, "*.yml"))):
+    for f in sorted(_capture_glob(os.path.join(d, "*.yaml")) + _capture_glob(os.path.join(d, "*.yml"))):
         name = re.sub(r"\.ya?ml$", "", os.path.basename(f))
         hyp = _hypothesis(name, f)
         try:
@@ -622,6 +645,10 @@ def load_hypotheses(paths):
             hyp["ids"] = {k for m in collections_of(body).values() for k in m}
         except (yaml.YAMLError, ValueError) as e:
             hyp["error"] = " ".join(str(e).split())[:120]
+        except OSError as e:
+            if _CAPTURE_READS.get() is None:
+                raise
+            hyp["error"] = type(e).__name__
         out[name] = hyp
     return out
 
@@ -828,12 +855,14 @@ def load(paths, *, read_mode=None):
                 if not (isinstance(c, str) and c.endswith((".yaml", ".yml"))):
                     continue
                 cf = os.path.join(os.path.dirname(f), c)
+                _capture_event('exists', cf, os.path.exists(cf))
                 if os.path.abspath(cf) in seen or not os.path.exists(cf):
                     continue
                 merge(cf, parse(cf) or {})
 
     for p in paths:
-        for f in sorted(glob.glob(p)) or [p]:
+        for f in sorted(_capture_glob(p)) or [p]:
+            _capture_event('exists', f, os.path.exists(f))
             if not os.path.exists(f):
                 if not _RAW_READS.get() and (read_mode or os.environ.get('KPOPPER_READ_MODE', 'live')) == 'live' and _peer('knowledge_views').has_pending(paths):
                     doc['meta'] = {}
@@ -843,7 +872,20 @@ def load(paths, *, read_mode=None):
             merge(f, parse(f) or {})
     doc.hypotheses = load_hypotheses(paths)
     mode = read_mode or ('frozen' if _RAW_READS.get() else os.environ.get('KPOPPER_READ_MODE', 'live'))
-    return _peer('knowledge_views').overlay(paths, doc, read_mode=mode)
+    doc = _peer('knowledge_views').overlay(paths, doc, read_mode=mode)
+    # A dormant profile must not be interpreted by legacy check/page/session paths.
+    # Attached proposals retain their own declared semantics as well as the base.
+    for document in [doc, *(hyp['doc'] for hyp in doc.hypotheses.values())]:
+        meta = document.get('meta')
+        if isinstance(meta, dict) and 'reasoning' in meta:
+            contract = _peer('reasoning.contract')
+            try:
+                contract.capabilities(document)
+            except contract.CapabilityError as error:
+                raise Refused(error.code + ': ' + str(error)) from None
+            if not _CORE_READS.get():
+                raise Refused('unsupported_capability: use core/v1 consumer')
+    return doc
 
 
 def collections_of(doc):

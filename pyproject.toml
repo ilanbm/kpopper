@@ -48,7 +48,7 @@ kpopper = "kpopper.cli:main"
 # The editor plugin reads these files out of scripts/ by path, so the package is mapped
 # onto that directory instead of being copied into one of its own. A second copy would
 # be a second thing to edit.
-packages = ["kpopper", "kpopper.session"]
+packages = ["kpopper", "kpopper.session", "kpopper.reasoning"]
 package-dir = { kpopper = "scripts" }
 
 [tool.setuptools.package-data]
@@ -57,3 +57,4 @@ package-dir = { kpopper = "scripts" }
 # the file it hands to node.
 kpopper = ["page/*.css", "page/*.js", "verify_page.js", "start-guide.md", "document-guide.md", "document/*.css", "document/*.js", "assessment.schema.json"]
 "kpopper.session" = ["rules.txt", "bootstrap.txt", "lean/*.lean", "lean/lean-toolchain"]
+"kpopper.reasoning" = ["assessment.schema.json", "lean/*.lean", "lean/lean-toolchain", "lean/lakefile.toml", "native/*.zip", "native/*.tar.gz", "native/*.md", "third_party/*"]
