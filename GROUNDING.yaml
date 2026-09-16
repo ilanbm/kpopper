@@ -594,6 +594,25 @@ sources:
            decided: the base's condition evaluated on the base, an unfired flip contested and folded
            only by name, every replacement traced beside the record, and a source's own clock in
            place of the day."
+  s.2026_09_15_link_spelling:
+    name: "The session that found a source link measured between two spellings of one place"
+    asked: "tests/test_page_links.py ... fails deterministically on macOS ... while it passes on the
+            Linux CI runner ... find where the renderer builds the relative href for an absolute
+            evidence file, and make the page location and the evidence path use one consistent
+            spelling (both resolved, or both as written) so a browser opening the page at the
+            spelling the CLI writes reaches the file on macOS as well as Linux. Decide whether the
+            test assumption or the renderer is the one to change"
+    of: "The Absolute evidence link on the rendered page left its directory with ten steps where
+         three reach the directory the two files share: it was measured from the resolved location of
+         the page to the source under the name the record spells it with. A temporary directory on
+         macOS is reached as both /var/folders/... and /private/var/folders/..., so the two ends
+         counted different numbers of levels and the link climbed past the root. The test that
+         catches it reads its verdict through urljoin, which discards a step past the root on some
+         versions and not on others: it failed on Python 3.13.13 and passed on 3.9.6 and 3.14.5, so
+         the runs that guard the tree stayed green while the link was wrong on every platform. Both
+         ends are resolved before the subtraction now; a path with no directory link in it produces
+         the same link as before, and the 1327-test suite passes."
+    read: "2026-09-15"
   s.2026_09_15_verdict_conflicts_decided:
     asked: "Closed: implement the rule shaped for issues #98 and #99 and see how it behaves,
             following the delivery workflow - a verdict, or other grounds, laid over a standing
@@ -610,6 +629,23 @@ sources:
            to by-hand once to show the tests fail. The rule itself went into the record as a
            hypothesis for a person to take by name - the new door deciding its own re-decision."
     read: "2026-09-15"
+  s.2026_09_16_page_address:
+    name: "The session that made the address of a page survive the name of its directory"
+    asked: "The path is pasted into the URL unquoted. A record directory whose name contains # ...
+            makes the browser treat everything from the # onward as a fragment, and the page never
+            loads. Spaces and other characters that need percent-encoding have the same problem, and
+            a literal % in a directory name would be read as an escape. Fix: build the URI properly
+            ... then append #tree when the --tree flag was given ... Add a test covering a record
+            directory whose name contains # and a space"
+    of: "The command that opens a written page built its address by pasting the path after a scheme.
+         A record directory named with a number sign ended the address where its name began: the
+         browser was asked for the path up to that point and read the rest as a fragment, so the page
+         never loaded. The name in the test fixtures, record # שלום, is such a name. The path becomes
+         a URL through the same call that escapes it now, and the one fragment the command offers is
+         added after. A test names a directory with a number sign and a space and reads the address
+         handed to the browser: without the change its fragment is the tail of the directory name
+         rather than the flag."
+    read: "2026-09-16"
   s.2026_09_16_versions_core:
     asked: "Close the model behind issues #98 and #99 for good: after the fold's fixes of PR #101,
             shape the smallest core that covers every case the thread raised - a two-branch verdict
@@ -1825,6 +1861,14 @@ open:
   q.hypothesis_lifetime: "when is an untested hypothesis stale enough for the opener to say so -
                           by age, by how much rests on it, or only when a person asks?"
 
+  q.verdict_through_a_library: "does a test that follows a link the way a reader would tell a
+                                malformed link from a sound one on every version it runs on - the
+                                page-links test reads its verdict through urljoin, whose treatment of
+                                a step past the root differs by version, and so passed on two of the
+                                three tried while the link was wrong on all of them; would asserting
+                                the shape of the link catch it everywhere, and what else in the suite
+                                takes its verdict from a library that is free to differ?"
+
 judgments:
   d.a_comparison_shows_where_it_parts:
     rests_on: [s.2026_09_04_difference, d.moved_is_a_flag]
@@ -1893,6 +1937,26 @@ judgments:
       d.a_comparison_shows_where_it_parts: "where two readings are printed side by side, each is
                                             clipped to where they part rather than to where they
                                             agree; the head is kept only when they part inside it"
+  d.a_name_becomes_a_url_by_escaping:
+    from: s.2026_09_16_page_address
+    name: "A path reaches a browser as a URL it was turned into, never as text pasted after a
+           scheme"
+    rests_on: [s.2026_09_16_page_address, d.link_ends_share_one_spelling]
+    verdict: "The path is converted by the call that escapes it, and any fragment this adds comes
+              after that conversion."
+    because: "A name is not an address. A number sign in a directory name ends the address where the
+              name begins and the rest is read as a fragment; a space cuts it just as short; a
+              literal percent sign is read as the start of an escape. None of these are unusual
+              names, and the fixtures here already carry one. Pasting a path after a scheme also puts
+              the one fragment the command offers where nothing distinguishes it from a fragment the
+              name produced, so the flag and the accident become the same character. Converting first
+              keeps the name inside the path and leaves the fragment to what asked for it."
+    reopened_by: "A destination is wanted that this conversion cannot spell - an address that is not
+                  a file, or a place a browser is given by some other means than a URL."
+    seen:
+      s.2026_09_16_page_address: "read 2026-09-16"
+      d.link_ends_share_one_spelling: "Both ends are resolved before one is subtracted from the
+                                       other, and the page is opened under the name it resolves to."
   d.a_write_joins_its_own_shard:
     rests_on: [s.2026_09_11_read_once, d.scale_by_federation, d.add_places_by_prefix]
     verdict: "a new entry goes into the file whose collection already holds its neighbours - the
@@ -2831,6 +2895,24 @@ judgments:
     seen:
       s.2026_09_13_readme_direction: "read 2026-09-13"
       s.2026_09_13_reasoning_overview: "read 2026-09-13"
+  d.link_ends_share_one_spelling:
+    from: s.2026_09_15_link_spelling
+    name: "A source link is measured between two paths spelled the same way"
+    rests_on: [s.2026_09_15_link_spelling]
+    verdict: "Both ends are resolved before one is subtracted from the other, and the page is opened
+              under the name it resolves to."
+    because: "One directory is reachable under more than one name, and the two ends arrive from
+              different places: a record names its sources under whichever name a person typed, while
+              the location of the page is found by walking up from where the command ran. Subtracting
+              one spelling from the other counts levels that do not correspond, so the link climbs
+              past the root and arrives nowhere - and it arrives nowhere quietly, because a link that
+              escapes the root is discarded by some readers and kept by others. Resolved on both
+              sides the link stays inside the directory the two files share, which holds under either
+              name, so a path with no directory link in it is unaffected."
+    reopened_by: "A record needs its links to keep the name a person typed rather than the one it
+                  resolves to - a page whose readers must see the authored path, or a place where the
+                  resolved name is not reachable."
+    seen: {s.2026_09_15_link_spelling: "read 2026-09-15"}
   d.local_claims_want_a_run:
     rests_on: [s.2026_09_04_calibration, prior.local_needs_a_run, m.claims.general_held,
                m.claims.local_checked_held, m.claims.local_assumed_held, m.reach.general_held,

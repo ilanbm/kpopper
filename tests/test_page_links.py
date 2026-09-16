@@ -14,6 +14,7 @@ import yaml
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 CLI = ROOT / "scripts" / "cli.py"
 sys.path.insert(0, str(ROOT / "scripts"))
+import cli as C  # noqa: E402
 import render_page as R  # noqa: E402
 
 
@@ -137,6 +138,28 @@ class PageSourceLinks(unittest.TestCase):
         page = self.root / ".kpopper" / "build" / "page.html"
         for anchor in self.named(page, "Local evidence"):
             self.assertEqual(resolved_file(page, anchor["href"]), self.local.resolve())
+
+    def test_opening_the_page_hands_the_browser_a_url_its_own_name_cannot_cut_short(self):
+        """The record directory is named with a '#' and a space, as a person may name one."""
+        page = self.root / ".kpopper" / "build" / "page.html"
+        record = str(self.root / "GROUNDING.yaml")
+
+        with unittest.mock.patch.object(C.webbrowser, "open") as opened:
+            with self.assertRaises(SystemExit) as stopped:
+                C.do_page([record, "--open", "--tree"])
+        self.assertEqual(stopped.exception.code, 0)
+
+        location = urllib.parse.urlsplit(opened.call_args[0][0])
+        self.assertEqual(location.scheme, "file")
+        self.assertEqual(location.fragment, "tree")
+        self.assertNotIn("#", location.path)
+        self.assertEqual(pathlib.Path(urllib.parse.unquote(location.path)).resolve(), page.resolve())
+
+        # The fragment is the flag's, not the name's: without --tree the address carries none.
+        with unittest.mock.patch.object(C.webbrowser, "open") as plain:
+            with self.assertRaises(SystemExit):
+                C.do_page([record, "--open"])
+        self.assertEqual(urllib.parse.urlsplit(plain.call_args[0][0]).fragment, "")
 
     def test_a_cross_volume_source_falls_back_to_an_escaped_file_uri(self):
         page = self.root / ".kpopper" / "build" / "page.html"
