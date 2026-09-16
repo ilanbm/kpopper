@@ -582,7 +582,9 @@ def render(store, st=None, rules=None, ancestry=None):
     base and no snapshot of the state is kept anywhere else -> (text, state hash)."""
     st = st or store.state(rules, ancestry)
     stamp = state_hash(st)
-    doc = {"meta": {"state": stamp, "heads": {s: e["heads"] for s, e in st["subjects"].items()}},
+    doc = {"meta": {"state": stamp, "heads": {s: e["heads"] for s, e in st["subjects"].items()},
+                    "acts": {s: sorted({i for h in e["heads"] for i in (e.get("open_acts") or {}).get(h, [])})
+                             for s, e in st["subjects"].items()}},
            "subjects": {}, "disputes": {}}
     for s, e in st["subjects"].items():
         if "head" in e:
@@ -621,6 +623,7 @@ def ingest(store, text, by="hand", on=None, rules=None, ancestry=None, op=None):
         raise ValueError("the entry file carries merge markers - it is rebuilt from the versions, never read")
     meta = doc.get("meta") if isinstance(doc.get("meta"), dict) else {}
     base_heads = meta.get("heads") if isinstance(meta.get("heads"), dict) else None
+    base_acts = meta.get("acts") if isinstance(meta.get("acts"), dict) else {}
     st = store.state(rules, ancestry)
     edited_subjects = doc.get("subjects") or {}
     if base_heads is not None:
@@ -648,9 +651,11 @@ def ingest(store, text, by="hand", on=None, rules=None, ancestry=None, op=None):
                     op=hashlib.sha256((seed + subject + canonical(edited)).encode()).hexdigest()[:32])
         store.keep(v)
         minted.append(v["id"])
+        # the edit answers the acts its own copy showed and nothing that arrived since: an act
+        # that answered a refutation the editor never saw would erase a reservation by mistake
         over = list(base_ids) if base_ids else []
         a = act(subject, by, "accept", of=v["id"], over=over, because="edited by hand", on=on,
-                saw=store.open_acts(subject, over, st) + over,
+                saw=sorted(set(base_acts.get(subject, [])) | set(over)),
                 op=hashlib.sha256(("accept" + v["id"]).encode()).hexdigest()[:32])
         store.keep(a)
         minted.append(a["id"])

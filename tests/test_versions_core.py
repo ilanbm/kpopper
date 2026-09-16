@@ -772,6 +772,23 @@ class TheActsThatRemainOpen(unittest.TestCase):
             self.assertEqual(again["problems"], first["problems"])
             self.assertEqual(again["subjects"], first["subjects"])
 
+
+    def test_an_edit_answers_only_the_acts_its_copy_showed(self):
+        with tempfile.TemporaryDirectory() as d:
+            s = V.Store(d)
+            a = reading(s, "x", 1, "s.a", T(1), at={"version": 7})
+            j = judgment(s, "d.j", "j", {"x": a}, "x > 5", "s.a", T(1))
+            text, stamp = V.render(s)
+            # after the copy was rendered, the reading is refuted - what rests on it says so
+            s.keep(V.act("x", "s.b", "refute", of=a, because="misread", saw=[a], on=T(2)))
+            self.assertEqual(status(s, "d.j")["deps"], {"x": "refuted"})
+            # the old copy is edited and taken in: its acceptance answers nothing it never saw
+            V.ingest(s, text.replace("v: 1", "v: 3"), by="hand", on=T(3))
+            e = status(s, "x")
+            self.assertEqual((e["status"], e["body"]["v"], e["marks"][a]), ("accepted", 3, "refuted"))
+            self.assertEqual(status(s, "d.j")["deps"], {"x": "refuted"})
+            self.assertEqual(status(s, "d.j")["reservations"], ["x"])
+
     def test_a_corroborating_observation_does_not_unreview_a_decision(self):
         with tempfile.TemporaryDirectory() as d:
             s = V.Store(d)
