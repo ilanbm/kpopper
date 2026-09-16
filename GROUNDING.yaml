@@ -821,6 +821,21 @@ sources:
          32s"
     read: "2026-09-16"
 
+  run.versions_core_review_round:
+    v: 2
+    from: s.2026_09_16_versions_core
+    name: "Two review rounds of the versions core by a second reviewer, with reproductions - the
+           semantic round against 3a04bc4 (ten findings: recorded time choosing between roots,
+           cross-source supersession, reservations not travelling a chain or from a fired premise,
+           identity unchecked on read, acceptance versus refutation unsurfaced, agreement read as
+           dispute, quadratic equal-clock comparison, snapshot growth, silent deletion, lexical
+           stamps) and the efficiency round against 53604b3 (the index keyed by file counts returning
+           another branch's value, and an identity without the recorded moment breaking the union)"
+    of: "reports at ~/docs/kpopper/reviews/2026-09-16-versions-core-3a04bc4/ and
+         2026-09-16-versions-core-53604b3/, reproducers included; every finding kept as a test and
+         closed at eacf4e2, 31 tests OK"
+    read: "2026-09-16"
+
   run.versions_core_tests:
     from: s.2026_09_16_versions_core
     name: "The versions core's scenarios run as tests on this tree - tests/test_versions_core.py,
@@ -998,6 +1013,13 @@ known:
            test"
     from: run.versions_core_cost
     at: "17,024.7 KiB over 75,274 files at a hundred thousand contributions"
+    of: "2026-09-16"
+  m.core.counterexamples_kept:
+    v: 13
+    name: "Counterexamples from the two review rounds kept as regression tests of the versions core,
+           each passing"
+    from: run.versions_core_review_round
+    at: "tests/test_versions_core.py, class TheCounterexamples and the retry tests; 31 tests in all"
     of: "2026-09-16"
   m.core.open_parsed_at_100k:
     v: 0
