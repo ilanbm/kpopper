@@ -1,6 +1,11 @@
-# Native source identities and corresponding-source recipes use committed bytes
-# on every build host, including Windows checkouts with core.autocrlf enabled.
-/scripts/reasoning/*.py text eol=lf
-/scripts/reasoning/lean/*.lean text eol=lf
-/scripts/reasoning/third_party/* text eol=lf
-/.github/workflows/reasoning-runtime.yml text eol=lf
+# Source bytes are hashed and compared byte for byte between platforms: the
+# runtime source identity, the bundled notices and every archive digest are
+# derived from the working tree. Check out one set of line endings everywhere.
+* text=auto eol=lf
+
+# Prebuilt payloads and images are never line-ending converted.
+*.zip binary
+*.gz binary
+*.xz binary
+*.png binary
+*.svg text eol=lf

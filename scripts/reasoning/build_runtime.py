@@ -176,7 +176,7 @@ def build_gmp(archive, directory, target, *, replacement_probe=False):
     source = directory / "gmp-6.3.0"
     if replacement_probe:
         marker = source / "version.c"
-        marker.write_text(marker.read_text(encoding="utf-8") + GMP_REPLACEMENT_PATCH, encoding="utf-8")
+        marker.write_bytes(marker.read_bytes() + GMP_REPLACEMENT_PATCH.encode())
     build = directory / "build"
     build.mkdir(exist_ok=True)
     prefix = directory / "install"
@@ -197,7 +197,8 @@ def build_gmp(archive, directory, target, *, replacement_probe=False):
         print(run(argv, cwd=build, env=env), flush=True)
     (prefix / "kpopper-gmp-provenance.json").write_text(json.dumps({
         "source_sha256": GMP_SHA256, "target": target, "configure": [str(x) for x in args],
-        "patches": ["replacement-constructor.patch"] if replacement_probe else [], "tests": "make check passed"}, sort_keys=True) + "\n", encoding="utf-8")
+        "patches": ["replacement-constructor.patch"] if replacement_probe else [], "tests": "make check passed"},
+        sort_keys=True) + "\n", encoding="utf-8")
     return prefix
 
 
@@ -219,7 +220,7 @@ def archive_payload(bundle, output, manifest):
             entry.external_attr = (stat.S_IFREG | mode) << 16
             entry.compress_type = zipfile.ZIP_DEFLATED
             zf.writestr(entry, data, compresslevel=9)
-    output.with_suffix(".zip.sha256").write_text(sha256(output) + "  " + output.name + "\n", encoding="ascii")
+    output.with_suffix(".zip.sha256").write_bytes((sha256(output) + "  " + output.name + "\n").encode())
     return manifest
 
 
@@ -328,7 +329,7 @@ def build_archive(source_root, lean_root, output, target, *, gmp_prefix=None):
         notices = Path(__file__).parent / "third_party"
         shutil.copytree(notices, bundle / "licenses")
         shutil.copyfile(notices / "THIRD_PARTY_NOTICES.txt", bundle / "THIRD_PARTY_NOTICES.txt")
-        (bundle / "linkage.json").write_text(json.dumps(audit, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+        (bundle / "linkage.json").write_bytes((json.dumps(audit, indent=2, sort_keys=True) + "\n").encode())
         if source_hash(source_root) != source_digest:
             raise ValueError("runtime sources changed during build")
         return archive_payload(bundle, output, {"version": 1, "protocol": "KP2", "target": target,
@@ -377,7 +378,10 @@ def audit_linkage(executable, library, target, lean_root):
         tool = str(objdump) if objdump.exists() else "objdump"
         text = run([tool, "-p", executable]) + run([tool, "-p", library])
         deps = re.findall(r"DLL Name: (\S+)", text, re.I)
-        allowed = {"libgmp-10.dll", "kernel32.dll", "msvcrt.dll", "ucrtbase.dll", "advapi32.dll", "user32.dll", "userenv.dll", "ws2_32.dll", "shell32.dll", "ole32.dll", "iphlpapi.dll", "psapi.dll", "ntdll.dll", "bcrypt.dll", "dbghelp.dll", "secur32.dll"}
+        # Windows supplies ICU as a system component. The compiler links it
+        # through an import library and ships no copy of its own, so it is an
+        # operating system dependency like the entries beside it.
+        allowed = {"libgmp-10.dll", "kernel32.dll", "msvcrt.dll", "ucrtbase.dll", "advapi32.dll", "user32.dll", "userenv.dll", "ws2_32.dll", "shell32.dll", "ole32.dll", "iphlpapi.dll", "psapi.dll", "ntdll.dll", "bcrypt.dll", "dbghelp.dll", "secur32.dll", "icu.dll"}
         if "libgmp-10.dll" not in [x.lower() for x in deps] or any(x.lower() not in allowed and not x.lower().startswith("api-ms-win-") for x in deps):
             raise ValueError("unexpected Windows dependencies: " + repr(deps))
         result["min_os"] = "Windows Server 2022 (CI-tested baseline)"
@@ -587,9 +591,11 @@ def check_bundles(native_dir=None, source_root=None):
 
 
 def main():
+    # Build diagnostics quote Lean proof statements, which are UTF-8. A
+    # redirected stream on Windows would otherwise encode them as cp1252.
     for stream in (sys.stdout, sys.stderr):
-        if hasattr(stream, 'reconfigure'):
-            stream.reconfigure(encoding='utf-8')
+        if hasattr(stream, "reconfigure"):
+            stream.reconfigure(encoding="utf-8", errors="replace")
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--source-root", type=Path, default=Path(__file__).parent / "lean")
     parser.add_argument("--lean-root", type=Path)
