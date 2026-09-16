@@ -646,6 +646,26 @@ sources:
          handed to the browser: without the change its fragment is the tail of the directory name
          rather than the flag."
     read: "2026-09-16"
+  s.2026_09_16_versions_core:
+    asked: "Close the model behind issues #98 and #99 for good: after the fold's fixes of PR #101,
+            shape the smallest core that covers every case the thread raised - a two-branch verdict
+            conflict, an inherited reading mistaken for evidence, a same-source re-read, a same-day
+            correction, two commits measuring two code states, a fallen conclusion and its
+            replacement, a replace-and-return with its reasons, a hand edit on a stale base, a
+            historical dependency that is not a lost one, conflicting adjudications - as one set of
+            rules with no path-specific exception; write it into the record as a model chosen for
+            examination, with its promises as requirements to prove, then prove them in an isolated
+            module with real git merges before wiring anything existing to it"
+    name: "The session that closed the model behind the branch verdict conflicts: versions per
+           subject stored one file each, what each writer saw kept apart from what a claim rests on
+           and from what an act replaced, acts as versions of their own kind, state computed from the
+           frontier and the acts and the checks, and the entry file as a rendering that carries its
+           own heads and that a hand edit is reconciled against three ways. Shaped in conversation
+           with a second reviewer's corrections - seeing is not replacing, a hand edit keeps the base
+           it saw, a historical dependency is not a lost one, one append-only file per subject
+           conflicts under git where one file per version merges clean, acts can conflict, the two
+           times need exact meaning, the merged entry file is rebuilt and never read as an edit - and
+           hardened by two review rounds of the module itself"
   s.background_ingestion:
     name: "Background capture and selective delivery contract"
     file: "skills/kpopper/INGESTION.md"
@@ -877,6 +897,57 @@ sources:
          by_hand=True, tests.test_reversals run, 4 of 12 failed, then restored"
     read: "2026-09-15"
 
+  run.versions_core_cost_settled:
+    from: s.2026_09_16_versions_core
+    name: "The cost of history in the versions core after the two review rounds - every write a
+           distinct operation, the acts a source rule implies recorded, the whole path timed: a full
+           state, an open, one update, a rebuild, a rendering and an unchanged take-in - at a
+           thousand, ten thousand and a hundred thousand contributions over twenty readings and three
+           judgments with many reviews on the three"
+    of: "this tree at 6a46e36, VERSIONS_BENCH=1000|10000|100000 python3 -m unittest
+         tests.test_versions_core.TheCostOfHistory, 2026-09-16, one laptop, warm cache: 1,422 files
+         520 KiB, open 0.002s 0 parsed, update 61 parsed, unchanged take-in 0.009s 0 parsed; 13,788
+         files 4.95 MiB, full 3.8s, open 0.013s, update 0.20s 556 parsed, rebuild 3.5s, render 0.17s,
+         take-in 0.037s; 137,645 files 49 MiB written in 27s, full 56s, open 0.11s 0 parsed, one
+         update 2.7s 5,797 parsed, rebuild 63s, render 2.8s - the settle of the update re-reading its
+         subject - take-in 0.37s 0 parsed"
+    read: "2026-09-16"
+
+
+
+  run.versions_core_review_round:
+    v: 4
+    from: s.2026_09_16_versions_core
+    name: "Four review rounds of the versions core by a second reviewer, with reproductions - the
+           semantic round (ten findings: recorded time choosing between roots, cross-source
+           supersession, reservations not travelling a chain or from a fired premise, identity
+           unchecked on read, acceptance versus refutation unsurfaced, agreement read as dispute,
+           quadratic equal-clock comparison, snapshot growth, silent deletion, lexical stamps), the
+           efficiency round (an index keyed by file counts returning another branch's value, an
+           identity without the recorded moment breaking the union), the interaction round (acts in
+           sequence and in branches decided by global flags instead of by the acts left unanswered,
+           an untouched rendering of an agreement read as an edit, a validation problem lost through
+           the index, a corroborating observation unreviewing a decision, and the product question
+           whether refuting a replacement restores what it replaced, answered no), and the import
+           round (an edited stale copy credited with answering a refutation its editor never saw,
+           erasing a reservation)"
+    of: "reports at ~/docs/kpopper/reviews/2026-09-16-versions-core-3a04bc4/, -53604b3/, -ad35e72/
+         and -5dfc6a9/, reproducers included, against heads the tag versions-core-reviewed-2026-09-16
+         keeps reachable; every finding kept as a test and closed at e96c10e, 39 tests OK"
+    read: "2026-09-16"
+
+  run.versions_core_tests:
+    from: s.2026_09_16_versions_core
+    name: "The versions core's scenarios run as tests on this tree - tests/test_versions_core.py,
+           thirty-one tests over the fifteen scenarios of the brief and the counterexamples of two
+           review rounds, with real git repositories where a merge is the subject"
+    of: "this tree at 6a46e36, python3 -m unittest tests.test_versions_core, 2026-09-16: Ran 31
+         tests, OK; two corrections to the contract's first draft came out of writing the first
+         fifteen - a reading's acceptance lays it over nothing, since seeing an earlier reading is
+         not replacing it, and a return to an earlier decision is a new version laid over the one it
+         returns from - and twelve more out of the reviews"
+    read: "2026-09-16"
+
 known:
   alt.drop_shape_line:
     v: rejected
@@ -1035,6 +1106,69 @@ known:
     name: "Claims about this project that held - checked with a run before they were asserted"
     from: run.claims_scored
     at: "of 6"
+  m.core.bytes_per_version:
+    v: 367
+    unit: bytes
+    name: "Bytes one version or act takes as a file in the versions core, on average, in the cost
+           test - an operation id and a forty-character identity on each"
+    from: run.versions_core_cost_settled
+    at: "49,359.7 KiB over 137,645 files at a hundred thousand contributions"
+    of: "2026-09-16"
+  m.core.counterexamples_kept:
+    v: 21
+    name: "Counterexamples from the four review rounds kept as regression tests of the versions
+           core, each passing - the short-history property test among them"
+    from: run.versions_core_review_round
+    at: "tests/test_versions_core.py, classes TheCounterexamples and TheActsThatRemainOpen and the
+         retry tests; 39 tests in all"
+    of: "2026-09-16"
+  m.core.open_parsed_at_100k:
+    v: 0
+    name: "Version files an open parses with a hundred thousand contributions behind the same state,
+           once the index holds them"
+    from: run.versions_core_cost_settled
+    at: "open 0.111s, 0 parsed, at 137,645 files"
+    of: "2026-09-16"
+  m.core.rebuild_seconds_at_100k:
+    v: 63.1
+    unit: seconds
+    name: "Seconds a rebuild of the state from every version file takes at a hundred thousand
+           contributions - the reconstruction path, never the working one"
+    from: run.versions_core_cost_settled
+    at: "rebuild 63.10s, full state 55.94s, 137,645 parsed"
+    of: "2026-09-16"
+  m.core.scenarios:
+    v: 15
+    name: "Scenarios the versions core must pass before anything existing is wired to it - the six
+           experiments of the second reviewer, order and idempotence over contributions including
+           acts, branch history travelling, an unreviewed reversal's reservation, a hand edit on a
+           stale base, a historical dependency left unflagged, a real git merge of version files, and
+           conflicting acts"
+    from: s.2026_09_16_versions_core
+    at: "the brief of the versions core track"
+    of: "2026-09-16"
+  m.core.scenarios_failed:
+    v: 0
+    name: "Scenarios of the versions core that a test in tests/test_versions_core.py fails on this
+           tree, or that needed an exception for a branch, a hand edit or a review to pass"
+    from: run.versions_core_tests
+    at: "the scenario tests; the count moves with the tests"
+    of: "2026-09-16"
+  m.core.scenarios_proved:
+    v: 15
+    name: "Scenarios of the versions core that a test in tests/test_versions_core.py passes on this
+           tree"
+    from: run.versions_core_tests
+    at: "the fifteen scenario tests, all passing; the count moves with the tests"
+    of: "2026-09-16"
+  m.core.update_parsed_at_100k:
+    v: 5797
+    name: "Version files one update parses with a hundred thousand contributions behind it - the
+           updated subject's own history and nothing else, twenty subjects sharing the files; the
+           settle that records the act the update implied reads the same subject once more"
+    from: run.versions_core_cost_settled
+    at: "one update 2.690s, 5,797 parsed of 137,645; render after settle 2.757s"
+    of: "2026-09-16"
   m.door.future_dated_readings_accepted:
     v: "1 of 1"
     name: "Readings dated after the day of writing that set accepted - a reading as of 2026-12-01
@@ -1321,6 +1455,29 @@ known:
     name: "The opener on the same record when clean, characters"
     from: "measured on a live record of 107 entries"
     of: "2026-09-01"
+  lit.belief_change:
+    v: "revising what we believed about an unchanged world, updating for a world that changed, and
+        merging sources that disagree are three operations with three different rules"
+    name: "What belief revision, update and merging keep apart"
+    from: "Katsuno and Mendelzon 1991, On the difference between updating a knowledge base and
+           revising it; Konieczny and Pino Perez 2002, Merging information under constraints"
+    at: "the revision versus update distinction, and the merging postulates"
+    of: "2026-09-16"
+  lit.bitemporal:
+    v: "the time a datum is about and the time it was recorded are two dimensions, kept apart, so
+        that learning today that yesterday was wrong is told apart from the world changing today"
+    name: "What bitemporal data models keep apart"
+    from: "Jensen and Snodgrass 1999, Temporal data management"
+    at: "valid time and transaction time"
+    of: "2026-09-16"
+  lit.crdt_mv_register:
+    v: "a single timestamp cannot tell concurrent writes apart - a write must carry what it was
+        based on; a multi-value register keeps every concurrent write visible and a later write that
+        saw them all resolves them; merge as a set union is order-free, idempotent and lossless"
+    name: "What conflict-free replicated data types settle"
+    from: "Shapiro, Preguica, Baquero and Zawirski 2011, Conflict-free replicated data types"
+    at: "section 3.2.2, the multi-value register, and the state-based merge as a join"
+    of: "2026-09-16"
   lit.github_registries:
     v: "GitHub Packages hosts npm, RubyGems, Maven, Gradle, NuGet and containers; it has no Python
         registry, so pip installs cannot come from it"
@@ -1339,6 +1496,14 @@ known:
     name: "What the registries hold"
     from: "registry lookup"
     of: "2026-09-03"
+  lit.tms:
+    v: "a conclusion keeps the justifications and assumptions it was drawn from, support is
+        recomputed when an assumption changes, and losing the support for a conclusion does not
+        establish its opposite"
+    name: "What truth maintenance systems formalised"
+    from: "Doyle 1979, A truth maintenance system; de Kleer 1986, An assumption-based TMS"
+    at: "the justification structure and the ATMS label update"
+    of: "2026-09-16"
   p.npm_files:
     v: 1
     name: "Files of substance the npm package ships"
@@ -2124,30 +2289,54 @@ judgments:
                                       judgment's source body alongside its computed card, exact raw
                                       reads and a reversible hook choice."
   d.contradiction_by_id_and_day:
-    rests_on: [s.2026_09_04_minted_permission, s.2026_09_03_hypotheses, d.base_shared_forks_on_contradiction, d.write_path_returns_reach, p.supersede_doors]
-    verdict: "a contradiction is told by the id and the day: the same id with a value read no later
-              than the base's own reading, or with a different verdict, is refused into the base and
-              named a hypothesis; a newer reading supersedes, a standing judgment is superseded only
-              when its wrong_if holds; the same premises under different ids are different subjects"
-    because: "set is the update path - the world moving, flagged as it always was - so a differing
-              value alone cannot be the contradiction, or the reach would have nothing left to reach.
-              What the record can tell apart is time: a reading newer than the one the base holds -
-              its own date, else its source's - supersedes it; one of the same day or older that
-              disagrees is two writers, not the world moving. A value nothing dates is superseded by
-              the first dated write, which starts the clock; a concurrent second writer is then
-              same-day and refused - the case the mechanism exists for. A judgment has no such clock,
-              and resting on a session source proves nothing, since every judgment rests on the
-              session that wrote it; naming one proves no more, since the session writes it. So a
-              judgment is replaced in the base only when it is already broken by its own condition,
-              and every other rewrite waits beside the record for a person to fold. Five judgments
-              here rest on one source with five verdicts, so the same premises under different ids
-              stay different subjects until someone says otherwise - a candidate to judge, never a
-              refusal. One function decides all of it; {{p.supersede_doors}} is the count that would
-              show a second one creeping in."
+    rests_on: [s.2026_09_04_minted_permission, s.2026_09_03_hypotheses, s.2026_09_15_verdict_conflicts_decided, s.2026_09_15_branch_verdict_conflicts, d.base_shared_forks_on_contradiction, d.write_path_returns_reach, p.supersede_doors, m.door.opposed_verdicts_named_reversed, m.door.grounds_changes_named, m.door.future_dated_readings_refused]
+    verdict: "a contradiction is told by the id, the day and the base's own readings: the same id
+              with a value read no later than the base's own reading, or with a different verdict, or
+              with the same verdict on other grounds, is refused into the base and named a
+              hypothesis; a newer reading supersedes and one dated after today is refused; a standing
+              judgment is superseded only when its wrong_if holds on what the base holds; across the
+              branch line a reading from another source with another value waits for a person to name
+              the source; the same premises under different ids are different subjects"
+    because: "set is the update path - the world moving - so a differing value alone cannot be the
+              contradiction; what the record can tell apart is time, and the day is its clock: a
+              reading newer than the base's supersedes, one of the same day or older that disagrees
+              is two writers. A day ahead of today would outrank every reading of today, so it is
+              refused - {{m.door.future_dated_readings_refused}} places a reading is dated. A
+              judgment has no clock and a session's word admits nothing, so a standing judgment is
+              replaced only when its own condition holds - on what the base holds, since a reading
+              that arrives together with the verdict has not been accepted yet - and every other
+              rewrite waits beside the record for a person to take by name. The same verdict on other
+              grounds is a decision written again and goes the same way, since the grounds are what
+              the verdict answers to; {{m.door.grounds_changes_named}} such changes are named where
+              both doors were blind. Across the branch line two sources for one id that disagree are
+              two instruments, and no day orders instruments, so a person names which the id follows.
+              The two-branch test of issues #98 and #99 named none of its opposed verdicts;
+              {{m.door.opposed_verdicts_named_reversed}} are named now. The same premises under
+              different ids stay different subjects until someone says otherwise. One function
+              decides all of it; {{p.supersede_doors}} is the count that would show a second one
+              creeping in."
     wrong_if: "p.supersede_doors > 1"
+    replaced: ["the standing judgment holds, and a person takes this over it by name on 2026-09-16"]
     seen:
       s.2026_09_04_minted_permission: "read 2026-09-04"
       s.2026_09_03_hypotheses: "read 2026-09-03"
+      s.2026_09_15_verdict_conflicts_decided: "read 2026-09-15"
+      s.2026_09_15_branch_verdict_conflicts: "The session that replayed the two-branch verdict
+                                              conflict of issues #98 and #99 on this tree and probed
+                                              four cases the issues did not try. Its reading:
+                                              readings pass the day rule, a judgment in one tree is
+                                              replaced only when its own falsifier fires, but the
+                                              fold - local hypothesis or another branch - lays any
+                                              verdict over a standing judgment by hand and calls it
+                                              clean, so the write that add refuses in one tree passes
+                                              across the branch line; the in-place supersede keeps
+                                              nothing of what it replaced; a judgment's grounds are
+                                              invisible to both doors; a future-dated reading enters.
+                                              The rule it shaped, not yet decided: the base's
+                                              condition evaluated on the base, an unfired flip
+                                              contested and folded only by name, every replacement
+                                              traced beside the record, and a source's own clock in
+                                              place of the day."
       d.base_shared_forks_on_contradiction: "a consistent addition goes straight to the shared
                                              record from any session or branch; a write that
                                              contradicts the record opens a named hypothesis, and
@@ -2156,8 +2345,13 @@ judgments:
       d.write_path_returns_reach: "the record changes from the command line through set, add and
                                    review; each edits the file in place, writes seen itself, and
                                    answers with the reach - what rests on the write, what is MOVED
-                                   now, which predicate fired"
+                                   now, which predicate fired; set can replace from and at together
+                                   with a value using --source and --at, without reviewing dependent
+                                   judgments"
       p.supersede_doors: 1
+      m.door.opposed_verdicts_named_reversed: 2
+      m.door.grounds_changes_named: 2
+      m.door.future_dated_readings_refused: 3
   d.coverage_printed_never_acted:
     rests_on: [s.2026_09_03_coverage, d.intent_is_a_source, d.metrics_derived_builtin, p.coverage_thresholds]
     verdict: "coverage is counted at every build and check and printed as facts - each intent no tab
@@ -2359,33 +2553,62 @@ judgments:
                                   kept under the earlier name after it, wherever that record already
                                   is, and no command creates the earlier name again"
   d.fold_passes_the_one_door:
-    rests_on: [s.2026_09_04_minted_permission, s.2026_09_04_consolidate, d.contradiction_by_id_and_day, p.supersede_doors]
-    verdict: "a folded reading passes the one door a written one does, with a person's hand on it:
-              an entry replaces what the base holds when its reading is newer, a judgment when the
-              standing one is broken or when the fold itself is the person's - and a reading the door
-              refuses is contested, never overwritten"
-    because: "The fold is a write under ids the base holds, and one function still says whether such
-              a write may replace what stands - {{d.contradiction_by_id_and_day}} put the rule there
-              so that nothing else decides it, and the fold passes its hand through that function
-              rather than deciding beside it. Readings keep the day rule whole: a hypothesis born of
-              a same-day contradiction stays beside the record until someone reads again on a later
-              day, which is the act the day rule tells two writers apart by, and no hand makes an
-              older reading newer. A standing judgment has no clock to appeal to, so what could admit
-              its rewrite was a claim written into the write itself - which is what a session mints
-              for free. The fold is the one act here a session cannot write into the record, and it
-              is where the rewrite is read beside what it replaces, with the dry run naming both.
-              {{p.supersede_doors}} is the count that would show a second door."
-    wrong_if: "p.supersede_doors > 1"
+    rests_on: [s.2026_09_04_minted_permission, s.2026_09_04_consolidate, s.2026_09_15_verdict_conflicts_decided, s.2026_09_15_branch_verdict_conflicts, d.contradiction_by_id_and_day, p.supersede_doors, m.door.unfired_flips_named_reversed, m.door.unfired_flips_folded_clean]
+    verdict: "a folded reading passes the one door a written one does, asked with the base's own
+              readings: a reading newer than the base's enters and a same-day or older one is
+              contested; a verdict, or other grounds, laid over a standing judgment folds only when
+              the base's own condition has broken it on what the base holds, or when a person names
+              the id at the fold; a reversal nobody named is red, and the trail says which of the two
+              admitted it"
+    because: "The fold asked the door with the union's readings and by hand, so any verdict laid
+              over a standing judgment folded as clean - {{m.door.unfired_flips_folded_clean}} of the
+              flips tried, each with no evidence - and a hypothesis that brought the reading that
+              breaks a judgment together with the verdict that repairs it had certified itself: the
+              write add refuses in one tree passed across the branch line, where contributors
+              actually meet. A person's hand was the design, but the report listed the flip among
+              updates under clean, so the hand never read it. Asked with the base's readings, the
+              base's condition fires only on what the base already accepted; a branch's reading is a
+              proposal like its verdict, and the report says when that reading would fire it, so the
+              person deciding knows. Naming the id is one flag per reversal per fold - the price a
+              reversal should cost - and the sequence is the one tree's own, reading, red, repair,
+              with the integrator as the one who repairs. {{m.door.unfired_flips_named_reversed}} of
+              the same flips are now reversed and red until named; {{p.supersede_doors}} is still the
+              count that would show a second door."
+    wrong_if: "m.door.unfired_flips_named_reversed < 3"
+    replaced: ["the standing judgment holds, and a person takes this over it by name on 2026-09-16"]
     seen:
       s.2026_09_04_minted_permission: "read 2026-09-04"
       s.2026_09_04_consolidate: "read 2026-09-04"
-      d.contradiction_by_id_and_day: "a contradiction is told by the id and the day: the same id
-                                      with a value read no later than the base's own reading, or with
-                                      a different verdict, is refused into the base and named a
-                                      hypothesis; a newer reading supersedes, a standing judgment is
-                                      superseded only when its wrong_if holds; the same premises
-                                      under different ids are different subjects"
+      s.2026_09_15_verdict_conflicts_decided: "read 2026-09-15"
+      s.2026_09_15_branch_verdict_conflicts: "The session that replayed the two-branch verdict
+                                              conflict of issues #98 and #99 on this tree and probed
+                                              four cases the issues did not try. Its reading:
+                                              readings pass the day rule, a judgment in one tree is
+                                              replaced only when its own falsifier fires, but the
+                                              fold - local hypothesis or another branch - lays any
+                                              verdict over a standing judgment by hand and calls it
+                                              clean, so the write that add refuses in one tree passes
+                                              across the branch line; the in-place supersede keeps
+                                              nothing of what it replaced; a judgment's grounds are
+                                              invisible to both doors; a future-dated reading enters.
+                                              The rule it shaped, not yet decided: the base's
+                                              condition evaluated on the base, an unfired flip
+                                              contested and folded only by name, every replacement
+                                              traced beside the record, and a source's own clock in
+                                              place of the day."
+      d.contradiction_by_id_and_day: "a contradiction is told by the id, the day and the base's own
+                                      readings: the same id with a value read no later than the
+                                      base's own reading, or with a different verdict, or with the
+                                      same verdict on other grounds, is refused into the base and
+                                      named a hypothesis; a newer reading supersedes and one dated
+                                      after today is refused; a standing judgment is superseded only
+                                      when its wrong_if holds on what the base holds; across the
+                                      branch line a reading from another source with another value
+                                      waits for a person to name the source; the same premises under
+                                      different ids are different subjects"
       p.supersede_doors: 1
+      m.door.unfired_flips_named_reversed: 3
+      m.door.unfired_flips_folded_clean: "3 of 3"
   d.followups_installation_is_not_execution:
     rests_on: [followups.installation_evidence, s.followups_install]
     verdict: "Report configured scheduling separately from evidence that a scheduled run actually

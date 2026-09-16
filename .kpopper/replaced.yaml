@@ -1,0 +1,68 @@
+# Judgments this record's writes replaced, kept whole - read with `kpopper pull <id> --history`.
+d.contradiction_by_id_and_day:
+- rests_on:
+  - s.2026_09_04_minted_permission
+  - s.2026_09_03_hypotheses
+  - d.base_shared_forks_on_contradiction
+  - d.write_path_returns_reach
+  - p.supersede_doors
+  verdict: 'a contradiction is told by the id and the day: the same id with a value read no later than
+    the base''s own reading, or with a different verdict, is refused into the base and named a hypothesis;
+    a newer reading supersedes, a standing judgment is superseded only when its wrong_if holds; the same
+    premises under different ids are different subjects'
+  because: 'set is the update path - the world moving, flagged as it always was - so a differing value
+    alone cannot be the contradiction, or the reach would have nothing left to reach. What the record
+    can tell apart is time: a reading newer than the one the base holds - its own date, else its source''s
+    - supersedes it; one of the same day or older that disagrees is two writers, not the world moving.
+    A value nothing dates is superseded by the first dated write, which starts the clock; a concurrent
+    second writer is then same-day and refused - the case the mechanism exists for. A judgment has no
+    such clock, and resting on a session source proves nothing, since every judgment rests on the session
+    that wrote it; naming one proves no more, since the session writes it. So a judgment is replaced in
+    the base only when it is already broken by its own condition, and every other rewrite waits beside
+    the record for a person to fold. Five judgments here rest on one source with five verdicts, so the
+    same premises under different ids stay different subjects until someone says otherwise - a candidate
+    to judge, never a refusal. One function decides all of it; {{p.supersede_doors}} is the count that
+    would show a second one creeping in.'
+  wrong_if: p.supersede_doors > 1
+  seen:
+    s.2026_09_04_minted_permission: read 2026-09-04
+    s.2026_09_03_hypotheses: read 2026-09-03
+    d.base_shared_forks_on_contradiction: a consistent addition goes straight to the shared record from
+      any session or branch; a write that contradicts the record opens a named hypothesis, and whatever
+      later rests on the contradiction goes there - a session is never the unit
+    d.write_path_returns_reach: the record changes from the command line through set, add and review;
+      each edits the file in place, writes seen itself, and answers with the reach - what rests on the
+      write, what is MOVED now, which predicate fired
+    p.supersede_doors: 1
+  ended: the standing judgment holds, and a person takes this over it by name
+  day: '2026-09-16'
+d.fold_passes_the_one_door:
+- rests_on:
+  - s.2026_09_04_minted_permission
+  - s.2026_09_04_consolidate
+  - d.contradiction_by_id_and_day
+  - p.supersede_doors
+  verdict: 'a folded reading passes the one door a written one does, with a person''s hand on it: an entry
+    replaces what the base holds when its reading is newer, a judgment when the standing one is broken
+    or when the fold itself is the person''s - and a reading the door refuses is contested, never overwritten'
+  because: 'The fold is a write under ids the base holds, and one function still says whether such a write
+    may replace what stands - {{d.contradiction_by_id_and_day}} put the rule there so that nothing else
+    decides it, and the fold passes its hand through that function rather than deciding beside it. Readings
+    keep the day rule whole: a hypothesis born of a same-day contradiction stays beside the record until
+    someone reads again on a later day, which is the act the day rule tells two writers apart by, and
+    no hand makes an older reading newer. A standing judgment has no clock to appeal to, so what could
+    admit its rewrite was a claim written into the write itself - which is what a session mints for free.
+    The fold is the one act here a session cannot write into the record, and it is where the rewrite is
+    read beside what it replaces, with the dry run naming both. {{p.supersede_doors}} is the count that
+    would show a second door.'
+  wrong_if: p.supersede_doors > 1
+  seen:
+    s.2026_09_04_minted_permission: read 2026-09-04
+    s.2026_09_04_consolidate: read 2026-09-04
+    d.contradiction_by_id_and_day: 'a contradiction is told by the id and the day: the same id with a
+      value read no later than the base''s own reading, or with a different verdict, is refused into the
+      base and named a hypothesis; a newer reading supersedes, a standing judgment is superseded only
+      when its wrong_if holds; the same premises under different ids are different subjects'
+    p.supersede_doors: 1
+  ended: the standing judgment holds, and a person takes this over it by name
+  day: '2026-09-16'
