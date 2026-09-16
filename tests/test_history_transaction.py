@@ -53,6 +53,14 @@ class PreparedWrites(unittest.TestCase):
             self.assertEqual((self.root / '.kpopper/replaced.yaml').read_bytes(), b'archive-after')
         self.assertFalse((self.root / self.journal).exists())
 
+    def test_shared_journal_location_is_private_and_stable(self):
+        entry = self.root / 'GROUNDING.yaml'
+        journal = T.journal_for(entry)
+        self.assertEqual(journal, T.journal_for(entry))
+        T.publish_legacy(self.root, journal, self.mutation, verify=lambda _: None)
+        self.assertEqual((self.root / journal).parent.joinpath('.gitignore').read_bytes(), b'*\n')
+        self.assertEqual(T.legacy_authority(entry)['authority'], 'legacy')
+
     def test_writer_lock_allows_nested_preparation_and_readback(self):
         # Same lock as ordinary provenance writers: nested publication must not hang.
         from scripts import provenance as P

@@ -26,6 +26,35 @@ ROLES = ('record', 'view', 'replaced', 'history_authority', 'history_object', 'h
 _LOCKS = contextvars.ContextVar('history_directory_locks', default=())
 
 
+def journal_for(entry):
+    """One record-relative private journal location shared by readers and writers."""
+    try:
+        from .provenance import layout
+    except ImportError:
+        from provenance import layout
+    entry = Path(entry).absolute()
+    home = Path(layout(entry)['home'])
+    token = C.sha256(entry.name.encode('utf-8'))[:24]
+    return (home / '.history-local' / (token + '.json')).relative_to(entry.parent).as_posix()
+
+
+def legacy_authority(entry):
+    """Local identity of an unactivated record, never a persisted history marker."""
+    token = C.sha256(str(Path(entry).resolve()).encode('utf-8'))[:32]
+    return C.authority(record_id='legacy-' + token, authority='legacy', generation=0)
+
+
+def _private_journal_home(root, journal, mutation):
+    # Integrated writers use journal_for; raw fixture callers may select another
+    # already-private location. Never alter a caller's existing ignore policy.
+    if journal == journal_for(Path(root) / mutation._data['entry']):
+        ignore = _target(root, journal).parent / '.gitignore'
+        if ignore.exists():
+            C._require(_read(ignore) == b'*\n', 'journal_ignore_mismatch')
+        else:
+            publish_immutable(ignore, b'*\n', root=root)
+
+
 def _blob(value):
     C._require(value is None or type(value) is bytes, 'invalid_bytes')
     return None if value is None else {'sha256': C.sha256(value),
@@ -354,6 +383,7 @@ def publish_legacy(root, journal, mutation, *, verify):
         C._require(not journal_path.exists(), 'recovery_required')
         targets = _preflight(root, mutation, recovery=False)
         verify(mutation.to_data())
+        _private_journal_home(root, journal, mutation)
         publish_immutable(journal_path, mutation.to_bytes(), root=root)
         _apply_legacy(targets, 'after')
         journal_path.unlink()
