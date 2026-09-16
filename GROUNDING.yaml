@@ -821,6 +821,21 @@ sources:
          32s"
     read: "2026-09-16"
 
+  run.versions_core_cost_settled:
+    from: s.2026_09_16_versions_core
+    name: "The cost of history in the versions core measured again after the two review rounds -
+           every write a distinct operation, the acts a source rule implies recorded, the whole path
+           timed: a full state, an open, one update, a rebuild, a rendering and an unchanged take-in
+           - at a thousand, ten thousand and a hundred thousand contributions"
+    of: "this tree at 139470f, VERSIONS_BENCH=1000|10000|100000 python3 -m unittest
+         tests.test_versions_core.TheCostOfHistory, 2026-09-16, one laptop, warm cache: 1,422 files
+         520 KiB, open 0.002s 0 parsed, update 61 parsed, unchanged take-in 0.009s 0 parsed; 13,788
+         files 4.95 MiB, full 3.8s, open 0.013s, update 0.20s 556 parsed, rebuild 3.5s, render 0.17s,
+         take-in 0.037s; 137,645 files 49 MiB written in 27s, full 56s, open 0.11s 0 parsed, one
+         update 2.7s 5,797 parsed, rebuild 63s, render 2.8s - the settle of the update re-reading its
+         subject - take-in 0.37s 0 parsed"
+    read: "2026-09-16"
+
   run.versions_core_review_round:
     v: 2
     from: s.2026_09_16_versions_core
@@ -1007,12 +1022,12 @@ known:
     from: run.claims_scored
     at: "of 6"
   m.core.bytes_per_version:
-    v: 232
+    v: 367
     unit: bytes
     name: "Bytes one version or act takes as a file in the versions core, on average, in the cost
-           test"
-    from: run.versions_core_cost
-    at: "17,024.7 KiB over 75,274 files at a hundred thousand contributions"
+           test - an operation id and a forty-character identity on each"
+    from: run.versions_core_cost_settled
+    at: "49,359.7 KiB over 137,645 files at a hundred thousand contributions"
     of: "2026-09-16"
   m.core.counterexamples_kept:
     v: 13
@@ -1029,12 +1044,12 @@ known:
     at: "open 0.231s, 0 parsed, at 75,274 files"
     of: "2026-09-16"
   m.core.rebuild_seconds_at_100k:
-    v: 32.4
+    v: 63.1
     unit: seconds
     name: "Seconds a rebuild of the state from every version file takes at a hundred thousand
            contributions - the reconstruction path, never the working one"
-    from: run.versions_core_cost
-    at: "rebuild 32.36s, full state 34.26s, 75,274 parsed"
+    from: run.versions_core_cost_settled
+    at: "rebuild 63.10s, full state 55.94s, 137,645 parsed"
     of: "2026-09-16"
   m.core.scenarios:
     v: 15
@@ -1061,11 +1076,12 @@ known:
     at: "the fifteen scenario tests, all passing; the count moves with the tests"
     of: "2026-09-16"
   m.core.update_parsed_at_100k:
-    v: 3866
+    v: 5797
     name: "Version files one update parses with a hundred thousand contributions behind it - the
-           updated subject's own history and nothing else, twenty subjects sharing the files"
-    from: run.versions_core_cost
-    at: "one update 1.895s, 3,866 parsed of 75,274"
+           updated subject's own history and nothing else, twenty subjects sharing the files; the
+           settle that records the act the update implied reads the same subject once more"
+    from: run.versions_core_cost_settled
+    at: "one update 2.690s, 5,797 parsed of 137,645; render after settle 2.757s"
     of: "2026-09-16"
   m.entry_name.false_reads:
     v: 8
