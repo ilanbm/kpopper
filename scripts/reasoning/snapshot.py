@@ -138,8 +138,11 @@ def _validate_history(document, context):
     # Shared validation applies both to capture and untrusted frozen replay.
     # Legacy snapshots with no history declaration keep their existing shape.
     if 'history' in context:
-        from ..history_contract import CapturedHistory
-        CapturedHistory(document, context['history'])
+        from ..history_contract import CapturedHistory, HistoryError
+        try:
+            CapturedHistory(document, context['history'])
+        except HistoryError as error:
+            raise SnapshotError('invalid_history', str(error)) from error
     elif isinstance(document.get('meta'), dict) and 'history' in document['meta']:
         raise SnapshotError('missing_history_context', 'history view requires captured evidence')
 

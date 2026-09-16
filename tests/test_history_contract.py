@@ -2,6 +2,7 @@
 import copy
 import datetime
 import unittest
+from unittest import mock
 
 from scripts import history_contract as H, history_transaction as T, provenance as P, versions as V
 from scripts.pending_grounding import identity
@@ -41,6 +42,15 @@ def receipt():
 
 
 class TypedObjects(unittest.TestCase):
+    def test_shared_python_graph_is_bounded_before_recursive_validation(self):
+        shared = ['leaf']
+        for _ in range(8):
+            shared = [shared] * 10
+        with mock.patch.object(H, '_check_finite') as finite:
+            with self.assertRaisesRegex(H.HistoryError, 'history_limit'):
+                H.detached({'value': shared})
+            finite.assert_not_called()
+
     def test_identity_distinguishes_typed_values_and_absence(self):
         bodies = [{'v': datetime.date(2026, 9, 17)}, {'v': '2026-09-17'},
                   {'v': True}, {'v': 1}, {'v': 1.0}, {'v': None}, {}, {'v': [1, 2]}, {'v': [2, 1]}]

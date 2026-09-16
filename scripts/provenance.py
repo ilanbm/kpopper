@@ -4252,7 +4252,7 @@ def _locked(path, *, project=None):
     """One writer at a time on a record: the whole write - load, validate, edit, replace -
     runs under an exclusive lock on the record's directory, so two sessions on one file
     take turns instead of the last one silently discarding the first. Where the platform
-    offers no such lock the write is unguarded."""
+    offers no such lock the write refuses."""
     project = project or _peer('knowledge_views').project_for([path])
     # All direct writers share this boundary. Policy precedes the directory lock;
     # capture/configuration own their locks and are never called inside this scope.

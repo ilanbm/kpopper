@@ -1,11 +1,19 @@
 """Interruption, replay and concurrent edits at the prepared publication boundary."""
 import tempfile
+import multiprocessing
 import unittest
 from pathlib import Path
 from unittest import mock
 
 from scripts import history_contract as H, history_transaction as T
 from tests.test_history_contract import receipt
+
+
+def _fork_reader(root, journal, connection):
+    connection.send('started')
+    with T.reader_guard(root, journal):
+        connection.send('entered')
+    connection.close()
 
 
 class PreparedWrites(unittest.TestCase):
@@ -57,6 +65,28 @@ class PreparedWrites(unittest.TestCase):
         with T.reader_guard(self.root, self.journal):
             with self.assertRaisesRegex(H.HistoryError, 'lock_upgrade_refused'):
                 T.publish_legacy(self.root, self.journal, self.mutation, verify=lambda _: None)
+
+    @unittest.skipUnless('fork' in multiprocessing.get_all_start_methods(), 'POSIX fork required')
+    def test_fork_does_not_inherit_reentrant_lock_authority(self):
+        context = multiprocessing.get_context('fork')
+        parent, child = context.Pipe()
+        process = context.Process(target=_fork_reader, args=(self.root, self.journal, child))
+        try:
+            with T.writer_guard(self.root):
+                process.start()
+                self.assertTrue(parent.poll(5))
+                self.assertEqual(parent.recv(), 'started')
+                self.assertFalse(parent.poll(.15), 'child bypassed parent directory lock')
+            self.assertTrue(parent.poll(5))
+            self.assertEqual(parent.recv(), 'entered')
+            process.join(5)
+            self.assertEqual(process.exitcode, 0)
+        finally:
+            if process.is_alive():
+                process.terminate()
+                process.join(5)
+            parent.close()
+            child.close()
 
     def test_interrupted_multi_file_state_refuses_read_then_recovers_same_operation(self):
         self.fail_after_archive()

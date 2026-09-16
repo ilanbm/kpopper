@@ -30,8 +30,12 @@ not recover precision or lexemes already lost while parsing a legacy source.
 objects. It never returns a valid-looking partial subset. This bounded in-memory
 helper admits at most 20,000 objects; a larger closure requires another explicitly
 bounded interface rather than silent truncation. Individual objects are bounded
-to 1 MiB. `encode_document` and `decode_document` retain typed YAML values and
-refuse duplicate mapping keys.
+to 1 MiB. Values are limited to 128 levels and 100,000 traversal occurrences
+before hashing/copying, including repeated references in a supplied Python DAG.
+`encode_document` and `decode_document` retain typed YAML values and refuse
+duplicate mapping keys and YAML aliases. The encoder emits no aliases. Existing
+prototype objects may retain sorted repeated references without changing their
+identity; newly typed objects require sorted unique reference lists.
 
 ## Authority and visibility
 
@@ -60,7 +64,8 @@ without changing their original operation or time. `committed_objects` takes
 captured manifest/object bytes and returns only the complete reachable object
 set. Orphan staging objects do not participate. Missing parents, corrupt bytes,
 wrong identities, invalid references or cyclic manifest ancestry refuse the
-entire result. This verifies internal consistency of supplied evidence; the
+entire result. The in-memory commit count also has a 20,000 limit and ancestry
+checking is linear in commit/parent count. This verifies internal consistency of supplied evidence; the
 reader still must establish complete file membership through capture.
 
 ## Capture and replay
@@ -100,12 +105,20 @@ Integrated readers must hold `reader_guard(root, journal)` while reading the
 whole closure. They either see a complete generation or receive
 `recovery_required`. The low-level transaction helpers alone do not make an
 unguarded legacy reader safe, and they are not yet wired into ordinary writers.
+Direct writers must check the same journal before preparing changes; a writer
+lock alone does not certify that a previous mutation completed. The shared lock
+is reentrant only within its owning process and thread.
 
 `recover_legacy` resumes the stored operation or restores its exact before
 images. It first checks that every current file matches either its before or
 after image and runs the verifier again. An unrelated concurrent edit refuses
 recovery before any additional change. Locks require `fcntl`; unavailable
 locking refuses rather than silently publishing unguarded files.
+An absent journal reports `no_recovery_pending`. If all after images already
+match, publishing reports `after_images_match` and changes nothing. Matching bytes
+do not prove this operation completed: durable completion/deduplication receipts
+belong to the integrating writer. The chosen root may use a filesystem alias such
+as `/tmp`; symlinks below that root and journal/member ancestry collisions refuse.
 
 For history publication, `publish_immutable` provides exclusive atomic file
 creation and byte-exact retries. A history mutation binds its objects and

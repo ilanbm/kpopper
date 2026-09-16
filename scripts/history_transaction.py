@@ -180,10 +180,13 @@ class PreparedMutation:
 
 def _target(root, relative):
     C.relative_path(relative)
-    root = Path(root).absolute()
-    # Do not follow a link in the supplied root, any parent, or the final file.
+    root = Path(root).resolve(strict=True)
+    # The caller chooses a root, possibly via /tmp or another path alias.
+    # Links below that root cannot redirect a relative record member.
     path = root / relative
     for candidate in (path, *path.parents):
+        if candidate == root:
+            break
         C._require(not candidate.is_symlink(), 'symlink_path', str(candidate))
     return path
 
@@ -225,12 +228,26 @@ def _replace(path, data):
             os.unlink(temp)
 
 
-def publish_immutable(path, data):
+def publish_immutable(path, data, *, root=None):
     """Exclusive atomic publication; retries verify exact bytes, including races."""
-    path = Path(path)
+    path = Path(path).absolute()
     C._require(type(data) is bytes, 'invalid_bytes')
-    for candidate in (path, *path.parents):
-        C._require(not candidate.is_symlink(), 'symlink_path', str(candidate))
+    if root is None:
+        # Standalone calls select an exact destination, not a relative capability.
+        # Resolve its parent alias but never follow a final-file symlink.
+        path = path.parent.resolve() / path.name
+        C._require(not path.is_symlink(), 'symlink_path', str(path))
+    else:
+        base = Path(root).absolute()
+        try:
+            relative = path.relative_to(base).as_posix()
+        except ValueError:
+            # Internal callers may already hold the canonical path from _target.
+            try:
+                relative = path.relative_to(base.resolve(strict=True)).as_posix()
+            except ValueError:
+                raise C.HistoryError('invalid_path', str(path)) from None
+        path = _target(root, relative)
     path.parent.mkdir(parents=True, exist_ok=True)
     fd, temp = tempfile.mkstemp(prefix='.history-', dir=path.parent)
     try:
@@ -255,7 +272,7 @@ def _lock(root, exclusive):
         raise C.HistoryError('locking_unavailable') from None
     fd = os.open(str(root), os.O_RDONLY)
     stat = os.fstat(fd)
-    key = (stat.st_dev, stat.st_ino, threading.get_ident())
+    key = (stat.st_dev, stat.st_ino, os.getpid(), threading.get_ident())
     held = next((mode for lock, mode in _LOCKS.get() if lock == key), None)
     if held is not None:
         os.close(fd)
@@ -290,14 +307,30 @@ def reader_guard(root, journal):
 
 
 def _preflight(root, mutation, *, recovery):
-    targets = []
+    targets, states = [], []
     for item in mutation.files:
         path = _target(root, item['path'])
         current = _read(path)
+        targets.append((item, path))
+        states.append(current)
+    if not recovery and any(current != item['before'] for current, (item, _) in zip(states, targets)) \
+            and all(current == item['after'] for current, (item, _) in zip(states, targets)):
+        # Equal bytes are observable evidence, not proof that this operation ran.
+        raise C.HistoryError('after_images_match', 'completion requires a retained operation receipt')
+    for current, (item, _) in zip(states, targets):
         allowed = (item['before'], item['after']) if recovery else (item['before'],)
         C._require(current in allowed, 'concurrent_edit', item['path'])
-        targets.append((item, path))
     return targets
+
+
+def _journal_path(root, journal, mutation):
+    path = _target(root, journal)
+    candidate = Path(journal)
+    for item in mutation.files:
+        member = Path(item['path'])
+        C._require(candidate != member and candidate not in member.parents
+                   and member not in candidate.parents, 'invalid_journal_path')
+    return path
 
 
 def _apply_legacy(targets, direction):
@@ -317,12 +350,11 @@ def publish_legacy(root, journal, mutation, *, verify):
     C._require(mutation._data['authority']['authority'] == 'legacy', 'invalid_authority')
     C._require(callable(verify), 'missing_verifier')
     with _lock(root, True):
-        journal_path = _target(root, journal)
-        C._require(journal not in {item['path'] for item in mutation.files}, 'invalid_journal_path')
+        journal_path = _journal_path(root, journal, mutation)
         C._require(not journal_path.exists(), 'recovery_required')
         targets = _preflight(root, mutation, recovery=False)
         verify(mutation.to_data())
-        publish_immutable(journal_path, mutation.to_bytes())
+        publish_immutable(journal_path, mutation.to_bytes(), root=root)
         _apply_legacy(targets, 'after')
         journal_path.unlink()
         _sync(journal_path.parent)
@@ -333,9 +365,10 @@ def recover_legacy(root, journal, *, verify, direction='after'):
     C._require(direction in ('before', 'after') and callable(verify), 'invalid_recovery')
     with _lock(root, True):
         journal_path = _target(root, journal)
+        C._require(journal_path.is_file(), 'no_recovery_pending')
         mutation = PreparedMutation.from_bytes(journal_path.read_bytes())
         C._require(mutation._data['authority']['authority'] == 'legacy', 'invalid_authority')
-        C._require(journal not in {item['path'] for item in mutation.files}, 'invalid_journal_path')
+        _journal_path(root, journal, mutation)
         targets = _preflight(root, mutation, recovery=True)
         verify(mutation.to_data())
         _apply_legacy(targets, direction)

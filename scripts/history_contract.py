@@ -5,6 +5,7 @@ consistency, never source authenticity, acceptance, or permission to publish.
 Readers choose authority through the record's marker, not a directory's presence.
 """
 import copy
+from collections import deque
 import hashlib
 import re
 from pathlib import PurePosixPath
@@ -29,6 +30,7 @@ OBJECT_ID = re.compile(r'(?:[0-9a-f]{40}|[0-9a-f]{64})\Z')
 MAX_OBJECT_BYTES = 1024 * 1024
 MAX_PROJECTION_BYTES = MAX_REQUEST_BYTES // 2
 MAX_OBJECTS = 20000
+MAX_VALUE_VISITS = 100000
 
 
 class HistoryError(ValueError):
@@ -55,11 +57,12 @@ def _integer(value):
     _require(type(value) is int and value >= 0, 'invalid_generation')
 
 
-def _ids(value):
+def _ids(value, *, unique=True):
     _require(isinstance(value, list), 'invalid_references')
     for item in value:
         _text(item, OBJECT_ID)
-    _require(value == sorted(set(value)), 'invalid_references', 'references must be sorted and unique')
+    _require(value == sorted(set(value) if unique else value), 'invalid_references',
+             'references must be sorted' + (' and unique' if unique else ''))
 
 
 def _pins(value):
@@ -71,8 +74,22 @@ def _pins(value):
 
 def detached(value, maximum=MAX_OBJECT_BYTES):
     """Bound and validate before copying/hashing potentially recursive input."""
-    _check_finite(value)
-    OutputBudget(maximum, 'history_limit').add(value)
+    # A shared Python DAG can expand exponentially even without a YAML alias.
+    # Count occurrences before the existing recursive finite/type validation.
+    pending, visits = [(value, 0)], 0
+    while pending:
+        item, depth = pending.pop()
+        visits += 1
+        _require(visits <= MAX_VALUE_VISITS and depth <= 128, 'history_limit')
+        if isinstance(item, (dict, list)):
+            children = item.values() if isinstance(item, dict) else item
+            _require(len(item) <= MAX_VALUE_VISITS - visits, 'history_limit')
+            pending.extend((child, depth + 1) for child in children)
+    try:
+        _check_finite(value)
+        OutputBudget(maximum, 'history_limit').add(value)
+    except ValueError as error:
+        raise HistoryError(getattr(error, 'code', 'invalid_history_value'), str(error)) from error
     return copy.deepcopy(value)
 
 
@@ -120,7 +137,7 @@ def validate_object(value):
     _require(value['by'] is None or isinstance(value['by'], str), 'invalid_actor')
     _require(isinstance(value['on'], str) and value['on'], 'invalid_recorded_time')
     _require(isinstance(value['body'], dict), 'invalid_body')
-    _ids(value['saw'])
+    _ids(value['saw'], unique='id_scheme' in value)
     if 'id_scheme' in value:
         _require(value['id_scheme'] == ID_SCHEME and type(value.get('schema_version')) is int
                  and value['schema_version'] == 2, 'unsupported_identity')
@@ -139,7 +156,7 @@ def validate_object(value):
         _mapping(body, ('act', 'of', 'over', 'because'), ('read',))
         _require(body['act'] in ('accept', 'refute', 'review', 'correct'), 'invalid_act')
         _text(body['of'], OBJECT_ID)
-        _ids(body['over'])
+        _ids(body['over'], unique='id_scheme' in value)
         _require(isinstance(body['because'], str), 'invalid_act')
         if 'read' in body:
             _pins(body['read'])
@@ -194,7 +211,15 @@ def validate_closure(objects):
 
 
 class _UniqueLoader(yaml.SafeLoader):
-    pass
+    def compose_node(self, parent, index):
+        _require(not self.check_event(yaml.AliasEvent), 'invalid_history_yaml',
+                 'history YAML aliases are unsupported')
+        return super().compose_node(parent, index)
+
+
+class _NoAliasDumper(yaml.SafeDumper):
+    def ignore_aliases(self, data):
+        return True
 
 
 def _unique_mapping(loader, node, deep=False):
@@ -217,14 +242,16 @@ def decode_document(raw):
         value = yaml.load(raw.decode('utf-8'), Loader=_UniqueLoader)
         _require(isinstance(value, dict), 'invalid_schema')
         return detached(value, MAX_REQUEST_BYTES)
-    except (yaml.YAMLError, UnicodeError, RecursionError) as error:
+    except HistoryError:
+        raise
+    except (yaml.YAMLError, UnicodeError, RecursionError, ValueError) as error:
         raise HistoryError('invalid_history_yaml') from error
 
 
 def encode_document(value):
     value = detached(value, MAX_REQUEST_BYTES)
     _require(isinstance(value, dict), 'invalid_schema')
-    raw = yaml.safe_dump(value, sort_keys=True, allow_unicode=True).encode('utf-8')
+    raw = yaml.dump(value, Dumper=_NoAliasDumper, sort_keys=True, allow_unicode=True).encode('utf-8')
     _require(identity(decode_document(raw)) == identity(value), 'serialization_changed')
     return raw
 
@@ -339,6 +366,7 @@ def committed_objects(marker, commits, objects):
     marker = validate_authority(marker)
     _require(marker['authority'] == 'history', 'authority_mismatch')
     _require(isinstance(commits, dict) and isinstance(objects, dict), 'invalid_closure')
+    _require(len(commits) <= MAX_OBJECTS, 'history_limit')
     manifests, selected = {}, {}
     for operation, raw in commits.items():
         manifest = validate_commit(decode_document(raw))
@@ -359,13 +387,21 @@ def committed_objects(marker, commits, objects):
             _require(parent in commits, 'incomplete_commit', parent)
             _require(sha256(commits[parent]) == expected, 'parent_bytes_mismatch')
     # Cyclic commit ancestry is malformed even when every file is present.
-    pending, visited = set(manifests), set()
-    while pending:
-        ready = {operation for operation in pending
-                 if set(manifests[operation]['parents']) <= visited}
-        _require(bool(ready), 'cyclic_commits')
-        visited.update(ready)
-        pending.difference_update(ready)
+    children = {operation: [] for operation in manifests}
+    remaining = {operation: len(manifest['parents']) for operation, manifest in manifests.items()}
+    for operation, manifest in manifests.items():
+        for parent in manifest['parents']:
+            children[parent].append(operation)
+    ready = deque(operation for operation, count in remaining.items() if count == 0)
+    visited = 0
+    while ready:
+        operation = ready.popleft()
+        visited += 1
+        for child in children[operation]:
+            remaining[child] -= 1
+            if not remaining[child]:
+                ready.append(child)
+    _require(visited == len(manifests), 'cyclic_commits')
     return validate_closure(selected)
 
 
@@ -397,6 +433,9 @@ def validate_projection(value):
     _require(coverage['subjects'] == sorted(set(coverage['subjects'])), 'invalid_coverage')
     _require(isinstance(value['subjects'], dict)
              and sorted(value['subjects']) == coverage['subjects'], 'invalid_coverage')
+    if coverage['scope'] == 'all':
+        _require(set(value['baseline']['heads']) | set(value['baseline']['open_acts'])
+                 <= set(coverage['subjects']), 'invalid_coverage')
     for subject, result in value['subjects'].items():
         _mapping(result, ('acceptance', 'heads', 'open_acts'))
         _require(result['acceptance'] in ('accepted', 'proposed', 'contested', 'refuted',
@@ -415,6 +454,8 @@ def validate_projection(value):
                  'invalid_pin_witness')
         if witness['status'] == 'recorded':
             obj = validate_object(witness['object'])
+            _require((ID_SCHEME if 'id_scheme' in obj else LEGACY_SCHEME) in schemes,
+                     'unsupported_identity')
             _require(obj['id'] == vid and obj['subject'] == witness['subject'] and obj['kind'] != 'act',
                      'reference_mismatch')
         else:
