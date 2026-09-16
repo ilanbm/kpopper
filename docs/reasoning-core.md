@@ -89,9 +89,29 @@ Ordinary check/page readers remain unavailable for declared core records. Use
 
 Computed reader/page builtins are not core inputs. New core calculations or
 reviews requiring them refuse with `unsupported_core_builtin`; arrangement and
-brief-section reviews retain that restriction. Contribution capture, specialized
-legacy mutation commands and explicit migration must use a compatible capability
-boundary before they can operate on core records.
+brief-section reviews retain that restriction. Specialized legacy mutations
+(`same`, `distinct`, consolidation, refutation and shared-watch apply) still
+refuse declared core records before changing them. Explicit migration remains a
+separate operation; a profile flag does not convert existing executable fields.
+
+Project contribution capture uses manifest version 2. It binds the selected
+document's profile, required modules, complete dependency and scope closure, and
+portable evidence hashes. Legacy content has an explicit `ordinary-reader/v1`
+identity in its manifest and no new record declaration. Existing version 1
+bundles and receipts keep their original identities and stored closures.
+
+Materialization and publication validate the declaration again. Supported core
+metadata versions 1 and 2 share meaning when bodies, schema, scopes and required
+modules match; legacy and core profiles always remain distinct. A target merge
+retains core metadata and validates previously accepted active contributions.
+Unknown requirements can remain in immutable archival evidence, but cannot be
+interpreted, materialized as a supported record or published.
+
+An accepted contribution still participates in the live overlay until explicitly
+retired. A profile change refuses incompatible active revisions with
+`pending_profile_reconciliation_required`. Explicit withdrawal names the exact
+revision and a reason; it preserves its bundle and prior acceptance receipts.
+Resuming it checks compatibility with the current record before reactivating it.
 
 Numeric constants keep their decimal lexemes and evaluate as exact rationals.
 Quoted numbers remain text; booleans, numeric zero, null and missing inputs remain

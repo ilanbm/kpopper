@@ -231,19 +231,33 @@ def route(paths, action, reader, project=None, expected_policy=None):
         raise ValueError('named hypotheses stay in the local record; use feature scope')
     if action['kind'] not in ('add', 'set'):
         raise ValueError('a project contribution requires a complete add or set, not a review refresh')
-    if reader._peer('reasoning.authoring').selected(doc, action.get('profile')):
-        raise ValueError('unsupported_capability: core contribution capture requires the versioned contribution writer')
+    authoring = reader._peer('reasoning.authoring')
+    world = None
+    if authoring.selected(doc, action.get('profile')):
+        if Path(paths[0]).exists():
+            doc, world = authoring.prepare(reader, paths, action)
+        else:
+            doc = reader.Record()
+            doc['meta'] = {'reasoning': copy.deepcopy(authoring.DECLARATION)}
+            authoring.pending_compatible(reader, paths, doc)
+            world = authoring.World(reader, doc)
     # Capture the authored representation, just as the file writer does. In
     # particular readable formulas must be lowered/validated before identity is
     # assigned, and a new judgment needs its initial dependency snapshot.
     base = doc or {'meta': {}}
     ids, judgments, fields = G.P.infer(base)
     fields = G.P.authored_fields(action, fields)
-    raw = G.P.with_builtins(base, ids, judgments, fields)
+    if world is not None:
+        fields = {**fields, **world.fields}
+        raw = world.raw
+    else:
+        raw = G.P.with_builtins(base, ids, judgments, fields)
     authored, notes = G.P.normalize_authored(action, ids, fields, raw)
     refusals = G.P.validate(authored, base, ids, judgments, fields, raw)
     if refusals:
         raise ValueError('; '.join(refusals))
+    if world is not None:
+        candidate = copy.deepcopy(world.candidate(authored).document)
     if action['kind'] == 'add':
         body = copy.deepcopy(authored['body'])
         snapshot_field = fields['snapshot'] or 'seen'
@@ -254,6 +268,9 @@ def route(paths, action, reader, project=None, expected_policy=None):
         for members in G.P.collections_of(candidate).values():
             members.pop(nid, None)
         candidate.setdefault(collection, {})[nid] = body
+    elif action['kind'] == 'set':
+        collection, old = G.entries(base)[nid]
+        candidate[collection][nid] = set_body(old, authored)
     bundle = G.prepare(candidate, [nid], scope=scope, shareability='project', evidence=action.get('evidence'))
     receipt = G.Store(project).capture(bundle, event_id=action.get('event_id') or uuid.uuid4().hex,
                                    contribution_id=action.get('contribution_id') or nid,

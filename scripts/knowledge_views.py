@@ -77,7 +77,7 @@ def overlay(paths, doc, *, read_mode='live'):
             raise P.Refused(error.code + ': ' + str(error)) from None
 
     def meaning(document, name):
-        capability = capability_of(document)
+        capability = G.meaning_capabilities(document)
         result = G.semantic_roles(document)
         if result is not None:
             judgments, fields = result
@@ -166,6 +166,10 @@ def overlay(paths, doc, *, read_mode='live'):
             # Explicit decisions retire an active proposal, not its immutable
             # evidence or publication history. Sequence alone never retires it.
             continue
+        try:
+            G.validate_bundle(bundle)
+        except ValueError as error:
+            raise P.Refused(getattr(error, 'code', 'invalid_contribution') + ': ' + str(error)) from None
         active_ids.update(entry_map)
         doc.hypotheses[name] = {
             'kind': 'contribution',
@@ -208,6 +212,7 @@ def materialize(project, revision, destination, *, ref=None):
     store = G.Store(project)
     pinned = ref or store.head()
     bundle = store.read_bundle(revision, pinned)
+    G.validate_bundle(bundle)
     destination = Path(destination).expanduser().resolve()
     if destination.exists():
         raise ValueError('snapshot destination already exists; select a new directory')

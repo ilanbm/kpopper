@@ -161,7 +161,56 @@ class Publisher:
         # one part would incorrectly acknowledge acceptance or overwrite another.
         if doc.get('record') or doc.get('also'):
             raise Attention('split target record requires explicit publication reconciliation')
+        self._validate_graph(files, doc)
         return doc
+
+    def _target_layers(self, files):
+        record = self.project.config()['record']
+        directory = PurePosixPath(record).parent / G.P.hypotheses_rel(record)
+        for path in sorted(files):
+            if PurePosixPath(path).parent != directory or not path.endswith(('.yaml', '.yml')):
+                continue
+            layer = G.P.parse(text=self._blob_at(files, path).decode('utf-8')) or {}
+            if not isinstance(layer, dict):
+                raise Attention('target hypothesis is not a mapping: ' + path)
+            layer.pop('hypothesis', None)
+            if layer.get('record') or layer.get('also'):
+                raise Attention('split target hypothesis requires explicit publication reconciliation')
+            yield layer
+
+    def _validate_graph(self, files, document):
+        G.document_capabilities(document)
+        for layer in self._target_layers(files):
+            G.document_capabilities(layer)
+            base = G.P.Record()
+            base.update(copy.deepcopy(document))
+            G.document_capabilities(G.P.layered(base, {'doc': layer}))
+
+    def _merge_capabilities(self, graph, incoming, files, snapshot, decisions):
+        current = G.document_capabilities(graph)
+        added = G.document_capabilities(incoming)
+        if current['profile'] != added['profile']:
+            if added['profile'] != 'core/v1':
+                raise Attention('pending_profile_reconciliation_required: legacy content cannot inherit the target profile')
+            authoring = G.P._peer('reasoning.authoring')
+            if any(authoring._promotion_blockers(G.P, layer, graph)
+                   for layer in [graph, *self._target_layers(files)]
+                   if G.document_capabilities(layer)['profile'] != 'core/v1'):
+                raise Attention('requires explicit target migration: existing executable legacy fields')
+            for revision, bundle in snapshot['bundles'].items():
+                if decisions.get(revision, {}).get('state') in TERMINAL:
+                    continue
+                if G.meaning_capabilities(bundle['manifest']['document']) != G.meaning_capabilities(incoming):
+                    raise Attention('pending_profile_reconciliation_required: ' + revision)
+        if added['profile'] == 'core/v1':
+            declaration = copy.deepcopy(added)
+            if current['profile'] == 'core/v1':
+                declaration['version'] = max(current['version'], added['version'])
+                declaration['requires'] = sorted(set(current['requires']) | set(added['requires']))
+            meta = graph.get('meta')
+            if meta is not None and not isinstance(meta, dict):
+                raise Attention('requires explicit target migration: metadata is not a mapping')
+            graph.setdefault('meta', {})['reasoning'] = declaration
 
     def _evidence(self, files, bundle):
         parent = PurePosixPath(self.project.config()['record']).parent
@@ -169,7 +218,9 @@ class Publisher:
                 if (data := self._blob_at(files, str(parent / name))) is not None}
 
     def _accepted(self, snapshot, files, doc):
+        decisions = self._load()['decisions']
         return {revision for revision, bundle in snapshot['bundles'].items()
+                if decisions.get(revision, {}).get('state') not in TERMINAL
                 if G.equivalent(bundle, doc, self._evidence(files, bundle))}
 
     @staticmethod
@@ -255,6 +306,7 @@ class Publisher:
         return target, head, files, doc, active, accepted
 
     def _commit(self, target, files, doc, snapshot, revisions):
+        self._validate_graph(files, doc)
         graph = copy.deepcopy(doc)
         current = G.entries(graph)
         additions = {}
@@ -270,7 +322,14 @@ class Publisher:
         # Conflicting revisions are obligations, not a sequence-based election.
         for revision in revisions:
             bundle = snapshot['bundles'][revision]
+            G.validate_bundle(bundle)
             incoming = bundle['manifest']['document']
+            self._merge_capabilities(graph, incoming, files, snapshot, decisions)
+            # Empty collections are captured scope authority too. They have no
+            # entries to reach the body merge, but must remain present in a target.
+            for collection, members in incoming.items():
+                if members == {} and collection not in ('meta', 'schema', 'record', 'also'):
+                    graph.setdefault(collection, {})
             if 'schema' in incoming:
                 if 'schema' in graph and G.identity(graph['schema']) != G.identity(incoming['schema']):
                     raise Attention('pending contribution conflicts with target schema')
@@ -293,6 +352,7 @@ class Publisher:
                     if not any(prior['files'].get(name) == existing for prior in replaceable.get(revision, [])):
                         raise Attention('pending evidence conflicts with target file: ' + path)
                 additions[path] = data
+        self._validate_graph(files, graph)
         record = self.project.config()['record']
         additions[record] = G.P.yaml.safe_dump(graph, allow_unicode=True, sort_keys=False).encode()
         for revision in revisions:
@@ -300,9 +360,9 @@ class Publisher:
             if not G.equivalent(bundle, graph, {name: additions[str(parent / name)] for name in bundle['files']}):
                 raise Attention('combined graph changes a contribution meaning; reconcile before publishing')
         for old, prior in snapshot['bundles'].items():
-            if old in revisions or not G.equivalent(prior, doc, self._evidence(files, prior)):
+            if old in revisions or decisions.get(old, {}).get('state') in TERMINAL:
                 continue
-            if decisions.get(old, {}).get('state') == 'superseded' and decisions[old].get('replacement') in revisions:
+            if not G.equivalent(prior, doc, self._evidence(files, prior)):
                 continue
             evidence = {name: additions.get(str(parent / name), self._blob_at(files, str(parent / name)))
                         for name in prior['files']}
@@ -440,7 +500,7 @@ class Publisher:
         """Explicit local decisions. No remote PR is closed/deleted by this API."""
         if action not in ('pause', 'resume', 'withdraw', 'reject', 'supersede', 'retry'):
             raise ValueError('unknown publication action')
-        with self.lock():
+        with self.lock(), self.project.lock():
             state = self._load()
             snapshot = self.store.snapshot()
             chosen = list(revisions or [])
@@ -460,6 +520,11 @@ class Publisher:
                 state['paused'] = True
             elif action == 'resume':
                 if chosen:
+                    authoring = G.P._peer('reasoning.authoring')
+                    paths = [str(self.project.record())]
+                    document = authoring.load(G.P, paths) if self.project.record().exists() else {}
+                    authoring.pending_compatible(G.P, paths, document, snapshot=snapshot,
+                                                 decisions=state['decisions'], resume=chosen)
                     for revision in chosen:
                         state['decisions'].pop(revision, None)
                         state['states'][revision] = 'captured'

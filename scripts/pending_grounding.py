@@ -100,7 +100,7 @@ def _strings(value):
             yield from _strings(item)
 
 
-def closure(doc, roots):
+def _legacy_closure(doc, roots):
     """Retain complete bodies plus every referenced existing entry, recursively.
 
     Explicit citations and dependencies must resolve. Incidental prose tokens that
@@ -146,6 +146,198 @@ def closure(doc, roots):
     return result
 
 
+def _reasoning_modules():
+    # Keep exception/module identities local to the importing package.
+    if __package__:
+        from .reasoning import contract, language, snapshot, assessment
+        return contract, language, snapshot, assessment
+    return tuple(P._peer('reasoning.' + name)
+                 for name in ('contract', 'language', 'snapshot', 'assessment'))
+
+
+def _declared_capabilities(document):
+    """Read a declaration without authorizing its interpretation."""
+    C, _, _, _ = _reasoning_modules()
+    meta = document.get('meta')
+    if not isinstance(meta, dict) or 'reasoning' not in meta:
+        return {'version': 1, 'profile': 'ordinary-reader/v1', 'requires': []}
+    value = meta['reasoning']
+    if not isinstance(value, dict) or set(value) != {'version', 'profile', 'requires'} \
+            or type(value['version']) is not int or not isinstance(value['profile'], str) \
+            or not isinstance(value['requires'], list) \
+            or any(not isinstance(item, str) for item in value['requires']) \
+            or value['requires'] != sorted(set(value['requires'])):
+        raise C.CapabilityError('invalid_capability', 'invalid meta.reasoning capability declaration')
+    return copy.deepcopy(value)
+
+
+def document_capabilities(document):
+    """Validate declared and actual dependent capabilities, without execution."""
+    C, L, S, A = _reasoning_modules()
+    cap = C.capabilities(document)
+    fields = S._fields(document) if cap['profile'] == C.PROFILE else None
+    # History declarations cannot hide behind an ordinary declaration either.
+    if fields is None:
+        has_history = any(isinstance(body, dict) and any(
+            isinstance(seen, dict) and any(isinstance(old, dict) and
+                isinstance(old.get('computed'), dict) and 'version' in old['computed']
+                for old in seen.values()) for seen in body.values())
+            for _, body in entries(document).values())
+        if not has_history:
+            return cap
+        fields = S._fields(document)
+    for nid, (_, body) in entries(document).items():
+        if not isinstance(body, dict):
+            continue
+        seen = body.get(fields['snapshot'])
+        for dependency, old in seen.items() if isinstance(seen, dict) else ():
+            computed = old.get('computed') if isinstance(old, dict) else None
+            if isinstance(computed, dict) and isinstance(computed.get('basis'), dict):
+                basis = computed['basis']
+                modules = basis.get('modules', [])
+                if not isinstance(modules, list) or any(not isinstance(module, str) for module in modules):
+                    raise C.CapabilityError('invalid_history', nid + ': invalid historical modules')
+                if set(modules) - set(C.MODULES) or basis.get('profile', C.PROFILE) != C.PROFILE:
+                    raise C.CapabilityError('unsupported_capability', nid + ': unsupported historical capability')
+                if set(modules) - set(cap['requires']):
+                    raise C.CapabilityError('invalid_capability', nid + ': undeclared historical modules')
+            if isinstance(computed, dict) and 'version' in computed:
+                error = A._history(old, document)[2]
+                if error:
+                    raise C.CapabilityError(error, nid + ': unsupported or malformed core history')
+            if cap['profile'] == C.PROFILE and isinstance(computed, dict) and isinstance(computed.get('rule'), dict):
+                _historical_rule_capabilities(computed, dependency, nid, C, L)
+        if cap['profile'] != C.PROFILE:
+            continue
+        for field in ('rule', fields['predicate']):
+            value = body.get(field)
+            if isinstance(value, dict):
+                _expression_capabilities(value, nid, C, L)
+        deps = body.get(fields['deps'], [])
+        if isinstance(deps, list) and any(isinstance(dep, str) and P.is_builtin(dep) for dep in deps):
+            raise C.CapabilityError('unsupported_core_builtin', nid + ': computed builtin dependency')
+    return cap
+
+
+def _historical_rule_capabilities(computed, dependency, nid, contract, language):
+    rule = computed['rule']
+    if set(rule) != {'collection', 'fields'}:
+        _expression_capabilities(rule, nid, contract, language)
+        return
+    # Scope review stores the original definition, not a scalar expression.
+    # Authorize its historical witness without looking up today's membership.
+    basis = computed.get('basis')
+    fields = rule['fields']
+    if not isinstance(rule['collection'], str) or not rule['collection'] \
+            or not isinstance(fields, list) or any(not isinstance(field, str) or not field for field in fields) \
+            or fields != sorted(set(fields)) or not isinstance(basis, dict):
+        raise contract.CapabilityError('invalid_history', nid + ': invalid historical scope definition')
+    witness = basis.get('witness')
+    if witness is not None:
+        if not isinstance(witness, dict) or witness.get('kind') != 'scope' \
+                or witness.get('scope_id') != dependency \
+                or witness.get('definition_digest') != contract.digest(rule):
+            raise contract.CapabilityError('invalid_history', nid + ': historical scope definition disagrees with its witness')
+    elif 'recipe' in basis or not {'members', 'dependencies'} <= set(basis):
+        # Preserve the supported older scope basis which carried membership but
+        # no recipe/witness. It remains distinct evidence, never upgraded here.
+        raise contract.CapabilityError('invalid_history', nid + ': missing historical scope witness')
+    value = computed.get('value')
+    if not isinstance(value, dict) or value.get('type') != 'record':
+        raise contract.CapabilityError('invalid_history', nid + ': historical scope needs its typed summary')
+
+
+def _expression_capabilities(value, nid, contract, language):
+    try:
+        expression = language.lower(value)
+        if any(P.is_builtin(ref) for ref in language.references(expression)):
+            raise contract.CapabilityError('unsupported_core_builtin', nid + ': computed builtin input')
+        return expression
+    except contract.CapabilityError:
+        raise
+    except (ValueError, TypeError, SyntaxError, RecursionError) as error:
+        raise contract.CapabilityError('invalid_expression', nid + ': ' + str(error)) from None
+
+
+def meaning_capabilities(document):
+    cap = document_capabilities(document)
+    return {key: copy.deepcopy(cap[key]) for key in ('profile', 'requires')}
+
+
+def closure(doc, roots):
+    """Capture complete bodies, core dependencies and named scope authority."""
+    C, L, S, _ = _reasoning_modules()
+    cap = document_capabilities(doc)
+    selected = _legacy_closure(doc, roots)
+    if cap['profile'] == C.PROFILE:
+        fields = S._fields(doc)
+        all_entries = entries(doc)
+        scopes, processed = set(), set()
+        # The snapshot captures authority and validates scopes without evaluation.
+        snapshot = None
+        while set(entries(selected)) - processed:
+            for nid in sorted(set(entries(selected)) - processed):
+                processed.add(nid)
+                body = all_entries[nid][1]
+                if not isinstance(body, dict):
+                    continue
+                dependencies = []
+                for field in ('rule', fields['predicate']):
+                    if isinstance(body.get(field), dict):
+                        dependencies.extend(L.references(L.lower(body[field])))
+                if 'collection_scope' in body:
+                    if snapshot is None:
+                        snapshot = S.Snapshot.from_data(doc)
+                    captured = snapshot.capture_scope(nid).to_data()
+                    collection = captured['definition']['collection']
+                    scopes.add(collection)
+                    dependencies.extend(doc[collection])
+                if dependencies:
+                    extra = _legacy_closure(doc, dependencies)
+                    for collection, members in extra.items():
+                        if collection != 'schema':
+                            selected.setdefault(collection, {}).update(members)
+        for collection in scopes:
+            selected.setdefault(collection, {})
+    meta = doc.get('meta')
+    if isinstance(meta, dict) and 'reasoning' in meta:
+        selected['meta'] = {'reasoning': copy.deepcopy(meta['reasoning'])}
+    return selected
+
+
+def validate_bundle(bundle, *, supported=True):
+    """Check frozen identity/evidence; optionally authorize its capabilities.
+
+    Raw archival reads preserve unknown declarations but never accept a v2
+    declaration which disagrees with the document bound by the same identity.
+    Raw reads and every v1 identity check use the stored closure. Supported v2
+    interpretation also checks complete current closure, scope and evidence.
+    """
+    manifest = bundle['manifest']
+    if type(manifest.get('version')) is not int or manifest['version'] not in (1, 2) \
+            or identity(manifest) != bundle['revision']:
+        raise ValueError('stored contribution failed its complete identity check')
+    cap = _declared_capabilities(manifest['document'])
+    if manifest['version'] == 2 and identity(manifest.get('reasoning')) != identity(cap):
+        raise ValueError('contribution manifest and document capabilities disagree')
+    _privacy(manifest['document'])
+    _privacy(manifest['scope'])
+    files = bundle['files']
+    _portable_files(files)
+    if set(files) != set(manifest['evidence']) or any(
+            hashlib.sha256(files[path]).hexdigest() != digest for path, digest in manifest['evidence'].items()):
+        raise ValueError('stored contribution evidence failed its complete identity check')
+    if not supported:
+        return cap
+    cap = document_capabilities(manifest['document'])
+    if manifest['version'] == 2:
+        checked = _prepare(manifest['document'], manifest['roots'], scope=manifest['scope'],
+                           shareability='project', evidence=files, version=2)
+        if checked['revision'] != bundle['revision']:
+            raise ValueError('contribution is not its complete validated closure')
+    return cap
+
+
 def _privacy(value):
     if isinstance(value, dict):
         if ('private' in value and value['private'] is not False) \
@@ -182,6 +374,10 @@ def _portable_files(files):
 
 
 def prepare(doc, roots, *, scope, shareability, evidence=None):
+    return _prepare(doc, roots, scope=scope, shareability=shareability, evidence=evidence, version=2)
+
+
+def _prepare(doc, roots, *, scope, shareability, evidence=None, version):
     """Create a validated bundle in memory, before any publishable object is written.
 
     Evidence is an explicit {portable record-relative path: bytes} allowlist. The
@@ -199,7 +395,7 @@ def prepare(doc, roots, *, scope, shareability, evidence=None):
     if not isinstance(roots, (list, tuple)) or not roots or any(not isinstance(x, str) for x in roots):
         raise ValueError('contribution needs explicit root entry IDs')
     _privacy({k: doc[k] for k in ('meta', 'privacy', 'visibility', 'private', 'shareability') if k in doc})
-    document = closure(doc, roots)
+    document = (closure if version == 2 else _legacy_closure)(doc, roots)
     if scope['kind'] == 'code':
         for root in roots:
             body = entries(document)[root][1]
@@ -216,9 +412,11 @@ def prepare(doc, roots, *, scope, shareability, evidence=None):
         body = entries(document)[root][1]
         if not isinstance(body, dict) or identity(body.get('scope')) != identity(scope):
             raise ValueError('contribution roots must retain their exact scope in the portable body')
-    manifest = {'version': 1, 'roots': sorted(set(roots)), 'document': document,
+    manifest = {'version': version, 'roots': sorted(set(roots)), 'document': document,
                 'scope': copy.deepcopy(scope),
                 'evidence': {path: hashlib.sha256(data).hexdigest() for path, data in sorted(files.items())}}
+    if version == 2:
+        manifest['reasoning'] = document_capabilities(document)
     return {'revision': identity(manifest), 'manifest': manifest, 'files': files}
 
 def semantic_roles(document):
@@ -238,7 +436,19 @@ def semantic_roles(document):
 
 def equivalent(bundle, doc, evidence):
     """Content-based acceptance: shared subset must match; extra local IDs are fine."""
+    validate_bundle(bundle)
     expected = bundle['manifest']
+    meaning = meaning_capabilities(expected['document'])
+    if meaning != meaning_capabilities(doc):
+        return False
+    # A captured named scope binds membership, including empty collections.
+    scoped = entries(expected['document']).values() if meaning['profile'] == 'core/v1' else ()
+    for _, body in scoped:
+        definition = body.get('collection_scope') if isinstance(body, dict) else None
+        if isinstance(definition, dict):
+            collection = definition.get('collection')
+            if identity(expected['document'].get(collection)) != identity(doc.get(collection)):
+                return False
     actual = entries(doc)
     for root in expected['roots']:
         body = actual.get(root, (None, None))[1]
@@ -355,8 +565,9 @@ class Store:
             if not isinstance(value, str) or not TOKEN.fullmatch(value):
                 raise ValueError('event and contribution IDs must be portable nonempty tokens')
         manifest = bundle['manifest']
-        verified = prepare(manifest['document'], manifest['roots'], scope=manifest['scope'],
-                           shareability=shareability, evidence=bundle['files'])
+        validate_bundle(bundle)
+        verified = _prepare(manifest['document'], manifest['roots'], scope=manifest['scope'],
+                            shareability=shareability, evidence=bundle['files'], version=manifest['version'])
         if identity(manifest) != verified['revision'] or bundle['revision'] != verified['revision']:
             raise ValueError('contribution integrity check failed before capture')
         revision = verified['revision']
@@ -434,18 +645,9 @@ class Store:
         manifest = _decode(json.loads(self.blob(files[path])))
         evidence = {name: self.blob(files[prefix + 'evidence/' + name])
                     for name in manifest['evidence'] if prefix + 'evidence/' + name in files}
-        # v1 objects are checked against their stored closure, never rebuilt using
-        # today's extraction algorithm. A later reader can add relationships without
-        # making previously acknowledged contributions unreadable.
-        if manifest.get('version') != 1 or identity(manifest) != revision:
-            raise ValueError('stored contribution failed its complete identity check')
-        _privacy(manifest['document'])
-        _privacy(manifest['scope'])
-        _portable_files(evidence)
-        if set(evidence) != set(manifest['evidence']) or any(
-                hashlib.sha256(evidence[path]).hexdigest() != digest for path, digest in manifest['evidence'].items()):
-            raise ValueError('stored contribution evidence failed its complete identity check')
-        return {'revision': revision, 'manifest': manifest, 'files': evidence}
+        bundle = {'revision': revision, 'manifest': manifest, 'files': evidence}
+        validate_bundle(bundle, supported=False)
+        return bundle
 
     def snapshot(self, ref=None):
         head = ref or self.head()

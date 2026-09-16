@@ -60,6 +60,29 @@ def _promotion_blockers(reader, document, context=None):
     return blockers
 
 
+def pending_compatible(reader, paths, destination, *, snapshot=None, decisions=None, resume=()):
+    """Check the effective overlay without changing its immutable ledger or receipts.
+
+    Accepted revisions remain attached until an explicit terminal decision retires
+    them. A cached acceptance alone never authorizes reinterpreting their profile.
+    Callers that mutate hold the project policy lock through their final recheck.
+    """
+    from pathlib import Path
+    from .. import knowledge_views as V, pending_grounding as G, pending_publication as C
+    project = V.project_for(paths)
+    if not project.git or project.config()['mode'] != 'advanced' or Path(paths[0]).resolve() != project.record():
+        return
+    snapshot = snapshot if snapshot is not None else G.Store(project).snapshot()
+    decisions = decisions if decisions is not None else C.Publisher(project)._load()['decisions']
+    meaning = G.meaning_capabilities(destination)
+    for revision, bundle in snapshot['bundles'].items():
+        if revision not in resume and decisions.get(revision, {}).get('state') in C.TERMINAL:
+            continue
+        G.validate_bundle(bundle)
+        if G.meaning_capabilities(bundle['manifest']['document']) != meaning:
+            raise ValueError('pending_profile_reconciliation_required: ' + revision)
+
+
 def prepare(reader, paths, action):
     doc = load(reader, paths)
     try:
@@ -79,11 +102,11 @@ def prepare(reader, paths, action):
                 raise ValueError('requires explicit migration: unreadable hypothesis')
             if any(_promotion_blockers(reader, world, doc) for world in worlds if capabilities(world)['profile'] != PROFILE):
                 raise ValueError('requires explicit migration: existing executable legacy fields')
-            # A frozen writer cannot silently change the live overlay's meaning.
-            live = Snapshot.capture(paths, read_mode='live').to_data()
-            contributions = live['context'].get('pending', {}).get('contributions', [])
-            if contributions:
-                raise ValueError('pending_profile_reconciliation_required')
+            # The raw ledger also contains retired evidence. Only the effective
+            # overlay constrains the destination's interpretation.
+            destination = copy.deepcopy(doc)
+            destination.setdefault('meta', {})['reasoning'] = copy.deepcopy(DECLARATION)
+            pending_compatible(reader, paths, destination)
         for hyp in doc.hypotheses.values():
             cap = capabilities(hyp['doc'])
             if cap['profile'] != PROFILE and _promotion_blockers(reader, hyp['doc'], doc):
