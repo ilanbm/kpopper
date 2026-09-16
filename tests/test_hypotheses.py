@@ -523,20 +523,33 @@ class TheWritePathForks(unittest.TestCase):
             # the standing judgment's wrong_if holds: the new verdict is its repair
             run(SCRIPTS / "provenance.py", "set", "heat.loss_kw", "20", "--as-of", "2026-09-04", rec)
             self.assertEqual(run(SCRIPTS / "provenance.py", "check", rec)[0], 1)
+            # a replacement that rests on less names what it drops, with a reason
             code, out, err = run(SCRIPTS / "provenance.py", "add", "c.boiler_short",
                                  "rests_on=[heat.boiler_kw, heat.loss_kw]",
                                  "verdict=the old boiler holds on the coldest night",
                                  "wrong_if=heat.loss_kw > heat.boiler_kw", "--as-of", "2026-09-04", rec)
+            self.assertEqual(code, 1, out + err)
+            self.assertIn("the new judgment no longer rests on heat.deficit_kw - a dependency dropped is a "
+                          "decision with a reason: add c.boiler_short", out + err)
+            self.assertIn("--drop 'heat.deficit_kw: <why>'", out + err)
+            code, out, err = run(SCRIPTS / "provenance.py", "add", "c.boiler_short",
+                                 "rests_on=[heat.boiler_kw, heat.loss_kw]",
+                                 "verdict=the old boiler holds on the coldest night",
+                                 "wrong_if=heat.loss_kw > heat.boiler_kw", "--as-of", "2026-09-04",
+                                 "--drop", "heat.deficit_kw: worked out from the two it rests on", rec)
             self.assertEqual(code, 0, out + err)
             self.assertIn("supersede c.boiler_short: the old boiler cannot hold 12°C on the coldest February "
                           "nig… -> the old boiler holds on the coldest night - its wrong_if holds "
                           "(heat.loss_kw <= heat.boiler_kw)\n"
+                          "  kept: the replaced verdict, because, in PROVENANCE.replaced.yaml (version 1)\n"
+                          "  no longer rests on heat.deficit_kw: worked out from the two it rests on\n"
                           "the new judgment holds: wrong_if does not hold (heat.loss_kw > heat.boiler_kw)\n", out)
             text = rec.read_text(encoding="utf-8")
             saved = P.yaml.safe_load(text)['judgments']['c.boiler_short']
             saved['wrong_if'] = P.predicate_text(saved['wrong_if'])
             self.assertEqual(saved, {'rests_on': ['heat.boiler_kw', 'heat.loss_kw'],
                 'verdict': 'the old boiler holds on the coldest night', 'wrong_if': 'heat.loss_kw > heat.boiler_kw',
+                'replaced': ['its wrong_if holds (heat.loss_kw <= heat.boiler_kw) on 2026-09-04'],
                 'seen': {'heat.boiler_kw': 24, 'heat.loss_kw': 20}})
             self.assertEqual(text.count("c.boiler_short:"), 1)
             self.assertEqual(run(SCRIPTS / "provenance.py", "check", rec)[0], 0)
@@ -578,9 +591,18 @@ class TheWritePathForks(unittest.TestCase):
             self.assertIn("    request: s.2026_09_04_ask\n",
                           (pathlib.Path(d) / "PROVENANCE.d" / f"{name}.yaml").read_text(encoding="utf-8"))
             code, out, err = run(SCRIPTS / "consolidate.py", name, "--as-of", "2026-09-04", rec)
+            self.assertEqual(code, 1, out + err)
+            self.assertIn(f"refused - a verdict the base's own condition has not broken folds only when a "
+                          f"person names it: consolidate {name} --take c.boiler_short", out + err)
+            self.assertEqual(rec.read_text(encoding="utf-8"), before)
+            code, out, err = run(SCRIPTS / "consolidate.py", name, "--take", "c.boiler_short",
+                                 "--as-of", "2026-09-04", rec)
             self.assertEqual(code, 0, out + err)
-            self.assertIn("    the standing judgment holds, and a person folds this over it\n", out)
+            self.assertIn("    taken by name - the standing judgment holds, and a person takes this over it "
+                          "by name\n", out)
             text = rec.read_text(encoding="utf-8")
+            self.assertIn('    replaced: ["the standing judgment holds, and a person takes this over it by '
+                          'name on 2026-09-04"]\n', text)
             self.assertIn('    verdict: "the old boiler is short by {{heat.deficit_kw}} kW on the coldest '
                           'night"\n', text)
             self.assertIn("    request: s.2026_09_04_ask\n", text)

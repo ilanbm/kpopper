@@ -105,13 +105,15 @@ cannot be introduced by that filtering. Header metadata is not an assessable ent
 its scalar normalization and uses the packaged expression core for structured calculations.
 Source read stamps and judgment verdicts can be displayed as readings but remain uncomparable
 under this profile where the ordinary comparator skips them. When a comparison is unavailable,
-the contract gives a reason instead of labeling it unchanged. No second arithmetic engine is added.
+the contract gives a reason instead of labeling it unchanged. This legacy profile continues to use
+its existing arithmetic engine. The separate [experimental core profile](reasoning-core.md) has a
+versioned result envelope and explicit resource limits; selecting it does not migrate old records.
 
 Existing flags remain a compatibility policy, including their historical lexical coverage of
 text predicates. The focused attention policy uses parsed reads, so an identifier inside a
 quoted literal does not silence a changed dependency. Neither policy replaces the other silently.
 The optional checked-session core still has its own typed comparison and review semantics; this
-release does not claim those semantics have been unified with the ordinary profile.
+legacy profile does not claim those semantics have been unified with the ordinary profile.
 
 `record_revision` binds the supplied record and hypothesis contents, complete typed live
 conflict bodies, and the observed target revision or its unavailability. Export snapshot identity

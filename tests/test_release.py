@@ -8,7 +8,10 @@ import importlib.util
 import json
 import pathlib
 import re
+import subprocess
+import tempfile
 import unittest
+from unittest.mock import patch
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 SCRIPTS = ROOT / ".github" / "scripts"
@@ -113,6 +116,38 @@ class TheChangelog(unittest.TestCase):
 
 
 class WhatIsPublished(unittest.TestCase):
+    def test_bundle_refusal_stops_build_before_output_is_touched(self):
+        with tempfile.TemporaryDirectory() as directory:
+            dist = pathlib.Path(directory) / "dist"
+            dist.mkdir()
+            marker = dist / "existing.txt"
+            marker.write_text("keep", encoding="utf-8")
+            error = subprocess.CalledProcessError(1, ["check-bundles"])
+            with patch.object(P, "DIST", dist), patch.object(P.release, "sh", side_effect=error) as command:
+                with self.assertRaises(subprocess.CalledProcessError):
+                    P.build("1.5.2")
+            self.assertEqual(marker.read_text(encoding="utf-8"), "keep")
+            command.assert_called_once_with(P.sys.executable,
+                str(P.ROOT / "scripts/reasoning/build_runtime.py"), "--check-bundles")
+
+    def test_distribution_build_follows_successful_committed_bundle_gate(self):
+        with tempfile.TemporaryDirectory() as directory:
+            dist = pathlib.Path(directory) / "dist"
+            calls = []
+            def command(*args):
+                calls.append(args)
+                if "--check-bundles" in args:
+                    self.assertFalse(dist.exists())
+                elif "build" in args:
+                    dist.mkdir()
+                    (dist / "kpopper-1.5.2-py3-none-any.whl").write_bytes(b"wheel")
+                    (dist / "kpopper-1.5.2.tar.gz").write_bytes(b"sdist")
+            with patch.object(P, "DIST", dist), patch.object(P.release, "sh", side_effect=command):
+                files = P.build("1.5.2")
+            self.assertEqual(calls[0][-1], "--check-bundles")
+            self.assertEqual(calls[1][1:3], ("-m", "build"))
+            self.assertEqual(len(files), 2)
+
     def test_the_tag_carries_the_version(self):
         self.assertEqual(P.tag_for("1.5.2"), "v1.5.2")
 

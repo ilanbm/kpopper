@@ -31,6 +31,8 @@ labels:
   doc.agent_graph: "How an agent starts a graph"
   prior.local_needs_a_run: "A claim about this project needs a run"
   prior.rust_unwarranted: "A compiled binary is not warranted"
+  s.2026_09_15_branch_verdict_conflicts: "Two branches, one judgment, opposite verdicts"
+  s.2026_09_15_verdict_conflicts_decided: "A reversal folds by its own condition or by name"
   prior.gate_by_consequence: "Who decides, by what being wrong costs"
   prior.ts_direction: "TypeScript for all of it, or none"
   prior.strings_lose_tooling: "Browser code in strings loses its tools"
@@ -84,6 +86,7 @@ tabs:
              s.2026_09_13_worker_and_research, s.2026_09_13_reasoning_overview,
              s.2026_09_13_remove_duplicate_overview, s.2026_09_13_github_releases,
              s.2026_09_14_working_modes, s.2026_09_15_batch_test_race,
+             s.2026_09_15_branch_verdict_conflicts, s.2026_09_15_verdict_conflicts_decided,
              s.2026_09_15_link_spelling, s.2026_09_16_page_address]
     sections:
       - title: How to read what follows

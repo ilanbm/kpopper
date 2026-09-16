@@ -1,0 +1,16 @@
+name = "kpopperReasoning"
+version = "1.0.0"
+defaultTargets = ["kpopper-reasoning"]
+
+[[lean_lib]]
+name = "Kernel"
+
+[[lean_lib]]
+name = "Protocol"
+
+[[lean_lib]]
+name = "Proof"
+
+[[lean_exe]]
+name = "kpopper-reasoning"
+root = "Main"

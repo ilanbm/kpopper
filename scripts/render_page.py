@@ -45,7 +45,7 @@ DATE_JS = "\n" + (_PAGE / "dates.js").read_text(encoding="utf-8")
 # ── what the record says about itself ────────────────────────────────────────
 # One reading of state, used by every section selector. The same four conditions
 # `provenance.py open` ranks by; named here so a brief can select on them.
-STATES = ("broken", "falsified", "unchecked", "moved", "blocked", "no_predicate", "unknown")
+STATES = ("broken", "falsified", "unchecked", "moved", "blocked", "no_predicate", "unknown", "reversed")
 GROUPED_SHAPES = ("grouped", "fronts")
 
 
@@ -677,7 +677,8 @@ def link_target(entry, record_root=None, page_path=None):
 
 
 URGENCY = {"broken": (100, "stop"), "falsified": (95, "stop"), "unchecked": (80, "stop"),
-           "moved": (70, "warn"), "blocked": (60, "warn"), "no_predicate": (40, "mut"), "unknown": (75, "warn")}
+           "moved": (70, "warn"), "blocked": (60, "warn"), "no_predicate": (40, "mut"), "unknown": (75, "warn"),
+           "reversed": (72, "warn")}
 
 # What each state means, said the way a person would say it. The machine name stays -
 # in the hover, where the keys and the rules live. Nothing on the reading surface is
@@ -688,7 +689,8 @@ SAYS = {"broken": "rests on something that is not in this record",
         "unchecked": "has never been checked against one of the things it rests on",
         "blocked": "waiting on something nobody has recorded yet",
         "no_predicate": "nothing here would show it to be wrong",
-        "unknown": "its condition cannot currently be evaluated"}
+        "unknown": "its condition cannot currently be evaluated",
+        "reversed": "its verdict was replaced under this id and nobody has reviewed it since"}
 
 # A human name for an entry belongs to the entry, not to a session: what a thing is
 # does not change because someone opened the page for a different reason. This is the
@@ -870,7 +872,7 @@ def tree_svg(ids, jud, E, J, flags, words=None, label=None):
     ci = ri = 0
     for k in roots + upper:
         f = flags.get(k, set())
-        sev = " stopf" if f - {"blocked", "moved"} else (" warnf" if f else "")
+        sev = " stopf" if f - {"blocked", "moved", "reversed"} else (" warnf" if f else "")
         kind = "crown" if k in jud else ("root" if depth[k] == 0 else "bough")
         r = 9 if kind == "crown" else (5 if kind == "root" else 4)
         o.append(f'<g class="tn {kind}{sev}" data-id="{html.escape(k)}">')

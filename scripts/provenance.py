@@ -112,6 +112,23 @@ def _peer(name):
 import contextvars
 import copy
 _RAW_READS = contextvars.ContextVar('raw_record_reads', default=False)
+# Only the common core loader may consume a declared reasoning profile.
+_CORE_READS = contextvars.ContextVar('core_record_reads', default=False)
+# Strict capture observes actual reads, including cache hits; ordinary reads are inert.
+_CAPTURE_READS = contextvars.ContextVar('record_capture_reads', default=None)
+
+
+def _capture_event(kind, path, value):
+    observer = _CAPTURE_READS.get()
+    if observer is not None:
+        observer(kind, os.path.abspath(path), value)
+
+
+def _capture_glob(pattern):
+    found = glob.glob(pattern)
+    _capture_event('glob', pattern, sorted(map(os.path.abspath, found)))
+    return found
+
 
 
 ID = re.compile(r"[A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z0-9_]+)+")
@@ -255,10 +272,11 @@ def hypotheses_rel(entry):
 def layout(first):
     """Where a record keeps what sits beside it, decided by the name of the file the reader
     opens first. GROUNDING.yaml keeps everything under .kpopper/ beside it - hypotheses/,
-    view.yaml, measure.yaml, session.json, and build/ for what is rebuilt. Records under the
-    earlier default name or a custom name keep PROVENANCE.d/, <record>.view.yaml,
-    PROVENANCE.measure.yaml and PROVENANCE.session.json beside them, as they always did. One
-    home per record: the reader never looks in both."""
+    view.yaml, measure.yaml, session.json, replaced.yaml, and build/ for what is rebuilt.
+    Records under the earlier default name or a custom name keep PROVENANCE.d/,
+    <record>.view.yaml, PROVENANCE.measure.yaml, PROVENANCE.session.json and
+    PROVENANCE.replaced.yaml beside them, as they always did. One home per record: the reader
+    never looks in both."""
     first = os.path.abspath(str(first))
     d = os.path.dirname(first)
     if is_legacy(first):
@@ -268,6 +286,7 @@ def layout(first):
                 "measure": os.path.join(d, "PROVENANCE.measure.yaml"),
                 "measure_name": "PROVENANCE.measure.yaml",
                 "session": os.path.join(d, "PROVENANCE.session.json"),
+                "replaced": os.path.join(d, "PROVENANCE.replaced.yaml"),
                 "build": None, "page": "record.html"}
     home = os.path.join(d, HOME)
     return {"legacy": False, "entry": first, "home": home,
@@ -276,6 +295,7 @@ def layout(first):
             "view": os.path.join(home, "view.yaml"),
             "measure": os.path.join(home, "measure.yaml"), "measure_name": HOME + "/measure.yaml",
             "session": os.path.join(home, "session.json"),
+            "replaced": os.path.join(home, "replaced.yaml"),
             "build": os.path.join(home, "build"), "page": os.path.join(home, "build", "page.html")}
 
 
@@ -294,7 +314,7 @@ def leftovers(paths):
     d = os.path.dirname(lay["entry"])
     other = layout(os.path.join(d, ENTRY if lay["legacy"] else LEGACY_ENTRY))
     out = []
-    for role in ("hypotheses", "view", "measure", "session"):
+    for role in ("hypotheses", "view", "measure", "session", "replaced"):
         there = other[role]
         if not os.path.exists(there):
             continue
@@ -362,6 +382,13 @@ def hypothesis_dir(paths):
 
 def hypothesis_path(paths, name):
     return os.path.join(hypothesis_dir(paths), name + ".yaml")
+
+
+def latest_today():
+    """Today, as the later of the local day and the UTC day: a reading is dated no later than
+    this. A host behind UTC in its evening already has readings dated tomorrow by UTC - the
+    pull request's re-measurement stamps its day in UTC - and those are not from the future."""
+    return max(datetime.date.today(), datetime.datetime.now(datetime.timezone.utc).date())
 
 
 def _as_day(v):
@@ -576,8 +603,13 @@ def parse(path):
     be served the parse of a file as it no longer is: what comes back is the parse of the bytes
     that are there now, or those bytes parsed again."""
     path = os.path.abspath(path)
-    with io.open(path, "rb") as f:
-        data = f.read()
+    try:
+        with io.open(path, "rb") as f:
+            data = f.read()
+    except OSError as error:
+        _capture_event('unreadable', path, type(error).__name__)
+        raise
+    _capture_event('bytes', path, data)
     if os.environ.get(NO_CACHE, "") not in ("", "0"):
         return yaml.safe_load(data.decode("utf-8"))
     try:
@@ -604,9 +636,10 @@ def load_hypotheses(paths):
     fails it and nothing passes over it in silence."""
     out = {}
     d = hypothesis_dir(paths)
+    _capture_event('directory', d, os.path.isdir(d))
     if not os.path.isdir(d):
         return out
-    for f in sorted(glob.glob(os.path.join(d, "*.yaml")) + glob.glob(os.path.join(d, "*.yml"))):
+    for f in sorted(_capture_glob(os.path.join(d, "*.yaml")) + _capture_glob(os.path.join(d, "*.yml"))):
         name = re.sub(r"\.ya?ml$", "", os.path.basename(f))
         hyp = _hypothesis(name, f)
         try:
@@ -622,6 +655,10 @@ def load_hypotheses(paths):
             hyp["ids"] = {k for m in collections_of(body).values() for k in m}
         except (yaml.YAMLError, ValueError) as e:
             hyp["error"] = " ".join(str(e).split())[:120]
+        except OSError as e:
+            if _CAPTURE_READS.get() is None:
+                raise
+            hyp["error"] = type(e).__name__
         out[name] = hyp
     return out
 
@@ -828,12 +865,14 @@ def load(paths, *, read_mode=None):
                 if not (isinstance(c, str) and c.endswith((".yaml", ".yml"))):
                     continue
                 cf = os.path.join(os.path.dirname(f), c)
+                _capture_event('exists', cf, os.path.exists(cf))
                 if os.path.abspath(cf) in seen or not os.path.exists(cf):
                     continue
                 merge(cf, parse(cf) or {})
 
     for p in paths:
-        for f in sorted(glob.glob(p)) or [p]:
+        for f in sorted(_capture_glob(p)) or [p]:
+            _capture_event('exists', f, os.path.exists(f))
             if not os.path.exists(f):
                 if not _RAW_READS.get() and (read_mode or os.environ.get('KPOPPER_READ_MODE', 'live')) == 'live' and _peer('knowledge_views').has_pending(paths):
                     doc['meta'] = {}
@@ -843,7 +882,20 @@ def load(paths, *, read_mode=None):
             merge(f, parse(f) or {})
     doc.hypotheses = load_hypotheses(paths)
     mode = read_mode or ('frozen' if _RAW_READS.get() else os.environ.get('KPOPPER_READ_MODE', 'live'))
-    return _peer('knowledge_views').overlay(paths, doc, read_mode=mode)
+    doc = _peer('knowledge_views').overlay(paths, doc, read_mode=mode)
+    # A dormant profile must not be interpreted by legacy check/page/session paths.
+    # Attached proposals retain their own declared semantics as well as the base.
+    for document in [doc, *(hyp['doc'] for hyp in doc.hypotheses.values())]:
+        meta = document.get('meta')
+        if isinstance(meta, dict) and 'reasoning' in meta:
+            contract = _peer('reasoning.contract')
+            try:
+                contract.capabilities(document)
+            except contract.CapabilityError as error:
+                raise Refused(error.code + ': ' + str(error)) from None
+            if not _CORE_READS.get():
+                raise Refused('unsupported_capability: use core/v1 consumer')
+    return doc
 
 
 def collections_of(doc):
@@ -1851,6 +1903,12 @@ def check_lines(paths):
                 was, is_ = apart(old, now)
                 moved.append(f"{name}: {dep} differs from its snapshot "
                              f"({was} -> {is_}) - re-review, or refresh seen")
+        # A verdict replaced under its id is a question for a person, not a failure: the
+        # replacement passed the door, and the trail says so until someone reviews it
+        day = reversal_pending(j["body"]) if not is_arrangement(j, raw) else None
+        if day:
+            note.append(f"{name}: reversed on {day} - the verdict under this id changed; review it "
+                        f"once read, or pull {name} --history")
     # What the record stands on: one line, printed and never failed on - the confidences are
     # the record's to defend, and a count of them is not a problem with it.
     priors = priors_line(ids, jud, raw)
@@ -1974,6 +2032,10 @@ def opening(paths, budget=25, chars=None, host=None):
             if state == "moved":
                 was, is_ = apart(old, now, 28)
                 items.append((70, name, f"{dep} differs from what it last saw: {was} -> {is_}"))
+        day = reversal_pending(j["body"]) if not is_arrangement(j, raw) else None
+        if day:
+            items.append((75, name, f"reversed on {day} - the verdict under this id changed; review "
+                                    f"it once read, or pull {name} --history"))
     # an id two hypotheses disagree on is ranked above everything: nothing decides it but a
     # person, and consolidation will refuse to run over it
     for k, hs in contested(doc).items():
@@ -2038,6 +2100,15 @@ def opening(paths, budget=25, chars=None, host=None):
     waiting = hypothesis_line(doc)
     if waiting:
         head.append(waiting)
+    # readings that moved while only a replaced judgment listened: nothing standing will
+    # ever flag them, so the opener says how many and names the first
+    lost = lost_ears(paths, ids, jud, raw)
+    if lost:
+        k, jid, day = lost[0]
+        head.append(f"{len(lost)} reading{'s' if len(lost) != 1 else ''} moved that only a replaced "
+                    f"judgment listened to: {k} ({jid} until {day})"
+                    + (f" and {len(lost) - 1} more" if len(lost) > 1 else "")
+                    + f" - pull {jid} --history")
     # a record moved by half: what sits beside the entry file under the other layout is
     # read by nothing, and this is where a session would otherwise never learn it
     left = leftover_head(paths)
@@ -3155,6 +3226,242 @@ def arrangement_renewal(old, ended, stamp, stood=None):
                                  + f"; {ended} on {stamp}"]}
 
 
+def judgment_renewal(old, ended, stamp):
+    """What a write leaves on a judgment it replaces in place -> the one field: one line
+    appended to `replaced:` naming what ended the decision it replaces and the day, so the
+    sequence of decisions reads from the record alone; the body it replaced is kept whole
+    beside the record (`keep_replaced`), one version per line. The replacing body's own
+    lines - a branch's history - are not carried: the base's trail is the base's, and the
+    branch keeps its own. Written by `add` when the door admits the replacement, and by
+    the fold."""
+    prior = old.get("replaced") or []
+    prior = [prior] if isinstance(prior, str) else list(prior)
+    return {"replaced": prior + [f"{ended} on {stamp}"]}
+
+
+TRAIL_FIELDS = ("replaced",)          # written by this tool on the judgment that replaced
+
+
+def replaced_path(paths):
+    """Where the record keeps the judgments its writes replaced: `.kpopper/replaced.yaml`
+    beside a record under the new name, `PROVENANCE.replaced.yaml` beside one under the old."""
+    return layout_of(paths)["replaced"]
+
+
+def read_replaced(paths):
+    """The kept versions of every replaced judgment -> {id: [version, ...]}, oldest first;
+    {} when nothing was ever replaced. A version is the body a replacement removed, whole,
+    with `ended` (what admitted the replacement) and `day`; one equal to an earlier version
+    is kept as {same_as: <version number, from 1>, ended, day} - a return, not a copy."""
+    p = replaced_path(paths)
+    if not os.path.isfile(p):
+        return {}
+    try:
+        data = parse(p) or {}          # the reader's one parser: kept against the file's identity
+    except yaml.YAMLError:
+        return {}
+    return {k: v for k, v in data.items() if isinstance(v, list)} if isinstance(data, dict) else {}
+
+
+def _version_core(v):
+    """What tells two kept versions apart: the decision itself, not what it saw or when."""
+    return {k: x for k, x in v.items()
+            if k not in ("seen", "reviewed", "born", "replaced", "ended", "day", "same_as", "dropped")}
+
+
+def version_at(versions, n):
+    """Kept version n, counted from 1, with a pointer followed -> the body it stands for. A
+    pointer that leads nowhere - out of range, or round in a circle - stands for itself."""
+    v = versions[n - 1]
+    hops = 0
+    while isinstance(v, dict) and "same_as" in v and hops < len(versions):
+        try:
+            v = versions[int(v["same_as"]) - 1]
+        except (ValueError, TypeError, IndexError):
+            break
+        hops += 1
+    return v
+
+
+def keep_replaced(paths, nid, old, ended, stamp, dropped=None):
+    """One version kept beside the record: the body a replacement removed - its verdict, its
+    why, whose asking it answered, what it rested on, its condition, what it saw - with what
+    ended it and the day; the dependencies the replacement dropped, each with its reason
+    when one was given. A body equal to a version already kept is kept as a pointer to it.
+    Written at the moment of replacement and read only when asked, so the file grows with
+    reversals and never with the record. -> the version's index."""
+    kept = read_replaced(paths)
+    versions = kept.setdefault(nid, [])
+    body = {k: copy.deepcopy(v) for k, v in old.items() if k not in TRAIL_FIELDS}
+    if isinstance(body.get("wrong_if"), dict):
+        body["wrong_if"] = predicate_text(body["wrong_if"])
+    core = _version_core(body)
+    version = None
+    for n in range(1, len(versions) + 1):
+        if _version_core(version_at(versions, n)) == core:
+            version = {"same_as": n}
+            break
+    if version is None:
+        version = body
+    version["ended"] = ended
+    version["day"] = stamp
+    if dropped:
+        version["dropped"] = dict(dropped)
+    versions.append(version)
+    p = replaced_path(paths)
+    os.makedirs(os.path.dirname(p), exist_ok=True)
+    text = yaml.safe_dump(kept, allow_unicode=True, sort_keys=False, width=100)
+    _write_text(p, "# Judgments this record's writes replaced, kept whole - read with "
+                   "`kpopper pull <id> --history`.\n" + text)
+    return len(versions)
+
+
+def returns_to(paths, nid, body):
+    """A kept version the body being written returns to -> (number from 1, version, exact) or
+    None: exact when the decision is the one kept - verdict, why, dependencies, condition -
+    else the verdict alone, on other grounds. A decision that stood before and fell is not a
+    fresh decision, and the write that brings it back is told so."""
+    versions = read_replaced(paths).get(nid) or []
+    want = _verdict_of(body)
+    if want is None:
+        return None
+    core = _version_core({k: v for k, v in body.items() if k not in TRAIL_FIELDS})
+    if isinstance(core.get("wrong_if"), dict):
+        core["wrong_if"] = predicate_text(core["wrong_if"])
+    found = None
+    for n in range(1, len(versions) + 1):
+        v = version_at(versions, n)
+        if not isinstance(v, dict) or _verdict_of(v) is None or not _same(_verdict_of(v), want):
+            continue
+        if _version_core(v) == core:
+            return n, versions[n - 1], True
+        found = found or (n, versions[n - 1], False)
+    return found
+
+
+def _text_of_or_none(path):
+    if not os.path.isfile(path):
+        return None
+    with io.open(path, encoding="utf-8") as f:
+        return f.read()
+
+
+REPLACED_DAY = re.compile(r" on (\d{4}-\d{2}-\d{2})$")
+
+
+def reversal_pending(body):
+    """The day a judgment's verdict was last replaced under its id, when nobody has reviewed
+    it since -> "YYYY-MM-DD", else None. The trail line carries the day; `reviewed:` is
+    what clears it, and review writes that field on a judgment that carries a trail."""
+    if not isinstance(body, dict):
+        return None
+    lines = body.get("replaced") or []
+    lines = [lines] if isinstance(lines, str) else list(lines)
+    if not lines:
+        return None
+    m = REPLACED_DAY.search(str(lines[-1]))
+    if not m:
+        return None
+    day = m.group(1)
+    seen = _as_day(body.get("reviewed"))
+    return None if seen and seen.isoformat() >= day else day
+
+
+def listened_until(kept, dep):
+    """The replaced judgments that rested on `dep` where nothing standing does now ->
+    [(judgment id, day it stopped listening, what it saw)], latest version per judgment;
+    `kept` is what `read_replaced` returned, read once by the caller."""
+    out = []
+    for jid, versions in sorted(kept.items()):
+        last = None
+        for n in range(1, len(versions) + 1):
+            v = version_at(versions, n)
+            deps = v.get("rests_on") if isinstance(v, dict) else None
+            if isinstance(deps, list) and dep in deps:
+                seen = v.get("seen") if isinstance(v.get("seen"), dict) else {}
+                last = (jid, versions[n - 1].get("day"), seen.get(dep))
+        if last:
+            out.append(last)
+    return out
+
+
+def lost_ears(paths, ids, jud, raw):
+    """Readings that moved while only a replaced judgment listened to them -> [(id, judgment,
+    day)]: no standing judgment rests on the reading, a kept version did, and the value now
+    differs from what that version saw. Said once in the opener, in one line."""
+    kept = read_replaced(paths)
+    if not kept:
+        return []
+    listened = {d for j in jud.values() for d in j["deps"]}
+    out = []
+    for k in sorted(ids):
+        if k in jud or k in listened or is_builtin(k):
+            continue
+        now = value_of(raw, ids, k)
+        for jid, day, saw in listened_until(kept, k):
+            if saw is not None and now is not None and not _same(saw, now):
+                out.append((k, jid, day))
+                break
+    return out
+
+
+def history_lines(paths, names):
+    """The kept versions of the judgments named, oldest first, for `pull --history`."""
+    kept = read_replaced(paths)
+    where = os.path.relpath(replaced_path(paths), os.path.dirname(_first_of(paths)))
+    out = []
+    for nid in names:
+        versions = kept.get(nid) or []
+        if not versions:
+            continue
+        out.append(f"history of {nid}: {len(versions)} version{'s' if len(versions) != 1 else ''} "
+                   f"kept in {where}")
+        for n, v in enumerate(versions, 1):
+            head = f"  {n}. until {v.get('day')} - {v.get('ended')}"
+            if "same_as" in v:
+                out.append(head + f" (the same decision as version {v['same_as']})")
+                continue
+            out.append(head)
+            for f in ("verdict", "because"):
+                if v.get(f):
+                    out.append(f"     {f}: {short(str(v[f]), 100)}")
+            deps = v.get("rests_on")
+            if isinstance(deps, list):
+                out.append("     rests_on: [" + ", ".join(str(d) for d in deps) + "]")
+            if v.get("wrong_if"):
+                out.append(f"     wrong_if: {predicate_text(v['wrong_if'])}")
+            if v.get("request"):
+                out.append(f"     request: {v['request']}")
+            for d, why in (v.get("dropped") or {}).items():
+                out.append(f"     no longer rested on {d}: {why}")
+    return out
+
+
+def dropped_deps(old, new, fields):
+    """The dependencies the replacing body no longer rests on -> [id]."""
+    was = old.get(fields["deps"]) if fields["deps"] else None
+    now = new.get(fields["deps"]) if fields["deps"] else None
+    was = [d for d in was if isinstance(d, str)] if isinstance(was, list) else []
+    now = [d for d in now if isinstance(d, str)] if isinstance(now, list) else []
+    return [d for d in was if d not in now]
+
+
+def trail_lines(paths, nid, old, new, fields, drops=None, index=None):
+    """What the reply says about a replacement: what was kept, what the new decision no
+    longer rests on and why, and whether it returns to a decision that stood before."""
+    out = []
+    gone = [f for f in ("verdict", "because", "request") if f in old]
+    where = os.path.relpath(replaced_path(paths), os.path.dirname(_first_of(paths)))
+    out.append(f"  kept: the replaced {', '.join(gone) if gone else 'body'}, in {where}"
+               + (f" (version {index})" if index is not None else ""))
+    dropped = dropped_deps(old, new, fields)
+    if dropped:
+        drops = drops or {}
+        out.append("  no longer rests on " + "; ".join(
+            f"{d}: {drops[d]}" if drops.get(d) else d for d in dropped))
+    return out
+
+
 def _read_on(body, raw):
     """The day an entry's value was read: its own `of` or `read`, else its source's read date -
     a day is the finest clock the record keeps. None when nothing dates it."""
@@ -3182,7 +3489,7 @@ def may_supersede(nid, existing, new, raw, ids, jud, fields, as_of=None, page=No
     else its source's read date; a day is the finest clock the record keeps, and a value
     nothing dates is superseded by one something does. A judgment: when the standing one's
     wrong_if holds now - it is broken, and the new verdict is its repair - or when
-    `by_hand`, the fold a person runs. Nothing inside the write itself opens it: every
+    `by_hand`, a fold in which a person named the id (`--take`). Nothing inside the write itself opens it: every
     session's first write is a source carrying what it was asked, so a field that read a
     person's authority off one would hand every session the key to every standing judgment.
     Everything else contradicts, and a contradiction forks - into a hypothesis a person
@@ -3215,7 +3522,7 @@ def may_supersede(nid, existing, new, raw, ids, jud, fields, as_of=None, page=No
         if evaluate(jud[nid]["pred"], raw, ids) is True:
             return True, f"its wrong_if holds ({short(jud[nid]['pred'], 60)})"
         if by_hand:
-            return True, "the standing judgment holds, and a person folds this over it"
+            return True, "the standing judgment holds, and a person takes this over it by name"
         return False, "the standing judgment holds, and its wrong_if has not fired"
     when = _read_on(existing, raw)
     stamp = _as_day(as_of) or datetime.date.today()
@@ -3225,6 +3532,9 @@ def may_supersede(nid, existing, new, raw, ids, jud, fields, as_of=None, page=No
         return True, f"a reading from {stamp} that is newer than the base's"
     return False, ("a reading of the same day" if stamp == when
                    else f"a reading from {stamp} that is older than the base's")
+
+
+JUDGMENT_KINDS = ("verdict", "grounds", "arrangement")   # what _disagreement says of a judgment
 
 
 def _disagreement(a, body, raw, ids, jud, fields, page=None):
@@ -3241,18 +3551,20 @@ def _disagreement(a, body, raw, ids, jud, fields, page=None):
         old, new = _verdict_of(jud[k]["body"]), _verdict_of(a["body"])
         if old is None or new is None:
             return None
+        kind = "verdict"
         if _same(old, new):
-            if not is_arrangement(jud[k], raw):
-                return None
-            skip = ("born", "replaced")
+            skip = ("born", "replaced", "reviewed")
             was = {f: v for f, v in jud[k]["body"].items()
                    if f not in skip and f != fields["snapshot"]}
             now = {f: v for f, v in a["body"].items() if f not in skip and f != fields["snapshot"]}
             if was == now:
                 return None
+            # the same verdict on other grounds - another why, other dependencies, another
+            # condition - is a decision written again, and the same door decides it
+            kind = "arrangement" if is_arrangement(jud[k], raw) else "grounds"
         may, why = may_supersede(k, jud[k]["body"], a["body"], raw, ids, jud, fields,
                                  a.get("as_of"), page)
-        return "verdict", old, new, may, why, None
+        return kind, old, new, may, why, None
     if not isinstance(body, dict):
         return None
     old = value_of(raw, ids, k)
@@ -3298,6 +3610,8 @@ def _command_of(a, name):
                      ("--source", "source"), ("--at", "at")):
         if a.get(key):
             parts += [opt, str(a[key])]
+    for d, why in (a.get("drops") or {}).items():
+        parts += ["--drop", f"{d}: {why}"]
     parts += ["--hypothesis", name]
     return " ".join(p if p.startswith("--") else shlex.quote(p) for p in parts)
 
@@ -3349,13 +3663,20 @@ def _forks_on_contradiction(a, doc, ids, jud, fields, raw):
         return out
     if k in ids:
         d = _disagreement(a, raw.get(k), raw, ids, jud, fields, getattr(doc, "page", None))
-        if d and not (d[0] == "verdict" and d[3]):        # a verdict that may supersede replaces
+        if d and not (d[0] in JUDGMENT_KINDS and d[3]):   # a judgment that may supersede replaces
             kind, old, new, newer, why, when = d
-            name = _hypothesis_name(doc, k, new)
+            name = _hypothesis_name(doc, k, str(new) + " (regrounded)" if kind == "grounds" else new)
             if kind == "verdict":
                 out.append(f"{k} is already a judgment, concluding {short(old, 60)!r} - {why}, so a "
                            f"different verdict under the same id contradicts it, and a hypothesis "
                            f"holds the other: {_command_of(a, name)}")
+            elif kind == "grounds":
+                out.append(f"{k} is already a judgment concluding the same, on other grounds - {why}, "
+                           f"so the same verdict on other grounds is a decision written again, and a "
+                           f"hypothesis holds it until a person takes it: {_command_of(a, name)}")
+            elif kind == "arrangement":
+                out.append(f"{k} is already this arrangement - {why}, so a hypothesis holds the "
+                           f"re-decision: {_command_of(a, name)}")
             elif newer:
                 out.append(f"{k} is already an entry, holding {short(old)}"
                            + (f" as of {when}" if when else "")
@@ -3383,6 +3704,64 @@ def _forks_on_contradiction(a, doc, ids, jud, fields, raw):
             out.append(f"{how} {dep}, which only hypothes{'is' if len(held) == 1 else 'es'} "
                        f"{', '.join(held)} hold{'s' if len(held) == 1 else ''} - what rests on a "
                        f"hypothesis goes into it: {_command_of(a, held[0])}")
+    return out
+
+
+def _not_from_the_future(a, doc, ids, jud, fields, raw):
+    """An entry's own day - of:, read: - is a reading's place in the record's clock, and a
+    day ahead of today would outrank every reading of today: refused, dated when read."""
+    if a["kind"] != "add" or not isinstance(a.get("body"), dict):
+        return []
+    today = latest_today()
+    out = []
+    for f in ("of", "read"):
+        day = _as_day(a["body"].get(f))
+        if day and day > today:
+            out.append(f"{f}: {a['body'][f]} is after today ({today.isoformat()}) - a reading is dated "
+                       f"the day it was read, never ahead")
+    return out
+
+
+def _trail_is_tool_written(a, doc, ids, jud, fields, raw):
+    """`replaced:` is the trail this tool leaves on a judgment that replaced another - on
+    every judgment, not only an arrangement - and a session cannot write a history."""
+    if a["kind"] != "add" or not isinstance(a.get("body"), dict):
+        return []
+    if _arrangement_shaped(a["body"], fields, raw):
+        return []                                    # _arrangement_is_sound says it
+    if "replaced" in a["body"]:
+        return ["replaced is written by this tool, when a decision replaces another - leave it out"]
+    return []
+
+
+def _drops_are_named(a, doc, ids, jud, fields, raw):
+    """A replacement that rests on less than the judgment it replaces stops listening to
+    something - a decision, not a side effect - so each dependency dropped is named with
+    its reason (--drop "<id>: <why>"), and the reason is kept with the replaced version."""
+    if a["kind"] != "add" or not isinstance(a.get("body"), dict) or a.get("hypothesis"):
+        return []
+    k = a["id"]
+    if k not in jud or not _judgment_shaped(a["body"], fields):
+        return []
+    if _arrangement_shaped(a["body"], fields, raw) or is_arrangement(jud[k], raw):
+        return []          # an arrangement re-decided changes the count its sign is over
+    d = _disagreement(a, raw.get(k), raw, ids, jud, fields, getattr(doc, "page", None))
+    if not d or not (d[0] in JUDGMENT_KINDS and d[3]):
+        return []                                    # refused anyway, or nothing replaces
+    drops = a.get("drops") or {}
+    old = jud[k]["body"]
+    gone = dropped_deps(old, a["body"], fields)
+    out = []
+    unnamed = [x for x in gone if x not in drops]
+    if unnamed:
+        cmd = " ".join(["add", k] + [p for p in _command_of(a, "_").split(" --hypothesis ")[0].split(" ")[2:]]
+                       + [f"--drop {shlex.quote(x + ': <why>')}" for x in unnamed])
+        out.append(f"the new judgment no longer rests on {', '.join(unnamed)} - a dependency "
+                   f"dropped is a decision with a reason: {cmd}")
+    stray = [x for x in drops if x not in gone]
+    if stray:
+        out.append(f"--drop names {', '.join(stray)}, which the new judgment "
+                   f"{'still rests on' if any(x in (a['body'].get(fields['deps']) or []) for x in stray) else 'never rested on here'}")
     return out
 
 
@@ -3517,8 +3896,10 @@ def normalize_authored(action, ids, fields, raw):
 # them; the entries nearest a new one are said just before it.
 VALIDATORS = [_known_key, _sound_dependencies, _sound_references, _sound_citation, _reopener_is_prose,
               _structured_is_sound,
-              _arrangement_is_sound, _request_names_the_asking, _not_born_broken,
-              _measure_is_a_name, _nearest_existing, _forks_on_contradiction]
+              _arrangement_is_sound, _not_from_the_future, _trail_is_tool_written,
+              _request_names_the_asking,
+              _not_born_broken, _measure_is_a_name, _nearest_existing, _forks_on_contradiction,
+              _drops_are_named]
 
 
 def validate(action, doc, ids, jud, fields, raw):
@@ -4279,6 +4660,7 @@ def _apply(paths, action, diagnostics=None):
     stamp = action.get("as_of") or datetime.date.today().isoformat()
     kind, nid = action["kind"], action["id"]
     brief = _brief_beside(paths[0])
+    side, side_before = replaced_path(paths), None     # the kept versions, restored with the record
     if kind == "review" and nid not in jud and brief:
         action["section"] = nid
     # an arrangement's write is held against the page - its counts, and what the brief
@@ -4353,12 +4735,32 @@ def _apply(paths, action, diagnostics=None):
         if action.get("source") is not None:
             out.append(f"source: {action['source']}, at {action['at']}")
     elif kind == "add" and supersede:
-        _, why = may_supersede(nid, jud[nid]["body"], body, raw, ids, jud, fields, action.get("as_of"),
-                               facts)
-        was = str(_verdict_of(jud[nid]["body"]) or nid)
+        old = jud[nid]["body"]
+        _, why = may_supersede(nid, old, body, raw, ids, jud, fields, action.get("as_of"), facts)
+        was = str(_verdict_of(old) or nid)
+        if not arranged:
+            # the trail an arrangement already carries, on every judgment: one line on the
+            # judgment, the body it replaced kept whole beside the record
+            extra = judgment_renewal(old, why, stamp)
+            body = {k: v for k, v in body.items() if k not in extra and k != snapshot_field}
+            body.update(extra)
+            body[snapshot_field] = seen
+            action["body"] = body
+        back = returns_to(paths, nid, body)
+        side_before = _text_of_or_none(side)
+        index = keep_replaced(paths, nid, old, why, stamp, action.get("drops"))
         _replace_in(lines, nid, body)
-        out.append("supersede {}: {} -> {} - {}".format(
-            nid, *apart(was, _verdict_of(body), 60), why))
+        if _same(was, str(_verdict_of(body) or nid)):
+            out.append(f"supersede {nid}: the same verdict on other grounds - {why}")
+        else:
+            out.append("supersede {}: {} -> {} - {}".format(
+                nid, *apart(was, _verdict_of(body), 60), why))
+        out += trail_lines(paths, nid, old, body, fields, action.get("drops"), index)
+        if back:
+            n, v, exact = back
+            out.append(f"  returns to {'version' if exact else 'the verdict of version'} {n}"
+                       + ("" if exact else ", on other grounds")
+                       + f" - it stood until {v.get('day')} and fell because {v.get('ended')}")
     elif kind == "add":
         # a collection the file lacks - the first judgment, a newborn record's first
         # section - is opened at the end, and the entry is its first member
@@ -4376,6 +4778,11 @@ def _apply(paths, action, diagnostics=None):
             e = _seen_lines(lines, s, e, snapshot_field, seen)
         if _field_span(lines, s, e, "reviewed"):
             _stamp_field(lines, s, e, "reviewed", stamp, None)
+        elif "replaced" in j["body"] and not arrangement:
+            # a judgment that carries a trail keeps the day it was last read, so the
+            # reversal the trail records stops asking once someone has reviewed it; an
+            # arrangement's day is its born, renewed by the re-decision itself
+            _stamp_field(lines, s, e, "reviewed", stamp, "replaced")
         out.append(f"review {nid}: " + (f"seen rewritten from what the record holds ({stamp})"
                                         if changed else f"what it saw is what the record holds ({stamp})"))
         for d in j["deps"]:
@@ -4446,6 +4853,12 @@ def _apply(paths, action, diagnostics=None):
             shape, facts2 = _page_side(paths)[1:]
     except (Exception, SystemExit) as e:
         _write_text(target, original)
+        if side_before is not None or os.path.isfile(side):
+            if side_before is None:
+                os.remove(side)
+                forget(side)
+            else:
+                _write_text(side, side_before)
         raise Refused(f"the write broke the record and was undone: {e}")
     # an arrangement's review also rewrites the shape it stood on - every tab it governs -
     # once the record is safely written, so a failed write leaves the brief as it was
@@ -4500,6 +4913,8 @@ def _report(paths, kind, nid, doc, ids, jud, fields, raw):
             print("  " + _state_line(name, jud[name], raw, ids, fields, touched=moved))
     elif kind == "set":
         print("nothing rests on it")
+        for jid, day, _ in listened_until(read_replaced(paths), nid):
+            print(f"  listened to by nothing standing - {jid} listened until {day}: pull {jid} --history")
     texts = _texts_that_saw(paths, [nid] + derived)
     if texts:
         print("text that saw it:")
@@ -4760,7 +5175,9 @@ with asked/file/url/of/read and no v/quoted/rule, not a judgment or computed val
 checks the recorded source identity, not the contents or availability of an external source. Omitting
 these options retains the existing citation. A citation-only change is written even
 when the value is unchanged. This option uses from/at; entries with src/source fields
-must reconcile those fields first. Judgment snapshots are never refreshed by set.
+must reconcile those fields first. Judgment snapshots are never refreshed by set. A reading dated
+after today is refused: a day is the record's clock, and a day ahead would outrank every reading
+of today.
 
 A reading newer than the one the base holds - its `of:`, else its source's read date -
 updates it. One of the same day or earlier that differs is a contradiction: refused into
@@ -4792,8 +5209,18 @@ takes - is born when it is written: `born` is stamped like `seen`, and its sign 
 comparison that can hold. Written again under its own id it is re-decided: admitted when its
 sign holds with its tabs intact; refused twice in a day, once the brief no longer carries
 what it decided, or while the sign has not fired - and a refusal names the hypothesis a
-person folds; `replaced:` keeps each decision it replaced, one line. `request:
-s.<date>_<slug>` names whose asking any judgment was taken from, and admits nothing.""",
+person folds. `request: s.<date>_<slug>` names whose asking any judgment was taken from,
+and admits nothing.
+
+A judgment written under a standing judgment's id, once the standing one is broken by its
+own condition, replaces it in place - and the replacement leaves a trail: one line appended
+to `replaced:` on the judgment, saying what ended the decision it replaced and the day, and
+the replaced body kept whole in `.kpopper/replaced.yaml` beside the record (its verdict,
+because, request, rests_on, wrong_if, seen). The reply says what was kept and what the new
+judgment no longer rests on. A replacement that drops a dependency is refused until each
+dropped id is named with its reason: `--drop "<id>: <why>"`, kept with the version. One
+whose verdict a kept version already held is told that it returns to it. `replaced:` is
+written by this tool on every judgment; a write that carries one is refused.""",
     "review": """  review <id> [--as-of YYYY-MM-DD] [--hypothesis NAME] [file]
   review "<section title>"
 
@@ -4811,7 +5238,7 @@ def write_command(cmd, rest):
     if "--help" in rest or "-h" in rest:
         print(HELP[cmd].strip("\n"))
         return 0
-    opts, args = {}, []
+    opts, args, drops = {}, [], {}
     i = 0
     while i < len(rest):
         a = rest[i]
@@ -4819,6 +5246,16 @@ def write_command(cmd, rest):
             if i + 1 >= len(rest):
                 raise Refused(f"{a} needs a value")
             opts[a[2:].replace("-", "_")] = rest[i + 1]
+            i += 2
+            continue
+        if a == "--drop":
+            if i + 1 >= len(rest) or ":" not in rest[i + 1]:
+                raise Refused('--drop takes "<id>: <why>" - the dependency the new judgment no '
+                              'longer rests on, and the reason')
+            d, why = rest[i + 1].split(":", 1)
+            if not d.strip() or not why.strip():
+                raise Refused('--drop takes "<id>: <why>" - both halves')
+            drops[d.strip()] = why.strip()
             i += 2
             continue
         args.append(a)
@@ -4829,6 +5266,10 @@ def write_command(cmd, rest):
     as_of = opts.get("as_of")
     if as_of and not re.match(r"^\d{4}-\d{2}-\d{2}$", as_of):
         raise Refused("--as-of takes a date, YYYY-MM-DD")
+    if as_of and _as_day(as_of) and _as_day(as_of) > latest_today():
+        raise Refused(f"--as-of {as_of} is after today ({latest_today().isoformat()}) - a day is "
+                      f"the record's clock, and a reading dated ahead would outrank every reading of "
+                      f"today; date it the day it was read")
     if opts.get("why") and "\n" in opts["why"]:
         raise Refused("--why is one line: a second line would be a line of the record")
     if opts.get("hypothesis") and not HYPOTHESIS_NAME.match(opts["hypothesis"]):
@@ -4836,6 +5277,10 @@ def write_command(cmd, rest):
                       "becomes <name>.yaml in the hypotheses directory beside the record")
     action = {"kind": cmd, "id": nid, "as_of": as_of, "why": opts.get("why"), "into": opts.get("in"),
               "hypothesis": opts.get("hypothesis"), "source": opts.get("source"), "at": opts.get("at")}
+    if drops:
+        if cmd != "add":
+            raise Refused("--drop goes with add, on a judgment that replaces a standing one")
+        action["drops"] = drops
     if cmd == "set":
         if not args:
             raise Refused("set needs a value: set <key> <value>")
@@ -5014,14 +5459,22 @@ if __name__ == "__main__":
         files = [x for x in rest if x.endswith((".yaml", ".yml"))] or default_paths()
         sys.exit(affects(files, [x for x in rest if not x.endswith((".yaml", ".yml"))]))
     if cmd == "pull":
-        b, seeds, files = 40, [], []
+        b, seeds, files, history = 40, [], [], False
         i = 0
         while i < len(rest):
             if rest[i] == "--budget":
                 b = int(rest[i + 1]); i += 2; continue
+            if rest[i] == "--history":
+                history = True; i += 1; continue
             (files if rest[i].endswith((".yaml", ".yml")) else seeds).append(rest[i])
             i += 1
-        sys.exit(pull(files or default_paths(), seeds, b))
+        code = pull(files or default_paths(), seeds, b)
+        if history:
+            lines = history_lines(files or default_paths(), seeds)
+            print()
+            for l in lines or ["no replaced version is kept for " + ", ".join(seeds)]:
+                print(l)
+        sys.exit(code)
     files = [x for x in rest if x.lower().endswith((".yaml", ".yml"))] or default_paths()
     if cmd == "open":
         b = int(rest[rest.index("--budget") + 1]) if "--budget" in rest else 25

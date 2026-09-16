@@ -230,6 +230,8 @@ def reader_flags(state, judgment, raw, ids, fields, defer_counts=False):
         flags.add('unknown')
     if any(disposition == 'moved' for _, _, _, disposition in P.moved_deps(judgment, raw, ids)):
         flags.add('moved')
+    if P.reversal_pending(judgment['body']) and not P.is_arrangement(judgment, raw):
+        flags.add('reversed')
     return flags
 
 
@@ -255,6 +257,7 @@ def selected_attention(report, ids=None, actions=None):
 
 def assess(doc, ids, judgments, fields, raw, policy=POLICY):
     """Assess the supplied base and disclose hypotheses inspected beside it."""
+    P._peer('reasoning.contract').capabilities(doc, profile=PROFILE)
     entries = {nid for section, members in P.collections_of(doc).items()
                if section != 'meta' for nid in members}
     ids = {nid for nid in ids if nid in entries or P.is_builtin(nid)}
@@ -313,8 +316,15 @@ def assess(doc, ids, judgments, fields, raw, policy=POLICY):
                 'states': {nid: node['state'] for nid, node in nodes.items()}})}
 
 
-def load(paths, policy=POLICY):
+def load(paths, policy=POLICY, *, profile=PROFILE, as_of=None, selection=None):
+    if profile == 'core/v1':
+        core = P._peer('reasoning.assessment')
+        snapshot = P._peer('reasoning.snapshot').Snapshot.capture(paths, as_of=as_of)
+        return core.assess(snapshot, selection, policy=policy)
     doc = P.load(paths)
+    P._peer('reasoning.contract').capabilities(doc, profile=profile)
+    if as_of is not None:
+        raise ValueError('--as-of is available on the explicit core/v1 assessment profile')
     try:
         ids, judgments, fields = P.infer(doc)
     except TypeError as error:
@@ -330,10 +340,14 @@ def main(argv=None):
     parser.add_argument('ids', nargs='+', help='exact IDs to assess; evaluation uses the full supplied record')
     parser.add_argument('--record', action='append')
     parser.add_argument('--policy', choices=[POLICY, 'falsifiers-only/v1'], default=POLICY)
+    parser.add_argument('--profile', choices=[PROFILE, 'core/v1'], default=PROFILE,
+                        help='core/v1 is an experimental read-only interpretation')
+    parser.add_argument('--as-of', help='explicit ISO date or timezone-aware timestamp for core/v1')
     parser.add_argument('--attention-only', action='store_true', help='only relevant actions from this assessment')
     args = parser.parse_args(argv)
     try:
-        report = load(args.record or P.default_paths(), args.policy)
+        report = load(args.record or P.default_paths(), args.policy, profile=args.profile,
+                      as_of=args.as_of, selection=args.ids)
         if set(args.ids) - set(report['nodes']):
             raise ValueError('unknown assessment ID; use open or pull to find an entry')
         report['selection'] = args.ids
@@ -342,7 +356,14 @@ def main(argv=None):
             del report['nodes']
         else:
             report['nodes'] = {nid: report['nodes'][nid] for nid in dict.fromkeys(args.ids)}
-        print(json.dumps(report, ensure_ascii=False, default=str, indent=2))
+        if args.profile == 'core/v1':
+            # Account for the final selection/attention projection too. Compact
+            # output keeps emitted UTF-8 within the compact ASCII JSON budget.
+            contract = P._peer('reasoning.contract')
+            contract.OutputBudget(report['operational_limits']['output_bytes'] - 1).add(report)
+            print(json.dumps(report, ensure_ascii=False, default=str, separators=(',', ':')))
+        else:
+            print(json.dumps(report, ensure_ascii=False, default=str, indent=2))
     except (ValueError, OSError, P.yaml.YAMLError) as error:
         parser.error(str(error))
     return 0

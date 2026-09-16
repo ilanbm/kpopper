@@ -9,10 +9,11 @@ from pathlib import Path
 import tempfile
 
 try:
-    from . import pending_grounding as G, project_modes as M
+    from . import pending_grounding as G, project_modes as M, provenance as P
 except ImportError:
     import pending_grounding as G
     import project_modes as M
+    import provenance as P
 
 
 def project_for(paths):
@@ -50,6 +51,8 @@ def overlay(paths, doc, *, read_mode='live'):
     if read_mode != 'live':
         raise ValueError('read mode must be live or frozen')
     project = project_for(paths)
+    if G.P._CAPTURE_READS.get() is not None:
+        doc.capture_config = copy.deepcopy(project.config())
     doc.private_drafts = G.P._peer('recording').private_drafts(project)
     if not project.git or project.config()['mode'] != 'advanced':
         return doc
@@ -58,19 +61,31 @@ def overlay(paths, doc, *, read_mode='live'):
         return doc
     snap = G.Store(project).snapshot()
     doc.pending_ref = snap['ref']
+    # Preserve immutable evidence for portable strict capture.
+    doc.pending_snapshot = copy.deepcopy(snap)
     if not snap['bundles']:
         return doc
     holders = {}
     meanings = {}
     active_ids = set()
+    contract = P._peer('reasoning.contract')
+
+    def capability_of(document):
+        try:
+            return contract.capabilities(document)
+        except contract.CapabilityError as error:
+            raise P.Refused(error.code + ': ' + str(error)) from None
+
     def meaning(document, name):
+        capability = capability_of(document)
         result = G.semantic_roles(document)
         if result is not None:
             judgments, fields = result
             roles = {'judgment': name in judgments, 'fields': fields if name in judgments else {}}
         else:
             roles = {'unreadable': True}
-        return G.identity({'schema': {k: document[k] for k in ('schema',) if k in document}, 'roles': roles})
+        return G.identity({'schema': {k: document[k] for k in ('schema',) if k in document},
+                           'roles': roles, 'reasoning': capability})
     for nid, pair in G.entries(doc).items():
         holders.setdefault(nid, []).append(('checkout', pair))
         meanings.setdefault(nid, set()).add(meaning(doc, nid))
@@ -101,7 +116,21 @@ def overlay(paths, doc, *, read_mode='live'):
                 # The existing bounded reader follows committed pointers and named
                 # hypotheses; no private working files or target code are imported.
                 W = G.P._peer('watch')
-                target = W._records(project.root, project.config()['record'], resolved.stdout.decode().strip())
+                # watch can use the independently imported ingestion reader. Pass
+                # only this consumer's capability permission and restore it after
+                # reading; committed target bytes are pinned by the Git revision.
+                core_token = W.P._CORE_READS.set(P._CORE_READS.get())
+                try:
+                    target = W._records(project.root, project.config()['record'], resolved.stdout.decode().strip())
+                finally:
+                    W.P._CORE_READS.reset(core_token)
+                # Validate the complete target before interpreting any of its entries.
+                # _records currently uses P.load too; keep this comparison boundary
+                # explicit so a different bounded reader cannot bypass its guard.
+                for document in [target['doc'], *(hyp['doc'] for hyp in target['hypotheses'])]:
+                    capability = capability_of(document)
+                    if capability['profile'] == contract.PROFILE and not P._CORE_READS.get():
+                        raise P.Refused('unsupported_capability: use core/v1 consumer')
                 target_docs = [('target:' + ref, target['doc'])]
                 for hyp in target['hypotheses']:
                     layered = copy.deepcopy(target['doc'])

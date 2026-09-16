@@ -511,6 +511,10 @@ def measure(paths, run=False, timeout=None, cap=None, today=None):
             what.append("a hole")
         if page_bound:
             what.append("a sign the page decides")
+        if getattr(c, "untaken", None):
+            what.append("a reversal a person has not taken by name")
+        if getattr(c, "drops_needed", None):
+            what.append("a dropped dependency to name at the fold")
         out.append("not clean: " + ", ".join(what) + " - red until the record and the tree agree")
         return out, 1
     n_moved = len(c.moved)

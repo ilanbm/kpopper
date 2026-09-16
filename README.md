@@ -733,7 +733,9 @@ There are three useful checks:
   and tests their readings against the declared conditions.
 
 A changed premise that needs review can be reported without failing CI; an affected hypothesis
-still needs review before it can be folded. Decisions are revised explicitly.
+still needs review before it can be folded. Decisions are revised explicitly: a verdict laid over a
+standing judgment folds only when the record's own condition has broken it, or when a person names
+it (`--take`), and what it replaced stays beside the record.
 
 **These commands already run in kpopper's own [CI workflow](.github/workflows/check.yml)** on
 pull requests and pushes to `main`, alongside the test suite and page checks. They use the
