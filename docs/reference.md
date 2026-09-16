@@ -17,6 +17,10 @@ This installs PyYAML with the CLI. The ordinary reader and HTML page need no Lea
 An isolated CLI installation does not supply dependencies to an unrelated Python
 environment used by a host's hooks.
 
+The installation also provides `kpop`, the same command under a shorter name. Help output
+names `kpopper` under either, so a command line copied out of it always runs. The examples
+below use the full name.
+
 Save [the launch-party example](../examples/launch-party/GROUNDING.yaml) as `GROUNDING.yaml` in
 an empty directory. Run these commands there:
 
