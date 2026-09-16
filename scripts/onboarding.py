@@ -140,8 +140,8 @@ def context(location, host=None):
         lines.append("An older mapping preference was saved but never dispatched. "
                      "Run `kpopper map` in an active session if the user still wants that work.")
     if current["status"] == "missing":
-        # Two lines, and no script: the starting offer and its timing live in the map skill,
-        # the first write in the record skill. A hook that carries the offer carries it onto
+        # Two lines, and no script: the starting offer and its timing live in the record skill,
+        # beside the first write; the map itself in the map skill. A hook that carries the offer carries it onto
         # greetings too.
         record, mapping = moves(host)
         lines.append("No knowledge record in this workspace. For work that will be revisited, "
@@ -156,7 +156,7 @@ def context(location, host=None):
                          "Mapping remains available on request.")
         else:
             lines.append("The starting choices (learn while working, map, investigate) were never offered "
-                         "in this workspace; the map skill says when, and `kpopper _agent shown welcome` records it.")
+                         "in this workspace; the record skill says when, and `kpopper _agent shown welcome` records it.")
     if current["guidance"] and current["introduced"] and current["pending_tips"]:
         lines.append("Explanations still unseen: " + ", ".join(current["pending_tips"]) + " - "
                      "`kpopper _agent guide` shows one only when that event happens, then `kpopper _agent shown EVENT`.")

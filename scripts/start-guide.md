@@ -40,8 +40,11 @@ continue the task; silence does not authorize scanning or additional writes.
 
 After actually displaying the offer, run `kpopper _agent shown welcome`. This remembers the offer
 for this project and the introduction for this user. Do not acknowledge it merely because the
-hook supplied it. Learning while working needs no configuration. For an explicit mapping request, run `kpopper map --json`
-or `kpopper map --deep --json` and execute the returned task. Do not ask again if the request is already clear.
+hook supplied it. Learning while working needs no configuration. For a mapping request - one that
+names the survey, the reconstruction or the investigation as what the user wants - run `kpopper map --json`
+or `kpopper map --deep --json` and execute the returned task without asking again. A task that merely
+uses supplied materials for something else is not a mapping request: do it as learning while working,
+and put the starting choices to the user once rather than choosing the map for them.
 `kpopper config --guidance off` remembers a request to skip explanations; `kpopper config --guidance on` restores
 them. These preferences live locally outside the record; they are not project evidence.
 

@@ -57,8 +57,8 @@ The [record skill](../record/SKILL.md) is where these are written; the
 | the moment | skill (Claude Code · Codex) |
 |---|---|
 | before answering about the project's state, a number, a date, a decision or a source; before changing a value the record may hold; when the opener or a grounding line names entries | [ground](../ground/SKILL.md) · `/kpopper:ground` · `$ground` |
-| something worth keeping exists: a fact from a source, a rule, a decision, a measurement, a correction, an open question - and before finishing a session that produced any | [record](../record/SKILL.md) · `/kpopper:record` · `$record` |
-| the user asks to map or investigate what already exists, or a workspace with no record needs the one-time starting offer | [map](../map/SKILL.md) · `/kpopper:map` · `$map` |
+| something worth keeping exists: a fact from a source, a rule, a decision, a measurement, a correction, an open question - and before finishing a session that produced any; and, once, the starting offer where a workspace with no record holds work that will be revisited | [record](../record/SKILL.md) · `/kpopper:record` · `$record` |
+| the user asks by name to map or investigate what already exists, or chose a map or an investigation at the starting offer - never the default, learning while working | [map](../map/SKILL.md) · `/kpopper:map` · `$map` |
 | the requested output is an HTML document, or a saved one is refreshed with new sources | [document](../document/SKILL.md) · `/kpopper:document` · `$document` |
 | see, render or verify the record's page; write or change a brief or arrangement | [page](../page/SKILL.md) · `/kpopper:page` · `$page` |
 | hypotheses wait or an id is CONTESTED; a write was refused into a hypothesis; a branch's record must be reconciled before a merge; a dry run or remeasure is red | [consolidate](../consolidate/SKILL.md) · `/kpopper:consolidate` · `$consolidate` |

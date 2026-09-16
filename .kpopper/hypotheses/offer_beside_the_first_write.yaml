@@ -1,0 +1,31 @@
+hypothesis: {born: "2026-09-16"}
+
+judgments:
+  d.no_record_opener_is_two_lines:
+    rests_on: [s.2026_09_10_skills_split, d.workspace_operations, run.opener_ab_2026_09_11, m.offers_on_durable_work_after_narrowing, m.choices_put_to_the_user_after_move, m.offers_on_greeting_after_move]
+    verdict: "with no record the opener says so in two lines and names the skills; the starting
+              offer and its timing belong to the record skill, beside the first write"
+    because: "The hook's onboarding text was offered on a greeting against its own instruction, so
+              the offer moved out of the hook and into a skill. In the map skill it was never reached
+              by ordinary work that will be revisited: {{m.offers_on_durable_work_after_narrowing}}
+              of 20 sessions offered it once that skill stopped pulling such work in, because none of
+              them read it. Beside the first write, where those sessions already look,
+              {{m.choices_put_to_the_user_after_move}} of 20 put the alternatives to the user and
+              nine named the default they were taking, while {{m.offers_on_greeting_after_move}} of
+              10 greetings got any of it. The first-use contract ({{d.workspace_operations}}) is
+              unchanged in what it offers; only where the offer is carried moved again."
+    wrong_if: "m.offers_on_greeting_after_move > 0"
+    reopened_by: "a session that offers the starting choices on a greeting; one that never names
+                  them where the work is clearly revisited; or sessions that acknowledge the offer as
+                  shown without showing it - five of twenty did"
+    seen:
+      s.2026_09_10_skills_split: "read 2026-09-10"
+      d.workspace_operations: "The public workspace interface is open, map with an optional deep
+                               flag, and config for guidance. Mapping runs through the calling agent
+                               and distinguishes a returned task from accepted work and a completed
+                               result; a plain terminal without a bound session must fail
+                               explicitly."
+      run.opener_ab_2026_09_11: "read 2026-09-11"
+      m.offers_on_durable_work_after_narrowing: 0
+      m.choices_put_to_the_user_after_move: 2
+      m.offers_on_greeting_after_move: 0

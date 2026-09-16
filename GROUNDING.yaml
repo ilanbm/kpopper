@@ -1,5 +1,5 @@
 meta:
-  updated: 2026-09-15
+  updated: 2026-09-16
   name: kpopper
   scope: "What this plugin is for and the decisions that shaped it, kept in its own format -
           the tools eat their own cooking, and every session here opens grounded."
@@ -751,6 +751,14 @@ sources:
          dry-run merges of each pair"
     read: "2026-09-01"
 
+  run.opener_ab_2026_09_11:
+    name: "Sessions on the Codex host in a workspace with no record, under the one-line reminder,
+           the two-line opener and no opener: six tasks, ten sessions per cell"
+    of: "180 sessions on 2026-09-11 with the skills as released in 1.4.0; the two-line opener as the
+         hook prints it with a payload naming the workspace; a greeting, a one-off, a trip, a
+         release, a renovation and a staged migration"
+    read: "2026-09-11"
+
   run.page_move_three_states:
     name: "The move of the page's code out of Python strings, run through check in three states of
            the record"
@@ -930,6 +938,16 @@ known:
          measured beside this one; none is written as what the record is missing, and the one
          that names an entry names one the record holds"
     measure: blocked_on_reopeners
+  m.choices_put_to_the_user_after_move:
+    name: "Sessions on work that will be revisited that put the starting choices to the user once
+           the offer moved into the record skill"
+    v: 2
+    of: "2026-09-11"
+    from: run.opener_ab_2026_09_11
+    at: "of 20 under the two-line opener, 10 on the trip and 10 on the staged migration: two named
+         the alternatives and offered them; nine in all named 'learn while working' as the default
+         they were taking, seven of those without putting the other two to the user; none showed the
+         three-choice card"
   m.claims.general_held:
     v: 3
     name: "Claims about how things usually work that held when scored"
@@ -1125,6 +1143,53 @@ known:
     from: run.prefix_survey
     at: "the judgment collection of each record, and the two letters both live records hold"
     of: "2026-09-11"
+  m.map_invoked_unasked:
+    name: "Sessions on work that will be revisited that ran kpopper map without being asked to map,
+           before reading any task file"
+    v: 118
+    of: "2026-09-11"
+    from: run.opener_ab_2026_09_11
+    at: "of 120 across the three openers; the request read as an explicit mapping, and the saved
+         mapping state then counted the workspace as offered"
+  m.map_invoked_unasked_after_narrowing:
+    name: "Sessions that ran kpopper map without being asked once the map skill's description was
+           narrowed to requests that name the map"
+    v: 0
+    of: "2026-09-11"
+    from: run.opener_ab_2026_09_11
+    at: "of 30 under the two-line opener - 10 on the trip, 10 on the staged migration, 10 greetings;
+         none read the map skill at all, and each session cost about 40% fewer tokens than with the
+         map path"
+  m.offers_on_durable_work_after_narrowing:
+    name: "Sessions on work that will be revisited that offered the starting choices once the map
+           skill's description was narrowed"
+    v: 0
+    of: "2026-09-11"
+    from: run.opener_ab_2026_09_11
+    at: "of 20 on the trip and the staged migration; the offer is carried by the map skill, which
+         none of them read; 0 of 10 greetings as well"
+  m.offers_on_durable_work_two_line_opener:
+    name: "Sessions on work that will be revisited, under the two-line opener, that offered the
+           starting choices"
+    v: 0
+    of: "2026-09-11"
+    from: run.opener_ab_2026_09_11
+    at: "of 40 - a trip, a release, a renovation and a staged migration whose request says it will
+         be revisited; 0 of 40 under the old line and 0 of 40 with no opener as well"
+  m.offers_on_greeting_after_move:
+    name: "Greeting sessions that offered the starting choices once the offer moved into the record
+           skill"
+    v: 0
+    of: "2026-09-11"
+    from: run.opener_ab_2026_09_11
+    at: "of 10, five in English and five in Hebrew; no greeting ran a command or read a skill"
+  m.offers_on_greeting_two_line_opener:
+    name: "Greeting sessions under the two-line opener that offered the starting choices"
+    v: 0
+    of: "2026-09-11"
+    from: run.opener_ab_2026_09_11
+    at: "of 10 greetings, five in English and five in Hebrew; 0 of 10 under the old line and 0 of 10
+         with no opener as well"
   m.older_records_changed:
     v: 0
     name: "Records written before the field whose reading changed once the reader learned it"
@@ -1394,6 +1459,26 @@ known:
     from: run.multisession_survey
     at: "the namespaces the four writers added that day, compared by hand"
 
+  m.records_after_move:
+    name: "Sessions on work that will be revisited that created the record once the offer moved into
+           the record skill"
+    v: 15
+    of: "2026-09-11"
+    from: run.opener_ab_2026_09_11
+    at: "of 20 - 6 of 10 on the trip, 9 of 10 on the staged migration, 12 meaningful and all 15
+         green under check; the same 15 of 20 as before the offer moved, and no session ran kpopper
+         map unasked"
+
+  m.records_after_narrowing:
+    name: "Sessions on work that will be revisited that created the record once the map skill's
+           description was narrowed, with the two-line opener as the only pointer"
+    v: 15
+    of: "2026-09-11"
+    from: run.opener_ab_2026_09_11
+    at: "of 20 - 7 of 10 on the trip, 8 of 10 on the staged migration, 12 of them meaningful and all
+         15 green under check; the record skill was read by the same 15, against 40 of 40 records
+         through the map path before"
+
   m.remeasure.stale_green:
     v: 1
     name: "Times check passed while a measurement it read was stale, of the three states run"
@@ -1409,7 +1494,8 @@ known:
     of: "2026-09-10"
 
   m.skill_bytes_largest:
-    v: 22224
+    v: 23281
+    # set 2026-09-16: the record skill carries the starting offer
     # Measured on the integrated source at 2218aa3; earlier same-day values describe its parents.
     scope: {kind: code, environment: kpopper skill sources, commit: 2218aa345c292eef51c4205c5437dd1fa93d56c3}
     # set 2026-09-14: Measured by skill_bytes_largest after the recording guidance update
@@ -1419,7 +1505,7 @@ known:
     name: "The largest skill body a session can be handed now, bytes"
     from: "skills/*/SKILL.md"
     at: "bytes of the largest body"
-    of: "2026-09-14"
+    of: "2026-09-16"
     measure: skill_bytes_largest
 
   m.unasked.question_filler:
@@ -1463,6 +1549,15 @@ known:
          by hand are in the method's shape - a source with what it was asked, values with where they
          came from, rules for what was worked out"
     of: "2026-09-11"
+
+  m.welcome_acknowledged_after_move:
+    name: "Sessions on work that will be revisited that ran kpopper _agent shown welcome once the
+           offer moved into the record skill"
+    v: 12
+    of: "2026-09-11"
+    from: run.opener_ab_2026_09_11
+    at: "of 20; five of the twelve had shown nothing first, against the guide's word that the
+         acknowledgement follows the display"
 
 open:
   q.followups_dispatch: "Which followups should stay in the daily session and which should receive
@@ -2503,6 +2598,30 @@ judgments:
       m.reach.local_checked_held: 83
       m.reach.local_assumed_held: 25
       m.reach.assumed_at_high_confidence: 0
+  d.map_runs_only_when_named:
+    rests_on: [run.opener_ab_2026_09_11, m.map_invoked_unasked, m.map_invoked_unasked_after_narrowing, d.no_record_opener_is_two_lines]
+    verdict: "a map runs only when the request names the map - survey, reconstruct, investigate, a
+              starting record built from the materials; a task that uses supplied files for something
+              else is learning while working, and is never turned into kpopper map on the user's
+              behalf"
+    because: "Under a description that said 'go through what already exists' and 'consult this
+              before reading the files yourself', {{m.map_invoked_unasked}} of 120 sessions turned a
+              plan, a note or a summary from supplied files into kpopper map before reading a single
+              file, and the saved mapping state then counted the workspace as offered: the starting
+              choice was made for the user by a description instead of being put to them (where the
+              offer lives: {{d.no_record_opener_is_two_lines}}). Narrowed to requests that name the
+              map, {{m.map_invoked_unasked_after_narrowing}} of 30 sessions did, at about 40% fewer
+              tokens each."
+    wrong_if: "m.map_invoked_unasked_after_narrowing > 0"
+    reopened_by: "a session that runs kpopper map for a task that only uses supplied files, or a
+                  user who asks to survey their materials and gets no map"
+    seen:
+      run.opener_ab_2026_09_11: "read 2026-09-11"
+      m.map_invoked_unasked: 118
+      m.map_invoked_unasked_after_narrowing: 0
+      d.no_record_opener_is_two_lines: "with no record the opener says so in two lines and names the
+                                        skills; the starting offer and its timing belong to the map
+                                        skill"
   d.measure_names_a_recipe:
     rests_on: [s.2026_09_04_remeasure, m.remeasure.stale_green, run.page_move_three_states, d.record_is_code, p.recipe_runners]
     verdict: "an entry whose value is a fact about the tree names its recipe with measure: - a bare

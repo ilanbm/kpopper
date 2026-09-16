@@ -1,6 +1,6 @@
 ---
 name: map
-description: "Map existing materials into a first knowledge record, or investigate a subject's history in depth. Use whenever the user asks to map, survey, go through, reconstruct or investigate what already exists - folders of documents, decision records, meeting notes, emails, exports, code - or wants a starting record built from existing materials, even when the word 'record' is never said: consult this before listing or reading the files yourself, because a map has an agreed scope, a protocol and a report. Also, once, at a suitable moment, to offer the starting choices where a workspace has no record and the work is clearly ongoing - never on a greeting. Learning while working needs no map. Requests come in any language."
+description: "Map existing materials into a first knowledge record, or investigate a subject's history in depth. Use when the user asks for the map itself: to map, survey, inventory, reconstruct or investigate what already exists - folders of documents, decision records, meeting notes, emails, exports, code - or to build a starting record from existing materials, even when the word 'record' is never said. Not for an ordinary task that uses supplied files for something else: collecting them into a plan, a note or a summary is learning while working, kept by the record skill as findings arise, and is never turned into a mapping on the user's behalf. The starting choices - learn while working, map, investigate - are put to the user once by the record skill; a chosen map or investigation comes here. Requests come in any language."
 ---
 
 # Map
@@ -12,24 +12,28 @@ materials. Run `kpopper open` if the hook did not supply `KPOPPER_START`, and fo
 `kpopper _agent guide` for the optional first offer, source discovery and contextual explanations.
 An unavailable registered record is a location problem, not a new project.
 
-## The starting offer, once
+**A mapping request names the map as what the user wants**: survey these folders, reconstruct
+what was decided, build a starting record from the archive, find out how a subject came to be
+where it is. A request that uses the materials for something else - a plan from the quotes, a
+release note from the checks, a migration plan from the notes - is ordinary work: read the files,
+do the task, keep findings through the [record skill](../record/SKILL.md), and never run
+`kpopper map` for it on the user's behalf. Where such work is clearly going to be revisited, the
+starting offer in the [record skill](../record/SKILL.md) is the one place the choice is put to the user.
 
-Where a workspace has no record and the work is clearly going to be revisited, offer the three
-starting choices once, briefly, at the first suitable moment in real work: **learn while working**
-(the default), **map existing materials**, or **investigate more deeply**. Allow skipping. Do not
-interrupt urgent work, and do not ask on a greeting - a session that only said hello gets no
-offer. No answer means continue the task, not permission to scan. After showing the offer run
-`kpopper _agent shown welcome`; the choice and what was shown are remembered per project and per
-user, so a later session does not repeat them, and `kpopper _agent status` says what is still
-unseen. Skip the introductory explanation for a user who has already seen it in another project.
-`kpopper config --guidance off` turns explanations off without turning the work off.
+## The starting offer is the record skill's
 
-**Mapping is available by choice.** Offer learning while working, an initial map of existing
-materials, or a deeper investigation within agreed subjects, sources and dates. An explicit
-mapping request already chooses that work; no extra confirmation is needed. Use the guide
+The three starting choices are put to the user once, at the first finding worth keeping in work
+that will be revisited, by the [record skill](../record/SKILL.md) - never on a greeting - and
+`kpopper _agent shown welcome` records that they were shown, so no later session repeats them. A
+map or an investigation chosen there, or asked for by name, is what this skill does.
+
+**Mapping is available by choice.** An initial map of existing materials, or a deeper
+investigation within agreed subjects, sources and dates, is chosen by the user - at the starting
+offer or by asking for it by name; no extra confirmation is needed then, and nothing short of
+naming it is read as a request. Use the guide
 to locate where decisions happen and to keep historical accounts separate from present
 findings. Do not expand into unrelated private sources or infer permission from silence.
-For an explicit mapping request, call `kpopper map --json` or `kpopper map --deep --json`
+For a mapping request, call `kpopper map --json` or `kpopper map --deep --json`
 with the host session environment, accept and execute the returned task, and report its actual
 result through the supplied internal protocol. Do not stop after announcing a ready task.
 Learning during ordinary work needs no configuration. Public operations are `open`, `map`,
