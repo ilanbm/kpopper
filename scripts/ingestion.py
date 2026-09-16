@@ -11,6 +11,7 @@ matching provenance.py's directory lock.  Those writes fail closed on platforms 
 ``fcntl``; read-only status and pending inspection remain available.
 """
 import argparse
+import base64
 import contextlib
 import copy
 import datetime
@@ -803,16 +804,124 @@ class PreparationRefused(ValueError):
         super().__init__('prepared update failed checks: ' + '\n'.join(issues))
 
 
+def _legacy_files(rec):
+    """Capture every mutable member, including absent members, under the writer lock."""
+    T = P._peer('history_transaction')
+    paths = P.layout(rec)
+    result = []
+    for role in ('record', 'view', 'replaced'):
+        path = Path(paths['entry' if role == 'record' else role])
+        relative = path.relative_to(rec.parent).as_posix()
+        data = T._read(T._target(rec.parent, relative))
+        result.append({'path': relative, 'role': role, 'before': data})
+    return result
+
+
+def _write_context(rec, project):
+    """Retain non-file authority used by preparation; it must survive final recheck."""
+    T, C = P._peer('history_transaction'), P._peer('history_contract')
+    marker_path = Path(P.layout(rec)['history_authority']).relative_to(rec.parent).as_posix()
+    raw = T._read(T._target(rec.parent, marker_path))
+    marker = C.validate_authority(C.decode_document(raw)) if raw is not None else T.legacy_authority(rec)
+    document = P.parse(text=rec.read_bytes()) or {}
+    if marker['authority'] != 'legacy' or isinstance(document.get('meta'), dict) and 'history' in document['meta']:
+        raise ValueError('unsupported_capability: history report preparation is not available')
+    # Validate all declared and historical reasoning requirements before staging.
+    P._peer('pending_grounding').document_capabilities(document)
+    destination = str(Path(P._peer('knowledge_views').write_paths([str(rec)])[0]).resolve())
+    if destination != str(rec.resolve()):
+        raise ValueError('record destination changed after report capture')
+    pending = (P._peer('pending_grounding').Store(project.root).head()
+               if project.git and project.config()['mode'] == 'advanced' else None)
+    return {'authority': marker, 'marker_sha256': _sha(raw) if raw is not None else None,
+            'destination': destination, 'policy': project.config(), 'pending_ref': pending}
+
+
+def _shadow(rec, root, event, before_bytes):
+    draft = root / 'drafts' / (event['event_id'] + '-' + uuid.uuid4().hex)
+    _private_dir(draft)
+    shadow = draft / rec.name
+    files = event.get('_before_files')
+    if files is None:
+        files = _legacy_files(rec)
+    for item in files:
+        data = before_bytes if item['role'] == 'record' else item['before']
+        if data is not None:
+            _atomic(draft / item['path'], data)
+    return shadow
+
+
+def _prepared_mutation(rec, shadow, event, files, context, before, after):
+    T, G = P._peer('history_transaction'), P._peer('pending_grounding')
+    members = [{**item, 'after': T._read(shadow.parent / item['path'])} for item in files]
+    for role in ('history', 'history_commits', 'history_authority'):
+        if Path(P.layout(shadow)[role]).exists():
+            raise ValueError('unsupported_capability: shadow history requires history transport')
+    receipt = T.semantic_receipt(profile=before.get('assessment_profile', 'ordinary-reader/v1'),
+        capabilities={'before': G.meaning_capabilities(P.parse(text=next(x['before'] for x in files if x['role'] == 'record'))),
+                      'after': G.meaning_capabilities(P.parse(text=shadow.read_bytes()))},
+        before=before, after=after)
+    baseline = {'event_id': event['event_id'], 'source_sha256': event['source_sha256'],
+                'envelope_sha256': event['envelope_sha256'], 'context': context}
+    return T.PreparedMutation(operation='report-' + event['event_id'], entry=rec.name,
+        authority=context['authority'], baseline=baseline, files=members, receipt=receipt)
+
+
+def _mutation_from_journal(journal):
+    T = P._peer('history_transaction')
+    return T.PreparedMutation.from_bytes(base64.b64decode(journal['mutation'], validate=True))
+
+
+def _bind_report_mutation(rec, event, journal, data):
+    baseline = data['baseline']
+    if (data['operation'] != 'report-' + event['event_id'] or data['entry'] != rec.name
+            or journal['event_id'] != event['event_id']
+            or baseline.get('event_id') != event['event_id']
+            or baseline.get('context', {}).get('destination') != str(rec.resolve())
+            or any(baseline.get(key) != event[key] for key in ('source_sha256', 'envelope_sha256'))):
+        raise ValueError('prepared report operation does not match its retained event')
+
+
+def _verify_mutation(rec, root, event, envelope, journal, project, supplied):
+    mutation = _mutation_from_journal(journal)
+    expected = mutation.to_data()
+    _bind_report_mutation(rec, event, journal, expected)
+    if supplied != expected:
+        raise ValueError('prepared report operation does not match its retained event')
+    _, error = _capture_payload(root, event)
+    if error:
+        raise ValueError(error)
+    if any(expected['baseline'][key] != event[key] for key in ('source_sha256', 'envelope_sha256')):
+        raise ValueError('prepared report capture changed')
+    if _write_context(rec, project) != expected['baseline']['context']:
+        raise ValueError('report authority, routing, policy or pending ref changed after preparation')
+    receipt = expected['receipt']
+    if receipt['before'] != journal['before_graph'] or receipt['after'] != journal['prepared_graph']:
+        raise ValueError('prepared report assessment differs from retained receipt')
+    if 'core_gate' in journal:
+        P._peer('reasoning.ingestion').verify_receipt(journal['core_gate'], journal['before_graph'], journal['prepared_graph'])
+    # Recovery may see mixed file images. Validate capability compatibility using
+    # the retained final document, never a partially published live graph.
+    after = next(item['after'] for item in mutation.files if item['role'] == 'record')
+    P._peer('reasoning.authoring').pending_compatible(P, [str(rec)], P.parse(text=after))
+
+
+def _committed(root, event, journal):
+    def save(_mutation):
+        journal.update(phase='record_committed', committed_mutation=_mutation['digest'])
+        journal.setdefault('committed_at', time.time())
+        # The shared journal may be removed only after the event receipt's file
+        # and directory are durable. The general queue saver tolerates directory
+        # fsync failures, which is insufficient for this completion boundary.
+        P._peer('history_transaction')._replace(
+            root / 'journals' / (event['event_id'] + '.json'), _json_bytes(journal))
+    return save
+
+
 def _prepare_core(rec, root, event, envelope, before_bytes):
     """Prepare one final core world; public legacy mark/gate remain dormant."""
     eid = event['event_id']
-    draft = root / 'drafts' / (eid + '-' + uuid.uuid4().hex)
-    _private_dir(draft)
-    shadow = draft / rec.name
-    _atomic(shadow, before_bytes)
-    brief = P._brief_beside(str(rec))
-    if brief:
-        _atomic(Path(P.layout(shadow)['view']), Path(brief).read_bytes())
+    shadow = _shadow(rec, root, event, before_bytes)
     source_id = 's.ingest_' + eid
     cited = envelope.get('source', source_id)
     if cited == source_id and 'source' in envelope:
@@ -868,14 +977,8 @@ def _prepare(rec, root, event, envelope, before_bytes):
     if P._peer('reasoning.authoring').selected(document, envelope.get('profile')):
         return _prepare_core(rec, root, event, envelope, before_bytes)
     eid = event["event_id"]
-    draft = root / "drafts" / (eid + "-" + uuid.uuid4().hex)
-    _private_dir(draft)
-    shadow = draft / rec.name
-    _atomic(shadow, before_bytes)
-    brief = P._brief_beside(str(rec))
-    if brief:
-        _atomic(Path(P.layout(shadow)["view"]), Path(brief).read_bytes())
-    mark = draft / "mark.json"
+    shadow = _shadow(rec, root, event, before_bytes)
+    mark = shadow.parent / 'mark.json'
     paths = [str(shadow)]
     source_id = "s.ingest_" + eid
     cited_source = envelope.get("source", source_id)
@@ -989,23 +1092,53 @@ def _recover(rec, root, event, envelope, journal):
     _, integrity = _capture_payload(root, event)
     if integrity:
         committed = journal.get("phase") == "record_committed"
-        try:
-            committed = committed or _sha(rec.read_bytes()) == journal["after_hash"]
-        except (OSError, KeyError):
-            pass
         return _integrity_question(root, event, integrity, committed)
-    current_hash = _sha(rec.read_bytes())
-    expected = journal["after_hash"]
-    applied = current_hash == expected
-    if not applied:
-        try:
-            now_hash = _batch_fingerprint(rec, envelope["updates"]) if "updates" in envelope else \
-                _target(rec, envelope["target"], core_writer=True)["body_sha256"]
-            applied = (now_hash == journal["target_after_sha256"] and
-                       P.bodies(P._peer('reasoning.authoring').load(P, [str(rec)])).get(journal["source_id"], {}).get("file")
-                       == event["source_file"])
-        except (Exception, SystemExit):
-            applied = False
+    T = P._peer('history_transaction')
+    if 'mutation' in journal:
+        mutation = _mutation_from_journal(journal)
+        data = mutation.to_data()
+        _bind_report_mutation(rec, event, journal, data)
+        shared = rec.parent / T.journal_for(rec)
+        if shared.exists():
+            with _event_lock(rec, event) as project:
+                retained = T.PreparedMutation.from_bytes(shared.read_bytes())
+                if retained.to_bytes() != mutation.to_bytes():
+                    raise ValueError('recovery_required: another report operation owns the record journal')
+                T.recover_legacy(rec.parent, T.journal_for(rec),
+                    verify=lambda supplied: _verify_mutation(rec, root, event, envelope, journal, project, supplied),
+                    on_committed=_committed(root, event, journal))
+                P.forget(rec)
+        if data['receipt']['before'] != journal['before_graph'] or data['receipt']['after'] != journal['prepared_graph']:
+            raise ValueError('prepared report assessment differs from retained receipt')
+        applied = (journal.get('phase') == 'record_committed'
+                   and journal.get('committed_mutation') == data['digest'])
+        if not applied:
+            # Matching bytes alone cannot establish that this event was published.
+            current = [(T._read(T._target(rec.parent, item['path'])), item) for item in mutation.files]
+            if all(raw == item['after'] for raw, item in current):
+                raise ValueError('after_images_match: report completion has no retained operation receipt')
+            if any(raw != item['before'] for raw, item in current):
+                raise ValueError('concurrent_edit: unfinished report lost its recovery journal')
+            return None
+        # The durable operation receipt proves publication. Later unrelated edits
+        # need not block acknowledgment, but a changed/reverted target is never
+        # replayed. Target/source equality alone did not establish this proof.
+        if any(T._read(T._target(rec.parent, item['path'])) != item['after'] for item in mutation.files):
+            try:
+                target_hash = (_batch_fingerprint(rec, envelope['updates']) if 'updates' in envelope else
+                               _target(rec, envelope['target'], core_writer=True)['body_sha256'])
+                source = P.bodies(P._peer('reasoning.authoring').load(P, [str(rec)])).get(journal['source_id'], {})
+                retained = target_hash == journal['target_after_sha256'] and source.get('file') == event['source_file']
+            except (Exception, SystemExit):
+                retained = False
+            if not retained:
+                return _question(root, event, envelope,
+                    'the committed report was changed or reverted later; it will not be applied again',
+                    record_committed=True)
+    else:
+        # Older event journals do not certify a multi-file prepared operation.
+        # Only their explicit durable completion phase can acknowledge a retry.
+        applied = journal.get('phase') == 'record_committed' and _sha(rec.read_bytes()) == journal['after_hash']
     if not applied:
         return None
     try:
@@ -1048,11 +1181,6 @@ def _process_event(rec, root, event, crash_after_commit=False):
     envelope, integrity = _capture_payload(root, event)
     if integrity:
         committed = bool(journal and journal.get("phase") == "record_committed")
-        if journal:
-            try:
-                committed = committed or _sha(rec.read_bytes()) == journal["after_hash"]
-            except (OSError, KeyError):
-                pass
         return _integrity_question(root, event, integrity, committed)
     if journal and journal.get('pending_event_id'):
         G = P._peer('pending_grounding')
@@ -1105,6 +1233,8 @@ def _process_event(rec, root, event, crash_after_commit=False):
                                  "target changed after capture; the report was retained without overwriting it")
             prepared_target_sha256 = current_target["body_sha256"]
             before_bytes = rec.read_bytes()
+            before_files = _legacy_files(rec)
+            context = _write_context(rec, project)
             try:
                 before_graph = _graph(rec, _report_seeds(envelope), profile=envelope.get('profile'))
             except P.Refused as error:
@@ -1114,7 +1244,8 @@ def _process_event(rec, root, event, crash_after_commit=False):
             if integrity:
                 return _integrity_question(root, event, integrity)
             shadow, after_bytes, prepared_graph, target_after_sha256, diagnostics = \
-                _prepare(rec, root, event, envelope, before_bytes)
+                _prepare(rec, root, dict(event, _before_files=before_files), envelope, before_bytes)
+            mutation = _prepared_mutation(rec, shadow, event, before_files, context, before_graph, prepared_graph)
         except PreparationRefused as exc:
             return _question(root, event, envelope, str(exc),
                              validation_issues=exc.issues, diagnostics=exc.diagnostics)
@@ -1127,8 +1258,9 @@ def _process_event(rec, root, event, crash_after_commit=False):
             "prepared_graph": prepared_graph, "shadow": str(shadow),
             "source_id": "s.ingest_" + eid, "attempt": attempt,
             "target_after_sha256": target_after_sha256,
-            "brief_hash": _brief_fingerprint(shadow),
+            "brief_hash": next((_sha(x["before"]) if x["before"] is not None else None) for x in before_files if x["role"] == "view"),
             "diagnostics": diagnostics,
+            "mutation": base64.b64encode(mutation.to_bytes()).decode('ascii'),
         }
         if before_graph.get('assessment_profile') == 'core/v1':
             core_gate = P._peer('reasoning.ingestion')
@@ -1163,10 +1295,11 @@ def _process_event(rec, root, event, crash_after_commit=False):
                         P._peer('reasoning.authoring').prepare(P, [str(rec)], {'profile': envelope.get('profile')})
                     except P.Refused as error:
                         return _question(root, event, envelope, str(error))
-                _replace_record(rec, after_bytes)
-                journal["phase"] = "record_committed"
-                journal["committed_at"] = time.time()
-                _save(journal_path, journal)
+                T = P._peer('history_transaction')
+                T.publish_legacy(rec.parent, T.journal_for(rec), mutation,
+                    verify=lambda data: _verify_mutation(rec, root, event, envelope, journal, project, data),
+                    on_committed=_committed(root, event, journal))
+                P.forget(rec)
         if project_capture:
             G = P._peer('pending_grounding')
             document = P._peer('reasoning.authoring').load(P, [str(shadow)])
@@ -1237,6 +1370,14 @@ def process(record=None, state_dir=None, event_id=None, max_events=32,
             try:
                 out.append(_process_event(rec, root, event, _crash_after_commit))
             except (ValueError, OSError) as error:
+                T = P._peer('history_transaction')
+                if (rec.parent / T.journal_for(rec)).exists():
+                    # Keep interrupted operations retryable without spawning an
+                    # unbounded retry loop or manufacturing a terminal receipt.
+                    event.update(state='recovery_required', reason=str(error))
+                    _save(_event_file(root, event['event_id']), event)
+                    out.append(_summary(event))
+                    continue
                 envelope, integrity = _capture_payload(root, event)
                 out.append(_integrity_question(root, event, integrity) if integrity else
                            _question(root, event, envelope, str(error)))

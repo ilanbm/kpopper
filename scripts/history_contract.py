@@ -308,7 +308,7 @@ def relative_path(value):
 def validate_commit(value):
     value = detached(value, MAX_REQUEST_BYTES)
     _mapping(value, ('version', 'record_id', 'authority_generation', 'operation', 'parents',
-                     'baseline_digest', 'objects', 'receipt', 'view_sha256'))
+                     'baseline_digest', 'objects', 'receipt', 'view_sha256'), ('view_template',))
     _require(type(value['version']) is int and value['version'] == 1, 'unsupported_commit')
     _text(value['record_id'])
     _integer(value['authority_generation'])
@@ -331,10 +331,13 @@ def validate_commit(value):
         _text(item['sha256'], HEX)
         ids.append(item['id'])
     _require(ids == sorted(set(ids)), 'invalid_object_inventory')
+    if 'view_template' in value:
+        _require(identity(document_template(value['view_template'])) == identity(value['view_template']),
+                 'invalid_view_template', 'template must contain headers and empty collections only')
     return value
 
 
-def make_commit(*, marker, operation, parents, baseline, objects, receipt, view):
+def make_commit(*, marker, operation, parents, baseline, objects, receipt, view, view_template=None):
     """Bind exact new object bytes and intended view; references need closure validation.
 
     `objects` is an iterable of (validated object, serialized bytes). A storage
@@ -351,7 +354,43 @@ def make_commit(*, marker, operation, parents, baseline, objects, receipt, view)
                             'authority_generation': marker['generation'], 'operation': operation,
                             'parents': parents, 'baseline_digest': identity(baseline),
                             'objects': sorted(inventory, key=lambda item: item['id']),
-                            'receipt': receipt, 'view_sha256': sha256(view)})
+                            'receipt': receipt, 'view_sha256': sha256(view),
+                            **({'view_template': view_template} if view_template is not None else {})})
+
+
+def document_template(document):
+    """Keep immutable render headers and empty collections, never generated heads."""
+    document = detached(document, MAX_REQUEST_BYTES)
+    _require(isinstance(document, dict), 'invalid_document')
+    try:
+        from .provenance import collections_of
+    except ImportError:
+        from provenance import collections_of
+    for collection in collections_of(document):
+        if collection != 'meta':
+            document[collection] = {}
+    if 'meta' in document:
+        _require(isinstance(document['meta'], dict), 'invalid_document')
+        document['meta'].pop('history', None)
+    return document
+
+
+def committed_set_digest(commits):
+    """Non-circular render baseline for the known set of committed effects.
+
+    View bytes contain this digest, and a semantic receipt may contain prepared
+    view evidence, so neither downstream field can be in its preimage. Complete
+    raw manifest bytes remain separately bound by captured closure identity.
+    Parents are already committed manifest hashes, not a hash of this commit.
+    """
+    _require(isinstance(commits, dict) and len(commits) <= MAX_OBJECTS, 'history_limit')
+    effects = {}
+    for operation, raw in commits.items():
+        manifest = validate_commit(decode_document(raw)) if isinstance(raw, bytes) else validate_commit(raw)
+        _require(manifest['operation'] == operation, 'operation_mismatch')
+        effects[operation] = {key: item for key, item in manifest.items()
+                              if key not in ('receipt', 'view_sha256')}
+    return identity(effects)
 
 
 def committed_objects(marker, commits, objects):

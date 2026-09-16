@@ -116,9 +116,17 @@ _RAW_READS = contextvars.ContextVar('raw_record_reads', default=False)
 _CORE_READS = contextvars.ContextVar('core_record_reads', default=False)
 # Strict capture observes actual reads, including cache hits; ordinary reads are inert.
 _CAPTURE_READS = contextvars.ContextVar('record_capture_reads', default=None)
+# Configured/file-path and package imports share the candidate generation. Page
+# rendering loads this reader by another module name in the same process.
+if not hasattr(E, '_direct_stage'):
+    E._direct_stage = contextvars.ContextVar('direct_record_stage', default=None)
+_DIRECT_STAGE = E._direct_stage
 
 
 def _capture_event(kind, path, value):
+    stage = _DIRECT_STAGE.get()
+    if stage is not None:
+        stage.observe(kind, path, value)
     observer = _CAPTURE_READS.get()
     if observer is not None:
         observer(kind, os.path.abspath(path), value)
@@ -615,6 +623,11 @@ def parse(path=None, *, text=None):
             raise ValueError('parse takes a file or staged text, not both')
         return yaml.safe_load(text)
     path = os.path.abspath(path)
+    stage = _DIRECT_STAGE.get()
+    if stage is not None and path in stage.after:
+        # Candidate bytes are evaluated, not asserted as a captured disk read.
+        # The direct transaction separately retains and verifies their before image.
+        return yaml.safe_load(stage.after[path].decode('utf-8'))
     try:
         with io.open(path, "rb") as f:
             data = f.read()
@@ -844,6 +857,47 @@ def _every_id(doc, ids):
 
 
 def load(paths, *, read_mode=None):
+    mode = read_mode or ('frozen' if _RAW_READS.get() else os.environ.get('KPOPPER_READ_MODE', 'live'))
+    if mode == 'live':
+        paths = _peer('knowledge_views').write_paths(paths)
+    with _record_read_guard(paths):
+        return _load(paths, read_mode=read_mode)
+
+
+@contextlib.contextmanager
+def _record_read_guard(paths):
+    # A staged generation exists only inside the owning direct writer lock.
+    if _DIRECT_STAGE.get() is not None:
+        yield
+        return
+    transaction = _peer('history_transaction')
+    with contextlib.ExitStack() as stack:
+        entries = sorted({os.path.abspath(f) for p in paths for f in (glob.glob(p) or [p])})
+        for entry in entries:
+            root = os.path.dirname(entry)
+            if os.path.isdir(root):
+                stack.enter_context(transaction.reader_guard(root, transaction.journal_for(entry)))
+                # A sibling pointer/member can belong to another entry's pending
+                # publication. Same-directory records share its recovery boundary.
+                pending_paths = sorted({pending
+                    for home in (os.path.join(root, HOME, '.history-local'), os.path.join(root, '.history-local'))
+                    for pending in glob.glob(os.path.join(home, '*.json'))})
+                if len(pending_paths) > 1024:
+                    raise Refused('history_limit: too many pending local operations')
+                total = 0
+                for pending in pending_paths:
+                    path = transaction._target(root, os.path.relpath(pending, root))
+                    total += path.stat().st_size
+                    if total > transaction.MAX_TRANSACTION_BYTES:
+                        raise Refused('history_limit: pending local operation bytes')
+                    operation = transaction.PreparedMutation.from_bytes(path.read_bytes())
+                    members = {os.path.abspath(os.path.join(root, item['path'])) for item in operation.files}
+                    if entry in members:
+                        raise Refused('recovery_required: incomplete member publication')
+        yield
+
+
+def _load(paths, *, read_mode=None):
     mode = read_mode or ('frozen' if _RAW_READS.get() else os.environ.get('KPOPPER_READ_MODE', 'live'))
     if mode == 'live':
         paths = _peer('knowledge_views').write_paths(paths)
@@ -3305,12 +3359,17 @@ def replaced_path(paths):
 
 
 def read_replaced(paths):
+    with _record_read_guard(paths):
+        return _read_replaced(paths)
+
+
+def _read_replaced(paths):
     """The kept versions of every replaced judgment -> {id: [version, ...]}, oldest first;
     {} when nothing was ever replaced. A version is the body a replacement removed, whole,
     with `ended` (what admitted the replacement) and `day`; one equal to an earlier version
     is kept as {same_as: <version number, from 1>, ended, day} - a return, not a copy."""
     p = replaced_path(paths)
-    if not os.path.isfile(p):
+    if not os.path.isfile(p) and not (_DIRECT_STAGE.get() is not None and os.path.abspath(p) in _DIRECT_STAGE.get().after):
         return {}
     try:
         data = parse(p) or {}          # the reader's one parser: kept against the file's identity
@@ -3321,8 +3380,13 @@ def read_replaced(paths):
 
 def _version_core(v):
     """What tells two kept versions apart: the decision itself, not what it saw or when."""
-    return {k: x for k, x in v.items()
+    core = {k: x for k, x in v.items()
             if k not in ("seen", "reviewed", "born", "replaced", "ended", "day", "same_as", "dropped")}
+    # Compare the legacy spelling with its lossless expression wrapper while
+    # retaining structured operators and original archive bytes as authored.
+    if isinstance(core.get('wrong_if'), str):
+        core['wrong_if'] = {'expr': core['wrong_if']}
+    return core
 
 
 def version_at(versions, n):
@@ -3349,8 +3413,6 @@ def keep_replaced(paths, nid, old, ended, stamp, dropped=None):
     kept = read_replaced(paths)
     versions = kept.setdefault(nid, [])
     body = {k: copy.deepcopy(v) for k, v in old.items() if k not in TRAIL_FIELDS}
-    if isinstance(body.get("wrong_if"), dict):
-        body["wrong_if"] = predicate_text(body["wrong_if"])
     core = _version_core(body)
     version = None
     for n in range(1, len(versions) + 1):
@@ -3365,7 +3427,8 @@ def keep_replaced(paths, nid, old, ended, stamp, dropped=None):
         version["dropped"] = dict(dropped)
     versions.append(version)
     p = replaced_path(paths)
-    os.makedirs(os.path.dirname(p), exist_ok=True)
+    if _DIRECT_STAGE.get() is None:
+        os.makedirs(os.path.dirname(p), exist_ok=True)
     text = yaml.safe_dump(kept, allow_unicode=True, sort_keys=False, width=100)
     _write_text(p, "# Judgments this record's writes replaced, kept whole - read with "
                    "`kpopper pull <id> --history`.\n" + text)
@@ -3382,8 +3445,6 @@ def returns_to(paths, nid, body):
     if want is None:
         return None
     core = _version_core({k: v for k, v in body.items() if k not in TRAIL_FIELDS})
-    if isinstance(core.get("wrong_if"), dict):
-        core["wrong_if"] = predicate_text(core["wrong_if"])
     found = None
     for n in range(1, len(versions) + 1):
         v = version_at(versions, n)
@@ -3396,10 +3457,15 @@ def returns_to(paths, nid, body):
 
 
 def _text_of_or_none(path):
-    if not os.path.isfile(path):
-        return None
-    with io.open(path, encoding="utf-8") as f:
-        return f.read()
+    from pathlib import Path
+    stage = _DIRECT_STAGE.get()
+    absolute = os.path.abspath(path)
+    if stage is not None and absolute in stage.after:
+        raw = stage.after[absolute]
+    else:
+        raw = _peer('history_transaction')._read(Path(path))
+        _capture_event('bytes', path, raw)
+    return None if raw is None else raw.decode('utf-8')
 
 
 REPLACED_DAY = re.compile(r" on (\d{4}-\d{2}-\d{2})$")
@@ -4237,6 +4303,10 @@ def _shape_in(lines, where, shape):
 def _write_text(path, text):
     """The whole file replaced in one step, so a reader never meets half a record; the
     temporary file is this writer's own, and the record keeps its permissions."""
+    stage = _DIRECT_STAGE.get()
+    if stage is not None:
+        stage.write(path, text.encode('utf-8'))
+        return
     d = os.path.dirname(os.path.abspath(path))
     fd, tmp = tempfile.mkstemp(prefix="." + os.path.basename(path) + ".", suffix=".tmp", dir=d)
     with io.open(fd, "w", encoding="utf-8") as f:
@@ -4447,6 +4517,7 @@ def apply(paths, action, diagnostics=None):
 
 def _apply_unlocked(paths, action, diagnostics=None, *, project=None):
     """The mutation body for a caller already holding the record-directory lock."""
+    _direct_ready(paths)
     # Recheck privacy inside the write lock: a source can change while a writer waits.
     private = _peer('recording').private_route(paths, action, sys.modules.get(__name__) or _Reader(), project=project)
     if private is not None:
@@ -4694,7 +4765,7 @@ def _snapshot(deps, raw, ids, jud, paths, brief, first_born=False, value=None):
 def _review_section(paths, brief, title, stamp, raw, ids, jud):
     """A section of the brief reviewed by its title: the references of its text
     snapshotted into `seen`, and `reviewed` moved. The record is not touched."""
-    btext = io.open(brief, encoding="utf-8").read()
+    btext = _text_of_or_none(brief)
     b = parse(brief) or {}
     secs = [s for s in (b.get("sections") or []) if isinstance(s, dict)]
     for tab in (b.get("tabs") or []):
@@ -4727,7 +4798,179 @@ def _check_citation_readback(action, body):
         raise ValueError(f"{action['id']} did not retain the requested from/at citation")
 
 
+def _direct_ready(paths):
+    """Reject interrupted publication and unsupported authority before routing a write."""
+    transaction = _peer('history_transaction')
+    for path in paths:
+        entry = os.path.abspath(path)
+        with _record_read_guard([entry]):
+            marker = layout(entry)['history_authority']
+            if os.path.exists(marker):
+                raise Refused('history_direct_writer_unsupported: use the history writer')
+            for member in _files_of([entry]):
+                if os.path.dirname(os.path.abspath(member)) != os.path.dirname(entry):
+                    raise Refused('unsupported_external_record_transaction: record members need a shared directory lock')
+                document = parse(member) or {}
+                meta = document.get('meta') if isinstance(document, dict) else None
+                if isinstance(meta, dict) and 'history' in meta:
+                    raise Refused('history_direct_writer_unsupported: use the history writer')
+
+
+class _DirectStage:
+    """Private candidate bytes; ordinary authoring still owns validation and settling."""
+    def __init__(self):
+        self.after = {}
+        self.before = {}
+        self.observations = {}
+
+    def observe(self, kind, path, value):
+        path = os.path.abspath(path)
+        if path in self.after or kind not in ('bytes', 'exists', 'glob'):
+            return
+        if kind == 'bytes':
+            value = None if value is None else hashlib.sha256(value).hexdigest()
+        key = kind, path
+        if key in self.observations and self.observations[key] != value:
+            raise Refused('concurrent_edit: input changed during preparation: ' + path)
+        self.observations[key] = copy.deepcopy(value)
+
+    def write(self, path, data):
+        from pathlib import Path
+        path = os.path.abspath(path)
+        if path not in self.before:
+            raw = _peer('history_transaction')._read(Path(path))
+            self.observe('bytes', path, raw)
+            self.before[path] = raw
+        self.after[path] = data
+
+
+def _verify_direct(paths, project, prepared):
+    """Recheck routing and all observed inputs, allowing only retained file images."""
+    from pathlib import Path
+    transaction = _peer('history_transaction')
+    baseline = prepared['baseline']
+    entry = os.path.abspath(_first_of(paths))
+    if (baseline.get('kind') != 'direct/v1' or baseline.get('paths') != list(map(os.path.abspath, paths))
+            or baseline.get('policy') != project.config()
+            or baseline.get('destination') != list(map(os.path.abspath, _peer('knowledge_views').write_paths(paths)))
+            or prepared['authority'] != transaction.legacy_authority(entry)
+            or prepared['entry'] != os.path.basename(entry)
+            or not prepared['operation'].startswith('direct-')):
+        raise Refused('direct_baseline_mismatch: policy, destination or authority changed')
+    root = Path(entry).parent
+    if Path(layout(entry)['history_authority']).exists():
+        raise Refused('history_direct_writer_unsupported: authority changed')
+    mutation = transaction.PreparedMutation.from_bytes(transaction.json_bytes(transaction._encode(prepared)))
+    touched = {str(root / item['path']): item for item in mutation.files}
+    members = {os.path.relpath(os.path.abspath(path), root): os.path.abspath(path)
+               for path in _files_of(paths)}
+    if set(members) != set(baseline.get('record_members', {})):
+        raise Refused('concurrent_edit: reader-resolved record membership changed')
+    for relative, path in members.items():
+        raw = touched[path]['before'] if path in touched else transaction._read(Path(path))
+        if raw is None or hashlib.sha256(raw).hexdigest() != baseline['record_members'][relative]:
+            raise Refused('concurrent_edit: record member changed: ' + path)
+    for event in baseline['reads']:
+        kind, path, expected = event['kind'], event['path'], event['value']
+        item = touched.get(path)
+        if kind == 'bytes':
+            current = transaction._read(Path(path))
+            if item is not None and current in (item['before'], item['after']):
+                continue
+            actual = None if current is None else hashlib.sha256(current).hexdigest()
+        elif kind == 'exists':
+            if item is not None:
+                continue
+            actual = os.path.exists(path)
+        elif kind == 'glob':
+            actual = sorted(map(os.path.abspath, glob.glob(path)))
+        else:
+            raise Refused('direct_baseline_mismatch: unsupported observation')
+        if actual != expected:
+            raise Refused('concurrent_edit: captured input changed: ' + path)
+
+
 def _apply(paths, action, diagnostics=None):
+    """Prepare and validate the complete direct generation before publishing it."""
+    from pathlib import Path
+    import uuid
+    _direct_ready(paths)
+    transaction = _peer('history_transaction')
+    project = _peer('knowledge_views').project_for(paths)
+    entry = Path(_first_of(paths)).absolute()
+    root = entry.parent
+    stage = _DirectStage()
+    output = io.StringIO()
+    token = _DIRECT_STAGE.set(stage)
+    try:
+        authored_members = {os.path.abspath(path): Path(path).read_bytes() for path in _files_of(paths)}
+        # Page code reads its brief directly; retain it and the page measurement
+        # inputs before the candidate runs, as well as parser-observed inputs.
+        for role in ('view', 'measure', 'session', 'replaced', 'history_authority'):
+            path = layout(entry)[role]
+            _text_of_or_none(path)
+        before_doc, before_world = _peer('reasoning.authoring').prepare(
+            sys.modules.get(__name__) or _Reader(), paths, action)
+        before_evidence = before_world.assessment() if before_world is not None else {'document': dict(before_doc)}
+        with contextlib.redirect_stdout(output):
+            result = _apply_candidate(paths, copy.deepcopy(action), diagnostics)
+        if not stage.after:
+            print(output.getvalue(), end='')
+            return result
+        for candidate in stage.after.values():
+            parse(text=candidate.decode('utf-8'))
+        after_doc, after_world = _peer('reasoning.authoring').prepare(
+            sys.modules.get(__name__) or _Reader(), paths, action)
+        after_evidence = after_world.assessment() if after_world is not None else {'document': dict(after_doc)}
+        capabilities = _peer('reasoning.contract').capabilities(after_doc)
+        receipt = transaction.semantic_receipt(profile=capabilities['profile'], capabilities=capabilities,
+                                                before=before_evidence, after=after_evidence)
+    finally:
+        _DIRECT_STAGE.reset(token)
+    members = set(authored_members)
+    files = []
+    locations = layout(entry)
+    for path, after in stage.after.items():
+        relative = os.path.relpath(path, root)
+        if path == str(entry):
+            role = 'record'
+        elif path in members:
+            role = 'record_member'
+        else:
+            role = next((name for name in ('view', 'replaced') if path == locations[name]), None)
+        if role is None:
+            raise Refused('unsupported_direct_target: ' + path)
+        files.append({'path': relative, 'role': role, 'before': stage.before[path], 'after': after})
+    baseline = {'kind': 'direct/v1', 'paths': list(map(os.path.abspath, paths)),
+                'destination': list(map(os.path.abspath, _peer('knowledge_views').write_paths(paths))),
+                'policy': project.config(),
+                'record_members': {os.path.relpath(path, root): hashlib.sha256(raw).hexdigest()
+                                   for path, raw in authored_members.items()},
+                'reads': [{'kind': kind, 'path': path, 'value': value}
+                          for (kind, path), value in sorted(stage.observations.items())]}
+    mutation = transaction.PreparedMutation(operation='direct-' + uuid.uuid4().hex,
+        authority=transaction.legacy_authority(entry), baseline=baseline, files=files,
+        receipt=receipt, entry=entry.name)
+    transaction.publish_legacy(root, transaction.journal_for(entry), mutation,
+        verify=lambda prepared: _verify_direct(paths, project, prepared),
+        on_committed=lambda prepared: [forget(root / item['path']) for item in mutation.files])
+    print(output.getvalue(), end='')
+    return result
+
+
+def recover_direct(paths, *, direction='after'):
+    """Resume exact direct-write bytes; never regenerate a candidate during recovery."""
+    from pathlib import Path
+    entry = Path(_first_of(paths)).absolute()
+    transaction = _peer('history_transaction')
+    project = _peer('knowledge_views').project_for(paths)
+    with _locked(entry, project=project):
+        return transaction.recover_legacy(entry.parent, transaction.journal_for(entry),
+            direction=direction, verify=lambda prepared: _verify_direct(paths, project, prepared),
+            on_committed=lambda prepared: [forget(entry.parent / item['path']) for item in prepared['files']])
+
+
+def _apply_candidate(paths, action, diagnostics=None):
     doc, world = _peer('reasoning.authoring').prepare((sys.modules.get(__name__) or _Reader()), paths, action)
     ids, jud, fields = infer(doc)
     fields = authored_fields(action, fields)
@@ -4802,8 +5045,7 @@ def _apply(paths, action, diagnostics=None):
         else:
             collection = _collection_for(doc, ids, jud, fields, nid, body, action.get("into"))
             target = _file_for(files, nid, collection)
-    with io.open(target, encoding="utf-8") as source:
-        original = source.read()
+    original = _text_of_or_none(target)
     lines = original.split("\n")
     if kind == "set":
         now = value_of(raw, ids, nid)
@@ -4930,7 +5172,7 @@ def _apply(paths, action, diagnostics=None):
             drift = {d: page2[d] for d in seen if d in PAGE and d in page2 and not _writer_same(raw, seen[d], page2[d])}
             if drift:
                 seen.update(drift)
-                lines2 = io.open(target, encoding="utf-8").read().split("\n")
+                lines2 = _text_of_or_none(target).split("\n")
                 _, ind, s, e = _locate(lines2, nid)
                 _seen_lines(lines2, s, e, snapshot_field, seen)
                 _write_text(target, "\n".join(lines2))
@@ -4952,7 +5194,7 @@ def _apply(paths, action, diagnostics=None):
             shape, facts2 = _page_side(paths)[1:]
     except (Exception, SystemExit) as e:
         _write_text(target, original)
-        if side_before is not None or os.path.isfile(side):
+        if _DIRECT_STAGE.get() is None and (side_before is not None or os.path.isfile(side)):
             if side_before is None:
                 os.remove(side)
                 forget(side)
@@ -4968,7 +5210,7 @@ def _apply(paths, action, diagnostics=None):
             out.append("  no tab's sections earn a session source this rests on - no shape "
                        "rewritten; serve it on the tab that reads what it wrote")
         else:
-            blines = io.open(brief, encoding="utf-8").read().split("\n")
+            blines = _text_of_or_none(brief).split("\n")
             for where in wheres:
                 _shape_in(blines, where, shape)
             _write_text(brief, "\n".join(blines))
@@ -5524,7 +5766,9 @@ def _apply_first_add(action):
             except BaseException:
                 # Still inside the birth lock: no successful waiter can be removed between
                 # this exact-content check and unlink.
-                if _newborn_only(current):
+                transaction = _peer('history_transaction')
+                pending = os.path.join(os.path.dirname(current), transaction.journal_for(current))
+                if not os.path.exists(pending) and _newborn_only(current):
                     os.remove(current)
                 raise
 

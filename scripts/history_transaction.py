@@ -22,20 +22,26 @@ except ImportError:
     from pending_grounding import _encode, _decode, json_bytes, identity
 
 MAX_TRANSACTION_BYTES = 64 * 1024 * 1024
-ROLES = ('record', 'view', 'replaced', 'history_authority', 'history_object', 'history_commit')
+ROLES = ('record', 'record_member', 'view', 'replaced', 'history_authority', 'history_object', 'history_commit')
 _LOCKS = contextvars.ContextVar('history_directory_locks', default=())
 
 
-def journal_for(entry):
-    """One record-relative private journal location shared by readers and writers."""
+def journal_for(entry, *, root=None):
+    """Private journal relative to the chosen lock root (normally entry.parent)."""
     try:
         from .provenance import layout
     except ImportError:
         from provenance import layout
     entry = Path(entry).absolute()
+    root = entry.parent if root is None else Path(root).absolute()
     home = Path(layout(entry)['home'])
     token = C.sha256(entry.name.encode('utf-8'))[:24]
-    return (home / '.history-local' / (token + '.json')).relative_to(entry.parent).as_posix()
+    try:
+        entry.relative_to(root)
+        relative = (home / '.history-local' / (token + '.json')).relative_to(root).as_posix()
+    except ValueError:
+        raise C.HistoryError('invalid_path', 'entry must be below the journal root') from None
+    return C.relative_path(relative)
 
 
 def legacy_authority(entry):
@@ -47,7 +53,7 @@ def legacy_authority(entry):
 def _private_journal_home(root, journal, mutation):
     # Integrated writers use journal_for; raw fixture callers may select another
     # already-private location. Never alter a caller's existing ignore policy.
-    if journal == journal_for(Path(root) / mutation._data['entry']):
+    if journal == journal_for(Path(root) / mutation._data['entry'], root=root):
         ignore = _target(root, journal).parent / '.gitignore'
         if ignore.exists():
             C._require(_read(ignore) == b'*\n', 'journal_ignore_mismatch')
@@ -100,6 +106,10 @@ class PreparedMutation:
     `files` lists mappings with relative path, role, before bytes (None means
     absent), and after bytes. Immutable history files require an absent before
     image. Their presence on retry is allowed only with identical bytes.
+
+    Legacy record_member paths must occur in baseline.record_members, including
+    the entry and captured SHA256 values. This proves internal consistency only:
+    the publication verifier must re-resolve reader membership and its hashes.
     """
     def __init__(self, *, operation, authority, baseline, files, receipt, entry='GROUNDING.yaml'):
         C._text(operation)
@@ -111,6 +121,12 @@ class PreparedMutation:
         paths = layout('/' + entry)
         marker = C.validate_authority(authority)
         C._require(isinstance(baseline, dict), 'invalid_baseline')
+        members = baseline.get('record_members')
+        if 'record_members' in baseline:
+            C._require(isinstance(members, dict) and entry in members, 'invalid_record_members')
+            for path, digest in members.items():
+                C.relative_path(path)
+                C._text(digest, C.HEX)
         receipt = validate_receipt(receipt)
         C._require(isinstance(files, list) and files, 'empty_mutation')
         encoded = []
@@ -119,7 +135,16 @@ class PreparedMutation:
             C.relative_path(item['path'])
             C._require(item['role'] in ROLES, 'invalid_file_role')
             role = item['role']
-            if role == 'history_object':
+            if role == 'record_member':
+                C._require(marker['authority'] == 'legacy', 'authority_transition_required')
+                C._require(item['path'] != entry, 'role_path_mismatch', item['path'])
+                C._require(members is not None and item['path'] in members,
+                           'invalid_record_members', item['path'])
+                C._require(type(item['before']) is bytes
+                           and C.sha256(item['before']) == members[item['path']],
+                           'record_member_mismatch', item['path'])
+                expected = '/' + item['path']
+            elif role == 'history_object':
                 obj = C.validate_object(C.decode_document(item['after']))
                 expected = paths['history'] + '/' + obj['subject'] + '/' + obj['id'] + '.yaml'
             elif role == 'history_commit':
@@ -127,6 +152,10 @@ class PreparedMutation:
             else:
                 expected = paths['entry' if role == 'record' else role]
             C._require(item['path'] == expected.lstrip('/'), 'role_path_mismatch', item['path'])
+            if role == 'record' and members is not None:
+                C._require(type(item['before']) is bytes
+                           and C.sha256(item['before']) == members[entry],
+                           'record_member_mismatch', entry)
             if item['role'] in ('history_object', 'history_commit'):
                 C._require(item['before'] is None and item['after'] is not None,
                            'immutable_mutation')
@@ -298,6 +327,11 @@ def _lock(root, exclusive):
     try:
         import fcntl
     except ImportError:
+        if not exclusive:
+            # Read-only installations remain portable. This host cannot run our
+            # writers; the reader still brackets its read with the journal guard.
+            yield
+            return
         raise C.HistoryError('locking_unavailable') from None
     fd = os.open(str(root), os.O_RDONLY)
     stat = os.fstat(fd)
@@ -333,6 +367,7 @@ def reader_guard(root, journal):
     with _lock(root, False):
         C._require(not _target(root, journal).exists(), 'recovery_required')
         yield
+        C._require(not _target(root, journal).exists(), 'recovery_required')
 
 
 def _preflight(root, mutation, *, recovery):
@@ -368,16 +403,18 @@ def _apply_legacy(targets, direction):
             _replace(path, item[direction])
 
 
-def publish_legacy(root, journal, mutation, *, verify):
+def publish_legacy(root, journal, mutation, *, verify, on_committed=None):
     """Validate under a writer lock, persist the journal, then apply all files.
 
-    `verify` must recheck routing/capabilities and the complete captured baseline.
+    `verify` must recheck routing/capabilities and the complete captured baseline,
+    including actual reader-resolved membership and hashes for record_members.
     It is mandatory and called before any journal or file publication. Recovery
     reuses the stored envelope. Readers must share reader_guard at integration.
     """
     C._require(isinstance(mutation, PreparedMutation), 'invalid_mutation')
     C._require(mutation._data['authority']['authority'] == 'legacy', 'invalid_authority')
     C._require(callable(verify), 'missing_verifier')
+    C._require(on_committed is None or callable(on_committed), 'invalid_completion_callback')
     with _lock(root, True):
         journal_path = _journal_path(root, journal, mutation)
         C._require(not journal_path.exists(), 'recovery_required')
@@ -386,13 +423,16 @@ def publish_legacy(root, journal, mutation, *, verify):
         _private_journal_home(root, journal, mutation)
         publish_immutable(journal_path, mutation.to_bytes(), root=root)
         _apply_legacy(targets, 'after')
+        if on_committed is not None:
+            on_committed(mutation.to_data())
         journal_path.unlink()
         _sync(journal_path.parent)
 
 
-def recover_legacy(root, journal, *, verify, direction='after'):
+def recover_legacy(root, journal, *, verify, direction='after', on_committed=None):
     """Resume or undo exact prepared bytes, refusing unrelated concurrent edits."""
     C._require(direction in ('before', 'after') and callable(verify), 'invalid_recovery')
+    C._require(on_committed is None or callable(on_committed), 'invalid_completion_callback')
     with _lock(root, True):
         journal_path = _target(root, journal)
         C._require(journal_path.is_file(), 'no_recovery_pending')
@@ -402,6 +442,8 @@ def recover_legacy(root, journal, *, verify, direction='after'):
         targets = _preflight(root, mutation, recovery=True)
         verify(mutation.to_data())
         _apply_legacy(targets, direction)
+        if direction == 'after' and on_committed is not None:
+            on_committed(mutation.to_data())
         journal_path.unlink()
         _sync(journal_path.parent)
         return mutation

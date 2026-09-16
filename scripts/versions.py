@@ -416,7 +416,7 @@ def state(versions, rules=None, ancestry=None):
     return _cross(entries, rules)
 
 
-def _subject_entry(subject, held, rules, ancestry):
+def _subject_entry(subject, held, rules, ancestry, *, claim_key=None):
     """What a subject's own files say -> its entry: heads, status, marks, proposals, the body
     that stands, the reviews on its heads - and the ids it holds, so the cross-subject pass
     never reads a file."""
@@ -523,7 +523,7 @@ def _subject_entry(subject, held, rules, ancestry):
     # heads that say the same are one claim held by several - agreement, not a dispute
     by_claim = {}
     for v in frontier:
-        by_claim.setdefault(_claim(v), []).append(v["id"])
+        by_claim.setdefault((claim_key or _claim)(v), []).append(v["id"])
     if len(by_claim) == 1 and heads and not (disputed & set(heads)):
         h = sorted(heads)[0]
         entry.update({"head": h, "body": claims[h]["body"], "agreed": len(heads),
