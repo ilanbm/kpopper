@@ -87,7 +87,7 @@ judgments:
               with the integrator as the one who repairs. {{m.door.unfired_flips_named_reversed}} of
               the same flips are now reversed and red until named; {{p.supersede_doors}} is still the
               count that would show a second door."
-    wrong_if: {expr: "m.door.unfired_flips_named_reversed < 3"}
+    wrong_if: "m.door.unfired_flips_named_reversed < 3"
     seen:
       s.2026_09_04_minted_permission: "read 2026-09-04"
       s.2026_09_04_consolidate: "read 2026-09-04"
