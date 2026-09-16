@@ -1,19 +1,23 @@
 name: reasoning-runtime
 
 on:
+  workflow_call:
+    inputs:
+      rebuild:
+        type: boolean
+        required: true
   workflow_dispatch:
-  pull_request:
-    paths:
-      - scripts/reasoning/**
-      - tests/test_reasoning*.py
-      - pyproject.toml
-      - .github/workflows/reasoning-runtime.yml
+
+concurrency:
+  group: reasoning-runtime-${{ github.ref }}
+  cancel-in-progress: true
 
 permissions:
   contents: read
 
 jobs:
   build:
+    if: inputs.rebuild || github.event_name == 'workflow_dispatch'
     strategy:
       fail-fast: false
       matrix:
@@ -82,6 +86,12 @@ jobs:
 
   installed:
     needs: build
+    # A packaging-only change tests the committed binaries without a compiler build.
+    # A requested build must succeed before testing replacement libraries from it.
+    if: >-
+      !cancelled() &&
+      (needs.build.result == 'success' ||
+       (needs.build.result == 'skipped' && !inputs.rebuild && github.event_name != 'workflow_dispatch'))
     strategy:
       fail-fast: false
       matrix:
@@ -102,6 +112,7 @@ jobs:
       - name: Check completeness and integrity of committed runtime bundles
         run: python scripts/reasoning/build_runtime.py --check-bundles
       - uses: actions/download-artifact@v4
+        if: needs.build.result == 'success'
         with:
           pattern: gmp-replacement-*
           merge-multiple: true
@@ -113,7 +124,7 @@ jobs:
       - name: Install each distribution and execute with cold caches and no compiler PATH
         shell: python
         env:
-          KPOPPER_TEST_REPLACEMENT_ROOT: ${{ runner.temp }}/replacement
+          KPOPPER_TEST_REPLACEMENT_ROOT: ${{ needs.build.result == 'success' && format('{0}/replacement', runner.temp) || '' }}
         run: |
           import os, pathlib, shutil, subprocess, sys, tempfile, zipfile
           root = pathlib.Path.cwd()

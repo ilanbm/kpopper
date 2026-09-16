@@ -1,6 +1,7 @@
 name: kpopper check
 
 on:
+  workflow_dispatch:
   pull_request:
     branches: [main]
   push:
@@ -15,20 +16,45 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  check:
+  changes:
     runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        # The floor the package declares, and the version most people run it on.
-        python: ["3.9", "3.13"]
+    outputs:
+      python: ${{ steps.select.outputs.python }}
+      documents: ${{ steps.select.outputs.documents }}
+      session: ${{ steps.select.outputs.session }}
+      installed: ${{ steps.select.outputs.installed }}
+      native: ${{ steps.select.outputs.native }}
     steps:
       - uses: actions/checkout@v4
-
+        with:
+          fetch-depth: 0
       - uses: actions/setup-python@v5
         with:
-          python-version: ${{ matrix.python }}
+          python-version: "3.13"
+      - name: Select checks from the complete change
+        id: select
+        env:
+          EVENT: ${{ github.event_name }}
+          PR_BASE: ${{ github.event.pull_request.base.sha }}
+          PR_HEAD: ${{ github.event.pull_request.head.sha }}
+          PUSH_BASE: ${{ github.event.before }}
+          PUSH_HEAD: ${{ github.sha }}
+        run: |
+          if [ "$EVENT" = pull_request ]; then
+            python .github/scripts/ci_selection.py --base "$PR_BASE" --head "$PR_HEAD"
+          elif [ "$EVENT" = push ]; then
+            python .github/scripts/ci_selection.py --push --base "$PUSH_BASE" --head "$PUSH_HEAD"
+          else
+            python .github/scripts/ci_selection.py --full
+          fi
 
+  record:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
       - name: The pull request declares its bump
         if: github.event_name == 'pull_request' && !startsWith(github.event.pull_request.title, 'Release ')
         env:
@@ -43,9 +69,8 @@ jobs:
 
       - name: Install the package the way a user gets it
         run: pip install .
-
-      - name: The reader and the page keep their contract
-        run: python -m unittest discover -s tests
+      - name: Check skill/release contracts and CI selection
+        run: python -m unittest tests.test_skills tests.test_release tests.test_ci_selection -v
 
       - name: The record holds together
         run: kpop --frozen check
@@ -75,7 +100,34 @@ jobs:
         # moved and the view it renders to was never regenerated alongside it.
         run: git diff --exit-code
 
+  check:
+    needs: changes
+    if: needs.changes.outputs.python == 'true' || needs.changes.outputs.documents == 'true'
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python: ["3.9", "3.13"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+      - name: Install the package the way a user gets it
+        run: pip install .
+      - name: The reader and the page keep their contract
+        env:
+          FULL_SUITE: ${{ needs.changes.outputs.python }}
+        run: |
+          if [ "$FULL_SUITE" = true ]; then
+            python -m unittest discover -s tests
+          else
+            python -m unittest discover -s tests -p 'test_document*.py'
+          fi
+
   document-ui:
+    needs: changes
+    if: needs.changes.outputs.documents == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -95,3 +147,29 @@ jobs:
         run: npm run test:documents
       - name: Test setup leaves the source tree unchanged
         run: git diff --exit-code
+
+  session:
+    needs: changes
+    if: needs.changes.outputs.session == 'true'
+    uses: ./.github/workflows/session.yml
+
+  reasoning-runtime:
+    needs: changes
+    if: needs.changes.outputs.installed == 'true'
+    uses: ./.github/workflows/reasoning-runtime.yml
+    with:
+      rebuild: ${{ needs.changes.outputs.native == 'true' }}
+
+  ci-required:
+    needs: [changes, record, check, document-ui, session, reasoning-runtime]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - name: Require every selected check to succeed
+        env:
+          CI_NEEDS: ${{ toJSON(needs) }}
+        run: python .github/scripts/ci_selection.py --required
