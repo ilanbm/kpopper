@@ -477,10 +477,13 @@ def _sha(data):
 
 
 class _Inventory:
-    def __init__(self):
+    def __init__(self, *, retain_bytes=False):
         self.events = {}
+        self.contents = {} if retain_bytes else None
 
     def __call__(self, kind, path, value):
+        if kind == 'bytes' and self.contents is not None:
+            self.contents[path] = bytes(value)
         value = _sha(value) if kind == 'bytes' else value
         key = (kind, path)
         if key in self.events and self.events[key] != value:
@@ -546,7 +549,31 @@ def _portable(value, origin, *, authored=False):
     return copy.deepcopy(value)
 
 
-def capture(paths, *, read_mode=None, as_of=None):
+class CapturedSource:
+    """Private exact reader inventory for checked copying; not publication authority."""
+    def __init__(self, snapshot, inventory, observation, paths, mode):
+        self.snapshot = snapshot
+        self.inventory = inventory
+        self.observation = copy.deepcopy(observation)
+        self.paths = list(paths)
+        self.mode = mode
+
+    @property
+    def files(self):
+        return dict(self.inventory.contents)
+
+    def verify(self):
+        self.inventory.verify()
+        if digest(self.observation) != digest(_observation(self.paths, self.mode)):
+            raise SnapshotError('snapshot_changed', 'routing, pending, or target observation changed')
+
+
+def capture_source(paths, *, read_mode=None, as_of=None):
+    """Capture the reader's exact bytes and observations for a later atomic copy."""
+    return capture(paths, read_mode=read_mode, as_of=as_of, _retain_source=True)
+
+
+def capture(paths, *, read_mode=None, as_of=None, _retain_source=False):
     from .. import provenance as P
     paths = [str(path) for path in ([paths] if isinstance(paths, (str, Path)) else paths)]
     if not paths:
@@ -561,7 +588,7 @@ def capture(paths, *, read_mode=None, as_of=None):
     # Discovery reads the complete actual closure; the second load is bracketed by
     # its verified inventory. Equal merged YAML alone is never sufficient.
     for _ in range(2):
-        inventory = _Inventory()
+        inventory = _Inventory(retain_bytes=_retain_source)
         token = P._CAPTURE_READS.set(inventory)
         core_token = P._CORE_READS.set(True)
         try:
@@ -598,6 +625,8 @@ def capture(paths, *, read_mode=None, as_of=None):
     observed_target = hasattr(doc, 'knowledge_target') and target.get('revision')
     target.update(status='unavailable' if reason else ('observed' if observed_target else 'unassessed'),
                   reason=reason, ref=target.get('ref'), revision=target.get('revision'))
+    if hasattr(doc, 'knowledge_target_snapshot'):
+        target['snapshot'] = copy.deepcopy(doc.knowledge_target_snapshot)
     context = {'read_mode': 'captured-live' if mode == 'live' else 'frozen',
                'original_read_mode': mode,
                'project': {'version': config['version'], 'mode': config['mode'], 'generation': config['generation'],
@@ -614,5 +643,8 @@ def capture(paths, *, read_mode=None, as_of=None):
              for (kind, path), value in sorted(inventories[-1].events.items()) if kind in ('bytes', 'unreadable')]
     revision = {'files': sorted(files, key=lambda item: item['origin'])}
     revision['digest'] = digest(revision)
-    return Snapshot.from_data(doc, context=context, hypotheses=_portable(doc.hypotheses, origin),
-                              as_of=as_of, authored_revision=revision)
+    snapshot = Snapshot.from_data(doc, context=context, hypotheses=_portable(doc.hypotheses, origin),
+                                  as_of=as_of, authored_revision=revision)
+    if _retain_source:
+        return CapturedSource(snapshot, inventories[-1], initial, paths, mode)
+    return snapshot

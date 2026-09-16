@@ -4,8 +4,10 @@ The checkout remains the code-world. Pending bodies are named proposals; reading
 never adopts them, chooses a newest revision, or updates a review snapshot.
 """
 import copy
+import ctypes
 import os
 from pathlib import Path
+import sys
 import tempfile
 
 try:
@@ -63,8 +65,6 @@ def overlay(paths, doc, *, read_mode='live'):
     doc.pending_ref = snap['ref']
     # Preserve immutable evidence for portable strict capture.
     doc.pending_snapshot = copy.deepcopy(snap)
-    if not snap['bundles']:
-        return doc
     holders = {}
     meanings = {}
     active_ids = set()
@@ -121,7 +121,7 @@ def overlay(paths, doc, *, read_mode='live'):
                 # reading; committed target bytes are pinned by the Git revision.
                 core_token = W.P._CORE_READS.set(P._CORE_READS.get())
                 try:
-                    target = W._records(project.root, project.config()['record'], resolved.stdout.decode().strip())
+                    target = W._records(project.root, project.config()['record'], resolved.stdout.decode().strip(), include_files=True)
                 finally:
                     W.P._CORE_READS.reset(core_token)
                 # Validate the complete target before interpreting any of its entries.
@@ -131,6 +131,7 @@ def overlay(paths, doc, *, read_mode='live'):
                     capability = capability_of(document)
                     if capability['profile'] == contract.PROFILE and not P._CORE_READS.get():
                         raise P.Refused('unsupported_capability: use core/v1 consumer')
+                doc.knowledge_target_snapshot = copy.deepcopy(target)
                 target_docs = [('target:' + ref, target['doc'])]
                 for hyp in target['hypotheses']:
                     layered = copy.deepcopy(target['doc'])
@@ -202,6 +203,43 @@ def lines(doc):
     return result
 
 
+def _rename_absent(source, destination):
+    """One filesystem operation, refusing even an empty destination created late."""
+    if os.name == 'nt':
+        os.rename(source, destination)  # Windows rename never replaces an existing path.
+        return
+    library = ctypes.CDLL(None, use_errno=True)
+    if sys.platform == 'darwin':
+        rename = library.renamex_np
+        rename.argtypes = (ctypes.c_char_p, ctypes.c_char_p, ctypes.c_uint)
+        result = rename(os.fsencode(source), os.fsencode(destination), 0x00000004)  # RENAME_EXCL
+    elif sys.platform.startswith('linux') and hasattr(library, 'renameat2'):
+        rename = library.renameat2
+        rename.argtypes = (ctypes.c_int, ctypes.c_char_p, ctypes.c_int, ctypes.c_char_p, ctypes.c_uint)
+        result = rename(-100, os.fsencode(source), -100, os.fsencode(destination), 1)  # NOREPLACE
+    else:
+        raise ValueError('atomic absent-destination publication is unavailable on this platform')
+    if result:
+        error = ctypes.get_errno()
+        raise OSError(error, os.strerror(error), str(destination))
+
+
+def publish_tree(destination, populate, validate=None):
+    """Build on the destination filesystem, validate, and publish into absence."""
+    destination = Path(destination).expanduser().absolute()
+    if os.path.lexists(destination):
+        raise FileExistsError('snapshot destination already exists; select a new directory')
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    with tempfile.TemporaryDirectory(prefix='.knowledge-', dir=destination.parent) as temporary:
+        staging = Path(temporary) / 'snapshot'
+        staging.mkdir()
+        populate(staging)
+        if validate is not None:
+            validate(staging)
+        _rename_absent(staging, destination)
+    return destination
+
+
 def materialize(project, revision, destination, *, ref=None):
     """Export complete immutable closure/evidence to a new directory, ready for review/CI.
 
@@ -214,12 +252,7 @@ def materialize(project, revision, destination, *, ref=None):
     bundle = store.read_bundle(revision, pinned)
     G.validate_bundle(bundle)
     destination = Path(destination).expanduser().resolve()
-    if destination.exists():
-        raise ValueError('snapshot destination already exists; select a new directory')
-    destination.parent.mkdir(parents=True, exist_ok=True)
-    with tempfile.TemporaryDirectory(prefix='.knowledge-', dir=destination.parent) as temporary:
-        root = Path(temporary) / 'snapshot'
-        root.mkdir()
+    def populate(root):
         document = copy.deepcopy(bundle['manifest']['document'])
         for path, data in bundle['files'].items():
             M.relative_path(path)
@@ -231,7 +264,9 @@ def materialize(project, revision, destination, *, ref=None):
         (root / 'GROUNDING.yaml').write_text(G.P.yaml.safe_dump(document, allow_unicode=True, sort_keys=False), encoding='utf-8')
         (root / 'snapshot.json').write_bytes(G.json_bytes({'version': 1, 'revision': revision,
                                                         'ledger_ref': pinned, 'read_mode': 'frozen'}))
-        # rename cannot replace a populated directory; no checkout content is changed.
-        root.rename(destination)
+    try:
+        publish_tree(destination, populate)
+    except FileExistsError as error:
+        raise ValueError('snapshot destination already exists; select a new directory') from error
     return {'state': 'materialized', 'revision': revision, 'record': str(destination / 'GROUNDING.yaml'),
             'read_mode': 'frozen', 'ledger_ref': pinned}

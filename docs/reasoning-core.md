@@ -113,6 +113,49 @@ retired. A profile change refuses incompatible active revisions with
 revision and a reason; it preserves its bundle and prior acceptance receipts.
 Resuming it checks compatibility with the current record before reactivating it.
 
+## Explicit migration
+
+Preview a complete conversion before writing a new directory:
+
+```sh
+kpopper expressions migrate --record example.yaml --profile core/v1 --destination candidate --json
+kpopper expressions migrate --record example.yaml --profile core/v1 --destination candidate --apply --json
+```
+
+The copy retains record shards and pointers, named hypotheses, layout sidecars,
+local referenced evidence, original pending contributions and captured target
+observations. It never runs measurement recipes or grants publication permission.
+Unresolved pointers, unreadable files, mixed layouts and ambiguous conversions
+block a complete copy. External evidence locators remain locators.
+
+The `.kpopper-migration` directory contains exact originals, the conversion
+receipt, and typed `original.json` and `candidate.json` snapshots. Replay them
+with `Snapshot.from_json`; the candidate evaluates the transformed document
+against its captured context without looking up current refs or configuration.
+Historical `seen` values remain unchanged. Known legacy results must preserve
+type, value and availability. Newly executable formulas and conditions are
+reported explicitly; an unavailable legacy runtime is not equivalence evidence.
+
+Without `--destination`, `--apply` is allowed only when one canonical file changes
+and the remaining captured closure stays unchanged. It retains a backup and
+rechecks source bytes, configuration and pending state before replacing the file.
+Copies publish with one atomic rename into an absent destination; a late-created
+empty directory is not overwritten.
+
+A copy does not change the live record route. `kpopper config --record PATH
+--migration-receipt candidate/.kpopper-migration/receipt.json --check --json`
+previews a separate routing change; omit `--check` to apply it. The transition
+recomputes conversion evidence under the existing locks. Unsettled contributions,
+unreconciled hypotheses, unavailable destinations and incompatible worktrees still
+block it. Advanced destinations must be repository-relative and prepared with
+compatible captured bytes in every participating worktree.
+
+An exact restoration uses the original record path and the same receipt with
+`--rollback`. It verifies the retained originals and recomputes the conversion;
+further core authoring can make restoration unavailable. Receipts bind retained
+evidence and current validation; they are not signatures or independent proof of
+the source claims.
+
 Numeric constants keep their decimal lexemes and evaluate as exact rationals.
 Quoted numbers remain text; booleans, numeric zero, null and missing inputs remain
 distinct. A YAML float has already lost its original lexeme: the adapter uses its

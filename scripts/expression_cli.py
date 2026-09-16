@@ -14,7 +14,20 @@ except ImportError:
 P = I.P
 
 
-def migrate(record=None, apply=False, readable=False):
+def migrate(record=None, apply=False, readable=False, *, profile=None, destination=None):
+    if profile is not None:
+        if profile != 'core/v1':
+            raise ValueError('unsupported migration profile')
+        C = P._peer('core_migration')
+        plan = C.prepare(record)
+        if apply and not plan.problems:
+            return plan.publish(destination) if destination else plan.apply()
+        result = plan.summary()
+        if destination:
+            result['destination'] = str(Path(destination).expanduser().absolute())
+        return result
+    if destination is not None:
+        raise ValueError('copy migration needs an explicit --profile core/v1')
     rec, project, policy = I._routed_record(record)
     with P._locked(str(rec), project=project):
         if project.config() != policy:
@@ -127,6 +140,8 @@ def main(argv=None):
     migrate_parser.add_argument("--record")
     migrate_parser.add_argument("--apply", action="store_true")
     migrate_parser.add_argument('--readable', action='store_true', help='convert supported active formulas to expr; preserve historical snapshots')
+    migrate_parser.add_argument('--profile', choices=['core/v1'], help='explicitly convert supported active fields and preserve history')
+    migrate_parser.add_argument('--destination', help='copy the complete frozen candidate to a new directory with --apply')
     for command in (convert, migrate_parser):
         command.add_argument("--json", action="store_true")
     args = parser.parse_args(argv)
@@ -137,7 +152,7 @@ def main(argv=None):
                 expression = E.readable(expression, args.predicate)
             result = {"expression": expression, "display": E.text(expression), "references": E.refs(expression)}
         else:
-            result = migrate(args.record, args.apply, args.readable)
+            result = migrate(args.record, args.apply, args.readable, profile=args.profile, destination=args.destination)
         print(json.dumps(result, ensure_ascii=False))
         return 1 if args.action == "migrate" and args.apply and result["problems"] else 0
     except (ValueError, SyntaxError, OSError, RecursionError) as error:

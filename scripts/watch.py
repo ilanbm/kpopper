@@ -47,7 +47,7 @@ def _safe_path(name):
     return path.as_posix()
 
 
-def _records(root, entry, sha=None):
+def _records(root, entry, sha=None, *, include_files=False):
     """Materialize only the bounded record/pointer/hypothesis closure, never source files."""
     import posixpath
     # Each ref keeps the entry name and companion layout it was committed with.  A
@@ -120,7 +120,10 @@ def _records(root, entry, sha=None):
             if h['error']:
                 raise ValueError('unreadable hypothesis ' + name + ': ' + h['error'])
             hyps.append({'name': name, 'doc': h['doc'], 'head': h['head']})
-    return {'doc': dict(doc), 'hypotheses': hyps, 'hash': digest(files)}
+    result = {'doc': dict(doc), 'hypotheses': hyps, 'hash': digest(files)}
+    if include_files:
+        result['files'] = dict(files)
+    return result
 
 
 def _entries(doc):

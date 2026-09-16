@@ -60,7 +60,7 @@ def _promotion_blockers(reader, document, context=None):
     return blockers
 
 
-def pending_compatible(reader, paths, destination, *, snapshot=None, decisions=None, resume=()):
+def pending_compatible(reader, paths, destination, *, snapshot=None, decisions=None, resume=(), project=None, mode=None):
     """Check the effective overlay without changing its immutable ledger or receipts.
 
     Accepted revisions remain attached until an explicit terminal decision retires
@@ -69,11 +69,13 @@ def pending_compatible(reader, paths, destination, *, snapshot=None, decisions=N
     """
     from pathlib import Path
     from .. import knowledge_views as V, pending_grounding as G, pending_publication as C
-    project = V.project_for(paths)
-    if not project.git or project.config()['mode'] != 'advanced' or Path(paths[0]).resolve() != project.record():
+    project = project or V.project_for(paths)
+    if not project.git or (mode or project.config()['mode']) != 'advanced' or Path(paths[0]).resolve() != project.record():
         return
-    snapshot = snapshot if snapshot is not None else G.Store(project).snapshot()
-    decisions = decisions if decisions is not None else C.Publisher(project)._load()['decisions']
+    # Configured readers can be loaded by file path under a separate package
+    # identity. Pass the repository location across that boundary, not a class.
+    snapshot = snapshot if snapshot is not None else G.Store(project.root).snapshot()
+    decisions = decisions if decisions is not None else C.Publisher(project.root)._load()['decisions']
     meaning = G.meaning_capabilities(destination)
     for revision, bundle in snapshot['bundles'].items():
         if revision not in resume and decisions.get(revision, {}).get('state') in C.TERMINAL:

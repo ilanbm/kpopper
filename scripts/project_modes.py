@@ -146,7 +146,104 @@ class Project:
                 and all(state in {'accepted', 'withdrawn', 'rejected', 'superseded', 'closed'}
                         for state in proof['terminal'].values()))
 
-    def transition_report(self, mode, record=None, *, _pending_proof=None):
+    def _migration_evidence(self, destination, receipt, *, rollback=False):
+        """Recompute the permitted conversion; a receipt alone cannot authorize it."""
+        if __package__:
+            from . import core_migration as C, pending_grounding as G
+        else:
+            C, G = I.P._peer('core_migration'), I.P._peer('pending_grounding')
+        authoring = I.P._peer('reasoning.authoring')
+        current = self.config()
+        snapshots, signatures, plans, receipts = {}, set(), [], []
+        for root in self.worktrees():
+            source = (root / Path(current['record']).expanduser()).resolve()
+            target = (root / Path(destination).expanduser()).resolve()
+            if not source.is_file() or not target.is_file():
+                raise ValueError('migration destination is unavailable in a participating worktree')
+            original, candidate = (target, source) if rollback else (source, target)
+            plan = C.prepare(original, route=False, read_mode='frozen' if rollback else 'live')
+            if plan.problems:
+                raise ValueError('migration cannot be validated: ' + '; '.join(map(str, plan.problems)))
+            witness = Path(receipt) if root == self.root else candidate.parent / C.ARTIFACTS / 'receipt.json'
+            if rollback:
+                self._migration_reverse(plan, candidate.parent, witness)
+            else:
+                plan.validate_destination(candidate.parent, witness)
+            # Reconciliation is separate from equivalence and remains required,
+            # including accepted revisions which still attach to the live overlay.
+            signatures.add(G.identity({plan.mapping[path]: hashlib.sha256(data).hexdigest()
+                                       for path, data in plan.source_files.items()}))
+            for path, data in plan.source_files.items():
+                snapshots[str(path)] = hashlib.sha256(data).hexdigest()
+            for path, data in plan.files.items():
+                actual = candidate.parent / path
+                snapshots[str(actual)] = hashlib.sha256(actual.read_bytes()).hexdigest()
+            artifacts = candidate.parent / C.ARTIFACTS
+            for path in artifacts.rglob('*'):
+                if path.is_file():
+                    snapshots[str(path)] = hashlib.sha256(path.read_bytes()).hexdigest()
+            receipts.append(hashlib.sha256(witness.read_bytes()).hexdigest())
+            plans.append(plan)
+        if len(signatures) != 1:
+            raise ValueError('worktrees have different migration source closures; reconcile before changing mode')
+        for plan in plans:
+            plan.source.verify()
+        return {'snapshots': snapshots, 'receipts': receipts, 'rollback': rollback}
+
+    @staticmethod
+    def _migration_reverse(plan, candidate, witness):
+        """Re-prove an exact restoration against retained originals and conversion.
+
+        The old observation remains evidence of that time. Current configuration
+        is validated by the surrounding transition, and can legitimately differ.
+        No new core write or unretained original is silently downgraded.
+        """
+        if __package__:
+            from . import core_migration as C, pending_grounding as G
+            from .reasoning.snapshot import Snapshot
+        else:
+            C, G = I.P._peer('core_migration'), I.P._peer('pending_grounding')
+            Snapshot = I.P._peer('reasoning.snapshot').Snapshot
+        try:
+            manifest = json.loads(Path(witness).read_bytes())
+            for key in ('version', 'transformation', 'state', 'publication_authority', 'record', 'complete'):
+                if G.identity(manifest[key]) != G.identity(plan.manifest[key]):
+                    raise ValueError('rollback migration contract differs')
+            originals = {row['path']: row['sha256'] for row in manifest['source']}
+            expected = {plan.mapping[path]: hashlib.sha256(data).hexdigest() for path, data in plan.source_files.items()}
+            if originals != expected or len(originals) != len(manifest['source']):
+                raise ValueError('rollback original closure changed')
+            inventory = manifest['destination']
+            for name in inventory:
+                relative_path(name)
+            actual = {path.relative_to(candidate).as_posix(): path for path in candidate.rglob('*')
+                      if path.is_file() or path.is_symlink()}
+            if set(actual) != set(inventory) | {C.ARTIFACTS + '/receipt.json'}:
+                raise ValueError('rollback candidate inventory changed')
+            if actual[C.ARTIFACTS + '/receipt.json'].read_bytes() != Path(witness).read_bytes():
+                raise ValueError('rollback receipt differs from the candidate receipt')
+            for name, digest in inventory.items():
+                if actual[name].is_symlink() or hashlib.sha256(actual[name].read_bytes()).hexdigest() != digest:
+                    raise ValueError('rollback candidate bytes changed')
+            for path, data in plan.source_files.items():
+                if (candidate / C.ARTIFACTS / 'originals' / plan.mapping[path]).read_bytes() != data:
+                    raise ValueError('rollback original evidence changed')
+            for name, data in plan.files.items():
+                if not name.startswith(C.ARTIFACTS + '/') and (candidate / name).read_bytes() != data:
+                    raise ValueError('rollback is unavailable after further core authoring')
+            original = Snapshot.from_json((candidate / C.ARTIFACTS / 'original.json').read_bytes())
+            transformed = Snapshot.from_json((candidate / C.ARTIFACTS / 'candidate.json').read_bytes())
+            if original.snapshot_id != manifest['source_snapshot_id'] or transformed.snapshot_id != manifest['candidate_snapshot_id']:
+                raise ValueError('rollback snapshot identity differs')
+            for retained, recomputed in ((original, plan.original), (transformed, plan.candidate)):
+                old, now = retained.to_data(), recomputed.to_data()
+                if any(G.identity(old[key]) != G.identity(now[key]) for key in ('document', 'hypotheses')):
+                    raise ValueError('rollback snapshots differ from recomputed conversion')
+            plan.source.verify()
+        except (KeyError, TypeError, OSError, json.JSONDecodeError) as error:
+            raise ValueError('invalid rollback migration evidence') from error
+
+    def transition_report(self, mode, record=None, *, _pending_proof=None, migration_receipt=None, rollback=False):
         if mode not in MODES or (not self.git and mode != 'simple'):
             raise ValueError('mode needs a compatible Git or Simple project')
         current = self.config()
@@ -181,6 +278,11 @@ class Project:
                 and not self._settled_pending(_pending_proof, current):
             blockers.append('durable contributions exist; reconcile their publication before changing mode')
         changed = mode != current['mode'] or destination != current['record']
+        migration = None
+        if rollback and not migration_receipt:
+            raise ValueError('rollback requires a verified migration receipt')
+        if changed and migration_receipt:
+            migration = self._migration_evidence(destination, migration_receipt, rollback=rollback)
         targets = {(root / destination).resolve() for root in self.worktrees()}
         old_hashes = {h for h in snapshots.values() if h is not None}
         if changed:
@@ -190,7 +292,7 @@ class Project:
                     snapshots.setdefault(str(target), None)
                     continue
                 target_hash = hashlib.sha256(target.read_bytes()).hexdigest()
-                if old_hashes and target_hash not in old_hashes:
+                if old_hashes and target_hash not in old_hashes and migration is None:
                     blockers.append('destination record differs; reconcile its knowledge before changing mode: ' + str(target))
                 snapshots.setdefault(str(target), target_hash)
                 hypothesis_dir = Path(I.P.layout_of([str(target)])['hypotheses'])
@@ -200,10 +302,20 @@ class Project:
             for path, digest in snapshots.items():
                 if digest:
                     doc = I.P.yaml.safe_load(Path(path).read_bytes())
-                    if isinstance(doc, dict) and any(doc.get(k) for k in ('record', 'also')):
+                    if isinstance(doc, dict) and any(doc.get(k) for k in ('record', 'also')) and migration is None:
                         blockers.append('multi-file record needs explicit reconciliation before changing mode: ' + path)
+            authoring = I.P._peer('reasoning.authoring')
+            for target in sorted(targets):
+                if target.is_file():
+                    document = authoring.load(I.P, [str(target)], read_mode='frozen')
+                    I.P._peer('pending_grounding').document_capabilities(document)
+                    authoring.pending_compatible(I.P, [str(self.record())], document, project=self,
+                        mode='advanced' if 'advanced' in (mode, current['mode']) else 'simple')
+        if migration is not None:
+            snapshots.update(migration['snapshots'])
         return {'from': current, 'mode': mode, 'record': destination, 'changed': changed,
-                'blockers': blockers if changed else [], 'snapshots': snapshots}
+                'blockers': blockers if changed else [], 'snapshots': snapshots,
+                'migration': {k: v for k, v in migration.items() if k != 'snapshots'} if migration else None}
 
     def _transition_guard(self, mode, record):
         current = self.config()
@@ -228,16 +340,17 @@ class Project:
             guard = verified_guard()
         return guard
 
-    def preview_transition(self, mode=None, record=None):
+    def preview_transition(self, mode=None, record=None, *, migration_receipt=None, rollback=False):
         with self._transition_guard(mode, record) as proof:
             with self.lock():
-                return self.transition_report(mode or self.config()['mode'], record, _pending_proof=proof)
+                return self.transition_report(mode or self.config()['mode'], record, _pending_proof=proof,
+                                              migration_receipt=migration_receipt, rollback=rollback)
 
-    def configure(self, mode=None, record=None, expected_generation=None):
+    def configure(self, mode=None, record=None, expected_generation=None, *, migration_receipt=None, rollback=False):
         with self._transition_guard(mode, record) as proof:
-            return self._configure(mode, record, expected_generation, proof)
+            return self._configure(mode, record, expected_generation, proof, migration_receipt, rollback)
 
-    def _configure(self, mode, record, expected_generation, proof):
+    def _configure(self, mode, record, expected_generation, proof, migration_receipt=None, rollback=False):
         with self.lock():
             current = self.config()
             if expected_generation is not None and current['generation'] != expected_generation:
@@ -245,21 +358,29 @@ class Project:
             paths = [(root / Path(current['record']).expanduser()).resolve() for root in self.worktrees()]
             if record:
                 paths.extend((root / Path(record).expanduser()).resolve() for root in self.worktrees())
+            if migration_receipt:
+                preliminary = self.transition_report(mode or current['mode'], record, _pending_proof=proof,
+                                                     migration_receipt=migration_receipt, rollback=rollback)
+                paths.extend(Path(path) for path in preliminary['snapshots'])
             # Lock order for routed writers: project policy, then record directories.
             # Existing file writers already honor the latter. Keep them out between
             # checking equality, retaining rollback bytes and committing the policy.
             with contextlib.ExitStack() as locks:
                 for directory in sorted({path.parent for path in paths if path.parent.is_dir()}):
                     locks.enter_context(I.P._directory_locked(str(directory / 'record')))
-                report = self.transition_report(mode or current['mode'], record, _pending_proof=proof)
+                report = self.transition_report(mode or current['mode'], record, _pending_proof=proof,
+                                                migration_receipt=migration_receipt, rollback=rollback)
                 if report['blockers']:
                     raise ValueError('; '.join(report['blockers']))
                 if report['changed']:
                     # Rollback contains original bytes, not just hashes, and never enters Git.
-                    backup = {'config': current, 'encoding': 'base64',
+                    backup = {'config': current, 'encoding': 'base64', 'migration': report['migration'],
                               'records': {p: base64.b64encode(Path(p).read_bytes()).decode('ascii') if h else None
                                                             for p, h in report['snapshots'].items()}}
                     I._save(self.state / 'mode-history' / (str(time.time_ns()) + '.json'), backup)
+                if any((hashlib.sha256(Path(path).read_bytes()).hexdigest() if Path(path).is_file() else None) != expected
+                       for path, expected in report['snapshots'].items()):
+                    raise ValueError('record closure changed before configuration commit')
                 value = dict(current, mode=report['mode'], record=report['record'],
                              generation=current['generation'] + 1)
                 I._save(self.config_path, value)
