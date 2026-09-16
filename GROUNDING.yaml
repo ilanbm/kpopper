@@ -877,20 +877,25 @@ sources:
          subject - take-in 0.37s 0 parsed"
     read: "2026-09-16"
 
+
   run.versions_core_review_round:
-    v: 2
+    v: 3
     from: s.2026_09_16_versions_core
-    name: "Two review rounds of the versions core by a second reviewer, with reproductions - the
+    name: "Three review rounds of the versions core by a second reviewer, with reproductions - the
            semantic round (ten findings: recorded time choosing between roots, cross-source
            supersession, reservations not travelling a chain or from a fired premise, identity
            unchecked on read, acceptance versus refutation unsurfaced, agreement read as dispute,
-           quadratic equal-clock comparison, snapshot growth, silent deletion, lexical stamps) and
-           the efficiency round (an index keyed by file counts returning another branch's value, and
-           an identity without the recorded moment breaking the union)"
-    of: "reports at ~/docs/kpopper/reviews/2026-09-16-versions-core-3a04bc4/ and
-         2026-09-16-versions-core-53604b3/, reproducers included, against the heads the tag
-         versions-core-reviewed-2026-09-16 keeps reachable; every finding kept as a test and closed
-         at 6a46e36, 31 tests OK"
+           quadratic equal-clock comparison, snapshot growth, silent deletion, lexical stamps), the
+           efficiency round (an index keyed by file counts returning another branch's value, an
+           identity without the recorded moment breaking the union), and the interaction round (acts
+           in sequence and in branches decided by global flags instead of by the acts left
+           unanswered, an untouched rendering of an agreement read as an edit, a validation problem
+           lost through the index, a corroborating observation unreviewing a decision - and the
+           product question whether refuting a replacement restores what it replaced, answered no: a
+           return is a word of its own)"
+    of: "reports at ~/docs/kpopper/reviews/2026-09-16-versions-core-3a04bc4/, -53604b3/ and
+         -ad35e72/, reproducers included, against heads the tag versions-core-reviewed-2026-09-16
+         keeps reachable; every finding kept as a test and closed at 9cb42ce, 38 tests OK"
     read: "2026-09-16"
 
   run.versions_core_tests:
@@ -1072,11 +1077,12 @@ known:
     at: "49,359.7 KiB over 137,645 files at a hundred thousand contributions"
     of: "2026-09-16"
   m.core.counterexamples_kept:
-    v: 13
-    name: "Counterexamples from the two review rounds kept as regression tests of the versions core,
-           each passing"
+    v: 20
+    name: "Counterexamples from the three review rounds kept as regression tests of the versions
+           core, each passing - the short-history property test among them"
     from: run.versions_core_review_round
-    at: "tests/test_versions_core.py, class TheCounterexamples and the retry tests; 31 tests in all"
+    at: "tests/test_versions_core.py, classes TheCounterexamples and TheActsThatRemainOpen and the
+         retry tests; 38 tests in all"
     of: "2026-09-16"
   m.core.open_parsed_at_100k:
     v: 0
