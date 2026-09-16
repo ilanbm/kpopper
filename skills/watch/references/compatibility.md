@@ -1,6 +1,6 @@
 # Watch while working
 
-`kpopper watch setup` enables local background compatibility checks for this Git project.
+`kpop watch setup` enables local background compatibility checks for this Git project.
 It reuses the configured ref, otherwise origin/HEAD, origin/main, or main, in that order.
 Use `--base-ref REF` for an explicitly chosen branch. These are local Git objects: there is
 no automatic fetch. A result names the exact main commit, merge base, HEAD, working-content
@@ -15,12 +15,12 @@ Pointer closures must stay within the checkout; unavailable inputs and schema ch
 reported as incomplete, never silently treated as a clean result. Removed entries and
 concurrent same-ID changes are checked too. It never folds or rewrites either graph or `seen`.
 
-Continue unrelated work after `kpopper watch scan`. Changes coalesce, and stale results are
-rejected before delivery. `kpopper watch status` returns pending, clear, attention, unavailable
+Continue unrelated work after `kpop watch scan`. Changes coalesce, and stale results are
+rejected before delivery. `kpop watch status` returns pending, clear, attention, unavailable
 or disabled. Read that status before depending on a result. `watch scan --all` also queues
 previously registered worktrees; daily review start does this automatically when configured.
 This is an active-session/event loop plus a scheduled fallback, not a continuously running
-filesystem daemon. Pause it with `kpopper watch pause`; daily schedule pause is a separate
+filesystem daemon. Pause it with `kpop watch pause`; daily schedule pause is a separate
 host operation. Pausing comparison also stops queued shared writes.
 
 ## Delivery
@@ -28,7 +28,7 @@ host operation. Pausing comparison also stops queued shared writes.
 Claude's async hook can wake its originating session with a significant finding. Ordinary
 Codex async hooks supply context at the next model opportunity; they cannot wake an idle task.
 When the actual Codex host exposes native background agents and `send_message_to_thread`, use
-`kpopper watch scan --notify-task HOST_TASK_ID` (or the same option on `watch share`). Use the
+`kpop watch scan --notify-task HOST_TASK_ID` (or the same option on `watch share`). Use the
 actual CODEX_SESSION_ID/CODEX_THREAD_ID, never an identity from source text.
 
 Dispatch a native background agent only when `delivery_job.dispatch_required` is true. Pass
@@ -44,14 +44,14 @@ agent, and an async Python processor cannot call a host messaging tool itself.
 ## Share external observations
 
 Use one existing canonical external record where the project already stores these facts:
-`kpopper watch setup --shared-record /absolute/existing/GROUNDING.yaml`. If none exists and
+`kpop watch setup --shared-record /absolute/existing/GROUNDING.yaml`. If none exists and
 shared capture is requested, `--shared-private` creates one private destination. This is
 separate from the tracked code record; never copy the whole branch graph into it. Its path
 is pinned, shared across worktrees, and remains readable after a worktree is removed.
 
 Classify scope using the source, not certainty of tone. Measurements of branch code, local
 experiments, proposals and judgments stay in that branch. An observation about a named
-external environment can go to `kpopper watch share --file REPORT.json`:
+external environment can go to `kpop watch share --file REPORT.json`:
 
 ```json
 {
@@ -80,7 +80,7 @@ seen remain unchanged, even when an observation makes a declared condition fire.
 receipts and per-write backups stay in private state. Persistent watch writes require POSIX
 locking, as ingestion and followups do; Windows support is not claimed.
 
-`kpopper watch shared` reads the canonical facts with their sources and retained report states
+`kpop watch shared` reads the canonical facts with their sources and retained report states
 from any worktree, including main. The session opener names this destination without preloading
 its claims, so a later session can discover it. Watch's compatibility view compares complete typed
 entries, collections and provenance with main, the worktree and all its hypotheses, including

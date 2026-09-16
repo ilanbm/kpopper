@@ -15,7 +15,7 @@ The Codex package loads the shared skill and these hooks:
 | `PostToolUse`, `UserPromptSubmit` | Asynchronous delivery of newly actionable ingestion results |
 | `Stop` | The existing record gate; no new ingestion wait or approval gate |
 
-The hooks only read the queue. `kpopper ingest capture` retains an explicit report and starts the
+The hooks only read the queue. `kpop ingest capture` retains an explicit report and starts the
 independent processor. Routine completion emits no hook output. Important results enter the next
 available model request while a turn is active. If the task is idle, Codex queues ordinary async
 hook output until the next user turn; the hook does not start one. See the

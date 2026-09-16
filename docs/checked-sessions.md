@@ -11,8 +11,8 @@ python -m pip install 'kpopper[session]'
 Use Lean 4.33.1, either selected by `elan` on the path or supplied as a toolchain directory:
 
 ```sh
-kpopper session setup --lean-root /path/to/lean-4.33.1
-kpopper session status
+kpop session setup --lean-root /path/to/lean-4.33.1
+kpop session status
 ```
 
 Setup compiles only the Lean source shipped with the package. It does not download a toolchain or execute record-supplied commands. The executable and its manifest are published together in a local cache keyed by source hash, operating system and architecture. A valid cache is reused; reads never build it. `session setup --rebuild` quarantines an invalid or existing cache before replacing it. Running session servers must restart after a program replacement.
@@ -20,8 +20,8 @@ Setup compiles only the Lean source shipped with the package. It does not downlo
 ## Open and read
 
 ```sh
-kpopper session open --input GROUNDING.yaml --project example
-kpopper session read --input GROUNDING.yaml --project example \
+kpop session open --input GROUNDING.yaml --project example
+kpop session read --input GROUNDING.yaml --project example \
   --revision REVISION_FROM_OPEN --ref node:some.claim
 ```
 
@@ -89,8 +89,8 @@ Unassigned IDs remain visible under their namespace. Profiles cannot run code. A
 The installed plugin's normal hook keeps its legacy behavior until checked mode is explicitly enabled:
 
 ```sh
-kpopper session enable --tokens 1000
-kpopper session disable
+kpop session enable --tokens 1000
+kpop session disable
 ```
 
 Enable stores the current Python executable in a project-scoped settings file outside the record, so the hook and later CLI reads use the environment containing the session dependencies. Optional `--profile`, `--project` and `--state` values are project-scoped. `--global` enables or disables the default for this machine without binding all projects to one profile or proposal store. A project setting overrides the global default. `KPOPPER_SESSION_DISABLE=1` temporarily selects the legacy hook.
@@ -126,7 +126,7 @@ Bind each stdio server to one project explicitly. This avoids depending on wheth
 }
 ```
 
-An installed console entry can also launch `kpopper session serve` with the same arguments. `serve` uses the explicitly launched Python environment; it does not switch interpreters based on project settings. The server offers `kpopper_open`, `kpopper_read`, `kpopper_propose` and `kpopper_verify_claims`. The verifier checks only listed structured assertions against the supplied snapshot, never accompanying prose, source reliability or action authority. Proposals remain pending and do not overwrite the canonical record.
+An installed console entry can also launch `kpop session serve` with the same arguments. `serve` uses the explicitly launched Python environment; it does not switch interpreters based on project settings. The server offers `kpopper_open`, `kpopper_read`, `kpopper_propose` and `kpopper_verify_claims`. The verifier checks only listed structured assertions against the supplied snapshot, never accompanying prose, source reliability or action authority. Proposals remain pending and do not overwrite the canonical record.
 
 ## Guarantees and limits
 

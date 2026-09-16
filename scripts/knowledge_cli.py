@@ -14,7 +14,7 @@ except ImportError:
 
 
 def main(argv):
-    parser = argparse.ArgumentParser(prog='kpopper knowledge')
+    parser = argparse.ArgumentParser(prog='kpop knowledge')
     sub = parser.add_subparsers(dest='command', required=True)
     sub.add_parser('status')
     export = sub.add_parser('materialize')

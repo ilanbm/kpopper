@@ -60,7 +60,7 @@ flowchart TD
 Arrows into the synthesis represent declared dependencies. They are not proofs.
 The dashed line is a research question prompted by the synthesis, not a premise.
 
-The synthesis entry, with `seen` filled by `kpopper add` in the full record:
+The synthesis entry, with `seen` filled by `kpop add` in the full record:
 
 ```yaml
 synthesis.dark_matter:

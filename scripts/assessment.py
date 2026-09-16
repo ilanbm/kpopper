@@ -336,7 +336,7 @@ def load(paths, policy=POLICY, *, profile=PROFILE, as_of=None, selection=None):
 
 
 def main(argv=None):
-    parser = argparse.ArgumentParser(prog='kpopper assess', description=__doc__)
+    parser = argparse.ArgumentParser(prog='kpop assess', description=__doc__)
     parser.add_argument('ids', nargs='+', help='exact IDs to assess; evaluation uses the full supplied record')
     parser.add_argument('--record', action='append')
     parser.add_argument('--policy', choices=[POLICY, 'falsifiers-only/v1'], default=POLICY)

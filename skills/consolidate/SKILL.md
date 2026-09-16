@@ -5,7 +5,7 @@ description: "Test, fold or refute hypotheses beside the knowledge record, and r
 
 # Consolidate
 
-A hypothesis is a claim the base does not yet hold: a refused reading, a proposal not yet approved, a branch's record, a what-if. Nothing here decides for a person; the dry run tests, the fold and the refutation are the person's acts, recorded so the question never returns. The command line is `kpopper` where it is on PATH; otherwise the `command` in the `KPOPPER_AGENT_CONTEXT` line the session opener printed (`python3 <plugin>/scripts/cli.py`) runs the same code. Do not guess a path and do not write a second reader - [the method's reference](../kpopper/references/method.md#finding-the-reader) says how to find the installed copy when neither is at hand.
+A hypothesis is a claim the base does not yet hold: a refused reading, a proposal not yet approved, a branch's record, a what-if. Nothing here decides for a person; the dry run tests, the fold and the refutation are the person's acts, recorded so the question never returns. The command line is `kpop` where it is on PATH; otherwise the `command` in the `KPOPPER_AGENT_CONTEXT` line the session opener printed (`python3 <plugin>/scripts/cli.py`) runs the same code. Do not guess a path and do not write a second reader - [the method's reference](../kpopper/references/method.md#finding-the-reader) says how to find the installed copy when neither is at hand.
 
 One record is written by everyone, from any session or branch, as long as the write is consistent
 with it. **A contradiction opens a hypothesis**, and the reader tells one by the id and the day.
@@ -107,7 +107,7 @@ long as it agrees with itself. An entry whose value is a fact about the tree - l
 files a package ships, places in the code where something is decided - names the recipe that
 takes it, `measure: <name>`, and `.kpopper/measure.yaml` beside the record holds that name's
 argument list. The name is all the record carries: a bare name, refused by `add` and failed by
-`check` when it is not one or stands on anything but a stored scalar reading. `kpopper remeasure`
+`check` when it is not one or stands on anything but a stored scalar reading. `kpop remeasure`
 prints the plan and runs nothing; `--run` runs each cited recipe once, from the checkout's root,
 without a shell, and lays what differs over the record as one more hypothesis, `tree/<commit>`,
 through the same dry run that tests any hypothesis - red on a falsifier that holds on the measured
@@ -121,15 +121,15 @@ with its date.
 ## The commands
 
 ```bash
-kpopper consolidate --dry-run [NAME ...]     # the union, tested; every hypothesis when none is named
-kpopper consolidate [NAME ...]               # folded into the base when the test is clean
-kpopper consolidate NAME --take <id>         # a reversal the person confirmed, run on their word, folded with its trail
-kpopper consolidate NAME --drop "<id>: <why>"   # a dependency the replacement drops, named at the fold
-kpopper consolidate --refute NAME "why"      # one negative finding stays; the file goes
-kpopper consolidate --from <ref> --dry-run   # another branch's committed record as one more hypothesis
-kpopper pull <id> --history                  # the versions a judgment's replacements kept
-kpopper same <a> <b> | distinct <a> <b> "why"   # the two answers the candidates list asks for
-kpopper remeasure [--run]                    # the entries that name a recipe, taken again from the tree
+kpop consolidate --dry-run [NAME ...]     # the union, tested; every hypothesis when none is named
+kpop consolidate [NAME ...]               # folded into the base when the test is clean
+kpop consolidate NAME --take <id>         # a reversal the person confirmed, run on their word, folded with its trail
+kpop consolidate NAME --drop "<id>: <why>"   # a dependency the replacement drops, named at the fold
+kpop consolidate --refute NAME "why"      # one negative finding stays; the file goes
+kpop consolidate --from <ref> --dry-run   # another branch's committed record as one more hypothesis
+kpop pull <id> --history                  # the versions a judgment's replacements kept
+kpop same <a> <b> | distinct <a> <b> "why"   # the two answers the candidates list asks for
+kpop remeasure [--run]                    # the entries that name a recipe, taken again from the tree
 ```
 
 The pull request runs the dry run and the remeasure on the merged tree, and the push to `main`

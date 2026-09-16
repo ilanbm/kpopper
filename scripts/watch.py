@@ -379,7 +379,7 @@ class Watch:
     def snapshot(self):
         config = self.config()
         if not config or not config.get('enabled'):
-            raise ValueError('watch is not enabled; use kpopper watch setup')
+            raise ValueError('watch is not enabled; use kpop watch setup')
         main = git(self.tree, 'rev-parse', '--verify', config['base_ref'] + '^{commit}')
         head = git(self.tree, 'rev-parse', '--verify', 'HEAD^{commit}')
         ancestor = git(self.tree, 'merge-base', head, main)

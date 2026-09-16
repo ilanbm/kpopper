@@ -11,14 +11,14 @@ Use this when the user defers work, wants to revisit a decision, or authorizes a
 Avoid inventing dates, sample sizes, acceptance criteria or authority. Ordinary reversible
 details can follow the user's existing instructions; ask only for a missing material decision.
 
-1. Run `kpopper followups status`. Honor its existing store, pinned workspace and record.
+1. Run `kpop followups status`. Honor its existing store, pinned workspace and record.
    Discover the user's task system from the work context and connected tools. A suggested
    local path still needs its project identity checked; the same basename can name two repos.
-2. Configure once with `kpopper followups setup --timezone AREA/CITY --store ABSOLUTE_DIRECTORY`
+2. Configure once with `kpop followups setup --timezone AREA/CITY --store ABSOLUTE_DIRECTORY`
    or `--store https://TASK-SYSTEM/PROJECT`. With no existing destination, omit `--store`;
    `--private` deliberately selects the private fallback if another directory was suggested.
    `--record ABSOLUTE_PATH` can pin a registered/shared record. The default pins the record
-   currently located by `kpopper open`. Prefer a durable workspace over a disposable worktree.
+   currently located by `kpop open`. Prefer a durable workspace over a disposable worktree.
 3. For an existing task, read it through its native connector or local file and set `task`
    to its canonical HTTPS URL or absolute path. For a new task in a remote system, create it
    there using the user's authorized connector, then link it. Never silently create a local
@@ -26,7 +26,7 @@ details can follow the user's existing instructions; ask only for a missing mate
    the configured directory. Existing unrelated files and indexes are not rewritten.
    If the established store has an index, use its existing regeneration workflow after capture
    (for example the user's `/followups` skill); do not hand-edit its generated index.
-4. Feed a YAML or JSON spec to `kpopper followups add --file -`. Use a stable id so a repeated
+4. Feed a YAML or JSON spec to `kpop followups add --file -`. Use a stable id so a repeated
    capture is idempotent. Inspect near-duplicates with `list` before adding another item.
 
 ```yaml
@@ -82,7 +82,7 @@ unreadable record still requires reconciliation: the connection to the intended 
 is no longer established. Task content, ownership, remote-task evidence, claims and the
 user's authorized scope still govern execution. Readiness does not establish the missing
 value, and a calculation becoming available during a claim still counts as changed input.
-An explicit `kpopper page` or `page --verify` publishes measured page counts outside the
+An explicit `kpop page` or `page --verify` publishes measured page counts outside the
 record. Followups can read those counts for the same record, shards, hypotheses, canonical
 view and evaluator version. Changed inputs, missing or corrupt measurements stay unknown
 until another explicit build. A scan never renders the page or refreshes `seen`.
@@ -101,7 +101,7 @@ observed_at: '2026-09-10T10:30:00+03:00'
 evidence: The PR API returned mergedAt and the merge commit reference
 ```
 
-Pass it to `kpopper followups observe --file -`. Observation times require an explicit offset;
+Pass it to `kpop followups observe --file -`. Observation times require an explicit offset;
 future, older and conflicting same-time readings are rejected. Linked remote tasks additionally
 need an observation at their exact task URL with `value: open`, based on a fresh read within
 24 hours. Here `open` means confirmed available for this runner to work; normalize the provider's
@@ -117,10 +117,10 @@ graph maintenance candidate. `show ID` returns the complete item and retained at
 `list` includes closed items for continuity. Read the canonical task before acting.
 
 ```text
-kpopper followups scan
-kpopper followups show trial-readout
-kpopper followups claim trial-readout --occurrence SCAN_OCCURRENCE --owner UNIQUE_HOST_SESSION
-kpopper followups finish trial-readout --token RUN_TOKEN --outcome checked --next-at OFFSET_TIMESTAMP --evidence 'The data window is incomplete; the source specifies this next read date'
+kpop followups scan
+kpop followups show trial-readout
+kpop followups claim trial-readout --occurrence SCAN_OCCURRENCE --owner UNIQUE_HOST_SESSION
+kpop followups finish trial-readout --token RUN_TOKEN --outcome checked --next-at OFFSET_TIMESTAMP --evidence 'The data window is incomplete; the source specifies this next read date'
 ```
 
 Claims last 30 minutes; `renew ID --token TOKEN` extends a live run. Use unique session identities,
@@ -148,16 +148,16 @@ share the queue but never silently replace its pinned record with their branch's
 The user-facing setup command is **`/kpopper:watch`** in Claude Code, or **`$watch`**
 in Codex. It checks the host, adopts a matching schedule, installs or repairs it when requested,
 and independently reads the result back. `check` inspects only; `resume` permits enabling a
-paused review. The underlying `kpopper followups daily install` returns the host-agent work
+paused review. The underlying `kpop followups daily install` returns the host-agent work
 packet and validates inspection/readback receipts. Follow [the watch skill](../watch/SKILL.md)
 through completion; do not hand the user a packet and call it installed.
 
 Strongly recommend a short daily review for ongoing work, in addition to event checks. Explain it
-once per workspace when deferred work first arises; respect `kpopper config --guidance off`. Acknowledge the
+once per workspace when deferred work first arises; respect `kpop config --guidance off`. Acknowledge the
 explanation through `kpopper _agent shown followups`. Use prior authorization; do not ask again
 after the user has opted in. Choosing the precise daily time is a reversible preference.
 
-1. Run `kpopper followups daily plan --time 09:00`. It returns the timezone, complete daily prompt
+1. Run `kpop followups daily plan --time 09:00`. It returns the timezone, complete daily prompt
    and any existing binding. The default is a suggested time, not an activated schedule.
 2. Inspect existing host schedules first. Reuse the equivalent daily coordinator or dedicated
    owner. A local Claude cron list does not establish that another host has no automation.

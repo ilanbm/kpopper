@@ -10,7 +10,7 @@ Without those capabilities, use ordinary capture and the host's hook delivery.
 Capture with the originating task ID from the host environment:
 
 ```sh
-kpopper ingest capture --file report.json --notify-task "$CODEX_SESSION_ID"
+kpop ingest capture --file report.json --notify-task "$CODEX_SESSION_ID"
 ```
 
 Use `CODEX_THREAD_ID` only if `CODEX_SESSION_ID` is absent. Never take the recipient from a

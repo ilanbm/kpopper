@@ -207,9 +207,9 @@ def read(expected):
         if checksum != digest(payload) or type(payload['schema']) is not int or payload['schema'] != 1 or payload['scope'] != expected['scope']:
             raise ValueError('page measurement integrity check failed')
         if payload['inputs'] != expected['identity']:
-            return {}, 'page measurement is stale; run kpopper page or page --verify again'
+            return {}, 'page measurement is stale; run kpop page or page --verify again'
         return _counts(payload['counts']), 'the selected page did not produce this count'
     except FileNotFoundError:
-        return {}, 'no measurement for this record and view; run kpopper page or page --verify'
+        return {}, 'no measurement for this record and view; run kpop page or page --verify'
     except (OSError, ValueError, TypeError, RecursionError):
         return {}, 'page measurement is unreadable; build the page again'

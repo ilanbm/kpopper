@@ -1160,7 +1160,7 @@ def update(envelope, record=None, state_dir=None):
 
 
 def update_main(argv=None):
-    parser = argparse.ArgumentParser(prog='kpopper update', description=update.__doc__)
+    parser = argparse.ArgumentParser(prog='kpop update', description=update.__doc__)
     parser.add_argument('--file', required=True, help='report JSON file, or - for standard input')
     parser.add_argument('--record')
     parser.add_argument('--state-dir')

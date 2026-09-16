@@ -77,7 +77,7 @@ class Line(Fixture):
     def test_the_host_names_its_own_skill_and_a_plain_host_the_reader(self):
         self.assertIn("$ground", self.prompt("the boiler output on the coldest night", "codex"))
         self.hook("ground_hook.py", "claude", "start", hook_event_name="SessionStart", source="startup")
-        self.assertIn("kpopper pull", self.prompt("the boiler output on the coldest night", "plain"))
+        self.assertIn("kpop pull", self.prompt("the boiler output on the coldest night", "plain"))
 
     def test_named_until_read_then_silent_until_its_body_changes(self):
         ask = "the heat loss on a -5 night"

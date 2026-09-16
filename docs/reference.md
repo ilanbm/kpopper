@@ -2,7 +2,7 @@
 
 For the product overview and a runnable example, start with the [README](../README.md).
 The commands here use the record found for the current directory unless an explicit path
-is supplied. Run `kpopper` for the command summary; the linked guides cover detailed options.
+is supplied. Run `kpop` for the command summary; the linked guides cover detailed options.
 
 ## Try it from the command line
 
@@ -17,26 +17,25 @@ This installs PyYAML with the CLI. The ordinary reader and HTML page need no Lea
 An isolated CLI installation does not supply dependencies to an unrelated Python
 environment used by a host's hooks.
 
-The installation also provides `kpop`, the same command under a shorter name. Help output
-names `kpopper` under either, so a command line copied out of it always runs. The examples
-below use the full name.
+The command is `kpop`. `kpopper` names the project and the installed package, and is
+kept as a second command name, so either spelling runs.
 
 Save [the launch-party example](../examples/launch-party/GROUNDING.yaml) as `GROUNDING.yaml` in
 an empty directory. Run these commands there:
 
 ```sh
-kpopper open                   # Project context, questions and attention signals
-kpopper pull launch            # The announcement decision and its grounding
-kpopper affects venue.status   # Decisions reachable from the venue's booking status
-kpopper check                  # Check structure and declared breaking conditions
-kpopper page --open            # Explore the record in a browser
+kpop open                   # Project context, questions and attention signals
+kpop pull launch            # The announcement decision and its grounding
+kpop affects venue.status   # Decisions reachable from the venue's booking status
+kpop check                  # Check structure and declared breaking conditions
+kpop page --open            # Explore the record in a browser
 ```
 
 Then, in that example directory, record the cancellation:
 
 ```sh
-kpopper set venue.status cancelled --as-of 2026-09-10 --why "Venue cancellation email"
-kpopper check
+kpop set venue.status cancelled --as-of 2026-09-10 --why "Venue cancellation email"
+kpop check
 ```
 
 The second check exits with a failure because `venue.status` is no longer `confirmed`.
@@ -48,14 +47,14 @@ limited to numerical thresholds.
 
 | Command | Purpose |
 |---|---|
-| `kpopper where` | Locate the record for this directory. |
-| `kpopper open` | Read a bounded project orientation, namespace and attention report. |
-| `kpopper pull <entry-or-prefix>` | Retrieve a subject's entries, sources and changed premises. |
-| `kpopper search "terms"` | Find matching claims, native hypotheses and local source passages with their status. |
-| `kpopper affects <entry>` | Follow the downstream reach of an entry through judgments and rule references. |
-| `kpopper export <entry> [entries...]` | Export a focused excerpt with historical/current readings and optional Mermaid. See [graph export](graph-export.md). |
-| `kpopper check` | Report structural problems, declared gaps, movement and fired conditions. |
-| `kpopper assess <entry> [entries...]` | Read versioned findings and scoped attention as JSON. See [assessment contract](assessment.md). |
+| `kpop where` | Locate the record for this directory. |
+| `kpop open` | Read a bounded project orientation, namespace and attention report. |
+| `kpop pull <entry-or-prefix>` | Retrieve a subject's entries, sources and changed premises. |
+| `kpop search "terms"` | Find matching claims, native hypotheses and local source passages with their status. |
+| `kpop affects <entry>` | Follow the downstream reach of an entry through judgments and rule references. |
+| `kpop export <entry> [entries...]` | Export a focused excerpt with historical/current readings and optional Mermaid. See [graph export](graph-export.md). |
+| `kpop check` | Report structural problems, declared gaps, movement and fired conditions. |
+| `kpop assess <entry> [entries...]` | Read versioned findings and scoped attention as JSON. See [assessment contract](assessment.md). |
 
 The legacy opener uses line and character budgets; its output reports omitted attention
 items. It is not a complete read of every entry. The optional
@@ -73,7 +72,7 @@ record bytes the agent read. It is distinct from checked-session and search-corp
 
 ## Record location and shape
 
-For deferred work, `kpopper followups` links tasks to graph entries and explicit triggers.
+For deferred work, `kpop followups` links tasks to graph entries and explicit triggers.
 `status`, `list`, `show` and `scan` inspect the queue; capture and lifecycle commands preserve
 outcomes and coordinate execution. `daily plan` prepares a recommended daily review and
 `daily bind` records a schedule actually created or inspected through the host's tools.
@@ -103,7 +102,7 @@ path in the Git common directory:
 
 ```sh
 printf '%s\n' '/absolute/path/to/GROUNDING.yaml' > "$(git rev-parse --git-common-dir)/kpopper-record"
-kpopper where
+kpop where
 ```
 
 This registration is shared by the repository's worktrees. It does not add the record to
@@ -180,12 +179,12 @@ and confirming the underlying evidence remain part of review.
 
 | Command | Purpose |
 |---|---|
-| `kpopper set <id> <value> --why "reason" --as-of YYYY-MM-DD` | Record a scalar reading with its explanation and date. |
-| `kpopper add <id> field=value ...` | Add an entry or judgment. Judgment snapshots are filled from the record. Where no record resolves for the workspace, the first `add` creates `GROUNDING.yaml` at its root with that entry. |
-| `kpopper review <id>` | Refresh a judgment's snapshot after reviewing it against the current record. |
-| `kpopper review "section title"` | Refresh the page section's review snapshot. |
-| `kpopper same <a> <b>` | Record that two IDs describe one subject; by default, retire `b` into `a`. |
-| `kpopper distinct <a> <b> "reason"` | Keep a similar-looking pair distinct with a recorded reason. |
+| `kpop set <id> <value> --why "reason" --as-of YYYY-MM-DD` | Record a scalar reading with its explanation and date. |
+| `kpop add <id> field=value ...` | Add an entry or judgment. Judgment snapshots are filled from the record. Where no record resolves for the workspace, the first `add` creates `GROUNDING.yaml` at its root with that entry. |
+| `kpop review <id>` | Refresh a judgment's snapshot after reviewing it against the current record. |
+| `kpop review "section title"` | Refresh the page section's review snapshot. |
+| `kpop same <a> <b>` | Record that two IDs describe one subject; by default, retire `b` into `a`. |
+| `kpop distinct <a> <b> "reason"` | Keep a similar-looking pair distinct with a recorded reason. |
 
 Writes report their downstream reach. `review` records that review happened; it does not
 perform the intellectual review for you. Updating `seen` alone cannot make a fired
@@ -203,10 +202,10 @@ older reading, while same-day disagreement remains a conflict. A standing judgme
 own rules for when it can be replaced.
 
 ```sh
-kpopper consolidate --dry-run   # Check the proposed combination without applying it
-kpopper consolidate            # Fold eligible hypotheses through the guarded writer
-kpopper consolidate --refute NAME "Reason for refutation"
-kpopper consolidate --from BRANCH_OR_REF --dry-run
+kpop consolidate --dry-run   # Check the proposed combination without applying it
+kpop consolidate            # Fold eligible hypotheses through the guarded writer
+kpop consolidate --refute NAME "Reason for refutation"
+kpop consolidate --from BRANCH_OR_REF --dry-run
 ```
 
 The dry run reports changed premises, fired falsifiers, structural gaps, contested IDs and
@@ -228,12 +227,12 @@ See the [record](../skills/record/SKILL.md) and [consolidate](../skills/consolid
 ## Background branch watch and shared facts
 
 ```sh
-kpopper watch setup                         # local checks, no host schedule
-kpopper watch setup --base-ref origin/main # preserve a deliberate base
-kpopper watch scan                          # queue and return immediately
-kpopper watch status                        # current versions and findings
-kpopper watch scan --all                    # include registered worktrees
-kpopper watch pause                         # pause local checks and shared writes
+kpop watch setup                         # local checks, no host schedule
+kpop watch setup --base-ref origin/main # preserve a deliberate base
+kpop watch scan                          # queue and return immediately
+kpop watch status                        # current versions and findings
+kpop watch scan --all                    # include registered worktrees
+kpop watch pause                         # pause local checks and shared writes
 ```
 
 Watch applies only the worktree's authored changes since its merge base to the selected
@@ -270,10 +269,10 @@ Python alone cannot call host tools. Persistent writes require POSIX locking. Se
 ## Background capture
 
 ```sh
-kpopper update --file report.json        # apply one report now and return its receipt
-kpopper ingest capture --file report.json
-kpopper ingest status --event-id EVENT_ID
-kpopper ingest pending
+kpop update --file report.json        # apply one report now and return its receipt
+kpop ingest capture --file report.json
+kpop ingest status --event-id EVENT_ID
+kpop ingest pending
 ```
 
 Capture retains the supplied report and normally starts a separate worker. Supported
@@ -308,8 +307,8 @@ the record maps that name to an argument list. Treat this file as executable con
 and review it as code.
 
 ```sh
-kpopper remeasure       # Inspect the plan; run nothing
-kpopper remeasure --run # Execute the declared recipes and check the proposed readings
+kpop remeasure       # Inspect the plan; run nothing
+kpop remeasure --run # Execute the declared recipes and check the proposed readings
 ```
 
 Recipes run without a shell, with a timeout and output limit. Differences are checked as
@@ -321,11 +320,11 @@ repository's measurement and CI contract.
 ## Page and browser checks
 
 ```sh
-kpopper page --open
-kpopper page --open --tree
-kpopper page --verify
-kpopper page                      # written to .kpopper/build/page.html
-kpopper page --checks .kpopper/build/page.html
+kpop page --open
+kpop page --open --tree
+kpop page --verify
+kpop page                      # written to .kpopper/build/page.html
+kpop page --checks .kpopper/build/page.html
 ```
 
 The renderer generates a self-contained HTML snapshot. The deterministic `--verify` checks
@@ -334,7 +333,7 @@ and `playwright-core`, which is not bundled:
 
 ```sh
 npm i --no-save playwright-core
-kpopper page --checks .kpopper/build/page.html
+kpop page --checks .kpopper/build/page.html
 ```
 
 The checker looks for the driver beside the page; `NODE_PATH` can point at an existing
@@ -347,12 +346,12 @@ localization, coverage and prose-drift checks.
 
 ## Authored HTML documents
 
-`kpopper document build` packages an authored document with its selected evidence,
+`kpop document build` packages an authored document with its selected evidence,
 `document inspect` validates and reads a saved copy without running its scripts, and
 `document refresh` prepares a new copy against explicitly supplied sources. The authoring
 agent creates anchors and mapping during ordinary document work. The final HTML contains
 all display resources and review state; only source refresh needs the agent and inputs.
-See [the user flow](documents.md) and run `kpopper document guide` for the author contract.
+See [the user flow](documents.md) and run `kpop document guide` for the author contract.
 
 ## Distribution and implementation
 
@@ -375,7 +374,7 @@ Every command reads the whole record, so a file's parsed form is kept under
 `$XDG_STATE_HOME/kpopper/cache`, or `~/.local/state/kpopper/cache`, one private entry per
 file, and taken again whenever the file's path, length, last write or content differs. The
 files are the authority: an entry that cannot be read, or holds anything but a document, is
-simply a parse, and every write drops the entry for the file it wrote. `kpopper --no-cache
+simply a parse, and every write drops the entry for the file it wrote. `kpop --no-cache
 <command>`, or `KPOPPER_NO_CACHE=1`, parses every time.
 
 The plugin's hooks are the layer every session gets without choosing it, and they carry
@@ -396,7 +395,7 @@ Adapters differ in their ability to block, remind or deliver asynchronously—co
 [capability matrix](../adapters/README.md#capability-matrix).
 
 From a source checkout, run `python3 scripts/cli.py <command>` or `scripts/kpopper <command>`.
-When using an installed plugin without a `kpopper` command on `PATH`, use the same dispatcher
+When using an installed plugin without a `kpop` command on `PATH`, use the same dispatcher
 under that plugin's `scripts/` directory. Installation paths are versioned; locate the
 active installation rather than retaining a path to an older copy.
 

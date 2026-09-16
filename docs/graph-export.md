@@ -1,23 +1,23 @@
 # Export a focused knowledge excerpt
 
-`kpopper export` prints selected entries and their recorded relationships. A judgment
+`kpop export` prints selected entries and their recorded relationships. A judgment
 shows its historical dependency readings as `at_review`, current selected readings as
 `current`, and the ordinary reader's condition result. These are output labels;
 `GROUNDING.yaml` and custom snapshot field names are unchanged.
 The comparison and condition findings come from the [shared assessment contract](assessment.md),
-also available directly through `kpopper assess`. The exporter only selects and formats them.
+also available directly through `kpop assess`. The exporter only selects and formats them.
 
 ```sh
-kpopper export d.choice
-kpopper export d.choice --depth 0
-kpopper export d.choice --details
-kpopper export d.choice --format markdown-mermaid
-kpopper export doc.quote --direction impact --depth 2
+kpop export d.choice
+kpop export d.choice --depth 0
+kpop export d.choice --details
+kpop export d.choice --format markdown-mermaid
+kpop export doc.quote --direction impact --depth 2
 ```
 
 Use `--record path/to/GROUNDING.yaml` for an explicit record; it can be repeated for
 multiple inputs. Otherwise normal workspace discovery applies. From a source checkout,
-replace `kpopper` with `python3 scripts/cli.py`.
+replace `kpop` with `python3 scripts/cli.py`.
 
 The default is Markdown. `markdown-mermaid` appends an optional diagram to the same text;
 `mermaid` emits diagram source only. A destination must support Mermaid to render it.
@@ -43,7 +43,7 @@ does not refresh snapshots, fetch external sources or run page-only checks.
 
 When a condition reads an existing entry outside the judgment's declared dependencies,
 the text names that gap alongside the condition result. Such a result does not establish
-that the dependency links are complete. Use `kpopper check` for record diagnostics.
+that the dependency links are complete. Use `kpop check` for record diagnostics.
 
 Structured rules retain their input links in both traversal directions. Supported rules and
 conditions are displayed as readable expressions; calculated values are labeled separately
@@ -60,7 +60,7 @@ These checks do not establish source-world truth.
 
 `--details` adds original recorded fields, labeling the snapshot field as historical.
 It is available with text formats. To obtain an omitted current entry, use
-`kpopper pull ID` or select it in another export.
+`kpop pull ID` or select it in another export.
 
 ## Selection and limits
 

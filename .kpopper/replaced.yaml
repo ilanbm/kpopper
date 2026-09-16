@@ -1,4 +1,4 @@
-# Judgments this record's writes replaced, kept whole - read with `kpopper pull <id> --history`.
+# Judgments this record's writes replaced, kept whole - read with `kpop pull <id> --history`.
 d.contradiction_by_id_and_day:
 - rests_on:
   - s.2026_09_04_minted_permission

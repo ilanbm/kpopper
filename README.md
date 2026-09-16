@@ -102,7 +102,7 @@ Source locators and the complete record are in the
 
 In the [runnable example](examples/merge-assumptions/README.md), a reviewed measurement
 recipe reads the explicit visibility switch in `search.py`. After PR A enables private
-projects, `kpopper remeasure --run` tests that new reading against the cache decision
+projects, `kpop remeasure --run` tests that new reading against the cache decision
 and fails its condition. It leaves the canonical record unchanged; `check` alone
 would still see the old recorded value.
 
@@ -725,11 +725,11 @@ changed readings as a hypothesis without silently rewriting the canonical record
 
 There are three useful checks:
 
-- **Across branches during work:** `kpopper consolidate --dry-run --from <branch-or-ref>` reads
+- **Across branches during work:** `kpop consolidate --dry-run --from <branch-or-ref>` reads
   another branch's committed record as proposed changes and tests it against the current record.
-- **On the proposed merge result in CI:** `kpopper check` checks the combined record;
-  `kpopper consolidate --dry-run` also tests the hypotheses stored beside it.
-- **Against the actual tree:** `kpopper remeasure --run` runs the deliberately configured recipes
+- **On the proposed merge result in CI:** `kpop check` checks the combined record;
+  `kpop consolidate --dry-run` also tests the hypotheses stored beside it.
+- **Against the actual tree:** `kpop remeasure --run` runs the deliberately configured recipes
   and tests their readings against the declared conditions.
 
 A changed premise that needs review can be reported without failing CI; an affected hypothesis
@@ -953,14 +953,14 @@ decisions and open questions, and can arrange them as a report. See the
 [document layout](examples/greenhouse-report/.kpopper/view.yaml) for a report built from
 recorded readings and a heating judgment.
 
-`kpopper page --open` generates this self-contained HTML from the project's record and a
+`kpop page --open` generates this self-contained HTML from the project's record and a
 chosen layout. **Now** and other project tabs can present reports, plans or comparisons;
 **Record** lists the entries directly, and **Tree** offers an optional graph view. The page
 is a rendered snapshot—regenerate it after the record changes. For layouts, components,
 localization and checks on stale explanatory text, see the [page reference](skills/kpopper/PAGE.md).
 
 To share a small part of the record in a task, document or pull request, use
-`kpopper export`. The excerpt separates readings captured at review from current recorded
+`kpop export`. The excerpt separates readings captured at review from current recorded
 readings and marks values omitted from the selection. From a source checkout:
 
 ```sh

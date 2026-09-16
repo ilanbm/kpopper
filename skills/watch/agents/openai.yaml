@@ -1,4 +1,4 @@
 interface:
-  display_name: "kpopper watch"
+  display_name: "kpop watch"
   short_description: "Watch branch changes, shared facts and daily followups"
   default_prompt: "Use $watch to set up this project's background branch checks and daily kpopper review."
