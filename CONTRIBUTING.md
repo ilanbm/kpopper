@@ -25,9 +25,9 @@ are printed in its log; the job summary lists the selected families.
 |---|---|
 | Skills, Markdown documentation or the project's record | None: their contracts and record checks already run. |
 | Standalone-document code, assets or tests | Document Python tests on 3.9 and 3.13, and the offline DOM suite. |
-| Shared Python code, other tests/fixtures, adapters, hooks or packaging metadata | Full Python suite on 3.9 and 3.13, document tests, session checks on three operating systems, and installed-distribution checks. |
+| Shared Python code, other tests/fixtures, adapters, hooks, packaging metadata, or the check/session workflows | Full Python suite on 3.9 and 3.13, document tests, session checks on three operating systems, and installed-distribution checks. |
 | Native sources, build recipes, bundled runtimes, loader, notices or the distribution probe | All checks, including native compilation and modified-GMP replacement checks on five targets. |
-| CI configuration, an unclassified path, an empty diff or unavailable Git history | All checks. |
+| The CI selector, native workflow, other CI configuration, an unclassified path, an empty diff or unavailable Git history | All checks. |
 
 The selector lives in `.github/scripts/ci_selection.py`. Keep shared inputs broad and add a
 regression case to `tests/test_ci_selection.py` when changing a classification. It does not

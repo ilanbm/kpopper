@@ -12,6 +12,11 @@ RUNTIME = set(LANES) - {"native"}
 
 
 def families(path):
+    # These workflows never compile the reasoning runtime. Changes still exercise
+    # all consumers; the selector and native workflow themselves take the full audit.
+    if path in {".github/workflows/check.yml", ".github/workflows/session.yml",
+                ".github/pull_request_template.md", "skills/watch/agents/openai.yaml"}:
+        return RUNTIME
     # These inputs can change compilation, its audit, or modified GMP loading.
     if (path.startswith(("scripts/reasoning/lean/", "scripts/reasoning/native/",
                          "scripts/reasoning/third_party/", ".github/"))
@@ -21,7 +26,7 @@ def families(path):
         return set(LANES)
     # The record and skill contracts run on every PR, independent of these flags.
     if (path in {"GROUNDING.yaml", "README.md", "CONTRIBUTING.md", "CHANGELOG.md", "tests/test_skills.py"}
-            or (path.startswith(("skills/", "docs/")) and path.endswith(".md"))
+            or (path.startswith(("skills/", "docs/", "examples/")) and path.endswith(".md"))
             or (path.startswith(".kpopper/") and path.endswith((".yaml", ".json")))
             or (path.startswith("assets/") and path.endswith((".png", ".jpg", ".svg", ".webp")))):
         return set()

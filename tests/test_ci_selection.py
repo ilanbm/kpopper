@@ -41,6 +41,16 @@ class Selection(unittest.TestCase):
                 self.assertTrue(selected["session"])
                 self.assertFalse(selected["native"])
 
+    def test_command_rename_does_not_rebuild_unchanged_native_sources(self):
+        # PR #106 changed these consumer/configuration paths, but no native input.
+        selected = CI.select([".github/pull_request_template.md", ".github/workflows/check.yml",
+                              ".github/workflows/session.yml", "skills/watch/agents/openai.yaml",
+                              "examples/merge-assumptions/README.md",
+                              "pyproject.toml", "scripts/cli.py", "scripts/session/core.py",
+                              "tests/test_predicate_literals.py", "scripts/__init__.py"])
+        self.assertTrue(all(selected[k] for k in CI.LANES if k != "native"))
+        self.assertFalse(selected["native"])
+
     def test_native_inputs_and_probe_changes_keep_the_full_audit(self):
         for path in ("scripts/reasoning/lean/Kernel.lean", "scripts/reasoning/lean/lean-toolchain",
                      "scripts/reasoning/build_runtime.py", "scripts/reasoning/native/linux-x86_64.zip",
@@ -52,7 +62,7 @@ class Selection(unittest.TestCase):
 
     def test_unknown_files_and_ci_changes_fail_open_to_full_checks(self):
         for path in ("new-component/config.toml", "new-file.md", "skills/ground/helper.py",
-                     "docs/check.py", ".kpopper/new-hook.sh", ".github/workflows/session.yml",
+                     "docs/check.py", ".kpopper/new-hook.sh", ".github/workflows/reasoning-runtime.yml",
                      ".github/scripts/ci_selection.py", "tests/test_ci_selection.py"):
             with self.subTest(path=path):
                 self.assertTrue(all(CI.select([path]).values()))
