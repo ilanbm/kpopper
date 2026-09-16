@@ -1,0 +1,230 @@
+hypothesis: {born: "2026-09-16"}
+
+judgments:
+  d.a_version_carries_its_times_apart:
+    verdict: "a version carries the time it was recorded as a full timestamp with no authority to
+              decide a dispute, the source's own clock value when the source has one - a document
+              version, a commit, a day, a timestamp - and, when it matters, the time the datum is
+              about, as three separate fields none of which is required of every record"
+    because: "A datum about January, taken from version 7 of a report, recorded in March, is three
+              facts; folding them into one date is what made a later reading of the same document
+              version look like an update and a same-day correction look like a dispute. Two of the
+              three are already in the record under other names; naming them keeps
+              learning-we-were-wrong apart from the-world-changed."
+    wrong_if: {expr: "m.core.scenarios_failed > 0"}
+    rests_on: [s.2026_09_16_versions_core, lit.bitemporal, m.core.scenarios_failed]
+    seen:
+      s.2026_09_16_versions_core: "The session that closed the model behind the branch verdict
+                                   conflicts: versions per subject stored one file each, what each
+                                   writer saw kept apart from what a claim rests on and from what an
+                                   act replaced, acts as versions of their own kind, state computed
+                                   from the frontier and the acts and the checks, and the entry file
+                                   as a stamped rendering that a hand edit is reconciled against
+                                   three ways. Shaped in conversation with a second reviewer's four
+                                   corrections - seeing is not replacing, a hand edit keeps the base
+                                   it saw, a historical dependency is not a lost one, and one
+                                   append-only file per subject conflicts under git where one file
+                                   per version merges clean - and three precisions: acts can
+                                   conflict, the two times need exact meaning, and the merged entry
+                                   file is rebuilt, never read as an edit."
+      lit.bitemporal: "the time a datum is about and the time it was recorded are two dimensions,
+                       kept apart, so that learning today that yesterday was wrong is told apart from
+                       the world changing today"
+      m.core.scenarios_failed: 0
+  d.acts_are_versions_and_can_conflict:
+    verdict: "an acceptance, a refutation, a review and a correction are versions of their own kind,
+              naming exactly which versions they adjudicated; a source rule is an automatic act
+              recorded as one; two acts that adjudicate the same versions differently are a dispute
+              between acts, never decided by arrival order; a review is recorded against the version
+              and the evidence it read, and covers no version written later under the same id"
+    because: "An adjudication that is not itself a record can be lost, repeated or applied to a
+              version it never saw; one that names its objects survives the union and says what it
+              did not cover, so a later piece of evidence it did not include is not erased by it.
+              Recording a source rule's decision as an act keeps automatic and human decisions on one
+              surface."
+    wrong_if: {expr: "m.core.scenarios_failed > 0"}
+    rests_on: [s.2026_09_16_versions_core, lit.tms, lit.belief_change, m.core.scenarios_failed]
+    seen:
+      s.2026_09_16_versions_core: "The session that closed the model behind the branch verdict
+                                   conflicts: versions per subject stored one file each, what each
+                                   writer saw kept apart from what a claim rests on and from what an
+                                   act replaced, acts as versions of their own kind, state computed
+                                   from the frontier and the acts and the checks, and the entry file
+                                   as a stamped rendering that a hand edit is reconciled against
+                                   three ways. Shaped in conversation with a second reviewer's four
+                                   corrections - seeing is not replacing, a hand edit keeps the base
+                                   it saw, a historical dependency is not a lost one, and one
+                                   append-only file per subject conflicts under git where one file
+                                   per version merges clean - and three precisions: acts can
+                                   conflict, the two times need exact meaning, and the merged entry
+                                   file is rebuilt, never read as an edit."
+      lit.tms: "a conclusion keeps the justifications and assumptions it was drawn from, support is
+                recomputed when an assumption changes, and losing the support for a conclusion does
+                not establish its opposite"
+      lit.belief_change: "revising what we believed about an unchanged world, updating for a world
+                          that changed, and merging sources that disagree are three operations with
+                          three different rules"
+      m.core.scenarios_failed: 0
+  d.entry_file_is_a_stamped_rendering:
+    verdict: "GROUNDING.yaml is the rendering of the accepted state and the disputes, stamped with
+              the state it was rendered from; a hand edit is a pending write, reconciled three ways
+              against that stamp - the base the editor saw, the edited file, the current state - and
+              an unknown stamp is an unknown base; a merge that rebuilt the file is never read as an
+              edit, and a real pending edit survives it"
+    because: "The record is hand-edited where the tool has no verb, so a model that makes hand edits
+              illegal fails the way the record is used; a model that imports them as if they saw
+              everything invents a causal context and can erase a dispute. The stamp is what makes
+              the three-way honest, and the file stays the readable current view that the page and
+              the hooks read today."
+    wrong_if: {expr: "m.core.scenarios_failed > 0"}
+    rests_on: [s.2026_09_16_versions_core, lit.crdt_mv_register, m.core.scenarios_failed]
+    seen:
+      s.2026_09_16_versions_core: "The session that closed the model behind the branch verdict
+                                   conflicts: versions per subject stored one file each, what each
+                                   writer saw kept apart from what a claim rests on and from what an
+                                   act replaced, acts as versions of their own kind, state computed
+                                   from the frontier and the acts and the checks, and the entry file
+                                   as a stamped rendering that a hand edit is reconciled against
+                                   three ways. Shaped in conversation with a second reviewer's four
+                                   corrections - seeing is not replacing, a hand edit keeps the base
+                                   it saw, a historical dependency is not a lost one, and one
+                                   append-only file per subject conflicts under git where one file
+                                   per version merges clean - and three precisions: acts can
+                                   conflict, the two times need exact meaning, and the merged entry
+                                   file is rebuilt, never read as an edit."
+      lit.crdt_mv_register: "a single timestamp cannot tell concurrent writes apart - a write must
+                             carry what it was based on; a multi-value register keeps every
+                             concurrent write visible and a later write that saw them all resolves
+                             them; merge as a set union is order-free, idempotent and lossless"
+      m.core.scenarios_failed: 0
+  d.fired_changes_status_acceptance_is_an_act:
+    verdict: "a falsifier that holds changes the status of the decision it belongs to and nothing
+              else; accepting a replacement is an act of its own, and a decision written but not yet
+              accepted or reviewed is an assumption that every conclusion resting on it carries"
+    because: "A fallen decision does not license whatever is written in its place - the wide
+              replacement that enters because the narrow one fell was the case the second reviewer
+              named - and a conclusion that rests on an unreviewed reversal as if it stood turns a
+              proposal into a fact through a chain. Entry is not approval; the act is."
+    wrong_if: {expr: "m.core.scenarios_failed > 0"}
+    rests_on: [s.2026_09_16_versions_core, lit.tms, m.core.scenarios_failed]
+    seen:
+      s.2026_09_16_versions_core: "The session that closed the model behind the branch verdict
+                                   conflicts: versions per subject stored one file each, what each
+                                   writer saw kept apart from what a claim rests on and from what an
+                                   act replaced, acts as versions of their own kind, state computed
+                                   from the frontier and the acts and the checks, and the entry file
+                                   as a stamped rendering that a hand edit is reconciled against
+                                   three ways. Shaped in conversation with a second reviewer's four
+                                   corrections - seeing is not replacing, a hand edit keeps the base
+                                   it saw, a historical dependency is not a lost one, and one
+                                   append-only file per subject conflicts under git where one file
+                                   per version merges clean - and three precisions: acts can
+                                   conflict, the two times need exact meaning, and the merged entry
+                                   file is rebuilt, never read as an edit."
+      lit.tms: "a conclusion keeps the justifications and assumptions it was drawn from, support is
+                recomputed when an assumption changes, and losing the support for a conclusion does
+                not establish its opposite"
+      m.core.scenarios_failed: 0
+  d.merge_is_union_and_state_is_computed:
+    verdict: "merge is the union of version files plus an index rebuild, and the state is computed
+              from the frontier of versions no act replaced, each head with a status - accepted,
+              proposed, contested, fired - and each judgment from the check on accepted heads and the
+              disposition of its dependencies, of which only corrected, refuted and contested carry a
+              reservation; the same contributions under the same rule version give the same computed
+              state, whatever the order or the number of merges"
+    because: "A union is order-free, idempotent and lossless by construction, which the fold had to
+              engineer path by path and thirty review findings priced. What a union cannot do is
+              choose what stands, so that is a separate computation over the same records and rules,
+              testable on its own. A dependency that merely gained a newer version is a re-review, as
+              MOVED is today; a conclusion about last year's report is not lost because this year's
+              exists."
+    wrong_if: {expr: "m.core.scenarios_failed > 0"}
+    rests_on: [s.2026_09_16_versions_core, lit.crdt_mv_register, lit.belief_change, m.core.scenarios_failed]
+    seen:
+      s.2026_09_16_versions_core: "The session that closed the model behind the branch verdict
+                                   conflicts: versions per subject stored one file each, what each
+                                   writer saw kept apart from what a claim rests on and from what an
+                                   act replaced, acts as versions of their own kind, state computed
+                                   from the frontier and the acts and the checks, and the entry file
+                                   as a stamped rendering that a hand edit is reconciled against
+                                   three ways. Shaped in conversation with a second reviewer's four
+                                   corrections - seeing is not replacing, a hand edit keeps the base
+                                   it saw, a historical dependency is not a lost one, and one
+                                   append-only file per subject conflicts under git where one file
+                                   per version merges clean - and three precisions: acts can
+                                   conflict, the two times need exact meaning, and the merged entry
+                                   file is rebuilt, never read as an edit."
+      lit.crdt_mv_register: "a single timestamp cannot tell concurrent writes apart - a write must
+                             carry what it was based on; a multi-value register keeps every
+                             concurrent write visible and a later write that saw them all resolves
+                             them; merge as a set union is order-free, idempotent and lossless"
+      lit.belief_change: "revising what we believed about an unchanged world, updating for a world
+                          that changed, and merging sources that disagree are three operations with
+                          three different rules"
+      m.core.scenarios_failed: 0
+  d.seeing_resting_replacing_are_three_relations:
+    verdict: "a version keeps three relations apart: what its writer saw, what its claim rests on,
+              and what an act replaced - so a second reading that saw the first and disagrees is a
+              second head, not a supersession, and the day is evidence for a source rule, never the
+              criterion of a contradiction"
+    because: "Treating a descendant as a replacement made a reader who saw 100 and found 120 in the
+              same source state into the sole head, which is a dispute painted as agreement.
+              Concurrency - neither saw the other - is what makes a contradiction; a later reading of
+              a moving source supersedes by a source rule that is an act, and a verdict is replaced
+              by an act or by its own fired condition. Every rule the record holds today falls out of
+              the three relations as a derived case."
+    wrong_if: {expr: "m.core.scenarios_failed > 0"}
+    rests_on: [s.2026_09_16_versions_core, lit.tms, lit.crdt_mv_register, m.core.scenarios_failed]
+    seen:
+      s.2026_09_16_versions_core: "The session that closed the model behind the branch verdict
+                                   conflicts: versions per subject stored one file each, what each
+                                   writer saw kept apart from what a claim rests on and from what an
+                                   act replaced, acts as versions of their own kind, state computed
+                                   from the frontier and the acts and the checks, and the entry file
+                                   as a stamped rendering that a hand edit is reconciled against
+                                   three ways. Shaped in conversation with a second reviewer's four
+                                   corrections - seeing is not replacing, a hand edit keeps the base
+                                   it saw, a historical dependency is not a lost one, and one
+                                   append-only file per subject conflicts under git where one file
+                                   per version merges clean - and three precisions: acts can
+                                   conflict, the two times need exact meaning, and the merged entry
+                                   file is rebuilt, never read as an edit."
+      lit.tms: "a conclusion keeps the justifications and assumptions it was drawn from, support is
+                recomputed when an assumption changes, and losing the support for a conclusion does
+                not establish its opposite"
+      lit.crdt_mv_register: "a single timestamp cannot tell concurrent writes apart - a write must
+                             carry what it was based on; a multi-value register keeps every
+                             concurrent write visible and a later write that saw them all resolves
+                             them; merge as a set union is order-free, idempotent and lossless"
+      m.core.scenarios_failed: 0
+  d.versions_per_subject_one_file_each:
+    verdict: "every write is an immutable version of one subject, content-addressed and kept as one
+              file of its own under .kpopper/versions/<subject>/, so that two branches writing one
+              subject merge under git without a textual conflict and the disagreement is met by the
+              reader, not by a merge marker"
+    because: "Two appends to one file per subject conflict under git and one file per version merges
+              clean - measured in a scratch repository on 2026-09-16 - and a textual conflict must be
+              resolved before the record can be read at all, which is the wrong surface for two
+              claims. Content addressing makes the union idempotent, and a version per write is what
+              lets a later reader see the path and not only the end."
+    wrong_if: {expr: "m.core.scenarios_failed > 0"}
+    rests_on: [s.2026_09_16_versions_core, lit.crdt_mv_register, m.core.scenarios_failed]
+    seen:
+      s.2026_09_16_versions_core: "The session that closed the model behind the branch verdict
+                                   conflicts: versions per subject stored one file each, what each
+                                   writer saw kept apart from what a claim rests on and from what an
+                                   act replaced, acts as versions of their own kind, state computed
+                                   from the frontier and the acts and the checks, and the entry file
+                                   as a stamped rendering that a hand edit is reconciled against
+                                   three ways. Shaped in conversation with a second reviewer's four
+                                   corrections - seeing is not replacing, a hand edit keeps the base
+                                   it saw, a historical dependency is not a lost one, and one
+                                   append-only file per subject conflicts under git where one file
+                                   per version merges clean - and three precisions: acts can
+                                   conflict, the two times need exact meaning, and the merged entry
+                                   file is rebuilt, never read as an edit."
+      lit.crdt_mv_register: "a single timestamp cannot tell concurrent writes apart - a write must
+                             carry what it was based on; a multi-value register keeps every
+                             concurrent write visible and a later write that saw them all resolves
+                             them; merge as a set union is order-free, idempotent and lossless"
+      m.core.scenarios_failed: 0

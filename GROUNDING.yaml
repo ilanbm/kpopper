@@ -1,5 +1,5 @@
 meta:
-  updated: 2026-09-15
+  updated: 2026-09-16
   name: kpopper
   scope: "What this plugin is for and the decisions that shaped it, kept in its own format -
           the tools eat their own cooking, and every session here opens grounded."
@@ -578,6 +578,26 @@ sources:
          on Python 3.13, and the full suite passed on 3.13 except one page-links test that fails in
          this checkout and passed in that CI run."
     read: "2026-09-15"
+  s.2026_09_16_versions_core:
+    asked: "Close the model behind issues #98 and #99 for good: after the fold's fixes on the branch
+            of PR #101, shape the smallest core that covers every case the thread raised - a
+            two-branch verdict conflict, an inherited reading mistaken for evidence, a same-source
+            re-read, a same-day correction, two commits measuring two code states, a fallen
+            conclusion and its replacement, a replace-and-return with its reasons, a hand edit on a
+            stale base, a historical dependency that is not a lost one, conflicting adjudications -
+            as one set of rules with no path-specific exception; write it into the record as a model
+            chosen for examination, with its promises as requirements to prove, then prove them in an
+            isolated module with real git merges before wiring anything existing to it"
+    name: "The session that closed the model behind the branch verdict conflicts: versions per
+           subject stored one file each, what each writer saw kept apart from what a claim rests on
+           and from what an act replaced, acts as versions of their own kind, state computed from the
+           frontier and the acts and the checks, and the entry file as a stamped rendering that a
+           hand edit is reconciled against three ways. Shaped in conversation with a second
+           reviewer's four corrections - seeing is not replacing, a hand edit keeps the base it saw,
+           a historical dependency is not a lost one, and one append-only file per subject conflicts
+           under git where one file per version merges clean - and three precisions: acts can
+           conflict, the two times need exact meaning, and the merged entry file is rebuilt, never
+           read as an edit."
   s.background_ingestion:
     name: "Background capture and selective delivery contract"
     file: "skills/kpopper/INGESTION.md"
@@ -945,6 +965,30 @@ known:
     name: "Claims about this project that held - checked with a run before they were asserted"
     from: run.claims_scored
     at: "of 6"
+  m.core.scenarios:
+    v: 15
+    name: "Scenarios the versions core must pass before anything existing is wired to it - the six
+           experiments of the second reviewer, order and idempotence over contributions including
+           acts, branch history travelling, an unreviewed reversal's reservation, a hand edit on a
+           stale base, a historical dependency left unflagged, a real git merge of version files, and
+           conflicting acts"
+    from: s.2026_09_16_versions_core
+    at: "the brief of the versions core track"
+    of: "2026-09-16"
+  m.core.scenarios_failed:
+    v: 0
+    name: "Scenarios of the versions core that a test in tests/test_versions_core.py fails on this
+           tree, or that needed an exception for a branch, a hand edit or a review to pass"
+    from: s.2026_09_16_versions_core
+    at: "the brief of the versions core track; the count moves with the tests"
+    of: "2026-09-16"
+  m.core.scenarios_proved:
+    v: 0
+    name: "Scenarios of the versions core that a test in tests/test_versions_core.py passes on this
+           tree"
+    from: s.2026_09_16_versions_core
+    at: "the brief of the versions core track; the count moves with the tests"
+    of: "2026-09-16"
   m.entry_name.false_reads:
     v: 8
     unit: trials
@@ -1140,6 +1184,29 @@ known:
     name: "The opener on the same record when clean, characters"
     from: "measured on a live record of 107 entries"
     of: "2026-09-01"
+  lit.belief_change:
+    v: "revising what we believed about an unchanged world, updating for a world that changed, and
+        merging sources that disagree are three operations with three different rules"
+    name: "What belief revision, update and merging keep apart"
+    from: "Katsuno and Mendelzon 1991, On the difference between updating a knowledge base and
+           revising it; Konieczny and Pino Perez 2002, Merging information under constraints"
+    at: "the revision versus update distinction, and the merging postulates"
+    of: "2026-09-16"
+  lit.bitemporal:
+    v: "the time a datum is about and the time it was recorded are two dimensions, kept apart, so
+        that learning today that yesterday was wrong is told apart from the world changing today"
+    name: "What bitemporal data models keep apart"
+    from: "Jensen and Snodgrass 1999, Temporal data management"
+    at: "valid time and transaction time"
+    of: "2026-09-16"
+  lit.crdt_mv_register:
+    v: "a single timestamp cannot tell concurrent writes apart - a write must carry what it was
+        based on; a multi-value register keeps every concurrent write visible and a later write that
+        saw them all resolves them; merge as a set union is order-free, idempotent and lossless"
+    name: "What conflict-free replicated data types settle"
+    from: "Shapiro, Preguica, Baquero and Zawirski 2011, Conflict-free replicated data types"
+    at: "section 3.2.2, the multi-value register, and the state-based merge as a join"
+    of: "2026-09-16"
   lit.github_registries:
     v: "GitHub Packages hosts npm, RubyGems, Maven, Gradle, NuGet and containers; it has no Python
         registry, so pip installs cannot come from it"
@@ -1158,6 +1225,14 @@ known:
     name: "What the registries hold"
     from: "registry lookup"
     of: "2026-09-03"
+  lit.tms:
+    v: "a conclusion keeps the justifications and assumptions it was drawn from, support is
+        recomputed when an assumption changes, and losing the support for a conclusion does not
+        establish its opposite"
+    name: "What truth maintenance systems formalised"
+    from: "Doyle 1979, A truth maintenance system; de Kleer 1986, An assumption-based TMS"
+    at: "the justification structure and the ATMS label update"
+    of: "2026-09-16"
   p.npm_files:
     v: 1
     name: "Files of substance the npm package ships"
