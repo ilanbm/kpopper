@@ -98,6 +98,8 @@ def prepare(reader, paths, action):
                 if capabilities(hyp['doc'])['profile'] == PROFILE:
                     raise CapabilityError('unsupported_capability', 'use core/v1 consumer')
             return doc, None
+        if 'meta' in doc and not isinstance(doc['meta'], dict):
+            raise ValueError('requires explicit migration: metadata is not a mapping')
         if capabilities(doc)['profile'] != PROFILE:
             worlds = [doc, *(hyp['doc'] for hyp in doc.hypotheses.values())]
             if any(hyp.get('error') for hyp in doc.hypotheses.values()):
@@ -115,9 +117,6 @@ def prepare(reader, paths, action):
                 raise ValueError('requires explicit migration: executable legacy hypothesis')
         original = Snapshot.capture(paths, read_mode='frozen')
         doc = copy.deepcopy(doc)
-        meta = doc.get('meta')
-        if meta is not None and not isinstance(meta, dict):
-            raise ValueError('requires explicit migration: metadata is not a mapping')
         doc.setdefault('meta', {})['reasoning'] = copy.deepcopy(DECLARATION)
         return doc, World(reader, doc, original=original)
     except (ValueError, TypeError, SyntaxError) as error:

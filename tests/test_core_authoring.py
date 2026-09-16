@@ -82,6 +82,16 @@ class CoreAuthoring(unittest.TestCase):
                 self.write('add', 'p.total', body={'rule': 'p.price * p.quantity'}, profile='core/v1')
             self.assertEqual(before, self.path.read_bytes())
 
+    def test_promotion_refuses_non_mapping_metadata_before_mutation(self):
+        for metadata in (None, 'heading', []):
+            with self.subTest(metadata=metadata):
+                self.doc['meta'] = metadata
+                self.save(self.doc)
+                before = self.path.read_bytes()
+                with self.assertRaisesRegex(P.Refused, 'metadata is not a mapping'):
+                    self.write('add', 'p.total', body={'rule': 'p.price * p.quantity'}, profile='core/v1')
+                self.assertEqual(self.path.read_bytes(), before)
+
     def test_null_zero_false_have_distinct_successful_history(self):
         self.write('add', 'p.null', body={'rule': {'null': True}}, profile='core/v1')
         self.write('add', 'p.zero', body={'v': 0})

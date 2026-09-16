@@ -84,6 +84,89 @@ class CoreIngestion(unittest.TestCase):
         self.assertEqual(result['state'], 'applied', result)
         self.assertEqual(yaml.safe_load(self.record.read_text())['meta']['reasoning']['version'], 2)
 
+    def test_refused_promotion_finishes_event_and_continues_queue(self):
+        self.doc.pop('meta')
+        self.doc.pop('judgments')
+        self.doc['known']['p.old'] = {'rule': 'p.price > 10'}
+        self.record.write_text(yaml.safe_dump(self.doc, sort_keys=False))
+        before = self.record.read_bytes()
+        first = I.capture(self.report(profile='core/v1'), self.record, self.state, start=False)
+        second = I.capture(self.report(), self.record, self.state, start=False)
+        prepare = I._prepare
+
+        def check_unchanged(*args, **kwargs):
+            self.assertEqual(self.record.read_bytes(), before)
+            self.assertEqual(args[2]['event_id'], second['event_id'])
+            return prepare(*args, **kwargs)
+
+        with patch.object(I, '_prepare', side_effect=check_unchanged) as prepared:
+            results = I.process(self.record, self.state)
+        self.assertEqual([result['state'] for result in results], ['needs_primary', 'applied'])
+        self.assertIn('requires explicit migration', results[0]['reason'])
+        self.assertEqual(prepared.call_count, 1)
+        self.assertEqual(I.status(first['event_id'], self.record, self.state)['state'], 'needs_primary')
+        self.assertEqual(I.status(second['event_id'], self.record, self.state)['state'], 'applied')
+
+    def test_final_promotion_refusal_preserves_record_and_prepared_journal(self):
+        event = I.capture(self.report(), self.record, self.state, start=False)
+        before = self.record.read_bytes()
+        authoring = I.P._peer('reasoning.authoring')
+        prepare = authoring.prepare
+
+        def refuse_after_preparation(*args, **kwargs):
+            if (self.state / 'journals' / (event['event_id'] + '.json')).exists():
+                raise I.P.Refused('pending_profile_reconciliation_required: changed overlay')
+            return prepare(*args, **kwargs)
+
+        with patch.object(authoring, 'prepare', side_effect=refuse_after_preparation):
+            result = I.process(self.record, self.state)[0]
+        self.assertEqual(result['state'], 'needs_primary', result)
+        self.assertIn('pending_profile_reconciliation_required', result['reason'])
+        self.assertEqual(self.record.read_bytes(), before)
+        journal = json.loads((self.state / 'journals' / (event['event_id'] + '.json')).read_text())
+        self.assertEqual(journal['phase'], 'prepared')
+
+    def test_recovery_assessment_refusal_retains_committed_record(self):
+        event = I.capture(self.report(), self.record, self.state, start=False)
+        with self.assertRaises(I._CrashAfterCommit):
+            I.process(self.record, self.state, event['event_id'], _crash_after_commit=True)
+        before = self.record.read_bytes()
+        with patch.object(I, '_graph', side_effect=I.P.Refused('unsupported_capability: changed overlay')):
+            result = I.process(self.record, self.state)[0]
+        self.assertEqual(result['state'], 'needs_primary', result)
+        self.assertIn('unsupported_capability', result['reason'])
+        self.assertTrue(result['record_committed'])
+        self.assertEqual(self.record.read_bytes(), before)
+
+    def test_post_commit_assessment_refusal_reports_commit_without_reapplying(self):
+        event = I.capture(self.report(), self.record, self.state, start=False)
+        journal_path = self.state / 'journals' / (event['event_id'] + '.json')
+        graph = I._graph
+
+        def refuse_after_commit(*args, **kwargs):
+            if journal_path.exists() and json.loads(journal_path.read_text())['phase'] == 'record_committed':
+                raise I.P.Refused('unsupported_capability: changed overlay')
+            return graph(*args, **kwargs)
+
+        with patch.object(I, '_graph', side_effect=refuse_after_commit):
+            result = I.process(self.record, self.state)[0]
+        self.assertEqual(result['state'], 'needs_primary', result)
+        self.assertTrue(result['record_committed'])
+        self.assertIn('unsupported_capability', result['reason'])
+        self.assertEqual(yaml.safe_load(self.record.read_text())['known']['p.price']['v'], 20)
+        committed = self.record.read_bytes()
+        self.assertEqual(I.process(self.record, self.state), [])
+        self.assertEqual(self.record.read_bytes(), committed)
+
+    def test_assessment_does_not_swallow_unrelated_process_exit(self):
+        I.capture(self.report(), self.record, self.state, start=False)
+        before = self.record.read_bytes()
+        with patch.object(I, '_graph', side_effect=SystemExit(42)):
+            with self.assertRaises(SystemExit) as raised:
+                I.process(self.record, self.state)
+        self.assertEqual(raised.exception.code, 42)
+        self.assertEqual(self.record.read_bytes(), before)
+
     def test_native_dates_survive_journal_and_recovery(self):
         self.doc['sources']['s.old']['read'] = datetime.date(2026, 9, 1)
         self.record.write_text(yaml.safe_dump(self.doc, sort_keys=False))

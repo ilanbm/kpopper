@@ -1008,7 +1008,10 @@ def _recover(rec, root, event, envelope, journal):
             applied = False
     if not applied:
         return None
-    after = _graph(rec, _report_seeds(envelope))
+    try:
+        after = _graph(rec, _report_seeds(envelope))
+    except P.Refused as error:
+        return _question(root, event, envelope, str(error), record_committed=True)
     if journal['before_graph'].get('assessment_profile') == 'core/v1' or after.get('assessment_profile') == 'core/v1':
         try:
             core_gate = P._peer('reasoning.ingestion')
@@ -1102,7 +1105,10 @@ def _process_event(rec, root, event, crash_after_commit=False):
                                  "target changed after capture; the report was retained without overwriting it")
             prepared_target_sha256 = current_target["body_sha256"]
             before_bytes = rec.read_bytes()
-            before_graph = _graph(rec, _report_seeds(envelope), profile=envelope.get('profile'))
+            try:
+                before_graph = _graph(rec, _report_seeds(envelope), profile=envelope.get('profile'))
+            except P.Refused as error:
+                return _question(root, event, envelope, str(error))
         try:
             _, integrity = _capture_payload(root, event)
             if integrity:
@@ -1153,7 +1159,10 @@ def _process_event(rec, root, event, crash_after_commit=False):
                 if 'core_gate' in journal:
                     # A pending contribution can appear without changing record bytes.
                     # Recheck semantic promotion under the final policy/record lock.
-                    P._peer('reasoning.authoring').prepare(P, [str(rec)], {'profile': envelope.get('profile')})
+                    try:
+                        P._peer('reasoning.authoring').prepare(P, [str(rec)], {'profile': envelope.get('profile')})
+                    except P.Refused as error:
+                        return _question(root, event, envelope, str(error))
                 _replace_record(rec, after_bytes)
                 journal["phase"] = "record_committed"
                 journal["committed_at"] = time.time()
@@ -1195,7 +1204,10 @@ def _process_event(rec, root, event, crash_after_commit=False):
                            pending=captured, source=source_id, diagnostics=diagnostics)
         if crash_after_commit:
             raise _CrashAfterCommit("simulated interruption after record commit")
-        after = _graph(rec, _report_seeds(envelope))
+        try:
+            after = _graph(rec, _report_seeds(envelope))
+        except P.Refused as error:
+            return _question(root, event, envelope, str(error), record_committed=True)
         fired, actionable = _classify(before_graph, after)
         signals = _signals(eid, envelope, after, fired, actionable)
         return _finish(root, event, envelope, "applied", None, signals,
