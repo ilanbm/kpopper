@@ -863,7 +863,7 @@ def _prepare_core(rec, root, event, envelope, before_bytes):
 
 
 def _prepare(rec, root, event, envelope, before_bytes):
-    document = P.yaml.safe_load(before_bytes) or {}
+    document = P.parse(text=before_bytes) or {}
     if P._peer('reasoning.authoring').selected(document, envelope.get('profile')):
         return _prepare_core(rec, root, event, envelope, before_bytes)
     eid = event["event_id"]

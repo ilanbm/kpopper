@@ -390,7 +390,7 @@ class ScopeCapture:
                    'projected_inputs_digest': digest(dependencies)}
         basis = {'version': 1, 'recipe': 'scope-inputs/v2',
                  'profile': 'core/v1', 'modules': ['arithmetic/v1'],
-                 'witness': witness, 'fields': list(fields), 'dependencies': dependencies,
+                 'witness': witness, 'members': list(members), 'fields': list(fields), 'dependencies': dependencies,
                  'historical_detail': 'fingerprints_only', 'as_of': data['as_of']}
         basis['digest'] = digest(basis)
         value = {'type': 'record', 'fields': {'member_count': {

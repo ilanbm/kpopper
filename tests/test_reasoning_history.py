@@ -39,6 +39,13 @@ def finding(doc, dep):
 
 
 class TypedHistoryTests(unittest.TestCase):
+    def test_absent_history_does_not_make_capabilities_validate_legacy_schema(self):
+        self.assertEqual(capabilities({'schema': 'legacy source text'})['profile'], 'ordinary-reader/v1')
+
+    def test_scope_history_retains_member_ids_without_projected_fields(self):
+        history = reviewed(document(), 'scope.items')
+        self.assertEqual(history['basis']['members'], ['p', 'q'])
+
     def test_metadata_v1_and_v2_keep_same_core_value_and_basis(self):
         doc = document()
         v2 = Evaluator(Snapshot.from_data(doc)).evaluate({'ref': 'q'}, declared=['q'])

@@ -177,7 +177,17 @@ def capabilities(document, *, profile=None):
         result = {**value, 'requires': list(value['requires'])}
     # Typed review envelopes require their declared record format. Inspect only
     # the actual mapped historical field, never arbitrary user mappings.
-    if result['version'] != 2:
+    # Ordinary declarations must not become a second legacy-schema validator.
+    # Infer the historical role only when a versioned envelope could be present.
+    possible_history = any(
+        isinstance(old, dict) and isinstance(old.get('computed'), dict)
+        and old['computed'].get('version') == 2
+        for collection, members in document.items()
+        if collection not in ('meta', 'schema', 'record', 'also') and isinstance(members, dict)
+        for body in members.values() if isinstance(body, dict)
+        for seen in body.values() if isinstance(seen, dict)
+        for old in seen.values())
+    if result['version'] != 2 and possible_history:
         from .snapshot import _fields
         history_field = _fields(document)['snapshot']
         for collection, members in document.items():

@@ -587,11 +587,16 @@ def forget(path):
         pass
 
 
-def parse(path):
+def parse(path=None, *, text=None):
     """One file of the record, as the parser reads it - the record, a file a pointer names, a
     hypothesis beside it. Every reader of a record file comes through here, so none of them can
     be served the parse of a file as it no longer is: what comes back is the parse of the bytes
-    that are there now, or those bytes parsed again."""
+    that are there now, or those bytes parsed again. Staged text uses the same parser
+    with no file identity or cache entry."""
+    if text is not None:
+        if path is not None:
+            raise ValueError('parse takes a file or staged text, not both')
+        return yaml.safe_load(text)
     path = os.path.abspath(path)
     try:
         with io.open(path, "rb") as f:
@@ -4179,7 +4184,7 @@ def _fork(paths, action, diagnostics=None):
     out, seen = list(expression_notes), {}
     if kind == "set":
         now = value_of(raw, ids, nid)
-        if nid in hyp["ids"] and now is not None and _writer_same(raw2, now, action["value"]) \
+        if nid in hyp["ids"] and now is not None and _writer_same(raw, now, action["value"]) \
                 and not action.get("as_of") and action.get("source") is None:
             print(f"{nid} is already {scalar(action['value'], fold=False)} in hypothesis {name}; "
                   f"nothing written")
@@ -4223,7 +4228,7 @@ def _fork(paths, action, diagnostics=None):
                 out.append(f"  {d}: {short(seen[d])} (never checked against it before)")
     if world is not None:
         _peer('reasoning.authoring').declare(lines, (sys.modules.get(__name__) or _Reader()))
-        staged = yaml.safe_load("\n".join(lines)) or {}
+        staged = parse(text="\n".join(lines)) or {}
         staged.pop('hypothesis', None)
         _peer('reasoning.contract').capabilities(staged)
         candidate = layered(doc, dict(hyp, doc=staged))
@@ -4491,7 +4496,7 @@ def _apply(paths, action, diagnostics=None):
     if world is not None:
         _peer('reasoning.authoring').declare(lines, (sys.modules.get(__name__) or _Reader()))
         # Validate the exact candidate bytes before publication, including history.
-        staged = yaml.safe_load("\n".join(lines)) or {}
+        staged = parse(text="\n".join(lines)) or {}
         _peer('reasoning.contract').capabilities(staged)
         final_document = copy.deepcopy(doc)
         for collection, members in staged.items():
@@ -4865,7 +4870,7 @@ def gate(state_path, paths, turns=0, host=None, nudged_at=None, *, _recording_co
 
 
 HELP = {
-    "set": """  set <key> <value> [--source <id> --at "..."] [--why "..."] [--as-of YYYY-MM-DD] [--hypothesis NAME] [file]
+    "set": """  set <key> <value> [--source <id> --at "..."] [--why "..."] [--as-of YYYY-MM-DD] [--hypothesis NAME] [--profile core/v1] [file]
 
 Change one value. The entry's `v:` (or `quoted:`) is rewritten where it stands, `of:` is
 stamped with the date, and the reason - if given - is kept as a comment beneath. A number
@@ -4888,7 +4893,7 @@ updates it. One of the same day or earlier that differs is a contradiction: refu
 the base, and the refusal names the command that writes it into a hypothesis instead.
 `--hypothesis NAME` writes into `.kpopper/hypotheses/NAME.yaml` beside the record, opened by its
 first write, and the base is not touched: the entry is carried over whole and set there.""",
-    "add": """  add <id> field=value ... [--in COLLECTION] [--as-of YYYY-MM-DD] [--hypothesis NAME] [file]
+    "add": """  add <id> field=value ... [--in COLLECTION] [--as-of YYYY-MM-DD] [--hypothesis NAME] [--profile core/v1] [file]
   add <id> '{field: value, ...}'
   add <id> "an open question"
 
@@ -4915,7 +4920,7 @@ sign holds with its tabs intact; refused twice in a day, once the brief no longe
 what it decided, or while the sign has not fired - and a refusal names the hypothesis a
 person folds; `replaced:` keeps each decision it replaced, one line. `request:
 s.<date>_<slug>` names whose asking any judgment was taken from, and admits nothing.""",
-    "review": """  review <id> [--as-of YYYY-MM-DD] [--hypothesis NAME] [file]
+    "review": """  review <id> [--as-of YYYY-MM-DD] [--hypothesis NAME] [--profile core/v1] [file]
   review "<section title>"
 
 "I read it, and it still holds." A judgment's `seen` is rewritten from what its

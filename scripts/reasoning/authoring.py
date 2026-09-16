@@ -345,7 +345,7 @@ def declare(lines, reader):
     """Change only the generated capability member, preserving surrounding text."""
     text = '\n'.join(lines)
     import yaml
-    doc = yaml.safe_load(text) or {}
+    doc = reader.parse(text=text) or {}
     meta = doc.get('meta')
     if meta is not None and not isinstance(meta, dict):
         raise reader.Refused('requires explicit migration: metadata is not a mapping')

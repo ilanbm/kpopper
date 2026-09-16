@@ -1,5 +1,6 @@
 """Atomic core batches validate the complete world and retain recovery evidence."""
 import copy
+import datetime
 import json
 import os
 from pathlib import Path
@@ -78,6 +79,37 @@ class CoreIngestion(unittest.TestCase):
         result = I.update(self.report(profile='core/v1'), self.record, self.state)
         self.assertEqual(result['state'], 'applied', result)
         self.assertEqual(yaml.safe_load(self.record.read_text())['meta']['reasoning']['version'], 2)
+
+    def test_native_dates_survive_journal_and_recovery(self):
+        self.doc['sources']['s.old']['read'] = datetime.date(2026, 9, 1)
+        self.record.write_text(yaml.safe_dump(self.doc, sort_keys=False))
+        event = I.capture(self.report(), self.record, self.state, start=False)
+        with self.assertRaises(I._CrashAfterCommit):
+            I.process(self.record, self.state, event['event_id'], _crash_after_commit=True)
+        result = I.process(self.record, self.state, event['event_id'])[0]
+        self.assertEqual(result['state'], 'applied', result)
+        self.assertEqual(yaml.safe_load(self.record.read_text())['sources']['s.old']['read'], datetime.date(2026, 9, 1))
+
+    def test_recovery_refuses_substituted_gate_evidence(self):
+        event = I.capture(self.report(), self.record, self.state, start=False)
+        with self.assertRaises(I._CrashAfterCommit):
+            I.process(self.record, self.state, event['event_id'], _crash_after_commit=True)
+        journal_path = self.state / 'journals' / (event['event_id'] + '.json')
+        journal = json.loads(journal_path.read_text())
+        journal['core_gate']['after'] = journal['core_gate']['before']
+        journal_path.write_text(json.dumps(journal))
+        before = self.record.read_bytes()
+        result = I.process(self.record, self.state, event['event_id'])[0]
+        self.assertEqual(result['state'], 'needs_primary', result)
+        self.assertIn('invalid core writer gate evidence', result['reason'])
+        self.assertEqual(self.record.read_bytes(), before)
+
+    def test_core_batch_text_input_is_not_a_legacy_inline_formula(self):
+        self.doc['known']['p.note'] = {'v': 'p.price + 1', 'from': 's.old'}
+        self.record.write_text(yaml.safe_dump(self.doc, sort_keys=False))
+        result = I.update(self.report([{'kind': 'set', 'id': 'p.note', 'value': 'p.price + 2'}]), self.record, self.state)
+        self.assertEqual(result['state'], 'applied', result)
+        self.assertEqual(yaml.safe_load(self.record.read_text())['known']['p.note']['v'], 'p.price + 2')
 
 
 if __name__ == '__main__':

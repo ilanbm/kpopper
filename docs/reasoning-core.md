@@ -1,7 +1,7 @@
 # Experimental deterministic core
 
-`core/v1` is an explicit, read-only assessment profile. Existing commands keep
-their legacy interpretation until the remaining consumers are integrated.
+`core/v1` is an explicit assessment and authoring profile. Existing ordinary
+readers keep their legacy interpretation until their consumers are integrated.
 
 ```sh
 kpopper assess m.total d.order --profile core/v1 --record example.yaml
@@ -32,14 +32,66 @@ This profile currently supports explicit scalar literals, references, exact
 arithmetic and comparisons. Boolean composition, conditional expressions and
 queries are separate planned capabilities. Unknown required modules refuse
 dependent interpretation. No record text can load code or change the installed
-module registry. Authoring and migration are not activated by this reader slice.
+module registry. A read never activates authoring or migrates stored content.
 
 The new assessment envelope has `schema_version: 2` and the schema at
 `scripts/reasoning/assessment.schema.json`. Existing ordinary assessments retain
 their original v1 schema. `checked-reader/v1` names the existing checked-session
 semantics for compatibility documentation; older checked-session responses did
 not carry that identifier. Missing metadata keeps the existing surface's legacy
-interpretation. An explicit `--profile core/v1` override does not rewrite a record.
+interpretation. An assessment's explicit `--profile core/v1` override does not
+rewrite a record.
+
+## Explicit authoring and review history
+
+`add`, `set` and `review` accept `--profile core/v1`. A declared core record also
+selects this writer when the flag is omitted. Missing metadata without the flag
+retains legacy authoring. Supported newly authored formulas are stored as
+`{expr: "original text"}` based on syntax and resolved intent, independently of
+legacy checked-session setup. A broken packaged runtime refuses a computation
+or required review before changing the record; it cannot turn the formula into prose.
+
+```sh
+kpopper add m.double 'rule=m.total * 2' --profile core/v1 example.yaml
+kpopper review d.order --as-of 2026-09-17 example.yaml
+```
+
+New core writes declare record metadata version 2, with the unchanged semantic
+profile `core/v1` and required module `arithmetic/v1`. Metadata version 1 remains
+readable. Existing executable legacy fields require explicit migration before
+record-wide promotion; a flag does not reinterpret them. New core history uses
+`seen.<dependency>.computed` with `version: 2`, a canonical typed `value`, the
+complete actual `basis`, and the original `rule` when applicable. The record's
+mapped snapshot field is respected. Unrelated writes preserve old history, and
+missing historical basis is never backfilled automatically.
+
+The writer's `--as-of` is a recording date. It does not bind an ambient date into
+computations: normal review basis uses semantic `as_of: null`, matching default
+assessment on later days. Successful null, false, zero and exact fractions retain
+their distinct typed values. Scope history records member count, sorted member
+IDs, all projected fingerprints and the full scope witness under basis version 1,
+recipe `scope-inputs/v2`. Equal member counts do not hide changed membership.
+Complete generated history is subject to the output budget; it is never truncated.
+
+Atomic report ingestion accepts `profile: core/v1` in its envelope and selects
+core automatically for declared records. It normalizes and validates all changes
+in the final staged world, including forward references, before publishing one
+record replacement. Its internal assessment gate and recovery evidence distinguish
+introduced integrity failures from an unchanged judgment whose falsifier newly
+fires after an input update. Existing single-file, source-permission and primary
+review restrictions still apply.
+
+Older readers that only support metadata version 1 refuse the newer record
+format. Upgrade readers before sharing a newly authored core record; metadata
+cannot protect it from already released writers that ignore capabilities.
+Ordinary check/page readers remain unavailable for declared core records. Use
+`assess --profile core/v1` to inspect their current findings.
+
+Computed reader/page builtins are not core inputs. New core calculations or
+reviews requiring them refuse with `unsupported_core_builtin`; arrangement and
+brief-section reviews retain that restriction. Contribution capture, specialized
+legacy mutation commands and explicit migration must use a compatible capability
+boundary before they can operate on core records.
 
 Numeric constants keep their decimal lexemes and evaluate as exact rationals.
 Quoted numbers remain text; booleans, numeric zero, null and missing inputs remain

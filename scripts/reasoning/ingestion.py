@@ -164,7 +164,7 @@ def stage(reader, paths, actions, *, profile=None):
     declare(lines, reader)
     reader._bump_updated(lines, actions[0]['as_of'])
     encoded = '\n'.join(lines)
-    parsed = reader.yaml.safe_load(encoded)
+    parsed = reader.parse(text=encoded)
     # Reject a text encoding that changed a typed claim or its historical evidence.
     if digest({nid: [collection, body] for nid, (collection, body) in entries(parsed).items()}) != digest({nid: [collection, body] for nid, (collection, body) in entries(candidate).items()}):
         raise ValueError('staged batch text does not preserve the complete authored entries')
