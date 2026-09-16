@@ -60,7 +60,8 @@ runtime identifies replacement without disabling it. See the included
 Candidate matrix: `linux-x86_64`, `linux-aarch64`, `darwin-arm64`,
 `darwin-x86_64`, `windows-x86_64`. macOS declares minimum 15.0 because
 upstream static runtime objects require it. Linux records the largest
-required GLIBC version observed in the executable/library. Windows initially
+required GLIBC version observed in the executable/library; the included Linux
+archives require glibc 2.38 or newer. Windows initially
 uses Server 2022 as its tested baseline; older Windows support is not inferred.
 An archive is not verified merely because its manifest names a platform.
 The candidate CI must pass on that platform before integration/publication.
