@@ -38,12 +38,15 @@ def commit(d, msg):
 
 
 def reading(store, subject, value, by, on, saw=(), at=None, over=()):
-    """A reading as the tool writes one: the version, and the writer's acceptance of it - over
-    nothing, since seeing the earlier reading is not replacing it; the source's own clock, or
-    an explicit act, is what lays one reading over another."""
+    """A reading as the tool writes one: a root stands by itself; a later one is accepted by
+    its writer - over nothing, since seeing the earlier reading is not replacing it; the
+    source's own clock, or an explicit act, is what lays one reading over another - and the
+    acceptance names the open acts on what it is laid over, answering them."""
     v = V.version(subject, "reading", by, {"v": value}, saw=saw, at=at, on=on)
     store.keep(v)
-    store.keep(V.act(subject, by, "accept", of=v["id"], over=list(over), on=on))
+    if saw or over:
+        store.keep(V.act(subject, by, "accept", of=v["id"], over=list(over), on=on,
+                         saw=store.open_acts(subject, list(over))))
     return v["id"]
 
 
@@ -52,8 +55,9 @@ def judgment(store, subject, verdict, rests_on, wrong_if, by, on, saw=(), over=N
     v = V.version(subject, "judgment", by, body, saw=saw, on=on)
     store.keep(v)
     if accept and (over is not None or saw):
-        store.keep(V.act(subject, by, "accept", of=v["id"], over=list(over if over is not None else saw),
-                         because=because, on=on))
+        over = list(over if over is not None else saw)
+        store.keep(V.act(subject, by, "accept", of=v["id"], over=over, because=because, on=on,
+                         saw=store.open_acts(subject, over)))
     return v["id"]
 
 
@@ -188,7 +192,8 @@ class TheSixExperiments(unittest.TestCase):
             body = s.read()["d.x"][ja]["body"]
             back = V.version("d.x", "judgment", "s.c", body, saw=[jb], on=T(3))
             s.keep(back)
-            s.keep(V.act("d.x", "s.c", "accept", of=back["id"], over=[jb], because="x.other moved after all", on=T(3)))
+            s.keep(V.act("d.x", "s.c", "accept", of=back["id"], over=[jb], because="x.other moved after all", on=T(3),
+                         saw=s.open_acts("d.x", [jb])))
             e = status(s, "d.x")
             self.assertEqual(e["head"], back["id"])
             self.assertEqual(e["body"], s.read()["d.x"][ja]["body"])
@@ -472,8 +477,8 @@ class TheCostOfHistory(unittest.TestCase):
             self.assertEqual(again, full)
             self.assertEqual(parsed_open, 0)
             # one more reading parses that subject's files only
-            V.Store.parsed = 0
             reading(s, subjects[0], 1, "s.z", T(30), saw=[heads[subjects[0]]], at={"version": 99999999})
+            V.Store.parsed = 0
             t0 = time.time(); one = s.state(); t_one = time.time() - t0
             parsed_one = V.Store.parsed
             self.assertLessEqual(parsed_one, s.subjects()[subjects[0]])
@@ -583,10 +588,17 @@ class TheCounterexamples(unittest.TestCase):
             # the refutation that saw the acceptance answers it
             t = V.Store(os.path.join(d, "t"))
             t.keep(s.read()["brief.runs"][r0]); t.keep(s.read()["d.not_done"][j0]); t.keep(j1); t.keep(accept)
-            t.keep(V.act("d.not_done", "s.b", "refute", of=j1["id"], because="no", saw=[accept["id"]], on=T(3)))
+            refute2 = V.act("d.not_done", "s.b", "refute", of=j1["id"], because="no", saw=[accept["id"]], on=T(3))
+            t.keep(refute2)
             e = status(t, "d.not_done")
             self.assertEqual(e["marks"][j1["id"]], "refuted")
-            # a refuted version's acceptance is void: what it was laid over stands again
+            # refuting the replacement restores nothing by itself: what it replaced stays replaced,
+            # and the subject stands empty until someone returns to it with a reason
+            self.assertEqual((e["status"], e["heads"]), ("empty", []))
+            back = V.act("d.not_done", "ilan", "accept", of=j0, over=[j1["id"]], because="the first reading held",
+                         saw=[accept["id"], refute2["id"]], on=T(4))
+            t.keep(back)
+            e = status(t, "d.not_done")
             self.assertEqual((e["status"], e["head"]), ("accepted", j0))
 
     def test_a_thousand_equal_observations_are_one_claim_and_cost_nothing_much(self):
@@ -652,9 +664,124 @@ class TheCounterexamples(unittest.TestCase):
             git(d, "switch", "-q", "a")
             self.assertEqual(s.state()["subjects"]["x"]["body"]["v"], 1)          # the index warms on a
             git(d, "switch", "-q", "b")
-            self.assertEqual(s.subjects(), {"x": 4})                              # as many files as on a
+            self.assertEqual(s.subjects(), {"x": 3})                              # as many files as on a
             self.assertEqual(s.state()["subjects"]["x"]["body"]["v"], 2)
             self.assertEqual(s.state(), s.state(fresh=True))
+
+
+class TheActsThatRemainOpen(unittest.TestCase):
+    """A claim is decided by the acts no later act answered - checked on short histories, in
+    sequence and in branches, against a declarative reading of the same rule."""
+
+    def setting(self, d):
+        s = V.Store(d)
+        r = reading(s, "x", 1, "s.map", T(1))
+        return s, r
+
+    def test_a_refutation_that_saw_a_root_refutes_it(self):
+        with tempfile.TemporaryDirectory() as d:
+            s, r = self.setting(d)
+            s.keep(V.act("x", "s.b", "refute", of=r, because="misread", saw=[r], on=T(2)))
+            e = status(s, "x")
+            self.assertEqual((e["status"], e["marks"].get(r)), ("empty", "refuted"))
+
+    def test_a_chain_of_three_acts_ends_where_the_last_one_says(self):
+        with tempfile.TemporaryDirectory() as d:
+            s = V.Store(d)
+            v = V.version("x", "reading", "s.a", {"v": 5}, saw=["nothing"], on=T(1))
+            s.keep(v)
+            a1 = V.act("x", "s.a", "accept", of=v["id"], on=T(1))
+            r = V.act("x", "s.b", "refute", of=v["id"], because="no", saw=[a1["id"]], on=T(2))
+            a2 = V.act("x", "s.c", "accept", of=v["id"], because="yes after all", saw=[r["id"]], on=T(3))
+            for a in (a1, r, a2):
+                s.keep(a)
+            e = status(s, "x")
+            self.assertEqual((e["status"], e["head"], e["accepted_by"]), ("accepted", v["id"], "s.c"))
+
+    def test_a_refutation_that_saw_one_of_two_acceptances_answers_only_that_one(self):
+        with tempfile.TemporaryDirectory() as d:
+            s = V.Store(d)
+            v = V.version("x", "reading", "s.a", {"v": 5}, saw=["nothing"], on=T(1))
+            s.keep(v)
+            a1 = V.act("x", "s.a", "accept", of=v["id"], on=T(1))
+            r = V.act("x", "s.b", "refute", of=v["id"], because="no", saw=[a1["id"]], on=T(2))
+            a2 = V.act("x", "s.c", "accept", of=v["id"], on=T(2))          # never met the refutation
+            for a in (a1, r, a2):
+                s.keep(a)
+            e = status(s, "x")
+            self.assertEqual(e["status"], "contested")
+            self.assertEqual(e["disputed_acts"], [v["id"]])
+
+    def test_short_histories_against_the_declarative_rule(self):
+        rnd = random.Random(11)
+        for trial in range(120):
+            with tempfile.TemporaryDirectory() as d:
+                s = V.Store(d)
+                root = rnd.random() < 0.5
+                v = V.version("x", "reading", "s.w", {"v": 1}, saw=[] if root else ["elsewhere"], on=T(1))
+                s.keep(v)
+                acts, words = [], []
+                for i in range(rnd.randrange(0, 5)):
+                    kind = rnd.choice(["accept", "refute"])
+                    saw = [a["id"] for a in acts if rnd.random() < 0.5]
+                    a = V.act("x", "s.%d" % i, kind, of=v["id"], saw=saw, on=T(2 + i))
+                    acts.append(a)
+                    words.append((a["id"], "stands" if kind == "accept" else "out", set(saw)))
+                # the rule, said once more in other words: an act is answered when a later act
+                # names it; the open acts decide, and a root stands with no act at all
+                answered = {i for i, _, _ in words for _, _, saw in words if i in saw}
+                open_kinds = {w for i, w, _ in words if i not in answered}
+                if not words:
+                    expect = "accepted" if root else "proposed"
+                elif open_kinds == {"stands"}:
+                    expect = "accepted"
+                elif open_kinds == {"out"}:
+                    expect = "empty"
+                else:
+                    expect = "contested"
+                order = list(acts)
+                rnd.shuffle(order)
+                for a in order:
+                    s.keep(a)
+                e = status(s, "x")
+                got = "proposed" if e["proposals"] == [v["id"]] and e["status"] == "empty" else e["status"]
+                self.assertEqual(got, expect, "trial %d: root=%s words=%s" % (trial, root, words))
+
+    def test_an_untouched_rendering_of_an_agreement_minted_nothing_after_the_source_moved(self):
+        with tempfile.TemporaryDirectory() as d:
+            s = V.Store(d)
+            a = reading(s, "x", 1, "s.a", T(1), at={"version": 7})
+            b = reading(s, "x", 1, "s.b", T(1), at={"version": 7})
+            text, stamp = V.render(s)
+            self.assertEqual(status(s, "x")["agreed"], 2)
+            reading(s, "x", 2, "s.c", T(2), saw=[a, b], at={"version": 8})
+            self.assertEqual(V.ingest(s, text, by="hand", on=T(3)), [])
+            self.assertEqual((status(s, "x")["status"], status(s, "x")["body"]["v"]), ("accepted", 2))
+
+    def test_a_problem_the_files_show_is_still_shown_from_the_index(self):
+        with tempfile.TemporaryDirectory() as d:
+            s = V.Store(d)
+            good = reading(s, "x", 1, "s.a", T(1))
+            bad = V.version("x", "reading", "s.b", {"v": 1}, on=T(2))
+            s.keep(bad)
+            p = os.path.join(s.dir, "x", bad["id"] + ".yaml")
+            pathlib.Path(p).write_text(pathlib.Path(p).read_text().replace("v: 1", "v: 999"), encoding="utf-8")
+            first = s.state(fresh=True)
+            self.assertEqual(len(first["problems"]), 1)
+            again = V.Store(d).state()                      # a new reader, the index warm, no file changed
+            self.assertEqual(again["problems"], first["problems"])
+            self.assertEqual(again["subjects"], first["subjects"])
+
+    def test_a_corroborating_observation_does_not_unreview_a_decision(self):
+        with tempfile.TemporaryDirectory() as d:
+            s = V.Store(d)
+            r1 = reading(s, "x", 1, "s.a", T(1), at={"version": 7})
+            j = judgment(s, "d.j", "j", {"x": r1}, "x > 5", "s.a", T(1), saw=["elsewhere"])
+            s.keep(V.act("d.j", "ilan", "review", of=j, read={"x": r1}, on=T(2)))
+            self.assertEqual(status(s, "d.j")["status"], "accepted")
+            r2 = reading(s, "x", 1, "s.b", T(3), at={"version": 7})     # the same, seen again
+            self.assertEqual(sorted(status(s, "x")["heads"]), sorted([r1, r2]))
+            self.assertEqual(status(s, "d.j")["status"], "accepted")
 
 
 if __name__ == "__main__":

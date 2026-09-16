@@ -205,34 +205,51 @@ class Store(object):
                 index = json.load(f)
         if index.get("rules") != rules or index.get("ancestry") != bool(ancestry):
             index = {}
-        entries, stale = {}, []
+        entries, stale, problems = {}, [], {}
         for subject, ids in listing.items():
             cached = (index.get("subjects") or {}).get(subject)
             if cached and cached.get("ids") == ids:
-                entries[subject] = cached["entry"]
+                if "entry" in cached:
+                    entries[subject] = cached["entry"]
+                problems[subject] = list(cached.get("problems") or [])
             else:
                 stale.append(subject)
         if stale:
+            before = len(self.problems)
             held = self.read(stale)
+            for m in self.problems[before:]:
+                problems.setdefault(m.split("/", 1)[0], []).append(m)
             for subject in stale:
+                problems.setdefault(subject, [])
                 if subject in held:
                     e = _subject_entry(subject, held[subject], rules, ancestry)
                     if e is not None:
                         entries[subject] = e
         entries = {s: entries[s] for s in sorted(entries)}
         st = _cross(entries, rules)
-        st["problems"] = list(self.problems)
+        st["problems"] = sorted({m for ms in problems.values() for m in ms})
         if stale or not index:
             os.makedirs(self.dir, exist_ok=True)
             ignore = os.path.join(self.dir, ".gitignore")
             if not os.path.isfile(ignore):
                 with io.open(ignore, "w", encoding="utf-8") as f:
                     f.write(".index.json\n")
+            kept = {}
+            for s in listing:
+                kept[s] = {"ids": listing[s], "problems": problems.get(s, [])}
+                if s in entries:
+                    kept[s]["entry"] = entries[s]
             with io.open(self.index_path, "w", encoding="utf-8") as f:
-                json.dump({"rules": rules, "ancestry": bool(ancestry),
-                           "subjects": {s: {"ids": listing[s], "entry": entries[s]} for s in entries}},
-                          f, sort_keys=True)
+                json.dump({"rules": rules, "ancestry": bool(ancestry), "subjects": kept}, f, sort_keys=True)
         return st
+
+    def open_acts(self, subject, ids, st=None):
+        """The acts on these claims of a subject that no later act answered - what an act
+        laid over them names in `saw`, so that it answers them rather than meets them as a
+        dispute. Read from the state, never from the files."""
+        st = st or self.state()
+        e = st["subjects"].get(subject) or {}
+        return sorted({i for c in ids for i in (e.get("open_acts") or {}).get(c, [])})
 
     def settle(self, rules=None, ancestry=None, on=None):
         """The acts a source rule implies, recorded as acts - so an automatic decision stands
@@ -243,6 +260,7 @@ class Store(object):
         for i in st["implied"]:
             a = act(i["subject"], RULE_ACTOR, "accept", of=i["by"], over=[i["superseded"]],
                     because="a later state of the source: " + i["why"], on=on or _now(),
+                    saw=self.open_acts(i["subject"], [i["superseded"]], st),
                     op=hashlib.sha256((i["subject"] + i["superseded"] + i["by"]).encode()).hexdigest()[:32])
             self.keep(a)
             written.append(a["id"])
@@ -365,58 +383,52 @@ def _subject_entry(subject, held, rules, ancestry):
     if not claims:
         return None
     ordered = sorted(acts.values(), key=lambda a: (a["on"], a["id"]))
-    # a root claim - one written knowing nothing of the subject - stands on its own; every
-    # other claim stands once an act accepts it. No moment decides which root came first:
-    # two roots that never met are two heads
-    accepted = {i for i, v in claims.items() if not v["saw"]}
-    accepted_by, accept_acts, refute_acts, corrections = {i: None for i in accepted}, {}, {}, {}
-    replacers, reviews = {}, []
+    roots = sorted(i for i, v in claims.items() if not v["saw"])
+    # every act says one word about a claim: an acceptance says it stands, a refutation says
+    # it is out, an acceptance laid over it says it is replaced (or corrected). What decides
+    # the claim is the words no later act answered - an act answers another by naming it in
+    # `saw`. All open words agree that it stands: it stands. None says so: it is out, marked
+    # by the strongest word. Both: a dispute between acts, and the claim stands as contested.
+    # A root claim - written knowing nothing of the subject - stands until a word says
+    # otherwise; a replaced claim stays replaced when its replacer falls, since a return is
+    # a word of its own, given with a reason, never implied.
+    words, reviews = {}, []
     for a in ordered:
         b = a["body"]
         if b["act"] in ("accept", "correct") and b["of"] in claims:
-            accepted.add(b["of"])
-            accepted_by.setdefault(b["of"], a["by"])
-            accept_acts.setdefault(b["of"], []).append(a)
+            words.setdefault(b["of"], []).append((a, "stands"))
             for o in b["over"]:
-                if o in claims:
-                    replacers.setdefault(o, set()).add(b["of"])
-                    if b["act"] == "correct":
-                        corrections[o] = b["of"]
+                if o in claims and o != b["of"]:
+                    words.setdefault(o, []).append((a, ("corrected:" if b["act"] == "correct" else "replaced:")
+                                                    + b["of"]))
         elif b["act"] == "refute" and b["of"] in claims:
-            refute_acts.setdefault(b["of"], []).append(a)
+            words.setdefault(b["of"], []).append((a, "out"))
         elif b["act"] == "review" and b["of"] in claims:
             reviews.append({"of": b["of"], "by": a["by"], "read": b.get("read") or {}})
-    # an acceptance and a refutation of one version: the later that saw the earlier answers
-    # it; two that never met are a dispute between acts, and the version stands as contested
-    refuted, disputed = set(), set()
-    for i, rs in refute_acts.items():
-        accepts = accept_acts.get(i, [])
-        if i not in accepted:
-            refuted.add(i)
+    standing, proposals, disputed, mark, accepted_by, open_acts = [], [], set(), {}, {}, {}
+    for c in sorted(claims):
+        ws = words.get(c, [])
+        if not ws:
+            if c in roots:
+                standing.append(c)
+                accepted_by[c] = None
+            else:
+                proposals.append(c)
             continue
-        answered = any(any(x["id"] in r["saw"] for x in accepts) for r in rs)
-        overruled = any(any(r["id"] in x["saw"] for r in rs) for x in accepts)
-        if answered and not overruled:
-            refuted.add(i)
-        elif overruled and not answered:
-            pass
+        answered = {a["id"] for a, _ in ws for a2, _ in ws if a2 is not a and a["id"] in a2["saw"]}
+        open_words = [(a, w) for a, w in ws if a["id"] not in answered]
+        open_acts[c] = sorted(a["id"] for a, _ in open_words)
+        kinds = {w.split(":")[0] for _, w in open_words}
+        if kinds == {"stands"}:
+            standing.append(c)
+            accepted_by[c] = open_words[-1][0]["by"]
+        elif "stands" not in kinds:
+            mark[c] = "corrected" if "corrected" in kinds else "refuted" if "out" in kinds else "replaced"
         else:
-            disputed.add(i)
-    mark = {}
-    for o, xs in replacers.items():
-        mark[o] = "corrected" if o in corrections else "replaced"
-    for i in refuted:
-        mark[i] = "refuted"
-    # a version is out once an accepted version was laid over it - and stays out when that
-    # one is replaced in turn, since a return is written as a new version; a refuted
-    # version's acceptance is void, so what it was laid over stands again; two laid over
-    # each other by acts that never met both stand
-    replaced = set(refuted)
-    for y, xs in replacers.items():
-        if any(x in accepted and x not in refuted and y not in replacers.get(x, ()) for x in xs):
-            replaced.add(y)
-    frontier = [claims[i] for i in sorted(claims) if i in accepted and i not in replaced]
-    proposals = [i for i in sorted(claims) if i not in accepted and i not in replaced]
+            standing.append(c)
+            disputed.add(c)
+            accepted_by[c] = next(a["by"] for a, w in open_words if w == "stands")
+    frontier = [claims[i] for i in standing]
     kind = next(iter(claims.values()))["kind"]
     implied = []
     divergent = False
@@ -465,7 +477,7 @@ def _subject_entry(subject, held, rules, ancestry):
              "proposals": proposals, "ids": sorted(claims), "implied": implied,
              "writers": {h: claims[h]["by"] for h in heads}, "bodies": {h: claims[h]["body"] for h in heads},
              "reviews": [r for r in reviews if r["of"] in heads], "disputed_acts": sorted(disputed & set(heads)),
-             "roots": sorted(i for i in claims if not claims[i]["saw"])}
+             "roots": roots, "open_acts": open_acts}
     # heads that say the same are one claim held by several - agreement, not a dispute
     by_claim = {}
     for v in frontier:
@@ -491,7 +503,6 @@ def _cross(entries, rules):
                      key=lambda i: (i["subject"], i["superseded"], i["by"]))
     values = {s: e["body"].get("v") for s, e in subjects.items()
               if e["kind"] == "reading" and e.get("status") == "accepted"}
-    heads = {s: e.get("head") for s, e in subjects.items()}
     judgments = [s for s, e in subjects.items() if e["kind"] == "judgment"]
     for s in judgments:
         e = subjects[s]
@@ -502,11 +513,11 @@ def _cross(entries, rules):
         # a review covers its version while the dependency versions it read are the heads
         others = set()
         for r in e["reviews"]:
-            if r["of"] != e["head"]:
+            if r["of"] not in e["heads"]:
                 continue
-            if not rules["self_review_counts"] and r["by"] == e["writer"]:
+            if not rules["self_review_counts"] and r["by"] == e["writers"].get(r["of"]):
                 continue
-            if all(heads.get(d) == vid for d, vid in r["read"].items()):
+            if all(vid in (subjects.get(d) or {}).get("heads", ()) for d, vid in r["read"].items()):
                 others.add(r["by"])
         e["reviewed_by"] = sorted(others)
     for _ in range(len(judgments) + 1):
@@ -627,7 +638,8 @@ def ingest(store, text, by="hand", on=None, rules=None, ancestry=None, op=None):
         if current and "body" in current and _same(edited, current["body"]):
             continue                                    # nothing changed against what stands
         base_ids = base_heads.get(subject) if base_heads is not None else None
-        base = store.get(subject, base_ids[0]) if base_ids and len(base_ids) == 1 else None
+        # a rendered agreement is one claim held by several heads: any of them is the base
+        base = store.get(subject, base_ids[0]) if base_ids else None
         if base is not None and _same(edited, base["body"]):
             continue                                    # the editor left it as they saw it
         kind = "judgment" if "rests_on" in edited else "reading"
@@ -636,8 +648,9 @@ def ingest(store, text, by="hand", on=None, rules=None, ancestry=None, op=None):
                     op=hashlib.sha256((seed + subject + canonical(edited)).encode()).hexdigest()[:32])
         store.keep(v)
         minted.append(v["id"])
-        over = base_ids if base_ids and len(base_ids) == 1 else []
+        over = list(base_ids) if base_ids else []
         a = act(subject, by, "accept", of=v["id"], over=over, because="edited by hand", on=on,
+                saw=store.open_acts(subject, over, st) + over,
                 op=hashlib.sha256(("accept" + v["id"]).encode()).hexdigest()[:32])
         store.keep(a)
         minted.append(a["id"])
