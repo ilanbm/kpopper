@@ -225,12 +225,16 @@ class NativeKernelTests(unittest.TestCase):
                           ("KP2\t1000\t128\t256\t100001", "edge_limit"),
                           (base + "o\tadd\t2\tn\t1\t" * 129 + "n\t1", "parser_depth_limit")]:
             run = subprocess.run([BINARY], input=(raw + "\n").encode("ascii"), capture_output=True, check=True, timeout=15)
-            result = decode_response(run.stdout.decode("ascii"))
+            lines = run.stdout.decode("ascii").splitlines()
+            self.assertEqual(len(lines), 1)
+            result = decode_response(lines[0])
             self.assertEqual((result["status"], result["diagnostics"]), ("limit", [code]))
             self.assertEqual((result["preflight_steps"], result["steps"]), (0, 0))
         # Invalid raw bytes cannot be accepted as an ID or text token.
         run = subprocess.run([BINARY], input=base.encode() + b"s\t\xff\n", capture_output=True, check=True, timeout=15)
-        self.assertEqual(decode_response(run.stdout.decode())["status"], "error")
+        lines = run.stdout.decode("ascii").splitlines()
+        self.assertEqual(len(lines), 1)
+        self.assertEqual(decode_response(lines[0])["status"], "error")
 
     def test_text_roundtrip(self):
         for text in ["", "\0", "\t\n", "é", "עברית🙂", "𝕒", "é\u0301"]:
