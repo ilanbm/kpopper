@@ -2751,6 +2751,18 @@ def _bump_updated(lines, date):
     for name, s, e in _collections_in(lines):
         if name != "meta":
             continue
+        if _inline(lines[s]).startswith('{'):
+            block = '\n'.join(lines[s:e])
+            metadata = yaml.compose(block).value[0][1]
+            current = next((value for key, value in metadata.value if key.value == 'updated'), None)
+            if current is not None:
+                start, end = current.start_mark.index, current.end_mark.index
+                block = block[:start] + scalar(date, _style(block[start:end]), fold=False) + block[end:]
+            else:
+                at = metadata.start_mark.index + 1
+                block = block[:at] + 'updated: ' + scalar(date, fold=False) + (', ' if metadata.value else '') + block[at:]
+            lines[s:e] = block.split('\n')
+            return True
         for i in range(s + 1, e):
             m = re.match(r"^(\s+updated:\s*)(\S+)(\s*(?:#.*)?)$", lines[i])
             if m:
@@ -4495,6 +4507,8 @@ def _apply(paths, action, diagnostics=None):
         _replace_in(lines, nid, entry)
     if world is not None:
         _peer('reasoning.authoring').declare(lines, (sys.modules.get(__name__) or _Reader()))
+    _bump_updated(lines, stamp)
+    if world is not None:
         # Validate the exact candidate bytes before publication, including history.
         staged = parse(text="\n".join(lines)) or {}
         _peer('reasoning.contract').capabilities(staged)
@@ -4506,7 +4520,6 @@ def _apply(paths, action, diagnostics=None):
                 final_document[collection] = members
         _peer('reasoning.authoring').World((sys.modules.get(__name__) or _Reader()), final_document,
             original=world.snapshot).assessment()
-    _bump_updated(lines, stamp)
     _write_text(target, "\n".join(lines))
 
     def read_back():

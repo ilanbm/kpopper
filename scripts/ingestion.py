@@ -845,7 +845,8 @@ def _prepare_core(rec, root, event, envelope, before_bytes):
         actions.append(action)
     core = P._peer('reasoning.ingestion')
     before = _graph(shadow, seeds, profile=envelope.get('profile'))
-    after_bytes, diagnostics = core.stage(P, [str(shadow)], actions, profile=envelope.get('profile'))
+    with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):
+        after_bytes, diagnostics = core.stage(P, [str(shadow)], actions, profile=envelope.get('profile'))
     _atomic(shadow, after_bytes)
     after = _graph(shadow, seeds)
     failures = core.gate(P, before, after)
@@ -1149,6 +1150,10 @@ def _process_event(rec, root, event, crash_after_commit=False):
                                and isinstance(scope, dict) and scope.get('kind') in ('project', 'external'))
             # Store.capture owns the policy lock; project capture follows outside it.
             if not project_capture:
+                if 'core_gate' in journal:
+                    # A pending contribution can appear without changing record bytes.
+                    # Recheck semantic promotion under the final policy/record lock.
+                    P._peer('reasoning.authoring').prepare(P, [str(rec)], {'profile': envelope.get('profile')})
                 _replace_record(rec, after_bytes)
                 journal["phase"] = "record_committed"
                 journal["committed_at"] = time.time()

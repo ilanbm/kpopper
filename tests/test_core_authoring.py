@@ -180,6 +180,21 @@ class CoreAuthoring(unittest.TestCase):
                     'wrong_if': 'p.total > 200'})
         self.assertEqual(before, self.path.read_bytes())
 
+    def test_format_upgrade_preserves_flow_metadata_siblings(self):
+        self.path.write_text('meta: {reasoning: {version: 1, profile: core/v1, requires: [arithmetic/v1]}, note: keep}\n'
+                             'known:\n  p.price: {v: 20}\n')
+        self.write('add', 'm.double', body={'rule': 'p.price * 2'})
+        self.assertEqual(self.read()['meta']['reasoning']['version'], 2)
+        self.assertEqual(self.read()['meta']['note'], 'keep')
+
+    def test_promotion_does_not_reinterpret_inline_legacy_readings(self):
+        self.doc['known']['p.old'] = {'v': 'p.price + 1'}
+        self.save(self.doc)
+        before = self.path.read_bytes()
+        with self.assertRaisesRegex(P.Refused, 'requires.*migration'):
+            self.write('add', 'm.double', body={'rule': 'p.price * 2'}, profile='core/v1')
+        self.assertEqual(self.path.read_bytes(), before)
+
 
 if __name__ == '__main__':
     unittest.main()

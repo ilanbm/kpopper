@@ -1,6 +1,8 @@
 """Atomic core batches validate the complete world and retain recovery evidence."""
 import copy
+import contextlib
 import datetime
+import io
 import json
 import os
 from pathlib import Path
@@ -43,13 +45,15 @@ class CoreIngestion(unittest.TestCase):
         self.assertEqual(yaml.safe_load(self.record.read_text())['judgments'], self.doc['judgments'])
 
     def test_forward_references_and_history_use_final_world(self):
-        result = I.update(self.report([
-            {'kind': 'add', 'id': 'c.total', 'body': {'rests_on': ['p.total'], 'verdict': 'Fits', 'wrong_if': 'p.total > 50'}},
-            {'kind': 'add', 'id': 'p.total', 'body': {'rule': 'p.price * p.quantity'}},
-            {'kind': 'add', 'id': 'p.quantity', 'body': {'v': 3}},
-            {'kind': 'set', 'id': 'p.price', 'value': 12},
-        ]), self.record, self.state)
+        with contextlib.redirect_stdout(io.StringIO()) as output:
+            result = I.update(self.report([
+                {'kind': 'add', 'id': 'c.total', 'body': {'rests_on': ['p.total'], 'verdict': 'Fits', 'wrong_if': 'p.total > 50'}},
+                {'kind': 'add', 'id': 'p.total', 'body': {'rule': 'p.price * p.quantity'}},
+                {'kind': 'add', 'id': 'p.quantity', 'body': {'v': 3}},
+                {'kind': 'set', 'id': 'p.price', 'value': 12},
+            ]), self.record, self.state)
         self.assertEqual(result['state'], 'applied', result)
+        self.assertEqual(output.getvalue(), '')
         raw = I.P.bodies(yaml.safe_load(self.record.read_text()))
         value = raw['c.total']['seen']['p.total']['computed']['value']
         self.assertEqual(value, {'type': 'number', 'numerator': '36', 'denominator': '1'})

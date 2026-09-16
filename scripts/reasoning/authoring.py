@@ -45,6 +45,21 @@ def _executables(document):
                 yield nid, field, value
 
 
+def _promotion_blockers(reader, document, context=None):
+    blockers = list(_executables(document))
+    from ..pending_grounding import entries
+    known = entries(document)
+    ids = set(known) | set(entries(context)) if context is not None else set(known)
+    for nid, (_, body) in known.items():
+        values = [(key, body[key]) for key in ('v', 'quoted') if key in body] if isinstance(body, dict) else [('value', body)]
+        for field, value in values:
+            if value is not None and type(value) not in (str, int, float, bool):
+                blockers.append((nid, field, value))
+            elif isinstance(value, str) and reader.EXPR.search(value) and any(ref in ids for ref in reader.ID.findall(value)):
+                blockers.append((nid, field, value))
+    return blockers
+
+
 def prepare(reader, paths, action):
     doc = load(reader, paths)
     try:
@@ -62,7 +77,7 @@ def prepare(reader, paths, action):
             worlds = [doc, *(hyp['doc'] for hyp in doc.hypotheses.values())]
             if any(hyp.get('error') for hyp in doc.hypotheses.values()):
                 raise ValueError('requires explicit migration: unreadable hypothesis')
-            if any(list(_executables(world)) for world in worlds if capabilities(world)['profile'] != PROFILE):
+            if any(_promotion_blockers(reader, world, doc) for world in worlds if capabilities(world)['profile'] != PROFILE):
                 raise ValueError('requires explicit migration: existing executable legacy fields')
             # A frozen writer cannot silently change the live overlay's meaning.
             live = Snapshot.capture(paths, read_mode='live').to_data()
@@ -71,7 +86,7 @@ def prepare(reader, paths, action):
                 raise ValueError('pending_profile_reconciliation_required')
         for hyp in doc.hypotheses.values():
             cap = capabilities(hyp['doc'])
-            if cap['profile'] != PROFILE and list(_executables(hyp['doc'])):
+            if cap['profile'] != PROFILE and _promotion_blockers(reader, hyp['doc'], doc):
                 raise ValueError('requires explicit migration: executable legacy hypothesis')
         original = Snapshot.capture(paths, read_mode='frozen')
         doc = copy.deepcopy(doc)
@@ -355,13 +370,18 @@ def declare(lines, reader):
     if meta is None:
         lines[:0] = ['meta:', *['  ' + line for line in encoded], '']
         return
-    # YAML token positions handle both block and flow metadata without touching
-    # unrelated keys/comments; the existing text editor handles an existing member.
-    if 'reasoning' in meta:
-        reader._replace_in(lines, 'reasoning', copy.deepcopy(DECLARATION))
-        return
+    # The supported v1/v2 declarations have identical profile/modules. Upgrade
+    # only the scalar format version, in either block or flow style.
     root = yaml.compose(text)
     value = next(value for key, value in root.value if key.value == 'meta')
+    if 'reasoning' in meta:
+        key, declaration = next((key, child) for key, child in value.value if key.value == 'reasoning')
+        if declaration.start_mark.index < key.end_mark.index:
+            raise reader.Refused('requires explicit migration: aliased reasoning declaration')
+        version = next(child for key, child in declaration.value if key.value == 'version')
+        text = text[:version.start_mark.index] + '2' + text[version.end_mark.index:]
+        lines[:] = text.split('\n')
+        return
     if value.flow_style:
         at = value.start_mark.index + 1
         item = yaml.safe_dump({'reasoning': DECLARATION}, default_flow_style=True, sort_keys=False, width=100000).strip()[1:-1]
