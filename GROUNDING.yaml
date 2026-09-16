@@ -807,6 +807,20 @@ sources:
          repository, 2026-09-03"
     read: "2026-09-03"
 
+  run.versions_core_cost:
+    from: s.2026_09_16_versions_core
+    name: "The cost of history in the versions core, measured by the cost test at three sizes - a
+           thousand, ten thousand and a hundred thousand contributions over twenty readings and three
+           judgments, with many reviews on the three - counting files, bytes, seconds and the files
+           parsed by a full state, an open, one update and a rebuild"
+    of: "this tree at 5572018, VERSIONS_BENCH=1000|10000|100000 python3 -m unittest
+         tests.test_versions_core.TheCostOfHistory, 2026-09-16, one laptop, warm cache: 828 files 192
+         KiB full 0.23s open 0.001s update 42 parsed; 7,558 files 1.7 MiB full 2.1s open 0.006s
+         update 372 parsed; 75,274 files 17 MiB written in 29s, full state 34s (75,274 parsed), open
+         0.23s (0 parsed), one update 1.9s (3,866 parsed - that subject's whole history), rebuild
+         32s"
+    read: "2026-09-16"
+
   run.versions_core_tests:
     from: s.2026_09_16_versions_core
     name: "The versions core's scenarios run as tests on this tree - tests/test_versions_core.py,
@@ -977,6 +991,29 @@ known:
     name: "Claims about this project that held - checked with a run before they were asserted"
     from: run.claims_scored
     at: "of 6"
+  m.core.bytes_per_version:
+    v: 232
+    unit: bytes
+    name: "Bytes one version or act takes as a file in the versions core, on average, in the cost
+           test"
+    from: run.versions_core_cost
+    at: "17,024.7 KiB over 75,274 files at a hundred thousand contributions"
+    of: "2026-09-16"
+  m.core.open_parsed_at_100k:
+    v: 0
+    name: "Version files an open parses with a hundred thousand contributions behind the same state,
+           once the index holds them"
+    from: run.versions_core_cost
+    at: "open 0.231s, 0 parsed, at 75,274 files"
+    of: "2026-09-16"
+  m.core.rebuild_seconds_at_100k:
+    v: 32.4
+    unit: seconds
+    name: "Seconds a rebuild of the state from every version file takes at a hundred thousand
+           contributions - the reconstruction path, never the working one"
+    from: run.versions_core_cost
+    at: "rebuild 32.36s, full state 34.26s, 75,274 parsed"
+    of: "2026-09-16"
   m.core.scenarios:
     v: 15
     name: "Scenarios the versions core must pass before anything existing is wired to it - the six
@@ -1000,6 +1037,13 @@ known:
            tree"
     from: run.versions_core_tests
     at: "the fifteen scenario tests, all passing; the count moves with the tests"
+    of: "2026-09-16"
+  m.core.update_parsed_at_100k:
+    v: 3866
+    name: "Version files one update parses with a hundred thousand contributions behind it - the
+           updated subject's own history and nothing else, twenty subjects sharing the files"
+    from: run.versions_core_cost
+    at: "one update 1.895s, 3,866 parsed of 75,274"
     of: "2026-09-16"
   m.entry_name.false_reads:
     v: 8
