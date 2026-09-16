@@ -1,5 +1,6 @@
 """Core migration copies a complete frozen closure without live authority."""
 import copy
+import hashlib
 import json
 from pathlib import Path
 import tempfile
@@ -255,6 +256,46 @@ class CoreMigration(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, 'changed'):
             plan.publish(self.root / 'stale-ref')
         self.assertEqual(Evaluator(replay).evaluate({'ref': 'p.result'}, declared=['p.result'])['value']['numerator'], '12')
+
+    def test_withdrawn_unsupported_archive_copies_without_interpretation(self):
+        from scripts import pending_publication as Pub
+        from tests.test_contribution_routes import CORE, SCOPE, retain_raw
+
+        for capability in (dict(CORE, requires=['arithmetic/v1', 'future/v1']),
+                           dict(CORE, version=999)):
+            with self.subTest(capability=capability):
+                record = self.fixture(mode='advanced', shape=str(capability['version']))
+                store = G.Store(record.parent)
+                evidence = b'Original unsupported evidence\n'
+                manifest = {'version': 2, 'roots': ['p.future'], 'scope': SCOPE,
+                    'evidence': {'evidence.txt': hashlib.sha256(evidence).hexdigest()},
+                    'reasoning': capability,
+                    'document': {'meta': {'reasoning': capability},
+                                 'known': {'p.future': {'v': 1, 'scope': SCOPE}}}}
+                bundle = {'manifest': manifest, 'revision': G.identity(manifest),
+                          'files': {'evidence.txt': evidence}}
+                retain_raw(store, bundle)
+                with self.assertRaisesRegex(P.Refused, 'unsupported_capability'):
+                    C.prepare(record)
+                Pub.Publisher(record.parent).action('withdraw', revisions=[bundle['revision']],
+                    reason='Retain as unsupported evidence')
+                head = store.head()
+                original = store.read_bundle(bundle['revision'])
+                destination = self.root / ('archive-copy-' + str(capability['version']))
+                plan = C.prepare(record)
+                self.assertFalse(plan.problems, plan.problems)
+                plan.publish(destination)
+                replay = Snapshot.from_json((destination / C.ARTIFACTS / 'candidate.json').read_bytes())
+                data = replay.to_data()
+                self.assertFalse(data['hypotheses'])
+                self.assertIn(bundle['revision'], data['context']['migration']['incompatible_original_pending'])
+                self.assertFalse(data['context']['migration']['publication_authority'])
+                self.assertIn(bundle['revision'], data['context']['pending']['bundles'])
+                self.assertEqual(store.head(), head)
+                self.assertEqual(store.read_bundle(bundle['revision']), original)
+                self.assertEqual((destination / C.ARTIFACTS / 'pending' / bundle['revision'] / 'evidence.txt').read_bytes(), evidence)
+                with patch('scripts.reasoning.snapshot._observation', side_effect=AssertionError('live lookup')):
+                    self.assertEqual(Evaluator(replay).evaluate({'ref': 'p.result'}, declared=['p.result'])['value']['numerator'], '12')
 
     def test_local_source_evidence_is_copied_and_external_locators_not_fetched(self):
         record = self.fixture()

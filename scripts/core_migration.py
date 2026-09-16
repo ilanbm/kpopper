@@ -16,6 +16,7 @@ try:
     from .reasoning.snapshot import Snapshot, capture_source
     from .reasoning.conversion import convert_snapshot, compare_snapshots, report_to_json, TRANSFORMATION
     from .reasoning.authoring import pending_compatible
+    from .reasoning.contract import CapabilityError
 except ImportError:
     import provenance as _reader
     P = _reader._peer('provenance')
@@ -25,6 +26,7 @@ except ImportError:
     convert_snapshot, compare_snapshots = _conversion.convert_snapshot, _conversion.compare_snapshots
     report_to_json, TRANSFORMATION = _conversion.report_to_json, _conversion.TRANSFORMATION
     pending_compatible = P._peer('reasoning.authoring').pending_compatible
+    CapabilityError = P._peer('reasoning.contract').CapabilityError
 
 ARTIFACTS = '.kpopper-migration'
 
@@ -362,9 +364,18 @@ class Plan:
         context['migration'] = {'transformation': TRANSFORMATION, 'source_snapshot_id': self.original.snapshot_id,
             'frozen_candidate': True, 'publication_authority': False}
         pending_incompatibilities = []
+        candidate_capabilities = G.meaning_capabilities(document)
         for revision, bundle in context.get('pending', {}).get('bundles', {}).items():
             manifest = bundle['manifest']
-            if G.meaning_capabilities(manifest['document']) != G.meaning_capabilities(document):
+            try:
+                compatible = G.meaning_capabilities(manifest['document']) == candidate_capabilities
+            except CapabilityError as error:
+                if error.code != 'unsupported_capability':
+                    raise
+                # Capture rejects active unsupported overlays. Retired archives
+                # remain immutable evidence, without authorizing interpretation.
+                compatible = False
+            if not compatible:
                 pending_incompatibilities.append(revision)
         context['migration']['incompatible_original_pending'] = sorted(pending_incompatibilities)
         self.candidate = _world(document, self.original, hypotheses=candidate_hyps, context=context)
