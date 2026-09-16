@@ -320,12 +320,14 @@ class TheEntryFile(unittest.TestCase):
             e = status(s, "brief.runs")
             self.assertEqual((e["status"], e["body"]["v"], e["head"]), ("accepted", 2, minted[0]))
 
-    def test_an_unknown_stamp_assumes_nothing_seen(self):
+    def test_a_file_that_carries_no_heads_is_an_unknown_base(self):
         with tempfile.TemporaryDirectory() as d:
             s, r0, j0 = base(d)
             text, stamp = V.render(s)
-            stale = text.replace(stamp, "nothing-known").replace("v: 0", "v: 2")
-            minted = V.ingest(s, stale, by="hand", on=T(2))
+            doc = V.yaml.safe_load(text)
+            del doc["meta"]["heads"]
+            doc["subjects"]["brief.runs"]["v"] = 2
+            minted = V.ingest(s, V.yaml.safe_dump(doc, sort_keys=False), by="hand", on=T(2))
             e = status(s, "brief.runs")
             self.assertEqual(e["status"], "contested")
             self.assertEqual(s.read()["brief.runs"][minted[0]]["saw"], [])
@@ -386,19 +388,48 @@ class TheEntryFile(unittest.TestCase):
 class TheCostOfHistory(unittest.TestCase):
     """More history behind the same state must not make the next open read it all again."""
 
-    def test_the_same_contribution_sent_twice_is_one_version(self):
+    def test_a_retry_of_one_operation_is_one_version_and_a_new_observation_is_another(self):
         with tempfile.TemporaryDirectory() as d:
             s = V.Store(d)
-            a = V.version("x", "reading", "s.a", {"v": 1}, on=T(1))
-            b = V.version("x", "reading", "s.a", {"v": 1}, on=T(2))
-            self.assertEqual(a["id"], b["id"])
+            a = V.version("x", "reading", "s.a", {"v": 1}, on=T(1), op="op-1")
+            again = V.version("x", "reading", "s.a", {"v": 1}, on=T(1), op="op-1")
+            self.assertEqual(a["id"], again["id"])
             s.keep(a)
-            s.keep(b)
-            held = s.read()["x"]
-            self.assertEqual(len(held), 1)
-            self.assertEqual(held[a["id"]]["on"], T(1))
-            # another writer saying the same is another version
-            self.assertNotEqual(V.version("x", "reading", "s.b", {"v": 1}, on=T(1))["id"], a["id"])
+            s.keep(again)
+            self.assertEqual(len(s.read()["x"]), 1)
+            # the same actor finding the same value again is a new observation
+            fresh = V.version("x", "reading", "s.a", {"v": 1}, on=T(2))
+            self.assertNotEqual(fresh["id"], a["id"])
+            s.keep(fresh)
+            self.assertEqual(len(s.read()["x"]), 2)
+            # a retry sends the same envelope: another moment under the same operation is a
+            # different version, so a writer keeps what it first sent
+            self.assertNotEqual(V.version("x", "reading", "s.a", {"v": 1}, on=T(3), op="op-1")["id"], a["id"])
+
+    def test_a_retry_in_two_replicas_merges_clean_under_git_and_in_both_orders(self):
+        with tempfile.TemporaryDirectory() as d:
+            repo(d)
+            s = V.Store(d)
+            r0 = reading(s, "x", 0, "s.map", T(1), at={"version": 1})
+            V.write_entry(s)
+            commit(d, "base")
+            same = V.version("x", "reading", "s.a", {"v": 1}, saw=[r0], at={"version": 2}, on=T(2), op="op-7")
+            for br in ("a", "b"):
+                git(d, "switch", "-qc", br, "main")
+                s.keep(same)
+                s.keep(V.act("x", "s.a", "accept", of=same["id"], on=T(2), op="op-7-accept"))
+                commit(d, br)
+            git(d, "switch", "-q", "main")
+            self.assertEqual(git(d, "merge", "-q", "a").returncode, 0)
+            self.assertEqual(git(d, "merge", "-q", "b").returncode, 0, "the same version in both replicas merges clean")
+            ab, ba = V.Store(os.path.join(d, "ab")), V.Store(os.path.join(d, "ba"))
+            for st, order in ((ab, ("a", "b")), (ba, ("b", "a"))):
+                for br in order:
+                    git(d, "switch", "-q", br)
+                    st.union_from(d)
+            git(d, "switch", "-q", "main")
+            self.assertEqual(V.state(ab.read()), V.state(ba.read()))
+            self.assertEqual(V.state(ab.read())["subjects"]["x"]["body"]["v"], 1)
 
     def test_an_open_after_a_thousand_contributions_parses_nothing_it_already_knows(self):
         n = int(os.environ.get("VERSIONS_BENCH", "1000"))
@@ -409,7 +440,7 @@ class TheCostOfHistory(unittest.TestCase):
             subjects = ["m.reading_%d" % i for i in range(20)]
             heads = {}
             for i, subj in enumerate(subjects):
-                heads[subj] = reading(s, subj, i, "s.map", T(1), at={"stamp": "00000000"})
+                heads[subj] = reading(s, subj, i, "s.map", T(1), at={"version": 0})
             js = []
             for i in range(3):
                 js.append(judgment(s, "d.judgment_%d" % i, "verdict %d" % i,
@@ -422,7 +453,7 @@ class TheCostOfHistory(unittest.TestCase):
                     subj = rnd.choice(subjects)
                     heads[subj] = reading(s, subj, rnd.randrange(100), "s.%d" % rnd.randrange(9),
                                           "2026-09-%02dT%02d:%02d:00+00:00" % (2 + written // 500, (written // 60) % 24, written % 60),
-                                          saw=[heads[subj]], at={"stamp": "%08d" % written})
+                                          saw=[heads[subj]], at={"version": written + 1})
                     written += 2
                 else:
                     j = rnd.choice(js)     # many reviews on few judgments
@@ -430,6 +461,7 @@ class TheCostOfHistory(unittest.TestCase):
                                  on="2026-09-%02dT%02d:%02d:00+00:00" % (2 + written // 500, (written // 60) % 24, written % 60)))
                     written += 1
             wrote = time.time() - t0
+            s.settle()                      # as the tool does after its writes
             files = sum(s.subjects().values())
             V.Store.parsed = 0
             t0 = time.time(); full = s.state(fresh=True); t_full = time.time() - t0
@@ -441,18 +473,188 @@ class TheCostOfHistory(unittest.TestCase):
             self.assertEqual(parsed_open, 0)
             # one more reading parses that subject's files only
             V.Store.parsed = 0
-            reading(s, subjects[0], 1, "s.z", T(30), saw=[heads[subjects[0]]], at={"stamp": "99999999"})
+            reading(s, subjects[0], 1, "s.z", T(30), saw=[heads[subjects[0]]], at={"version": 99999999})
             t0 = time.time(); one = s.state(); t_one = time.time() - t0
             parsed_one = V.Store.parsed
             self.assertLessEqual(parsed_one, s.subjects()[subjects[0]])
             self.assertEqual(one["subjects"][subjects[0]]["body"]["v"], 1)
             t0 = time.time(); rebuilt = s.state(fresh=True); t_rebuild = time.time() - t0
             self.assertEqual(one, rebuilt)
+            s.settle()                      # the act the update implied, recorded as the tool would
+            # the whole path: a rendering, and an unchanged file taken in again - no snapshot
+            # of the state is kept anywhere, and nothing already known is parsed
+            t0 = time.time(); V.write_entry(s); t_render = time.time() - t0
+            V.Store.parsed = 0
+            t0 = time.time(); V.take_in(s); t_take = time.time() - t0
+            self.assertEqual(V.Store.parsed, 0)
+            self.assertFalse(os.path.isdir(os.path.join(s.dir, ".stamps")))
             size = sum(os.path.getsize(os.path.join(r, f)) for r, _, fs in os.walk(s.dir) for f in fs)
             sys.stderr.write("\n  history: %d files, %.1f KiB, written in %.1fs; full state %.2fs (%d parsed); "
-                             "open %.3fs (%d parsed); one update %.3fs (%d parsed); rebuild %.2fs\n"
+                             "open %.3fs (%d parsed); one update %.3fs (%d parsed); rebuild %.2fs; "
+                             "render %.3fs; unchanged take_in %.3fs (0 parsed)\n"
                              % (files, size / 1024, wrote, t_full, parsed_full, t_open, parsed_open, t_one,
-                                parsed_one, t_rebuild))
+                                parsed_one, t_rebuild, t_render, t_take))
+
+
+class TheCounterexamples(unittest.TestCase):
+    """The probes of two review rounds, each a case the contract names, kept as tests."""
+
+    def test_two_roots_that_never_met_are_two_heads_and_no_moment_decides(self):
+        with tempfile.TemporaryDirectory() as d:
+            a, b = V.Store(os.path.join(d, "a")), V.Store(os.path.join(d, "b"))
+            reading(a, "x", 100, "s.a", T(2), at={"version": 7})
+            reading(b, "x", 120, "s.b", T(1), at={"version": 7})     # recorded earlier
+            a.union_from(b.root)
+            self.assertEqual(status(a, "x")["status"], "contested")
+            # and two roots that say the same are one claim held twice
+            c = V.Store(os.path.join(d, "c"))
+            reading(c, "y", 1, "s.a", T(2), at={"version": 7})
+            reading(c, "y", 1, "s.b", T(1), at={"version": 7})
+            e = status(c, "y")
+            self.assertEqual((e["status"], e["agreed"], e["body"]["v"]), ("accepted", 2, 1))
+
+    def test_a_later_clock_of_another_source_supersedes_nothing(self):
+        with tempfile.TemporaryDirectory() as d:
+            s = V.Store(d)
+            v = V.version("x", "reading", "s.a", {"v": 100, "from": "source-a"}, at={"version": 1}, on=T(1))
+            s.keep(v)
+            w = V.version("x", "reading", "s.b", {"v": 120, "from": "source-b"}, saw=[v["id"]], at={"version": 2}, on=T(2))
+            s.keep(w)
+            s.keep(V.act("x", "s.b", "accept", of=w["id"], on=T(2)))
+            self.assertEqual(status(s, "x")["status"], "contested")
+            # the same source, a later revision: superseded by rule, and settle records it
+            u = V.version("x", "reading", "s.c", {"v": 130, "from": "source-b"}, saw=[w["id"]], at={"version": 3}, on=T(3))
+            s.keep(u)
+            s.keep(V.act("x", "s.c", "accept", of=u["id"], on=T(3)))
+            st = s.state()
+            self.assertEqual([i["superseded"] for i in st["implied"]], [w["id"]])
+            written = s.settle()
+            self.assertEqual(len(written), 1)
+            self.assertEqual(s.state()["implied"], [])
+            self.assertEqual(s.read()["x"][written[0]]["by"], V.RULE_ACTOR)
+
+    def test_a_reservation_travels_down_a_chain_and_a_fired_premise_is_one(self):
+        with tempfile.TemporaryDirectory() as d:
+            s, r0, j0 = base(d)
+            r1 = reading(s, "brief.runs", 1, "s.a", T(4), saw=[r0], at={"day": "2026-09-04"})
+            j1 = judgment(s, "d.not_done", "done", {"brief.runs": r1}, "brief.runs < 1", "s.a", T(4), saw=[j0])
+            k = judgment(s, "d.k", "k", {"d.not_done": j1}, "brief.runs < 1", "s.a", T(4))
+            l = judgment(s, "d.l", "l", {"d.k": k}, "brief.runs < 1", "s.a", T(4))
+            self.assertEqual(status(s, "d.k")["reservations"], ["d.not_done"])
+            self.assertEqual(status(s, "d.l")["deps"], {"d.k": "reserved"})
+            self.assertEqual(status(s, "d.l")["reservations"], ["d.k"])
+            # a fired premise: what rests on it says so
+            reading(s, "brief.runs", 0, "s.b", T(5), saw=[r1], at={"day": "2026-09-05"})
+            self.assertEqual(status(s, "d.not_done")["status"], "fired")
+            self.assertEqual(status(s, "d.k")["deps"], {"d.not_done": "fired"})
+            # a dependency version nothing holds leaves the judgment unresolved
+            m = judgment(s, "d.m", "m", {"brief.runs": "nothing-like-this"}, "brief.runs < 1", "s.a", T(5))
+            e = status(s, "d.m")
+            self.assertEqual((e["status"], e["deps"]), ("unresolved", {"brief.runs": "unresolved"}))
+
+    def test_a_file_that_does_not_say_what_its_name_says_is_a_problem_not_a_version(self):
+        with tempfile.TemporaryDirectory() as d:
+            s = V.Store(d)
+            r = reading(s, "x", 1, "s.a", T(1))
+            p = os.path.join(s.dir, "x", r + ".yaml")
+            pathlib.Path(p).write_text(pathlib.Path(p).read_text().replace("v: 1", "v: 999"), encoding="utf-8")
+            held = s.read()
+            self.assertNotIn(r, held.get("x", {}))
+            self.assertTrue(any("does not say what its name says" in m for m in s.problems))
+            v = V.version("x", "reading", "s.a", {"v": 1}, on=T(1), op="k")
+            s.keep(v)
+            other = dict(v, body={"v": 2})
+            with self.assertRaises(V.IntegrityError):
+                s.keep(other)
+
+    def test_an_acceptance_and_a_refutation_that_never_met_are_a_dispute_between_acts(self):
+        with tempfile.TemporaryDirectory() as d:
+            s, r0, j0 = base(d)
+            j1 = V.version("d.not_done", "judgment", "s.a", {"verdict": "x", "wrong_if": "brief.runs > 9",
+                                                             "rests_on": {"brief.runs": r0}}, saw=[j0], on=T(2))
+            s.keep(j1)
+            accept = V.act("d.not_done", "s.a", "accept", of=j1["id"], over=[j0], on=T(2))
+            refute = V.act("d.not_done", "s.b", "refute", of=j1["id"], because="no", on=T(2))
+            s.keep(accept)
+            s.keep(refute)
+            e = status(s, "d.not_done")
+            self.assertEqual(e["status"], "contested")
+            self.assertEqual(e["disputed_acts"], [j1["id"]])
+            # the refutation that saw the acceptance answers it
+            t = V.Store(os.path.join(d, "t"))
+            t.keep(s.read()["brief.runs"][r0]); t.keep(s.read()["d.not_done"][j0]); t.keep(j1); t.keep(accept)
+            t.keep(V.act("d.not_done", "s.b", "refute", of=j1["id"], because="no", saw=[accept["id"]], on=T(3)))
+            e = status(t, "d.not_done")
+            self.assertEqual(e["marks"][j1["id"]], "refuted")
+            # a refuted version's acceptance is void: what it was laid over stands again
+            self.assertEqual((e["status"], e["head"]), ("accepted", j0))
+
+    def test_a_thousand_equal_observations_are_one_claim_and_cost_nothing_much(self):
+        import time
+        with tempfile.TemporaryDirectory() as d:
+            s = V.Store(d)
+            for i in range(1000):
+                reading(s, "x", 1, "s.%d" % i, T(1), at={"version": 7})
+            t0 = time.time(); e = status(s, "x"); took = time.time() - t0
+            self.assertEqual((e["status"], e["agreed"]), ("accepted", 1000))
+            self.assertLess(took, 3.0)
+
+    def test_a_rendering_keeps_no_snapshot_beside_the_files(self):
+        with tempfile.TemporaryDirectory() as d:
+            s, r0, j0 = base(d)
+            for i in range(50):
+                reading(s, "n.%d" % i, i, "s.a", T(1))
+                V.write_entry(s)
+            names = {n for _, _, fs in os.walk(s.dir) for n in fs}
+            self.assertEqual({n for n in names if not n.endswith(".yaml")}, {".index.json", ".gitignore"})
+
+    def test_a_deleted_subject_is_refused_and_the_file_left_as_it_is(self):
+        with tempfile.TemporaryDirectory() as d:
+            s, r0, j0 = base(d)
+            V.write_entry(s)
+            entry = pathlib.Path(d) / V.ENTRY
+            doc = V.yaml.safe_load(entry.read_text(encoding="utf-8"))
+            del doc["subjects"]["brief.runs"]
+            edited = V.yaml.safe_dump(doc, sort_keys=False)
+            entry.write_text(edited, encoding="utf-8")
+            with self.assertRaises(V.EditRefused):
+                V.take_in(s)
+            self.assertEqual(entry.read_text(encoding="utf-8"), edited)
+            self.assertIn("brief.runs", status(s, "brief.runs") and s.ids())
+
+    def test_a_stamp_is_ordered_as_an_instant_not_as_text(self):
+        self.assertEqual(V.clock_order({"stamp": "2026-09-01T09:00:00+03:00"}, {"stamp": "2026-09-01T08:00:00+00:00"}), -1)
+        self.assertEqual(V.clock_order({"stamp": "2026-09-01T09:00:00Z"}, {"stamp": "2026-09-01T09:00:00+00:00"}), 0)
+        self.assertIsNone(V.clock_order({"stamp": "yesterday"}, {"stamp": "2026-09-01T09:00:00Z"}))
+
+    def test_a_review_covers_its_version_while_what_it_read_still_stands(self):
+        with tempfile.TemporaryDirectory() as d:
+            s, r0, j0 = base(d)
+            r1 = reading(s, "brief.runs", 1, "s.a", T(4), saw=[r0], at={"day": "2026-09-04"})
+            j1 = judgment(s, "d.not_done", "done", {"brief.runs": r1}, "brief.runs < 1", "s.a", T(4), saw=[j0])
+            s.keep(V.act("d.not_done", "ilan", "review", of=j1, read={"brief.runs": r1}, on=T(5)))
+            self.assertEqual(status(s, "d.not_done")["status"], "accepted")
+            reading(s, "brief.runs", 2, "s.c", T(6), saw=[r1], at={"day": "2026-09-06"})
+            self.assertEqual(status(s, "d.not_done")["status"], "unreviewed")
+
+    def test_the_index_is_checked_against_the_files_not_their_number(self):
+        with tempfile.TemporaryDirectory() as d:
+            repo(d)
+            s = V.Store(d)
+            r0 = reading(s, "x", 0, "s.map", T(1), at={"version": 0})
+            commit(d, "base")
+            git(d, "switch", "-qc", "a")
+            reading(s, "x", 1, "s.a", T(2), saw=[r0], at={"version": 1})
+            commit(d, "a")
+            git(d, "switch", "-qc", "b", "main")
+            reading(s, "x", 2, "s.b", T(2), saw=[r0], at={"version": 1})
+            commit(d, "b")
+            git(d, "switch", "-q", "a")
+            self.assertEqual(s.state()["subjects"]["x"]["body"]["v"], 1)          # the index warms on a
+            git(d, "switch", "-q", "b")
+            self.assertEqual(s.subjects(), {"x": 4})                              # as many files as on a
+            self.assertEqual(s.state()["subjects"]["x"]["body"]["v"], 2)
+            self.assertEqual(s.state(), s.state(fresh=True))
 
 
 if __name__ == "__main__":
