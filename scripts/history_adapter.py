@@ -137,7 +137,7 @@ def capture_history(objects, projection, *, document=None):
         if not heads or len(heads) != len(state['heads']):
             incomplete('missing_accepted_head', subject, '', 'accepted head evidence is unavailable')
             continue
-        representations = {identity({key: obj.get(key) for key in ('kind', 'body', 'authored', 'pins')})
+        representations = {identity(C.claim_meaning(obj))
                            for obj in heads}
         _require(len(representations) == 1, 'ambiguous_accepted_selection', subject)
         selected = min(heads, key=lambda obj: obj['id'])
@@ -149,7 +149,9 @@ def capture_history(objects, projection, *, document=None):
             schema[role] = field
         for dep, version in selected['pins'].items():
             witness(dep, version)
-        document.setdefault(authored['collection'], {})[subject] = _adapt_body(selected)
+        collection_body = document.setdefault(authored['collection'], {})
+        _require(isinstance(collection_body, dict), 'unresolved_mapping', authored['collection'])
+        collection_body[subject] = _adapt_body(selected)
     declaration = meta.get('reasoning')
     if declaration is not None:
         _require(isinstance(declaration, dict) and
@@ -160,6 +162,54 @@ def capture_history(objects, projection, *, document=None):
     # No global capability declaration is invented from a claim's profile. The
     # immutable authored profile remains available in each retained head witness.
     return C.CapturedHistory(document, projection)
+
+
+
+def from_store_capture(captured):
+    """Adapt detached Store.capture evidence; no mutable view supplies headers.
+
+    The semantic closure binds only committed manifests and reachable objects.
+    Orphan staging bytes remain the source capture's private concurrency evidence.
+    """
+    from .history_store import Store
+    objects = captured.objects
+    subjects = {subject: {'acceptance': state['acceptance'],
+                          'heads': sorted(state['heads']),
+                          'open_acts': captured.baseline['open_acts'].get(subject, [])}
+                for subject, state in sorted(captured.state['subjects'].items())}
+    reviews = {subject: [] for subject in subjects}
+    for version, obj in sorted(objects.items()):
+        if obj['kind'] == 'act' and obj['body']['act'] == 'review' \
+                and obj['body']['of'] in subjects[obj['subject']]['heads']:
+            reviews[obj['subject']].append(obj)
+    dispositions = {subject: {'marks': state['marks'], 'proposals': sorted(state['proposals']),
+                              'contested_claims': sorted(state['disputed_acts']),
+                              'reviews': reviews[subject], 'implied': state['implied']}
+                    for subject, state in sorted(captured.state['subjects'].items())}
+    versions = set()
+    for subject, state in captured.state['subjects'].items():
+        versions.update(state['heads'])
+        versions.update(state['proposals'])
+        for review in reviews[subject]:
+            versions.update(review['body'].get('read', {}).values())
+    pins = {version: {'subject': objects[version]['subject'], 'version': version,
+                      'status': 'recorded', 'object': objects[version]}
+            for version in sorted(versions)}
+    closure = {'authority': captured.marker,
+               'commits': {operation: C.sha256(raw) for operation, raw in sorted(captured.commits.items())},
+               'objects': {version: {'subject': obj['subject'],
+                                    'sha256': C.sha256(captured.object_bytes[(obj['subject'], version)])}
+                           for version, obj in sorted(objects.items())}}
+    projection = {'projection_version': 1, 'authority': captured.marker,
+                  'baseline': captured.baseline,
+                  'identity_schemes': sorted({C.ID_SCHEME if 'id_scheme' in obj else C.LEGACY_SCHEME
+                                              for obj in objects.values()}),
+                  'rules': captured.state['rules'], 'rules_digest': identity(captured.state['rules']),
+                  'closure_digest': identity(closure),
+                  'coverage': {'scope': 'all', 'subjects': sorted(subjects), 'complete': True},
+                  'subjects': subjects, 'pins': pins, 'dispositions': dispositions,
+                  'integrity': {'complete': True, 'findings': []}}
+    return capture_history(objects, projection, document=Store._template(captured.commits))
 
 
 def _literal(value):

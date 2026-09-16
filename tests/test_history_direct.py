@@ -93,9 +93,23 @@ class DirectTransactions(unittest.TestCase):
         marker = Path(P.layout(self.entry)['history_authority'])
         marker.parent.mkdir(parents=True)
         marker.write_text('authority: history\n')
-        with self.assertRaisesRegex(P.Refused, 'history_direct_writer_unsupported'):
+        with self.assertRaisesRegex(P.Refused, 'invalid_schema|history_direct_writer_unsupported'):
             self.apply({'kind': 'set', 'id': 'p.value', 'value': 5})
         self.assertEqual(self.entry.read_bytes(), before)
+
+    def test_inactive_authority_allows_legacy_write_without_reading_history(self):
+        from scripts import history_contract as C
+        marker = Path(P.layout(self.entry)['history_authority'])
+        marker.parent.mkdir(parents=True)
+        raw = C.encode_document(C.authority(record_id='retained-history', authority='legacy', generation=3))
+        marker.write_bytes(raw)
+        history = Path(P.layout(self.entry)['history'])
+        history.mkdir()
+        (history / 'inactive-evidence').write_bytes(b'retained; not reactivated')
+        self.apply({'kind': 'set', 'id': 'p.value', 'value': 5})
+        self.assertEqual(P.load([str(self.entry)])['known']['p.value']['v'], 5)
+        self.assertEqual(marker.read_bytes(), raw)
+        self.assertEqual((history / 'inactive-evidence').read_bytes(), b'retained; not reactivated')
 
     def test_core_archive_retains_typed_original_seen(self):
         self.doc.pop('judgments')

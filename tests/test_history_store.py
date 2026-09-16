@@ -121,7 +121,7 @@ class Storage(unittest.TestCase):
         # Baselines bind committed operation/object evidence independently of the
         # manifest's generated-view digest, avoiding a self-referential hash.
         draft = C.make_commit(marker=self.marker, operation=op,
-                              parents={key: C.sha256(raw) for key, raw in capture.commits.items()},
+                              parents=C.commit_frontier(capture.commits),
                               baseline=capture.baseline, objects=pairs, receipt=receipt, view=b'',
                               view_template=C.document_template(capture.document))
         commits = dict(capture.commits, **{op: C.encode_document(draft)})

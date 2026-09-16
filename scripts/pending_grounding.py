@@ -174,6 +174,10 @@ def _declared_capabilities(document):
 def document_capabilities(document):
     """Validate declared and actual dependent capabilities, without execution."""
     C, L, S, A = _reasoning_modules()
+    meta = document.get('meta')
+    if isinstance(meta, dict) and 'history' in meta:
+        raise C.CapabilityError('unsupported_history_contribution',
+                                'history evidence requires a history-aware contribution format')
     cap = C.capabilities(document)
     fields = S._fields(document) if cap['profile'] == C.PROFILE else None
     # History declarations cannot hide behind an ordinary declaration either.

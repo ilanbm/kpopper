@@ -599,6 +599,72 @@ class CapturedSource:
             raise SnapshotError('snapshot_changed', 'routing, pending, or target observation changed')
 
 
+
+def _capture_load(paths, mode, initial):
+    """Select explicit history authority before the ordinary loader sees a view."""
+    from .. import provenance as P, knowledge_views as V, history_contract as C
+    routed = V.write_paths(paths) if mode == 'live' else paths
+    entries = [str(Path(path).absolute()) for pattern in routed
+               for path in sorted(P._capture_glob(glob.escape(pattern) if Path(pattern).exists() else pattern)) or [pattern]]
+    active = []
+    for entry in entries:
+        marker_path = Path(P.layout(entry)['history_authority'])
+        exists = marker_path.exists()
+        P._capture_event('exists', marker_path, exists)
+        if not exists:
+            continue
+        with marker_path.open('rb') as stream:
+            raw = stream.read(C.MAX_OBJECT_BYTES + 1)
+        P._capture_event('bytes', marker_path, raw)
+        C._require(len(raw) <= C.MAX_OBJECT_BYTES, 'history_limit')
+        marker = C.validate_authority(C.decode_document(raw))
+        if marker['authority'] == 'history':
+            active.append(entry)
+    if not active:
+        return P.load(paths, read_mode=mode)
+    if len(entries) != 1:
+        raise SnapshotError('history_composite_capture_unsupported', 'capture one authoritative history entry')
+    if mode == 'live' and initial['config']['mode'] == 'advanced':
+        raise SnapshotError('history_advanced_live_unsupported',
+                            'history contribution and accepted-target capture requires a versioned capability')
+    from ..history_store import Store
+    from ..history_adapter import from_store_capture
+    store = Store(active[0])
+    captured = store.capture()
+    rendered = C.decode_document(store.render(captured))
+    current = digest(captured.document) == digest(rendered)
+    known = store._known_view(captured)
+    if not current and not known:
+        raise SnapshotError('unresolved_view_edit', 'history entry needs reconciliation')
+    adapted = from_store_capture(captured)
+    document = adapted.document
+    # Authored pointers cannot be silently ignored by this single-entry capture.
+    for key in ('record', 'also'):
+        value = document.get(key)
+        values = [value] if isinstance(value, str) else value if isinstance(value, list) else \
+            list(value.values()) if isinstance(value, dict) else []
+        if any(isinstance(item, str) and item.endswith(('.yaml', '.yml')) for item in values):
+            raise SnapshotError('history_composite_capture_unsupported', 'history template contains record members')
+    doc = P.Record(document)
+    doc.hypotheses = P.load_hypotheses(routed)
+    from .contract import capabilities, CapabilityError
+    for hypothesis in doc.hypotheses.values():
+        body = hypothesis['doc']
+        try:
+            capabilities(body)
+        except CapabilityError as error:
+            raise P.Refused(error.code + ': ' + str(error)) from None
+        if isinstance(body.get('meta'), dict) and 'history' in body['meta']:
+            raise SnapshotError('history_hypothesis_unsupported', 'hypothesis needs its own committed capture')
+    doc = V.overlay(routed, doc, read_mode=mode)
+    doc.history_projection = adapted.projection
+    doc.history_view = {'status': 'current' if current else 'stale_generated',
+                        'baseline_digest': digest(captured.document['meta']['history'])}
+    doc.history_private_roots = [os.path.abspath(store.layout[name])
+                                 for name in ('history', 'history_commits')]
+    return doc
+
+
 def capture_source(paths, *, read_mode=None, as_of=None):
     """Capture the reader's exact bytes and observations for a later atomic copy."""
     return capture(paths, read_mode=read_mode, as_of=as_of, _retain_source=True)
@@ -623,7 +689,10 @@ def capture(paths, *, read_mode=None, as_of=None, _retain_source=False):
         token = P._CAPTURE_READS.set(inventory)
         core_token = P._CORE_READS.set(True)
         try:
-            documents.append(P.load(paths, read_mode=mode))
+            try:
+                documents.append(_capture_load(paths, mode, initial))
+            except P._peer('history_contract').HistoryError as error:
+                raise SnapshotError(error.code, str(error)) from error
         finally:
             P._CORE_READS.reset(core_token)
             P._CAPTURE_READS.reset(token)
@@ -670,10 +739,17 @@ def capture(paths, *, read_mode=None, as_of=None, _retain_source=False):
         getattr(doc, 'publication', initial.get('publication', {}))), origin)
     context['pending']['contributions'] = _portable([
         _publication_context(item) for item in getattr(doc, 'contributions', [])], origin)
+    if hasattr(doc, 'history_projection'):
+        context['history'] = doc.history_projection
+        context['history_view'] = doc.history_view
+    private_roots = getattr(doc, 'history_private_roots', [])
+    def public_revision_path(path):
+        absolute = os.path.abspath(path)
+        return not any(absolute == root or absolute.startswith(root + os.sep) for root in private_roots)
     files = [{'origin': origin(path), 'sha256': value if kind == 'bytes' else None,
               'status': 'read' if kind == 'bytes' else 'unreadable',
               **({'error': value} if kind == 'unreadable' else {})}
-             for (kind, path), value in sorted(inventories[-1].events.items()) if kind in ('bytes', 'unreadable')]
+             for (kind, path), value in sorted(inventories[-1].events.items()) if kind in ('bytes', 'unreadable') and public_revision_path(path)]
     revision = {'files': sorted(files, key=lambda item: item['origin'])}
     revision['digest'] = digest(revision)
     hypotheses = copy.deepcopy(doc.hypotheses)

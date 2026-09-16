@@ -881,7 +881,7 @@ def _record_read_guard(paths):
                 # publication. Same-directory records share its recovery boundary.
                 pending_paths = sorted({pending
                     for home in (os.path.join(root, HOME, '.history-local'), os.path.join(root, '.history-local'))
-                    for pending in glob.glob(os.path.join(home, '*.json'))})
+                    for pending in glob.glob(glob.escape(home) + '/*.json')})
                 if len(pending_paths) > 1024:
                     raise Refused('history_limit: too many pending local operations')
                 total = 0
@@ -890,7 +890,10 @@ def _record_read_guard(paths):
                     total += path.stat().st_size
                     if total > transaction.MAX_TRANSACTION_BYTES:
                         raise Refused('history_limit: pending local operation bytes')
-                    operation = transaction.PreparedMutation.from_bytes(path.read_bytes())
+                    try:
+                        operation = transaction.PreparedMutation.from_bytes(path.read_bytes())
+                    except ValueError as error:
+                        raise Refused('invalid_pending_journal: ' + str(path) + ': ' + str(error)) from error
                     members = {os.path.abspath(os.path.join(root, item['path'])) for item in operation.files}
                     if entry in members:
                         raise Refused('recovery_required: incomplete member publication')
@@ -904,6 +907,38 @@ def _load(paths, *, read_mode=None):
     doc, seen = Record(), set()
 
     def merge(f, d):
+        # A history view is not an ordinary computational record, even for a
+        # caller allowed to read dormant core declarations. Snapshot capture has
+        # a separate committed-history path; no overlay may erase this boundary.
+        contract = _peer('history_contract')
+        marker_path = layout(f)['history_authority']
+        marker_exists = os.path.exists(marker_path)
+        _capture_event('exists', marker_path, marker_exists)
+        meta = d.get('meta') if isinstance(d, dict) else None
+        declared = isinstance(meta, dict) and 'history' in meta
+        marker = None
+        if marker_exists:
+            try:
+                with io.open(marker_path, 'rb') as stream:
+                    raw = stream.read(contract.MAX_OBJECT_BYTES + 1)
+                _capture_event('bytes', marker_path, raw)
+                contract._require(len(raw) <= contract.MAX_OBJECT_BYTES, 'history_limit')
+                marker = contract.validate_authority(contract.decode_document(raw))
+            except contract.HistoryError as error:
+                raise Refused(error.code + ': ' + str(error)) from None
+        if declared and marker is None:
+            raise Refused('missing_history_authority: history view needs its authority marker')
+        if declared:
+            try:
+                contract.bind_authority(marker, meta['history'])
+            except contract.HistoryError as error:
+                raise Refused(error.code + ': ' + str(error)) from None
+        if marker is not None and marker['authority'] == 'history':
+            if not declared:
+                raise Refused('missing_history_baseline: active history needs its generated baseline')
+            raise Refused('history_reader_unsupported: use explicit committed-history snapshot capture')
+        if declared:
+            raise Refused('authority_mismatch: inactive history cannot authorize a generated view')
         # Validate each physical declaration before a later shard can mask it.
         try:
             _peer('reasoning.contract').capabilities(d)
@@ -3384,8 +3419,8 @@ def _version_core(v):
             if k not in ("seen", "reviewed", "born", "replaced", "ended", "day", "same_as", "dropped")}
     # Compare the legacy spelling with its lossless expression wrapper while
     # retaining structured operators and original archive bytes as authored.
-    if isinstance(core.get('wrong_if'), str):
-        core['wrong_if'] = {'expr': core['wrong_if']}
+    if 'wrong_if' in core:
+        core['wrong_if'] = predicate_text(core['wrong_if'])
     return core
 
 
@@ -4798,15 +4833,24 @@ def _check_citation_readback(action, body):
         raise ValueError(f"{action['id']} did not retain the requested from/at citation")
 
 
+def _direct_authority(entry):
+    """Read an inactive marker without reactivating its retained history."""
+    transaction, contract = _peer('history_transaction'), _peer('history_contract')
+    text = _text_of_or_none(layout(entry)['history_authority'])
+    marker = contract.validate_authority(contract.decode_document(text.encode('utf-8'))) \
+        if text is not None else transaction.legacy_authority(entry)
+    if marker['authority'] != 'legacy':
+        raise Refused('history_direct_writer_unsupported: use the history writer')
+    return marker
+
+
 def _direct_ready(paths):
     """Reject interrupted publication and unsupported authority before routing a write."""
     transaction = _peer('history_transaction')
     for path in paths:
         entry = os.path.abspath(path)
         with _record_read_guard([entry]):
-            marker = layout(entry)['history_authority']
-            if os.path.exists(marker):
-                raise Refused('history_direct_writer_unsupported: use the history writer')
+            _direct_authority(entry)
             for member in _files_of([entry]):
                 if os.path.dirname(os.path.abspath(member)) != os.path.dirname(entry):
                     raise Refused('unsupported_external_record_transaction: record members need a shared directory lock')
@@ -4853,13 +4897,11 @@ def _verify_direct(paths, project, prepared):
     if (baseline.get('kind') != 'direct/v1' or baseline.get('paths') != list(map(os.path.abspath, paths))
             or baseline.get('policy') != project.config()
             or baseline.get('destination') != list(map(os.path.abspath, _peer('knowledge_views').write_paths(paths)))
-            or prepared['authority'] != transaction.legacy_authority(entry)
+            or prepared['authority'] != _direct_authority(entry)
             or prepared['entry'] != os.path.basename(entry)
             or not prepared['operation'].startswith('direct-')):
         raise Refused('direct_baseline_mismatch: policy, destination or authority changed')
     root = Path(entry).parent
-    if Path(layout(entry)['history_authority']).exists():
-        raise Refused('history_direct_writer_unsupported: authority changed')
     mutation = transaction.PreparedMutation.from_bytes(transaction.json_bytes(transaction._encode(prepared)))
     touched = {str(root / item['path']): item for item in mutation.files}
     members = {os.path.relpath(os.path.abspath(path), root): os.path.abspath(path)
@@ -4949,7 +4991,7 @@ def _apply(paths, action, diagnostics=None):
                 'reads': [{'kind': kind, 'path': path, 'value': value}
                           for (kind, path), value in sorted(stage.observations.items())]}
     mutation = transaction.PreparedMutation(operation='direct-' + uuid.uuid4().hex,
-        authority=transaction.legacy_authority(entry), baseline=baseline, files=files,
+        authority=_direct_authority(entry), baseline=baseline, files=files,
         receipt=receipt, entry=entry.name)
     transaction.publish_legacy(root, transaction.journal_for(entry), mutation,
         verify=lambda prepared: _verify_direct(paths, project, prepared),
@@ -4961,10 +5003,15 @@ def _apply(paths, action, diagnostics=None):
 def recover_direct(paths, *, direction='after'):
     """Resume exact direct-write bytes; never regenerate a candidate during recovery."""
     from pathlib import Path
-    entry = Path(_first_of(paths)).absolute()
     transaction = _peer('history_transaction')
     project = _peer('knowledge_views').project_for(paths)
+    original_paths = list(paths)
+    policy = project.config()
+    paths = _peer('knowledge_views').write_paths(paths)
+    entry = Path(_first_of(paths)).absolute()
     with _locked(entry, project=project):
+        if project.config() != policy or list(_peer('knowledge_views').write_paths(original_paths)) != list(paths):
+            raise Refused('refused - project mode or record destination changed; retry recovery')
         return transaction.recover_legacy(entry.parent, transaction.journal_for(entry),
             direction=direction, verify=lambda prepared: _verify_direct(paths, project, prepared),
             on_committed=lambda prepared: [forget(entry.parent / item['path']) for item in prepared['files']])

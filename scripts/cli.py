@@ -59,6 +59,7 @@ COMMANDS = {
     "set": ("ID VALUE [--why TEXT] [--as-of DATE]", "Update a reading and see what it affects."),
     "update": ("--file JSON|- [--record FILE] [--state-dir PATH]", "Record one or many changes from a source report now; return applied or retained status."),
     "review": ("ID [--as-of DATE]", "Record a judgment's review against current readings."),
+    "recover": ("[--record FILE] [--rollback]", "Complete an interrupted direct write or restore its exact before images."),
     "document": ("OPERATION [OPTIONS]", "Create or refresh a standalone authored HTML document with evidence."),
     "page": ("[--open] [--out PATH] [--verify]", "Render or verify the knowledge page."),
     "export": ("ID [ID ...] [--format FORMAT]", "Export a focused readable excerpt with optional Mermaid."),
@@ -224,6 +225,12 @@ def main():
         except ImportError:
             from knowledge_cli import main as knowledge_main
         sys.exit(knowledge_main([a for a in rest if a != '--json']))
+    if cmd == 'recover':
+        try:
+            from .history_recovery_cli import main as recover_main
+        except ImportError:
+            from history_recovery_cli import main as recover_main
+        sys.exit(recover_main((["--json"] if options.json else []) + rest))
     if cmd == "watch":
         try:
             from .watch import main as watch_main

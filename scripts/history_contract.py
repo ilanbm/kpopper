@@ -393,6 +393,25 @@ def committed_set_digest(commits):
     return identity(effects)
 
 
+def commit_frontier(commits):
+    """The complete captured set's causal frontier, with exact parent bytes."""
+    _require(isinstance(commits, dict) and len(commits) <= MAX_OBJECTS, 'history_limit')
+    parents = set()
+    for operation, raw in commits.items():
+        manifest = validate_commit(decode_document(raw))
+        _require(operation == manifest['operation'], 'operation_mismatch')
+        parents.update(manifest['parents'])
+    return {operation: sha256(raw) for operation, raw in sorted(commits.items()) if operation not in parents}
+
+
+def claim_meaning(obj):
+    """Authored interpretation affects agreement; an evidence locator does not."""
+    value = {key: copy.deepcopy(obj.get(key)) for key in ('kind', 'body', 'pins', 'authored')}
+    if isinstance(value['authored'], dict):
+        value['authored'].pop('locator', None)
+    return value
+
+
 def committed_objects(marker, commits, objects):
     """Pure all-or-refuse visibility rule over captured manifest/object bytes.
 
@@ -452,7 +471,8 @@ def validate_projection(value):
     """
     value = detached(value, MAX_PROJECTION_BYTES)
     _mapping(value, ('projection_version', 'authority', 'baseline', 'identity_schemes', 'rules',
-                     'rules_digest', 'closure_digest', 'coverage', 'subjects', 'pins', 'integrity'))
+                     'rules_digest', 'closure_digest', 'coverage', 'subjects', 'pins', 'integrity'),
+             ('dispositions',))
     _require(type(value['projection_version']) is int and value['projection_version'] == 1,
              'unsupported_projection')
     bind_authority(value['authority'], value['baseline'])
@@ -499,6 +519,38 @@ def validate_projection(value):
                      'reference_mismatch')
         else:
             _require(witness['object'] is None, 'invalid_pin_witness')
+    dispositions = value.get('dispositions', {})
+    _require(isinstance(dispositions, dict) and set(dispositions) <= set(value['subjects']),
+             'invalid_dispositions')
+    for subject, disposition in dispositions.items():
+        _mapping(disposition, ('marks', 'proposals', 'contested_claims', 'reviews', 'implied'))
+        _require(isinstance(disposition['marks'], dict), 'invalid_dispositions')
+        for vid, mark in disposition['marks'].items():
+            _text(vid, OBJECT_ID)
+            _require(mark in ('corrected', 'refuted', 'replaced', 'superseded'), 'invalid_dispositions')
+        _ids(disposition['proposals'])
+        _ids(disposition['contested_claims'])
+        _require(isinstance(disposition['reviews'], list), 'invalid_dispositions')
+        review_ids = []
+        for review in disposition['reviews']:
+            review = validate_object(review)
+            _require(review['subject'] == subject and review['kind'] == 'act'
+                     and review['body']['act'] == 'review'
+                     and review['body']['of'] in value['subjects'][subject]['heads'], 'invalid_review_scope')
+            _require((ID_SCHEME if 'id_scheme' in review else LEGACY_SCHEME) in schemes,
+                     'unsupported_identity')
+            for dependency, vid in review['body'].get('read', {}).items():
+                witness = value['pins'].get(vid)
+                _require(witness is not None and witness['subject'] == dependency, 'missing_pin_witness')
+            review_ids.append(review['id'])
+        _require(review_ids == sorted(set(review_ids)), 'invalid_references')
+        _require(isinstance(disposition['implied'], list), 'invalid_dispositions')
+        for finding in disposition['implied']:
+            _mapping(finding, ('rule', 'subject', 'superseded', 'by', 'why'))
+            _require(finding['rule'] == 'source_clock' and finding['subject'] == subject
+                     and isinstance(finding['why'], str), 'invalid_dispositions')
+            _text(finding['superseded'], OBJECT_ID)
+            _text(finding['by'], OBJECT_ID)
     integrity = value['integrity']
     _mapping(integrity, ('complete', 'findings'))
     _require(type(integrity['complete']) is bool and isinstance(integrity['findings'], list),

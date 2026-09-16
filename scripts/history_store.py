@@ -17,7 +17,7 @@ MAX_REDUCTION_WORK = 4_000_000
 def _claim_key(obj):
     # Operation, writer and time do not turn agreement into disagreement. Pins
     # and authored interpretation do: equal printed bodies need not mean equality.
-    return identity({k: obj.get(k) for k in ('kind', 'body', 'pins', 'authored')})
+    return identity(C.claim_meaning(obj))
 
 
 def reduce(objects, rules=None, ancestry=None):
@@ -133,8 +133,8 @@ class Store:
             event('directory', path, path.is_dir())
             event('exists', path, path.exists())
             C._require(not path.exists() or path.is_dir(), 'invalid_history_path')
-            pattern = str(path / '*')
             import glob
+            pattern = glob.escape(str(path)) + '/*'
             found = sorted(glob.glob(pattern))
             C._require(len(found) <= C.MAX_OBJECTS, 'history_limit')
             event('glob', pattern, found)
@@ -164,6 +164,15 @@ class Store:
                 C._require(len(objects) < C.MAX_OBJECTS, 'history_limit')
                 objects[(directory.name, path.stem)] = read(path, C.MAX_OBJECT_BYTES)
         selected = C.committed_objects(marker, commits, objects)
+        # A stale view may name older heads, which remain in complete history.
+        # Missing manifest membership cannot turn that evidence into empty state.
+        for role, kind in (('heads', 'claim'), ('open_acts', 'act')):
+            for subject, ids in meta['history'][role].items():
+                for vid in ids:
+                    obj = selected.get(vid)
+                    C._require(obj is not None, 'incomplete_view_baseline', vid)
+                    C._require(obj['subject'] == subject and
+                               (obj['kind'] == 'act') == (kind == 'act'), 'baseline_reference_mismatch', vid)
         state = reduce(selected, rules, ancestry)
         current = baseline(marker, commits, state)
         inventory.verify()
@@ -234,8 +243,35 @@ class Store:
 
     def _known_view(self, captured):
         """A manifest digest certifies rendered bytes, never a hand-edited scalar."""
-        return any(C.decode_document(raw)['view_sha256'] == C.sha256(captured.entry_bytes)
-                   for raw in captured.commits.values())
+        manifests = {op: C.decode_document(raw) for op, raw in captured.commits.items()}
+        if any(manifest['view_sha256'] == C.sha256(captured.entry_bytes) for manifest in manifests.values()):
+            return True
+        # A canonical union rebuild has no knowledge commit of its own. A later
+        # commit's bound before baseline and parent closure can attest that view.
+        expected = identity(captured.document['meta']['history'])
+        examined = set()
+        for manifest in manifests.values():
+            if manifest['baseline_digest'] != expected:
+                continue
+            parents = tuple(sorted(manifest['parents']))
+            if parents in examined:
+                continue
+            examined.add(parents)
+            known, pending = set(), list(parents)
+            while pending:
+                parent = pending.pop()
+                if parent not in known:
+                    known.add(parent)
+                    pending.extend(manifests[parent]['parents'])
+            subset = {op: captured.commits[op] for op in known}
+            if not subset:
+                continue
+            objects = C.committed_objects(captured.marker, subset, captured.object_bytes)
+            state = reduce(objects, captured.state['rules'])
+            if identity(baseline(captured.marker, subset, state)) == expected \
+                    and self.render(captured, objects=objects, commits=subset) == captured.entry_bytes:
+                return True
+        return False
 
     def rebuild(self, capture=None, *, write=False):
         """Regenerate a known view; stale or edited unknown baselines require reconciliation."""
@@ -296,10 +332,9 @@ class Store:
             C._require(sum(map(len, combined.values())) + sum(map(len, staged.values()))
                        <= MAX_CAPTURE_BYTES, 'history_limit')
             expected_view = self.render(live, objects=selected, commits=combined)
-            C._require(identity(C.decode_document(record['after'])) ==
-                       identity(C.decode_document(expected_view)), 'view_projection_mismatch')
+            C._require(record['after'] == expected_view, 'view_projection_mismatch')
             commit = C.decode_document(manifest_item['after'])
-            expected_parents = {op: C.sha256(raw) for op, raw in live.commits.items() if op != operation}
+            expected_parents = C.commit_frontier({op: raw for op, raw in live.commits.items() if op != operation})
             if prior is None:
                 C._require(commit['parents'] == expected_parents, 'parent_baseline_mismatch')
             verify(data)
