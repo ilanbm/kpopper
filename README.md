@@ -1018,3 +1018,5 @@ see [Contributing](CONTRIBUTING.md) to improve the project.
 
 [Command and storage reference](docs/reference.md) · [Contributing and validation](CONTRIBUTING.md) ·
 [Changelog](CHANGELOG.md) · [MIT license](LICENSE)
+
+<!-- Temporary CI routing probe: documentation changes keep the short checks. -->
