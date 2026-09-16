@@ -287,6 +287,9 @@ def layout(first):
                 "measure_name": "PROVENANCE.measure.yaml",
                 "session": os.path.join(d, "PROVENANCE.session.json"),
                 "replaced": os.path.join(d, "PROVENANCE.replaced.yaml"),
+                "history": os.path.join(d, "PROVENANCE.history"),
+                "history_commits": os.path.join(d, "PROVENANCE.history-commits"),
+                "history_authority": os.path.join(d, "PROVENANCE.history.yaml"),
                 "build": None, "page": "record.html"}
     home = os.path.join(d, HOME)
     return {"legacy": False, "entry": first, "home": home,
@@ -296,6 +299,9 @@ def layout(first):
             "measure": os.path.join(home, "measure.yaml"), "measure_name": HOME + "/measure.yaml",
             "session": os.path.join(home, "session.json"),
             "replaced": os.path.join(home, "replaced.yaml"),
+            "history": os.path.join(home, "history"),
+            "history_commits": os.path.join(home, "history-commits"),
+            "history_authority": os.path.join(home, "history.yaml"),
             "build": os.path.join(home, "build"), "page": os.path.join(home, "build", "page.html")}
 
 
@@ -314,7 +320,8 @@ def leftovers(paths):
     d = os.path.dirname(lay["entry"])
     other = layout(os.path.join(d, ENTRY if lay["legacy"] else LEGACY_ENTRY))
     out = []
-    for role in ("hypotheses", "view", "measure", "session", "replaced"):
+    for role in ("hypotheses", "view", "measure", "session", "replaced",
+                 "history", "history_commits", "history_authority"):
         there = other[role]
         if not os.path.exists(there):
             continue
@@ -4259,14 +4266,8 @@ def _directory_locked(path):
     """Directory-only lock for policy owners; never captures or configures."""
     token = _RAW_READS.set(True)
     try:
-        import fcntl
-        fd = os.open(os.path.dirname(os.path.abspath(path)), os.O_RDONLY)
-        try:
-            fcntl.flock(fd, fcntl.LOCK_EX)
+        with _peer('history_transaction').writer_guard(os.path.dirname(os.path.abspath(path))):
             yield
-        finally:
-            fcntl.flock(fd, fcntl.LOCK_UN)
-            os.close(fd)
     finally:
         _RAW_READS.reset(token)
 

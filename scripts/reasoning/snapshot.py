@@ -134,6 +134,16 @@ def _snapshot_preimage(data):
     return {key: value for key, value in data.items() if key not in ('snapshot_id', 'authored_revision')}
 
 
+def _validate_history(document, context):
+    # Shared validation applies both to capture and untrusted frozen replay.
+    # Legacy snapshots with no history declaration keep their existing shape.
+    if 'history' in context:
+        from ..history_contract import CapturedHistory
+        CapturedHistory(document, context['history'])
+    elif isinstance(document.get('meta'), dict) and 'history' in document['meta']:
+        raise SnapshotError('missing_history_context', 'history view requires captured evidence')
+
+
 def _check_typed_json(value, depth=0):
     """Check exact encoder shapes before the legacy typed decoder can consume them."""
     if depth > 128:
@@ -202,6 +212,7 @@ class Snapshot:
         if not isinstance(data['document'], dict) or not isinstance(data['context'], dict) \
                 or not isinstance(data['hypotheses'], dict):
             raise SnapshotError('invalid_snapshot', 'invalid snapshot structure')
+        _validate_history(data['document'], data['context'])
         _validate_authored_revision(data['authored_revision'])
         if digest(_snapshot_preimage(data)) != data['snapshot_id']:
             raise SnapshotError('stale_snapshot', 'snapshot digest does not match')
@@ -226,6 +237,7 @@ class Snapshot:
         context = copy.deepcopy(context) if context is not None else {
             'read_mode': 'supplied', 'source_collection': 'caller-owned'}
         context.setdefault('read_mode', 'supplied')
+        _validate_history(document, context)
         if context['read_mode'] not in ('supplied', 'live', 'frozen', 'captured-live'):
             raise SnapshotError('invalid_snapshot', 'unknown captured read mode')
         _validate_authored_revision(authored_revision)
