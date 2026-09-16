@@ -54,9 +54,14 @@ day. A verdict, or other grounds, over a standing judgment is **reversed**: it f
 own condition has broken the judgment on what the base holds - a hypothesis that brings the reading
 that breaks a judgment together with the verdict that repairs it has not broken it here, and the
 report says its readings would - or when a person names it, `consolidate NAME --take <id>`; until
-then the run is red and nothing folds. Report that command; never run it on the session's own word,
-since taking by name is the person's act, the way the refusal into a hypothesis was built for. A
-replacement that rests on less names each dropped dependency at the fold too, `--drop "<id>: <why>"`.
+then the run is red and nothing folds. Taking by name is the person's act, and the session's part is
+to put the decision in front of them in the words of the work - which verdict would replace which, on
+what grounds, what it stops resting on - and ask whether it stands. On their word the session runs the
+take itself and reports what folded. The command is the session's to run, never a request to the
+person: a session that hands it over as their task has hidden the decision behind the mechanism. And
+never take on the session's own word, the way the refusal into a hypothesis was built for. A
+replacement that rests on less names each dropped dependency at the fold too, `--drop "<id>: <why>"`,
+asked of the person the same way - why the decision stops resting on it - and run by the session.
 A subject does not change kind at the fold - an entry under a judgment's id or the reverse, an
 arrangement replaced by what is not one or a judgment that would become one - and no name takes
 those: write it as its own decision. Across
@@ -118,7 +123,7 @@ with its date.
 ```bash
 kpopper consolidate --dry-run [NAME ...]     # the union, tested; every hypothesis when none is named
 kpopper consolidate [NAME ...]               # folded into the base when the test is clean
-kpopper consolidate NAME --take <id>         # a reversal the person names, folded with its trail
+kpopper consolidate NAME --take <id>         # a reversal the person confirmed, run on their word, folded with its trail
 kpopper consolidate NAME --drop "<id>: <why>"   # a dependency the replacement drops, named at the fold
 kpopper consolidate --refute NAME "why"      # one negative finding stays; the file goes
 kpopper consolidate --from <ref> --dry-run   # another branch's committed record as one more hypothesis
