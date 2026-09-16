@@ -610,6 +610,26 @@ sources:
            to by-hand once to show the tests fail. The rule itself went into the record as a
            hypothesis for a person to take by name - the new door deciding its own re-decision."
     read: "2026-09-15"
+  s.2026_09_16_versions_core:
+    asked: "Close the model behind issues #98 and #99 for good: after the fold's fixes of PR #101,
+            shape the smallest core that covers every case the thread raised - a two-branch verdict
+            conflict, an inherited reading mistaken for evidence, a same-source re-read, a same-day
+            correction, two commits measuring two code states, a fallen conclusion and its
+            replacement, a replace-and-return with its reasons, a hand edit on a stale base, a
+            historical dependency that is not a lost one, conflicting adjudications - as one set of
+            rules with no path-specific exception; write it into the record as a model chosen for
+            examination, with its promises as requirements to prove, then prove them in an isolated
+            module with real git merges before wiring anything existing to it"
+    name: "The session that closed the model behind the branch verdict conflicts: versions per
+           subject stored one file each, what each writer saw kept apart from what a claim rests on
+           and from what an act replaced, acts as versions of their own kind, state computed from the
+           frontier and the acts and the checks, and the entry file as a rendering that carries its
+           own heads and that a hand edit is reconciled against three ways. Shaped in conversation
+           with a second reviewer's corrections - seeing is not replacing, a hand edit keeps the base
+           it saw, a historical dependency is not a lost one, one append-only file per subject
+           conflicts under git where one file per version merges clean, acts can conflict, the two
+           times need exact meaning, the merged entry file is rebuilt and never read as an edit - and
+           hardened by two review rounds of the module itself"
   s.background_ingestion:
     name: "Background capture and selective delivery contract"
     file: "skills/kpopper/INGESTION.md"
@@ -841,6 +861,57 @@ sources:
          by_hand=True, tests.test_reversals run, 4 of 12 failed, then restored"
     read: "2026-09-15"
 
+  run.versions_core_cost_settled:
+    from: s.2026_09_16_versions_core
+    name: "The cost of history in the versions core after the two review rounds - every write a
+           distinct operation, the acts a source rule implies recorded, the whole path timed: a full
+           state, an open, one update, a rebuild, a rendering and an unchanged take-in - at a
+           thousand, ten thousand and a hundred thousand contributions over twenty readings and three
+           judgments with many reviews on the three"
+    of: "this tree at 6a46e36, VERSIONS_BENCH=1000|10000|100000 python3 -m unittest
+         tests.test_versions_core.TheCostOfHistory, 2026-09-16, one laptop, warm cache: 1,422 files
+         520 KiB, open 0.002s 0 parsed, update 61 parsed, unchanged take-in 0.009s 0 parsed; 13,788
+         files 4.95 MiB, full 3.8s, open 0.013s, update 0.20s 556 parsed, rebuild 3.5s, render 0.17s,
+         take-in 0.037s; 137,645 files 49 MiB written in 27s, full 56s, open 0.11s 0 parsed, one
+         update 2.7s 5,797 parsed, rebuild 63s, render 2.8s - the settle of the update re-reading its
+         subject - take-in 0.37s 0 parsed"
+    read: "2026-09-16"
+
+
+
+  run.versions_core_review_round:
+    v: 4
+    from: s.2026_09_16_versions_core
+    name: "Four review rounds of the versions core by a second reviewer, with reproductions - the
+           semantic round (ten findings: recorded time choosing between roots, cross-source
+           supersession, reservations not travelling a chain or from a fired premise, identity
+           unchecked on read, acceptance versus refutation unsurfaced, agreement read as dispute,
+           quadratic equal-clock comparison, snapshot growth, silent deletion, lexical stamps), the
+           efficiency round (an index keyed by file counts returning another branch's value, an
+           identity without the recorded moment breaking the union), the interaction round (acts in
+           sequence and in branches decided by global flags instead of by the acts left unanswered,
+           an untouched rendering of an agreement read as an edit, a validation problem lost through
+           the index, a corroborating observation unreviewing a decision, and the product question
+           whether refuting a replacement restores what it replaced, answered no), and the import
+           round (an edited stale copy credited with answering a refutation its editor never saw,
+           erasing a reservation)"
+    of: "reports at ~/docs/kpopper/reviews/2026-09-16-versions-core-3a04bc4/, -53604b3/, -ad35e72/
+         and -5dfc6a9/, reproducers included, against heads the tag versions-core-reviewed-2026-09-16
+         keeps reachable; every finding kept as a test and closed at e96c10e, 39 tests OK"
+    read: "2026-09-16"
+
+  run.versions_core_tests:
+    from: s.2026_09_16_versions_core
+    name: "The versions core's scenarios run as tests on this tree - tests/test_versions_core.py,
+           thirty-one tests over the fifteen scenarios of the brief and the counterexamples of two
+           review rounds, with real git repositories where a merge is the subject"
+    of: "this tree at 6a46e36, python3 -m unittest tests.test_versions_core, 2026-09-16: Ran 31
+         tests, OK; two corrections to the contract's first draft came out of writing the first
+         fifteen - a reading's acceptance lays it over nothing, since seeing an earlier reading is
+         not replacing it, and a return to an earlier decision is a new version laid over the one it
+         returns from - and twelve more out of the reviews"
+    read: "2026-09-16"
+
 known:
   alt.drop_shape_line:
     v: rejected
@@ -999,6 +1070,69 @@ known:
     name: "Claims about this project that held - checked with a run before they were asserted"
     from: run.claims_scored
     at: "of 6"
+  m.core.bytes_per_version:
+    v: 367
+    unit: bytes
+    name: "Bytes one version or act takes as a file in the versions core, on average, in the cost
+           test - an operation id and a forty-character identity on each"
+    from: run.versions_core_cost_settled
+    at: "49,359.7 KiB over 137,645 files at a hundred thousand contributions"
+    of: "2026-09-16"
+  m.core.counterexamples_kept:
+    v: 21
+    name: "Counterexamples from the four review rounds kept as regression tests of the versions
+           core, each passing - the short-history property test among them"
+    from: run.versions_core_review_round
+    at: "tests/test_versions_core.py, classes TheCounterexamples and TheActsThatRemainOpen and the
+         retry tests; 39 tests in all"
+    of: "2026-09-16"
+  m.core.open_parsed_at_100k:
+    v: 0
+    name: "Version files an open parses with a hundred thousand contributions behind the same state,
+           once the index holds them"
+    from: run.versions_core_cost_settled
+    at: "open 0.111s, 0 parsed, at 137,645 files"
+    of: "2026-09-16"
+  m.core.rebuild_seconds_at_100k:
+    v: 63.1
+    unit: seconds
+    name: "Seconds a rebuild of the state from every version file takes at a hundred thousand
+           contributions - the reconstruction path, never the working one"
+    from: run.versions_core_cost_settled
+    at: "rebuild 63.10s, full state 55.94s, 137,645 parsed"
+    of: "2026-09-16"
+  m.core.scenarios:
+    v: 15
+    name: "Scenarios the versions core must pass before anything existing is wired to it - the six
+           experiments of the second reviewer, order and idempotence over contributions including
+           acts, branch history travelling, an unreviewed reversal's reservation, a hand edit on a
+           stale base, a historical dependency left unflagged, a real git merge of version files, and
+           conflicting acts"
+    from: s.2026_09_16_versions_core
+    at: "the brief of the versions core track"
+    of: "2026-09-16"
+  m.core.scenarios_failed:
+    v: 0
+    name: "Scenarios of the versions core that a test in tests/test_versions_core.py fails on this
+           tree, or that needed an exception for a branch, a hand edit or a review to pass"
+    from: run.versions_core_tests
+    at: "the scenario tests; the count moves with the tests"
+    of: "2026-09-16"
+  m.core.scenarios_proved:
+    v: 15
+    name: "Scenarios of the versions core that a test in tests/test_versions_core.py passes on this
+           tree"
+    from: run.versions_core_tests
+    at: "the fifteen scenario tests, all passing; the count moves with the tests"
+    of: "2026-09-16"
+  m.core.update_parsed_at_100k:
+    v: 5797
+    name: "Version files one update parses with a hundred thousand contributions behind it - the
+           updated subject's own history and nothing else, twenty subjects sharing the files; the
+           settle that records the act the update implied reads the same subject once more"
+    from: run.versions_core_cost_settled
+    at: "one update 2.690s, 5,797 parsed of 137,645; render after settle 2.757s"
+    of: "2026-09-16"
   m.door.future_dated_readings_accepted:
     v: "1 of 1"
     name: "Readings dated after the day of writing that set accepted - a reading as of 2026-12-01
@@ -1285,6 +1419,29 @@ known:
     name: "The opener on the same record when clean, characters"
     from: "measured on a live record of 107 entries"
     of: "2026-09-01"
+  lit.belief_change:
+    v: "revising what we believed about an unchanged world, updating for a world that changed, and
+        merging sources that disagree are three operations with three different rules"
+    name: "What belief revision, update and merging keep apart"
+    from: "Katsuno and Mendelzon 1991, On the difference between updating a knowledge base and
+           revising it; Konieczny and Pino Perez 2002, Merging information under constraints"
+    at: "the revision versus update distinction, and the merging postulates"
+    of: "2026-09-16"
+  lit.bitemporal:
+    v: "the time a datum is about and the time it was recorded are two dimensions, kept apart, so
+        that learning today that yesterday was wrong is told apart from the world changing today"
+    name: "What bitemporal data models keep apart"
+    from: "Jensen and Snodgrass 1999, Temporal data management"
+    at: "valid time and transaction time"
+    of: "2026-09-16"
+  lit.crdt_mv_register:
+    v: "a single timestamp cannot tell concurrent writes apart - a write must carry what it was
+        based on; a multi-value register keeps every concurrent write visible and a later write that
+        saw them all resolves them; merge as a set union is order-free, idempotent and lossless"
+    name: "What conflict-free replicated data types settle"
+    from: "Shapiro, Preguica, Baquero and Zawirski 2011, Conflict-free replicated data types"
+    at: "section 3.2.2, the multi-value register, and the state-based merge as a join"
+    of: "2026-09-16"
   lit.github_registries:
     v: "GitHub Packages hosts npm, RubyGems, Maven, Gradle, NuGet and containers; it has no Python
         registry, so pip installs cannot come from it"
@@ -1303,6 +1460,14 @@ known:
     name: "What the registries hold"
     from: "registry lookup"
     of: "2026-09-03"
+  lit.tms:
+    v: "a conclusion keeps the justifications and assumptions it was drawn from, support is
+        recomputed when an assumption changes, and losing the support for a conclusion does not
+        establish its opposite"
+    name: "What truth maintenance systems formalised"
+    from: "Doyle 1979, A truth maintenance system; de Kleer 1986, An assumption-based TMS"
+    at: "the justification structure and the ATMS label update"
+    of: "2026-09-16"
   p.npm_files:
     v: 1
     name: "Files of substance the npm package ships"
