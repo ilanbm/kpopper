@@ -61,3 +61,5 @@ package-dir = { kpopper = "scripts" }
 kpopper = ["page/*.css", "page/*.js", "verify_page.js", "start-guide.md", "document-guide.md", "document/*.css", "document/*.js", "assessment.schema.json"]
 "kpopper.session" = ["rules.txt", "bootstrap.txt", "lean/*.lean", "lean/lean-toolchain"]
 "kpopper.reasoning" = ["assessment.schema.json", "lean/*.lean", "lean/lean-toolchain", "lean/lakefile.toml", "native/*.zip", "native/*.tar.gz", "native/*.md", "third_party/*"]
+
+# Temporary CI routing probe: packaging checks use the committed native bundles.
