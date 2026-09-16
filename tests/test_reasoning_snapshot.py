@@ -440,7 +440,7 @@ class LiveCaptureTests(Repository):
 
     def test_portable_metadata_does_not_rewrite_authored_evidence(self):
         from scripts.reasoning.snapshot import _portable
-        value = {'standing_permission': True, 'record': '/private/record.yaml',
+        value = {'standing_permission': True, 'record': str(self.root / 'record.yaml'),
                  'manifest': {'document': {'known': {'p.permission': {
                      'standing_permission': True, 'v': '/authored/quoted/path'}}}}}
         portable = _portable(value, lambda _: 'sanitized-origin')
@@ -449,9 +449,29 @@ class LiveCaptureTests(Repository):
         self.assertEqual(portable['manifest'], value['manifest'])
 
     def test_full_bundle_preserved_and_replay_never_resolves_ref(self):
+        from scripts import pending_grounding as G
+
+        def seed_ledger(bundle, event_id):
+            # Install immutable Git fixture bytes directly: this exercises live
+            # reading on Windows without invoking the POSIX-only capture writer.
+            old = self.store.head()
+            files = self.store.tree(old)
+            revision = bundle['revision']
+            prefix = 'contributions/' + revision + '/'
+            event = {'event_id': event_id, 'contribution_id': 'limit', 'revision': revision,
+                     'sequence': len(self.store.events(old)) + 1, 'captured_at_ns': 1}
+            additions = {'events/' + event_id + '.json': G.json_bytes(event),
+                         prefix + 'manifest.json': G.json_bytes(G._encode(bundle['manifest']))}
+            additions.update({prefix + 'evidence/' + name: data for name, data in bundle['files'].items()})
+            files.update({name: self.store._write_blob(data) for name, data in additions.items()})
+            commit = self.store._commit(files, old)
+            self.assertTrue(self.store._cas(old, commit))
+            self.assertEqual(self.store.read_bundle(revision, commit), bundle)
+            return {'revision': revision, 'ledger_commit': commit}
+
         path = self.root / 'GROUNDING.yaml'
         path.write_text('known:\n  local.one: {v: 1}\n')
-        receipt = self.capture()
+        receipt = seed_ledger(fixture_bundle(), 'first')
         live = Snapshot.capture([str(path)], read_mode='live')
         data = live.to_data()
         self.assertEqual(data['context']['read_mode'], 'captured-live')
@@ -463,7 +483,7 @@ class LiveCaptureTests(Repository):
         self.assertNotEqual(live.snapshot_id, frozen.snapshot_id)
         self.assertEqual(frozen.to_data()['context']['pending']['bundles'], {})
         self.assertNotIn(str(self.root), str(data))
-        self.capture(fixture_bundle(value=20), event_id='second')
+        seed_ledger(fixture_bundle(value=20), 'second')
         with mock.patch.object(P, 'load', side_effect=AssertionError('must not read')):
             replayed = Snapshot.from_snapshot(data)
             portable_replay = Snapshot.from_json(live.to_json())

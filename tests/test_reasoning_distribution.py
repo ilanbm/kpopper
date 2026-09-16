@@ -337,8 +337,8 @@ if replacement_root:
     assert hashlib.sha256(modified.binary.read_bytes()).hexdigest() == before
     changed = modified.request({"nodes": {}, "declared": [], "expression": {"op": "div", "args": [{"num": "1"}, {"num": "3"}]}})
     assert changed == result, changed
-    receipt = subprocess.run([str(modified.binary)], input="KP2\t1000\t128\t256\t0\t0\tn\t1\n", text=True, capture_output=True, check=True)
-    assert "KPOPPER_GMP_REPLACEMENT_PROBE" in receipt.stderr, receipt
+    receipt = subprocess.run([str(modified.binary)], input=b"KP2\t1000\t128\t256\t0\t0\tn\t1\n", capture_output=True, check=True)
+    assert b"KPOPPER_GMP_REPLACEMENT_PROBE" in receipt.stderr, receipt
     print(json.dumps({"replacement": modified.implementation}, sort_keys=True))
 '''
 

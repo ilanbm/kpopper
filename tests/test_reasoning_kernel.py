@@ -85,10 +85,13 @@ class TransportTests(unittest.TestCase):
 @unittest.skipUnless(BINARY, "set KPOPPER_REASONING_TEST_BINARY for native conformance")
 class NativeKernelTests(unittest.TestCase):
     def batch(self, requests):
-        run = subprocess.run([BINARY], input="\n".join(encode_request(r) for r in requests) + "\n",
-                             text=True, capture_output=True, timeout=15, check=True)
-        self.assertEqual(run.stderr, "")
-        lines = run.stdout.splitlines()
+        # The native protocol uses literal LF bytes on every OS. Text-mode pipes
+        # translate LF to CRLF on Windows, unlike the product Runtime adapter.
+        payload = ("\n".join(encode_request(r) for r in requests) + "\n").encode("ascii")
+        run = subprocess.run([BINARY], input=payload,
+                             capture_output=True, timeout=15, check=True)
+        self.assertEqual(run.stderr, b"")
+        lines = run.stdout.decode("ascii").splitlines()
         self.assertEqual(len(lines), len(requests))
         results = [decode_response(line) for line in lines]
         for req, result in zip(requests, results):
@@ -205,15 +208,15 @@ class NativeKernelTests(unittest.TestCase):
         self.assertEqual(unsupported["status"], "unsupported_capability")
         self.assertEqual((unsupported["preflight_steps"], unsupported["steps"]), (0, 0))
         base = "KP2\t1000\t128\t256\t0\t0\t"
-        invalid = ["", base.replace("KP2", "KP1") + "n\t1", base + "b\t2", base + "n\t01", base + "n\t+1", base + "n\t1.",
+        invalid = ["", base.replace("KP2", "KP1") + "n\t1", base + "n\t1\r", base + "b\t2", base + "n\t01", base + "n\t+1", base + "n\t1.",
                    base + "n\t1e", base + "z\tz", base + "s\tf", base + "s\tFF", base + "s\tff",
                    base + "s\tc080", base + "s\teda080", base + "u\tforged", base + "o\tadd\t1\tn\t1",
                    base + "o\tadd\t3\tn\t1\tn\t2\tn\t3", base + "r", base.replace("1000", "00") + "z",
                    base.replace("1000", "10000001") + "z", base.replace("128", "0") + "z",
                    "KP2\t1000\t128\t256\t2\t61\t61\t0\tz",
                    "KP2\t1000\t128\t256\t0\t2\t61\tn\t1\t61\tn\t2\tz"]
-        run = subprocess.run([BINARY], input="\n".join(invalid) + "\n", text=True, capture_output=True, check=True, timeout=15)
-        outputs = [decode_response(line) for line in run.stdout.splitlines()]
+        run = subprocess.run([BINARY], input=("\n".join(invalid) + "\n").encode("ascii"), capture_output=True, check=True, timeout=15)
+        outputs = [decode_response(line) for line in run.stdout.decode("ascii").splitlines()]
         self.assertEqual(len(outputs), len(invalid))
         for result in outputs:
             self.assertEqual((result["status"], result["value"], result["steps"]), ("error", None, 0), result)
@@ -221,8 +224,8 @@ class NativeKernelTests(unittest.TestCase):
         for raw, code in [("KP2\t1000\t128\t256\t0\t20001", "node_limit"),
                           ("KP2\t1000\t128\t256\t100001", "edge_limit"),
                           (base + "o\tadd\t2\tn\t1\t" * 129 + "n\t1", "parser_depth_limit")]:
-            run = subprocess.run([BINARY], input=raw + "\n", text=True, capture_output=True, check=True, timeout=15)
-            result = decode_response(run.stdout)
+            run = subprocess.run([BINARY], input=(raw + "\n").encode("ascii"), capture_output=True, check=True, timeout=15)
+            result = decode_response(run.stdout.decode("ascii"))
             self.assertEqual((result["status"], result["diagnostics"]), ("limit", [code]))
             self.assertEqual((result["preflight_steps"], result["steps"]), (0, 0))
         # Invalid raw bytes cannot be accepted as an ID or text token.
@@ -254,7 +257,7 @@ class NativeKernelTests(unittest.TestCase):
 
     def test_public_fixture_slice(self):
         for filename in ["scalar-v1.json", "t0-scalar-slice.json"]:
-            corpus = json.loads((Path(__file__).parent / "reasoning" / filename).read_text())
+            corpus = json.loads((Path(__file__).parent / "reasoning" / filename).read_text(encoding="utf-8"))
             results = self.batch([case["request"] for case in corpus["cases"]])
             for case, result in zip(corpus["cases"], results):
                 with self.subTest(corpus=filename, case=case["id"]):
