@@ -33,6 +33,7 @@ labels:
   prior.rust_unwarranted: "A compiled binary is not warranted"
   s.2026_09_15_branch_verdict_conflicts: "Two branches, one judgment, opposite verdicts"
   s.2026_09_15_verdict_conflicts_decided: "A reversal folds by its own condition or by name"
+  s.2026_09_16_versions_core: "One version per claim, a state computed from them all"
   prior.gate_by_consequence: "Who decides, by what being wrong costs"
   prior.ts_direction: "TypeScript for all of it, or none"
   prior.strings_lose_tooling: "Browser code in strings loses its tools"
@@ -86,7 +87,8 @@ tabs:
              s.2026_09_13_worker_and_research, s.2026_09_13_reasoning_overview,
              s.2026_09_13_remove_duplicate_overview, s.2026_09_13_github_releases,
              s.2026_09_14_working_modes, s.2026_09_15_batch_test_race,
-             s.2026_09_15_branch_verdict_conflicts, s.2026_09_15_verdict_conflicts_decided]
+             s.2026_09_15_branch_verdict_conflicts, s.2026_09_15_verdict_conflicts_decided,
+             s.2026_09_16_versions_core]
     sections:
       - title: How to read what follows
         why: a wall of cards is not an argument until you know what separates them
