@@ -807,6 +807,18 @@ sources:
          repository, 2026-09-03"
     read: "2026-09-03"
 
+  run.versions_core_tests:
+    from: s.2026_09_16_versions_core
+    name: "The versions core's scenarios run as tests on this tree - tests/test_versions_core.py,
+           seventeen tests over the fifteen scenarios of the brief, with real git repositories where
+           a merge is the subject"
+    of: "this tree at c087ef9, python3 -m unittest tests.test_versions_core, 2026-09-16: Ran 17
+         tests, OK; two corrections to the contract's first draft came out of writing them - a
+         reading's acceptance lays it over nothing, since seeing an earlier reading is not replacing
+         it, and a return to an earlier decision is a new version laid over the one it returns from,
+         not the earlier version accepted again"
+    read: "2026-09-16"
+
 known:
   alt.drop_shape_line:
     v: rejected
@@ -983,11 +995,11 @@ known:
     at: "the brief of the versions core track; the count moves with the tests"
     of: "2026-09-16"
   m.core.scenarios_proved:
-    v: 0
+    v: 15
     name: "Scenarios of the versions core that a test in tests/test_versions_core.py passes on this
            tree"
-    from: s.2026_09_16_versions_core
-    at: "the brief of the versions core track; the count moves with the tests"
+    from: run.versions_core_tests
+    at: "the fifteen scenario tests, all passing; the count moves with the tests"
     of: "2026-09-16"
   m.entry_name.false_reads:
     v: 8
