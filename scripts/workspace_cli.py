@@ -16,7 +16,7 @@ except ImportError:
 
 
 def _parser(command, description):
-    parser = argparse.ArgumentParser(prog="kpopper " + command, description=description)
+    parser = argparse.ArgumentParser(prog="kpop " + command, description=description)
     parser.add_argument("--json", action="store_true", help="return structured JSON")
     return parser
 
@@ -65,7 +65,7 @@ def open_context(argv):
             return _emit({**data, "error": location["reason"]}, location["reason"], args.json, 1)
         if location["status"] == "missing":
             text = ("No knowledge record yet. Continue your work and keep useful findings as they arise, "
-                    "or run `kpopper map` for an initial map (`--deep` for a deeper investigation).")
+                    "or run `kpop map` for an initial map (`--deep` for a deeper investigation).")
             if data.get("mapping"):
                 text += "\nMapping: " + data["mapping"]["mapping"]
             return _emit({**data, "message": text}, text, args.json)

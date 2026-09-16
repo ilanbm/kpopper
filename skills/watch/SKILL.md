@@ -29,8 +29,8 @@ opt-in, recommend daily review and obtain the user's choice before installing an
 ## Local checks and shared facts
 
 Read [compatibility and sharing](references/compatibility.md) when setting up live watch,
-capturing a shared observation, or handling a background finding. Inspect `kpopper watch status`;
-for an authorized setup run `kpopper watch setup`, preserving an existing base ref. Check mode
+capturing a shared observation, or handling a background finding. Inspect `kpop watch status`;
+for an authorized setup run `kpop watch setup`, preserving an existing base ref. Check mode
 does not run setup. Non-Git/external-record projects can still use daily review.
 
 Hooks queue mechanical checks without blocking the working session. When a batch needs native
@@ -53,13 +53,13 @@ after capture and during active sessions, and does not install a schedule. Prese
 existing external shared record; importing selected permitted observations into the
 project store is explicit and non-destructive. See [project modes](../../docs/project-modes.md).
 
-1. Locate the workspace and existing followup configuration with `kpopper followups status`.
+1. Locate the workspace and existing followup configuration with `kpop followups status`.
    Use the CLI from the current plugin when needed: `python3 <plugin-root>/scripts/cli.py`.
    The plugin root is two directories above this skill folder. Keep its pinned record and
    canonical task destination. Use an existing destination from user context or its verified
    suggestion; a private fallback is available. If no useful knowledge record exists yet,
    explain that prerequisite rather than inventing a graph solely to install a timer.
-2. Read [the host protocol](references/host-protocol.md). Run `kpopper followups daily install
+2. Read [the host protocol](references/host-protocol.md). Run `kpop followups daily install
    --owner UNIQUE_HOST_SESSION`, adding `--timezone AREA/CITY` on first setup and the selected
    `--store` or `--private` when necessary. Pass an explicit `--time HH:MM` only when requested;
    pass `--resume` only for that mode. For inspection only, use `--check` instead of reserving

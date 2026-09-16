@@ -147,7 +147,7 @@ def hits(prompt, index):
 
 def moves(host):
     form = SKILL_FORMS.get(host or "")
-    return form.format("ground") if form else "kpopper pull"
+    return form.format("ground") if form else "kpop pull"
 
 
 def line(named, host):

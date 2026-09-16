@@ -338,7 +338,7 @@ def refresh_command(nid, value, name, said, holder, paths, today):
                f"what was measured")
     if why:
         return f"edit it by hand in this pull request - {nid}: v: {text!r} - {why}"
-    parts = ["kpopper", "set", nid, text, "--why", _by(name, said),
+    parts = ["kpop", "set", nid, text, "--why", _by(name, said),
              "--as-of", today.isoformat()]
     if holder:
         parts += ["--hypothesis", holder]

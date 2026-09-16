@@ -7,9 +7,9 @@ The data is adapted from the repository's page fixture; the document layout is k
 With the kpopper CLI installed, run from this directory:
 
 ```sh
-kpopper check
-kpopper page --verify
-kpopper page --open
+kpop check
+kpop page --verify
+kpop page --open
 ```
 
 On the **Now** tab, hover over the heating conclusion to see its premises, condition and

@@ -229,7 +229,7 @@ class Store:
             if self.registered:
                 raise Refused("Registered followups ledger is unavailable: " + str(self.path) + "; restore it from backup")
             if required:
-                raise Refused("Followups are not configured. Run `kpopper followups setup`.")
+                raise Refused("Followups are not configured. Run `kpop followups setup`.")
             return None
         data = read_yaml(path)
         if not isinstance(data, dict) or data.get("version") != 1 or data.get("workspace_key") != self.location["key"]:
@@ -381,7 +381,7 @@ class Store:
                 ref = str(root / ("kp-" + key + ".md"))
                 content = ("# " + spec["title"] + "\n\n- **When**: " + json.dumps(spec["when"], ensure_ascii=False)
                            + "\n- **Why**: " + spec["why"] + "\n- **How**: " + spec["how"]
-                           + "\n- **Routine**: Managed by kpopper followups " + key
+                           + "\n- **Routine**: Managed by kpop followups " + key
                            + "; use its scan/claim/finish commands.\n")
                 target = Path(ref)
                 # Recover an interrupted creation only when its exact content agrees.
@@ -695,9 +695,9 @@ def summary(location, counts_only=False):
         return ""
     if counts_only:
         return "KPOPPER_FOLLOWUPS " + json.dumps({"counts": result["counts"], "record": result["record"]}, ensure_ascii=False) \
-            + "\n`kpopper followups scan` explains which work is ready and the dependencies behind it."
+            + "\n`kpop followups scan` explains which work is ready and the dependencies behind it."
     compact = [{"id": row["id"], "state": row["state"], "title": row["title"],
                 "reasons": [reason[:240] for reason in row["reasons"][:2]]} for row in visible]
     return "KPOPPER_FOLLOWUPS " + json.dumps({"counts": result["counts"], "items": compact,
                                               "record": result["record"], "graph_error": result["graph_error"]}, ensure_ascii=False) \
-        + "\nRead the canonical task, rescan and claim before acting within the user's authorized scope. `kpopper followups scan` shows the full queue."
+        + "\nRead the canonical task, rescan and claim before acting within the user's authorized scope. `kpop followups scan` shows the full queue."

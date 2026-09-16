@@ -32,8 +32,8 @@ jobs:
         with:
           python-version: "3.13"
       - run: python -m pip install kpopper==1.2.0
-      - run: kpopper check
-      - run: kpopper consolidate --dry-run
+      - run: kpop check
+      - run: kpop consolidate --dry-run
 ```
 
 Choose the package version deliberately when updating this workflow. The ordinary
@@ -65,7 +65,7 @@ project.
 With the other branch or ref already available in the local repository:
 
 ```sh
-kpopper consolidate --dry-run --from other-branch
+kpop consolidate --dry-run --from other-branch
 ```
 
 This reads the branch's committed record and its hypotheses, compares claims by ID, and
@@ -86,8 +86,8 @@ facts that can be measured reproducibly, attach a named `measure` recipe and def
 argument list in `.kpopper/measure.yaml`:
 
 ```sh
-kpopper remeasure       # Inspect what would run
-kpopper remeasure --run # Execute the reviewed recipes and test the resulting readings
+kpop remeasure       # Inspect what would run
+kpop remeasure --run # Execute the reviewed recipes and test the resulting readings
 ```
 
 Add the second command to CI only after those recipes are in place and reviewed as code.

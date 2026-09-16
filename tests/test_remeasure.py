@@ -126,7 +126,7 @@ class TheMeasurementTests(unittest.TestCase):
                           "    worked out from it: heat.deficit_kw\n"
                           "    MUTED     c.boiler_short: heat.loss_kw moved 31 -> 28, inside wrong_if", out)
             self.assertIn("  heat.loss_kw: 31 recorded (2026-09-02, by its own of:) -> 28 measured by loss_kw\n"
-                          f"    refresh: kpopper set heat.loss_kw 28 --why 'measured by loss_kw' --as-of {TODAY} "
+                          f"    refresh: kpop set heat.loss_kw 28 --why 'measured by loss_kw' --as-of {TODAY} "
                           + str(rec) + "\n", out)
             self.assertTrue(out.rstrip().endswith("the tree reads 1 entry differently, none across a line - refresh them"), out)
             # the generic advice of the dry run - fold it, refute it, --as-of it - is not given
@@ -152,7 +152,7 @@ class TheMeasurementTests(unittest.TestCase):
             # the judgment whose sign does not name the count moved, and is a flag, not a failure
             self.assertIn("  MOVED c.season_plan: log.cold_nights differs from its snapshot (3 -> 7)", out)
             self.assertIn("  log.cold_nights: 3 recorded (2026-09-02, by the read: of run.night_log) -> 7 measured by cold_nights\n"
-                          "    refresh: kpopper set log.cold_nights 7 --why 'measured by cold_nights' ", out)
+                          "    refresh: kpop set log.cold_nights 7 --why 'measured by cold_nights' ", out)
             self.assertIn("not clean: a falsifier that holds on what the tree measures - red until the record and the tree agree", out)
 
     def test_a_reading_of_the_same_day_is_contested_through_the_door(self):
@@ -425,7 +425,7 @@ class TheFieldTests(unittest.TestCase):
                                        "label: [python3, -I, -c, \"print('$(printf injected)')\"]\n")
             code, out, err = kp("remeasure", "--run", rec)
             self.assertEqual(code, 0, out + err)
-            self.assertIn("    refresh: kpopper set note.label '$(printf injected)' --why 'measured by label' ", out)
+            self.assertIn("    refresh: kpop set note.label '$(printf injected)' --why 'measured by label' ", out)
             allowlist(pathlib.Path(d), "boiler_kw: [python3, -I, -c, 'print(24)']\n"
                                        "loss_kw: [python3, -I, -c, 'print(31)']\ncold_nights: [python3, -I, -c, 'print(3)']\n"
                                        "label: [python3, -I, -c, \"print('--help')\"]\n")

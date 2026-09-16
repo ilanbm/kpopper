@@ -7,7 +7,7 @@
 ## How it was exercised
 
 <!-- The commands, or the path through the page. Every pull request already runs
-     `kpopper check` and `kpopper page --verify`; this is for what those cannot see. -->
+     `kpop check` and `kpop page --verify`; this is for what those cannot see. -->
 
 Bump: minor
 

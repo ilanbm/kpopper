@@ -230,8 +230,8 @@ and the email's link and duration separately; the integration probe connects the
 ## Why measurement, rather than check alone?
 
 PR A deliberately leaves the stored reading unchanged. On the merged tree, plain
-`kpopper check` therefore still passes: it evaluates the record it has.
-`kpopper remeasure --run` runs the declared recipes and tests their changed readings
+`kpop check` therefore still passes: it evaluates the record it has.
+`kpop remeasure --run` runs the declared recipes and tests their changed readings
 as a hypothesis. The output includes:
 
 ```text

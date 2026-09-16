@@ -48,10 +48,10 @@ later source changes by itself.
 ## Author and developer entry points
 
 ```sh
-kpopper document guide
-kpopper document build --html draft.html --manifest evidence.json --out report.html
-kpopper document inspect report.html
-kpopper document refresh report.html --sources sources.json --out report-updated.html
+kpop document guide
+kpop document build --html draft.html --manifest evidence.json --out report.html
+kpop document inspect report.html
+kpop document refresh report.html --sources sources.json --out report-updated.html
 ```
 
 The [author guide](../scripts/document-guide.md) describes exact source selectors,

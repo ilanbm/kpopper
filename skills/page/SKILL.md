@@ -5,7 +5,7 @@ description: "Render, arrange or verify the knowledge record's page: the two-tab
 
 # Page
 
-The page is how a person meets the record: hover anything for where it came from, click to walk to a dependency. Build it with the shipped renderer and never by hand. The command line is `kpopper` where it is on PATH; otherwise the `command` in the `KPOPPER_AGENT_CONTEXT` line the session opener printed (`python3 <plugin>/scripts/cli.py`) runs the same code. Do not guess a path and do not write a second reader - [the method's reference](../kpopper/references/method.md#finding-the-reader) says how to find the installed copy when neither is at hand.
+The page is how a person meets the record: hover anything for where it came from, click to walk to a dependency. Build it with the shipped renderer and never by hand. The command line is `kpop` where it is on PATH; otherwise the `command` in the `KPOPPER_AGENT_CONTEXT` line the session opener printed (`python3 <plugin>/scripts/cli.py`) runs the same code. Do not guess a path and do not write a second reader - [the method's reference](../kpopper/references/method.md#finding-the-reader) says how to find the installed copy when neither is at hand.
 
 `render_page.py` turns any record into one self-contained HTML file, in two tabs: **Record**,
 which nobody writes, and **Now**, the arrangement this session chose. What makes it worth
@@ -13,10 +13,10 @@ opening is the provenance layer - hover anything for where it came from, click t
 dependency, and see the graph around it outlined in place.
 
 ```bash
-kpopper page                        # the page, at .kpopper/build/page.html
-kpopper page --open [--tree]        # and look at it in your own browser
-kpopper page --verify               # deterministic, no browser
-kpopper page --checks .kpopper/build/page.html   # the browser checks, on a page already written
+kpop page                        # the page, at .kpopper/build/page.html
+kpop page --open [--tree]        # and look at it in your own browser
+kpop page --verify               # deterministic, no browser
+kpop page --checks .kpopper/build/page.html   # the browser checks, on a page already written
 ```
 
 The same three, by the scripts themselves - `R` is the reader's path, found as [the method's reference](../kpopper/references/method.md#finding-the-reader) says:

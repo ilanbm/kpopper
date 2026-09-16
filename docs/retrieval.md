@@ -1,9 +1,9 @@
 # Find evidence in a checked session
 
-`kpopper session search` finds candidate records when a question does not map cleanly to a name in the opening. It returns references to the original records at the opening's revision. Read those references and their declared premises before relying on them. Search does not create relationships, verify claims or change the record.
+`kpop session search` finds candidate records when a question does not map cleanly to a name in the opening. It returns references to the original records at the opening's revision. Read those references and their declared premises before relying on them. Search does not create relationships, verify claims or change the record.
 
 For retained ingestion reports and passages in local text source files, the separate
-`kpopper search` command provides source-content discovery and exact source reads. Its
+`kpop search` command provides source-content discovery and exact source reads. Its
 `search-corpus` revision is separate from this checked-session protocol. See the
 [local source retrieval guide](../skills/kpopper/RETRIEVAL.md).
 
@@ -14,11 +14,11 @@ Exact identifiers are preferred over approximate matches. Lexical search covers 
 First [set up checked sessions](checked-sessions.md) and open the project:
 
 ```sh
-kpopper session open
-kpopper session search --revision REV_FROM_OPEN --query 'editable script copies and performance measurements'
-kpopper session search --revision REV_FROM_OPEN --id p.script_copies --search-mode lexical
-kpopper session read --revision REV_FROM_OPEN --ref node:p.script_copies
-kpopper session read --revision REV_FROM_OPEN --ref edges:p.script_copies
+kpop session open
+kpop session search --revision REV_FROM_OPEN --query 'editable script copies and performance measurements'
+kpop session search --revision REV_FROM_OPEN --id p.script_copies --search-mode lexical
+kpop session read --revision REV_FROM_OPEN --ref node:p.script_copies
+kpop session read --revision REV_FROM_OPEN --ref edges:p.script_copies
 ```
 
 Use IDs actually supplied by the project; `--id` also accepts a returned `node:ID` reference. Source handles and field selectors remain read operations. An exact ID selects a record, not a guarantee of relevance: prefer the original question or a faithful translation when its source is not yet known. An unresolved ID means only that the ID was not found; a question may still be covered under a different name. `--branch /known/p` is an optional hint from the current map. `--limit` accepts1–32 candidates (default8); `--tokens` budgets the returned text, including metadata and its final newline (default1,000 reference tokens). Results identify the candidate subset, any omitted whole hits and the root recovery route. If the budget cannot fit a complete response, raise it; records and identifiers are never clipped to fit.
@@ -26,8 +26,8 @@ Use IDs actually supplied by the project; `--id` also accepts a returned `node:I
 When more candidates are needed, pass the returned `next_cursor` and repeat the same query, ordered IDs, branch and mode:
 
 ```sh
-kpopper session search --revision REV_FROM_OPEN --query 'recorded performance limits' --limit 8
-kpopper session search --revision REV_FROM_OPEN --query 'recorded performance limits' --limit 16 --cursor CURSOR_FROM_SEARCH
+kpop session search --revision REV_FROM_OPEN --query 'recorded performance limits' --limit 8
+kpop session search --revision REV_FROM_OPEN --query 'recorded performance limits' --limit 16 --cursor CURSOR_FROM_SEARCH
 ```
 
 Page size and token budget may change. `offset` is the page's starting position; `matched_candidates` counts the entire ranked result, and `next_offset`/`next_cursor` describe the next page. Continuation advances past emitted whole hits only, so a smaller text budget does not skip candidates. If even the next whole hit cannot fit, the search fails explicitly instead of skipping it. Pagination metadata consumes part of the same budget.
@@ -41,8 +41,8 @@ Search results contain references, not evidence excerpts. Existing reads preserv
 Use explicit context reads when a relevant record's premises or dependents would help the task:
 
 ```sh
-kpopper session context --revision REV_FROM_OPEN --id d.choice --direction support --depth 2 --tokens 2000
-kpopper session context --revision REV_FROM_OPEN --id m.reading --direction impact --depth 1 --max-nodes 16
+kpop session context --revision REV_FROM_OPEN --id d.choice --direction support --depth 2 --tokens 2000
+kpop session context --revision REV_FROM_OPEN --id m.reading --direction impact --depth 1 --max-nodes 16
 ```
 
 Replace these example IDs with IDs from the project. Supply1–8 known IDs or exact `node:ID` references. `support` follows declared `rests_on`, `from` and `rule_reads` links; `impact` follows those links in reverse to recorded dependents. The displayed edges retain their original orientation. Names, hierarchy, similarity and prose mentions do not create new relationships.
@@ -73,8 +73,8 @@ Obtain these two files from the [pinned Xenova multilingual-e5-small revision](h
 Place both directly in one local directory as `model_quantized.onnx` and `tokenizer.json`. Their pinned hashes and sizes are verified before loading. Other model variants require an explicit implementation change; a similarly named file is not accepted. Search performs no downloads or remote embedding requests.
 
 ```sh
-kpopper session search --revision REV_FROM_OPEN --query 'recorded observations and unresolved conditions' --embedding-dir /path/to/e5 --search-mode hybrid
-kpopper session serve --embedding-dir /path/to/e5
+kpop session search --revision REV_FROM_OPEN --query 'recorded observations and unresolved conditions' --embedding-dir /path/to/e5 --search-mode hybrid
+kpop session serve --embedding-dir /path/to/e5
 ```
 
 `semantic` ranks by E5 similarity; `hybrid` combines semantic and lexical ranks. Both prefer exact IDs. Without a configured/usable encoder, the response explicitly reports complete-record lexical fallback. Ordinary query text is enough: E5 prefixes are added internally. Translation or project-specific query wording belongs to the calling agent; it must preserve the request's constraints and uncertainty. The server itself never calls a language model or needs its credentials.

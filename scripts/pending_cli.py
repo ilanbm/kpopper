@@ -13,7 +13,7 @@ except ImportError:
 
 
 def parser():
-    result = argparse.ArgumentParser(prog='kpopper pending', description=__doc__)
+    result = argparse.ArgumentParser(prog='kpop pending', description=__doc__)
     result.add_argument('--json', action='store_true', help='return structured state')
     commands = result.add_subparsers(dest='command', required=True)
     status = commands.add_parser('status', help='inspect local capture and publication state')
@@ -91,7 +91,7 @@ def main(argv=None):
         if as_json:
             print(json.dumps({'error': str(error)}, ensure_ascii=False))
         else:
-            print('kpopper pending: ' + str(error), file=sys.stderr)
+            print('kpop pending: ' + str(error), file=sys.stderr)
         return 2
 
 

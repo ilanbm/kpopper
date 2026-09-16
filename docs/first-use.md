@@ -26,12 +26,12 @@ and respects the guidance preference; it does not activate a schedule. The separ
 [followups guide](../skills/kpopper/FOLLOWUPS.md) covers capture and host scheduling.
 
 ```bash
-kpopper open
-kpopper map
-kpopper map --deep
-kpopper config
-kpopper config --guidance off
-kpopper config --guidance on
+kpop open
+kpop map
+kpop map --deep
+kpop config
+kpop config --guidance off
+kpop config --guidance on
 ```
 
 `open` reads the current context. When no record exists it explains the starting options;
@@ -43,13 +43,13 @@ ordinary work is the default and needs no command.
 Select the working directory before the operation:
 
 ```bash
-kpopper --workspace "/path/to/Weekly planning" open
-kpopper --workspace "/path/to/Weekly planning" map --deep
+kpop --workspace "/path/to/Weekly planning" open
+kpop --workspace "/path/to/Weekly planning" map --deep
 ```
 
 Every operation has `--help`. `--json` returns structured output; the existing record
 operations preserve their exit codes and include their output and error text in a JSON
-envelope. For example, `kpopper check --json` still exits nonzero when its check fails.
+envelope. For example, `kpop check --json` still exits nonzero when its check fails.
 When the command is not on PATH, use `python3 <plugin>/scripts/cli.py` with the same arguments.
 
 Mapping currently runs **inside the calling agent session**. It does not launch another LLM
@@ -87,7 +87,7 @@ and are not synced between devices by kpopper.
 The existing record opener still supplies the current view, including an enabled checked
 session view. The first-use path works without the optional session dependencies. Claude,
 Codex and Gemini use the shared opener; Cursor wraps it in its own response format. Environments
-without an active start hook use the shared method's `kpopper open` instruction instead.
+without an active start hook use the shared method's `kpop open` instruction instead.
 Hook wiring and capabilities remain subject to each adapter's documented limitations.
 
 The temporary session baseline can be recorded before a knowledge file exists. If the session
