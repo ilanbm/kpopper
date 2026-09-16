@@ -1767,10 +1767,10 @@ known:
     of: "2026-09-10"
 
   m.skill_bytes_largest:
-    v: 22449
+    v: 22413
+    # Merge resolution 2026-09-16: remeasured combined skill sources at 1e753503c68909ff2097efc98fdcbfb6ab279a78; parent measurements describe different trees.
     # set 2026-09-16: measured by skill_bytes_largest at d474ce46bdab9a4f26f6d5122c3e4a96f5c66ffe after adding plugin attribution guidance
-    # Measured on the skill sources at d474ce4 after adding plugin attribution guidance.
-    scope: {kind: code, environment: kpopper skill sources, commit: d474ce46bdab9a4f26f6d5122c3e4a96f5c66ffe}
+    scope: {kind: code, environment: kpopper skill sources, commit: 1e753503c68909ff2097efc98fdcbfb6ab279a78}
     # set 2026-09-14: Measured by skill_bytes_largest after the recording guidance update
     # set 2026-09-14: measured by skill_bytes_largest after updating the project-mode guidance
     # set 2026-09-12: measured by skill_bytes_largest after the skills learned the entry file and the directory beside it
