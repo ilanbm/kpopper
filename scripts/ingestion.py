@@ -39,7 +39,7 @@ ACTIONABLE = {"MOVED", "UNCHECKED", "BROKEN", "BLOCKED", "UNKNOWN"}
 AUTO_STATES = {"captured", "processing"}
 EVENT_FIELDS = {"event_id", "session_id", "source_quote", "target", "value", "date",
                 "kind", "question", "reason", "updates", "record_sha256",
-                "shareability", "privacy", "scope", "source", "at"}
+                "shareability", "privacy", "scope", "source", "at", "profile"}
 MAX_REPREPARES = 2
 
 
@@ -207,6 +207,8 @@ def _validate_envelope(envelope):
     if not isinstance(quote, str) or not quote.strip():
         raise ValueError("source_quote must be non-empty text")
     out = dict(envelope)
+    if out.get('profile') not in (None, 'core/v1'):
+        raise ValueError('unsupported writer profile')
     scope = out.get('scope')
     if scope is not None:
         if not isinstance(scope, dict) or scope.get('kind') not in ('project', 'external', 'code', 'feature', 'unclear'):
@@ -272,11 +274,15 @@ def _record_world(record):
     files = [Path(x).resolve() for x in P._files_of(paths)]
     if len(files) != 1 or files[0] != record.resolve():
         raise ValueError("multi-file and pointer records require primary review")
-    doc = P.load(paths, read_mode='frozen')
+    doc = P._peer('reasoning.authoring').load(P, paths)
     if doc.hypotheses:
         raise ValueError("a record with hypothesis context requires primary review")
     ids, judgments, fields = P.infer(doc)
-    raw = P.with_builtins(doc, ids, judgments, fields)
+    if P._peer('reasoning.authoring').selected(doc):
+        original = P._peer('reasoning.snapshot').Snapshot.capture(paths, read_mode='frozen')
+        raw = P._peer('reasoning.authoring').World(P, doc, original=original).raw
+    else:
+        raw = P.with_builtins(doc, ids, judgments, fields)
     return doc, ids, judgments, fields, raw
 
 
@@ -298,7 +304,7 @@ def _target(record, name, source_collection=None):
     value = body[own[0]]
     if _basic_type(value) is None:
         raise ValueError(f"{name} is not a scalar reading")
-    if isinstance(value, str) and P.EXPR.search(value) and \
+    if getattr(raw, 'world', None) is None and isinstance(value, str) and P.EXPR.search(value) and \
             any(token in ids for token in P.ID.findall(value)):
         raise ValueError(f"{name} is worked out by an inline expression and cannot be rewritten")
     collections = P.collections_of(doc)
@@ -535,8 +541,11 @@ def capture(envelope, record=None, state_dir=None, start=True):
     return _summary(event)
 
 
-def _graph(record, target=None, measured=False):
+def _graph(record, target=None, measured=False, profile=None):
     doc, ids, judgments, fields, raw = _record_world(record)
+    if getattr(raw, 'world', None) is not None or profile == 'core/v1':
+        return P._peer('reasoning.ingestion').graph(P, record, target, profile)
+
     measurement = None
     if measured and set(ids) & set(P.PAGE):
         try:
@@ -576,6 +585,8 @@ def _graph(record, target=None, measured=False):
 
 
 def _classify(before, after):
+    if before.get('assessment_profile', 'ordinary-reader/v1') != after.get('assessment_profile', 'ordinary-reader/v1'):
+        raise ValueError('mixed assessment profiles in ingestion classification')
     reached = after["reach"]["judgments"]
     fired, actionable = [], []
     for jid in reached:
@@ -792,7 +803,69 @@ class PreparationRefused(ValueError):
         super().__init__('prepared update failed checks: ' + '\n'.join(issues))
 
 
+def _prepare_core(rec, root, event, envelope, before_bytes):
+    """Prepare one final core world; public legacy mark/gate remain dormant."""
+    eid = event['event_id']
+    draft = root / 'drafts' / (eid + '-' + uuid.uuid4().hex)
+    _private_dir(draft)
+    shadow = draft / rec.name
+    _atomic(shadow, before_bytes)
+    brief = P._brief_beside(str(rec))
+    if brief:
+        _atomic(Path(P.layout(shadow)['view']), Path(brief).read_bytes())
+    source_id = 's.ingest_' + eid
+    cited = envelope.get('source', source_id)
+    if cited == source_id and 'source' in envelope:
+        raise ValueError('a report cannot cite its own capture as an existing source')
+    seeds = _report_seeds(envelope)
+    source_body = {'name': 'Captured report', 'file': event['source_file'], 'read': envelope['date'],
+        'recorded_for': 'Update ' + (', '.join(seeds) if isinstance(seeds, list) else seeds) + ' from this captured report.'}
+    if 'source' in envelope:
+        source_body['from'] = cited
+        if 'at' in envelope:
+            source_body['at'] = envelope['at']
+    actions = [{'kind': 'add', 'id': source_id, 'body': source_body,
+                'as_of': envelope['date'], 'into': event['target_snapshot']['source_collection']}]
+    for operation in envelope.get('updates', [{'kind': 'set', 'id': envelope.get('target'), 'value': envelope.get('value')}]):
+        action = copy.deepcopy(operation)
+        action['as_of'] = envelope['date']
+        location = action.pop('at', envelope.get('at', 'entire captured report'))
+        if 'scope' in envelope:
+            action['_record_scope'] = copy.deepcopy(envelope['scope'])
+        if action['kind'] == 'set':
+            action.update(source=cited, at=location)
+        else:
+            body = action['body']
+            if 'scope' in envelope:
+                if 'scope' in body and body['scope'] != envelope['scope']:
+                    raise ValueError('entry scope differs from report scope: ' + action['id'])
+                body['scope'] = copy.deepcopy(envelope['scope'])
+            if 'v' in body or 'quoted' in body:
+                body.update({'from': cited, 'at': location, 'of': envelope['date']})
+        actions.append(action)
+    core = P._peer('reasoning.ingestion')
+    before = _graph(shadow, seeds, profile=envelope.get('profile'))
+    after_bytes, diagnostics = core.stage(P, [str(shadow)], actions, profile=envelope.get('profile'))
+    _atomic(shadow, after_bytes)
+    after = _graph(shadow, seeds)
+    failures = core.gate(P, before, after)
+    if failures:
+        raise PreparationRefused(failures, diagnostics)
+    doc = P._peer('reasoning.authoring').load(P, [str(shadow)])
+    if _report_private(doc, envelope):
+        raise ValueError('private or unclear source permission in prepared core report')
+    # This is the same captured-source ownership test used by the ordinary gate.
+    if not recording_source(source_id, P.bodies(doc)[source_id], str(shadow), _preparing={
+            'record': str(rec), 'state_dir': str(root), 'event_id': eid, 'shadow': str(shadow)}):
+        raise ValueError('prepared core report has no verified recording intent')
+    target_hash = _batch_fingerprint(shadow, envelope['updates']) if 'updates' in envelope else _target(shadow, envelope['target'])['body_sha256']
+    return shadow, after_bytes, after, target_hash, diagnostics
+
+
 def _prepare(rec, root, event, envelope, before_bytes):
+    document = P.yaml.safe_load(before_bytes) or {}
+    if P._peer('reasoning.authoring').selected(document, envelope.get('profile')):
+        return _prepare_core(rec, root, event, envelope, before_bytes)
     eid = event["event_id"]
     draft = root / "drafts" / (eid + "-" + uuid.uuid4().hex)
     _private_dir(draft)
@@ -928,13 +1001,22 @@ def _recover(rec, root, event, envelope, journal):
             now_hash = _batch_fingerprint(rec, envelope["updates"]) if "updates" in envelope else \
                 _target(rec, envelope["target"])["body_sha256"]
             applied = (now_hash == journal["target_after_sha256"] and
-                       P.bodies(P.load([str(rec)])).get(journal["source_id"], {}).get("file")
+                       P.bodies(P._peer('reasoning.authoring').load(P, [str(rec)])).get(journal["source_id"], {}).get("file")
                        == event["source_file"])
         except (Exception, SystemExit):
             applied = False
     if not applied:
         return None
     after = _graph(rec, _report_seeds(envelope))
+    if journal['before_graph'].get('assessment_profile') == 'core/v1' or after.get('assessment_profile') == 'core/v1':
+        try:
+            core_gate = P._peer('reasoning.ingestion')
+            core_gate.verify_receipt(journal.get('core_gate'), journal['before_graph'], journal['prepared_graph'])
+            failures = core_gate.gate(P, journal['before_graph'], after)
+            if failures:
+                raise ValueError('; '.join(failures))
+        except (ValueError, KeyError) as error:
+            return _question(root, event, envelope, str(error), record_committed=True)
     fired, actionable = _classify(journal["before_graph"], after)
     signals = _signals(event["event_id"], envelope, after, fired, actionable)
     return _finish(root, event, envelope, "applied", None, signals,
@@ -1007,7 +1089,7 @@ def _process_event(rec, root, event, crash_after_commit=False):
     for attempt in range(MAX_REPREPARES + 1):
         with _event_lock(rec, event) as project:
             try:
-                original_doc = P.load([str(rec)], read_mode='frozen')
+                original_doc = P._peer('reasoning.authoring').load(P, [str(rec)])
                 if _report_private(original_doc, envelope):
                     return _question(root, event, envelope, 'private or unclear original source permission; entire report retained privately')
                 current_target = _report_target(rec, envelope)
@@ -1019,7 +1101,7 @@ def _process_event(rec, root, event, crash_after_commit=False):
                                  "target changed after capture; the report was retained without overwriting it")
             prepared_target_sha256 = current_target["body_sha256"]
             before_bytes = rec.read_bytes()
-            before_graph = _graph(rec, _report_seeds(envelope))
+            before_graph = _graph(rec, _report_seeds(envelope), profile=envelope.get('profile'))
         try:
             _, integrity = _capture_payload(root, event)
             if integrity:
@@ -1041,6 +1123,12 @@ def _process_event(rec, root, event, crash_after_commit=False):
             "brief_hash": _brief_fingerprint(shadow),
             "diagnostics": diagnostics,
         }
+        if before_graph.get('assessment_profile') == 'core/v1':
+            core_gate = P._peer('reasoning.ingestion')
+            failures = core_gate.gate(P, before_graph, prepared_graph)
+            if failures:
+                return _question(root, event, envelope, '; '.join(failures), validation_issues=failures)
+            journal['core_gate'] = core_gate.receipt(before_graph, prepared_graph)
         _save(journal_path, journal)
         with _event_lock(rec, event) as project:
             _, integrity = _capture_payload(root, event)
@@ -1067,7 +1155,9 @@ def _process_event(rec, root, event, crash_after_commit=False):
                 _save(journal_path, journal)
         if project_capture:
             G = P._peer('pending_grounding')
-            document = P.load([str(shadow)], read_mode='frozen')
+            document = P._peer('reasoning.authoring').load(P, [str(shadow)])
+            if P._peer('reasoning.authoring').selected(document):
+                return _question(root, event, envelope, 'unsupported_capability: core contribution capture requires the versioned contribution writer')
             roots = _report_seeds(envelope)
             roots = [roots] if isinstance(roots, str) else roots
             # The report is independently retained evidence, including when the

@@ -1,0 +1,372 @@
+"""Capability-bound writer worlds; parsing and evidence, never a second evaluator."""
+import copy
+
+from .contract import (PROFILE, capabilities, CapabilityError, OutputBudget,
+                       operational_bounds, validate_value)
+from .evaluate import Evaluator
+from .language import lower, references
+from .snapshot import Snapshot, _fields
+
+
+DECLARATION = {'version': 2, 'profile': PROFILE, 'requires': ['arithmetic/v1']}
+
+
+def load(reader, paths, *, read_mode='frozen'):
+    """Authorize only source collection, never a surrounding legacy computation."""
+    token = reader._CORE_READS.set(True)
+    try:
+        return reader.load(paths, read_mode=read_mode)
+    finally:
+        reader._CORE_READS.reset(token)
+
+
+def selected(document, requested=None):
+    cap = capabilities(document)
+    if requested not in (None, PROFILE):
+        raise CapabilityError('unsupported_capability', 'unsupported writer profile')
+    return requested == PROFILE or cap['profile'] == PROFILE
+
+
+def _executables(document):
+    fields = _fields(document)
+    from ..pending_grounding import entries
+    for nid, (_, body) in entries(document).items():
+        if not isinstance(body, dict):
+            continue
+        for field in ('rule', fields['predicate']):
+            value = body.get(field)
+            if isinstance(value, dict):
+                yield nid, field, value
+            elif isinstance(value, str):
+                try:
+                    lower({'expr': value})
+                except (ValueError, TypeError, SyntaxError, RecursionError):
+                    continue
+                yield nid, field, value
+
+
+def prepare(reader, paths, action):
+    doc = load(reader, paths)
+    try:
+        active = selected(doc, action.get('profile'))
+        aimed = doc.hypotheses.get(action.get('hypothesis'))
+        if aimed is not None and capabilities(aimed['doc'])['profile'] == PROFILE:
+            active = True
+        if not active:
+            # Legacy writers still refuse an attached core proposal.
+            for hyp in doc.hypotheses.values():
+                if capabilities(hyp['doc'])['profile'] == PROFILE:
+                    raise CapabilityError('unsupported_capability', 'use core/v1 consumer')
+            return doc, None
+        if capabilities(doc)['profile'] != PROFILE:
+            worlds = [doc, *(hyp['doc'] for hyp in doc.hypotheses.values())]
+            if any(hyp.get('error') for hyp in doc.hypotheses.values()):
+                raise ValueError('requires explicit migration: unreadable hypothesis')
+            if any(list(_executables(world)) for world in worlds if capabilities(world)['profile'] != PROFILE):
+                raise ValueError('requires explicit migration: existing executable legacy fields')
+            # A frozen writer cannot silently change the live overlay's meaning.
+            live = Snapshot.capture(paths, read_mode='live').to_data()
+            contributions = live['context'].get('pending', {}).get('contributions', [])
+            if contributions:
+                raise ValueError('pending_profile_reconciliation_required')
+        for hyp in doc.hypotheses.values():
+            cap = capabilities(hyp['doc'])
+            if cap['profile'] != PROFILE and list(_executables(hyp['doc'])):
+                raise ValueError('requires explicit migration: executable legacy hypothesis')
+        original = Snapshot.capture(paths, read_mode='frozen')
+        doc = copy.deepcopy(doc)
+        meta = doc.get('meta')
+        if meta is not None and not isinstance(meta, dict):
+            raise ValueError('requires explicit migration: metadata is not a mapping')
+        doc.setdefault('meta', {})['reasoning'] = copy.deepcopy(DECLARATION)
+        return doc, World(reader, doc, original=original)
+    except (ValueError, TypeError, SyntaxError) as error:
+        raise reader.Refused(getattr(error, 'code', 'refused') + ': ' + str(error)) from None
+
+
+class Readings(dict):
+    """A raw-body mapping with an explicit immutable computational world."""
+    def __init__(self, world, bodies):
+        super().__init__(bodies)
+        self.world = world
+
+
+class World:
+    def __init__(self, reader, document, *, original=None, operational_limits=None):
+        self.reader = reader
+        self.document = copy.deepcopy(document)
+        self.fields = _fields(document)
+        self.bounds = operational_bounds(operational_limits)
+        source = original.to_data() if original is not None else None
+        self.snapshot = Snapshot.from_data(document,
+            context=source['context'] if source else None,
+            hypotheses=source['hypotheses'] if source else getattr(document, 'hypotheses', None),
+            as_of=None)
+        self.engine = Evaluator(self.snapshot, operational_limits=self.bounds)
+        self.raw = Readings(self, reader.bodies(document))
+        self.ids = set(self.snapshot.to_data()['nodes'])
+        self._readings = {}
+        self._assessment = None
+        capabilities(document)
+        from .assessment import _history
+        for node in self.snapshot.to_data()['nodes'].values():
+            body = node['body']
+            seen = body.get(self.fields['snapshot']) if isinstance(body, dict) else None
+            for old in seen.values() if isinstance(seen, dict) else ():
+                computed = old.get('computed') if isinstance(old, dict) else None
+                if isinstance(computed, dict) and 'version' in computed:
+                    error = _history(old, document)[2]
+                    if error:
+                        raise reader.Refused(error + ': cannot write against unsupported core history')
+        for nid, field, value in _executables(document):
+            if isinstance(value, dict):
+                try:
+                    self._check_builtin(references(lower(value)))
+                except (ValueError, TypeError, SyntaxError) as error:
+                    raise reader.Refused(f'{nid}.{field}: {error}') from None
+
+    def _check_builtin(self, names):
+        bad = [name for name in names if self.reader.is_builtin(name)]
+        if bad:
+            raise self.reader.Refused('unsupported_core_builtin: ' + ', '.join(sorted(bad)))
+
+    def result(self, nid):
+        from .assessment import dependency_result
+        self._check_builtin([nid])
+        if nid not in self._readings:
+            self._readings[nid] = dependency_result(self.snapshot, nid, self.engine)
+        return copy.deepcopy(self._readings[nid])
+
+    def require(self, result, *, blocked=False):
+        if result['status'] == 'ok':
+            return result
+        reasons = ', '.join(item['code'] for item in result['diagnostics']) or result['status']
+        if blocked and result['status'] == 'unknown' and all(
+                item['code'] == 'missing_reference' for item in result['diagnostics']):
+            return result
+        raise self.reader.Refused('cannot compute core/v1 evidence: ' + reasons)
+
+    @staticmethod
+    def same(left, right):
+        from fractions import Fraction
+        from .contract import digest
+        if type(left) in (int, float) and type(right) in (int, float):
+            return Fraction(str(left)) == Fraction(str(right))
+        return digest(left) == digest(right)
+
+    def value(self, nid):
+        result = self.result(nid)
+        if result['status'] == 'operational_error':
+            self.require(result)
+        if result['status'] != 'ok':
+            return None
+        value = result['value']
+        if value['type'] == 'number':
+            if value['denominator'] == '1':
+                return int(value['numerator'])
+            return {'rational': [value['numerator'], value['denominator']]}
+        return value.get('value')
+
+    def predicate(self, expression, declared=None):
+        if not isinstance(expression, dict):
+            return None
+        tree = lower(expression)
+        self._check_builtin(references(tree))
+        result = self.engine.evaluate(tree, declared=declared if declared is not None else references(tree))
+        if result['status'] == 'operational_error':
+            self.require(result)
+        if result['status'] == 'ok' and result['value']['type'] == 'boolean':
+            return result['value']['value']
+        return None
+
+    def candidate(self, action):
+        doc = copy.deepcopy(self.document)
+        from ..pending_grounding import entries
+        existing = entries(doc)
+        if action['kind'] == 'add':
+            ids, jud, fields = self.reader.infer(doc)
+            collection = existing[action['id']][0] if action['id'] in existing else self.reader._collection_for(
+                doc, ids, jud, fields, action['id'], action['body'], action.get('into'))
+            doc.setdefault(collection, {})[action['id']] = copy.deepcopy(action['body'])
+        elif action['kind'] == 'set' and action['id'] in existing:
+            collection, body = existing[action['id']]
+            doc[collection][action['id']] = self.reader._peer('recording').set_body(body, action)
+        return World(self.reader, doc, original=self.snapshot, operational_limits=self.bounds)
+
+    def normalize(self, action, *, previous_raw=None):
+        if action['kind'] != 'add' or not isinstance(action.get('body'), dict):
+            return action, []
+        action = copy.deepcopy(action)
+        body, nid = action['body'], action['id']
+        predicate = self.fields['deps'] in body
+        field = self.fields['predicate'] if predicate else 'rule'
+        source = body.get(field)
+        previous = (self.raw if previous_raw is None else previous_raw).get(nid)
+        if not isinstance(source, str) or isinstance(previous, dict) and previous.get(field) == source:
+            return action, []
+        def keep(reason):
+            return action, [f'NOTE {nid}.{field} kept as text: {reason}']
+        if not predicate and any(key in body for key in ('v', 'quoted')):
+            return keep('a stored reading and a calculation need distinct fields/entries')
+        try:
+            comparison = self.reader.CMP.match(source) if predicate else None
+            tree = self.reader.E.convert_authored(source, predicate=predicate,
+                legacy_rhs=comparison.group(3) if comparison else None)
+            tree = lower(tree)
+        except (ValueError, TypeError, SyntaxError, RecursionError) as error:
+            return keep(str(error))
+        refs = references(tree)
+        self._check_builtin(refs)
+        if not predicate and any(ref not in self.ids and ref != nid for ref in refs):
+            return keep('unknown or ambiguous reference; use rule={expr: "..."} for an intended calculation')
+        # Resolve potential coercion from authored scalar types, without executing.
+        # Explicit expressions make the typed choice; implicit text stays conservative.
+        def scalar_type(node, visiting=()):
+            if 'ref' in node:
+                ref = node['ref']
+                if ref in visiting or ref not in self.raw:
+                    return None
+                reading = self.raw[ref]
+                if isinstance(reading, dict):
+                    if isinstance(reading.get('rule'), dict):
+                        return scalar_type(lower(reading['rule']), (*visiting, ref))
+                    reading = reading.get('v', reading.get('quoted'))
+                return 'text' if isinstance(reading, str) else 'boolean' if type(reading) is bool else 'number' if type(reading) in (int, float) else None
+            if 'text' in node: return 'text'
+            if 'bool' in node: return 'boolean'
+            if 'num' in node: return 'number'
+            if node.get('op') in ('add', 'sub', 'mul', 'div'):
+                kinds = [scalar_type(child, visiting) for child in node['args']]
+                if any(kind in ('text', 'boolean') for kind in kinds):
+                    raise ValueError('text or boolean arithmetic needs an explicit choice of typed semantics')
+                return 'number'
+            return None
+        try:
+            if predicate:
+                kinds = [scalar_type(child) for child in tree['args']]
+                if 'text' in kinds and ('number' in kinds or all('ref' in child for child in tree['args'])):
+                    return keep('comparisons between text readings need an explicit choice of typed semantics')
+            else:
+                scalar_type(tree)
+        except ValueError as error:
+            return keep(str(error))
+        body[field] = {'expr': source}
+        return action, [f'{nid}.{field}: stored as a readable expression']
+
+    def validate(self, action, doc, ids, jud, fields):
+        P = self.reader
+        raw = self.raw
+        # Structural, citation, identity and permission rules are shared. Their
+        # value/predicate callbacks dispatch through this explicit raw world.
+        checks = [P._known_key, P._sound_dependencies, P._sound_references, P._sound_citation,
+                  P._reopener_is_prose, P._request_names_the_asking,
+                  P._measure_is_a_name, P._nearest_existing, P._forks_on_contradiction]
+        out = []
+        for check in checks:
+            out.extend(check(action, doc, ids, jud, fields, raw))
+        body = action.get('body', {})
+        if action.get('section') or (isinstance(body, dict) and P._arrangement_shaped(body, fields, raw)) \
+                or action['id'] in jud and P.is_arrangement(jud[action['id']], raw):
+            out.append('unsupported_core_builtin: page arrangement/section review requires its own declared inputs')
+        if isinstance(body, dict):
+            deps = body.get(fields['deps'], [])
+            self._check_builtin(deps if isinstance(deps, list) else [])
+        if action['kind'] == 'add' and isinstance(body, dict):
+            candidate = self.candidate(action)
+            for field, predicate in (('rule', False), (fields['predicate'], True)):
+                expression = body.get(field)
+                if not isinstance(expression, dict):
+                    continue
+                try:
+                    tree = lower(expression)
+                    refs = references(tree)
+                    self._check_builtin(refs)
+                    if not predicate and any(key in body for key in ('v', 'quoted')):
+                        out.append('a structured rule cannot also store v or quoted')
+                    result = candidate.engine.evaluate(tree if predicate else {'ref': action['id']},
+                        declared=body.get(fields['deps'], []) if predicate else [action['id']])
+                    self.require(result, blocked=bool(P._blocked_text(body)))
+                    if predicate and result['status'] == 'ok':
+                        if result['value']['type'] != 'boolean':
+                            out.append('predicate must compute a boolean')
+                        elif result['value']['value']:
+                            out.append('wrong_if already holds - the judgment would be born broken')
+                except (ValueError, TypeError, SyntaxError) as error:
+                    out.append(f'{field}: {error}')
+        return out
+
+    def history(self, dep, judgments, page):
+        self._check_builtin([dep])
+        body = self.raw.get(dep)
+        if dep in judgments:
+            b = judgments[dep]['body']
+            return str(b.get('verdict') or b.get('title') or dep)
+        if isinstance(body, dict) and not any(key in body for key in ('v', 'quoted', 'rule', 'collection_scope')):
+            when = body.get('read') or body.get('of')
+            return f'read {when}' if when else self.reader.named(body) or 'present'
+        if isinstance(body, dict) and isinstance(body.get('rule'), str):
+            return body['rule']
+        result = self.require(self.result(dep))
+        history = {'version': 2, 'value': validate_value(result['value']), 'basis': result['basis']}
+        if isinstance(body, dict):
+            field = 'collection_scope' if 'collection_scope' in body else 'rule'
+            if field in body:
+                history['rule'] = copy.deepcopy(body[field])
+        return {'computed': history}
+
+    def assessment(self):
+        from .assessment import assess
+        if self._assessment is None:
+            self._assessment = assess(self.snapshot, operational_limits=self.bounds)
+            for node in self._assessment['nodes'].values():
+                results = [node['computation'], node['state']['falsifier'].get('computation')]
+                results += [dep['computation'] for dep in node['state']['basis']['dependencies'].values()]
+                for result in results:
+                    if result and result['status'] == 'operational_error':
+                        self.require(result)
+        return self._assessment
+
+    def state(self, nid):
+        node = self.assessment()['nodes'][nid]
+        state = node['state']
+        if state['falsifier']['status'] == 'holds':
+            return 'FIRED', 'wrong_if holds under core/v1'
+        if state['integrity']['issues']:
+            return 'UNKNOWN', ', '.join(sorted({issue['code'] for issue in state['integrity']['issues']}))
+        deps = state['basis']['dependencies']
+        if any(dep['comparison'] == 'changed' or dep['rule_changed'] or dep['basis_comparison'] == 'changed' for dep in deps.values()):
+            return 'MOVED', 'dependency value, rule or computational basis changed since review'
+        if node['attention']:
+            return 'REVIEW', 'core/v1 assessment requests review'
+        return 'HOLDS', 'core/v1 assessment has no review finding'
+
+
+def declare(lines, reader):
+    """Change only the generated capability member, preserving surrounding text."""
+    text = '\n'.join(lines)
+    import yaml
+    doc = yaml.safe_load(text) or {}
+    meta = doc.get('meta')
+    if meta is not None and not isinstance(meta, dict):
+        raise reader.Refused('requires explicit migration: metadata is not a mapping')
+    if isinstance(meta, dict) and meta.get('reasoning') == DECLARATION:
+        return
+    encoded = yaml.safe_dump({'reasoning': DECLARATION}, sort_keys=False).rstrip().splitlines()
+    if meta is None:
+        lines[:0] = ['meta:', *['  ' + line for line in encoded], '']
+        return
+    # YAML token positions handle both block and flow metadata without touching
+    # unrelated keys/comments; the existing text editor handles an existing member.
+    if 'reasoning' in meta:
+        reader._replace_in(lines, 'reasoning', copy.deepcopy(DECLARATION))
+        return
+    root = yaml.compose(text)
+    value = next(value for key, value in root.value if key.value == 'meta')
+    if value.flow_style:
+        at = value.start_mark.index + 1
+        item = yaml.safe_dump({'reasoning': DECLARATION}, default_flow_style=True, sort_keys=False, width=100000).strip()[1:-1]
+        text = text[:at] + item + (', ' if meta else '') + text[at:]
+        lines[:] = text.split('\n')
+    else:
+        at = value.start_mark.line
+        lines[at:at] = ['  ' + line for line in encoded]

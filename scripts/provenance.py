@@ -828,6 +828,11 @@ def load(paths, *, read_mode=None):
     doc, seen = Record(), set()
 
     def merge(f, d):
+        # Validate each physical declaration before a later shard can mask it.
+        try:
+            _peer('reasoning.contract').capabilities(d)
+        except _peer('reasoning.contract').CapabilityError as error:
+            raise Refused(error.code + ': ' + str(error)) from None
         seen.add(os.path.abspath(f))
         for k, v in d.items():
             if isinstance(v, dict):
@@ -936,6 +941,10 @@ def _no_deps(unresolved):
 
 def infer(doc):
     collections = collections_of(doc)
+    if isinstance(doc.get('meta'), dict) and 'reasoning' in doc['meta']:
+        collections = dict(collections)
+        collections['meta'] = {key: value for key, value in collections.get('meta', {}).items()
+                               if key != 'reasoning'}
     ids = {k for m in collections.values() for k in m}
     # A computed name is an entry the moment something in the record mentions it.
     for members in collections.values():
@@ -1222,6 +1231,8 @@ def bodies(doc):
 def value_of(raw, ids, k):
     """The comparable value an entry holds right now - v, else the quoted text, else
     nothing: a rule has no value of its own."""
+    if getattr(raw, 'world', None) is not None:
+        return raw.world.value(k)
     b = raw.get(k)
     if not isinstance(b, dict):
         return b if k in ids else None
@@ -1244,6 +1255,8 @@ def evaluate(pred, raw, ids):
     A truth value is matched as one: a record writes `false` and the fact holds Python's
     False, and comparing them as text matches in neither state of the fact.
     """
+    if getattr(raw, 'world', None) is not None:
+        return raw.world.predicate(pred)
     if isinstance(pred, dict):
         try:
             E.validate(pred, predicate=True)
@@ -2618,7 +2631,7 @@ def _field_lines(field, v, ind, width=100, like="bare"):
     """One field as lines at indent `ind`: a scalar folded if long, a list as a flow
     sequence, a mapping as a flow mapping when it fits on the line and one pair per
     line when it does not."""
-    key = " " * ind + field + ": "
+    key = " " * ind + scalar(field, fold=False) + ": "
     children = v.values() if isinstance(v, dict) else v if isinstance(v, list) else []
     if any(isinstance(child, (dict, list)) for child in children):
         dumped = yaml.safe_dump({field: v}, allow_unicode=True, sort_keys=False, width=width - ind)
@@ -2626,10 +2639,10 @@ def _field_lines(field, v, ind, width=100, like="bare"):
     if isinstance(v, list):
         return [key + "[" + ", ".join(scalar(x, fold=False) for x in v) + "]"]
     if isinstance(v, dict):
-        flow = key + "{" + ", ".join(f"{k}: {scalar(x, fold=False)}" for k, x in v.items()) + "}"
+        flow = key + "{" + ", ".join(f"{scalar(k, fold=False)}: {scalar(x, fold=False)}" for k, x in v.items()) + "}"
         if len(flow) <= width:
             return [flow]
-        out = [" " * ind + field + ":"]
+        out = [" " * ind + scalar(field, fold=False) + ":"]
         for k, x in v.items():
             out += _field_lines(k, x, ind + 2, width)
         return out
@@ -2804,6 +2817,8 @@ def snapshot_value(dep, raw, ids, jud, page):
     only a rule, its verdict where it is a judgment, the date a source was read - each
     exactly as the record holds it, so a later comparison sees a move and never a
     paraphrase. None for a page count the page has not taken."""
+    if getattr(raw, 'world', None) is not None:
+        return raw.world.history(dep, jud, page)
     if dep in jud:
         b = jud[dep]["body"]
         return str(b.get("verdict") or b.get("title") or dep)
@@ -2898,6 +2913,8 @@ def which_moved(old, now):
 def _state(name, j, raw, ids, fields, touched=()):
     """-> (tag, reason): a judgment's state after a write - the reading `check` gives it,
     said in terms of what just moved."""
+    if getattr(raw, 'world', None) is not None:
+        return raw.world.state(name)
     blocked = _blocked_text(j["body"])
     missing = [d for d in j["deps"] if d not in ids]
     if missing:
@@ -3011,7 +3028,8 @@ def _known_key(a, doc, ids, jud, fields, raw):
             out.append(f"{k} is counted by the reader, never set")
         else:
             b = raw.get(k)
-            if isinstance(b, dict) and b.get("v") is None and b.get("quoted") is None:
+            if isinstance(b, dict) and b.get("v") is None and b.get("quoted") is None and not (
+                    getattr(raw, 'world', None) is not None and any(key in b for key in ('v', 'quoted'))):
                 out.append(f"{k} holds no value of its own"
                            + (" - it is worked out from a rule; change the rule, not the result"
                               if b.get("rule") else ""))
@@ -3283,7 +3301,7 @@ def _disagreement(a, body, raw, ids, jud, fields, page=None):
         old, new = _verdict_of(jud[k]["body"]), _verdict_of(a["body"])
         if old is None or new is None:
             return None
-        if _same(old, new):
+        if _writer_same(raw, old, new):
             if not is_arrangement(jud[k], raw):
                 return None
             skip = ("born", "replaced")
@@ -3298,7 +3316,7 @@ def _disagreement(a, body, raw, ids, jud, fields, page=None):
     if not isinstance(body, dict):
         return None
     old = value_of(raw, ids, k)
-    if old is None or isinstance(old, (list, dict)):
+    if (old is None and not (getattr(raw, 'world', None) is not None and raw.world.result(k)['status'] == 'ok')) or isinstance(old, (list, dict)):
         return None
     if a["kind"] == "set":
         new = a["value"]
@@ -3307,7 +3325,7 @@ def _disagreement(a, body, raw, ids, jud, fields, page=None):
         new = b.get("v") if b.get("v") is not None else b.get("quoted")
         if new is None or isinstance(new, (list, dict)):
             return None
-    if _same(old, new):
+    if _writer_same(raw, old, new):
         return None
     may, why = may_supersede(k, body, new, raw, ids, jud, fields, a.get("as_of"))
     return "value", old, new, may, why, _read_on(body, raw)
@@ -3498,6 +3516,8 @@ def authored_fields(action, fields):
 
 def normalize_authored(action, ids, fields, raw):
     """Normalize only new/changed expression fields, in their actual writing context."""
+    if getattr(raw, 'world', None) is not None:
+        return raw.world.normalize(action)
     if action['kind'] != 'add' or not isinstance(action.get('body'), dict):
         return action, []
     import copy
@@ -3564,6 +3584,8 @@ VALIDATORS = [_known_key, _sound_dependencies, _sound_references, _sound_citatio
 
 
 def validate(action, doc, ids, jud, fields, raw):
+    if getattr(raw, 'world', None) is not None:
+        return raw.world.validate(action, doc, ids, jud, fields)
     out = []
     for check_ in VALIDATORS:
         out += check_(action, doc, ids, jud, fields, raw)
@@ -4016,6 +4038,13 @@ def _collection_for(doc, ids, jud, fields, nid, body, explicit):
 
 
 class _Reader:
+    # File-path imports need the same writer callbacks and context variables as
+    # package imports, without borrowing another module instance's read permission.
+    def __getattr__(self, name):
+        if name in globals():
+            return globals()[name]
+        raise AttributeError(name)
+
     load = staticmethod(load)
     Record = Record
     collections_of = staticmethod(collections_of)
@@ -4110,7 +4139,7 @@ def _fork(paths, action, diagnostics=None):
     snapshot says so. A hypothesis that does not exist yet is opened by its first write, with
     the day it was born in its head; an entry the base holds is carried over whole and set
     there."""
-    doc = load(paths, read_mode='frozen')
+    doc, base_world = _peer('reasoning.authoring').prepare((sys.modules.get(__name__) or _Reader()), paths, action)
     name, kind, nid = action["hypothesis"], action["kind"], action["id"]
     hyp = doc.hypotheses.get(name)
     if hyp and hyp["error"]:
@@ -4122,9 +4151,15 @@ def _fork(paths, action, diagnostics=None):
     under = layered(doc, hyp)
     ids, jud, fields = infer(under)
     fields = authored_fields(action, fields)
-    raw = with_builtins(under, ids, jud, fields)
-    for k, v in counts(under, ids, jud, fields, bodies(under)).items():
-        raw.setdefault(k, {"name": COMPUTED[k], "v": v})
+    world = _peer('reasoning.authoring').World((sys.modules.get(__name__) or _Reader()), under,
+        original=base_world.snapshot) if base_world is not None else None
+    if world is not None:
+        fields = {**fields, **world.fields}
+        raw = world.raw
+    else:
+        raw = with_builtins(under, ids, jud, fields)
+        for k, v in counts(under, ids, jud, fields, bodies(under)).items():
+            raw.setdefault(k, {"name": COMPUTED[k], "v": v})
     action, expression_notes = normalize_authored(action, ids, fields, raw)
     stamp = action.get("as_of") or datetime.date.today().isoformat()
     refusals = validate(action, under, ids, jud, fields, raw)
@@ -4144,7 +4179,7 @@ def _fork(paths, action, diagnostics=None):
     out, seen = list(expression_notes), {}
     if kind == "set":
         now = value_of(raw, ids, nid)
-        if nid in hyp["ids"] and now is not None and _same(now, action["value"]) \
+        if nid in hyp["ids"] and now is not None and _writer_same(raw2, now, action["value"]) \
                 and not action.get("as_of") and action.get("source") is None:
             print(f"{nid} is already {scalar(action['value'], fold=False)} in hypothesis {name}; "
                   f"nothing written")
@@ -4172,7 +4207,7 @@ def _fork(paths, action, diagnostics=None):
         was = dict(j["snap"])
         seen = _snapshot(j["deps"], raw, ids, jud, paths, brief)
         _, ind, s, e = _locate(lines, nid)
-        changed = [d for d in seen if d not in was or not _same(was[d], seen[d])] + \
+        changed = [d for d in seen if d not in was or not _writer_same(raw, was[d], seen[d])] + \
             [d for d in was if d not in seen]
         if changed:
             e = _seen_lines(lines, s, e, snapshot_field, seen)
@@ -4182,10 +4217,18 @@ def _fork(paths, action, diagnostics=None):
                    + (f"seen rewritten from what the record holds under it ({stamp})" if changed
                       else f"what it saw is what the record holds under it ({stamp})"))
         for d in j["deps"]:
-            if d in was and d in seen and not _same(was[d], seen[d]):
+            if d in was and d in seen and not _writer_same(raw, was[d], seen[d]):
                 out.append("  {}: {} -> {}".format(d, *apart(was[d], seen[d])))
             elif d not in was and d in seen:
                 out.append(f"  {d}: {short(seen[d])} (never checked against it before)")
+    if world is not None:
+        _peer('reasoning.authoring').declare(lines, (sys.modules.get(__name__) or _Reader()))
+        staged = yaml.safe_load("\n".join(lines)) or {}
+        staged.pop('hypothesis', None)
+        _peer('reasoning.contract').capabilities(staged)
+        candidate = layered(doc, dict(hyp, doc=staged))
+        _peer('reasoning.authoring').World((sys.modules.get(__name__) or _Reader()), candidate,
+            original=world.snapshot).assessment()
     made_dir = False
     if fresh and not os.path.isdir(os.path.dirname(hyp["path"])):
         os.makedirs(os.path.dirname(hyp["path"]))
@@ -4193,7 +4236,7 @@ def _fork(paths, action, diagnostics=None):
     _write_text(hyp["path"], "\n".join(lines))
     # read it back: the hypothesis must still load, and hold what was written
     try:
-        doc2 = load(paths)
+        doc2 = _peer('reasoning.authoring').load((sys.modules.get(__name__) or _Reader()), paths) if world is not None else load(paths)
         h2 = doc2.hypotheses.get(name)
         if h2 is None or h2["error"]:
             raise ValueError(h2["error"] if h2 else "the file is not found after the write")
@@ -4201,10 +4244,13 @@ def _fork(paths, action, diagnostics=None):
             raise ValueError(f"{nid} is not in the hypothesis after the write")
         under2 = layered(doc2, h2)
         ids2, jud2, fields2 = infer(under2)
-        raw2 = with_builtins(under2, ids2, jud2, fields2)
+        raw2 = _peer('reasoning.authoring').World((sys.modules.get(__name__) or _Reader()), under2,
+            original=world.snapshot).raw if world is not None else with_builtins(under2, ids2, jud2, fields2)
+        if world is not None:
+            raw2.world.assessment()
         if kind == "set":
             now = value_of(raw2, ids2, nid)
-            if now is None or not _same(now, action["value"]):
+            if (now is None and not (getattr(raw2, 'world', None) and raw2.world.result(nid)['status'] == 'ok')) or not _writer_same(raw2, now, action["value"]):
                 raise ValueError(f"{nid} reads back as {now!r}")
             _check_citation_readback(action, raw2[nid])
     except (Exception, SystemExit) as e:
@@ -4269,6 +4315,8 @@ def _snapshot(deps, raw, ids, jud, paths, brief, first_born=False, value=None):
                              + (" - no arrangement carries born, so nothing dates what was added"
                                 if d == "page.drift" else "")))
         seen[d] = v
+    if getattr(raw, 'world', None) is not None:
+        _peer('reasoning.contract').OutputBudget(raw.world.bounds['output_bytes']).add(seen)
     return seen
 
 
@@ -4309,14 +4357,17 @@ def _check_citation_readback(action, body):
 
 
 def _apply(paths, action, diagnostics=None):
-    doc = load(paths, read_mode='frozen')
+    doc, world = _peer('reasoning.authoring').prepare((sys.modules.get(__name__) or _Reader()), paths, action)
     ids, jud, fields = infer(doc)
     fields = authored_fields(action, fields)
-    raw = with_builtins(doc, ids, jud, fields)
-    # every count the reader can take, whether or not the record mentions it yet: a new
-    # judgment may be the first to rest on one
-    for k, v in counts(doc, ids, jud, fields, bodies(doc)).items():
-        raw.setdefault(k, {"name": COMPUTED[k], "v": v})
+    if world is not None:
+        fields = {**fields, **world.fields}
+        raw = world.raw
+    else:
+        raw = with_builtins(doc, ids, jud, fields)
+        # Legacy counts remain available only to legacy computations.
+        for k, v in counts(doc, ids, jud, fields, bodies(doc)).items():
+            raw.setdefault(k, {"name": COMPUTED[k], "v": v})
     files = _files_of(paths)
     stamp = action.get("as_of") or datetime.date.today().isoformat()
     kind, nid = action["kind"], action["id"]
@@ -4328,7 +4379,7 @@ def _apply(paths, action, diagnostics=None):
     # same build a snapshot runs; so the birth check and the supersede door decide against
     # the numbers --verify decides. A brief that cannot be built leaves the page out of it.
     facts = {}
-    if brief and kind == "add" and isinstance(action["body"], dict) and \
+    if world is None and brief and kind == "add" and isinstance(action["body"], dict) and \
             (_arrangement_shaped(action["body"], fields, raw)
              or (nid in jud and is_arrangement(jud[nid], raw))):
         try:
@@ -4384,9 +4435,9 @@ def _apply(paths, action, diagnostics=None):
     lines = original.split("\n")
     if kind == "set":
         now = value_of(raw, ids, nid)
-        if now is not None and _same(now, action["value"]) and not action.get("as_of") \
+        if now is not None and _writer_same(raw, now, action["value"]) and not action.get("as_of") \
                 and action.get("source") is None and ('_record_scope' not in action or
-                    _same(action['_record_scope'], raw[nid].get('scope') if isinstance(raw[nid], dict) else None)):
+                    _writer_same(raw, action['_record_scope'], raw[nid].get('scope') if isinstance(raw[nid], dict) else None)):
             print(f"{nid} is already {scalar(action['value'], fold=False)}; nothing written")
             return 0
         old, field = _set_in(lines, nid, action["value"], stamp, action.get("why"),
@@ -4412,7 +4463,7 @@ def _apply(paths, action, diagnostics=None):
         was = dict(j["snap"])
         seen = _snapshot(j["deps"], raw, ids, jud, paths, brief)
         _, ind, s, e = _locate(lines, nid)
-        changed = [d for d in seen if d not in was or not _same(was[d], seen[d])] + \
+        changed = [d for d in seen if d not in was or not _writer_same(raw, was[d], seen[d])] + \
             [d for d in was if d not in seen]
         if changed:
             e = _seen_lines(lines, s, e, snapshot_field, seen)
@@ -4421,7 +4472,7 @@ def _apply(paths, action, diagnostics=None):
         out.append(f"review {nid}: " + (f"seen rewritten from what the record holds ({stamp})"
                                         if changed else f"what it saw is what the record holds ({stamp})"))
         for d in j["deps"]:
-            if d in was and d in seen and not _same(was[d], seen[d]):
+            if d in was and d in seen and not _writer_same(raw, was[d], seen[d]):
                 out.append("  {}: {} -> {}".format(d, *apart(was[d], seen[d])))
             elif d not in was and d in seen:
                 out.append(f"  {d}: {short(seen[d])} (never checked against it before)")
@@ -4437,20 +4488,35 @@ def _apply(paths, action, diagnostics=None):
                 entry['reviewed'] = stamp
         entry['scope'] = copy.deepcopy(action['_record_scope'])
         _replace_in(lines, nid, entry)
+    if world is not None:
+        _peer('reasoning.authoring').declare(lines, (sys.modules.get(__name__) or _Reader()))
+        # Validate the exact candidate bytes before publication, including history.
+        staged = yaml.safe_load("\n".join(lines)) or {}
+        _peer('reasoning.contract').capabilities(staged)
+        final_document = copy.deepcopy(doc)
+        for collection, members in staged.items():
+            if isinstance(members, dict) and isinstance(final_document.get(collection), dict):
+                final_document[collection].update(members)
+            else:
+                final_document[collection] = members
+        _peer('reasoning.authoring').World((sys.modules.get(__name__) or _Reader()), final_document,
+            original=world.snapshot).assessment()
     _bump_updated(lines, stamp)
     _write_text(target, "\n".join(lines))
 
     def read_back():
-        doc2 = load(paths)
+        doc2, world2 = _peer('reasoning.authoring').prepare((sys.modules.get(__name__) or _Reader()), paths, action)
         ids2, jud2, fields2 = infer(doc2)
-        raw2 = with_builtins(doc2, ids2, jud2, fields2)
+        raw2 = world2.raw if world2 is not None else with_builtins(doc2, ids2, jud2, fields2)
         if kind == "set":
             now = value_of(raw2, ids2, nid)
-            if now is None or not _same(now, action["value"]):
+            if (now is None and not (getattr(raw2, 'world', None) and raw2.world.result(nid)['status'] == 'ok')) or not _writer_same(raw2, now, action["value"]):
                 raise ValueError(f"{nid} reads back as {now!r}")
             _check_citation_readback(action, raw2[nid])
         elif nid not in ids2 and nid not in (doc2.get("meta") or {}):
             raise ValueError(f"{nid} is not in the record after the write")
+        if world2 is not None:
+            world2.assessment()
         return doc2, ids2, jud2, fields2, raw2
 
     # read it back: the record must still load, and hold what was written. Then a page
@@ -4463,7 +4529,7 @@ def _apply(paths, action, diagnostics=None):
         doc2, ids2, jud2, fields2, raw2 = read_back()
         if seen and brief and any(d in PAGE for d in seen):
             page2, shape, facts2 = _page_side(paths)
-            drift = {d: page2[d] for d in seen if d in PAGE and d in page2 and not _same(seen[d], page2[d])}
+            drift = {d: page2[d] for d in seen if d in PAGE and d in page2 and not _writer_same(raw, seen[d], page2[d])}
             if drift:
                 seen.update(drift)
                 lines2 = io.open(target, encoding="utf-8").read().split("\n")
@@ -4513,6 +4579,12 @@ def _apply(paths, action, diagnostics=None):
     return 0
 
 
+def _writer_same(raw, a, b):
+    if getattr(raw, 'world', None) is not None:
+        return raw.world.same(a, b)
+    return _same(a, b)
+
+
 def _same(a, b):
     if " ".join(str(a).split()) == " ".join(str(b).split()):
         return True
@@ -4525,6 +4597,13 @@ def _same(a, b):
 def _report(paths, kind, nid, doc, ids, jud, fields, raw):
     """The reach, as the write's return value: worked-out entries that read it, every
     judgment reached and its state now, the texts of the brief that saw it."""
+    if getattr(raw, 'world', None) is not None:
+        report = raw.world.assessment()
+        for name, node in report['nodes'].items():
+            if fields['deps'] in (node['body'] if isinstance(node['body'], dict) else {}):
+                tag, why = raw.world.state(name)
+                print(f"  {name} {tag.lower()}: {why}")
+        return
     if kind == "review":
         tag, why = _state(nid, jud[nid], raw, ids, fields)
         print(f"  {nid} {tag.lower()}: {why}")
@@ -4857,7 +4936,7 @@ def write_command(cmd, rest):
     i = 0
     while i < len(rest):
         a = rest[i]
-        if a in ("--why", "--as-of", "--in", "--hypothesis", "--source", "--at", "--shareability", "--scope", "--environment", "--commit", "--event-id", "--contribution-id", "--evidence-root"):
+        if a in ("--why", "--as-of", "--in", "--hypothesis", "--source", "--at", "--profile", "--shareability", "--scope", "--environment", "--commit", "--event-id", "--contribution-id", "--evidence-root"):
             if i + 1 >= len(rest):
                 raise Refused(f"{a} needs a value")
             opts[a[2:].replace("-", "_")] = rest[i + 1]
@@ -4915,6 +4994,8 @@ def write_command(cmd, rest):
         action["body"] = body
     else:
         files = [x for x in args if x.endswith((".yaml", ".yml"))]
+    if 'profile' in opts:
+        action['profile'] = opts['profile']
     action.update({key: opts[key] for key in _peer('recording').ROUTING if key in opts})
     if cmd == "add" and not files:
         code, born = _apply_first_add(action)

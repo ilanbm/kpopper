@@ -87,7 +87,7 @@ def draft(project, action, doc, reason):
 
 
 def private_route(paths, action, reader, project=None):
-    doc = reader.load(paths, read_mode='frozen')
+    doc = reader._peer('reasoning.authoring').load(reader, paths)
     # This locked check is conservative: entry/source privacy cannot be weakened by
     # an edit while a routed local writer waits to acquire the directory.
     value = copy.deepcopy(action.get('body', {}))
@@ -147,7 +147,7 @@ def route(paths, action, reader, project=None, expected_policy=None):
                      for path in G.P._files_of(paths)}
     if not Path(paths[0]).exists():
         source_hashes[str(paths[0])] = None
-    doc = reader.load(paths, read_mode='frozen') if Path(paths[0]).exists() else reader.Record()
+    doc = reader._peer('reasoning.authoring').load(reader, paths) if Path(paths[0]).exists() else reader.Record()
     if any((hashlib.sha256(Path(path).read_bytes()).hexdigest() if Path(path).is_file() else None) != digest
            for path, digest in source_hashes.items()):
         raise ValueError('record changed while preparing the write; retry')
@@ -231,6 +231,8 @@ def route(paths, action, reader, project=None, expected_policy=None):
         raise ValueError('named hypotheses stay in the local record; use feature scope')
     if action['kind'] not in ('add', 'set'):
         raise ValueError('a project contribution requires a complete add or set, not a review refresh')
+    if reader._peer('reasoning.authoring').selected(doc, action.get('profile')):
+        raise ValueError('unsupported_capability: core contribution capture requires the versioned contribution writer')
     # Capture the authored representation, just as the file writer does. In
     # particular readable formulas must be lowered/validated before identity is
     # assigned, and a new judgment needs its initial dependency snapshot.
