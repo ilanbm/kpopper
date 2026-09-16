@@ -12,12 +12,38 @@ git push -u origin HEAD
 gh pr create
 ```
 
-Every pull request runs the tests, then `kpop check`, `kpop consolidate --dry-run`,
-`kpop remeasure --run` and `kpop page --verify` on the two Python versions the package
-claims to support, and fails if `.kpopper/view.yaml` no longer matches the record it renders
-from — the record moved, the view did not. The tests run against the fixture record in
-`tests/fixtures/page`, which exercises every field the reader and the page accept; a new field
-goes there first.
+Every pull request runs the skill/release contracts, CI selection tests, `kpop check`,
+`kpop consolidate --dry-run`, `kpop remeasure --run` and `kpop page --verify` on
+Python 3.13. It fails if `.kpopper/view.yaml` no longer matches the record it renders from.
+The checkout remains GitHub's proposed merge result.
+
+The `changes` job selects the other checks from the entire PR's diff against its merge
+base, including deleted files and both sides of renames. The selection and changed files
+are printed in its log; the job summary lists the selected families.
+
+| Change | Additional checks |
+|---|---|
+| Skills, Markdown documentation or the project's record | None: their contracts and record checks already run. |
+| Standalone-document code, assets or tests | Document Python tests on 3.9 and 3.13, and the offline DOM suite. |
+| Shared Python code, other tests/fixtures, adapters, hooks, packaging metadata, or the check/session workflows | Full Python suite on 3.9 and 3.13, document tests, session checks on three operating systems, and installed-distribution checks. |
+| Native sources, build recipes, bundled runtimes, loader, notices or the distribution probe | All checks, including native compilation and modified-GMP replacement checks on five targets. |
+| The CI selector, native workflow, other CI configuration, an unclassified path, an empty diff or unavailable Git history | All checks. |
+
+The selector lives in `.github/scripts/ci_selection.py`. Keep shared inputs broad and add a
+regression case to `tests/test_ci_selection.py` when changing a classification. It does not
+infer Python dependencies. A change to `pyproject.toml` verifies packaging and installation;
+it does not by itself rebuild unchanged native sources.
+
+Every push to `main` runs all test families, with native compilation selected from the push
+diff. Manual dispatch forces the complete native audit. New commits cancel older checks for
+the same ref. Release and publish workflows keep their own cancellation policies.
+
+`ci-required` runs even if another job fails or is skipped. It requires every selected job
+to succeed and accepts skips only for unselected jobs. This is the aggregate status to use
+when configuring branch protection; changing a workflow does not change repository rules.
+
+The full Python suite uses the fixture record in `tests/fixtures/page`, which exercises
+every field the reader and the page accept; a new field goes there first.
 
 Standalone-document changes also run the offline UI suite with Node 22 or later:
 

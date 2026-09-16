@@ -1,10 +1,12 @@
 name: checked-session
 
 on:
-  pull_request:
-    branches: [main]
-  push:
-    branches: [main]
+  workflow_call:
+  workflow_dispatch:
+
+concurrency:
+  group: checked-session-${{ github.ref }}
+  cancel-in-progress: true
 
 permissions:
   contents: read

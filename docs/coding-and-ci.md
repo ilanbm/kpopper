@@ -55,10 +55,12 @@ Neither command folds hypotheses or rewrites conclusions in this configuration.
 | A comparable premise moved and needs review, without a fired condition. | Reported; does not by itself fail CI. It blocks folding an affected hypothesis. |
 | A condition is explicitly declared uncheckable or needs human interpretation. | Reported according to the record's declarations; not a proof that the decision holds. |
 
-The repository's own [check workflow](../.github/workflows/check.yml) also runs the test
-suite, measurement recipes and page verification. Those steps are specific to its record
-and page configuration; the two-command example above is the basic integration for another
-project.
+The repository's own [check workflow](../.github/workflows/check.yml) always runs measurement
+recipes and page verification, and selects test families from the changed paths. Its
+`ci-required` job checks that every selected family succeeded. See the
+[contribution guide](../CONTRIBUTING.md#the-loop) for selection and main-branch coverage.
+Those steps are specific to this repository; the two-command example above is the basic
+integration for another project.
 
 ## Inspect another branch before merging
 
