@@ -176,8 +176,13 @@ def do_page(args):
     if after:
         # The page's source links are relative to where the page resolves to, so it is opened
         # under that same name: a record reached through a directory link would otherwise start
-        # its links one place and finish them in another.
-        webbrowser.open("file://" + os.path.realpath(out) + ("#tree" if tree else ""))
+        # its links one place and finish them in another. The path is turned into a URL rather
+        # than pasted into one, because a name is not a URL: a record directory called
+        # `notes # 2` ends the address where its name begins, a space cuts it just as short, and
+        # a literal % in it is read as the start of an escape. The one fragment this command
+        # offers is added after that, where a fragment belongs.
+        target = pathlib.Path(os.path.realpath(out)).as_uri()
+        webbrowser.open(target + ("#tree" if tree else ""))
     sys.exit(0)
 
 

@@ -1,5 +1,5 @@
 meta:
-  updated: 2026-09-15
+  updated: 2026-09-16
   name: kpopper
   scope: "What this plugin is for and the decisions that shaped it, kept in its own format -
           the tools eat their own cooking, and every session here opens grounded."
@@ -597,6 +597,23 @@ sources:
          ends are resolved before the subtraction now; a path with no directory link in it produces
          the same link as before, and the 1327-test suite passes."
     read: "2026-09-15"
+  s.2026_09_16_page_address:
+    name: "The session that made the address of a page survive the name of its directory"
+    asked: "The path is pasted into the URL unquoted. A record directory whose name contains # ...
+            makes the browser treat everything from the # onward as a fragment, and the page never
+            loads. Spaces and other characters that need percent-encoding have the same problem, and
+            a literal % in a directory name would be read as an escape. Fix: build the URI properly
+            ... then append #tree when the --tree flag was given ... Add a test covering a record
+            directory whose name contains # and a space"
+    of: "The command that opens a written page built its address by pasting the path after a scheme.
+         A record directory named with a number sign ended the address where its name began: the
+         browser was asked for the path up to that point and read the rest as a fragment, so the page
+         never loaded. The name in the test fixtures, record # שלום, is such a name. The path becomes
+         a URL through the same call that escapes it now, and the one fragment the command offers is
+         added after. A test names a directory with a number sign and a space and reads the address
+         handed to the browser: without the change its fragment is the tail of the directory name
+         rather than the flag."
+    read: "2026-09-16"
   s.background_ingestion:
     name: "Background capture and selective delivery contract"
     file: "skills/kpopper/INGESTION.md"
@@ -1609,6 +1626,26 @@ judgments:
       d.a_comparison_shows_where_it_parts: "where two readings are printed side by side, each is
                                             clipped to where they part rather than to where they
                                             agree; the head is kept only when they part inside it"
+  d.a_name_becomes_a_url_by_escaping:
+    from: s.2026_09_16_page_address
+    name: "A path reaches a browser as a URL it was turned into, never as text pasted after a
+           scheme"
+    rests_on: [s.2026_09_16_page_address, d.link_ends_share_one_spelling]
+    verdict: "The path is converted by the call that escapes it, and any fragment this adds comes
+              after that conversion."
+    because: "A name is not an address. A number sign in a directory name ends the address where the
+              name begins and the rest is read as a fragment; a space cuts it just as short; a
+              literal percent sign is read as the start of an escape. None of these are unusual
+              names, and the fixtures here already carry one. Pasting a path after a scheme also puts
+              the one fragment the command offers where nothing distinguishes it from a fragment the
+              name produced, so the flag and the accident become the same character. Converting first
+              keeps the name inside the path and leaves the fragment to what asked for it."
+    reopened_by: "A destination is wanted that this conversion cannot spell - an address that is not
+                  a file, or a place a browser is given by some other means than a URL."
+    seen:
+      s.2026_09_16_page_address: "read 2026-09-16"
+      d.link_ends_share_one_spelling: "Both ends are resolved before one is subtracted from the
+                                       other, and the page is opened under the name it resolves to."
   d.a_write_joins_its_own_shard:
     rests_on: [s.2026_09_11_read_once, d.scale_by_federation, d.add_places_by_prefix]
     verdict: "a new entry goes into the file whose collection already holds its neighbours - the
