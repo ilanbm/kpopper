@@ -165,8 +165,20 @@ class World:
     def same(left, right):
         from fractions import Fraction
         from .contract import digest
-        if type(left) in (int, float) and type(right) in (int, float):
-            return Fraction(str(left)) == Fraction(str(right))
+        def number(value):
+            if type(value) in (int, float):
+                return Fraction(str(value))
+            if isinstance(value, dict) and set(value) == {'rational'}:
+                parts = value['rational']
+                if isinstance(parts, list) and len(parts) == 2 and all(type(part) in (str, int) for part in parts):
+                    try:
+                        return Fraction(int(parts[0]), int(parts[1]))
+                    except (ValueError, ZeroDivisionError):
+                        pass
+            return None
+        a, b = number(left), number(right)
+        if a is not None and b is not None:
+            return a == b
         return digest(left) == digest(right)
 
     def value(self, nid):
@@ -287,6 +299,10 @@ class World:
             deps = body.get(fields['deps'], [])
             self._check_builtin(deps if isinstance(deps, list) else [])
         if action['kind'] == 'add' and isinstance(body, dict):
+            if fields['deps'] in body and not P._blocked_text(body):
+                predicate = body.get(fields['predicate'])
+                if not isinstance(predicate, dict) and (predicate not in (None, '') or not P._reopened_text(body)):
+                    out.append('condition cannot be computed under core/v1; choose explicit typed operands or declare the unavailable condition with blocked_on')
             candidate = self.candidate(action)
             for field, predicate in (('rule', False), (fields['predicate'], True)):
                 expression = body.get(field)
@@ -367,12 +383,13 @@ def declare(lines, reader):
     if isinstance(meta, dict) and meta.get('reasoning') == DECLARATION:
         return
     encoded = yaml.safe_dump({'reasoning': DECLARATION}, sort_keys=False).rstrip().splitlines()
+    root = yaml.compose(text)
     if meta is None:
-        lines[:0] = ['meta:', *['  ' + line for line in encoded], '']
+        at = root.start_mark.line if root is not None else 0
+        lines[at:at] = ['meta:', *['  ' + line for line in encoded], '']
         return
     # The supported v1/v2 declarations have identical profile/modules. Upgrade
     # only the scalar format version, in either block or flow style.
-    root = yaml.compose(text)
     value = next(value for key, value in root.value if key.value == 'meta')
     if 'reasoning' in meta:
         key, declaration = next((key, child) for key, child in value.value if key.value == 'reasoning')

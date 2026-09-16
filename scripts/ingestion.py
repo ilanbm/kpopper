@@ -269,12 +269,12 @@ def _basic_type(value):
     return None
 
 
-def _record_world(record):
+def _record_world(record, *, core_writer=False):
     paths = [str(record)]
     files = [Path(x).resolve() for x in P._files_of(paths)]
     if len(files) != 1 or files[0] != record.resolve():
         raise ValueError("multi-file and pointer records require primary review")
-    doc = P._peer('reasoning.authoring').load(P, paths)
+    doc = P._peer('reasoning.authoring').load(P, paths) if core_writer else P.load(paths, read_mode='frozen')
     if doc.hypotheses:
         raise ValueError("a record with hypothesis context requires primary review")
     ids, judgments, fields = P.infer(doc)
@@ -286,10 +286,10 @@ def _record_world(record):
     return doc, ids, judgments, fields, raw
 
 
-def _target(record, name, source_collection=None):
+def _target(record, name, source_collection=None, *, core_writer=False):
     if not isinstance(name, str) or not name:
         raise ValueError("the report does not identify one existing target")
-    doc, ids, judgments, fields, raw = _record_world(record)
+    doc, ids, judgments, fields, raw = _record_world(record, core_writer=core_writer)
     bodies = P.bodies(doc)
     body = bodies.get(name)
     if name not in ids or not isinstance(body, dict):
@@ -349,7 +349,7 @@ def _brief_fingerprint(record):
 
 
 def _batch_fingerprint(record, updates):
-    doc, _, _, _, _ = _record_world(record)
+    doc, _, _, _, _ = _record_world(record, core_writer=True)
     raw = P.bodies(doc)
     return _body_hash({op["id"]: raw.get(op["id"]) for op in updates})
 
@@ -379,8 +379,8 @@ def _report_target(record, envelope):
     if expected is not None and _sha(Path(record).read_bytes()) != expected:
         raise ValueError("record changed since the primary read it; reread the premises before resubmitting")
     if "updates" not in envelope and source is None:
-        return _target(record, envelope.get("target"))
-    doc, ids, judgments, fields, raw = _record_world(record)
+        return _target(record, envelope.get("target"), core_writer=True)
+    doc, ids, judgments, fields, raw = _record_world(record, core_writer=True)
     citation_home = _cited_source_collection(doc, ids, judgments, raw, source) if source is not None else None
     if source is not None and not envelope.get("at"):
         operations = envelope.get("updates", [{"kind": "set", "id": envelope.get("target")}])
@@ -388,11 +388,11 @@ def _report_target(record, envelope):
                and not op.get("at") for op in operations):
             raise ValueError("an existing source citation requires at for each reading, or a shared envelope.at")
     if "updates" not in envelope:
-        return _target(record, envelope.get("target"), citation_home)
+        return _target(record, envelope.get("target"), citation_home, core_writer=True)
     homes = {citation_home} if citation_home else set()
     for op in envelope["updates"]:
         if op["kind"] == "set":
-            old = _target(record, op["id"], citation_home)
+            old = _target(record, op["id"], citation_home, core_writer=True)
             if _basic_type(op["value"]) != old["type"]:
                 raise ValueError(op["id"] + " has a different scalar type")
             homes.add(old["source_collection"])
@@ -542,7 +542,7 @@ def capture(envelope, record=None, state_dir=None, start=True):
 
 
 def _graph(record, target=None, measured=False, profile=None):
-    doc, ids, judgments, fields, raw = _record_world(record)
+    doc, ids, judgments, fields, raw = _record_world(record, core_writer=True)
     if getattr(raw, 'world', None) is not None or profile == 'core/v1':
         return P._peer('reasoning.ingestion').graph(P, record, target, profile)
 
@@ -553,7 +553,7 @@ def _graph(record, target=None, measured=False, profile=None):
         except ImportError:
             import page_measurements as M
         measurement = M.snapshot([str(record)])
-        doc, ids, judgments, fields, raw = _record_world(record)
+        doc, ids, judgments, fields, raw = _record_world(record, core_writer=True)
         page, _ = M.read(measurement)
         for key, value in page.items():
             if key in ids:
@@ -859,7 +859,7 @@ def _prepare_core(rec, root, event, envelope, before_bytes):
     if not recording_source(source_id, P.bodies(doc)[source_id], str(shadow), _preparing={
             'record': str(rec), 'state_dir': str(root), 'event_id': eid, 'shadow': str(shadow)}):
         raise ValueError('prepared core report has no verified recording intent')
-    target_hash = _batch_fingerprint(shadow, envelope['updates']) if 'updates' in envelope else _target(shadow, envelope['target'])['body_sha256']
+    target_hash = _batch_fingerprint(shadow, envelope['updates']) if 'updates' in envelope else _target(shadow, envelope['target'], core_writer=True)['body_sha256']
     return shadow, after_bytes, after, target_hash, diagnostics
 
 
@@ -1000,7 +1000,7 @@ def _recover(rec, root, event, envelope, journal):
     if not applied:
         try:
             now_hash = _batch_fingerprint(rec, envelope["updates"]) if "updates" in envelope else \
-                _target(rec, envelope["target"])["body_sha256"]
+                _target(rec, envelope["target"], core_writer=True)["body_sha256"]
             applied = (now_hash == journal["target_after_sha256"] and
                        P.bodies(P._peer('reasoning.authoring').load(P, [str(rec)])).get(journal["source_id"], {}).get("file")
                        == event["source_file"])

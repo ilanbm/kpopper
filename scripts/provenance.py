@@ -1695,6 +1695,18 @@ def flags(ids, jud, fields, raw, defer_counts=False):
             for name, j in jud.items()}
 
 
+def _legacy_computation(doc):
+    """A supplied document needs the same semantic guard as a loaded one."""
+    meta = doc.get('meta')
+    if isinstance(meta, dict) and 'reasoning' in meta:
+        contract = _peer('reasoning.contract')
+        try:
+            contract.capabilities(doc)
+        except contract.CapabilityError as error:
+            raise Refused(error.code + ': ' + str(error)) from None
+        raise Refused('unsupported_capability: use core/v1 consumer')
+
+
 def counts(doc, ids, jud, fields, raw):
     """Every graph.* value, counted from the record alone - and taken before any judgment
     that reads a count is decided. A line drawn against "how many are flagged" could
@@ -1702,6 +1714,7 @@ def counts(doc, ids, jud, fields, raw):
     count never includes what reading it decided, and every surface that then decides
     those judgments - check, the opener, the page - decides them against the same numbers.
     `raw` here is the record's own bodies, without the counts."""
+    _legacy_computation(doc)
     open_ids = {k for g in OPEN for k in (doc.get(g) or {})}
     held = [k for k in ids if k not in jud and not is_builtin(k)]
     fl = flags(ids, jud, fields, {k: v for k, v in raw.items() if not is_builtin(k)}, defer_counts=True)
@@ -1761,6 +1774,7 @@ def builtins(doc, ids, jud, fields, raw):
 def with_builtins(doc, ids, jud, fields):
     """The record's bodies plus the computed ones it mentions: what every reader compares
     values against."""
+    _legacy_computation(doc)
     raw = bodies(doc)
     raw.update(builtins(doc, ids, jud, fields, raw))
     return raw

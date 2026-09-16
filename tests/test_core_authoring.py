@@ -195,6 +195,41 @@ class CoreAuthoring(unittest.TestCase):
             self.write('add', 'm.double', body={'rule': 'p.price * 2'}, profile='core/v1')
         self.assertEqual(self.path.read_bytes(), before)
 
+    def test_first_declaration_follows_yaml_document_marker(self):
+        self.path.write_text('---\n# retained source heading\nknown:\n  p.price: {v: 20}\n')
+        self.write('add', 'm.double', body={'rule': 'p.price * 2'}, profile='core/v1')
+        self.assertEqual(self.read()['meta']['reasoning']['version'], 2)
+        self.assertTrue(self.path.read_text().startswith('---\n# retained source heading\n'))
+
+    def test_fractional_set_round_trips_in_base_and_hypothesis(self):
+        self.write('add', 'p.decimal', body={'v': 20}, profile='core/v1')
+        for hypothesis in (None, 'proposal'):
+            for index, value in enumerate((2.5, 0.1, 3.5)):
+                self.write('set', 'p.decimal', value=value, hypothesis=hypothesis, as_of=f'2026-10-{index + 1:02d}')
+                from scripts.reasoning.authoring import load
+                doc = load(P, [str(self.path)])
+                actual = P.bodies(doc.hypotheses[hypothesis]['doc'] if hypothesis else doc)['p.decimal']['v']
+                self.assertEqual(actual, value)
+
+    def test_unavailable_new_predicate_needs_an_explicit_hole(self):
+        self.write('add', 'p.total', body={'rule': 'p.price * p.quantity'}, profile='core/v1')
+        body = {'rests_on': ['p.price'], 'verdict': 'Unresolved reading', 'wrong_if': 'p.price > "001"'}
+        before = self.path.read_bytes()
+        with self.assertRaisesRegex(P.Refused, 'condition cannot be computed'):
+            self.write('add', 'c.ambiguous', body=body)
+        self.assertEqual(self.path.read_bytes(), before)
+        self.write('add', 'c.ambiguous', body={**body, 'blocked_on': 'A typed interpretation must be chosen'})
+        self.assertEqual(P.bodies(self.read())['c.ambiguous']['wrong_if'], body['wrong_if'])
+
+    def test_supplied_core_document_cannot_enter_legacy_counts(self):
+        self.write('add', 'p.total', body={'rule': 'p.price * p.quantity'}, profile='core/v1')
+        doc = self.read()
+        ids, judgments, fields = P.infer(doc)
+        with self.assertRaisesRegex(P.Refused, 'core/v1 consumer'):
+            P.with_builtins(doc, ids, judgments, fields)
+        with self.assertRaisesRegex(P.Refused, 'core/v1 consumer'):
+            P.counts(doc, ids, judgments, fields, P.bodies(doc))
+
 
 if __name__ == '__main__':
     unittest.main()

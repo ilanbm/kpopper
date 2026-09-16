@@ -115,6 +115,12 @@ class CoreIngestion(unittest.TestCase):
         self.assertEqual(result['state'], 'applied', result)
         self.assertEqual(yaml.safe_load(self.record.read_text())['known']['p.note']['v'], 'p.price + 2')
 
+    def test_shared_legacy_record_adapter_remains_dormant(self):
+        with self.assertRaisesRegex(I.P.Refused, 'core/v1 consumer'):
+            I._record_world(self.record)
+        with self.assertRaisesRegex(I.P.Refused, 'core/v1 consumer'):
+            I._target(self.record, 'p.price')
+
 
 if __name__ == '__main__':
     unittest.main()
