@@ -392,7 +392,9 @@ def check_distribution(python, plugin_root=None):
         assert result["nodes"]["café"]["computation"]["value"] == {"type": "number", "numerator": "2", "denominator": "1"}, result
         assert result["nodes"]["café"]["body"]["note"] == "שלום café", result
         assert "operational_error" not in raw, result
-        print(raw, flush=True)
+        # Preserve the parsed Unicode checks above; CI's own redirected console
+        # may use cp1252 even though the installed CLI correctly emitted UTF-8.
+        print(json.dumps(result, ensure_ascii=True, sort_keys=True), flush=True)
 
 
 def check_candidate_archive(archive):
