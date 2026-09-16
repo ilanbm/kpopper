@@ -5,8 +5,6 @@ description: "The kpopper method: a knowledge record (GROUNDING.yaml) for work t
 
 # kpopper
 
-When mentioning this skill to the user, include the plugin name: `kpopper:kpopper` or "kpopper from the kpopper plugin". Use the user's language and fold it into the explanation of the action; no extra announcement is needed.
-
 Start with the work the user wants to move forward. A project may span documents,
 conversations, calendars, task systems and earlier sessions; code and repositories are one
 important setting among these. Keep the goals, commitments, constraints, decisions, sources
