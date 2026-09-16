@@ -1,5 +1,5 @@
 meta:
-  updated: 2026-09-16
+  updated: 2026-09-17
   name: kpopper
   scope: "What this plugin is for and the decisions that shaped it, kept in its own format -
           the tools eat their own cooking, and every session here opens grounded."
@@ -1330,6 +1330,20 @@ known:
     of: "2026-09-13"
     distinct_from: lit.github_registries
     # distinct 2026-09-14: one reading of the same table, two jobs: the list is what a person reads to see which ecosystems are served, the count is the one number a falsifier can compare against
+  p.history_capture_contract:
+    name: "Committed history capture contract"
+    fidelity: paraphrase
+    v: "typed-history/v2 immutable claims and acts use marker-selected authority; complete committed
+        closure feeds bounded Snapshot history evidence for single-entry frozen or Simple live reads;
+        Advanced live, composite history and public assessment-v3 remain unsupported"
+    scope:
+      kind: code
+      commit: d9857cdb184d1daf4df37c09e71be804e1c46c37
+      environment: "kpopper source at d9857cdb184d1daf4df37c09e71be804e1c46c37"
+    from: "docs/history-contract.md"
+    at: "docs/history-contract.md, History store and Capture and replay; scripts/history_contract.py
+         and scripts/reasoning/snapshot.py at d9857cdb184d1daf4df37c09e71be804e1c46c37"
+    of: "2026-09-17"
   p.hypothesis_homes:
     v: 1
     name: "Places the reader reads hypothesis files from"
@@ -1556,6 +1570,21 @@ known:
          they report a judgment, and by an arrangement's sign when it is written - every surface
          reads that one answer"
     measure: predicate_shapes
+  p.prepared_legacy_recovery:
+    name: "Prepared legacy write and recovery boundary"
+    fidelity: paraphrase
+    v: "Existing-record direct writes and report ingestion retain exact record/archive/view images
+        in a journal; recover routes to the configured record and refuses changed evidence. Matching
+        after images alone does not establish completed operation identity."
+    scope:
+      kind: code
+      commit: d9857cdb184d1daf4df37c09e71be804e1c46c37
+      environment: "kpopper source at d9857cdb184d1daf4df37c09e71be804e1c46c37"
+    from: "docs/history-contract.md"
+    at: "docs/history-contract.md, Prepared legacy publication and recovery and Integrated write
+         scope; scripts/history_transaction.py and scripts/history_recovery_cli.py at
+         d9857cdb184d1daf4df37c09e71be804e1c46c37"
+    of: "2026-09-17"
   p.prior_count_thresholds:
     v: 1
     name: "Lines the count of what rests on priors draws in code - a confidence past which it counts
