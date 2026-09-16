@@ -3457,7 +3457,7 @@ judgments:
               new decision no longer listening, which is a decision, not a side effect: named with
               its reason, kept with the version. {{m.door.replaced_fields_kept}} is what the trail
               keeps."
-    wrong_if: {expr: "m.door.replaced_fields_kept < 6"}
+    wrong_if: "m.door.replaced_fields_kept < 6"
     seen:
       s.2026_09_15_verdict_conflicts_decided: "read 2026-09-15"
       s.2026_09_15_branch_verdict_conflicts: "The session that replayed the two-branch verdict
