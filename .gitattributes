@@ -1,0 +1,6 @@
+# Native source identities and corresponding-source recipes use committed bytes
+# on every build host, including Windows checkouts with core.autocrlf enabled.
+/scripts/reasoning/*.py text eol=lf
+/scripts/reasoning/lean/*.lean text eol=lf
+/scripts/reasoning/third_party/* text eol=lf
+/.github/workflows/reasoning-runtime.yml text eol=lf

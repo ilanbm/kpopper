@@ -3,6 +3,12 @@ GMP 6.3.0 (LGPL-3.0-or-later), libuv 1.52.1 (MIT and additional notices),
 and mimalloc 2.2.3 (MIT). LLVM runtime/header notices are included
 conservatively. The licenses in this directory retain the upstream notices.
 
+Native builds may incorporate GCC startup and runtime code. GCC source notices
+and the GCC Runtime Library Exception 3.1 are retained in GCC-runtime-NOTICES.txt
+and GCC-COPYING.RUNTIME; the accompanying GPLv3 text is COPYINGv3. The Windows
+GMP build uses MinGW-w64; its complete upstream runtime notices are retained in
+MinGW-w64-runtime-LICENSE.txt. These notices apply to their respective components.
+
 GMP is a separate, replaceable shared library. You may modify or replace
 GMP and reverse engineer this combined work to debug those modifications.
 The GMP source and build instructions are supplied in the same distribution

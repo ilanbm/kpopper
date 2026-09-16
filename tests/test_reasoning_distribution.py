@@ -145,6 +145,9 @@ class ArchiveContractTests(unittest.TestCase):
                 self.assertIn("COPYING.LESSERv3", tf.getnames())
                 self.assertIn("COPYINGv3", tf.getnames())
                 self.assertIn(b"build_gmp", tf.extractfile("SOURCE-BUILD.md").read())
+                rebuild = tf.extractfile("SOURCE-BUILD.md").read()
+                self.assertIn(b'export KPOPPER_MSYS2_ROOT="$(cygpath -m /)"', rebuild)
+                self.assertIn(b'-std=gnu17', rebuild)
 
     def test_linux_audit_refuses_accidental_cpp_shared_dependency(self):
         text = "Shared library: [libgmp.so.10]\nShared library: [libstdc++.so.6]"
