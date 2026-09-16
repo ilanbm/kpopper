@@ -549,6 +549,22 @@ def _portable(value, origin, *, authored=False):
     return copy.deepcopy(value)
 
 
+def _publication_context(status):
+    """Bind observed content and disposition, not publisher scheduling telemetry.
+
+    Exact private capture checks still observe the complete publisher state.
+    Only the portable semantic context omits repeated verification timestamps.
+    Authored documents and immutable events never pass through this projection.
+    """
+    result = copy.deepcopy(status)
+    for key in ('retry_at', 'failures'):
+        result.pop(key, None)
+    verified = result.get('last_verified')
+    if isinstance(verified, dict):
+        verified.pop('at', None)
+    return result
+
+
 class CapturedSource:
     """Private exact reader inventory for checked copying; not publication authority."""
     def __init__(self, snapshot, inventory, observation, paths, mode):
@@ -635,15 +651,23 @@ def capture(paths, *, read_mode=None, as_of=None, _retain_source=False):
                'pending': _portable(getattr(doc, 'pending_snapshot', {'ref': None, 'bundles': {}, 'events': []}), origin),
                'conflicts': _portable(getattr(doc, 'knowledge_conflicts', {}), origin, authored=True),
                'target': _portable(target, origin)}
-    context['pending']['observations'] = _portable(getattr(doc, 'publication', initial.get('publication', {})), origin)
-    context['pending']['contributions'] = _portable(getattr(doc, 'contributions', []), origin)
+    context['pending']['observations'] = _portable(_publication_context(
+        getattr(doc, 'publication', initial.get('publication', {}))), origin)
+    context['pending']['contributions'] = _portable([
+        _publication_context(item) for item in getattr(doc, 'contributions', [])], origin)
     files = [{'origin': origin(path), 'sha256': value if kind == 'bytes' else None,
               'status': 'read' if kind == 'bytes' else 'unreadable',
               **({'error': value} if kind == 'unreadable' else {})}
              for (kind, path), value in sorted(inventories[-1].events.items()) if kind in ('bytes', 'unreadable')]
     revision = {'files': sorted(files, key=lambda item: item['origin'])}
     revision['digest'] = digest(revision)
-    snapshot = Snapshot.from_data(doc, context=context, hypotheses=_portable(doc.hypotheses, origin),
+    hypotheses = copy.deepcopy(doc.hypotheses)
+    for hypothesis in hypotheses.values():
+        if hypothesis.get('kind') == 'contribution':
+            head = hypothesis.get('head', {})
+            if isinstance(head.get('publication'), dict):
+                head['publication'] = _publication_context(head['publication'])
+    snapshot = Snapshot.from_data(doc, context=context, hypotheses=_portable(hypotheses, origin),
                                   as_of=as_of, authored_revision=revision)
     if _retain_source:
         return CapturedSource(snapshot, inventories[-1], initial, paths, mode)

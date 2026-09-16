@@ -127,6 +127,9 @@ local referenced evidence, original pending contributions and captured target
 observations. It never runs measurement recipes or grants publication permission.
 Unresolved pointers, unreadable files, mixed layouts and ambiguous conversions
 block a complete copy. External evidence locators remain locators.
+Local evidence must name explicit files; directory locators are refused. Retired
+unsupported contributions remain immutable evidence and are marked incompatible,
+without being interpreted as active core facts.
 
 The `.kpopper-migration` directory contains exact originals, the conversion
 receipt, and typed `original.json` and `candidate.json` snapshots. Replay them
@@ -149,6 +152,10 @@ recomputes conversion evidence under the existing locks. Unsettled contributions
 unreconciled hypotheses, unavailable destinations and incompatible worktrees still
 block it. Advanced destinations must be repository-relative and prepared with
 compatible captured bytes in every participating worktree.
+The destination must be the copied entry record, including its complete shard
+closure. Portable snapshot identity binds publication content and dispositions;
+repeated verification times and retry counters do not change that identity.
+Private capture checks still detect changes during copying.
 
 An exact restoration uses the original record path and the same receipt with
 `--rollback`. It verifies the retained originals and recomputes the conversion;

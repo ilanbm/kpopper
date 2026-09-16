@@ -164,6 +164,9 @@ class Project:
             plan = C.prepare(original, route=False, read_mode='frozen' if rollback else 'live')
             if plan.problems:
                 raise ValueError('migration cannot be validated: ' + '; '.join(map(str, plan.problems)))
+            expected_entry = (candidate.parent / plan.mapping[str(plan.record)]).resolve()
+            if candidate != expected_entry:
+                raise ValueError('migration destination must be the complete mapped entry record')
             witness = Path(receipt) if root == self.root else candidate.parent / C.ARTIFACTS / 'receipt.json'
             if rollback:
                 self._migration_reverse(plan, candidate.parent, witness)

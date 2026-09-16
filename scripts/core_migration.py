@@ -108,7 +108,8 @@ def _capture_evidence(source, record):
         # Absolute, URL and parent-relative locators confer no extra file access.
         if os.path.isabs(name) or '://' in name or '..' in Path(name).parts:
             continue
-        G.M.relative_path(name)
+        # A leading ./ is the same local locator; retain its authored spelling.
+        G.M.relative_path(Path(name).as_posix())
         if '.git' in Path(name).parts or name.startswith(ARTIFACTS + '/'):
             raise ValueError('evidence cannot name administration or migration artifacts')
         path = record.parent / name
@@ -116,6 +117,8 @@ def _capture_evidence(source, record):
             raise ValueError('evidence locator escapes the captured record directory')
         absolute = str(path.absolute())
         source.inventory('exists', absolute, path.exists())
+        if path.is_dir():
+            raise ValueError('directory evidence locator requires an explicit file: ' + name)
         if not path.is_file():
             raise ValueError('missing referenced evidence: ' + name)
         try:
@@ -144,7 +147,10 @@ def _observe_admin(source, project):
 
 
 def _parse(data):
-    doc = P.parse(text=data.decode('utf-8')) or {}
+    try:
+        doc = P.parse(text=data.decode('utf-8')) or {}
+    except (P.yaml.YAMLError, UnicodeDecodeError) as error:
+        raise ValueError('invalid migration record: ' + str(error)) from error
     if not isinstance(doc, dict):
         raise ValueError('migration requires a mapping of collections')
     return doc
@@ -194,20 +200,31 @@ def _patch(data, before, after):
                 edits.append((key.start_mark.index, key.end_mark.index, 'rule'))
                 edits.append((value.start_mark.index, value.end_mark.index, _flow(new['rule'])))
                 removed, added = set(), set()
-            if not removed and not added:
+            if not removed:
+                if added:
+                    extra = {key: new[key] for key in new if key in added}
+                    if node.flow_style:
+                        at = node.start_mark.index
+                        if text[at:at + 1] != '{':
+                            raise ValueError('migration cannot add metadata to an aliased mapping')
+                        edits.append((at + 1, at + 1, _flow(extra)[1:-1] + (', ' if old else '')))
+                    else:
+                        first = node.value[0][0]
+                        at = first.start_mark.index - first.start_mark.column
+                        indent = ' ' * first.start_mark.column
+                        added_text = ''.join(indent + line + '\n' for line in
+                            P.yaml.safe_dump(extra, sort_keys=False, allow_unicode=True).splitlines())
+                        edits.append((at, at, added_text))
                 for key in old.keys() & new.keys():
                     visit(pairs[key][1], old[key], new[key])
                 return
-        edits.append((node.start_mark.index, node.end_mark.index, _flow(new)))
-    # Metadata is separately generated. Do not reserialize a document merely to add it.
-    left, right = copy.deepcopy(before), copy.deepcopy(after)
-    if 'meta' not in left and 'meta' in right:
-        meta = right.pop('meta')
-        offset = tree.start_mark.index if tree is not None else 0
-        edits.append((offset, offset, 'meta: ' + _flow(meta) + '\n'))
+        end = node.end_mark.index
+        while end > node.start_mark.index and text[end - 1] in '\r\n':
+            end -= 1
+        edits.append((node.start_mark.index, end, _flow(new)))
     if tree is None:
         return P.yaml.safe_dump(after, sort_keys=False, allow_unicode=True).encode()
-    visit(tree, left, right)
+    visit(tree, before, after)
     for start, end, value in sorted(edits, reverse=True):
         text = text[:start] + value + text[end:]
     result = text.encode('utf-8')

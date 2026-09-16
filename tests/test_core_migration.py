@@ -94,6 +94,32 @@ class CoreMigration(unittest.TestCase):
                     plan.publish(destination)
                 self.assertFalse(destination.exists())
 
+    def test_generated_metadata_preserves_block_and_flow_source_layouts(self):
+        for style in ('block', 'flow'):
+            with self.subTest(style=style):
+                record = self.fixture(shape=style)
+                if style == 'block':
+                    original = (b'---\n# record heading\nmeta:\n'
+                                b'  updated: 2026-09-16  # retained date\n'
+                                b'  name: Original name  # retained metadata\n\n' + record.read_bytes())
+                else:
+                    original = P.yaml.safe_dump(P.yaml.safe_load(record.read_bytes()),
+                                               default_flow_style=True, width=100000).encode()
+                record.write_bytes(original)
+                plan = C.prepare(record)
+                self.assertFalse(plan.problems, plan.problems)
+                destination = self.root / ('metadata-copy-' + style)
+                plan.publish(destination)
+                copied = (destination / record.name).read_bytes()
+                self.assertEqual(P.yaml.safe_load(copied)['meta']['reasoning']['version'], 2)
+                self.assertEqual(record.read_bytes(), original)
+                if style == 'block':
+                    self.assertIn(b'  updated: 2026-09-16  # retained date\n', copied)
+                    self.assertIn(b'  name: Original name  # retained metadata\n', copied)
+                    self.assertTrue(copied.startswith(b'---\n# record heading\n'))
+                plan.apply()
+                self.assertEqual(record.read_bytes(), copied)
+
     def test_missing_pointer_and_half_moved_sidecar_block_complete_conversion(self):
         record = self.fixture()
         record.write_text(record.read_text() + 'also: missing.yaml\n')
@@ -317,6 +343,25 @@ class CoreMigration(unittest.TestCase):
         evidence.unlink()
         with self.assertRaisesRegex(ValueError, 'missing referenced evidence'):
             C.prepare(record)
+
+    def test_dot_relative_evidence_is_copied_and_directory_locator_is_explicit(self):
+        record = self.fixture()
+        document = P.yaml.safe_load(record.read_bytes())
+        document['sources'] = {'s.local': {'file': './notes.md'}}
+        record.write_text(P.yaml.safe_dump(document))
+        evidence = record.parent / 'notes.md'
+        evidence.write_bytes(b'Retained local evidence')
+        destination = self.root / 'relative-evidence-copy'
+        C.prepare(record).publish(destination)
+        self.assertEqual((destination / 'notes.md').read_bytes(), evidence.read_bytes())
+        self.assertEqual(P.yaml.safe_load((destination / record.name).read_bytes())['sources'], document['sources'])
+        document['sources']['s.local']['file'] = './notes'
+        record.write_text(P.yaml.safe_dump(document))
+        (record.parent / 'notes').mkdir()
+        before = record.read_bytes()
+        with self.assertRaisesRegex(ValueError, 'directory evidence locator.*explicit file'):
+            C.prepare(record)
+        self.assertEqual(record.read_bytes(), before)
 
     def test_admin_credentials_and_permission_are_not_copied_into_export(self):
         record = self.fixture(mode='advanced')
