@@ -230,6 +230,8 @@ def reader_flags(state, judgment, raw, ids, fields, defer_counts=False):
         flags.add('unknown')
     if any(disposition == 'moved' for _, _, _, disposition in P.moved_deps(judgment, raw, ids)):
         flags.add('moved')
+    if P.reversal_pending(judgment['body']) and not P.is_arrangement(judgment, raw):
+        flags.add('reversed')
     return flags
 
 

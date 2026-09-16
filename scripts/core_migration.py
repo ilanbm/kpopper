@@ -60,7 +60,7 @@ def _extend_inventory(source, record):
             raise ValueError('missing referenced migration source: ' + path)
     layout = P.layout(record)
     other = P.layout(record.parent / (P.ENTRY if layout['legacy'] else P.LEGACY_ENTRY))
-    for role in ('view', 'measure', 'session', 'hypotheses'):
+    for role in ('view', 'measure', 'session', 'replaced', 'hypotheses'):
         alternate = other[role]
         inventory('exists', alternate, os.path.exists(alternate))
         if role == 'hypotheses':
@@ -329,7 +329,7 @@ class Plan:
         # Sidecars have reader-owned roles; only parsed record reads are semantic files.
         records = self.record_files
         if not records:
-            sidecars = {layout[key] for key in ('view', 'measure', 'session')}
+            sidecars = {layout[key] for key in ('view', 'measure', 'session', 'replaced')}
             records = [path for path in self.source_files if path not in hypotheses and path not in sidecars]
         self.record_files = records
         if str(self.record) not in records:

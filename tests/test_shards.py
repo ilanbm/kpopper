@@ -240,7 +240,8 @@ class AWriteLandsWhereItsSubjectIs(unittest.TestCase):
                              "verdict=the standup fits the room again",
                              "because=twenty seats against fourteen people",
                              "wrong_if=mtg.attendees > room.seats",
-                             "--as-of", "2026-09-11", self.record)
+                             "--as-of", "2026-09-11", "--drop", "room.spare: the seats alone decide it",
+                             self.record)
         self.assertEqual(code, 0, out + err)
         self.assertIn("supersede mtg.outgrown_the_room", out)
         self.assertEqual(holder(self.root, "mtg.outgrown_the_room"), "meetings.yaml")

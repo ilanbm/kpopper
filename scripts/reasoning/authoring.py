@@ -311,7 +311,8 @@ class World:
         # value/predicate callbacks dispatch through this explicit raw world.
         checks = [P._known_key, P._sound_dependencies, P._sound_references, P._sound_citation,
                   P._reopener_is_prose, P._request_names_the_asking,
-                  P._measure_is_a_name, P._nearest_existing, P._forks_on_contradiction]
+                  P._measure_is_a_name, P._nearest_existing, P._forks_on_contradiction,
+                  P._trail_is_tool_written, P._drops_are_named]
         out = []
         for check in checks:
             out.extend(check(action, doc, ids, jud, fields, raw))

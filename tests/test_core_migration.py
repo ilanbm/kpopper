@@ -15,14 +15,22 @@ from scripts.reasoning.snapshot import Snapshot
 from scripts.reasoning.evaluate import Evaluator
 
 
+REPLACED_BYTES = (b'# Retired predicates keep their original language and history.\r\n'
+                  b'd.retired:\r\n  - verdict: Retired\r\n'
+                  b'    wrong_if: graph.nodes + 2\r\n'
+                  b'    seen: {p.input: 9}\r\n'
+                  b'    born: 2025-01-01\r\n    day: 2026-09-16\r\n'
+                  b'    ended: replaced\r\n')
+
+
 class CoreMigration(unittest.TestCase):
     def setUp(self):
         temporary = tempfile.TemporaryDirectory()
         self.addCleanup(temporary.cleanup)
         self.root = Path(temporary.name)
 
-    def fixture(self, shape='single', mode='simple', name='GROUNDING.yaml'):
-        source = self.root / (shape + '-' + mode)
+    def fixture(self, shape='single', mode='simple', name='GROUNDING.yaml', archive=False):
+        source = self.root / (shape + '-' + mode + ('-legacy' if name == 'PROVENANCE.yaml' else ''))
         source.mkdir()
         doc = {'known': {'p.input': {'v': 10, 'from': 'measured'},
                          'p.result': {'rule': {'expr': 'p.input + 2'}}},
@@ -41,6 +49,8 @@ class CoreMigration(unittest.TestCase):
             path = Path(layout[key])
             path.parent.mkdir(parents=True, exist_ok=True)
             path.write_text(content)
+        if archive:
+            Path(layout['replaced']).write_bytes(REPLACED_BYTES)
         if shape == 'hypothesis':
             path = Path(layout['hypotheses']) / 'alternative.yaml'
             path.parent.mkdir(parents=True)
@@ -53,6 +63,60 @@ class CoreMigration(unittest.TestCase):
             M.git(source, 'add', '.')
             M.git(source, '-c', 'commit.gpgsign=false', 'commit', '-m', 'Source')
         return record
+
+    def test_replacement_archive_copy_matrix_is_exact_and_not_active_data(self):
+        for name in (P.ENTRY, P.LEGACY_ENTRY):
+            for mode in ('simple', 'advanced'):
+                for shape in ('single', 'sharded', 'pointer', 'hypothesis'):
+                    with self.subTest(name=name, mode=mode, shape=shape):
+                        record = self.fixture(shape, mode, name, archive=True)
+                        archive = Path(P.layout(record)['replaced']).resolve()
+                        plan = C.prepare(record)
+                        self.assertEqual(plan.source_files[str(archive)], REPLACED_BYTES)
+                        mapped = plan.mapping[str(archive)]
+                        digest = hashlib.sha256(REPLACED_BYTES).hexdigest()
+                        self.assertIn({'origin': 'origin:' + mapped, 'path': mapped, 'sha256': digest},
+                                      plan.manifest['source'])
+                        self.assertEqual(plan.manifest['destination'][mapped], digest)
+                        self.assertNotIn(str(archive), plan.record_files)
+                        self.assertNotIn('d.retired', plan.candidate.to_data()['document']['judgments'])
+                        self.assertFalse(plan.problems, plan.problems)
+                        destination = self.root / ('archive-copy-' + record.parent.name)
+                        plan.publish(destination)
+                        self.assertEqual(Path(P.layout(destination / name)['replaced']).read_bytes(), REPLACED_BYTES)
+                        self.assertEqual((destination / C.ARTIFACTS / 'originals' / mapped).read_bytes(), REPLACED_BYTES)
+                        self.assertEqual(archive.read_bytes(), REPLACED_BYTES)
+                        self.assertTrue(plan.validate_destination(destination)['valid'])
+
+    def test_replacement_archive_addition_removal_and_bytes_invalidate_preview(self):
+        for name in (P.ENTRY, P.LEGACY_ENTRY):
+            for change in ('addition', 'removal', 'bytes'):
+                with self.subTest(name=name, change=change):
+                    record = self.fixture(change, name=name, archive=change != 'addition')
+                    archive = Path(P.layout(record)['replaced'])
+                    before = record.read_bytes()
+                    plan = C.prepare(record)
+                    if change == 'removal':
+                        archive.unlink()
+                    else:
+                        archive.write_bytes(REPLACED_BYTES + b'# changed\r\n')
+                    destination = self.root / ('stale-archive-' + record.parent.name)
+                    with self.assertRaisesRegex(ValueError, 'changed|unreadable|stale|inventory'):
+                        plan.publish(destination)
+                    self.assertFalse(destination.exists())
+                    with self.assertRaisesRegex(ValueError, 'changed|unreadable|stale|inventory'):
+                        plan.apply()
+                    self.assertEqual(record.read_bytes(), before)
+
+    def test_other_layout_replacement_archive_blocks_copy(self):
+        for name, other_name in ((P.ENTRY, P.LEGACY_ENTRY), (P.LEGACY_ENTRY, P.ENTRY)):
+            with self.subTest(name=name):
+                record = self.fixture(name=name)
+                archive = Path(P.layout(record.parent / other_name)['replaced'])
+                archive.parent.mkdir(parents=True, exist_ok=True)
+                archive.write_bytes(REPLACED_BYTES)
+                with self.assertRaisesRegex(ValueError, 'layout|leftover|moved'):
+                    C.prepare(record)
 
     def test_complete_copy_matrix_and_captured_candidate_replay(self):
         for mode in ('simple', 'advanced'):
@@ -131,7 +195,7 @@ class CoreMigration(unittest.TestCase):
             C.prepare(record)
 
     def test_inplace_only_one_changed_canonical_file_and_history_unchanged(self):
-        record = self.fixture()
+        record = self.fixture(archive=True)
         original = record.read_bytes()
         plan = C.prepare(record)
         result = plan.apply()
@@ -139,6 +203,7 @@ class CoreMigration(unittest.TestCase):
         document = P.yaml.safe_load(record.read_bytes())
         self.assertEqual(document['meta']['reasoning']['version'], 2)
         self.assertEqual(document['judgments']['d.stable']['seen'], {'p.result': 12})
+        self.assertEqual(Path(P.layout(record)['replaced']).read_bytes(), REPLACED_BYTES)
         self.assertNotEqual(original, record.read_bytes())
         other = self.fixture('sharded')
         plan = C.prepare(other)
@@ -405,16 +470,18 @@ class CoreMigration(unittest.TestCase):
             plan.publish(self.root / 'stale-target')
 
     def test_unreadable_sidecar_is_an_explicit_blocker(self):
-        record = self.fixture()
-        path = Path(P.layout(record)['measure'])
+        record = self.fixture(archive=True)
         read_bytes = Path.read_bytes
-        def unreadable(instance):
-            if instance.resolve() == path.resolve():
-                raise PermissionError('fixture unreadable')
-            return read_bytes(instance)
-        with patch.object(Path, 'read_bytes', unreadable):
-            with self.assertRaisesRegex(ValueError, 'unreadable migration sidecar'):
-                C.prepare(record)
+        for role in ('measure', 'replaced'):
+            with self.subTest(role=role):
+                path = Path(P.layout(record)[role])
+                def unreadable(instance):
+                    if instance.resolve() == path.resolve():
+                        raise PermissionError('fixture unreadable')
+                    return read_bytes(instance)
+                with patch.object(Path, 'read_bytes', unreadable):
+                    with self.assertRaisesRegex(ValueError, 'unreadable migration sidecar'):
+                        C.prepare(record)
 
     def test_source_path_alias_has_identical_manifest(self):
         record = self.fixture()

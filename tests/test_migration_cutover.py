@@ -48,6 +48,65 @@ class MigrationCutover(unittest.TestCase):
             project.configure('simple', str(candidate), migration_receipt=receipt)
         self.assertEqual(project.config(), before)
 
+    def test_replacement_archive_cutover_and_rollback_bind_both_closures(self):
+        for name in (M.I.P.ENTRY, M.I.P.LEGACY_ENTRY):
+            with self.subTest(name=name):
+                original = self.fixture(name=name, archive=True)
+                project = M.Project(original.parent)
+                destination = self.root / ('archive-candidate-' + original.parent.name)
+                C.prepare(original).publish(destination)
+                candidate = destination / original.name
+                receipt = destination / C.ARTIFACTS / 'receipt.json'
+                source_archive = Path(M.I.P.layout(original)['replaced'])
+                copied_archive = Path(M.I.P.layout(candidate)['replaced'])
+                retained_archive = destination / C.ARTIFACTS / 'originals' / source_archive.relative_to(original.parent)
+                self.assertEqual(copied_archive.read_bytes(), Fixtures.REPLACED_BYTES)
+                for rollback in (False, True):
+                    target = original if rollback else candidate
+                    before = project.config()
+                    for archive in (source_archive, copied_archive, retained_archive):
+                        for change in ('bytes', 'removal'):
+                            with self.subTest(rollback=rollback, archive=str(archive), change=change):
+                                old = archive.read_bytes()
+                                if change == 'removal':
+                                    archive.unlink()
+                                else:
+                                    archive.write_bytes(old + b'# later edit\r\n')
+                                try:
+                                    with self.assertRaises(ValueError):
+                                        project.configure('simple', str(target), migration_receipt=receipt, rollback=rollback)
+                                    self.assertEqual(project.config(), before)
+                                finally:
+                                    archive.write_bytes(old)
+                    project.configure('simple', str(target), migration_receipt=receipt, rollback=rollback)
+                    self.assertEqual(project.record(), target.resolve())
+                    self.assertEqual(source_archive.read_bytes(), Fixtures.REPLACED_BYTES)
+                    self.assertEqual(copied_archive.read_bytes(), Fixtures.REPLACED_BYTES)
+
+    def test_new_replacement_archive_invalidates_cutover_and_rollback(self):
+        for name in (M.I.P.ENTRY, M.I.P.LEGACY_ENTRY):
+            with self.subTest(name=name):
+                original = self.fixture(name=name)
+                project = M.Project(original.parent)
+                destination = self.root / ('absent-archive-candidate-' + original.parent.name)
+                C.prepare(original).publish(destination)
+                candidate = destination / original.name
+                receipt = destination / C.ARTIFACTS / 'receipt.json'
+                for rollback in (False, True):
+                    target = original if rollback else candidate
+                    before = project.config()
+                    for record in (original, candidate):
+                        archive = Path(M.I.P.layout(record)['replaced'])
+                        archive.write_bytes(Fixtures.REPLACED_BYTES)
+                        try:
+                            with self.assertRaises(ValueError):
+                                project.configure('simple', str(target), migration_receipt=receipt, rollback=rollback)
+                            self.assertEqual(project.config(), before)
+                        finally:
+                            archive.unlink()
+                    project.configure('simple', str(target), migration_receipt=receipt, rollback=rollback)
+                    self.assertEqual(project.record(), target.resolve())
+
     def test_hypothesis_copy_is_not_permission_to_cut_over(self):
         original = self.fixture('hypothesis')
         destination = self.root / 'candidate'
