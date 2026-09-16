@@ -383,5 +383,77 @@ class TheEntryFile(unittest.TestCase):
             self.assertEqual(V.state(t.read()), V.state(s.read()))
 
 
+class TheCostOfHistory(unittest.TestCase):
+    """More history behind the same state must not make the next open read it all again."""
+
+    def test_the_same_contribution_sent_twice_is_one_version(self):
+        with tempfile.TemporaryDirectory() as d:
+            s = V.Store(d)
+            a = V.version("x", "reading", "s.a", {"v": 1}, on=T(1))
+            b = V.version("x", "reading", "s.a", {"v": 1}, on=T(2))
+            self.assertEqual(a["id"], b["id"])
+            s.keep(a)
+            s.keep(b)
+            held = s.read()["x"]
+            self.assertEqual(len(held), 1)
+            self.assertEqual(held[a["id"]]["on"], T(1))
+            # another writer saying the same is another version
+            self.assertNotEqual(V.version("x", "reading", "s.b", {"v": 1}, on=T(1))["id"], a["id"])
+
+    def test_an_open_after_a_thousand_contributions_parses_nothing_it_already_knows(self):
+        n = int(os.environ.get("VERSIONS_BENCH", "1000"))
+        with tempfile.TemporaryDirectory() as d:
+            import time
+            s = V.Store(d)
+            rnd = random.Random(3)
+            subjects = ["m.reading_%d" % i for i in range(20)]
+            heads = {}
+            for i, subj in enumerate(subjects):
+                heads[subj] = reading(s, subj, i, "s.map", T(1), at={"stamp": "00000000"})
+            js = []
+            for i in range(3):
+                js.append(judgment(s, "d.judgment_%d" % i, "verdict %d" % i,
+                                   {subjects[i]: heads[subjects[i]]}, subjects[i] + " > 1000", "s.map", T(1)))
+            t0 = time.time()
+            written = 0
+            while written < n:
+                kind = rnd.random()
+                if kind < 0.6:
+                    subj = rnd.choice(subjects)
+                    heads[subj] = reading(s, subj, rnd.randrange(100), "s.%d" % rnd.randrange(9),
+                                          "2026-09-%02dT%02d:%02d:00+00:00" % (2 + written // 500, (written // 60) % 24, written % 60),
+                                          saw=[heads[subj]], at={"stamp": "%08d" % written})
+                    written += 2
+                else:
+                    j = rnd.choice(js)     # many reviews on few judgments
+                    s.keep(V.act("d.judgment_%d" % js.index(j), "s.%d" % rnd.randrange(9), "review", of=j,
+                                 on="2026-09-%02dT%02d:%02d:00+00:00" % (2 + written // 500, (written // 60) % 24, written % 60)))
+                    written += 1
+            wrote = time.time() - t0
+            files = sum(s.subjects().values())
+            V.Store.parsed = 0
+            t0 = time.time(); full = s.state(fresh=True); t_full = time.time() - t0
+            parsed_full = V.Store.parsed
+            V.Store.parsed = 0
+            t0 = time.time(); again = s.state(); t_open = time.time() - t0
+            parsed_open = V.Store.parsed
+            self.assertEqual(again, full)
+            self.assertEqual(parsed_open, 0)
+            # one more reading parses that subject's files only
+            V.Store.parsed = 0
+            reading(s, subjects[0], 1, "s.z", T(30), saw=[heads[subjects[0]]], at={"stamp": "99999999"})
+            t0 = time.time(); one = s.state(); t_one = time.time() - t0
+            parsed_one = V.Store.parsed
+            self.assertLessEqual(parsed_one, s.subjects()[subjects[0]])
+            self.assertEqual(one["subjects"][subjects[0]]["body"]["v"], 1)
+            t0 = time.time(); rebuilt = s.state(fresh=True); t_rebuild = time.time() - t0
+            self.assertEqual(one, rebuilt)
+            size = sum(os.path.getsize(os.path.join(r, f)) for r, _, fs in os.walk(s.dir) for f in fs)
+            sys.stderr.write("\n  history: %d files, %.1f KiB, written in %.1fs; full state %.2fs (%d parsed); "
+                             "open %.3fs (%d parsed); one update %.3fs (%d parsed); rebuild %.2fs\n"
+                             % (files, size / 1024, wrote, t_full, parsed_full, t_open, parsed_open, t_one,
+                                parsed_one, t_rebuild))
+
+
 if __name__ == "__main__":
     unittest.main()
