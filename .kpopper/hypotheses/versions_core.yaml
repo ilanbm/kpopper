@@ -214,7 +214,7 @@ judgments:
   d.versions_per_subject_one_file_each:
     verdict: "every write is an immutable version of one subject, identified by everything it says -
               its operation and its moment included - and kept as one file of its own under
-              .kpopper/versions/<subject>/, so that two branches writing one subject merge under git
+              .kpopper/history/<subject>/, so that two branches writing one subject merge under git
               without a textual conflict, a retry of one operation is one version, and the
               disagreement is met by the reader, not by a merge marker"
     because: "Two appends to one file per subject conflict under git and one file per version merges

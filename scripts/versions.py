@@ -1,9 +1,15 @@
 """Versions of a subject, the acts on them, and the state computed from both.
 
-A record is a set of immutable versions. A version is one claim about one subject - a
+A record is a set of immutable versions, kept under `.kpopper/history/` beside the entry
+file - the record's source, from which the entry file is built as the current view; not a
+backup, and not a directory to delete. A version is one claim about one subject - a
 reading, a judgment, or an act on other versions - identified by the hash of everything it
 says, kept as one file of its own, so that two branches writing one subject merge under git
-without a textual conflict and the disagreement is met by the reader. A version keeps three
+without a textual conflict and the disagreement is met by the reader. Two things git does
+not do: it carries a history file only once it is committed, so a write is not kept until
+the files it added are committed with the record; and its clean merge of history files is
+not an agreement on the content - the state is computed from the union, its disputes shown,
+and the entry file rebuilt, and a clean merge can hold a dispute nobody has decided. A version keeps three
 relations apart: what its writer saw (`saw`, versions of the same subject known when it was
 written), what its claim rests on (`rests_on`, dependency versions by id), and what an act
 replaced (`over`). It carries the operation that wrote it (`op`, minted once, so a retry is
@@ -27,7 +33,7 @@ import uuid
 import yaml
 
 HOME = ".kpopper"
-STORE = "versions"
+STORE = "history"
 ENTRY = "GROUNDING.yaml"
 RULES = {"version": 2, "self_review_counts": False}
 RESERVATIONS = ("corrected", "refuted", "contested", "divergent", "unreviewed", "proposed", "fired",
@@ -63,7 +69,7 @@ def _now():
 def version(subject, kind, by, body, saw=(), at=None, applies=None, on=None, op=None):
     """One claim about a subject -> the version, with its id. `kind` is reading or judgment;
     `saw` the ids of this subject's versions the writer knew; `at` the source's own clock
-    value, {day|stamp|version|commit: ...}, when the source has one; `applies` the time the
+    value, {day|stamp|revision|commit: ...}, when the source has one; `applies` the time the
     datum is about, when it matters; `on` the moment recorded; `op` the operation - minted
     once by the writer and sent again on a retry, so the retry is this very version, while a
     new observation of the same value is a new operation and a new version."""
@@ -127,6 +133,13 @@ class Store(object):
                     raise IntegrityError("a version file named " + v["id"] + " already holds other content")
             return v["id"]
         os.makedirs(os.path.dirname(p), exist_ok=True)
+        readme = os.path.join(self.dir, "README")
+        if not os.path.isfile(readme):
+            with io.open(readme, "w", encoding="utf-8") as f:
+                f.write("This directory is the record's source: every claim, decision and act ever kept, one "
+                        "file each, named by what it says. The entry file beside it is the current view built "
+                        "from these files. It is not a backup: without it the view cannot be rebuilt, and "
+                        "what stood before is gone.\n")
         with io.open(p, "w", encoding="utf-8") as f:
             f.write(text)
         return v["id"]
@@ -268,7 +281,7 @@ class Store(object):
 
 
 # ── the source's own clock ───────────────────────────────────────────────────
-def _version_key(v):
+def _revision_key(v):
     return tuple(int(p) if p.isdigit() else p for p in re.split(r"[.\-]", str(v)))
 
 
@@ -287,7 +300,7 @@ def _instant(s):
 
 def clock_key(at):
     """A sortable key for a clock value of a totally ordered kind - a day, a stamp as an
-    instant, a version as a tuple - or None when the kind orders only along ancestry or the
+    instant, a revision as a tuple - or None when the kind orders only along ancestry or the
     value does not read."""
     if not isinstance(at, dict) or len(at) != 1:
         return None
@@ -296,14 +309,14 @@ def clock_key(at):
         return str(v) if re.match(r"^\d{4}-\d{2}-\d{2}$", str(v)) else None
     if k == "stamp":
         return _instant(v)
-    if k == "version":
-        return _version_key(v)
+    if k == "revision":
+        return _revision_key(v)
     return None
 
 
 def clock_order(a, b, ancestry=None):
     """How two clock values of one source relate -> -1, 0, 1 when the source's clock orders
-    them, None when it does not: a day, a stamp and a version are totally ordered; a commit
+    them, None when it does not: a day, a stamp and a revision are totally ordered; a commit
     is ordered only along ancestry, which `ancestry(x, y)` answers - is x an ancestor of y."""
     if not isinstance(a, dict) or not isinstance(b, dict) or len(a) != 1 or len(b) != 1:
         return None

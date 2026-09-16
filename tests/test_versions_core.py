@@ -109,19 +109,19 @@ class TheSixExperiments(unittest.TestCase):
     def test_2_the_same_source_version_read_on_another_day_is_not_an_update(self):
         with tempfile.TemporaryDirectory() as d:
             s = V.Store(d)
-            a = reading(s, "report.revenue", 100, "s.a", T(1), at={"version": 7})
+            a = reading(s, "report.revenue", 100, "s.a", T(1), at={"revision": 7})
             # b saw a's reading, read version 7 again a day later, and found 120
-            reading(s, "report.revenue", 120, "s.b", T(2), saw=[a], at={"version": 7})
+            reading(s, "report.revenue", 120, "s.b", T(2), saw=[a], at={"revision": 7})
             self.assertEqual(status(s, "report.revenue")["status"], "contested")
 
     def test_3_a_correction_the_source_publishes_the_same_day_replaces_and_marks(self):
         with tempfile.TemporaryDirectory() as d:
             s = V.Store(d)
-            a = reading(s, "report.revenue", 100, "s.a", T(1), at={"version": 7})
+            a = reading(s, "report.revenue", 100, "s.a", T(1), at={"revision": 7})
             j = judgment(s, "d.on_track", "on track", {"report.revenue": a}, "report.revenue < 90", "s.a", T(1))
             # the source's own correction, an hour later: version 8 corrects 7
             b = reading(s, "report.revenue", 120, "rule:source", "2026-09-01T13:00:00+00:00", saw=[a],
-                        at={"version": 8}, over=[])
+                        at={"revision": 8}, over=[])
             s.keep(V.act("report.revenue", "rule:source", "correct", of=b, over=[a],
                          because="the source's revision 8 corrects revision 7", on="2026-09-01T13:00:00+00:00"))
             e = status(s, "report.revenue")
@@ -291,9 +291,9 @@ class ThePromises(unittest.TestCase):
     def test_a_historical_dependency_is_moved_not_lost(self):
         with tempfile.TemporaryDirectory() as d:
             s = V.Store(d)
-            r24 = reading(s, "revenue.latest", 100, "s.a", T(1), at={"version": "2024"})
+            r24 = reading(s, "revenue.latest", 100, "s.a", T(1), at={"revision": "2024"})
             j = judgment(s, "d.growth", "growing", {"revenue.latest": r24}, "revenue.latest < 50", "s.a", T(1))
-            reading(s, "revenue.latest", 130, "s.a", T(2), saw=[r24], at={"version": "2025"})
+            reading(s, "revenue.latest", 130, "s.a", T(2), saw=[r24], at={"revision": "2025"})
             e = status(s, "d.growth")
             self.assertEqual(e["deps"], {"revenue.latest": "moved"})
             self.assertEqual(e["reservations"], [])
@@ -415,10 +415,10 @@ class TheCostOfHistory(unittest.TestCase):
         with tempfile.TemporaryDirectory() as d:
             repo(d)
             s = V.Store(d)
-            r0 = reading(s, "x", 0, "s.map", T(1), at={"version": 1})
+            r0 = reading(s, "x", 0, "s.map", T(1), at={"revision": 1})
             V.write_entry(s)
             commit(d, "base")
-            same = V.version("x", "reading", "s.a", {"v": 1}, saw=[r0], at={"version": 2}, on=T(2), op="op-7")
+            same = V.version("x", "reading", "s.a", {"v": 1}, saw=[r0], at={"revision": 2}, on=T(2), op="op-7")
             for br in ("a", "b"):
                 git(d, "switch", "-qc", br, "main")
                 s.keep(same)
@@ -445,7 +445,7 @@ class TheCostOfHistory(unittest.TestCase):
             subjects = ["m.reading_%d" % i for i in range(20)]
             heads = {}
             for i, subj in enumerate(subjects):
-                heads[subj] = reading(s, subj, i, "s.map", T(1), at={"version": 0})
+                heads[subj] = reading(s, subj, i, "s.map", T(1), at={"revision": 0})
             js = []
             for i in range(3):
                 js.append(judgment(s, "d.judgment_%d" % i, "verdict %d" % i,
@@ -458,7 +458,7 @@ class TheCostOfHistory(unittest.TestCase):
                     subj = rnd.choice(subjects)
                     heads[subj] = reading(s, subj, rnd.randrange(100), "s.%d" % rnd.randrange(9),
                                           "2026-09-%02dT%02d:%02d:00+00:00" % (2 + written // 500, (written // 60) % 24, written % 60),
-                                          saw=[heads[subj]], at={"version": written + 1})
+                                          saw=[heads[subj]], at={"revision": written + 1})
                     written += 2
                 else:
                     j = rnd.choice(js)     # many reviews on few judgments
@@ -477,7 +477,7 @@ class TheCostOfHistory(unittest.TestCase):
             self.assertEqual(again, full)
             self.assertEqual(parsed_open, 0)
             # one more reading parses that subject's files only
-            reading(s, subjects[0], 1, "s.z", T(30), saw=[heads[subjects[0]]], at={"version": 99999999})
+            reading(s, subjects[0], 1, "s.z", T(30), saw=[heads[subjects[0]]], at={"revision": 99999999})
             V.Store.parsed = 0
             t0 = time.time(); one = s.state(); t_one = time.time() - t0
             parsed_one = V.Store.parsed
@@ -507,28 +507,28 @@ class TheCounterexamples(unittest.TestCase):
     def test_two_roots_that_never_met_are_two_heads_and_no_moment_decides(self):
         with tempfile.TemporaryDirectory() as d:
             a, b = V.Store(os.path.join(d, "a")), V.Store(os.path.join(d, "b"))
-            reading(a, "x", 100, "s.a", T(2), at={"version": 7})
-            reading(b, "x", 120, "s.b", T(1), at={"version": 7})     # recorded earlier
+            reading(a, "x", 100, "s.a", T(2), at={"revision": 7})
+            reading(b, "x", 120, "s.b", T(1), at={"revision": 7})     # recorded earlier
             a.union_from(b.root)
             self.assertEqual(status(a, "x")["status"], "contested")
             # and two roots that say the same are one claim held twice
             c = V.Store(os.path.join(d, "c"))
-            reading(c, "y", 1, "s.a", T(2), at={"version": 7})
-            reading(c, "y", 1, "s.b", T(1), at={"version": 7})
+            reading(c, "y", 1, "s.a", T(2), at={"revision": 7})
+            reading(c, "y", 1, "s.b", T(1), at={"revision": 7})
             e = status(c, "y")
             self.assertEqual((e["status"], e["agreed"], e["body"]["v"]), ("accepted", 2, 1))
 
     def test_a_later_clock_of_another_source_supersedes_nothing(self):
         with tempfile.TemporaryDirectory() as d:
             s = V.Store(d)
-            v = V.version("x", "reading", "s.a", {"v": 100, "from": "source-a"}, at={"version": 1}, on=T(1))
+            v = V.version("x", "reading", "s.a", {"v": 100, "from": "source-a"}, at={"revision": 1}, on=T(1))
             s.keep(v)
-            w = V.version("x", "reading", "s.b", {"v": 120, "from": "source-b"}, saw=[v["id"]], at={"version": 2}, on=T(2))
+            w = V.version("x", "reading", "s.b", {"v": 120, "from": "source-b"}, saw=[v["id"]], at={"revision": 2}, on=T(2))
             s.keep(w)
             s.keep(V.act("x", "s.b", "accept", of=w["id"], on=T(2)))
             self.assertEqual(status(s, "x")["status"], "contested")
             # the same source, a later revision: superseded by rule, and settle records it
-            u = V.version("x", "reading", "s.c", {"v": 130, "from": "source-b"}, saw=[w["id"]], at={"version": 3}, on=T(3))
+            u = V.version("x", "reading", "s.c", {"v": 130, "from": "source-b"}, saw=[w["id"]], at={"revision": 3}, on=T(3))
             s.keep(u)
             s.keep(V.act("x", "s.c", "accept", of=u["id"], on=T(3)))
             st = s.state()
@@ -606,7 +606,7 @@ class TheCounterexamples(unittest.TestCase):
         with tempfile.TemporaryDirectory() as d:
             s = V.Store(d)
             for i in range(1000):
-                reading(s, "x", 1, "s.%d" % i, T(1), at={"version": 7})
+                reading(s, "x", 1, "s.%d" % i, T(1), at={"revision": 7})
             t0 = time.time(); e = status(s, "x"); took = time.time() - t0
             self.assertEqual((e["status"], e["agreed"]), ("accepted", 1000))
             self.assertLess(took, 3.0)
@@ -618,7 +618,7 @@ class TheCounterexamples(unittest.TestCase):
                 reading(s, "n.%d" % i, i, "s.a", T(1))
                 V.write_entry(s)
             names = {n for _, _, fs in os.walk(s.dir) for n in fs}
-            self.assertEqual({n for n in names if not n.endswith(".yaml")}, {".index.json", ".gitignore"})
+            self.assertEqual({n for n in names if not n.endswith(".yaml")}, {".index.json", ".gitignore", "README"})
 
     def test_a_deleted_subject_is_refused_and_the_file_left_as_it_is(self):
         with tempfile.TemporaryDirectory() as d:
@@ -653,13 +653,13 @@ class TheCounterexamples(unittest.TestCase):
         with tempfile.TemporaryDirectory() as d:
             repo(d)
             s = V.Store(d)
-            r0 = reading(s, "x", 0, "s.map", T(1), at={"version": 0})
+            r0 = reading(s, "x", 0, "s.map", T(1), at={"revision": 0})
             commit(d, "base")
             git(d, "switch", "-qc", "a")
-            reading(s, "x", 1, "s.a", T(2), saw=[r0], at={"version": 1})
+            reading(s, "x", 1, "s.a", T(2), saw=[r0], at={"revision": 1})
             commit(d, "a")
             git(d, "switch", "-qc", "b", "main")
-            reading(s, "x", 2, "s.b", T(2), saw=[r0], at={"version": 1})
+            reading(s, "x", 2, "s.b", T(2), saw=[r0], at={"revision": 1})
             commit(d, "b")
             git(d, "switch", "-q", "a")
             self.assertEqual(s.state()["subjects"]["x"]["body"]["v"], 1)          # the index warms on a
@@ -750,11 +750,11 @@ class TheActsThatRemainOpen(unittest.TestCase):
     def test_an_untouched_rendering_of_an_agreement_minted_nothing_after_the_source_moved(self):
         with tempfile.TemporaryDirectory() as d:
             s = V.Store(d)
-            a = reading(s, "x", 1, "s.a", T(1), at={"version": 7})
-            b = reading(s, "x", 1, "s.b", T(1), at={"version": 7})
+            a = reading(s, "x", 1, "s.a", T(1), at={"revision": 7})
+            b = reading(s, "x", 1, "s.b", T(1), at={"revision": 7})
             text, stamp = V.render(s)
             self.assertEqual(status(s, "x")["agreed"], 2)
-            reading(s, "x", 2, "s.c", T(2), saw=[a, b], at={"version": 8})
+            reading(s, "x", 2, "s.c", T(2), saw=[a, b], at={"revision": 8})
             self.assertEqual(V.ingest(s, text, by="hand", on=T(3)), [])
             self.assertEqual((status(s, "x")["status"], status(s, "x")["body"]["v"]), ("accepted", 2))
 
@@ -776,7 +776,7 @@ class TheActsThatRemainOpen(unittest.TestCase):
     def test_an_edit_answers_only_the_acts_its_copy_showed(self):
         with tempfile.TemporaryDirectory() as d:
             s = V.Store(d)
-            a = reading(s, "x", 1, "s.a", T(1), at={"version": 7})
+            a = reading(s, "x", 1, "s.a", T(1), at={"revision": 7})
             j = judgment(s, "d.j", "j", {"x": a}, "x > 5", "s.a", T(1))
             text, stamp = V.render(s)
             # after the copy was rendered, the reading is refuted - what rests on it says so
@@ -792,11 +792,11 @@ class TheActsThatRemainOpen(unittest.TestCase):
     def test_a_corroborating_observation_does_not_unreview_a_decision(self):
         with tempfile.TemporaryDirectory() as d:
             s = V.Store(d)
-            r1 = reading(s, "x", 1, "s.a", T(1), at={"version": 7})
+            r1 = reading(s, "x", 1, "s.a", T(1), at={"revision": 7})
             j = judgment(s, "d.j", "j", {"x": r1}, "x > 5", "s.a", T(1), saw=["elsewhere"])
             s.keep(V.act("d.j", "ilan", "review", of=j, read={"x": r1}, on=T(2)))
             self.assertEqual(status(s, "d.j")["status"], "accepted")
-            r2 = reading(s, "x", 1, "s.b", T(3), at={"version": 7})     # the same, seen again
+            r2 = reading(s, "x", 1, "s.b", T(3), at={"revision": 7})     # the same, seen again
             self.assertEqual(sorted(status(s, "x")["heads"]), sorted([r1, r2]))
             self.assertEqual(status(s, "d.j")["status"], "accepted")
 
