@@ -5,6 +5,8 @@ description: "Test, fold or refute hypotheses beside the knowledge record, and r
 
 # Consolidate
 
+When mentioning this skill to the user, include the plugin name: `kpopper:consolidate` or "consolidate from the kpopper plugin". Use the user's language and fold it into the explanation of the action; no extra announcement is needed.
+
 A hypothesis is a claim the base does not yet hold: a refused reading, a proposal not yet approved, a branch's record, a what-if. Nothing here decides for a person; the dry run tests, the fold and the refutation are the person's acts, recorded so the question never returns. The command line is `kpopper` where it is on PATH; otherwise the `command` in the `KPOPPER_AGENT_CONTEXT` line the session opener printed (`python3 <plugin>/scripts/cli.py`) runs the same code. Do not guess a path and do not write a second reader - [the method's reference](../kpopper/references/method.md#finding-the-reader) says how to find the installed copy when neither is at hand.
 
 One record is written by everyone, from any session or branch, as long as the write is consistent
