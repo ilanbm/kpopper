@@ -5,8 +5,6 @@ description: "Create or refresh a standalone HTML document - a report, update, b
 
 # Document
 
-When mentioning this skill to the user, include the plugin name: `kpopper:document` or "document from the kpopper plugin". Use the user's language and fold it into the explanation of the action; no extra announcement is needed.
-
 For an ordinary HTML report, summary, brief or other document, use the standalone
 workflow below. Create the user's content and design,
 and create the source/check mapping while writing it; the user does not prepare that
@@ -15,6 +13,8 @@ mapping or ask for a separate evidence step. Deliver the single HTML produced by
 author guide before authoring, use actual available sources, and keep missing evidence
 and inferred prose explicit. A one-off document does not require a new GROUNDING.yaml,
 a workspace map, or unrelated record setup. Requests for the record's own page use the [page skill](../page/SKILL.md).
+
+When mentioning this skill to the user, include the plugin name: `kpopper:document` or "document from the kpopper plugin". Use the user's language and fold it into the explanation of the action; no extra announcement is needed.
 
 ## Author the requested HTML document with its evidence
 

@@ -5,12 +5,12 @@ description: Set up kpopper watch for background branch compatibility, scoped sh
 
 # Watch
 
-When mentioning this skill to the user, include the plugin name: `kpopper:watch` or "watch from the kpopper plugin". Use the user's language and fold it into the explanation of the action; no extra announcement is needed.
-
 Enable local background checks and check whether this workspace has a working daily review,
 then install or repair scheduling when requested. Complete host operations and verify readback.
 The user should finish with an actual schedule, a confirmed existing schedule, or a clear
 blocker. A local plan or installation packet is an intermediate step.
+
+When mentioning this skill to the user, include the plugin name: `kpopper:watch` or "watch from the kpopper plugin". Use the user's language and fold it into the explanation of the action; no extra announcement is needed.
 
 Invocation: `/kpopper:watch` in Claude Code, or select/invoke `$watch` in Codex.
 Natural-language requests to set up the project's daily kpopper review use the same flow.

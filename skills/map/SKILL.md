@@ -5,9 +5,9 @@ description: "Map existing materials into a first knowledge record, or investiga
 
 # Map
 
-When mentioning this skill to the user, include the plugin name: `kpopper:map` or "map from the kpopper plugin". Use the user's language and fold it into the explanation of the action; no extra announcement is needed.
-
 A map is work in its own right, with a scope and a result the user asked for. Learning while working - the default - needs none of this: the [record skill](../record/SKILL.md) keeps findings as they arise, and the first useful one creates the record. The command line is `kpopper` where it is on PATH; otherwise the `command` in the `KPOPPER_AGENT_CONTEXT` line the session opener printed (`python3 <plugin>/scripts/cli.py`) runs the same code. Do not guess a path and do not write a second reader - [the method's reference](../kpopper/references/method.md#finding-the-reader) says how to find the installed copy when neither is at hand.
+
+When mentioning this skill to the user, include the plugin name: `kpopper:map` or "map from the kpopper plugin". Use the user's language and fold it into the explanation of the action; no extra announcement is needed.
 
 **If it does not exist:** there is no record here yet; knowledge may already live in the
 materials. Run `kpopper open` if the hook did not supply `KPOPPER_START`, and follow
