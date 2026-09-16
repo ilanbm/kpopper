@@ -37,7 +37,10 @@ def canonical(obj):
 
 
 def ident(fields):
-    return hashlib.sha256(canonical(fields).encode("utf-8")).hexdigest()[:12]
+    """The identity of a version: the hash of everything it says except the moment it was
+    recorded, so that the same contribution sent twice is one version, kept once, with the
+    first moment on it."""
+    return hashlib.sha256(canonical({k: v for k, v in fields.items() if k != "on"}).encode("utf-8")).hexdigest()[:12]
 
 
 def _now():
@@ -94,12 +97,28 @@ class Store(object):
                 yaml.safe_dump(v, f, sort_keys=True, allow_unicode=True)
         return v["id"]
 
-    def read(self):
-        """Every version kept -> {subject: {id: version}}, read from the files alone."""
+    parsed = 0                      # files parsed by this process, for the growth tests
+
+    def subjects(self):
+        """Every subject with a directory, and how many files each holds - a listing, no
+        parsing: what the index is checked against."""
         out = {}
         if not os.path.isdir(self.dir):
             return out
         for subject in sorted(os.listdir(self.dir)):
+            d = os.path.join(self.dir, subject)
+            if subject.startswith(".") or not os.path.isdir(d):
+                continue
+            out[subject] = sum(1 for n in os.listdir(d) if n.endswith(".yaml"))
+        return out
+
+    def read(self, subjects=None):
+        """Every version kept - of the subjects named, else all -> {subject: {id: version}},
+        read from the files alone."""
+        out = {}
+        if not os.path.isdir(self.dir):
+            return out
+        for subject in sorted(subjects if subjects is not None else os.listdir(self.dir)):
             d = os.path.join(self.dir, subject)
             if subject.startswith(".") or not os.path.isdir(d):
                 continue
@@ -108,9 +127,55 @@ class Store(object):
                     continue
                 with io.open(os.path.join(d, name), encoding="utf-8") as f:
                     v = yaml.safe_load(f)
+                Store.parsed += 1
                 if isinstance(v, dict) and v.get("id") == name[:-5] and v.get("subject") == subject:
                     out.setdefault(subject, {})[v["id"]] = v
         return out
+
+    @property
+    def index_path(self):
+        return os.path.join(self.dir, ".index.json")
+
+    def state(self, rules=None, ancestry=None, fresh=False):
+        """The state, from the index where the files behind a subject are as many as when its
+        entry was computed, and from the files for the rest; `fresh` reads every file. The
+        index is a cache the working state is read from, never the source: the files are."""
+        rules = dict(RULES, **(rules or {}))
+        counts = self.subjects()
+        index = {}
+        if not fresh and os.path.isfile(self.index_path):
+            with io.open(self.index_path, encoding="utf-8") as f:
+                index = json.load(f)
+        if index.get("rules") != rules or index.get("ancestry") != bool(ancestry):
+            index = {}
+        entries = {}
+        stale = []
+        for subject, n in counts.items():
+            cached = (index.get("subjects") or {}).get(subject)
+            if cached and cached.get("files") == n:
+                entries[subject] = cached["entry"]
+            else:
+                stale.append(subject)
+        if stale:
+            held = self.read(stale)
+            for subject in stale:
+                if subject in held:
+                    entries[subject] = _subject_entry(subject, held[subject], rules, ancestry)
+        entries = {s: entries[s] for s in sorted(entries)}
+        st = _cross(entries, rules)
+        kept = {"rules": rules, "ancestry": bool(ancestry),
+                "subjects": {s: {"files": counts[s], "entry": entries[s]} for s in entries}}
+        if stale or not index:
+            os.makedirs(self.dir, exist_ok=True)
+            ignore = os.path.join(self.dir, ".gitignore")
+            if not os.path.isfile(ignore):
+                # the index is this checkout's cache of what the files say, never shared:
+                # git carries the versions and the stamps, and each checkout indexes its own
+                with io.open(ignore, "w", encoding="utf-8") as f:
+                    f.write(".index.json\n")
+            with io.open(self.index_path, "w", encoding="utf-8") as f:
+                json.dump(kept, f, sort_keys=True)
+        return st
 
     def union_from(self, other):
         """Every version the other store holds and this one does not, copied in."""
@@ -209,14 +274,24 @@ def state(versions, rules=None, ancestry=None):
     "implied": [...]}: per subject its heads, their status, the value or body that stands, and
     for a judgment the disposition of each dependency and the reservations it carries."""
     rules = dict(RULES, **(rules or {}))
-    subjects = {}
-    implied = []
+    entries = {}
     for subject, held in sorted(versions.items()):
+        e = _subject_entry(subject, held, rules, ancestry)
+        if e is not None:
+            entries[subject] = e
+    return _cross(entries, rules)
+
+
+def _subject_entry(subject, held, rules, ancestry):
+    """What a subject's own files say -> its entry: heads, status, marks, proposals, the body
+    that stands - and the ids it holds, so the cross-subject pass never reads a file."""
+    implied = []
+    if True:
         claims = {i: v for i, v in held.items() if v["kind"] != "act"}
         acts = [v for v in held.values() if v["kind"] == "act"]
         acts.sort(key=lambda a: (a["on"], a["id"]))
         if not claims:
-            continue
+            return None
         birth = min(claims.values(), key=lambda v: (v["on"], v["id"]))["id"]
         mark, accepted, accepted_by, reviewed_by, refuted = {}, {birth}, {birth: None}, {}, set()
         replacers = {}                  # replaced version -> the accepted versions laid over it
@@ -270,7 +345,9 @@ def state(versions, rules=None, ancestry=None):
             frontier = keep
         heads = [v["id"] for v in frontier]
         entry = {"kind": kind, "heads": heads, "versions": len(claims), "acts": len(acts),
-                 "marks": mark, "birth": birth, "proposals": proposals}
+                 "marks": mark, "birth": birth, "proposals": proposals, "ids": sorted(claims),
+                 "implied": implied, "writers": {h: claims[h]["by"] for h in heads},
+                 "bodies": {h: claims[h]["body"] for h in heads}}
         if len(heads) == 1:
             h = claims[heads[0]]
             entry["head"] = h["id"]
@@ -288,8 +365,15 @@ def state(versions, rules=None, ancestry=None):
             entry["status"] = "divergent" if divergent else "contested"
         else:
             entry["status"] = "empty"
-        subjects[subject] = entry
-    # judgments: the falsifier on accepted reading values, and what each dependency became
+        return entry
+
+
+def _cross(entries, rules):
+    """The pass across subjects, from their entries alone: each judgment's falsifier against
+    the accepted readings, and what each of its dependencies became."""
+    subjects = {s: dict(e) for s, e in sorted(entries.items())}
+    implied = sorted((i for e in subjects.values() for i in e.get("implied", [])),
+                     key=lambda i: (i["subject"], i["superseded"], i["by"]))
     values = {s: e["body"].get("v") for s, e in subjects.items()
               if e["kind"] == "reading" and e.get("status") == "accepted"}
     for subject, entry in subjects.items():
@@ -316,7 +400,7 @@ def state(versions, rules=None, ancestry=None):
                 deps[dep] = "unreviewed" if d["kind"] == "judgment" and d["status"] == "unreviewed" else "same"
             elif vid in d["proposals"]:
                 deps[dep] = "proposed"
-            elif vid in d["marks"] or vid in versions.get(dep, {}):
+            elif vid in d["marks"] or vid in d.get("ids", ()):
                 deps[dep] = "moved"
             else:
                 deps[dep] = "unknown"
@@ -333,9 +417,9 @@ def history(versions, subject):
 # ── the entry file: a stamped rendering, and a hand edit reconciled against it ──
 def render(store, st=None, rules=None, ancestry=None):
     """The state as the entry file - one entry per subject with what stands, the disputes
-    beside it, and the stamp of the state it shows -> (text, stamp)."""
-    versions = store.read()
-    st = st or state(versions, rules, ancestry)
+    beside it, and the stamp of the state it shows -> (text, stamp). Read from the state,
+    so a rendering parses no version file the index already accounts for."""
+    st = st or store.state(rules, ancestry)
     heads = {s: e["heads"] for s, e in st["subjects"].items()}
     stamp = store.stamp(heads)
     doc = {"meta": {"state": stamp}, "subjects": {}, "disputes": {}}
@@ -343,8 +427,8 @@ def render(store, st=None, rules=None, ancestry=None):
         if "head" in e:
             doc["subjects"][s] = dict(e["body"], version=e["head"], status=e["status"])
         else:
-            doc["disputes"][s] = {"status": e["status"], "heads": [dict(versions[s][h]["body"], version=h, by=versions[s][h]["by"])
-                                                                for h in e["heads"]]}
+            doc["disputes"][s] = {"status": e["status"],
+                                  "heads": [dict(e["bodies"][h], version=h, by=e["writers"][h]) for h in e["heads"]]}
     if not doc["disputes"]:
         del doc["disputes"]
     return yaml.safe_dump(doc, sort_keys=False, allow_unicode=True), stamp
@@ -375,8 +459,9 @@ def ingest(store, text, by="hand", on=None, rules=None, ancestry=None):
         raise ValueError("the entry file carries merge markers - it is rebuilt from the versions, never read")
     stamp = (doc.get("meta") or {}).get("state")
     base_heads = store.heads_at(stamp)
-    versions = store.read()
-    st = state(versions, rules, ancestry)
+    st = store.state(rules, ancestry)
+    touched = [s for s in (doc.get("subjects") or {}) if s in st["subjects"]]
+    versions = store.read(touched) if touched else {}
     minted = []
     for subject, edited in (doc.get("subjects") or {}).items():
         edited = {k: v for k, v in edited.items() if k not in ("version", "status")}
