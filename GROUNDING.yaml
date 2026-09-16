@@ -1,5 +1,5 @@
 meta:
-  updated: 2026-09-15
+  updated: 2026-09-16
   name: kpopper
   scope: "What this plugin is for and the decisions that shaped it, kept in its own format -
           the tools eat their own cooking, and every session here opens grounded."
@@ -614,6 +614,12 @@ sources:
            gaze can enhance advertising effectiveness"
     url: "https://pmc.ncbi.nlm.nih.gov/articles/PMC3941030/"
     read: "2026-09-13"
+  s.ingest_64eac369f0d3ca58463f27679fa42bb0:
+    name: "Captured report"
+    file: "/Users/ilanbm/.local/state/kpopper/ingestion/d38be57d78902508217b8f6b3d18d9c39fcf1b9fd9a67b76790e4473e1fe5b68/sources/64eac369f0d3ca58463f27679fa42bb0.txt"
+    read: "2026-09-16"
+    recorded_for: "Update p.reasoning_core_contract, m.scope_basis_collision_cases from this
+                   captured report."
   s.watch_command:
     name: "Watch plugin command"
     file: "skills/watch/SKILL.md"
@@ -1249,6 +1255,18 @@ known:
          count prints"
     of: "2026-09-04"
     measure: prior_count_thresholds
+  p.reasoning_core_contract:
+    fidelity: paraphrase
+    name: "Experimental portable core contract"
+    v: "core/v1 is an explicit read-only profile backed by a packaged exact Lean scalar runtime;
+        default authoring remains legacy"
+    scope:
+      commit: faed0f2432c025a0b6bcb5aa7fa51c0cc5538cf1
+      environment: "kpopper source at merged faed0f2"
+      kind: code
+    from: s.ingest_64eac369f0d3ca58463f27679fa42bb0
+    at: "docs/reasoning-core.md:1-35 at faed0f2432c025a0b6bcb5aa7fa51c0cc5538cf1; PR86"
+    of: "2026-09-16"
   p.recipe_runners:
     v: 1
     name: "Places a measurement recipe is executed - files under scripts/ that name the allowlist
@@ -1400,6 +1418,21 @@ known:
     from: run.page_move_three_states
     at: "m.page_string_lines written as 431 with seen at 431 after the move had already made it 0: 0
          problems; MOVED only once a hand set the value to 0"
+
+  m.scope_basis_collision_cases:
+    cases: ["same-count member replacement", "different empty collection definition"]
+    limits: "Two synthetic cases with fields=[] on the cited source commit."
+    name: "Reproduced scope basis collisions with no selected fields"
+    observed: "Scope witnesses differ, but compare_basis returns same."
+    v: 2
+    scope:
+      commit: faed0f2432c025a0b6bcb5aa7fa51c0cc5538cf1
+      environment: "kpopper source at merged faed0f2"
+      kind: code
+    from: s.ingest_64eac369f0d3ca58463f27679fa42bb0
+    at: "ScopeCapture probe at faed0f2432c025a0b6bcb5aa7fa51c0cc5538cf1;
+         scripts/reasoning/snapshot.py:316-398 and scripts/reasoning/evaluate.py:157-167"
+    of: "2026-09-16"
 
   m.skill_bytes_before:
     v: 64011
