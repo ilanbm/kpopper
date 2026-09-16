@@ -53,7 +53,7 @@ COMMANDS = {
     "config": ("[--mode simple|advanced] [--record PATH] [--check] [--guidance on|off]", "Inspect the project mode or change local preferences."),
     "check": ("[FILE ...]", "Check the record's consistency and declared conditions."),
     "assess": ("ID [ID ...] [--attention-only]", "Read versioned assessment findings and scoped attention as JSON."),
-    "pull": ("SUBJECT [SUBJECT ...] [--from REF]", "Read a subject and the evidence behind it."),
+    "pull": ("SUBJECT [SUBJECT ...] [--from REF] [--history]", "Read a subject and the evidence behind it."),
     "affects": ("SUBJECT [SUBJECT ...]", "Trace what a change reaches."),
     "add": ("ID FIELD=VALUE ...", "Add a grounded entry or judgment."),
     "set": ("ID VALUE [--why TEXT] [--as-of DATE]", "Update a reading and see what it affects."),
@@ -174,7 +174,15 @@ def do_page(args):
         out = default_page(rest)
     pathlib.Path(out).write_bytes(proc.stdout)
     if after:
-        webbrowser.open("file://" + os.path.abspath(out) + ("#tree" if tree else ""))
+        # The page's source links are relative to where the page resolves to, so it is opened
+        # under that same name: a record reached through a directory link would otherwise start
+        # its links one place and finish them in another. The path is turned into a URL rather
+        # than pasted into one, because a name is not a URL: a record directory called
+        # `notes # 2` ends the address where its name begins, a space cuts it just as short, and
+        # a literal % in it is read as the start of an escape. The one fragment this command
+        # offers is added after that, where a fragment belongs.
+        target = pathlib.Path(os.path.realpath(out)).as_uri()
+        webbrowser.open(target + ("#tree" if tree else ""))
     sys.exit(0)
 
 

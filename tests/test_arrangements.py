@@ -443,16 +443,41 @@ class TheReDecision(unittest.TestCase):
             self.assertEqual(code, 1, out + err)
             self.assertIn("it was decided on 2026-09-05 - a second decision on the same day is a "
                           "contradiction, not a change", out)
-            # a day later it folds, and leaves the trail a re-decision in place leaves
+            # a day later it still waits for a person's name - its sign has not fired - and
+            # taken by name it folds, and leaves the trail a re-decision in place leaves
             code, out, err = run(SCRIPTS / "consolidate.py", "flip", "--as-of", "2026-09-06", rec)
+            self.assertEqual(code, 1, out + err)
+            self.assertIn("consolidate flip --take v.glazing_tab", out + err)
+            code, out, err = run(SCRIPTS / "consolidate.py", "flip", "--take", "v.glazing_tab",
+                                 "--as-of", "2026-09-06", rec)
             self.assertEqual(code, 0, out + err)
             self.assertIn("born renewed, and what it replaced kept", out)
             text = entry(rec, "v.glazing_tab")
             self.assertIn('born: "2026-09-06"', text)
             self.assertIn('"born 2026-09-05, stood 0 sessions; the standing judgment holds, and a '
-                          'person folds this over it on 2026-09-06"', text)
+                          'person takes this over it by name on 2026-09-06"', text)
             self.assertEqual(run(SCRIPTS / "provenance.py", "check", rec)[0], 0)
             self.assertEqual(run(SCRIPTS / "render_page.py", "--verify", rec)[0], 0)
+
+    def test_no_name_takes_a_body_that_is_not_an_arrangement_over_one(self):
+        with tempfile.TemporaryDirectory() as d:
+            rec = copy_fixture(pathlib.Path(d))
+            (pathlib.Path(d) / "PROVENANCE.d").mkdir(exist_ok=True)
+            (pathlib.Path(d) / "PROVENANCE.d" / "flat.yaml").write_text(
+                'hypothesis:\n  claim: "one tab is enough"\n  born: "2026-09-05"\n\n'
+                'judgments:\n  v.glazing_tab:\n    rests_on: [heat.loss_kw]\n'
+                '    verdict: "one tab is enough"\n    wrong_if: "heat.loss_kw > 40"\n'
+                '    seen: {heat.loss_kw: 31}\n', encoding="utf-8")
+            code, out, err = run(SCRIPTS / "consolidate.py", "--dry-run", "flat", *AS_OF, rec)
+            self.assertEqual(code, 1, out + err)
+            self.assertIn("what replaces an arrangement is an arrangement - rest on the session sources of "
+                          "the occasion it decides and give it a sign over a count; no name takes a body that "
+                          "drops them", out)
+            code, out, err = run(SCRIPTS / "consolidate.py", "flat", "--take", "v.glazing_tab", *AS_OF, rec)
+            self.assertEqual(code, 1, out + err)
+            self.assertIn("refused - no name takes v.glazing_tab: what replaces an arrangement is an "
+                          "arrangement", out + err)
+            self.assertIn('born: "2026-09-03"', entry(rec, "v.glazing_tab"))
 
     def test_a_cut_tab_refuses_the_fold_as_it_refuses_the_write(self):
         with tempfile.TemporaryDirectory() as d:
