@@ -15,6 +15,7 @@ supported end-to-end integration.
 | Host / version | Verified boundary | Still to verify |
 |---|---|---|
 | **Claude Code / Codex shared scripts** | Record birth, reopen, relocation, Claude-to-Codex payload handoff, failure reporting and stop continuation in real subprocesses; named-main regression fixed | Installation and consumption in clean clients, live named-main delivery, active/idle background delivery. |
+| **Codex CLI 0.153.3** | Two real ephemeral sessions using the existing profile: CLI-authored source/readings/judgment and independent recall of a random code after reading the record and source | Clean plugin installation, changed-premise live turn, Desktop/IDE behavior and active/idle delivery. |
 | **OpenClaw 2026.9.4** | Bundle/skill discovery; live Claude CLI backend writes, independent random-code recall in two projects, changed-premise detection with unchanged decision and snapshot | Clean Claude profile, other providers, sandbox/remote paths, automatic hooks and delivery. |
 | **OpenCode 1.18.31** | Isolated native binary accepts configuration and discovers all eight canonical skills at original paths | Model tool use, session resumption, Desktop/IDE behavior. |
 | **Gemini CLI 0.43.0** | Isolated extension link/list; installed host hook runner and aggregator accept startup JSON context; adapter regression tests | Live probe stopped before a model call because the selected API-key authentication had no key in the test environment; lifecycle/shutdown, resume and sandbox execution remain unverified. |
