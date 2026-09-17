@@ -18,7 +18,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python3 \"$PLUGIN_ROOT/scripts/watch_hook.py\" codex start",
+            "command": "\"$PLUGIN_ROOT/scripts/hook.sh\" \"watch_hook.py\" codex start",
             "timeout": 10
           }
         ]
@@ -27,7 +27,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python3 \"$PLUGIN_ROOT/scripts/ground_hook.py\" codex start",
+            "command": "\"$PLUGIN_ROOT/scripts/hook.sh\" \"ground_hook.py\" codex start",
             "timeout": 10
           }
         ]
@@ -58,7 +58,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python3 \"$PLUGIN_ROOT/scripts/followups_hook.py\"",
+            "command": "\"$PLUGIN_ROOT/scripts/hook.sh\" \"followups_hook.py\"",
             "timeout": 10
           }
         ]
@@ -67,7 +67,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python3 \"$PLUGIN_ROOT/scripts/watch_hook.py\" codex wait",
+            "command": "\"$PLUGIN_ROOT/scripts/hook.sh\" \"watch_hook.py\" codex wait",
             "timeout": 130,
             "async": true
           }
@@ -77,7 +77,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python3 \"$PLUGIN_ROOT/scripts/ground_hook.py\" codex read",
+            "command": "\"$PLUGIN_ROOT/scripts/hook.sh\" \"ground_hook.py\" codex read",
             "timeout": 10
           }
         ]
@@ -98,7 +98,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python3 \"$PLUGIN_ROOT/scripts/watch_hook.py\" codex wait",
+            "command": "\"$PLUGIN_ROOT/scripts/hook.sh\" \"watch_hook.py\" codex wait",
             "timeout": 130,
             "async": true
           }
@@ -108,7 +108,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python3 \"$PLUGIN_ROOT/scripts/ground_hook.py\" codex prompt",
+            "command": "\"$PLUGIN_ROOT/scripts/hook.sh\" \"ground_hook.py\" codex prompt",
             "timeout": 15
           }
         ]
