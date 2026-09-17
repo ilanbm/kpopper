@@ -14,8 +14,13 @@ DECLARATION = {'version': 2, 'profile': PROFILE, 'requires': ['arithmetic/v1']}
 def declaration(document):
     """Validated destination requirements, unioned with retained capabilities."""
     from ..pending_grounding import entries
-    cap = capabilities(document)
-    modules = set(cap['requires']) | {'arithmetic/v1'}
+    meta = document.get('meta')
+    # A first core judgment writes typed history before the line editor inserts
+    # its declaration into the same staged document. Existing undeclared typed
+    # history was already rejected when the original world was prepared; this
+    # writer-only pass must still be able to declare the bytes it just created.
+    declared = isinstance(meta, dict) and 'reasoning' in meta
+    modules = set(capabilities(document)['requires'] if declared else ()) | {'arithmetic/v1'}
     fields = _fields(document)
     for _, body in entries(document).values():
         if isinstance(body, dict) and 'rule' in body and not isinstance(body['rule'], dict):
