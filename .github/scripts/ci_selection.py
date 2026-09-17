@@ -32,7 +32,11 @@ def families(path):
     if (path.startswith(("scripts/reasoning/lean/", "scripts/reasoning/native/",
                          "scripts/reasoning/third_party/", ".github/"))
             or path in {"scripts/reasoning/build_runtime.py", "scripts/reasoning/runtime.py",
-                        "tests/test_reasoning_runtime.py", "tests/test_reasoning_distribution.py"}):
+                        "tests/test_reasoning_runtime.py", "tests/test_reasoning_distribution.py",
+                        "tests/test_reasoning_composition_kernel.py",
+                        "tests/test_reasoning_composition_review.py",
+                        "tests/test_reasoning_composition_acceptance.py",
+                        "tests/test_core_composition.py"}):
         return set(LANES)
     # The record and skill contracts run on every PR, independent of these flags.
     if (path in {"GROUNDING.yaml", "README.md", "CONTRIBUTING.md", "CHANGELOG.md", "tests/test_skills.py"}

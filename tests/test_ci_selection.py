@@ -76,7 +76,9 @@ class Selection(unittest.TestCase):
                      "scripts/reasoning/build_runtime.py", "scripts/reasoning/native/linux-x86_64.zip",
                      "scripts/reasoning/runtime.py", "tests/test_reasoning_runtime.py",
                      "scripts/reasoning/native/gmp-source-and-build.tar.gz",
-                     "scripts/reasoning/third_party/COPYING.LESSERv3", "tests/test_reasoning_distribution.py"):
+                     "scripts/reasoning/third_party/COPYING.LESSERv3", "tests/test_reasoning_distribution.py",
+                     "tests/test_reasoning_composition_kernel.py", "tests/test_reasoning_composition_review.py",
+                     "tests/test_reasoning_composition_acceptance.py", "tests/test_core_composition.py"):
             with self.subTest(path=path):
                 self.assertTrue(all(CI.select([path]).values()))
 
