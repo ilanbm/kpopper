@@ -630,6 +630,19 @@ sources:
            conflicts under git where one file per version merges clean, acts can conflict, the two
            times need exact meaning, the merged entry file is rebuilt and never read as an edit - and
            hardened by two review rounds of the module itself"
+  s.2026_09_17_history_reasoning_integration:
+    name: "History-backed records with the packaged exact reasoning core"
+    asked: "Integrate history-backed records with the packaged exact reasoning core, preserve
+            historical evidence and recoverable writes, and continue autonomously through a verified
+            release candidate"
+    file: "docs/history-contract.md"
+    at: "History store; Capture and replay; Prepared legacy publication and recovery; Integrated
+         write scope at d9857cdb184d1daf4df37c09e71be804e1c46c37"
+    scope:
+      kind: code
+      commit: d9857cdb184d1daf4df37c09e71be804e1c46c37
+      environment: "kpopper source at d9857cdb184d1daf4df37c09e71be804e1c46c37"
+    of: "2026-09-17"
   s.background_ingestion:
     name: "Background capture and selective delivery contract"
     file: "skills/kpopper/INGESTION.md"
@@ -1340,9 +1353,8 @@ known:
       kind: code
       commit: d9857cdb184d1daf4df37c09e71be804e1c46c37
       environment: "kpopper source at d9857cdb184d1daf4df37c09e71be804e1c46c37"
-    from: "docs/history-contract.md"
-    at: "docs/history-contract.md, History store and Capture and replay; scripts/history_contract.py
-         and scripts/reasoning/snapshot.py at d9857cdb184d1daf4df37c09e71be804e1c46c37"
+    from: "s.2026_09_17_history_reasoning_integration"
+    at: "docs/history-contract.md, History store and Capture and replay; scripts/history_contract.py and scripts/reasoning/snapshot.py at d9857cdb184d1daf4df37c09e71be804e1c46c37"
     of: "2026-09-17"
   p.hypothesis_homes:
     v: 1
@@ -1580,10 +1592,8 @@ known:
       kind: code
       commit: d9857cdb184d1daf4df37c09e71be804e1c46c37
       environment: "kpopper source at d9857cdb184d1daf4df37c09e71be804e1c46c37"
-    from: "docs/history-contract.md"
-    at: "docs/history-contract.md, Prepared legacy publication and recovery and Integrated write
-         scope; scripts/history_transaction.py and scripts/history_recovery_cli.py at
-         d9857cdb184d1daf4df37c09e71be804e1c46c37"
+    from: "s.2026_09_17_history_reasoning_integration"
+    at: "docs/history-contract.md, Prepared legacy publication and recovery and Integrated write scope; scripts/history_transaction.py and scripts/history_recovery_cli.py at d9857cdb184d1daf4df37c09e71be804e1c46c37"
     of: "2026-09-17"
   p.prior_count_thresholds:
     v: 1
