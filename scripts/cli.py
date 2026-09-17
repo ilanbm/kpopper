@@ -48,7 +48,7 @@ READ = ("open", "check", "affects", "pull", "where", "set", "add", "review", "sa
 COMMANDS = {
     "expressions": ('convert TEXT [--predicate] | migrate [--record FILE] [--apply]', "Convert explicit formulas to structured data; preview checked record migration."),
     "search": ('"QUERY" [--record FILE] [--limit N] [--chars N]', "Find local source evidence; read a hit with --read REF --revision REV."),
-    "open": ("[FILE ...] [--chars N] [--budget N]", "Open the current knowledge context."),
+    "open": ("[FILE ...] [--chars N] [--budget N] [--profile core/v1]", "Open the current knowledge context."),
     "map": ("[--deep]", "Map the work through an available host agent."),
     "config": ("[--mode simple|advanced] [--record PATH] [--check] [--guidance on|off]", "Inspect the project mode or change local preferences."),
     "check": ("[FILE ...] [--profile core/v1]", "Check the record's consistency and declared conditions."),
