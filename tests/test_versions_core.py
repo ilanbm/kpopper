@@ -12,6 +12,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
+from unittest import mock
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "scripts"))
@@ -391,7 +392,7 @@ class TheEntryFile(unittest.TestCase):
 
 
 class TheCostOfHistory(unittest.TestCase):
-    """More history behind the same state must not make the next open read it all again."""
+    """Warm opens avoid reparsing unchanged history, but still read and hash its bytes."""
 
     def test_a_retry_of_one_operation_is_one_version_and_a_new_observation_is_another(self):
         with tempfile.TemporaryDirectory() as d:
@@ -667,6 +668,100 @@ class TheCounterexamples(unittest.TestCase):
             self.assertEqual(s.subjects(), {"x": 3})                              # as many files as on a
             self.assertEqual(s.state()["subjects"]["x"]["body"]["v"], 2)
             self.assertEqual(s.state(), s.state(fresh=True))
+
+
+class TheStoreIntegrity(unittest.TestCase):
+
+    def test_unchanged_byte_checks_reuse_the_parsed_state(self):
+        with tempfile.TemporaryDirectory() as d:
+            s = V.Store(d)
+            reading(s, "x", 1, "s.a", T(1))
+            original = s.state(fresh=True)
+            with mock.patch.object(V.Store, "_parse", side_effect=AssertionError("unchanged history reparsed")):
+                self.assertEqual(V.Store(d).state(), original)
+
+    def test_changed_bytes_with_same_ids_size_and_mtime_invalidate_cached_state(self):
+        with tempfile.TemporaryDirectory() as d:
+            s = V.Store(d)
+            r = reading(s, "x", 1, "s.a", T(1))
+            original_state = s.state()
+            p = pathlib.Path(s._path("x", r))
+            original = p.read_bytes()
+            metadata = p.stat()
+            p.write_bytes(original.replace(b"v: 1", b"v: 9"))
+            os.utime(p, ns=(metadata.st_atime_ns, metadata.st_mtime_ns))
+            self.assertEqual(p.stat().st_size, metadata.st_size)
+            self.assertEqual(p.stat().st_mtime_ns, metadata.st_mtime_ns)
+            warm = V.Store(d).state()
+            fresh = V.Store(d).state(fresh=True)
+            self.assertEqual(warm, fresh)
+            self.assertNotIn("x", warm["subjects"])
+            self.assertEqual(len(warm["problems"]), 1)
+            self.assertIn("does not say what its name says", warm["problems"][0])
+            p.write_bytes(original)
+            os.utime(p, ns=(metadata.st_atime_ns, metadata.st_mtime_ns))
+            self.assertEqual(V.Store(d).state(), original_state)
+            self.assertEqual(V.Store(d).state(fresh=True), original_state)
+
+    def test_malformed_or_unreadable_history_has_warm_fresh_parity_and_recovers(self):
+        for failure in ("yaml", "utf8", "unreadable"):
+            with self.subTest(failure=failure), tempfile.TemporaryDirectory() as d:
+                s = V.Store(d)
+                r = reading(s, "x", 1, "s.a", T(1))
+                original_state = s.state()
+                p = pathlib.Path(s._path("x", r))
+                original = p.read_bytes()
+                if failure != "unreadable":
+                    p.write_bytes(b"body: [" if failure == "yaml" else b"\xff")
+                original_open = V.io.open
+
+                def open_history(path, *args, **kwargs):
+                    if failure == "unreadable" and os.fspath(path) == str(p):
+                        raise PermissionError("test unreadable history")
+                    return original_open(path, *args, **kwargs)
+
+                with mock.patch.object(V.io, "open", side_effect=open_history):
+                    warm = V.Store(d).state()
+                    fresh = V.Store(d).state(fresh=True)
+                    self.assertEqual(warm, fresh)
+                    self.assertNotIn("x", warm["subjects"])
+                    self.assertEqual(len(warm["problems"]), 1)
+                p.write_bytes(original)
+                self.assertEqual(V.Store(d).state(), original_state)
+
+    def test_union_refuses_all_source_objects_before_copying_any_when_one_is_invalid(self):
+        for failure in ("identity", "yaml", "unreadable"):
+            with self.subTest(failure=failure), tempfile.TemporaryDirectory() as d:
+                source = V.Store(os.path.join(d, "source"))
+                destination = V.Store(os.path.join(d, "destination"))
+                reading(destination, "existing", 7, "s.a", T(1))
+                before = destination.state()
+                reading(source, "a_good", 1, "s.a", T(1))
+                bad = reading(source, "z_bad", 2, "s.a", T(1))
+                p = pathlib.Path(source._path("z_bad", bad))
+                original = p.read_bytes()
+                if failure != "unreadable":
+                    p.write_bytes(original.replace(b"v: 2", b"v: 3") if failure == "identity" else b"body: [")
+                dest_root = pathlib.Path(destination.root)
+                saved = {str(f.relative_to(dest_root)): f.read_bytes() for f in dest_root.rglob("*") if f.is_file()}
+                original_open = V.io.open
+
+                def open_history(path, *args, **kwargs):
+                    if failure == "unreadable" and os.fspath(path) == str(p):
+                        raise PermissionError("test unreadable history")
+                    return original_open(path, *args, **kwargs)
+
+                with mock.patch.object(V.io, "open", side_effect=open_history):
+                    with self.assertRaisesRegex(V.IntegrityError, "z_bad"):
+                        destination.union_from(source.root)
+                self.assertEqual({str(f.relative_to(dest_root)): f.read_bytes()
+                                  for f in dest_root.rglob("*") if f.is_file()}, saved)
+                self.assertEqual(destination.state(), before)
+                p.write_bytes(original)
+                self.assertEqual(destination.union_from(source.root), 2)
+                self.assertEqual(destination.union_from(source.root), 0)
+                self.assertEqual(destination.read()["z_bad"][bad], source.read()["z_bad"][bad])
+                self.assertEqual(destination.state()["problems"], [])
 
 
 class TheActsThatRemainOpen(unittest.TestCase):

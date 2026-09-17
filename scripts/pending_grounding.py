@@ -100,7 +100,7 @@ def _strings(value):
             yield from _strings(item)
 
 
-def closure(doc, roots):
+def _legacy_closure(doc, roots):
     """Retain complete bodies plus every referenced existing entry, recursively.
 
     Explicit citations and dependencies must resolve. Incidental prose tokens that
@@ -146,6 +146,215 @@ def closure(doc, roots):
     return result
 
 
+def _reasoning_modules():
+    # Keep exception/module identities local to the importing package.
+    if __package__:
+        from .reasoning import contract, language, snapshot, assessment
+        return contract, language, snapshot, assessment
+    return tuple(P._peer('reasoning.' + name)
+                 for name in ('contract', 'language', 'snapshot', 'assessment'))
+
+
+def _declared_capabilities(document):
+    """Read a declaration without authorizing its interpretation."""
+    C, _, _, _ = _reasoning_modules()
+    meta = document.get('meta')
+    if not isinstance(meta, dict) or 'reasoning' not in meta:
+        return {'version': 1, 'profile': 'ordinary-reader/v1', 'requires': []}
+    value = meta['reasoning']
+    if not isinstance(value, dict) or set(value) != {'version', 'profile', 'requires'} \
+            or type(value['version']) is not int or not isinstance(value['profile'], str) \
+            or not isinstance(value['requires'], list) \
+            or any(not isinstance(item, str) for item in value['requires']) \
+            or value['requires'] != sorted(set(value['requires'])):
+        raise C.CapabilityError('invalid_capability', 'invalid meta.reasoning capability declaration')
+    return copy.deepcopy(value)
+
+
+def document_capabilities(document):
+    """Validate declared and actual dependent capabilities, without execution."""
+    C, L, S, A = _reasoning_modules()
+    meta = document.get('meta')
+    if isinstance(meta, dict) and 'history' in meta:
+        raise C.CapabilityError('unsupported_history_contribution',
+                                'history evidence requires a history-aware contribution format')
+    cap = C.capabilities(document)
+    fields = S._fields(document) if cap['profile'] == C.PROFILE else None
+    # History declarations cannot hide behind an ordinary declaration either.
+    if fields is None:
+        has_history = any(isinstance(body, dict) and any(
+            isinstance(seen, dict) and any(isinstance(old, dict) and
+                isinstance(old.get('computed'), dict) and 'version' in old['computed']
+                for old in seen.values()) for seen in body.values())
+            for _, body in entries(document).values())
+        if not has_history:
+            return cap
+        fields = S._fields(document)
+    for nid, (_, body) in entries(document).items():
+        if not isinstance(body, dict):
+            continue
+        seen = body.get(fields['snapshot'])
+        for dependency, old in seen.items() if isinstance(seen, dict) else ():
+            computed = old.get('computed') if isinstance(old, dict) else None
+            if isinstance(computed, dict) and isinstance(computed.get('basis'), dict):
+                basis = computed['basis']
+                modules = basis.get('modules', [])
+                if not isinstance(modules, list) or any(not isinstance(module, str) for module in modules):
+                    raise C.CapabilityError('invalid_history', nid + ': invalid historical modules')
+                if set(modules) - set(C.MODULES) or basis.get('profile', C.PROFILE) != C.PROFILE:
+                    raise C.CapabilityError('unsupported_capability', nid + ': unsupported historical capability')
+                if set(modules) - set(cap['requires']):
+                    raise C.CapabilityError('invalid_capability', nid + ': undeclared historical modules')
+            if isinstance(computed, dict) and 'version' in computed:
+                error = A._history(old, document)[2]
+                if error:
+                    raise C.CapabilityError(error, nid + ': unsupported or malformed core history')
+            if cap['profile'] == C.PROFILE and isinstance(computed, dict) and isinstance(computed.get('rule'), dict):
+                _historical_rule_capabilities(computed, dependency, nid, C, L)
+        if cap['profile'] != C.PROFILE:
+            continue
+        for field in ('rule', fields['predicate']):
+            value = body.get(field)
+            if isinstance(value, dict):
+                _expression_capabilities(value, nid, C, L)
+        deps = body.get(fields['deps'], [])
+        if isinstance(deps, list) and any(isinstance(dep, str) and P.is_builtin(dep) for dep in deps):
+            raise C.CapabilityError('unsupported_core_builtin', nid + ': computed builtin dependency')
+    return cap
+
+
+def _historical_rule_capabilities(computed, dependency, nid, contract, language):
+    rule = computed['rule']
+    if set(rule) != {'collection', 'fields'}:
+        _expression_capabilities(rule, nid, contract, language)
+        return
+    # Scope review stores the original definition, not a scalar expression.
+    # Authorize its historical witness without looking up today's membership.
+    basis = computed.get('basis')
+    fields = rule['fields']
+    if not isinstance(rule['collection'], str) or not rule['collection'] \
+            or not isinstance(fields, list) or any(not isinstance(field, str) or not field for field in fields) \
+            or fields != sorted(set(fields)) or not isinstance(basis, dict):
+        raise contract.CapabilityError('invalid_history', nid + ': invalid historical scope definition')
+    witness = basis.get('witness')
+    if witness is not None:
+        if not isinstance(witness, dict) or witness.get('kind') != 'scope' \
+                or witness.get('scope_id') != dependency \
+                or witness.get('definition_digest') != contract.digest(rule):
+            raise contract.CapabilityError('invalid_history', nid + ': historical scope definition disagrees with its witness')
+    elif 'recipe' in basis or not {'members', 'dependencies'} <= set(basis):
+        # Preserve the supported older scope basis which carried membership but
+        # no recipe/witness. It remains distinct evidence, never upgraded here.
+        raise contract.CapabilityError('invalid_history', nid + ': missing historical scope witness')
+    value = computed.get('value')
+    if not isinstance(value, dict) or value.get('type') != 'record':
+        raise contract.CapabilityError('invalid_history', nid + ': historical scope needs its typed summary')
+
+
+def _expression_capabilities(value, nid, contract, language):
+    try:
+        expression = language.lower(value)
+        if any(P.is_builtin(ref) for ref in language.references(expression)):
+            raise contract.CapabilityError('unsupported_core_builtin', nid + ': computed builtin input')
+        return expression
+    except contract.CapabilityError:
+        raise
+    except (ValueError, TypeError, SyntaxError, RecursionError) as error:
+        raise contract.CapabilityError('invalid_expression', nid + ': ' + str(error)) from None
+
+
+def meaning_capabilities(document):
+    cap = document_capabilities(document)
+    return {key: copy.deepcopy(cap[key]) for key in ('profile', 'requires')}
+
+
+def closure(doc, roots):
+    """Capture complete bodies, core dependencies and named scope authority."""
+    C, L, S, _ = _reasoning_modules()
+    cap = document_capabilities(doc)
+    selected = _legacy_closure(doc, roots)
+    if cap['profile'] == C.PROFILE:
+        fields = S._fields(doc)
+        all_entries = entries(doc)
+        scopes, processed = set(), set()
+        # The snapshot captures authority and validates scopes without evaluation.
+        snapshot = None
+        while set(entries(selected)) - processed:
+            for nid in sorted(set(entries(selected)) - processed):
+                processed.add(nid)
+                body = all_entries[nid][1]
+                if not isinstance(body, dict):
+                    continue
+                dependencies = []
+                for field in ('rule', fields['predicate']):
+                    if isinstance(body.get(field), dict):
+                        dependencies.extend(L.references(L.lower(body[field])))
+                if 'collection_scope' in body:
+                    if snapshot is None:
+                        snapshot = S.Snapshot.from_data(doc)
+                    captured = snapshot.capture_scope(nid).to_data()
+                    collection = captured['definition']['collection']
+                    scopes.add(collection)
+                    dependencies.extend(doc[collection])
+                if dependencies:
+                    extra = _legacy_closure(doc, dependencies)
+                    for collection, members in extra.items():
+                        if collection != 'schema':
+                            selected.setdefault(collection, {}).update(members)
+        for collection in scopes:
+            selected.setdefault(collection, {})
+    meta = doc.get('meta')
+    if isinstance(meta, dict) and 'reasoning' in meta:
+        selected['meta'] = {'reasoning': copy.deepcopy(meta['reasoning'])}
+    return selected
+
+
+def validate_bundle(bundle, *, supported=True):
+    """Check frozen identity/evidence; optionally authorize its capabilities.
+
+    Raw archival reads preserve unknown declarations but never accept a v2
+    declaration which disagrees with the document bound by the same identity.
+    Raw reads and every v1 identity check use the stored closure. Supported v2
+    interpretation also checks complete current closure, scope and evidence.
+    """
+    manifest = bundle['manifest']
+    if manifest.get('version') == 3:
+        H = _history_bundles()
+        H.C.detached(manifest, H.C.MAX_REQUEST_BYTES)
+        H._files(bundle['files'])
+    if type(manifest.get('version')) is not int or manifest['version'] not in (1, 2, 3) \
+            or identity(manifest) != bundle['revision']:
+        raise ValueError('stored contribution failed its complete identity check')
+    cap = _declared_capabilities(manifest['document'])
+    if manifest['version'] in (2, 3) and identity(manifest.get('reasoning')) != identity(cap):
+        raise ValueError('contribution manifest and document capabilities disagree')
+    _privacy(manifest['document'])
+    _privacy(manifest['scope'])
+    files = bundle['files']
+    _portable_files(files)
+    if set(files) != set(manifest['evidence']) or any(
+            hashlib.sha256(files[path]).hexdigest() != digest for path, digest in manifest['evidence'].items()):
+        raise ValueError('stored contribution evidence failed its complete identity check')
+    if manifest['version'] == 3:
+        H = _history_bundles()
+        history = H.from_contribution(bundle)
+        checked = _prepare_history(manifest['document'], manifest['roots'], scope=manifest['scope'],
+                                   shareability='project', evidence=files, history=history,
+                                   combined_evidence=True)
+        if checked['revision'] != bundle['revision']:
+            raise ValueError('contribution is not its complete validated history closure')
+        return cap
+    if not supported:
+        return cap
+    cap = document_capabilities(manifest['document'])
+    if manifest['version'] == 2:
+        checked = _prepare(manifest['document'], manifest['roots'], scope=manifest['scope'],
+                           shareability='project', evidence=files, version=2)
+        if checked['revision'] != bundle['revision']:
+            raise ValueError('contribution is not its complete validated closure')
+    return cap
+
+
 def _privacy(value):
     if isinstance(value, dict):
         if ('private' in value and value['private'] is not False) \
@@ -181,7 +390,73 @@ def _portable_files(files):
             raise ValueError('portable evidence must be supplied as bytes')
 
 
-def prepare(doc, roots, *, scope, shareability, evidence=None):
+def _history_bundles():
+    return P._peer('history_bundle')
+
+
+def prepare(doc, roots, *, scope, shareability, evidence=None, history=None):
+    if history is not None:
+        return _prepare_history(doc, roots, scope=scope, shareability=shareability,
+                                evidence=evidence, history=history)
+    return _prepare(doc, roots, scope=scope, shareability=shareability, evidence=evidence, version=2)
+
+
+def _prepare_history(doc, roots, *, scope, shareability, evidence, history, combined_evidence=False):
+    H = _history_bundles()
+    captured = H.validate(history)
+    adapted = H.A.from_store_capture(captured).document
+    if not isinstance(roots, (list, tuple)) or not roots or any(not isinstance(x, str) for x in roots):
+        raise ValueError('contribution needs explicit root entry IDs')
+    binding = history['manifest']
+    if sorted(set(roots)) != binding['roots'] or identity(scope) != identity(binding['scope']) \
+            or shareability != binding['shareability']:
+        raise ValueError('history contribution authorization disagrees with captured closure')
+    if not H.matches_document(captured, doc):
+        raise ValueError('history contribution document disagrees with captured closure')
+    plain = copy.deepcopy(adapted)
+    plain['meta'].pop('history')
+    cap = document_capabilities(plain)
+    H._files(evidence or {})
+    files = copy.deepcopy(evidence or {})
+    history_files = {H.PREFIX + path: raw for path, raw in history['files'].items()}
+    if combined_evidence:
+        if any(files.get(path) != raw for path, raw in history_files.items()):
+            raise ValueError('history contribution bytes disagree with closure binding')
+        files = {path: raw for path, raw in files.items() if path not in history_files}
+    if any(path.startswith(H.PREFIX) for path in files):
+        raise ValueError('evidence uses reserved history closure namespace')
+    required = set()
+    for raw in history['files'].values():
+        required.update(_files(H.C.decode_document(raw)))
+    imported = adapted.get('meta', {}).get('history_import')
+    if imported is not None:
+        H.C._mapping(imported, ('version', 'operation', 'recorded_at', 'members'))
+        H.C._require(type(imported['version']) is int and imported['version'] == 1,
+                     'unsupported_history_import')
+        H.C._require(isinstance(imported['members'], list), 'invalid_history_import')
+        seen_members = set()
+        for item in imported['members']:
+            H.C._mapping(item, ('path', 'sha256', 'role'))
+            path = H.C.relative_path(item['path'])
+            H.C._require(path not in seen_members and item['role'] in ('retained_original', 'replaced'),
+                         'invalid_history_import')
+            seen_members.add(path)
+            required.add(path)
+            H.C._require(path in files and H.C.sha256(files[path]) == item['sha256'],
+                         'retained_history_mismatch', path)
+    if set(files) != required:
+        raise ValueError('evidence allowlist must contain exactly all historical referenced files')
+    files.update(history_files)
+    H._files(files)
+    manifest = {'version': 3, 'requires': list(binding['requires']), 'roots': binding['roots'],
+                'document': adapted, 'scope': copy.deepcopy(scope), 'reasoning': cap,
+                'history': {'revision': history['revision'], 'manifest': copy.deepcopy(binding)},
+                'evidence': {path: hashlib.sha256(raw).hexdigest() for path, raw in sorted(files.items())}}
+    H.C.detached(manifest, H.C.MAX_REQUEST_BYTES)
+    return {'revision': identity(manifest), 'manifest': manifest, 'files': files}
+
+
+def _prepare(doc, roots, *, scope, shareability, evidence=None, version):
     """Create a validated bundle in memory, before any publishable object is written.
 
     Evidence is an explicit {portable record-relative path: bytes} allowlist. The
@@ -199,7 +474,7 @@ def prepare(doc, roots, *, scope, shareability, evidence=None):
     if not isinstance(roots, (list, tuple)) or not roots or any(not isinstance(x, str) for x in roots):
         raise ValueError('contribution needs explicit root entry IDs')
     _privacy({k: doc[k] for k in ('meta', 'privacy', 'visibility', 'private', 'shareability') if k in doc})
-    document = closure(doc, roots)
+    document = (closure if version == 2 else _legacy_closure)(doc, roots)
     if scope['kind'] == 'code':
         for root in roots:
             body = entries(document)[root][1]
@@ -216,9 +491,11 @@ def prepare(doc, roots, *, scope, shareability, evidence=None):
         body = entries(document)[root][1]
         if not isinstance(body, dict) or identity(body.get('scope')) != identity(scope):
             raise ValueError('contribution roots must retain their exact scope in the portable body')
-    manifest = {'version': 1, 'roots': sorted(set(roots)), 'document': document,
+    manifest = {'version': version, 'roots': sorted(set(roots)), 'document': document,
                 'scope': copy.deepcopy(scope),
                 'evidence': {path: hashlib.sha256(data).hexdigest() for path, data in sorted(files.items())}}
+    if version == 2:
+        manifest['reasoning'] = document_capabilities(document)
     return {'revision': identity(manifest), 'manifest': manifest, 'files': files}
 
 def semantic_roles(document):
@@ -236,9 +513,48 @@ def semantic_roles(document):
         return None
 
 
-def equivalent(bundle, doc, evidence):
+def equivalent(bundle, doc, evidence, *, history=None):
     """Content-based acceptance: shared subset must match; extra local IDs are fine."""
+    validate_bundle(bundle)
     expected = bundle['manifest']
+    if expected['version'] == 3:
+        if history is None:
+            return False
+        H = _history_bundles()
+        if isinstance(history, dict) and 'projection' in history and 'sha256' in history:
+            target = P._peer('knowledge_views').validate_history_evidence(history)
+        else:
+            target = H.validate(history)
+        if not H.matches_document(target, doc):
+            return False
+        artifact = H.from_contribution(bundle)
+        source = H.validate(artifact)
+        if artifact['manifest']['version'] == 2:
+            if not H.adopted_by(target, artifact):
+                return False
+        else:
+            if identity(source.marker) != identity(target.marker) or identity(source.state['rules']) != identity(target.state['rules']):
+                return False
+            if any(generation not in target.inactive_generations or
+                   target.inactive_generations[generation]['digest'] != prior['digest']
+                   for generation, prior in source.inactive_generations.items()):
+                return False
+            if any(target.commits.get(op) != raw for op, raw in source.commits.items()) or any(
+                    target.object_bytes.get(key) != raw for key, raw in source.object_bytes.items()):
+                return False
+        return all(path in evidence and hashlib.sha256(evidence[path]).hexdigest() == digest
+                   for path, digest in expected['evidence'].items() if not path.startswith(H.PREFIX))
+    meaning = meaning_capabilities(expected['document'])
+    if meaning != meaning_capabilities(doc):
+        return False
+    # A captured named scope binds membership, including empty collections.
+    scoped = entries(expected['document']).values() if meaning['profile'] == 'core/v1' else ()
+    for _, body in scoped:
+        definition = body.get('collection_scope') if isinstance(body, dict) else None
+        if isinstance(definition, dict):
+            collection = definition.get('collection')
+            if identity(expected['document'].get(collection)) != identity(doc.get(collection)):
+                return False
     actual = entries(doc)
     for root in expected['roots']:
         body = actual.get(root, (None, None))[1]
@@ -329,10 +645,10 @@ class Store:
         return M.git(self.root, 'update-ref', REF, new, old or zero, check=False).returncode == 0
 
     def capture(self, bundle, *, event_id, contribution_id, shareability, expected_generation=None, expected_policy=None,
-                expected_sources=None):
+                expected_sources=None, verify_source=None):
         receipt = self._capture(bundle, event_id=event_id, contribution_id=contribution_id,
                                 shareability=shareability, expected_generation=expected_generation,
-                                expected_policy=expected_policy, expected_sources=expected_sources)
+                                expected_policy=expected_policy, expected_sources=expected_sources, verify_source=verify_source)
         # The durable acknowledgement is established and the policy lock released
         # before a publisher is even started. Publication failure cannot erase or
         # turn a successfully retained contribution into a failed capture.
@@ -347,7 +663,7 @@ class Store:
         return receipt
 
     def _capture(self, bundle, *, event_id, contribution_id, shareability, expected_generation=None, expected_policy=None,
-                 expected_sources=None):
+                 expected_sources=None, verify_source=None):
         # Validate again at the object-write boundary, including supplied identity.
         if shareability != 'project':
             raise ValueError('private or unclear sharing permission belongs in a private draft')
@@ -355,14 +671,25 @@ class Store:
             if not isinstance(value, str) or not TOKEN.fullmatch(value):
                 raise ValueError('event and contribution IDs must be portable nonempty tokens')
         manifest = bundle['manifest']
-        verified = prepare(manifest['document'], manifest['roots'], scope=manifest['scope'],
-                           shareability=shareability, evidence=bundle['files'])
+        validate_bundle(bundle)
+        if manifest['version'] == 3:
+            verified = _prepare_history(manifest['document'], manifest['roots'], scope=manifest['scope'],
+                                        shareability=shareability, evidence=bundle['files'],
+                                        history=_history_bundles().from_contribution(bundle), combined_evidence=True)
+        else:
+            verified = _prepare(manifest['document'], manifest['roots'], scope=manifest['scope'],
+                                shareability=shareability, evidence=bundle['files'], version=manifest['version'])
         if identity(manifest) != verified['revision'] or bundle['revision'] != verified['revision']:
             raise ValueError('contribution integrity check failed before capture')
         revision = verified['revision']
         event = {'event_id': event_id, 'contribution_id': contribution_id, 'revision': revision}
         event_path = 'events/' + event_id + '.json'
         with self.project.lock():
+            if verify_source is not None:
+                if not callable(verify_source):
+                    raise ValueError('source verifier must be callable')
+                if verify_source() is False:
+                    raise ValueError('source changed before capture')
             # Coordinated source writers also hold this policy lock. A prepared
             # contribution cannot outlive a permission/body change in its inputs.
             if expected_sources is not None and any(
@@ -434,18 +761,9 @@ class Store:
         manifest = _decode(json.loads(self.blob(files[path])))
         evidence = {name: self.blob(files[prefix + 'evidence/' + name])
                     for name in manifest['evidence'] if prefix + 'evidence/' + name in files}
-        # v1 objects are checked against their stored closure, never rebuilt using
-        # today's extraction algorithm. A later reader can add relationships without
-        # making previously acknowledged contributions unreadable.
-        if manifest.get('version') != 1 or identity(manifest) != revision:
-            raise ValueError('stored contribution failed its complete identity check')
-        _privacy(manifest['document'])
-        _privacy(manifest['scope'])
-        _portable_files(evidence)
-        if set(evidence) != set(manifest['evidence']) or any(
-                hashlib.sha256(evidence[path]).hexdigest() != digest for path, digest in manifest['evidence'].items()):
-            raise ValueError('stored contribution evidence failed its complete identity check')
-        return {'revision': revision, 'manifest': manifest, 'files': evidence}
+        bundle = {'revision': revision, 'manifest': manifest, 'files': evidence}
+        validate_bundle(bundle, supported=False)
+        return bundle
 
     def snapshot(self, ref=None):
         head = ref or self.head()

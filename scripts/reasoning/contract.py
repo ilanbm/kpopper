@@ -167,7 +167,7 @@ def capabilities(document, *, profile=None):
                 or any(not isinstance(item, str) for item in value['requires']) \
                 or value['requires'] != sorted(set(value['requires'])):
             raise CapabilityError('invalid_capability', 'invalid meta.reasoning capability declaration')
-        if value['version'] != 1 or value['profile'] != PROFILE:
+        if value['version'] not in (1, 2) or value['profile'] != PROFILE:
             raise CapabilityError('unsupported_capability', 'unsupported reasoning profile or metadata version')
         unknown = set(value['requires']) - set(MODULES)
         if unknown:
@@ -175,6 +175,33 @@ def capabilities(document, *, profile=None):
         if 'arithmetic/v1' not in value['requires']:
             raise CapabilityError('invalid_capability', 'core/v1 requires arithmetic/v1')
         result = {**value, 'requires': list(value['requires'])}
+    # Typed review envelopes require their declared record format. Inspect only
+    # the actual mapped historical field, never arbitrary user mappings.
+    # Ordinary declarations must not become a second legacy-schema validator.
+    # Infer the historical role only when a versioned envelope could be present.
+    possible_history = any(
+        isinstance(old, dict) and isinstance(old.get('computed'), dict)
+        and old['computed'].get('version') == 2
+        for collection, members in document.items()
+        if collection not in ('meta', 'schema', 'record', 'also') and isinstance(members, dict)
+        for body in members.values() if isinstance(body, dict)
+        for seen in body.values() if isinstance(seen, dict)
+        for old in seen.values())
+    if result['version'] != 2 and possible_history:
+        from .snapshot import _fields
+        history_field = _fields(document)['snapshot']
+        for collection, members in document.items():
+            if collection in ('meta', 'schema', 'record', 'also') or not isinstance(members, dict):
+                continue
+            for body in members.values():
+                seen = body.get(history_field) if isinstance(body, dict) else None
+                if not isinstance(seen, dict):
+                    continue
+                for old in seen.values():
+                    computed = old.get('computed') if isinstance(old, dict) else None
+                    if isinstance(computed, dict) and computed.get('version') == 2:
+                        raise CapabilityError('invalid_capability',
+                                              'typed core history requires record metadata version 2')
     if profile is not None:
         if profile not in (*LEGACY_PROFILES, PROFILE):
             raise CapabilityError('unsupported_capability', 'unsupported requested profile')

@@ -4,6 +4,7 @@ Captured scope is an assertion by the authorized caller, not a classification gu
 from branch text. Ambiguous/conflicting reports stay in the durable inbox for review.
 """
 import contextlib
+import base64
 import datetime
 import io
 import json
@@ -106,6 +107,106 @@ def capture(watch, report):
     return {'state': 'captured', 'event_id': eid, 'record': str(record), 'receipt': str(path)}
 
 
+def _prepared_shared(watch, record, root, event, before, after, findings):
+    T, C = P._peer('history_transaction'), P._peer('history_contract')
+    before_doc, after_doc = P.parse(text=before.decode()), P.parse(text=after.decode())
+    capability = P._peer('reasoning.contract').capabilities(after_doc)
+    receipt = T.semantic_receipt(profile=capability['profile'], capabilities=capability,
+                                 before={'document': before_doc}, after={'document': after_doc, 'findings': findings})
+    baseline = {'kind': 'watch-shared/v1', 'record': str(record), 'state_dir': str(root),
+                'event_id': event['id'], 'report_hash': event['report_hash'],
+                'watch_config': watch.config(), 'record_members': {record.name: C.sha256(before)}}
+    return T.PreparedMutation(operation='watch-' + event['id'], authority=P._direct_authority(record),
+        baseline=baseline, files=[{'path': record.name, 'role': 'record', 'before': before, 'after': after}],
+        receipt=receipt, entry=record.name)
+
+
+def _shared_mutation(journal):
+    T = P._peer('history_transaction')
+    try:
+        return T.PreparedMutation.from_bytes(base64.b64decode(journal['prepared'], validate=True))
+    except (ValueError, KeyError, TypeError) as error:
+        raise ValueError('shared prepared operation is invalid') from error
+
+
+def _verify_shared(watch, record, root, event, mutation):
+    T, G = P._peer('history_transaction'), P._peer('pending_grounding')
+    data = mutation.to_data()
+    source = root / 'sources' / (event['id'] + '.json')
+    expected = {'kind': 'watch-shared/v1', 'record': str(record), 'state_dir': str(root),
+                'event_id': event['id'], 'report_hash': event['report_hash'], 'watch_config': watch.config(),
+                'record_members': data['baseline'].get('record_members')}
+    if data['baseline'] != expected or W.digest(event['report']) != event['report_hash'] \
+            or I._load(source) != event['report'] or data['authority'] != P._direct_authority(record):
+        raise ValueError('shared source, routing or operation identity changed')
+    config = watch.config() or {}
+    if not config.get('enabled') or config.get('shared_record') != str(record):
+        raise ValueError('watch was paused or its destination changed before commit')
+    if len(mutation.files) != 1 or mutation.files[0]['role'] != 'record':
+        raise ValueError('shared operation changed unexpected files')
+    item = mutation.files[0]
+    before, after = P.parse(text=item['before'].decode()), P.parse(text=item['after'].decode())
+    if G.identity(before) != G.identity(data['receipt']['before']['document']) \
+            or G.identity(after) != G.identity(data['receipt']['after']['document']):
+        raise ValueError('shared prepared semantic evidence changed')
+    source_id = 's.shared_' + event['id'].replace('-', '_')
+    before_entries = {nid: pair[1] for nid, pair in G.entries(before).items()}
+    after_entries = {nid: pair[1] for nid, pair in G.entries(after).items()}
+    report = event['report']
+    target = after_entries.get(report['id'])
+    source_body = {'name': report['name'] + ' — source report', 'file': str(source),
+                   'read': report['date'], 'origin': report['source']}
+    old_target = before_entries.get(report['id'])
+    expected_target = (dict(old_target) if isinstance(old_target, dict) else
+                       {'name': report['name'], 'scope': report['scope']})
+    expected_target.update(v=report['value'], of=report['date'],
+                           **{'from': source_id, 'at': report['source']['at']})
+    if not isinstance(target, dict) or G.identity(target.get('v')) != G.identity(report['value']) \
+            or target.get('from') != source_id or target.get('at') != report['source']['at'] \
+            or target.get('scope') != report['scope'] or target.get('of') != report['date'] \
+            or G.identity(target) != G.identity(expected_target) or after_entries.get(source_id) != source_body:
+        raise ValueError('shared prepared source or observation differs from report')
+    for nid in set(before_entries) | set(after_entries):
+        if nid not in (source_id, report['id']) and G.identity(before_entries.get(nid)) != G.identity(after_entries.get(nid)):
+            raise ValueError('shared prepared operation changes an unrelated entry')
+
+
+def _publish_shared(watch, record, root, event, journal, *, recovery=False):
+    T = P._peer('history_transaction')
+    mutation = _shared_mutation(journal)
+    path = root / 'journals' / (event['id'] + '.json')
+    def verify(data):
+        if data['digest'] != mutation.to_data()['digest']:
+            raise ValueError('shared recovery journal belongs to another operation')
+        _verify_shared(watch, record, root, event, mutation)
+    def committed(data):
+        completed = {**journal, 'phase': 'committed', 'mutation_digest': data['digest']}
+        T._replace(path, I._json_bytes(completed))
+    with I._file_lock(watch.config_path.with_suffix('.lock')):
+        with P._locked(str(record)):
+            if recovery:
+                T.recover_legacy(record.parent, T.journal_for(record), verify=verify, on_committed=committed)
+            else:
+                T.publish_legacy(record.parent, T.journal_for(record), mutation, verify=verify, on_committed=committed)
+    P.forget(str(record))
+
+
+def _resume_shared(watch, record, root, event, journal):
+    T = P._peer('history_transaction')
+    mutation = _shared_mutation(journal)
+    data = mutation.to_data()
+    if data['baseline']['event_id'] != event['id'] or data['baseline']['report_hash'] != event['report_hash']:
+        raise ValueError('shared prepared event identity changed')
+    primary = record.parent / T.journal_for(record)
+    if primary.exists():
+        _publish_shared(watch, record, root, event, journal, recovery=True)
+    elif journal.get('phase') != 'committed' or journal.get('mutation_digest') != data['digest']:
+        # Equal current bytes cannot acknowledge a report without its durable event proof.
+        _publish_shared(watch, record, root, event, journal)
+    return {'state': 'applied', 'recovered': True, 'target_after': journal['target_after'],
+            'findings': data['receipt']['after']['findings']}
+
+
 def _apply(watch, record, root, event):
     report = event['report']
     validate(report)
@@ -114,6 +215,9 @@ def _apply(watch, record, root, event):
     source_path = root / 'sources' / (event['id'] + '.json')
     if W.digest(report) != event['report_hash'] or I._load(source_path) != report:
         raise ValueError('retained shared source failed its integrity check')
+    retained = I._load(journal_path)
+    if retained and retained.get('version') == 2:
+        return _resume_shared(watch, record, root, event, retained)
     for _ in range(3):
         with P._locked(str(record)):
             before = record.read_bytes()
@@ -166,7 +270,11 @@ def _apply(watch, record, root, event):
             # A newly falsified existing judgment is a finding, not grounds to hide a fact.
             before_fail = W.C._check_of(doc)[0] if W._entries(doc) else []
             after_fail, _ = W.C._check_of(P.load([str(shadow)]))
-            I._save(journal_path, {'before': W.digest(before.hex()), 'target_after': W.digest(updated)})
+            findings = [line for line in after_fail if line not in before_fail]
+            mutation = _prepared_shared(watch, record, root, event, before, after, findings)
+            journal = {'version': 2, 'phase': 'prepared', 'target_after': W.digest(updated),
+                       'prepared': base64.b64encode(mutation.to_bytes()).decode('ascii')}
+            I._save(journal_path, journal)
             with I._file_lock(watch.config_path.with_suffix('.lock')):
                 config = watch.config() or {}
                 if not config.get('enabled') or config.get('shared_record') != str(record):
@@ -175,7 +283,7 @@ def _apply(watch, record, root, event):
                     if record.read_bytes() != before:
                         continue
                     I._atomic(root / 'backups' / (event['id'] + '.yaml'), before)
-                    I._replace_record(record, after)
+            _publish_shared(watch, record, root, event, journal)
             return {'state': 'applied', 'target_after': W.digest(updated),
                     'findings': [line for line in after_fail if line not in before_fail]}
     raise ValueError('shared record kept changing; report retained for review')
@@ -189,14 +297,24 @@ def process(watch):
         applied = False
         events = [I._load(p) for p in (root / 'events').glob('*.json')]
         for event in sorted(events, key=lambda e: e['captured_at']):
-            if event['state'] != 'captured':
+            if event['state'] not in ('captured', 'recovery_required'):
                 continue
             try:
                 if event['record'] != str(record):
                     raise ValueError('shared destination changed')
                 outcome = _apply(watch, record, root, event)
             except (Exception, SystemExit) as exc:
-                outcome = {'state': 'needs_review', 'reason': str(exc)[:1200]}
+                transaction = P._peer('history_transaction')
+                primary = record.parent / transaction.journal_for(record)
+                recoverable = False
+                if primary.is_file():
+                    try:
+                        pending = transaction.PreparedMutation.from_bytes(primary.read_bytes()).to_data()
+                        recoverable = pending['baseline'].get('kind') == 'watch-shared/v1' \
+                            and pending['baseline'].get('event_id') == event['id']
+                    except (ValueError, OSError):
+                        pass
+                outcome = {'state': 'recovery_required' if recoverable else 'needs_review', 'reason': str(exc)[:1200]}
             I._save(root / 'events' / (event['id'] + '.json'), dict(event, **outcome))
             applied = applied or outcome['state'] == 'applied'
         return applied

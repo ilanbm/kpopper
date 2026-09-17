@@ -224,6 +224,31 @@ class SnapshotTests(unittest.TestCase):
         with self.assertRaisesRegex(SnapshotError, 'limit'):
             Snapshot.from_data(data).capture_scope('scope.items', limits={'members': 1})
 
+    def test_scope_basis_tracks_membership_without_projected_fields(self):
+        doc = source()
+        doc['scopes']['scope.items']['collection_scope']['fields'] = []
+        first = Snapshot.from_data(doc).capture_scope('scope.items').basis
+        doc['items']['c'] = {'v': 3}
+        self.assertNotEqual(first, Snapshot.from_data(doc).capture_scope('scope.items').basis)
+        del doc['items']['c']
+        self.assertEqual(first, Snapshot.from_data(doc).capture_scope('scope.items').basis)
+
+    def test_scope_basis_tracks_empty_definition(self):
+        doc = source()
+        doc['items'] = {}
+        first = Snapshot.from_data(doc).capture_scope('scope.items').basis
+        doc['scopes']['scope.items']['collection_scope']['fields'] = []
+        self.assertNotEqual(first, Snapshot.from_data(doc).capture_scope('scope.items').basis)
+
+    def test_scope_basis_tracks_equal_count_member_replacement(self):
+        doc = source()
+        doc['scopes']['scope.items']['collection_scope']['fields'] = []
+        first = Snapshot.from_data(doc).capture_scope('scope.items')
+        doc['items']['c'] = doc['items'].pop('b')
+        second = Snapshot.from_data(doc).capture_scope('scope.items')
+        self.assertEqual(first.value, second.value)
+        self.assertNotEqual(first.basis, second.basis)
+
     def test_mapped_historical_seen_is_excluded_from_scope_basis(self):
         doc = source()
         doc['items']['a']['reviewed'] = {'x': 1}

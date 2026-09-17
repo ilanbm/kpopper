@@ -632,7 +632,7 @@ def _mentions(R, worlds, fields, brief):
             if R in _ids_in(b.get("distinct_from")):
                 hit("distinct_from", k + tag)
     if brief and os.path.exists(brief):
-        b = yaml.safe_load(io.open(brief, encoding="utf-8").read()) or {}
+        b = P.parse(brief) or {}
         secs = [s for s in (b.get("sections") or []) if isinstance(s, dict)]
         for t in (b.get("tabs") or []):
             if isinstance(t, dict):
@@ -658,6 +658,8 @@ def _mentions(R, worlds, fields, brief):
 def same(paths, a, b, keep=None, as_of=None):
     project = P._peer('knowledge_views').project_for(paths)
     paths = P._peer('knowledge_views').write_paths(paths)
+    if P._peer('history_direct').active(paths):
+        return P._peer('history_direct').identity_write(paths, a, b, kind='same', keep=keep, as_of=as_of)
     if not P._RAW_READS.get():
         with P._locked(paths[0], project=project):
             return same(paths, a, b, keep, as_of)
@@ -673,7 +675,8 @@ def same(paths, a, b, keep=None, as_of=None):
         receipt = R.draft(P._peer('knowledge_views').project_for(paths),
                           {'kind': 'same', 'ids': [a, b]}, closure, 'private identity change retained for review')
         raise P.Refused('private draft retained at ' + receipt['path'])
-    return _same_unlocked(paths, a, b, keep, as_of)
+    return P._mutate_legacy(paths, {'kind': 'same', 'as_of': as_of},
+                            lambda: _same_unlocked(paths, a, b, keep, as_of))
 
 
 def _same_unlocked(paths, a, b, keep=None, as_of=None):
@@ -731,8 +734,7 @@ def _same_unlocked(paths, a, b, keep=None, as_of=None):
     # every file read once; each is edited in memory and written only when all of them are
     texts = {}
     for f in files + [h["path"] for h in hyps.values()] + ([brief] if brief else []):
-        with io.open(f, encoding="utf-8") as fh:
-            texts[f] = fh.read()
+        texts[f] = P._text_of_or_none(f)
     originals = dict(texts)
     stamp = as_of or datetime.date.today().isoformat()
     notes, base_s = [], base.get(S) if S in base else None
@@ -925,6 +927,8 @@ def _same_unlocked(paths, a, b, keep=None, as_of=None):
 def distinct(paths, a, b, why, as_of=None):
     project = P._peer('knowledge_views').project_for(paths)
     paths = P._peer('knowledge_views').write_paths(paths)
+    if P._peer('history_direct').active(paths):
+        return P._peer('history_direct').identity_write(paths, a, b, kind='distinct', because=why, as_of=as_of)
     if not P._RAW_READS.get():
         with P._locked(paths[0], project=project):
             return distinct(paths, a, b, why, as_of)
@@ -940,7 +944,8 @@ def distinct(paths, a, b, why, as_of=None):
         receipt = R.draft(P._peer('knowledge_views').project_for(paths),
                           {'kind': 'distinct', 'ids': [a, b]}, closure, 'private identity change retained for review')
         raise P.Refused('private draft retained at ' + receipt['path'])
-    return _distinct_unlocked(paths, a, b, why, as_of)
+    return P._mutate_legacy(paths, {'kind': 'distinct', 'as_of': as_of},
+                            lambda: _distinct_unlocked(paths, a, b, why, as_of))
 
 
 def _distinct_unlocked(paths, a, b, why, as_of=None):
@@ -970,7 +975,7 @@ def _distinct_unlocked(paths, a, b, why, as_of=None):
         return 0
     target, in_hypothesis = None, None
     for f in P._files_of(paths):
-        if P._locate(io.open(f, encoding="utf-8").read().split("\n"), a):
+        if P._locate(P._text_of_or_none(f).split("\n"), a):
             target = f
             break
     if target is None:
@@ -978,7 +983,7 @@ def _distinct_unlocked(paths, a, b, why, as_of=None):
             if a in hyps[n]["ids"]:
                 target, in_hypothesis = hyps[n]["path"], n
                 break
-    original = io.open(target, encoding="utf-8").read()
+    original = P._text_of_or_none(target)
     lines = original.split("\n")
     stamp = as_of or datetime.date.today().isoformat()
     _, ind, s, e = P._locate(lines, a)

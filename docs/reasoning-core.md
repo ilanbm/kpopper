@@ -1,7 +1,7 @@
 # Experimental deterministic core
 
-`core/v1` is an explicit, read-only assessment profile. Existing commands keep
-their legacy interpretation until the remaining consumers are integrated.
+`core/v1` is an explicit assessment and authoring profile. Existing ordinary
+readers keep their legacy interpretation until their consumers are integrated.
 
 ```sh
 kpop assess m.total d.order --profile core/v1 --record example.yaml
@@ -32,14 +32,136 @@ This profile currently supports explicit scalar literals, references, exact
 arithmetic and comparisons. Boolean composition, conditional expressions and
 queries are separate planned capabilities. Unknown required modules refuse
 dependent interpretation. No record text can load code or change the installed
-module registry. Authoring and migration are not activated by this reader slice.
+module registry. A read never activates authoring or migrates stored content.
 
 The new assessment envelope has `schema_version: 2` and the schema at
 `scripts/reasoning/assessment.schema.json`. Existing ordinary assessments retain
 their original v1 schema. `checked-reader/v1` names the existing checked-session
 semantics for compatibility documentation; older checked-session responses did
 not carry that identifier. Missing metadata keeps the existing surface's legacy
-interpretation. An explicit `--profile core/v1` override does not rewrite a record.
+interpretation. An assessment's explicit `--profile core/v1` override does not
+rewrite a record.
+
+## Explicit authoring and review history
+
+`add`, `set` and `review` accept `--profile core/v1`. A declared core record also
+selects this writer when the flag is omitted. Missing metadata without the flag
+retains legacy authoring. Supported newly authored formulas are stored as
+`{expr: "original text"}` based on syntax and resolved intent, independently of
+legacy checked-session setup. A broken packaged runtime refuses a computation
+or required review before changing the record; it cannot turn the formula into prose.
+
+```sh
+kpopper add m.double 'rule=m.total * 2' --profile core/v1 example.yaml
+kpopper review d.order --as-of 2026-09-17 example.yaml
+```
+
+New core writes declare record metadata version 2, with the unchanged semantic
+profile `core/v1` and required module `arithmetic/v1`. Metadata version 1 remains
+readable. Existing executable legacy fields require explicit migration before
+record-wide promotion; a flag does not reinterpret them. New core history uses
+`seen.<dependency>.computed` with `version: 2`, a canonical typed `value`, the
+complete actual `basis`, and the original `rule` when applicable. The record's
+mapped snapshot field is respected. Unrelated writes preserve old history, and
+missing historical basis is never backfilled automatically.
+
+The writer's `--as-of` is a recording date. It does not bind an ambient date into
+computations: normal review basis uses semantic `as_of: null`, matching default
+assessment on later days. Successful null, false, zero and exact fractions retain
+their distinct typed values. Scope history records member count, sorted member
+IDs, all projected fingerprints and the full scope witness under basis version 1,
+recipe `scope-inputs/v2`. Equal member counts do not hide changed membership.
+Complete generated history is subject to the output budget; it is never truncated.
+
+Atomic report ingestion accepts `profile: core/v1` in its envelope and selects
+core automatically for declared records. It normalizes and validates all changes
+in the final staged world, including forward references, before publishing one
+record replacement. Its internal assessment gate and recovery evidence distinguish
+introduced integrity failures from an unchanged judgment whose falsifier newly
+fires after an input update. Existing single-file, source-permission and primary
+review restrictions still apply.
+
+Older readers that only support metadata version 1 refuse the newer record
+format. Upgrade readers before sharing a newly authored core record; metadata
+cannot protect it from already released writers that ignore capabilities.
+Ordinary check/page readers remain unavailable for declared core records. Use
+`assess --profile core/v1` to inspect their current findings.
+
+Computed reader/page builtins are not core inputs. New core calculations or
+reviews requiring them refuse with `unsupported_core_builtin`; arrangement and
+brief-section reviews retain that restriction. Specialized legacy mutations
+(`same`, `distinct`, consolidation, refutation and shared-watch apply) still
+refuse declared core records before changing them. Explicit migration remains a
+separate operation; a profile flag does not convert existing executable fields.
+
+Project contribution capture uses manifest version 2. It binds the selected
+document's profile, required modules, complete dependency and scope closure, and
+portable evidence hashes. Legacy content has an explicit `ordinary-reader/v1`
+identity in its manifest and no new record declaration. Existing version 1
+bundles and receipts keep their original identities and stored closures.
+
+Materialization and publication validate the declaration again. Supported core
+metadata versions 1 and 2 share meaning when bodies, schema, scopes and required
+modules match; legacy and core profiles always remain distinct. A target merge
+retains core metadata and validates previously accepted active contributions.
+Unknown requirements can remain in immutable archival evidence, but cannot be
+interpreted, materialized as a supported record or published.
+
+An accepted contribution still participates in the live overlay until explicitly
+retired. A profile change refuses incompatible active revisions with
+`pending_profile_reconciliation_required`. Explicit withdrawal names the exact
+revision and a reason; it preserves its bundle and prior acceptance receipts.
+Resuming it checks compatibility with the current record before reactivating it.
+
+## Explicit migration
+
+Preview a complete conversion before writing a new directory:
+
+```sh
+kpopper expressions migrate --record example.yaml --profile core/v1 --destination candidate --json
+kpopper expressions migrate --record example.yaml --profile core/v1 --destination candidate --apply --json
+```
+
+The copy retains record shards and pointers, named hypotheses, layout sidecars,
+local referenced evidence, original pending contributions and captured target
+observations. It never runs measurement recipes or grants publication permission.
+Unresolved pointers, unreadable files, mixed layouts and ambiguous conversions
+block a complete copy. External evidence locators remain locators.
+Local evidence must name explicit files; directory locators are refused. Retired
+unsupported contributions remain immutable evidence and are marked incompatible,
+without being interpreted as active core facts.
+
+The `.kpopper-migration` directory contains exact originals, the conversion
+receipt, and typed `original.json` and `candidate.json` snapshots. Replay them
+with `Snapshot.from_json`; the candidate evaluates the transformed document
+against its captured context without looking up current refs or configuration.
+Historical `seen` values remain unchanged. Known legacy results must preserve
+type, value and availability. Newly executable formulas and conditions are
+reported explicitly; an unavailable legacy runtime is not equivalence evidence.
+
+Without `--destination`, `--apply` is allowed only when one canonical file changes
+and the remaining captured closure stays unchanged. It retains a backup and
+rechecks source bytes, configuration and pending state before replacing the file.
+Copies publish with one atomic rename into an absent destination; a late-created
+empty directory is not overwritten.
+
+A copy does not change the live record route. `kpopper config --record PATH
+--migration-receipt candidate/.kpopper-migration/receipt.json --check --json`
+previews a separate routing change; omit `--check` to apply it. The transition
+recomputes conversion evidence under the existing locks. Unsettled contributions,
+unreconciled hypotheses, unavailable destinations and incompatible worktrees still
+block it. Advanced destinations must be repository-relative and prepared with
+compatible captured bytes in every participating worktree.
+The destination must be the copied entry record, including its complete shard
+closure. Portable snapshot identity binds publication content and dispositions;
+repeated verification times and retry counters do not change that identity.
+Private capture checks still detect changes during copying.
+
+An exact restoration uses the original record path and the same receipt with
+`--rollback`. It verifies the retained originals and recomputes the conversion;
+further core authoring can make restoration unavailable. Receipts bind retained
+evidence and current validation; they are not signatures or independent proof of
+the source claims.
 
 Numeric constants keep their decimal lexemes and evaluate as exact rationals.
 Quoted numbers remain text; booleans, numeric zero, null and missing inputs remain

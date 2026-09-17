@@ -98,11 +98,14 @@ class SharedTests(fixture.WatchFixture, unittest.TestCase):
 
     def test_shared_crash_after_replace_is_recovered_once(self):
         self.capture()
-        real = W.I._replace_record
+        transaction = W.P._peer('history_transaction')
+        real = transaction._replace
+        rec, _ = S.layout(self.watch)
         def crash(record, data):
             real(record, data)
-            raise KeyboardInterrupt('simulated process termination')
-        with patch.object(W.I, '_replace_record', side_effect=crash):
+            if record == rec:
+                raise KeyboardInterrupt('simulated process termination')
+        with patch.object(transaction, '_replace', side_effect=crash):
             with self.assertRaises(KeyboardInterrupt):
                 S.process(self.watch)
         rec, _ = S.layout(self.watch)
@@ -122,6 +125,44 @@ class SharedTests(fixture.WatchFixture, unittest.TestCase):
         S.process(self.watch)
         self.assertEqual(rec.read_bytes(), before)
         self.assertIn('integrity', S.read(self.watch)['reports'][0]['reason'])
+
+    def test_failed_shared_completion_receipt_keeps_recovery_evidence(self):
+        self.capture()
+        record, root = S.layout(self.watch)
+        transaction = W.P._peer('history_transaction')
+        replace = transaction._replace
+        journal = root / 'journals' / (self.report['event_id'] + '.json')
+        def crash(path, data):
+            if path == journal:
+                raise KeyboardInterrupt('completion receipt interrupted')
+            return replace(path, data)
+        with patch.object(transaction, '_replace', side_effect=crash):
+            with self.assertRaises(KeyboardInterrupt):
+                S.process(self.watch)
+        self.assertTrue((record.parent / transaction.journal_for(record)).exists())
+        with self.assertRaisesRegex((ValueError, W.P.Refused), 'recovery_required'):
+            W.P.load([str(record)])
+        S.process(self.watch)
+        receipt = S.read(self.watch)['reports'][0]
+        self.assertEqual(receipt['state'], 'applied')
+        self.assertTrue(receipt['recovered'])
+        self.assertFalse((record.parent / transaction.journal_for(record)).exists())
+
+    def test_filesystem_failure_remains_retryable_in_the_shared_queue(self):
+        self.capture()
+        record, root = S.layout(self.watch)
+        transaction = W.P._peer('history_transaction')
+        replace = transaction._replace
+        def fail(path, data):
+            if path == record:
+                raise OSError('record storage unavailable')
+            return replace(path, data)
+        with patch.object(transaction, '_replace', side_effect=fail):
+            S.process(self.watch)
+        event_path = root / 'events' / (self.report['event_id'] + '.json')
+        self.assertEqual(W.I._load(event_path)['state'], 'recovery_required')
+        S.process(self.watch)
+        self.assertEqual(W.I._load(event_path)['state'], 'applied')
 
     def test_shared_updates_flag_main_decisions_without_rewriting_seen(self):
         self.capture();self.watch.process()

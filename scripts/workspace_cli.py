@@ -116,6 +116,8 @@ def config(argv):
     parser.add_argument('--record', help='explicit record location; Simple Git uses an external shared record')
     parser.add_argument('--check', action='store_true', help='preview the mode transition without changing policy')
     parser.add_argument('--expected-generation', type=int, help='refuse a policy change if its generation has moved')
+    parser.add_argument('--migration-receipt', help='revalidate a complete core migration before changing the record route')
+    parser.add_argument('--rollback', action='store_true', help='restore the exact original closure named by a migration receipt')
     args = parser.parse_args(argv)
     try:
         path = O.state_dir() / "guidance.json"
@@ -132,10 +134,12 @@ def config(argv):
         project = Project()
         report = None
         if args.check:
-            report = project.preview_transition(args.mode, args.record)
+            report = project.preview_transition(args.mode, args.record, migration_receipt=args.migration_receipt,
+                                                rollback=args.rollback)
             policy = project.config()
         elif args.mode is not None or args.record is not None:
-            policy = project.configure(args.mode, args.record, args.expected_generation)
+            policy = project.configure(args.mode, args.record, args.expected_generation,
+                                       migration_receipt=args.migration_receipt, rollback=args.rollback)
         else:
             policy = project.config()
         data = {"guidance": value["enabled"], 'project': policy,

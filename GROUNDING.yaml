@@ -666,6 +666,19 @@ sources:
            conflicts under git where one file per version merges clean, acts can conflict, the two
            times need exact meaning, the merged entry file is rebuilt and never read as an edit - and
            hardened by two review rounds of the module itself"
+  s.2026_09_17_history_reasoning_integration:
+    name: "History-backed records with the packaged exact reasoning core"
+    asked: "Integrate history-backed records with the packaged exact reasoning core, preserve
+            historical evidence and recoverable writes, and continue autonomously through a verified
+            release candidate"
+    file: "docs/history-contract.md"
+    at: "History store; Capture and replay; Prepared legacy publication and recovery; Integrated
+         write scope at d9857cdb184d1daf4df37c09e71be804e1c46c37"
+    scope:
+      kind: code
+      commit: d9857cdb184d1daf4df37c09e71be804e1c46c37
+      environment: "kpopper source at d9857cdb184d1daf4df37c09e71be804e1c46c37"
+    of: "2026-09-17"
   s.2026_09_17_host_compatibility:
     asked: "Check how kpopper works in OpenClaw, add usage instructions, and identify and test other
             environments worth supporting before launch; run bounded compatibility checks in
@@ -721,6 +734,12 @@ sources:
            gaze can enhance advertising effectiveness"
     url: "https://pmc.ncbi.nlm.nih.gov/articles/PMC3941030/"
     read: "2026-09-13"
+  s.ingest_64eac369f0d3ca58463f27679fa42bb0:
+    name: "Captured report"
+    file: "/Users/ilanbm/.local/state/kpopper/ingestion/d38be57d78902508217b8f6b3d18d9c39fcf1b9fd9a67b76790e4473e1fe5b68/sources/64eac369f0d3ca58463f27679fa42bb0.txt"
+    read: "2026-09-16"
+    recorded_for: "Update p.reasoning_core_contract, m.scope_basis_collision_cases from this
+                   captured report."
   s.watch_command:
     name: "Watch plugin command"
     file: "skills/watch/SKILL.md"
@@ -828,6 +847,14 @@ sources:
          (39 entries, Hebrew and English names), the hook run per prompt and its line placed in the
          developer instructions of one arm, the same opener in both"
     read: "2026-09-11"
+  run.history_record_measurement_a0e5e9b:
+    name: "History authority record measurement"
+    file: ".kpopper/measure.yaml"
+    at: "blocked_on_reopeners recipe evaluated against GROUNDING.yaml at
+         a0e5e9bbca859db59ccc607de2c3c1fd20fcc886; observed 64"
+    read: "2026-09-17"
+    scope: "Repository text count only; it does not review the adequacy of each observational
+            falsifier"
   run.hub_vs_now:
     name: "A hand-written page and this plugin's Now tab, rendered from the same record and
            read side by side"
@@ -838,6 +865,15 @@ sources:
     name: "Focused graph export contract"
     file: "docs/graph-export.md"
     read: "2026-09-14"
+  doc.history_writer_contract_c5cc6a3:
+    name: "History writer, replay and branch adoption contract at c5cc6a3"
+    file: "docs/history-contract.md"
+    at: "Implementation and regression evidence at c5cc6a3b873628d08f338e457f09153962d406f8"
+    read: "2026-09-17"
+    scope:
+      kind: code
+      commit: c5cc6a3b873628d08f338e457f09153962d406f8
+      environment: "source protocol and disposable regression fixtures"
   doc.host_compatibility:
     name: "Host compatibility verification and release acceptance"
     file: "docs/compatibility.md"
@@ -1122,19 +1158,18 @@ known:
          half drifts while the total holds"
     measure: blocked_on_implementation
   m.blocked_on_reopeners:
-    v: 63
+    v: 64
+    # set 2026-09-17: remeasured after the explicit history authority decision
     # set 2026-09-14: this branch added two judgments that declare an observational hole
     # set 2026-09-11: measured by blocked_on_reopeners at a51bc75 with the working tree changed
     # reconciled 2026-09-05 after the same-day write rule refused a second reading: this tree adds
     # five observational declarations to the 55 measured earlier that day
-    of: "2026-09-14"
+    of: "2026-09-17"
     name: "Judgments that declare a hole with blocked_on - the count. Whether each names a sign
            that would re-open the decision, or an input the record lacks, is read by hand and said
            beside it"
-    from: run.blocked_on_reread
-    at: "of 61 declared holes - 57 say observational and 4 implementation, the second half
-         measured beside this one; none is written as what the record is missing, and the one
-         that names an entry names one the record holds"
+    from: run.history_record_measurement_a0e5e9b
+    at: "blocked_on_reopeners recipe against GROUNDING.yaml at a0e5e9bbca859db59ccc607de2c3c1fd20fcc886, after adding explicit history authority"
     measure: blocked_on_reopeners
   m.claims.general_held:
     v: 3
@@ -1437,6 +1472,63 @@ known:
     of: "2026-09-13"
     distinct_from: lit.github_registries
     # distinct 2026-09-14: one reading of the same table, two jobs: the list is what a person reads to see which ecosystems are served, the count is the one number a falsifier can compare against
+  p.history_activation_cancellation:
+    name: "Activation cancellation and guarded group recovery"
+    v: "Guarded activation cancellation retains the complete candidate as inactive immutable audit,
+        restores authored bytes, advances the legacy authority epoch, and binds cancellation receipts
+        to the authority and later commits. Group recovery validates every member before clearing
+        reader guards."
+    of: "2026-09-17"
+    from: doc.history_writer_contract_c5cc6a3
+    at: "docs/history-contract.md, Explicit proposals, groups and generation changes; scripts/history_activation.py; scripts/history_group_activation.py; tests/test_history_generations.py"
+    scope: "Source protocol and disposable regression fixtures; not a live-record cutover or
+            installed release-readiness claim"
+  p.history_branch_adoption:
+    name: "Pinned branch capture and adoption"
+    v: "Local branch history is captured at pinned Git commits and adopted through one prepared
+        mutation with explicit overlap choices. Captured source envelopes are retained as immutable
+        audit evidence; prior capsule coverage is explicit rather than recursively copied. Ordinary
+        target evidence must match exact source bytes, and recovery never rereads moved source refs."
+    of: "2026-09-17"
+    from: doc.history_writer_contract_c5cc6a3
+    at: "docs/history-contract.md; scripts/history_branch.py; scripts/history_direct.py; tests/test_history_branch.py; tests/test_history_branch_direct.py"
+    scope: "Single and bounded multiple local Git sources, no remote publication authority or live
+            record activation"
+  p.history_capture_contract:
+    name: "Committed history capture contract"
+    fidelity: paraphrase
+    v: "typed-history/v2 immutable claims and acts use marker-selected authority; complete committed
+        closure feeds bounded Snapshot history evidence for single-entry frozen or Simple live reads;
+        Advanced live, composite history and public assessment-v3 remain unsupported"
+    scope:
+      kind: code
+      commit: d9857cdb184d1daf4df37c09e71be804e1c46c37
+      environment: "kpopper source at d9857cdb184d1daf4df37c09e71be804e1c46c37"
+    from: "s.2026_09_17_history_reasoning_integration"
+    at: "docs/history-contract.md, History store and Capture and replay; scripts/history_contract.py and scripts/reasoning/snapshot.py at d9857cdb184d1daf4df37c09e71be804e1c46c37"
+    of: "2026-09-17"
+  p.history_replay_audit_evidence:
+    name: "Adapter audit replay witness"
+    v: "Adapter audit replay accepts only the current adapter identity or an exact full audit in
+        validated causal parent receipts. A pending operation cannot witness its own audit. An
+        unknown old adapter requires the original verified runtime; semantic and native audit changes
+        still refuse."
+    of: "2026-09-17"
+    from: doc.history_writer_contract_c5cc6a3
+    at: "docs/history-contract.md; scripts/history_authoring.py; tests/test_history_batch_final_world.py"
+    scope: "Source replay admission contract; recorded provenance is not proof of external source
+            truth"
+  p.history_writer_compatibility:
+    name: "History writer compatibility"
+    v: "History batch receipt v6 validates the final staged world while retaining per-action
+        admission and original seen. Retained v2/v3 operations replay exact bytes. Unicode subjects
+        retain exact logical identities through versioned hashed physical paths; older raw paths
+        remain readable. Identity changes and brief references publish under one reader guard."
+    of: "2026-09-17"
+    from: doc.history_writer_contract_c5cc6a3
+    at: "docs/history-contract.md; scripts/history_authoring.py; scripts/history_paths.py; scripts/history_identity.py; tests/test_history_batch_final_world.py; tests/test_history_direct_auxiliary.py"
+    scope: "Source implementation with focused disposable regression evidence; full combined and
+            installed gates remain separate"
   p.hypothesis_homes:
     v: 1
     name: "Places the reader reads hypothesis files from"
@@ -1708,6 +1800,19 @@ known:
          they report a judgment, and by an arrangement's sign when it is written - every surface
          reads that one answer"
     measure: predicate_shapes
+  p.prepared_legacy_recovery:
+    name: "Prepared legacy write and recovery boundary"
+    fidelity: paraphrase
+    v: "Existing-record direct writes and report ingestion retain exact record/archive/view images
+        in a journal; recover routes to the configured record and refuses changed evidence. Matching
+        after images alone does not establish completed operation identity."
+    scope:
+      kind: code
+      commit: d9857cdb184d1daf4df37c09e71be804e1c46c37
+      environment: "kpopper source at d9857cdb184d1daf4df37c09e71be804e1c46c37"
+    from: "s.2026_09_17_history_reasoning_integration"
+    at: "docs/history-contract.md, Prepared legacy publication and recovery and Integrated write scope; scripts/history_transaction.py and scripts/history_recovery_cli.py at d9857cdb184d1daf4df37c09e71be804e1c46c37"
+    of: "2026-09-17"
   p.prior_count_thresholds:
     v: 1
     name: "Lines the count of what rests on priors draws in code - a confidence past which it counts
@@ -1717,6 +1822,18 @@ known:
          count prints"
     of: "2026-09-04"
     measure: prior_count_thresholds
+  p.reasoning_core_contract:
+    fidelity: paraphrase
+    name: "Experimental portable core contract"
+    v: "core/v1 is an explicit read-only profile backed by a packaged exact Lean scalar runtime;
+        default authoring remains legacy"
+    scope:
+      commit: faed0f2432c025a0b6bcb5aa7fa51c0cc5538cf1
+      environment: "kpopper source at merged faed0f2"
+      kind: code
+    from: s.ingest_64eac369f0d3ca58463f27679fa42bb0
+    at: "docs/reasoning-core.md:1-35 at faed0f2432c025a0b6bcb5aa7fa51c0cc5538cf1; PR86"
+    of: "2026-09-16"
   p.recipe_runners:
     v: 1
     name: "Places a measurement recipe is executed - files under scripts/ that name the allowlist
@@ -1868,6 +1985,21 @@ known:
     from: run.page_move_three_states
     at: "m.page_string_lines written as 431 with seen at 431 after the move had already made it 0: 0
          problems; MOVED only once a hand set the value to 0"
+
+  m.scope_basis_collision_cases:
+    cases: ["same-count member replacement", "different empty collection definition"]
+    limits: "Two synthetic cases with fields=[] on the cited source commit."
+    name: "Reproduced scope basis collisions with no selected fields"
+    observed: "Scope witnesses differ, but compare_basis returns same."
+    v: 2
+    scope:
+      commit: faed0f2432c025a0b6bcb5aa7fa51c0cc5538cf1
+      environment: "kpopper source at merged faed0f2"
+      kind: code
+    from: s.ingest_64eac369f0d3ca58463f27679fa42bb0
+    at: "ScopeCapture probe at faed0f2432c025a0b6bcb5aa7fa51c0cc5538cf1;
+         scripts/reasoning/snapshot.py:316-398 and scripts/reasoning/evaluate.py:157-167"
+    of: "2026-09-16"
 
   m.skill_bytes_before:
     v: 64011
@@ -2888,6 +3020,46 @@ judgments:
                               it"
       d.npm_holds_the_name: "the npm name is held against the day this becomes a Node tool, and it
                              is held by the browser checks rather than by a placeholder"
+  d.history_authority_is_explicit:
+    name: "Explicit history authority and preserved evidence"
+    rests_on: [p.history_activation_cancellation, p.history_branch_adoption, p.history_replay_audit_evidence, p.history_writer_compatibility]
+    verdict: "Activated records select authority through a validated generation marker and explicit
+              acts. Retaining or importing an immutable claim does not accept it; cancellation
+              preserves later evidence as inactive history."
+    because: "Interrupted writes and merged branches can retain several valid versions at once.
+              Choosing the newest file or treating presence as acceptance would change the record
+              without an attributable decision. Binding each publication to a checked baseline and
+              keeping cancelled generations lets recovery preserve both the current decision and the
+              evidence needed to examine it."
+    blocked_on: "observational: falsified by a reproducible interrupted-write or
+                 branch-reconciliation case in which the same validated marker and retained evidence
+                 admit different accepted states, or recovery requires deleting an original claim or
+                 inventing a prior acceptance. Reproduce from retained copies independently of
+                 generated-view checks."
+    seen:
+      p.history_activation_cancellation: "Guarded activation cancellation retains the complete
+                                          candidate as inactive immutable audit, restores authored
+                                          bytes, advances the legacy authority epoch, and binds
+                                          cancellation receipts to the authority and later commits.
+                                          Group recovery validates every member before clearing
+                                          reader guards."
+      p.history_branch_adoption: "Local branch history is captured at pinned Git commits and adopted
+                                  through one prepared mutation with explicit overlap choices.
+                                  Captured source envelopes are retained as immutable audit evidence;
+                                  prior capsule coverage is explicit rather than recursively copied.
+                                  Ordinary target evidence must match exact source bytes, and
+                                  recovery never rereads moved source refs."
+      p.history_replay_audit_evidence: "Adapter audit replay accepts only the current adapter
+                                        identity or an exact full audit in validated causal parent
+                                        receipts. A pending operation cannot witness its own audit.
+                                        An unknown old adapter requires the original verified
+                                        runtime; semantic and native audit changes still refuse."
+      p.history_writer_compatibility: "History batch receipt v6 validates the final staged world
+                                       while retaining per-action admission and original seen.
+                                       Retained v2/v3 operations replay exact bytes. Unicode subjects
+                                       retain exact logical identities through versioned hashed
+                                       physical paths; older raw paths remain readable. Identity
+                                       changes and brief references publish under one reader guard."
   d.home_beside_the_entry:
     verdict: "everything a record keeps beside itself lives in one directory, .kpopper, beside the
               file the reader opens first - hypotheses/, view.yaml, measure.yaml, session.json,

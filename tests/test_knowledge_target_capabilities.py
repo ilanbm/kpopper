@@ -104,6 +104,17 @@ class TargetCapabilities(Repository):
         self.assertEqual(W.P._CORE_READS.get(), previous)
         self.assertEqual(Snapshot.from_json(snapshot.to_json()).snapshot_id, snapshot.snapshot_id)
 
+    def test_committed_target_hypothesis_profile_survives_snapshot_replay(self):
+        self.commit_target(CORE, hypothesis=True)
+        snapshot = Snapshot.capture([str(self.record)])
+        data = snapshot.to_data()
+        self.assertEqual(data['context']['target']['status'], 'observed')
+        self.assertIn('api.limit', data['context']['conflicts'])
+        self.assertEqual(data['context']['target']['snapshot']['hypotheses'][0]['doc']['meta']['reasoning'], CORE)
+        replay = Snapshot.from_json(snapshot.to_json())
+        self.assertEqual(replay.snapshot_id, snapshot.snapshot_id)
+        self.assertIn('api.limit', replay.to_data()['context']['conflicts'])
+
     def test_committed_target_hypothesis_requirements_refuse_before_comparison(self):
         self.commit_target({**CORE, 'requires': ['arithmetic/v1', 'future/v1']}, hypothesis=True)
         previous = W.P._CORE_READS.get()
