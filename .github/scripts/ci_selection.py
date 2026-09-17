@@ -24,7 +24,7 @@ def families(path):
     if path in {".github/scripts/ci_selection.py", "tests/test_ci_selection.py"}:
         return set()
     # These workflows never compile the reasoning runtime. Changes still exercise
-    # all consumers; the selector and native workflow themselves take the full audit.
+    # all consumers; the native workflow itself takes the full audit.
     if path in {".github/workflows/check.yml", ".github/workflows/session.yml",
                 "skills/watch/agents/openai.yaml"}:
         return RUNTIME

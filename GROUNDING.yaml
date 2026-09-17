@@ -858,6 +858,13 @@ sources:
     name: "The source update and recording gate regression contract"
     file: "tests/test_ingestion.py"
     read: "2026-09-07"
+  doc.session_test_gates:
+    name: "Checked-session integration test readiness gates"
+    file: "tests/test_predicate_literals.py"
+    of: "PredicateLiteralContract.setUpClass; also ReadableRuntime.setUpClass in
+         tests/test_readable_expressions.py and cache validation in scripts/session/core.py
+         Core.__init__"
+    read: "2026-09-17"
   doc.standalone_html:
     name: "Standalone authored HTML contract"
     from: s.2026_09_10_standalone_html
@@ -1378,14 +1385,16 @@ known:
          note say the word of the door's refusal and of a question - the same rival claim"
     of: "2026-09-04"
   p.contributor_session_test_setup:
-    name: "Session dependencies for contributors whose environment includes Lean"
-    v: "When Lean is on PATH, legacy checked-session tests require the session extra in the test
-        environment. The separate experimental core/v1 profile uses a packaged native runtime and its
-        normal execution needs neither a Lean compiler nor checked-session setup."
+    name: "Cached kernel and optional dependencies for checked-session tests"
+    v: "A matching cached kernel from session setup enables kernel-backed integration tests; Lean on
+        PATH alone does not. Some enabled tests import the session extra, so a base-only environment
+        can fail on missing tiktoken. The separate core/v1 packaged runtime needs neither the Lean
+        compiler nor checked-session setup for normal execution."
+    # set 2026-09-17: Correct the activation condition against the test gates and cached-core loader.
     # set 2026-09-16: Distinguish the legacy checked-session test requirements from the packaged runtime introduced on main.
-    from: doc.contributing
-    at: "Make and submit a change: optional session dependencies and the separate core/v1 runtime"
-    of: "2026-09-16"
+    from: doc.session_test_gates
+    at: "PredicateLiteralContract.setUpClass and store import; ReadableRuntime.setUpClass; Core.__init__ cache validation"
+    of: "2026-09-17"
   p.coverage_thresholds:
     v: 0
     name: "Thresholds the coverage report carries in code - a line drawn anywhere but inside a

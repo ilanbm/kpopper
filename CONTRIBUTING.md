@@ -76,12 +76,17 @@ Read the measurement recipes before running `kpop --frozen remeasure --run`; the
 Optional runtimes may skip tests locally. Changes to them need their documented setup and
 the corresponding CI job; skips are not proof that the integration passes.
 
-If Lean is already on your `PATH`, some tests exercise the checked-session runtime.
-Install its optional dependencies in the same environment before running the full suite:
+If a matching kernel is cached from `kpop session setup`, some tests exercise the
+checked-session runtime. Install its optional dependencies in the same environment before
+running the full suite; some kernel-backed tests otherwise fail on missing imports:
 
 ```sh
 python -m pip install -e '.[session]'
 ```
+
+Without a matching cached kernel, the integration tests skip. Having Lean on `PATH`
+alone does not enable them. Set `KPOPPER_REQUIRE_CORE_TESTS=1` when testing this runtime
+to make an unavailable kernel fail instead of silently skipping, as CI does.
 
 For changes to that runtime, follow the full [checked-session setup](docs/checked-sessions.md)
 and use the toolchain pinned in `scripts/session/lean/lean-toolchain`. Python 3.13 matches
@@ -115,6 +120,11 @@ Every pull request runs the skill/release contracts, CI selection tests, `kpop c
 Python 3.13. It fails if `.kpopper/view.yaml` no longer matches the record it renders from.
 The checkout remains GitHub's proposed merge result.
 
+The mandatory contracts also check local file links and heading anchors in the four
+root community documents, plus the structure and documentation links of the issue forms.
+These checks run offline; remote-page availability and GitHub reporting settings still
+need verification when preparing a public release.
+
 The `changes` job selects the other checks from the entire PR's diff against its merge
 base, including deleted files and both sides of renames. The selection and changed files
 are printed in its log; the job summary lists the selected families.
@@ -132,6 +142,13 @@ The selector lives in `.github/scripts/ci_selection.py`. Keep shared inputs broa
 regression case to `tests/test_ci_selection.py` when changing a classification. It does not
 infer Python dependencies. A change to `pyproject.toml` verifies packaging and installation;
 it does not by itself rebuild unchanged native sources.
+
+Changes to the selector rely on maintainer review as well as its mandatory regression
+tests. Reviewers must inspect every newly skipped family and the complete PR diff,
+especially when the same PR narrows a classification and changes the affected files.
+The tests validate declared cases; they cannot prove that a new classification covers all
+dependencies. Keep uncertain paths on the full checks, or use manual dispatch for a full
+audit before merging. Main's consumer checks run after merge and do not replace this review.
 
 Every push to `main` runs all test families, with native compilation selected from the push
 diff. Manual dispatch forces the complete native audit. New commits cancel older checks for

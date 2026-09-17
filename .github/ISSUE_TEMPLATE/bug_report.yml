@@ -31,7 +31,7 @@ body:
     attributes:
       label: kpopper version and installation method
       description: Use the version shown in your host's plugin manager, pip show kpopper, or the checkout commit. Say if unknown.
-      placeholder: "1.6.0; Claude Code marketplace / Codex plugin / pip / source checkout"
+      placeholder: "x.y.z; Claude Code marketplace / Codex plugin / pip / source checkout"
     validations:
       required: true
   - type: input
