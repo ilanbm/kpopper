@@ -2002,6 +2002,113 @@ def check(paths):
     return 1 if fail else 0
 
 
+def _core_context(paths):
+    """One explicit core/v1 capture for read consumers; legacy callers never enter here."""
+    context = _peer('reasoning.context')
+    try:
+        return context.CapturedAssessment.capture(paths)
+    except context.CaptureError as error:
+        failure = error.envelope
+        print('FAIL ' + failure['code'] + ': ' + failure['detail'])
+        print('capture failure ' + failure['failure_revision'] + '; no findings')
+        return None
+
+
+def core_check(paths):
+    """Apply explicit core check policy to one captured v3 finding set."""
+    context = _core_context(paths)
+    if context is None:
+        return 1
+    report = context.assessment
+    failures, notes = [], []
+    for nid, node in sorted(report['nodes'].items()):
+        coverage = node['coverage']
+        if not coverage['complete']:
+            codes = sorted({item.get('code', 'incomplete') for item in coverage['findings']})
+            failures.append(nid + ': incomplete history coverage (' + ', '.join(codes) + ')')
+        issues = node['state']['integrity']['issues']
+        if issues:
+            failures.append(nid + ': integrity (' + ', '.join(sorted({
+                item.get('code', 'error') for item in issues})) + ')')
+        computation = node.get('computation')
+        if isinstance(computation, dict) and computation.get('status') not in ('ok', 'unknown'):
+            failures.append(nid + ': computation ' + computation.get('status', 'error'))
+        falsifier = node['state']['falsifier']
+        if falsifier['status'] == 'holds':
+            failures.append(nid + ': falsifier holds')
+        elif falsifier['status'] == 'error':
+            failures.append(nid + ': falsifier unavailable')
+        elif falsifier['status'] == 'unknown':
+            line = nid + ': falsifier unknown'
+            if isinstance(falsifier.get('computation'), dict):
+                failures.append(line)
+            else:
+                notes.append(line + ' (declared prose)')
+        if node['support']['status'] == 'reserved':
+            states = sorted({item['state'] for item in node['support']['reservations']})
+            notes.append(nid + ': support reserved (' + ', '.join(states) + ')')
+    for line in notes:
+        print('NOTE ' + line)
+    for line in failures:
+        print('FAIL ' + line)
+    print('core/v1 snapshot ' + context.snapshot_id + '; findings ' + context.findings_revision)
+    print(str(len(report['nodes'])) + ' nodes, ' + str(len(failures)) + ' problems')
+    return 1 if failures else 0
+
+
+def core_pull(paths, seeds):
+    """Project exact core findings/history subjects without another read or evaluator."""
+    context = _core_context(paths)
+    if context is None:
+        return 1
+    report = context.assessment
+    available = set(report['nodes']) | set(report['history_subjects'])
+    selected = sorted({candidate for seed in seeds for candidate in available
+                       if candidate == seed or candidate.startswith(seed + '.')})
+    if not selected:
+        print('nothing matching ' + ', '.join(seeds))
+        return 1
+    payload = {
+        'schema_version': 1, 'profile': 'core/v1-consumer/v1',
+        'snapshot_id': context.snapshot_id, 'findings_revision': context.findings_revision,
+        'selection': selected,
+        'nodes': {nid: report['nodes'][nid] for nid in selected if nid in report['nodes']},
+        'history_subjects': {nid: report['history_subjects'][nid]
+                             for nid in selected if nid in report['history_subjects']},
+    }
+    print(json.dumps(payload, ensure_ascii=False, sort_keys=True, default=str))
+    return 0
+
+
+def core_affects(paths, changed):
+    """Trace transitive impact from the shared actual/potential witness projection."""
+    context = _core_context(paths)
+    if context is None:
+        return 1
+    edges = context.view['impacts']
+    outgoing = {}
+    for edge in edges:
+        outgoing.setdefault(edge['from'], []).append(edge)
+    queue, seen, reached = list(dict.fromkeys(changed)), set(changed), {}
+    while queue:
+        source = queue.pop(0)
+        for edge in sorted(outgoing.get(source, []), key=lambda item: item['to']):
+            target = edge['to']
+            current = reached.get(target)
+            if current != 'executed':
+                reached[target] = edge['classification']
+            if target not in seen:
+                seen.add(target)
+                queue.append(target)
+    if not reached:
+        print('nothing reached from ' + ', '.join(changed))
+    else:
+        for target in sorted(reached):
+            print(reached[target].upper() + ' ' + target)
+    print('core/v1 snapshot ' + context.snapshot_id + '; findings ' + context.findings_revision)
+    return 0
+
+
 def _fired_failure(name, judgment):
     return f"{name}: wrong_if holds ({predicate_text(judgment['pred'])}) - broken by its own condition"
 
@@ -6130,6 +6237,15 @@ if __name__ == "__main__":
         os.environ['KPOPPER_READ_MODE'] = 'frozen'
     a = a or ["check"]
     cmd, rest = a[0], a[1:]
+    profile = None
+    if '--profile' in rest:
+        position = rest.index('--profile')
+        if position + 1 >= len(rest):
+            sys.exit('--profile needs a value')
+        profile = rest[position + 1]
+        rest = rest[:position] + rest[position + 2:]
+        if profile != 'core/v1':
+            sys.exit('unsupported read profile: ' + profile)
     if cmd == "where":
         # the record this directory answers for: at the root, or registered with the
         # checkout. Silent and non-zero when there is none - a hook's guard, not an error.
@@ -6158,7 +6274,8 @@ if __name__ == "__main__":
         sys.exit(sameness.command(cmd, rest))
     if cmd == "affects":
         files = [x for x in rest if x.endswith((".yaml", ".yml"))] or default_paths()
-        sys.exit(affects(files, [x for x in rest if not x.endswith((".yaml", ".yml"))]))
+        changed = [x for x in rest if not x.endswith((".yaml", ".yml"))]
+        sys.exit(core_affects(files, changed) if profile else affects(files, changed))
     if cmd == "pull":
         b, seeds, files, history = 40, [], [], False
         i = 0
@@ -6169,7 +6286,7 @@ if __name__ == "__main__":
                 history = True; i += 1; continue
             (files if rest[i].endswith((".yaml", ".yml")) else seeds).append(rest[i])
             i += 1
-        code = pull(files or default_paths(), seeds, b)
+        code = core_pull(files or default_paths(), seeds) if profile else pull(files or default_paths(), seeds, b)
         if history:
             lines = history_lines(files or default_paths(), seeds)
             print()
@@ -6182,4 +6299,4 @@ if __name__ == "__main__":
         c = int(rest[rest.index("--chars") + 1]) if "--chars" in rest else None
         h = rest[rest.index("--host") + 1] if "--host" in rest else None
         sys.exit(opening(files, b, c, h))
-    sys.exit(check(files))
+    sys.exit(core_check(files) if profile else check(files))

@@ -79,13 +79,16 @@ class CapturedAssessment:
                 runtime=None, operational_limits=None, display_selection=None):
         try:
             snapshot = Snapshot.capture(paths, as_of=as_of)
+        except (Exception, SystemExit) as error:
+            raise CaptureError(capture_failure(error, stage='capture')) from error
+        try:
             return cls.from_snapshot(
                 snapshot, selection, policy=policy, runtime=runtime,
                 operational_limits=operational_limits, display_selection=display_selection)
         except CaptureError:
             raise
         except Exception as error:
-            raise CaptureError(capture_failure(error)) from error
+            raise CaptureError(capture_failure(error, stage='assessment')) from error
 
     @property
     def snapshot(self):
