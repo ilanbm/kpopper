@@ -5,7 +5,7 @@ paths. Use the instructions for the surface you actually run.
 
 | Surface | Route | Verification, 2026-09-16 |
 |---|---|---|
-| **Copilot CLI** | Canonical skills, shared instructions and the [CLI hook bridge](cli/hook.py) | CLI 1.0.75 on macOS: actual hook discovery, context delivery and one stop continuation passed against a local stub provider. Six component tests passed. See the live-workflow qualification below. |
+| **Copilot CLI** | Canonical skills, shared instructions and the [CLI hook bridge](cli/hook.py) | CLI 1.0.75 on macOS: actual hook discovery, context delivery, resume and one stop continuation passed against a local stub provider. Eight component tests passed. See the live-workflow qualification below. |
 | **VS Code local agent** | [Instructions](vscode/copilot-instructions.md); optional hook sketch | Documentation reviewed; no VS Code runtime test. |
 | **Copilot cloud agent** | [Setup workflow](cloud-agent/copilot-setup-steps.yml) and [PR check](cloud-agent/provenance-check.yml) | Documentation reviewed; no hosted job tested. |
 
@@ -24,7 +24,8 @@ The native payload deliberately mixes naming styles: `sessionId` is camelCase,
 `source` is `startup`, `resume` or `new`, and `agentStop.stop_hook_active` is
 snake_case. The bridge translates only the session ID. CLI 1.0.75 emitted
 `source: "new"`, then stop payloads with `stop_hook_active: false` and `true` in
-the recorded two-response probe. The guard applies to that forced continuation;
+the recorded two-response probe; resuming emitted `source: "resume"` and the same
+false/true stop sequence. The guard applies to that forced continuation;
 a later user turn can still trigger a new check.
 
 ### Install
@@ -113,7 +114,7 @@ temporary Git repository and a localhost provider that returned fixed responses.
 provider received the opening context, then received the new failure after the stop
 hook forced one continuation. This verifies the host protocol, not whether a model
 chooses skills, records useful findings or completes a task correctly. Linux, WSL,
-native Windows, live-model behavior and cross-agent handoff still need runtime checks.
+native Windows, complete source fidelity and cross-agent handoff still need checks.
 
 A subsequent real-model probe exposed issues the protocol tests could not detect.
 An instructions-only run guessed field names and produced no executable judgment.

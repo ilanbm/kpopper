@@ -145,7 +145,8 @@ tabs:
         why: distinguish verified loading and hooks from the conversations still needed before launch
         pick: [doc.host_compatibility, m.openclaw_bundle_skills, m.openclaw_bundle_hooks,
                m.host_compatibility_model_sessions, m.named_main_hooks_suppressed,
-               m.named_main_delivery_corrected]
+               m.named_main_delivery_corrected, m.openclaw_live_core_verified,
+               m.copilot_live_core_verified]
         as: table
       - title: The ground
         why: measured here, read from the world, or taken from a session's own prior - separated because they are not worth the same

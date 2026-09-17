@@ -1130,6 +1130,12 @@ known:
     name: "Claims about this project that held - checked with a run before they were asserted"
     from: run.claims_scored
     at: "of 6"
+  m.copilot_live_core_verified:
+    v: true
+    name: "Copilot live core sequence passes with explicitly retained source-fidelity gaps"
+    from: doc.host_compatibility
+    at: "Copilot live exercise / core behavior and provenance gaps"
+    of: "2026-09-17"
   m.core.bytes_per_version:
     v: 367
     unit: bytes
@@ -1579,6 +1585,13 @@ known:
     name: "Eligible model-visible kpopper skills in isolated OpenClaw 2026.9.4 on macOS"
     from: doc.host_compatibility
     at: "Verification matrix / OpenClaw 2026.9.4: all eight skills eligible and model-visible"
+    of: "2026-09-17"
+  m.openclaw_live_core_verified:
+    v: true
+    name: "OpenClaw Claude CLI backend passes assisted creation, two-project random recall and
+           preserved-snapshot change checks"
+    from: doc.host_compatibility
+    at: "OpenClaw live exercise / scope, assertions and operator-assisted qualification"
     of: "2026-09-17"
   m.prompt_hook_10x_kept:
     v: 0.15

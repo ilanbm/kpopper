@@ -1,9 +1,10 @@
 # kpopper for OpenClaw
 
-**Status: bundle installation and all eight skills were verified with OpenClaw
-2026.9.4. Record commands work through the separately installed Python runtime.
+**Status: bundle installation, all eight skills and a live record workflow were
+verified with OpenClaw 2026.9.4. The live test used its Claude CLI backend with
+Fable 5.1, an existing authenticated Claude profile and explicit tool approvals.
 Automatic opening, stop checks and background delivery are not connected by this
-bundle. A model-driven OpenClaw conversation has not yet been verified.**
+bundle. Other providers and clean native-client profiles remain unverified.**
 
 OpenClaw detects this repository as a **Codex bundle**, because it contains
 `.codex-plugin/plugin.json`. It loads the canonical `skills/` directory. The
@@ -47,6 +48,18 @@ agent's visibility and allowlists as well. Skill eligibility alone does not test
 Python availability or authorize the agent's file access.
 
 ## Point the agent at the project
+
+The agent's tool policy must permit reading the project and skill references,
+writing the intended record or report files, and executing the configured CLI.
+An exec allowlist with no approval route can list the skills while refusing their
+use. For a CLI backend, keep an operator approval interface available when the
+policy asks; approve only the intended project operations.
+
+The tested allowlist accepted simple CLI calls but refused some longer write
+commands. The agent then used the documented file-based route: write a JSON source
+report inside the project and run `kpop update --file /absolute/path/to/report.json`.
+This route retains the writer's source/hash checks and requires the same write
+authority. A refused tool call is not a successful record update.
 
 Use a durable project directory accessible to the OpenClaw execution environment.
 Keep the record in that project, and use `--workspace` explicitly if the agent's
@@ -116,8 +129,23 @@ On 2026-09-16, OpenClaw 2026.9.4 on macOS arm64 with Node 24.16.0 linked the
 repository in isolated state. Its CLI reported all eight skills eligible and
 model-visible. Plugin inspection reported the bundle's declared `skills` and
 `hooks`, with no registered hook names. A separately installed kpopper 1.6.0 Python
-runtime was used for the record smoke check. No model/provider, messaging channel,
-sandbox, Gateway restart, or scheduled job was exercised.
+runtime was used for the record smoke check.
+
+On 2026-09-17, the `claude-cli/claude-fable-5-1` route completed source/fact creation,
+an executable judgment, fresh-session recall of random confirmation codes in two
+separate projects, and a later reading that fired the judgment without changing
+its verdict or historical snapshot. Captured native transcripts show successful
+record reads before both recall answers. The second project's record stayed
+unchanged while the first changed, and the default Gateway workspace acquired no
+record. This tests workspace selection, not a filesystem isolation boundary.
+
+The test needed operator approvals and the file-based write route after denied
+shell commands. OpenClaw state was separate, while the Claude backend used an
+existing login and could see its native kpopper skills/hooks. Warnings from that
+native profile's Python hooks were observed; they are not evidence that OpenClaw
+executed the bundle's hooks. The explicit virtualenv CLI completed the checks.
+No messaging channel, sandbox, default embedded provider, scheduling or other OS
+was validated. See the [CLI backend contract](https://docs.openclaw.ai/gateway/cli-backends).
 
 Official references:
 

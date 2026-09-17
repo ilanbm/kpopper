@@ -59,15 +59,15 @@ documents linking, context loading, and path substitution. Checked 2026-09-16.
 
 ## Validation and limits
 
-Tested on 2026-09-16 with **Gemini CLI 0.43.0**, Node 24.14.0, Python 3.14.5 and
+Tested on 2026-09-16/17 with **Gemini CLI 0.43.0**, Node 24.14.0, Python 3.14.5 and
 macOS (Darwin 25.4.0):
 
 - Linked and listed the extension using an isolated `GEMINI_CLI_HOME`; Gemini
   discovered the context file and enabled the extension.
 - Executed both configured commands through the installed Gemini `HookRunner`.
   Its output parser accepted JSON, and its aggregator retained startup context.
-- Passed five regression tests covering record opening, first-use guidance,
-  advisory failure reporting, an absent record, and malformed input. Paths with
+- Passed six regression tests covering record opening, first-use guidance,
+  advisory failure reporting, an absent record, malformed input and closed stdin. Paths with
   spaces and a hook process running outside the project are covered.
 
 Run the repository checks with:
@@ -80,3 +80,7 @@ These are CLI-management and hook-component checks. A model-driven session,
 resume/reopen behavior, actual shutdown delivery, sandboxed execution, Linux/WSL,
 and native Windows remain unverified. Do not treat successful linking as proof of
 an end-to-end session.
+
+The 2026-09-17 live probe stopped before a model call: the selected `gemini-api-key`
+authentication required `GEMINI_API_KEY`, which was absent from that execution
+environment. No login or global configuration change was made to work around it.

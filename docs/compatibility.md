@@ -15,9 +15,9 @@ supported end-to-end integration.
 | Host / version | Verified boundary | Still to verify |
 |---|---|---|
 | **Claude Code / Codex shared scripts** | Record birth, reopen, relocation, Claude-to-Codex payload handoff, failure reporting and stop continuation in real subprocesses; named-main regression fixed | Installation and consumption in clean clients, live named-main delivery, active/idle background delivery. |
-| **OpenClaw 2026.9.4** | Isolated linked bundle install; all eight skills eligible and model-visible; original support links resolve; hook inventory confirms no kpopper hook pack | Model tool use, fresh-conversation recall, sandbox/remote paths and delivery. |
+| **OpenClaw 2026.9.4** | Bundle/skill discovery; live Claude CLI backend writes, independent random-code recall in two projects, changed-premise detection with unchanged decision and snapshot | Clean Claude profile, other providers, sandbox/remote paths, automatic hooks and delivery. |
 | **OpenCode 1.18.31** | Isolated native binary accepts configuration and discovers all eight canonical skills at original paths | Model tool use, session resumption, Desktop/IDE behavior. |
-| **Gemini CLI 0.43.0** | Isolated extension link/list; installed host hook runner and aggregator accept startup JSON context; adapter regression tests | Model consumption, actual lifecycle/shutdown delivery, resume and sandbox execution. |
+| **Gemini CLI 0.43.0** | Isolated extension link/list; installed host hook runner and aggregator accept startup JSON context; adapter regression tests | Live probe stopped before a model call because the selected API-key authentication had no key in the test environment; lifecycle/shutdown, resume and sandbox execution remain unverified. |
 | **Copilot CLI 1.0.75** | Actual CLI hooks and native payloads; real-model creation, fresh record read and changed-premise detection with canonical skills | Complete citation metadata, randomized fresh-session recall, live cross-agent handoff and other operating systems. |
 | **Cursor** | Shell wrappers handle native-shaped payloads, executable symlinks, paths with spaces and one follow-up; documentation reviewed | Actual local client delivery, resume/compaction and multi-root behavior. Hosted cloud lacks the opening event used by this adapter. |
 | **Claude Cowork** | Package route and runtime requirements reviewed against official documentation | Installation in Cowork, Python/runtime access, hook behavior and persistence across conversations. |
@@ -33,6 +33,24 @@ The Gemini adapter now translates raw opener text to the host's JSON context
 format. The Copilot CLI bridge translates both opening and blocking responses.
 The [adapter matrix](../adapters/README.md#capability-matrix) describes the resulting
 behavior and links the installation guides.
+
+### OpenClaw live exercise
+
+The Claude CLI backend with Fable 5.1 completed the core workflow on two isolated
+project directories. Each held a different random confirmation code, absent from
+its fresh-conversation prompt. Both native transcripts show a successful record
+read before the correct answer, with no writes in the recall turns. Updating one
+project's capacity from 47 to 19 fired its existing condition against requirement
+32 while the verdict and `seen: 47` remained intact. The other project's record
+remained unchanged and neither record appeared in the default Gateway workspace.
+
+This was an **operator-assisted workflow pass for that backend**, not a clean-client
+or all-provider certification. Initial calls failed under the test's tool policy;
+explicit approvals and JSON source reports allowed completion without changing
+that policy to unrestricted execution. The backend retained an existing Claude
+login/profile, including native skills/hooks, so its own hook output cannot prove
+OpenClaw bundle-hook support. The virtualenv CLI was verified independently.
+Messaging, sandboxing, remote execution and automated delivery remain untested.
 
 ### Copilot live exercise
 
@@ -110,7 +128,7 @@ POSIX commands; native Windows requires separate proof. CI matrices for the core
 runtime are not proof of host installation. Include a non-Git project, paths with
 spaces, and a sandbox or remote worker where that route is advertised.
 
-The initial pass reproduced a Claude-specific issue: continuing hooks filtered
+The initial pass on baseline `5c2062b` reproduced a Claude-specific issue: continuing hooks filtered
 on `agent_type` and suppressed named main agents as well as subagents. The follow-up
 corrects all five continuing hooks to identify subagents by `agent_id`, matching
 the opener. Five behavioral regressions failed before the fix and passed afterward;
