@@ -1,0 +1,28 @@
+meta:
+  name: Core page fixture
+  reasoning:
+    version: 2
+    profile: core/v1
+    requires: [arithmetic/v1, composition/v1]
+known:
+  v.zero:
+    v: 0
+  v.false:
+    v: false
+  v.list:
+    v: [0, false, null, text]
+  v.record:
+    v:
+      a: [false, 0]
+      z: null
+judgments:
+  d.safe:
+    rests_on: [v.false]
+    seen:
+      v.false: false
+    verdict: false remains false
+    wrong_if:
+      op: eq
+      args:
+        - ref: v.false
+        - bool: true

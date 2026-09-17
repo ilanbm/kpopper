@@ -2122,7 +2122,10 @@ def core_build_from_context(context, brief_content=None, page_path=None, *, reco
         '.core-node{background:white;border:1px solid #ddd;border-radius:10px;padding:14px}.core-node h3{margin:0 0 10px}'
         '.core-value,.core-rule{font-size:1.1rem;overflow-wrap:anywhere}.unavailable{color:#777}.core-state{padding-left:20px;font-size:13px}'
         '.core-state span{font-weight:600}.core-dependency{display:inline-block;margin:2px;padding:2px 5px;background:#eee;border-radius:4px}'
-        '.core-arrangement{margin:28px 0}.core-section{margin:18px 0}</style></head>',
+        '.core-arrangement{margin:28px 0}.core-section{margin:18px 0}'
+        '@media(prefers-color-scheme:dark){body{background:#181817;color:#eee}.core-node{background:#242422;border-color:#555}'
+        '.core-dependency{background:#383835}a{color:#8fc7ff}}'
+        '@media(prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important;scroll-behavior:auto!important}}</style></head>',
         f'<body data-profile="core/v1" data-snapshot-id="{context.snapshot_id}" '
         f'data-findings-revision="{context.findings_revision}" '
         f'data-page-assessment-revision="{page_assessment["page_assessment_revision"]}">',
