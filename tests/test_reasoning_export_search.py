@@ -101,7 +101,7 @@ class CoreExportSearchTests(unittest.TestCase):
         source = next(row for row in found['results'] if row['kind'] == 'source')
         read = S.read(source['ref'], found['revision'], record=str(self.record),
                       profile='core/v1')
-        self.assertEqual(read['content'], self.source.read_text(encoding='utf-8'))
+        self.assertEqual(read['content'], self.source.read_bytes().decode('utf-8'))
         self.assertEqual(read['snapshot_id'], found['snapshot_id'])
         self.assertEqual(read['findings_revision'], found['findings_revision'])
         with self.assertRaisesRegex(ValueError,

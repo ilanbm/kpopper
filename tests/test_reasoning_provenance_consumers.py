@@ -1,6 +1,7 @@
 """Explicit record readers share one core assessment and leave legacy default alone."""
 import contextlib
 import io
+import os
 from pathlib import Path
 import subprocess
 import sys
@@ -71,6 +72,7 @@ class CoreProvenanceConsumers(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertIn('core/v1 snapshot ', result.stdout)
 
+    @unittest.skipUnless(os.name == 'posix', 'record writers require POSIX locks')
     def test_writer_cli_keeps_profile_for_action_dispatch(self):
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / 'GROUNDING.yaml'
