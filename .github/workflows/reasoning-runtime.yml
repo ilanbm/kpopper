@@ -17,7 +17,6 @@ permissions:
 
 jobs:
   build:
-    timeout-minutes: 45
     if: inputs.rebuild || github.event_name == 'workflow_dispatch'
     strategy:
       fail-fast: false
@@ -101,7 +100,6 @@ jobs:
           if-no-files-found: error
 
   installed:
-    timeout-minutes: 25
     needs: build
     # A packaging-only change tests the committed binaries without a compiler build.
     # A requested build must succeed before testing replacement libraries from it.

@@ -950,6 +950,18 @@ sources:
          dry-run merges of each pair"
     read: "2026-09-01"
 
+  run.native_bundle_holds_the_workflow:
+    name: "What the committed GMP corresponding-source archive turned out to contain"
+    v: "_source_bundle_files reads .github/workflows/reasoning-runtime.yml and stores its bytes in
+        gmp-source-and-build.tar.gz beside the GMP tarball, its own source and the licence texts.
+        Adding two timeout-minutes lines to that workflow made --check-bundles raise 'GMP
+        corresponding-source recipe or inventory mismatch' on every one of the nine installed legs,
+        while the parent commit passed"
+    from: s.2026_09_18_ci_cost
+    at: "scripts/reasoning/build_runtime.py, _source_bundle_files and check_bundles; reproduced on a
+         fresh checkout of the commit and of its parent"
+    of: "2026-09-18"
+
   run.page_move_three_states:
     name: "The move of the page's code out of Python strings, run through check in three states of
            the record"
@@ -3521,6 +3533,17 @@ judgments:
                   pending; an uncertain send causes another automatic offer in the same epoch; or a
                   quiet native worker completion starts a new primary turn."
     seen: {s.background_ingestion: "read 2026-09-09"}
+  d.native_workflow_is_corresponding_source:
+    name: "Why the native workflow file cannot be edited on its own"
+    verdict: "An edit to .github/workflows/reasoning-runtime.yml is an edit to the shipped
+              corresponding-source archive, and the archive has to be rebuilt in the same change"
+    rests_on: [s.2026_09_18_ci_cost]
+    reopened_by: "The corresponding-source bundle stops carrying the workflow file - the recipe
+                  names the producer platform setup some other way, or the licence obligation is met
+                  by a different artifact."
+    from: s.2026_09_18_ci_cost
+    as_of: "2026-09-18"
+    seen: {s.2026_09_18_ci_cost: "read 2026-09-18"}
   d.no_record_opener_is_two_lines:
     rests_on: [s.2026_09_10_skills_split, d.workspace_operations]
     verdict: "with no record the opener says so in two lines and names the skills; the starting
