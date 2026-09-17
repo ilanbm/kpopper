@@ -49,11 +49,12 @@ def venv_python(directory):
     return directory / ("Scripts/python.exe" if os.name == "nt" else "bin/python")
 
 
-def probe(python):
+def probe(python, isolated=False):
     try:
         # Match a hook script's import environment, including existing user-site
         # installs. For -c, cwd=HERE stands in for the script's sys.path[0].
-        result = subprocess.run([str(python), "-c", PROBE], cwd=HERE, capture_output=True,
+        command = [str(python), *(["-I"] if isolated else []), "-c", PROBE]
+        result = subprocess.run(command, cwd=HERE, capture_output=True,
                                 text=True, encoding="utf-8", timeout=10)
         if result.returncode:
             raise ValueError(result.stderr.strip() or "probe exited %s" % result.returncode)
@@ -101,7 +102,9 @@ def setup():
             raise ValueError("Refusing to modify a directory that is not a virtualenv: " + str(directory))
         print("Creating/checking private Python environment: " + str(directory), flush=True)
         subprocess.run([sys.executable, "-I", "-m", "venv", str(directory)], check=True)
-        status = probe(python)
+        # Setup must install dependencies into the venv itself, even if the
+        # terminal supplies them through PYTHONPATH that the host will not inherit.
+        status = probe(python, isolated=True)
         # Never hand pip a system interpreter, even if a partial venv is damaged.
         if (Path(status.get("prefix", "")).resolve() != directory.resolve()
                 or status.get("prefix") == status.get("base_prefix")):
@@ -109,7 +112,7 @@ def setup():
         if status["errors"]:
             print("Installing plugin dependencies into " + str(python), flush=True)
             subprocess.run([str(python), "-I", "-m", "pip", "--isolated", "install", *REQUIREMENTS], check=True)
-        status = probe(python)
+        status = probe(python, isolated=True)
         if status["errors"]:
             print(diagnostic(status), file=sys.stderr)
             return 1

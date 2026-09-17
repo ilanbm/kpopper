@@ -19,6 +19,8 @@ python3 "/absolute/path/to/kpopper/scripts/plugin_runtime.py" doctor
 `setup` is an explicit network operation. It uses Python's `venv`, then that venv's
 `python -m pip` to install the required packages. It never uses `--user` or
 `--break-system-packages`, and never installs the plugin package into the venv.
+Setup checks dependencies in isolation so a terminal's `PYTHONPATH` cannot make an
+empty venv look ready. Ordinary hook checks use the same import environment as the hook.
 Python must include working `venv`/`ensurepip` support. A failed venv or pip command
 returns nonzero and prints its error; setup is not complete until it prints `Ready`.
 After correcting network or Python/venv availability, rerun the same command.

@@ -181,6 +181,27 @@ class PluginRuntime(unittest.TestCase):
                 mock.call([sys.executable, "-I", "-m", "venv", str(directory)], check=True),
                 mock.call([python, "-I", "-m", "pip", "--isolated", "install", *R.REQUIREMENTS], check=True)])
 
+    def test_setup_does_not_count_ambient_pythonpath_as_installed(self):
+        _, site = self.repaired()
+        ambient = self.root / "ambient dependencies"
+        site.rename(ambient)
+        site.mkdir()
+        self.env["PYTHONPATH"] = str(ambient)
+        real_run = subprocess.run
+        pip_calls = []
+
+        def offline_setup(command, **kwargs):
+            if command[1:4] == ["-I", "-m", "venv"]:
+                return subprocess.CompletedProcess(command, 0)  # existing empty venv
+            if command[1:4] == ["-I", "-m", "pip"]:
+                pip_calls.append(command)
+                raise subprocess.CalledProcessError(1, command)
+            return real_run(command, **kwargs)
+
+        with mock.patch.dict(os.environ, self.env), mock.patch.object(R.subprocess, "run", offline_setup):
+            self.assertEqual(R.main(["setup"]), 1)
+        self.assertEqual(len(pip_calls), 1)
+
     def test_setup_refuses_pip_when_python_is_not_the_private_venv(self):
         with mock.patch.dict(os.environ, self.env), \
                 mock.patch.object(R, "probe", return_value={"python": sys.executable,
