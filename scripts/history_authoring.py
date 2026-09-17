@@ -150,14 +150,13 @@ def prepare(entry, action, *, by=None, operation=None, recorded_at=None, capture
             authored = copy.deepcopy(old['authored'])
         else:
             body = copy.deepcopy(action['body'])
-            C._require(isinstance(body, dict), 'history_body_mapping_required')
             collection = existing[subject][0] if subject in existing else P._collection_for(
                 document, ids, judgments, fields, subject, body, action.get('into'))
             authored = {'collection': collection, 'fields': {k: v for k, v in fields.items() if v},
                         'profile': cap['profile']}
-        deps = body.get(fields['deps'], [])
+        deps = body.get(fields['deps'], []) if isinstance(body, dict) else []
         pins = _pins(captured, deps)
-        claim = C.make_object(subject=subject, kind='judgment' if fields['deps'] in body else 'reading',
+        claim = C.make_object(subject=subject, kind='judgment' if isinstance(body, dict) and fields['deps'] in body else 'reading',
                               by=by, on=recorded_at, operation=operation, body=body, saw=saw,
                               pins=pins, authored=authored)
         new.append(claim)

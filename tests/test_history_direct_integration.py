@@ -29,6 +29,17 @@ class DirectHistory(unittest.TestCase):
         self.assertEqual(Snapshot.capture(self.entry).to_data()['nodes']['p.input']['body']['v'], 5)
         self.assertFalse((self.entry.parent / D.journal(self.entry)).exists())
 
+    def test_ordinary_scalar_add_keeps_the_original_authored_body(self):
+        with contextlib.redirect_stdout(io.StringIO()):
+            result = P.apply([str(self.entry)], {'kind': 'add', 'id': 'q.choice',
+                                                'body': 'Which source remains current?'})
+        self.assertEqual(result, 0)
+        captured = H.Store(self.entry).capture()
+        head = captured.state['subjects']['q.choice']['head']
+        self.assertEqual(captured.objects[head]['body'], 'Which source remains current?')
+        self.assertEqual(Snapshot.capture(self.entry).to_data()['nodes']['q.choice']['body'],
+                         'Which source remains current?')
+
     def test_after_manifest_failure_retains_exact_recovery_operation(self):
         replace = T._replace
         def failed(path, raw):
@@ -75,6 +86,31 @@ class DirectHistory(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         self.assertEqual(json.loads(result.stdout)['state'], 'rebuilt')
         self.assertEqual(Snapshot.capture(self.entry).to_data()['nodes']['p.input']['body']['v'], 7)
+
+    def test_cli_report_recovery_uses_the_event_lock_without_a_nested_direct_lock(self):
+        import json
+        import subprocess
+        import sys
+        from tests import test_history_report_integration as reports
+        report = reports.HistoryReports()
+        report.setUp()
+        self.addCleanup(report.doCleanups)
+        report.capture()
+        replace = report.T._replace
+        def fail_view(path, raw):
+            if Path(path).resolve() == report.entry.resolve():
+                raise OSError('report view interrupted')
+            return replace(path, raw)
+        with mock.patch.object(report.T, '_replace', side_effect=fail_view):
+            self.assertEqual(report.process()['state'], 'recovery_required')
+        cli = Path(P.__file__).with_name('cli.py')
+        result = subprocess.run([sys.executable, str(cli), 'recover', '--record', str(report.entry), '--json'],
+                                capture_output=True, text=True, timeout=20)
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        receipt = json.loads(result.stdout)
+        self.assertEqual(receipt['state'], 'applied')
+        self.assertTrue(receipt['recovered'])
+        self.assertEqual(len(report.store.capture().commits), 2)
 
 
 if __name__ == '__main__':
