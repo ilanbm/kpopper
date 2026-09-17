@@ -2047,6 +2047,20 @@ def core_check(paths):
         if node['support']['status'] == 'reserved':
             states = sorted({item['state'] for item in node['support']['reservations']})
             notes.append(nid + ': support reserved (' + ', '.join(states) + ')')
+    try:
+        page = _peer('render_page')
+        page_info = page.core_build(paths, context=context)[4]
+        unresolved = page_info['coverage'].get('unresolved_selectors', [])
+        if unresolved:
+            failures.append('page selectors unresolved (' + ', '.join(unresolved) + ')')
+        misfits = page_info['coverage'].get('renderer_misfits', [])
+        if misfits:
+            failures.append('page renderer mismatch (' + '; '.join(misfits) + ')')
+        stale = page_info['coverage'].get('stale_shapes', [])
+        if stale:
+            failures.append('page shape moved (' + '; '.join(stale) + ')')
+    except (OSError, ValueError, TypeError) as error:
+        failures.append('page projection unavailable (' + str(error) + ')')
     for line in notes:
         print('NOTE ' + line)
     for line in failures:
@@ -2089,17 +2103,18 @@ def core_affects(paths, changed):
     outgoing = {}
     for edge in edges:
         outgoing.setdefault(edge['from'], []).append(edge)
-    queue, seen, reached = list(dict.fromkeys(changed)), set(changed), {}
+    queue = [(item, 'executed') for item in dict.fromkeys(changed)]
+    reached = {}
     while queue:
-        source = queue.pop(0)
+        source, path_classification = queue.pop(0)
         for edge in sorted(outgoing.get(source, []), key=lambda item: item['to']):
             target = edge['to']
+            candidate = 'executed' if path_classification == 'executed' \
+                and edge['classification'] == 'executed' else 'potential'
             current = reached.get(target)
-            if current != 'executed':
-                reached[target] = edge['classification']
-            if target not in seen:
-                seen.add(target)
-                queue.append(target)
+            if current is None or current == 'potential' and candidate == 'executed':
+                reached[target] = candidate
+                queue.append((target, candidate))
     if not reached:
         print('nothing reached from ' + ', '.join(changed))
     else:
@@ -6240,7 +6255,7 @@ if __name__ == "__main__":
     a = a or ["check"]
     cmd, rest = a[0], a[1:]
     profile = None
-    if '--profile' in rest:
+    if cmd in ('affects', 'pull', 'check', 'open') and '--profile' in rest:
         position = rest.index('--profile')
         if position + 1 >= len(rest):
             sys.exit('--profile needs a value')
@@ -6279,15 +6294,19 @@ if __name__ == "__main__":
         changed = [x for x in rest if not x.endswith((".yaml", ".yml"))]
         sys.exit(core_affects(files, changed) if profile else affects(files, changed))
     if cmd == "pull":
-        b, seeds, files, history = 40, [], [], False
+        b, seeds, files, history, budget_requested = 40, [], [], False, False
         i = 0
         while i < len(rest):
             if rest[i] == "--budget":
-                b = int(rest[i + 1]); i += 2; continue
+                b = int(rest[i + 1]); budget_requested = True; i += 2; continue
             if rest[i] == "--history":
                 history = True; i += 1; continue
             (files if rest[i].endswith((".yaml", ".yml")) else seeds).append(rest[i])
             i += 1
+        if profile and history:
+            sys.exit('core_profile_option_unsupported: --history; core pull already includes captured history')
+        if profile and budget_requested:
+            sys.exit('core_profile_option_unsupported: --budget')
         code = core_pull(files or default_paths(), seeds) if profile else pull(files or default_paths(), seeds, b)
         if history:
             lines = history_lines(files or default_paths(), seeds)

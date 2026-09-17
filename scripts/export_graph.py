@@ -18,11 +18,15 @@ def _core_modules():
         from .reasoning.context import CapturedAssessment
         from .reasoning.projection import render_expression, render_value
     except ImportError:
-        root = str(Path(__file__).resolve().parents[1])
-        if root not in sys.path:
-            sys.path.insert(0, root)
-        from scripts.reasoning.context import CapturedAssessment
-        from scripts.reasoning.projection import render_expression, render_value
+        import importlib
+        package = Path(__file__).resolve().parent.name
+        parent = str(Path(__file__).resolve().parent.parent)
+        if parent not in sys.path:
+            sys.path.insert(0, parent)
+        CapturedAssessment = importlib.import_module(
+            package + '.reasoning.context').CapturedAssessment
+        projection = importlib.import_module(package + '.reasoning.projection')
+        render_expression, render_value = projection.render_expression, projection.render_value
     return CapturedAssessment, render_expression, render_value
 
 
@@ -617,7 +621,9 @@ def main(argv=None):
                        'The text above is the readable representation.\n\n```mermaid\n' +
                        render_mermaid(packet) + '```\n')
     except (ValueError, OSError, P.yaml.YAMLError) as error:
-        parser.error(str(error))
+        failure = getattr(error, 'envelope', None)
+        parser.error(json.dumps(failure, ensure_ascii=False, sort_keys=True)
+                     if isinstance(failure, dict) else str(error))
     print(output, end='')
     return 0
 

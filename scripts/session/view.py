@@ -8,6 +8,7 @@ from .core import Core
 from .model import MapTree, BudgetTooSmall
 from .reader import CheckedSessionService, CoreSessionReader, pointer_value
 from .store import RULES, TextEncoder, encode, digest
+from ..pending_grounding import _encode as typed_encode
 
 META_REFS = {'orientation', 'assessment', 'pending', 'native'}
 
@@ -397,9 +398,12 @@ def _core_graph_data(context, revision, project_identity, navigation_profile=Non
             states.append('unknown')
         if status['falsifier']['holds'] is True:
             states.append('falsifier_triggered')
+        if status['support']['status'] == 'reserved':
+            states.append('support_reserved')
         nodes[identifier] = {
             'kind': captured['collection'], 'states': sorted(states),
-            'body': copy.deepcopy(captured['body']),
+            'body': {'encoding': 'typed-json/v1', 'value': typed_encode(captured['body'])},
+            'body_encoding': 'typed-json/v1',
             'core_status': copy.deepcopy(status),
             'core_status_text': projected['status_text'],
             'core_dependencies': copy.deepcopy(projected['dependencies']),
@@ -417,8 +421,10 @@ def _core_graph_data(context, revision, project_identity, navigation_profile=Non
         'contributions': copy.deepcopy(snapshot['context'].get('pending', {}).get(
             'contributions', [])),
         'read_mode': snapshot['context'].get('read_mode', 'frozen'),
-        'core_findings': copy.deepcopy(assessment['nodes']),
-        'core_history_subjects': copy.deepcopy(assessment['history_subjects']),
+        'core_findings': {identifier: typed_encode(value)
+                          for identifier, value in assessment['nodes'].items()},
+        'core_history_subjects': {identifier: typed_encode(value)
+                                  for identifier, value in assessment['history_subjects'].items()},
         'core_assessment': {
             'schema_version': assessment['schema_version'],
             'assessment_profile': assessment['assessment_profile'],

@@ -180,7 +180,8 @@ def attention(state, policy=POLICY):
     reasons = []
     falsifier = state['falsifier']
     if falsifier['status'] == 'holds':
-        reasons.append({'code': 'falsifier_holds'})
+        reasons.append({'code': 'falsifier_holds',
+                        'related_ids': sorted(set(falsifier.get('reads') or []))})
     if policy == POLICY:
         reads = set(falsifier.get('reads') or [])
         for dep, finding in state['basis'].get('dependencies', {}).items():
@@ -203,7 +204,10 @@ def attention(state, policy=POLICY):
         if gaps:
             items.append({'action': 'resolve_gap', 'reasons': gaps})
         if state['contention']['status'] == 'detected':
-            items.append({'action': 'inspect_alternatives', 'reasons': [{'code': 'competing_hypotheses'}]})
+            related = sorted({item.get('id') for item in state['contention'].get('alternatives', [])
+                              if isinstance(item, dict) and isinstance(item.get('id'), str)})
+            items.append({'action': 'inspect_alternatives', 'reasons': [
+                {'code': 'competing_hypotheses', 'related_ids': related}]})
     return items
 
 

@@ -3,7 +3,8 @@ import copy
 import json
 
 from .contract import digest
-from .history_assessment import assess as assess_history, validate as validate_assessment
+from .history_assessment import (assess as assess_history, from_v2 as history_from_v2,
+                                 validate as validate_assessment, validate_v2)
 from .projection import project_findings
 from .snapshot import Snapshot
 
@@ -59,6 +60,22 @@ class CapturedAssessment:
         report = validate_assessment(assessment)
         if report['snapshot_id'] != snapshot.snapshot_id:
             raise ValueError('assessment belongs to a different snapshot')
+        base = {
+            'schema_version': 2, 'assessment_profile': report['assessment_profile'],
+            'attention_policy': report['attention_policy'], 'snapshot_id': report['snapshot_id'],
+            'as_of': report['as_of'], 'scope': copy.deepcopy(report['scope']),
+            'selection': list(report['assessment_selection']),
+            'assessment_revision': report['base_assessment_revision'],
+            'nodes': {identifier: {key: copy.deepcopy(node[key]) for key in (
+                'body', 'fields', 'state', 'attention', 'computation')}
+                for identifier, node in report['nodes'].items()},
+            'operational_limits': copy.deepcopy(report['operational_limits']),
+        }
+        base = validate_v2(snapshot, base)
+        rebuilt = history_from_v2(snapshot, base,
+                                  display_selection=report['display_selection'])
+        if rebuilt != report:
+            raise ValueError('assessment does not match its retained snapshot')
         view = project_findings(report)
         if view['snapshot_id'] != snapshot.snapshot_id \
                 or view['findings_revision'] != report['findings_revision']:
@@ -118,27 +135,37 @@ class CapturedAssessment:
         return digest(payload)
 
     def to_data(self):
-        payload = {'version': CONTEXT_VERSION, 'snapshot': self._snapshot.to_json(),
+        from ..pending_grounding import _encode
+        payload = {'snapshot': self._snapshot.to_json(),
                    'assessment': self.assessment, 'view': self.view}
-        payload['context_revision'] = digest(payload)
-        return payload
+        return {'version': CONTEXT_VERSION, 'encoding': 'typed-json/v1',
+                'payload': _encode(payload), 'context_revision': digest(payload)}
 
     def to_json(self):
-        return json.dumps(self.to_data(), ensure_ascii=False, sort_keys=True,
-                          separators=(',', ':'))
+        from ..pending_grounding import json_bytes
+        return json_bytes(self.to_data()).decode('utf-8')
 
     @classmethod
     def from_data(cls, payload):
-        expected = {'version', 'snapshot', 'assessment', 'view', 'context_revision'}
+        from ..pending_grounding import _decode, _encode
+        expected = {'version', 'encoding', 'payload', 'context_revision'}
         if not isinstance(payload, dict) or set(payload) != expected \
                 or payload['version'] != CONTEXT_VERSION \
-                or not isinstance(payload['snapshot'], str):
+                or payload['encoding'] != 'typed-json/v1':
             raise ValueError('invalid captured assessment context')
-        preimage = {key: value for key, value in payload.items() if key != 'context_revision'}
-        if payload['context_revision'] != digest(preimage):
+        try:
+            decoded = _decode(payload['payload'])
+        except (TypeError, ValueError, IndexError, RecursionError) as error:
+            raise ValueError('invalid captured assessment typed payload') from error
+        if _encode(decoded) != payload['payload'] \
+                or not isinstance(decoded, dict) \
+                or set(decoded) != {'snapshot', 'assessment', 'view'} \
+                or not isinstance(decoded['snapshot'], str):
+            raise ValueError('invalid captured assessment typed payload')
+        if payload['context_revision'] != digest(decoded):
             raise ValueError('noncanonical captured assessment context')
-        context = cls(Snapshot.from_json(payload['snapshot']), payload['assessment'])
-        if context.view != payload['view']:
+        context = cls(Snapshot.from_json(decoded['snapshot']), decoded['assessment'])
+        if context.view != decoded['view']:
             raise ValueError('captured consumer view does not match findings')
         return context
 

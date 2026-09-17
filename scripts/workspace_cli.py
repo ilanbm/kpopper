@@ -75,10 +75,16 @@ def open_context(argv):
             if args.chars is not None or args.budget is not None:
                 raise ValueError('core_profile_option_unsupported: --chars/--budget')
             try:
-                from .reasoning.context import CapturedAssessment
+                from .reasoning.context import CaptureError, CapturedAssessment
             except ImportError:
-                from reasoning.context import CapturedAssessment
-            context = CapturedAssessment.capture(files)
+                from reasoning.context import CaptureError, CapturedAssessment
+            try:
+                context = CapturedAssessment.capture(files)
+            except CaptureError as error:
+                failure = error.envelope
+                text = (failure['code'] + ': ' + failure['detail'] + '\n'
+                        'capture failure ' + failure['failure_revision'] + '; no findings')
+                return _emit({**data, **failure, 'error': str(error)}, text, args.json, 2)
             report, snapshot = context.assessment, context.snapshot.to_data()
             document = snapshot['document']
             meta = document.get('meta') if isinstance(document.get('meta'), dict) else {}

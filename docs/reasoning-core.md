@@ -68,6 +68,12 @@ options and preserve unknown/error independently from false. The core session ha
 project identity, Snapshot, findings and consumer-view version; follow-up reads reuse its retained
 source-free context and recapture only to reject staleness.
 
+`consolidate`, watch compatibility/uncertainty, followups, and `remeasure` remain explicit
+legacy-only operations during the dormant T4 route. A declared core record fails them closed with
+`unsupported_capability: use core/v1 consumer`; they never fall back to the legacy evaluator.
+Use the shared read consumers above for current findings. Activation remains blocked while these
+operation-specific contracts are not migrated.
+
 ## Composable conditions
 
 Composition is an additive capability of `core/v1`, not a new profile. A record

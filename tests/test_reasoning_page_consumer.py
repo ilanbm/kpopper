@@ -124,6 +124,33 @@ class CorePageConsumerTests(unittest.TestCase):
                 self.assertEqual(R.verify([str(record)], str(brief), profile='core/v1',
                                           context=self.context), 0)
 
+    def test_missing_selector_fails_page_verify(self):
+        brief = b'title: Missing\nsections:\n- title: Missing\n  pick: missing.prefix\n'
+        _, _, _, _, info = self.build(brief)
+        self.assertEqual(info['coverage']['unresolved_selectors'], ['missing.prefix'])
+        with tempfile.TemporaryDirectory() as directory:
+            record = Path(directory) / 'GROUNDING.yaml'
+            view = Path(directory) / 'view.yaml'
+            record.write_text('not read by supplied context\n', encoding='utf-8')
+            view.write_bytes(brief)
+            self.assertEqual(R.verify([str(record)], str(view), profile='core/v1',
+                                      context=self.context), 1)
+
+    def test_stale_shape_and_renderer_misfit_fail_page_verify(self):
+        brief = (b'title: Stale\n'
+                 b'shape: {entries: 999, judgments: 999, flagged: 999, blocked: 999}\n'
+                 b'sections:\n- title: Bad fit\n  as: comparison\n  pick: all\n')
+        _, _, _, _, info = self.build(brief)
+        self.assertTrue(info['coverage']['stale_shapes'])
+        self.assertTrue(info['coverage']['renderer_misfits'])
+        with tempfile.TemporaryDirectory() as directory:
+            record = Path(directory) / 'GROUNDING.yaml'
+            view = Path(directory) / 'view.yaml'
+            record.write_text('not read by supplied context\n', encoding='utf-8')
+            view.write_bytes(brief)
+            self.assertEqual(R.verify([str(record)], str(view), profile='core/v1',
+                                      context=self.context), 1)
+
     def test_default_build_does_not_enter_the_core_route(self):
         with tempfile.TemporaryDirectory() as directory:
             record = Path(directory) / 'GROUNDING.yaml'

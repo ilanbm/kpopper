@@ -5,6 +5,7 @@ import io
 import json
 from pathlib import Path
 import tempfile
+import tracemalloc
 import unittest
 from unittest import mock
 
@@ -130,6 +131,18 @@ class HistoryAssessmentTests(unittest.TestCase):
                 if jsonschema is not None:
                     jsonschema.validate(result, self.schema)
 
+    def test_fired_falsifier_attention_is_canonical_v2_and_v3(self):
+        decision = claim('d.ready', {'rests_on': [], 'wrong_if': {'bool': True}},
+                         kind='judgment', operation='fired')
+        snapshot = captured(decision).snapshot()
+        base = v2(snapshot)
+        reason = base['nodes']['d.ready']['attention'][0]['reasons'][0]
+        self.assertEqual(reason, {'code': 'falsifier_holds', 'related_ids': []})
+        result = V3.from_v2(snapshot, base)
+        self.assertEqual(result['nodes']['d.ready']['state']['falsifier']['status'], 'holds')
+        if jsonschema is not None:
+            jsonschema.validate(result, self.schema)
+
     def test_nonaccepted_subjects_never_enter_computational_nodes(self):
         accepted = claim('p.current', {'v': 1}, operation='current')
         proposed = claim('p.proposal', {'v': 2}, operation='proposal')
@@ -232,6 +245,36 @@ class HistoryAssessmentTests(unittest.TestCase):
         self.assertEqual({item['state'] for item in result['reservations']},
                          set(reserved) | {'fired', 'unknown'})
 
+    def test_long_support_chain_uses_bounded_linear_traversal_memory(self):
+        length = 3000
+        graph = {}
+        for index in range(length):
+            key = 's' + str(index) + '@v'
+            graph[key] = {'subject': 's' + str(index), 'version': 'v',
+                          'state': 'accepted', 'dependencies': (
+                              [{'subject': 's' + str(index + 1), 'version': 'v'}]
+                              if index + 1 < length else [])}
+        tracemalloc.start()
+        result = V3._reduce_support_graph(['s0@v'], graph, {})
+        _, peak = tracemalloc.get_traced_memory()
+        tracemalloc.stop()
+        self.assertEqual(result['visited_count'], length)
+        self.assertEqual(result['status'], 'clear')
+        self.assertLess(peak, 12 * 1024 * 1024)
+
+    def test_support_budget_is_shared_across_subject_reductions(self):
+        graph = {
+            'a@v': {'subject': 'a', 'version': 'v', 'state': 'accepted',
+                    'dependencies': [{'subject': 'b', 'version': 'v'}]},
+            'b@v': {'subject': 'b', 'version': 'v', 'state': 'accepted',
+                    'dependencies': []},
+        }
+        budget = {'remaining': 2, 'path_items': 20}
+        self.assertEqual(V3._reduce_support_graph(
+            ['a@v'], graph, {}, shared_budget=budget)['visited_count'], 2)
+        with self.assertRaisesRegex(OperationalLimit, 'support_limit'):
+            V3._reduce_support_graph(['b@v'], graph, {}, shared_budget=budget)
+
     def test_current_moved_and_fired_support_outcomes_remain_independent(self):
         nodes = {
             'd.parent': {'state': {
@@ -273,6 +316,27 @@ class HistoryAssessmentTests(unittest.TestCase):
             cycle['envelope_revision'] = digest({
                 key: value for key, value in cycle.items() if key != 'envelope_revision'})
             jsonschema.validate(cycle, self.schema)
+
+    def test_public_validator_rejects_invalid_active_history_identity_and_source_state(self):
+        source = claim('p.input', {'v': 1}, operation='input')
+        snapshot = captured(source).snapshot()
+        result = V3.from_v2(snapshot, v2(snapshot))
+        for mutation in ('identity', 'source_state', 'generation', 'integrity'):
+            forged = copy.deepcopy(result)
+            if mutation == 'identity':
+                forged['history']['authority']['identity'] = 'not-a-digest'
+            elif mutation == 'source_state':
+                forged['history_subjects']['p.input']['source_state'] = 'invented'
+            elif mutation == 'generation':
+                forged['history']['authority']['generation'] = -1
+            else:
+                forged['history']['integrity']['findings'] = [1]
+            forged['findings_revision'] = digest(V3._findings_preimage(forged))
+            forged['envelope_revision'] = digest({
+                key: value for key, value in forged.items() if key != 'envelope_revision'})
+            with self.subTest(mutation=mutation), self.assertRaisesRegex(
+                    ValueError, 'history|source state'):
+                V3.validate(forged)
 
     def test_findings_ignore_attention_and_display_but_envelope_does_not(self):
         snapshot = Snapshot.from_data({**HEADERS, 'readings': {'p.input': {'v': 1}}})

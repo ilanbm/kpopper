@@ -1964,6 +1964,15 @@ def _core_select(selector, ids, judgments, flags):
     return {identifier for identifier in ids if identifier.startswith(prefix + '.')}
 
 
+def _core_unresolved_selectors(selector, ids, judgments, flags):
+    if isinstance(selector, list):
+        return sorted({item for value in selector
+                       for item in _core_unresolved_selectors(value, ids, judgments, flags)})
+    if not isinstance(selector, str) or selector in {'all', 'judgments', 'flagged'} | set(STATES):
+        return []
+    return [] if _core_select(selector, ids, judgments, flags) else [selector]
+
+
 def _core_label(identifier, body, labels):
     if identifier in labels:
         return str(labels[identifier])
@@ -2007,6 +2016,12 @@ def core_build_from_context(context, brief_content=None, page_path=None, *, reco
     }
     flags = {identifier: _core_state_flags(nodes[identifier], view['nodes'][identifier])
              for identifier in sorted(ids)}
+    current_shape = {'entries': len(ids - judgments), 'judgments': len(judgments),
+                     'flagged': sum(bool(states) for states in flags.values()),
+                     'blocked': sum('blocked' in states for states in flags.values())}
+    raw_bodies = {identifier: (node['body'] if isinstance(node.get('body'), dict)
+                               else {'v': node.get('body')})
+                  for identifier, node in nodes.items()}
 
     display = {}
     root = pathlib.Path(record_root).resolve() if record_root else None
@@ -2043,15 +2058,33 @@ def core_build_from_context(context, brief_content=None, page_path=None, *, reco
         }
 
     tabs = tabs_of(brief) if brief else []
-    arrangements, selected = [], set()
+    arrangements, selected, unresolved_selectors = [], set(), set()
+    renderer_misfits, stale_shapes = [], []
     for tab in tabs:
+        recorded_shape = tab.get('shape')
+        if recorded_shape:
+            if not isinstance(recorded_shape, dict):
+                stale_shapes.append((tab['title'] or 'Now') + ': invalid recorded shape')
+            else:
+                moved = [key + ': ' + str(recorded_shape[key]) + ' -> ' + str(current_shape[key])
+                         for key in current_shape if key in recorded_shape
+                         and recorded_shape[key] != current_shape[key]]
+                if moved:
+                    stale_shapes.append((tab['title'] or 'Now') + ': ' + '; '.join(moved))
         sections = []
         for section in tab['sections']:
-            chosen = sorted(_core_select(section.get('pick'), ids, judgments, flags))
+            selector = section.get('pick')
+            chosen = sorted(_core_select(selector, ids, judgments, flags))
+            unresolved_selectors.update(
+                _core_unresolved_selectors(selector, ids, judgments, flags))
+            kind = str(section.get('as') or '').strip()
+            wrong = fits(kind, chosen, judgments, raw_bodies) if kind and chosen else None
+            if wrong:
+                renderer_misfits.append(str(section.get('title') or selector or '?') + ': ' + wrong)
             selected.update(chosen)
             sections.append({'title': str(section.get('title') or ''),
                              'why': str(section.get('why') or ''),
-                             'shape': str(section.get('as') or 'generic'),
+                             'shape': kind or 'cards',
                              'ids': chosen})
         arrangements.append({'key': tab['key'], 'title': tab['title'],
                              'occasion': tab['occasion'], 'serves': list(tab['serves']),
@@ -2060,6 +2093,9 @@ def core_build_from_context(context, brief_content=None, page_path=None, *, reco
     spill = sorted(flagged - selected) if tabs else []
     coverage = {'picked': sorted(selected), 'flagged': sorted(flagged),
                 'spill': spill, 'covered_count': len(selected), 'spill_count': len(spill)}
+    coverage['unresolved_selectors'] = sorted(unresolved_selectors)
+    coverage['renderer_misfits'] = sorted(renderer_misfits)
+    coverage['stale_shapes'] = sorted(stale_shapes)
     page_values = {
         'consumer_view_version': view['version'],
         'title': str(brief.get('title') or meta.get('name') or meta.get('scope') or 'record'),
@@ -2086,7 +2122,10 @@ def core_build_from_context(context, brief_content=None, page_path=None, *, reco
                 ('acceptance', status['acceptance']), ('computation', computation),
                 ('basis', status['basis']), ('falsifier', status['falsifier']['status']),
                 ('contention', status['contention']), ('integrity', status['integrity']),
-                ('coverage', status['coverage']), ('assurance', status['assurance'])))
+                ('coverage', status['coverage']), ('assurance', status['assurance']),
+                ('support', status['support']['status'] +
+                 ((' [' + ', '.join(status['support']['states']) + ']')
+                  if status['support']['states'] else ''))))
 
     def card(identifier):
         item = display[identifier]
@@ -2159,8 +2198,7 @@ def core_build_from_context(context, brief_content=None, page_path=None, *, reco
 
     entries = {identifier: display[identifier] for identifier in sorted(ids - judgments)}
     decisions = {identifier: display[identifier] for identifier in sorted(judgments)}
-    shape = {'entries': len(entries), 'judgments': len(decisions),
-             'flagged': len(flagged), 'blocked': sum('blocked' in item for item in flags.values())}
+    shape = current_shape
     info = {'profile': 'core/v1', 'shape': shape, 'brief': bool(brief),
             'flags': flags, 'coverage': coverage,
             'page': {'page.covered': len(selected), 'page.spill': len(spill)},
@@ -2201,6 +2239,13 @@ def core_verify(paths, brief_path=None, *, read_mode=None, context=None):
     for field in ('snapshot_id', 'findings_revision', 'page_assessment_revision'):
         if str(info[field]) not in page:
             fail.append('core page omits ' + field)
+    if info['coverage'].get('unresolved_selectors'):
+        fail.append('core page selectors unresolved: '
+                    + ', '.join(info['coverage']['unresolved_selectors']))
+    for item in info['coverage'].get('renderer_misfits', []):
+        fail.append('core page renderer does not fit: ' + item)
+    for item in info['coverage'].get('stale_shapes', []):
+        fail.append('core page shape moved: ' + item)
     embedded = re.search(
         r'<script type="application/json" id="kpopper-page-assessment">(.*?)</script>',
         page, flags=re.S)
@@ -2369,9 +2414,16 @@ if __name__ == "__main__":
             sys.exit('unsupported page profile: ' + profile)
     brief = a[a.index("--brief") + 1] if "--brief" in a else None
     files = [x for x in a if x.endswith((".yaml", ".yml")) and x != brief] or P.default_paths()
-    if "--verify" in a:
-        sys.exit(verify(files, brief, profile=profile))
-    page, _, _, _, info = measured_build(files, brief, page_path, profile=profile)
+    try:
+        if "--verify" in a:
+            sys.exit(verify(files, brief, profile=profile))
+        page, _, _, _, info = measured_build(files, brief, page_path, profile=profile)
+    except Exception as error:
+        failure = getattr(error, 'envelope', None)
+        if profile == 'core/v1' and isinstance(failure, dict):
+            print(json.dumps(failure, ensure_ascii=False, sort_keys=True), file=sys.stderr)
+            sys.exit(2)
+        raise
     for t in ([] if profile == 'core/v1' else info["tabs"]):
         if t["shape"]:
             continue

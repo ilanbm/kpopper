@@ -5,6 +5,7 @@ import copy
 from .store import CapturedSessionService, SessionService, encode
 from .core import Core
 from ..expressions import text as expression_text
+from ..pending_grounding import _decode as typed_decode, _encode as typed_encode
 
 def card(bundle):
     """Format only facts computed by Lean; no status/value inference in this layer."""
@@ -78,21 +79,29 @@ class CoreSessionReader(CapturedSessionService):
             finding = graph.data.get('core_findings', {}).get(identifier)
             if finding is None:
                 raise ValueError('unknown core finding')
-            value = copy.deepcopy(finding)
-            return pointer_value(value, pointer) if separator and pointer else value
+            value = typed_decode(copy.deepcopy(finding))
+            if separator and pointer:
+                value = pointer_value(value, pointer)
+            return {'encoding': 'typed-json/v1', 'value': typed_encode(value)}
         if base.startswith('history:'):
             identifier = base[8:]
             finding = graph.data.get('core_history_subjects', {}).get(identifier)
             if finding is None:
                 raise ValueError('unknown core history subject')
-            value = copy.deepcopy(finding)
-            return pointer_value(value, pointer) if separator and pointer else value
+            value = typed_decode(copy.deepcopy(finding))
+            if separator and pointer:
+                value = pointer_value(value, pointer)
+            return {'encoding': 'typed-json/v1', 'value': typed_encode(value)}
         if base == 'history':
-            value = copy.deepcopy(graph.data.get('core_history_subjects', {}))
-            return pointer_value(value, pointer) if separator and pointer else value
+            value = {identifier: typed_decode(copy.deepcopy(finding))
+                     for identifier, finding in graph.data.get('core_history_subjects', {}).items()}
+            if separator and pointer:
+                value = pointer_value(value, pointer)
+            return {'encoding': 'typed-json/v1', 'value': typed_encode(value)}
         if base.startswith('node:') and base[5:] in graph.nodes:
             node = graph.nodes[base[5:]]
             value = {'body': copy.deepcopy(node['body']),
+                     'body_encoding': node.get('body_encoding'),
                      'finding_ref': 'finding:' + base[5:],
                      'status': copy.deepcopy(node['core_status']),
                      'status_text': node['core_status_text'],

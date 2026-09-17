@@ -18,10 +18,12 @@ from .snapshot import Snapshot
 SCHEMA_VERSION = 3
 SUPPORT_REDUCER = 'necessary-support/v1'
 MAX_SUPPORT_VISITS = 100_000
+MAX_SUPPORT_PATH_ITEMS = 200_000
 ACCEPTANCE = frozenset(('accepted', 'proposed', 'contested', 'refuted', 'corrected',
                         'retired', 'unreviewed', 'unavailable'))
 SUPPORT_STATES = ACCEPTANCE | frozenset(('moved', 'fired', 'unknown'))
 POLICIES = frozenset(('focused-review/v1', 'falsifiers-only/v1'))
+HEX = frozenset('0123456789abcdef')
 
 
 def _require(condition, message):
@@ -31,6 +33,15 @@ def _require(condition, message):
 
 def _same(left, right):
     return digest(left) == digest(right)
+
+
+def _is_digest(value):
+    return isinstance(value, str) and len(value) == 64 and set(value) <= HEX
+
+
+def _validate_ids(value, message):
+    _require(isinstance(value, list) and all(isinstance(item, str) for item in value)
+             and len(value) == len(set(value)), message)
 
 
 def _validate_attention(value):
@@ -247,7 +258,8 @@ def _reservation(code, state, subject, version, path):
             'path': list(path)}
 
 
-def _reduce_support_graph(roots, graph, outcomes, *, max_visits=MAX_SUPPORT_VISITS):
+def _reduce_support_graph(roots, graph, outcomes, *, max_visits=MAX_SUPPORT_VISITS,
+                          shared_budget=None):
     """Bounded iterative support reduction over already captured facts.
 
     ``graph`` is a normalized view of captured version pins.  No predicate body
@@ -260,34 +272,48 @@ def _reduce_support_graph(roots, graph, outcomes, *, max_visits=MAX_SUPPORT_VISI
              'invalid support visit limit')
     visited, reservations = set(), []
     reservation_ids = set()
+    budget = shared_budget if shared_budget is not None else {
+        'remaining': max_visits, 'path_items': MAX_SUPPORT_PATH_ITEMS}
+    _require(isinstance(budget, dict) and set(budget) == {'remaining', 'path_items'}
+             and type(budget['remaining']) is int and type(budget['path_items']) is int,
+             'invalid support budget')
 
     def reserve(item):
+        cost = len(item['path'])
+        if cost > budget['path_items']:
+            raise OperationalLimit('support_limit')
         marker = digest(item)
         if marker not in reservation_ids:
+            budget['path_items'] -= cost
             reservation_ids.add(marker)
             reservations.append(item)
 
     for root in roots:
-        stack = [('enter', root, (root,))]
-        active = set()
+        stack = [('enter', root)]
+        active, path = set(), []
         while stack:
-            action, current, path = stack.pop()
+            action, current = stack.pop()
             if action == 'leave':
                 active.discard(current)
+                _require(path and path[-1] == current, 'invalid support traversal')
+                path.pop()
                 continue
             if current in active:
                 subject, _, version = current.partition('@')
-                reserve(_reservation('support_cycle', 'unavailable', subject, version, path))
+                reserve(_reservation('support_cycle', 'unavailable', subject, version,
+                                     path + [current]))
                 continue
             if current in visited:
                 continue
-            if len(visited) >= max_visits:
+            if len(visited) >= max_visits or budget['remaining'] <= 0:
                 raise OperationalLimit('support_limit')
             visited.add(current)
+            budget['remaining'] -= 1
             item = graph.get(current)
             if not isinstance(item, dict):
                 subject, _, version = current.partition('@')
-                reserve(_reservation('missing_support', 'unavailable', subject, version, path))
+                reserve(_reservation('missing_support', 'unavailable', subject, version,
+                                     path + [current]))
                 continue
             subject, version = item.get('subject'), item.get('version')
             state, dependencies = item.get('state'), item.get('dependencies')
@@ -296,7 +322,8 @@ def _reduce_support_graph(roots, graph, outcomes, *, max_visits=MAX_SUPPORT_VISI
                      and state in SUPPORT_STATES | {'accepted'}
                      and isinstance(dependencies, list), 'invalid support graph node')
             active.add(current)
-            stack.append(('leave', current, path))
+            path.append(current)
+            stack.append(('leave', current))
             if state != 'accepted':
                 reserve(_reservation('support_state', state, subject, version, path))
             current_outcomes = outcomes.get(subject, [])
@@ -316,7 +343,7 @@ def _reduce_support_graph(roots, graph, outcomes, *, max_visits=MAX_SUPPORT_VISI
                          'invalid support dependency')
                 children.append(_key(dependency['subject'], dependency['version']))
             for child in reversed(sorted(children)):
-                stack.append(('enter', child, path + (child,)))
+                stack.append(('enter', child))
     reservations.sort(key=lambda item: (item['path'], item['code'], item['state']))
     return {'reducer': SUPPORT_REDUCER,
             'status': 'reserved' if reservations else 'clear',
@@ -401,7 +428,7 @@ def _pin_evidence(projection, subject, version, cache):
     return copy.deepcopy(cache[key])
 
 
-def _subject_projection(projection, subject, graph, outcomes, evidence_cache):
+def _subject_projection(projection, subject, graph, outcomes, evidence_cache, support_budget):
     state = projection['subjects'][subject]
     disposition = projection.get('dispositions', {}).get(subject, {
         'marks': {}, 'proposals': [], 'contested_claims': [], 'reviews': [], 'implied': []})
@@ -431,7 +458,8 @@ def _subject_projection(projection, subject, graph, outcomes, evidence_cache):
         'coverage': {'included': covered,
                      'complete': bool(covered and projection['coverage']['complete'] and not findings),
                      'findings': findings},
-        'support': _reduce_support_graph(roots, graph, outcomes),
+        'support': _reduce_support_graph(roots, graph, outcomes,
+                                         shared_budget=support_budget),
         **({'source_state': disposition['source_state']} if 'source_state' in disposition else {}),
     }
 
@@ -554,6 +582,139 @@ def _findings_preimage(report):
             'nodes': nodes, 'history_subjects': copy.deepcopy(report['history_subjects'])}
 
 
+def _validate_coverage(value):
+    _require(isinstance(value, dict) and set(value) == {'included', 'complete', 'findings'}
+             and type(value['included']) is bool and type(value['complete']) is bool
+             and isinstance(value['findings'], list)
+             and all(isinstance(item, dict) for item in value['findings']),
+             'v3 schema: invalid coverage')
+
+
+def _validate_pin_evidence(value):
+    expected = {'status', 'evidence_kind', 'subject', 'version', 'body', 'profile',
+                'value_status', 'value', 'basis_status', 'basis', 'findings'}
+    _require(isinstance(value, dict) and set(value) == expected
+             and value['status'] in ('recorded', 'unavailable')
+             and value['evidence_kind'] == 'version_pin'
+             and (value['subject'] is None or isinstance(value['subject'], str))
+             and isinstance(value['version'], str)
+             and (value['profile'] is None or isinstance(value['profile'], str))
+             and value['value_status'] in ('recorded', 'unavailable')
+             and value['basis_status'] in ('recorded', 'not_recorded', 'unavailable')
+             and isinstance(value['findings'], list)
+             and all(isinstance(item, dict) for item in value['findings']),
+             'v3 schema: invalid pin evidence')
+
+
+def _validate_review_evidence(value):
+    _require(isinstance(value, dict) and set(value) == {'review_id', 'of', 'read'}
+             and isinstance(value['review_id'], str) and isinstance(value['of'], str)
+             and isinstance(value['read'], dict), 'v3 schema: invalid review evidence')
+    for evidence in value['read'].values():
+        _validate_pin_evidence(evidence)
+
+
+def _validate_support(value):
+    expected = {'reducer', 'status', 'visited', 'visited_count', 'reservations'}
+    _require(isinstance(value, dict) and set(value) == expected
+             and value['reducer'] == SUPPORT_REDUCER
+             and value['status'] in ('clear', 'reserved')
+             and isinstance(value['visited'], list)
+             and all(isinstance(item, str) for item in value['visited'])
+             and value['visited'] == sorted(set(value['visited']))
+             and type(value['visited_count']) is int
+             and value['visited_count'] == len(value['visited'])
+             and isinstance(value['reservations'], list), 'v3 schema: invalid support')
+    for item in value['reservations']:
+        _require(isinstance(item, dict)
+                 and set(item) == {'code', 'state', 'subject', 'version', 'path'}
+                 and all(isinstance(item[key], str) for key in ('code', 'state', 'subject', 'version'))
+                 and item['state'] in SUPPORT_STATES
+                 and isinstance(item['path'], list)
+                 and all(isinstance(path, str) for path in item['path']),
+                 'v3 schema: invalid support reservation')
+    _require((value['status'] == 'reserved') == bool(value['reservations']),
+             'v3 schema: support status mismatch')
+
+
+def _validate_assurance(value):
+    _require(isinstance(value, dict) and set(value) == {'actual', 'recorded_evidence_kinds'}
+             and isinstance(value['actual'], dict)
+             and set(value['actual']) == {'node', 'falsifier', 'dependencies'}
+             and (value['actual']['node'] is None or isinstance(value['actual']['node'], dict))
+             and (value['actual']['falsifier'] is None
+                  or isinstance(value['actual']['falsifier'], dict))
+             and isinstance(value['actual']['dependencies'], dict)
+             and all(item is None or isinstance(item, dict)
+                     for item in value['actual']['dependencies'].values())
+             and isinstance(value['recorded_evidence_kinds'], list)
+             and value['recorded_evidence_kinds'] == sorted(set(value['recorded_evidence_kinds']))
+             and set(value['recorded_evidence_kinds']) <= {'version_pin', 'review_pin'},
+             'v3 schema: invalid assurance')
+
+
+def _validate_node_history(value):
+    expected = {'subject_id', 'current_head_witnesses', 'proposals', 'reviews',
+                'disposition_marks', 'contested_claims', 'implied_reservations',
+                'recorded_support', 'pin_review_evidence'}
+    _require(isinstance(value, dict) and set(value) == expected
+             and (value['subject_id'] is None or isinstance(value['subject_id'], str))
+             and all(isinstance(value[key], list) for key in (
+                 'current_head_witnesses', 'proposals', 'reviews', 'contested_claims',
+                 'implied_reservations', 'pin_review_evidence'))
+             and isinstance(value['disposition_marks'], dict)
+             and isinstance(value['recorded_support'], dict),
+             'v3 schema: invalid node history')
+    _validate_ids(value['proposals'], 'v3 schema: invalid node history proposals')
+    _validate_ids(value['contested_claims'], 'v3 schema: invalid node history contention')
+    _require(all(isinstance(item, dict) for item in value['reviews'])
+             and all(isinstance(item, dict) for item in value['implied_reservations'])
+             and all(isinstance(key, str) and mark in (
+                 'corrected', 'refuted', 'retired', 'replaced', 'superseded')
+                 for key, mark in value['disposition_marks'].items()),
+             'v3 schema: invalid node history dispositions')
+    for evidence in value['current_head_witnesses']:
+        _validate_pin_evidence(evidence)
+    for evidence in value['recorded_support'].values():
+        _validate_pin_evidence(evidence)
+    for evidence in value['pin_review_evidence']:
+        _validate_review_evidence(evidence)
+
+
+def _validate_history_summary(value):
+    _require(isinstance(value, dict) and value.get('authority_status') in ('active', 'not_active'),
+             'v3 schema: invalid history summary')
+    if value['authority_status'] == 'not_active':
+        _require(set(value) == {'authority_status'}, 'v3 schema: invalid inactive history')
+        return
+    expected = {'authority_status', 'projection_version', 'authority', 'committed_set_digest',
+                'closure_digest', 'coverage', 'identity_schemes', 'integrity'}
+    _require(set(value) == expected and value['projection_version'] == 1
+             and isinstance(value['authority'], dict)
+             and set(value['authority']) == {'record_id', 'generation', 'identity'}
+             and isinstance(value['authority']['record_id'], str)
+             and type(value['authority']['generation']) is int
+             and value['authority']['generation'] >= 0
+             and _is_digest(value['authority']['identity'])
+             and _is_digest(value['committed_set_digest'])
+             and _is_digest(value['closure_digest'])
+             and isinstance(value['coverage'], dict)
+             and set(value['coverage']) == {'scope', 'subjects', 'complete'}
+             and value['coverage']['scope'] in ('all', 'selected')
+             and isinstance(value['coverage']['subjects'], list)
+             and value['coverage']['subjects'] == sorted(set(value['coverage']['subjects']))
+             and type(value['coverage']['complete']) is bool
+             and isinstance(value['identity_schemes'], list)
+             and all(isinstance(item, str) for item in value['identity_schemes'])
+             and value['identity_schemes'] == sorted(set(value['identity_schemes']))
+             and isinstance(value['integrity'], dict)
+             and set(value['integrity']) == {'complete', 'findings'}
+             and type(value['integrity']['complete']) is bool
+             and isinstance(value['integrity']['findings'], list)
+             and all(isinstance(item, dict) for item in value['integrity']['findings']),
+             'v3 schema: invalid active history')
+
+
 def validate(report):
     """Validate and detach one canonical v3 envelope for downstream consumers."""
     expected = {'schema_version', 'assessment_profile', 'attention_policy', 'snapshot_id', 'as_of',
@@ -567,12 +728,14 @@ def validate(report):
              and report['attention_policy'] in POLICIES,
              'v3 schema/profile mismatch')
     _validate_bounds(report['operational_limits'], 'v3 operational limits mismatch')
-    _require(isinstance(report['snapshot_id'], str) and len(report['snapshot_id']) == 64
-             and isinstance(report['base_assessment_revision'], str)
-             and len(report['base_assessment_revision']) == 64,
+    _require(_is_digest(report['snapshot_id'])
+             and _is_digest(report['base_assessment_revision']),
              'v3 identity mismatch')
     nodes, subjects = report['nodes'], report['history_subjects']
     _require(isinstance(nodes, dict) and isinstance(subjects, dict), 'v3 findings must be mappings')
+    _validate_ids(report['assessment_selection'], 'v3 schema: invalid assessment selection')
+    _validate_ids(report['history_selection'], 'v3 schema: invalid history selection')
+    _validate_ids(report['display_selection'], 'v3 schema: invalid display selection')
     _require(set(report['assessment_selection']) == set(nodes),
              'v3 assessment selection and node keys disagree')
     _require(set(report['history_selection']) == set(subjects),
@@ -590,15 +753,48 @@ def validate(report):
                  and set(acceptance) == {'status', 'head_ids', 'open_act_ids'}
                  and acceptance['status'] in ACCEPTANCE | {'not_applicable'},
                  'v3 schema: invalid node acceptance')
-        _require(isinstance(node['coverage'], dict) and isinstance(node['assurance'], dict)
-                 and isinstance(node['support'], dict) and isinstance(node['history'], dict),
-                 'v3 schema: invalid node evidence')
+        _validate_ids(acceptance['head_ids'], 'v3 schema: invalid node head ids')
+        _validate_ids(acceptance['open_act_ids'], 'v3 schema: invalid node open acts')
+        _validate_coverage(node['coverage'])
+        _validate_assurance(node['assurance'])
+        _validate_support(node['support'])
+        _validate_node_history(node['history'])
     for subject in subjects.values():
-        _require(isinstance(subject, dict) and subject.get('acceptance') in ACCEPTANCE,
+        required = {'acceptance', 'head_ids', 'open_act_ids', 'head_witnesses', 'proposals',
+                    'reviews', 'disposition_marks', 'contested_claims', 'implied_reservations',
+                    'recorded_support', 'pin_review_evidence', 'coverage', 'support'}
+        _require(isinstance(subject, dict) and required <= set(subject)
+                 and set(subject) <= required | {'source_state'}
+                 and subject.get('acceptance') in ACCEPTANCE
+                 and all(isinstance(subject[key], list) for key in (
+                     'head_ids', 'open_act_ids', 'head_witnesses', 'proposals', 'reviews',
+                     'contested_claims', 'implied_reservations', 'pin_review_evidence'))
+                 and isinstance(subject['disposition_marks'], dict)
+                 and isinstance(subject['recorded_support'], dict),
                  'v3 schema: invalid history subject')
+        _validate_ids(subject['head_ids'], 'v3 schema: invalid history head ids')
+        _validate_ids(subject['open_act_ids'], 'v3 schema: invalid history open acts')
+        _validate_ids(subject['proposals'], 'v3 schema: invalid history proposals')
+        _validate_ids(subject['contested_claims'], 'v3 schema: invalid history contention')
+        _require(all(isinstance(item, dict) for item in subject['reviews'])
+                 and all(isinstance(item, dict) for item in subject['implied_reservations'])
+                 and all(isinstance(key, str) and mark in (
+                     'corrected', 'refuted', 'retired', 'replaced', 'superseded')
+                     for key, mark in subject['disposition_marks'].items()),
+                 'v3 schema: invalid history dispositions')
+        for evidence in subject['head_witnesses']:
+            _validate_pin_evidence(evidence)
+        for evidence in subject['recorded_support'].values():
+            _validate_pin_evidence(evidence)
+        for evidence in subject['pin_review_evidence']:
+            _validate_review_evidence(evidence)
+        if 'source_state' in subject:
+            _require(subject['source_state'] in ('committed', 'prepared_candidate'),
+                     'v3 schema: invalid history source state')
+        _validate_coverage(subject['coverage'])
+        _validate_support(subject['support'])
     history = report['history']
-    _require(isinstance(history, dict) and history.get('authority_status') in ('active', 'not_active'),
-             'v3 schema: invalid history summary')
+    _validate_history_summary(history)
     if history['authority_status'] == 'not_active':
         _require(not subjects and all(node['acceptance']['status'] == 'not_applicable'
                                       for node in nodes.values()),
@@ -622,8 +818,10 @@ def from_v2(snapshot, report, *, display_selection=None):
     graph = _support_graph(projection) if projection is not None else {}
     outcomes = _outcomes(base['nodes'])
     evidence_cache = {}
+    support_budget = {'remaining': MAX_SUPPORT_VISITS,
+                      'path_items': MAX_SUPPORT_PATH_ITEMS}
     subjects = {subject: _subject_projection(
-                    projection, subject, graph, outcomes, evidence_cache)
+                    projection, subject, graph, outcomes, evidence_cache, support_budget)
                 for subject in sorted(projection['subjects'])} if projection is not None else {}
     nodes = {node_id: _node_with_history(node_id, node, projection, subjects, graph, outcomes)
              for node_id, node in base['nodes'].items()}

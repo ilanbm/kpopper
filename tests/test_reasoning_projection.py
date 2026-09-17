@@ -119,11 +119,14 @@ class ProjectionTests(unittest.TestCase):
         }, 'coverage': {'status': 'complete'}, 'computation': {
             'status': 'unknown', 'value': None,
             'assurance': {'kind': 'computed'},
-        }}
+        }, 'support': {'status': 'reserved', 'reservations': [
+            {'code': 'support_state', 'state': 'refuted'}]}}
         status = project_node_status(node)
         self.assertIsNone(status['falsifier']['holds'])
         self.assertIsNone(status['computation']['truth'])
         self.assertEqual(status['acceptance'], 'accepted')
+        self.assertEqual(status['support'], {
+            'status': 'reserved', 'states': ['refuted'], 'codes': ['support_state']})
 
     def test_status_projection_tolerates_canonical_or_state_nested_dimensions(self):
         canonical = {'acceptance': {'status': 'accepted'},

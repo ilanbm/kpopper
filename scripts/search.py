@@ -73,10 +73,13 @@ def _core_modules():
     try:
         from .reasoning.context import CapturedAssessment
     except ImportError:
-        root = str(Path(__file__).resolve().parents[1])
-        if root not in sys.path:
-            sys.path.insert(0, root)
-        from scripts.reasoning.context import CapturedAssessment
+        import importlib
+        package = Path(__file__).resolve().parent.name
+        parent = str(Path(__file__).resolve().parent.parent)
+        if parent not in sys.path:
+            sys.path.insert(0, parent)
+        CapturedAssessment = importlib.import_module(
+            package + '.reasoning.context').CapturedAssessment
     return CapturedAssessment
 
 
@@ -548,7 +551,10 @@ def main(argv=None):
             result = search(args.query, args.record, args.state_dir, args.limit, args.chars,
                             args.source_root, args.profile)
     except (ValueError, OSError, sqlite3.Error, P.yaml.YAMLError, SystemExit) as error:
-        print(encode({"error": str(error)}) if args.json else str(error), file=sys.stderr)
+        failure = getattr(error, 'envelope', None)
+        payload = ({"error": str(error), "capture_failure": failure}
+                   if isinstance(failure, dict) else {"error": str(error)})
+        print(encode(payload) if args.json or isinstance(failure, dict) else str(error), file=sys.stderr)
         return 2
     # The structured result is also the ordinary CLI output: no second prose rendering
     # that could drop scope labels, source anchors, or the omitted-result count.

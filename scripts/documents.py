@@ -395,8 +395,7 @@ def _core_record_source(path, inputs, now):
     # This is the only source capture for this record source.  All selection,
     # citation and evidence work below is a pure projection of the same Snapshot.
     snapshot = Snapshot.capture([str(path)], read_mode="frozen")
-    context = CapturedAssessment.from_snapshot(
-        snapshot, selected, display_selection=selected)
+    context = CapturedAssessment.from_snapshot(snapshot)
     report = context.assessment
     snapshot_data = snapshot.to_data()
     nodes = snapshot_data["nodes"]
@@ -430,7 +429,8 @@ def _core_record_source(path, inputs, now):
         "captured_at": now,
         "snapshot_id": context.snapshot_id,
         "findings_revision": context.findings_revision,
-        "assessment_selection": selected,
+        "assessment_selection": list(report["assessment_selection"]),
+        "embedded_selection": selected,
         "history_selection": sorted(finding_history),
         "nodes": finding_nodes,
         "history_subjects": finding_history,
@@ -442,6 +442,7 @@ def _core_record_source(path, inputs, now):
 def _validate_core_receipt(receipt, selections):
     expected = {"version", "assessment_profile", "schema_version", "finding_encoding",
                 "captured_at", "snapshot_id", "findings_revision", "assessment_selection",
+                "embedded_selection",
                 "history_selection", "nodes", "history_subjects", "receipt_revision"}
     if not isinstance(receipt, dict) or set(receipt) != expected \
             or receipt.get("version") != CORE_EVIDENCE_VERSION \
@@ -455,14 +456,16 @@ def _validate_core_receipt(receipt, selections):
            for value in identities) or not isinstance(receipt.get("captured_at"), str):
         raise DocumentError("Invalid embedded core assessment identity")
     selected = receipt.get("assessment_selection")
+    embedded = receipt.get("embedded_selection")
     history = receipt.get("history_selection")
     nodes = receipt.get("nodes")
     subjects = receipt.get("history_subjects")
-    if not isinstance(selected, list) or selected != sorted(set(selected)) \
+    if not isinstance(selected, list) or len(selected) != len(set(selected)) \
+            or not isinstance(embedded, list) or embedded != sorted(set(embedded)) \
             or not isinstance(history, list) or history != sorted(set(history)) \
-            or not isinstance(nodes, dict) or set(nodes) != set(selected) \
+            or not isinstance(nodes, dict) or set(nodes) != set(embedded) \
             or not isinstance(subjects, dict) or set(subjects) != set(history) \
-            or not set(history) <= set(selected):
+            or not set(embedded) <= set(selected) or not set(history) <= set(embedded):
         raise DocumentError("Invalid embedded core finding subset")
     referenced = set()
     for selection in selections.values():
@@ -470,7 +473,7 @@ def _validate_core_receipt(receipt, selections):
         if selector:
             nid, _ = _record_pointer({"pointer": selector.get("pointer", "")})
             referenced.add(nid)
-    if referenced != set(selected):
+    if referenced != set(embedded):
         raise DocumentError("Embedded core findings differ from selected record evidence")
     decoded_nodes = {}
     for nid, value in nodes.items():

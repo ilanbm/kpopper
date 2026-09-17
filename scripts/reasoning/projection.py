@@ -159,6 +159,11 @@ def project_node_status(node):
     evidence_kinds = assurance.get('recorded_evidence_kinds', [])
     if not isinstance(evidence_kinds, list) or any(not isinstance(item, str) for item in evidence_kinds):
         evidence_kinds = []
+    support = _dimension(node, state, 'support')
+    support = _mapping(support, 'support')
+    reservations = support.get('reservations', [])
+    if not isinstance(reservations, list):
+        raise ValueError('support reservations must be a list')
     result = {
         'acceptance': _status(_dimension(node, state, 'acceptance'), 'not_applicable'),
         'computation': {
@@ -177,6 +182,13 @@ def project_node_status(node):
         'coverage_included': coverage_included,
         'assurance': _assurance_status(assurance, computation),
         'recorded_evidence_kinds': sorted(set(evidence_kinds)),
+        'support': {
+            'status': support.get('status', 'not_available'),
+            'states': sorted({item.get('state') for item in reservations
+                              if isinstance(item, dict) and isinstance(item.get('state'), str)}),
+            'codes': sorted({item.get('code') for item in reservations
+                             if isinstance(item, dict) and isinstance(item.get('code'), str)}),
+        },
     }
     return result
 
@@ -196,6 +208,9 @@ def render_node_status(node):
         'integrity=' + status['integrity'],
         'coverage=' + status['coverage'],
         'assurance=' + status['assurance'],
+        'support=' + status['support']['status']
+        + (('[' + ','.join(status['support']['states']) + ']')
+           if status['support']['states'] else ''),
     ))
 
 

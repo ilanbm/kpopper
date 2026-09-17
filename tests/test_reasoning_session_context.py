@@ -6,12 +6,14 @@ import subprocess
 import sys
 import tempfile
 import unittest
+import datetime
 from unittest import mock
 
 try:
     import tiktoken  # noqa: F401
     from scripts.reasoning.context import CapturedAssessment
     from scripts.reasoning.snapshot import Snapshot
+    from scripts.pending_grounding import _decode as typed_decode
     from scripts.session.entry import parser
     from scripts.session.view import CoreGroundingService
     SESSION_READY = True
@@ -86,7 +88,8 @@ class CoreSessionContextTests(unittest.TestCase):
         cache = self.folder / 'state-fixture' / ('core-context-' + revision + '.json')
         payload = json.loads(cache.read_text())
         self.assertEqual(payload['revision'], revision)
-        self.assertEqual(payload['context']['view']['version'], 'reasoning-projection/v1')
+        self.assertEqual(CapturedAssessment.from_data(payload['context']).view['version'],
+                         'reasoning-projection/v1')
 
     def test_followups_recapture_only_for_staleness_then_read_retained_context(self):
         context = self.context('review-one')
@@ -105,9 +108,11 @@ class CoreSessionContextTests(unittest.TestCase):
             context_read = json.loads(followup.contextualizing(
                 ['d.choice'], revision, 'support', 10000))
         self.assertEqual(recapture.call_count, 5)
-        self.assertEqual(node['body'], self.document['judgments']['d.choice'])
+        self.assertEqual(typed_decode(node['body']['value']), self.document['judgments']['d.choice'])
+        self.assertEqual(node['body_encoding'], 'typed-json/v1')
         self.assertEqual(node['finding_ref'], 'finding:d.choice')
-        self.assertEqual(finding, context.assessment['nodes']['d.choice'])
+        self.assertEqual(typed_decode(finding['value']), context.assessment['nodes']['d.choice'])
+        self.assertEqual(finding['encoding'], 'typed-json/v1')
         self.assertEqual(assessment['snapshot_id'], context.snapshot_id)
         self.assertEqual(assessment['findings_revision'], context.findings_revision)
         self.assertEqual(assessment['assessment_profile'], 'core/v1')
@@ -175,8 +180,22 @@ class CoreSessionContextTests(unittest.TestCase):
                               timeout=30)
         self.assertEqual(read.returncode, 0, read.stderr)
         value = json.loads(read.stdout)['value']
-        self.assertEqual(value['body'], {'v': 1})
+        self.assertEqual(typed_decode(value['body']['value']), {'v': 1})
+        self.assertEqual(value['body_encoding'], 'typed-json/v1')
         self.assertEqual(value['finding_ref'], 'finding:p.input')
+
+    def test_date_bearing_record_opens_and_reads_with_typed_body(self):
+        self.record.write_text(
+            'meta:\n'
+            '  reasoning: {version: 2, profile: core/v1, requires: [arithmetic/v1]}\n'
+            'known:\n'
+            '  p.input: {v: 1, of: 2026-09-17}\n')
+        service = self.service('dated')
+        opened = service.opening_packet(1000)
+        revision = opened['packet']['revision']
+        value = json.loads(service.reading('node:p.input', revision, 2000))['value']
+        body = typed_decode(value['body']['value'])
+        self.assertEqual(body['of'], datetime.date(2026, 9, 17))
 
 
 if __name__ == '__main__':

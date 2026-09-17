@@ -508,18 +508,23 @@ class CoreRecordSources(unittest.TestCase):
         return D.build(self.draft, self.manifest, self.root, now)
 
     def test_explicit_core_source_captures_once_and_embeds_only_selected_v3_findings(self):
+        from scripts.reasoning.context import CapturedAssessment
         from scripts.reasoning.snapshot import Snapshot
-        original = Snapshot.capture
-        with patch.object(Snapshot, "capture", wraps=original) as capture:
+        snapshot = Snapshot.capture([str(self.path)], read_mode="frozen")
+        shared = CapturedAssessment.from_snapshot(snapshot)
+        with patch.object(Snapshot, "capture", return_value=snapshot) as capture:
             data = self.build()
         self.assertEqual(capture.call_count, 1)
         source = data["sources"]["record"]
         receipt = source["assessment"]
+        self.assertEqual(receipt["findings_revision"], shared.findings_revision)
         self.assertEqual(source["sha256"], receipt["snapshot_id"])
         self.assertEqual(receipt["assessment_profile"], "core/v1")
         self.assertEqual(receipt["schema_version"], 3)
-        self.assertEqual(receipt["assessment_selection"],
+        self.assertEqual(receipt["embedded_selection"],
                          ["reading.finished", "reading.registered"])
+        self.assertTrue(set(receipt["embedded_selection"]) <=
+                        set(receipt["assessment_selection"]))
         self.assertEqual(set(receipt["nodes"]),
                          {"reading.finished", "reading.registered"})
         self.assertEqual(receipt["history_selection"], [])
@@ -595,7 +600,9 @@ class CoreRecordSources(unittest.TestCase):
         with patch.object(Snapshot, "capture", return_value=history):
             values, receipt = D._core_record_source(self.path, inputs, NOW)
         self.assertEqual(values[key]["value"], {"type": "number", "value": "80"})
-        self.assertEqual(receipt["assessment_selection"], ["reading.registered"])
+        self.assertEqual(receipt["embedded_selection"], ["reading.registered"])
+        self.assertEqual(set(receipt["assessment_selection"]),
+                         {"reading.private", "reading.registered", "s.report"})
         self.assertEqual(receipt["history_selection"], ["reading.registered"])
         self.assertEqual(set(receipt["history_subjects"]), {"reading.registered"})
         self.assertNotIn("DO NOT EMBED THIS", D.encoded(receipt))

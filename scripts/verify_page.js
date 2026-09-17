@@ -63,7 +63,7 @@ if (!CHROME) { console.log('no Chrome/Chromium found - set CHROME to a browser b
             const nodes = [...document.querySelectorAll('.core-node[data-id]')];
             const ids = nodes.map(node => node.dataset.id);
             const dimensions = ['acceptance', 'computation', 'basis', 'falsifier',
-              'contention', 'integrity', 'coverage', 'assurance'];
+              'contention', 'integrity', 'coverage', 'assurance', 'support'];
             const meta = name => document.querySelector(`meta[name=${name}]`).content;
             return {
               snapshot: body.dataset.snapshotId,
@@ -94,7 +94,7 @@ if (!CHROME) { console.log('no Chrome/Chromium found - set CHROME to a browser b
             && state.page === state.assessment.page_assessment_revision);
           chk(`${T} every captured node is present`, state.unique > 0
             && state.unique === state.assessment.page_inputs.values.nodes.length);
-          chk(`${T} all eight independent state dimensions are visible`, state.completeDimensions);
+          chk(`${T} all independent state and support dimensions are visible`, state.completeDimensions);
           chk(`${T} generic typed values are rendered`, state.typed > 0);
           chk(`${T} theme media query is applied`, theme === 'dark'
             ? state.background === 'rgb(24, 24, 23)' : state.background !== 'rgb(24, 24, 23)');

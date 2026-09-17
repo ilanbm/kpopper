@@ -7,6 +7,7 @@ import sys
 import tempfile
 import unittest
 from types import SimpleNamespace
+from unittest import mock
 
 from scripts import provenance as P
 from scripts.reasoning import assessment as V2
@@ -69,6 +70,76 @@ class CoreProvenanceConsumers(unittest.TestCase):
             result = subprocess.run(command, capture_output=True, text=True, check=False)
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertIn('core/v1 snapshot ', result.stdout)
+
+    def test_writer_cli_keeps_profile_for_action_dispatch(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / 'GROUNDING.yaml'
+            path.write_text('known:\n  p.input: {v: 1}\n', encoding='utf-8')
+            result = subprocess.run([
+                sys.executable, str(Path(P.__file__)), 'add', 'p.new', 'v=2',
+                '--profile', 'core/v1', str(path)], capture_output=True, text=True, check=False)
+            written = path.read_text(encoding='utf-8')
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn('profile: core/v1', written)
+        self.assertIn('p.new:', written)
+
+    def test_transitive_affects_never_upgrades_a_potential_path(self):
+        view = {'impacts': [
+            {'from': 'x', 'to': 'mid', 'classification': 'potential', 'witnesses': []},
+            {'from': 'mid', 'to': 'downstream', 'classification': 'executed', 'witnesses': []},
+        ], 'findings_revision': 'f' * 64}
+        context = SimpleNamespace(view=view, snapshot_id='s' * 64,
+                                  findings_revision='f' * 64)
+        output = io.StringIO()
+        with mock.patch.object(P, '_core_context', return_value=context), \
+                contextlib.redirect_stdout(output):
+            self.assertEqual(P.core_affects(['unused'], ['x']), 0)
+        self.assertIn('POTENTIAL mid', output.getvalue())
+        self.assertIn('POTENTIAL downstream', output.getvalue())
+
+    def test_core_pull_refuses_legacy_history_and_ignored_budget_options(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / 'GROUNDING.yaml'
+            path.write_text(DOCUMENT, encoding='utf-8')
+            base = [sys.executable, str(Path(P.__file__)), 'pull', 'd.ready',
+                    '--profile', 'core/v1', str(path)]
+            for option, expected in ((['--history'], '--history'),
+                                     (['--budget', '1'], '--budget')):
+                result = subprocess.run(base + option, capture_output=True, text=True, check=False)
+                self.assertNotEqual(result.returncode, 0)
+                self.assertIn('core_profile_option_unsupported: ' + expected,
+                              result.stderr + result.stdout)
+
+    def test_core_check_fails_an_unresolved_page_selector(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            path = root / 'GROUNDING.yaml'
+            path.write_text(DOCUMENT, encoding='utf-8')
+            view_dir = root / '.kpopper'
+            view_dir.mkdir()
+            (view_dir / 'view.yaml').write_text(
+                'title: Missing\nsections:\n- title: Missing\n  pick: missing.prefix\n',
+                encoding='utf-8')
+            code, output = self.capture_output(P.core_check, [str(path)])
+        self.assertEqual(code, 1)
+        self.assertIn('page selectors unresolved (missing.prefix)', output)
+
+    def test_core_check_fails_stale_shape_and_renderer_misfit(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            path = root / 'GROUNDING.yaml'
+            path.write_text(DOCUMENT, encoding='utf-8')
+            view_dir = root / '.kpopper'
+            view_dir.mkdir()
+            (view_dir / 'view.yaml').write_text(
+                'title: Stale\n'
+                'shape: {entries: 999, judgments: 999, flagged: 999, blocked: 999}\n'
+                'sections:\n- title: Bad fit\n  as: comparison\n  pick: all\n',
+                encoding='utf-8')
+            code, output = self.capture_output(P.core_check, [str(path)])
+        self.assertEqual(code, 1)
+        self.assertIn('page renderer mismatch', output)
+        self.assertIn('page shape moved', output)
 
     def test_core_writer_summary_wraps_cached_v2_without_another_evaluation(self):
         snapshot = Snapshot.from_data({
