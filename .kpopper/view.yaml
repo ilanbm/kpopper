@@ -133,7 +133,8 @@ tabs:
         why: the record's history writes, recovery, branch adoption and replay rules are kept together for the next implementation session
         pick: [p.history_capture_contract, p.prepared_legacy_recovery,
                p.history_activation_cancellation, p.history_branch_adoption,
-               p.history_replay_audit_evidence, p.history_writer_compatibility]
+               p.history_replay_audit_evidence, p.history_writer_compatibility,
+               d.history_authority_is_explicit]
         as: table
       - title: The decisions that hold
         why: every one says what would make it wrong - hover any reference in the reasoning to see the value it was decided against

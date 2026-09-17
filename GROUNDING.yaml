@@ -3013,6 +3013,46 @@ judgments:
                               it"
       d.npm_holds_the_name: "the npm name is held against the day this becomes a Node tool, and it
                              is held by the browser checks rather than by a placeholder"
+  d.history_authority_is_explicit:
+    name: "Explicit history authority and preserved evidence"
+    rests_on: [p.history_activation_cancellation, p.history_branch_adoption, p.history_replay_audit_evidence, p.history_writer_compatibility]
+    verdict: "Activated records select authority through a validated generation marker and explicit
+              acts. Retaining or importing an immutable claim does not accept it; cancellation
+              preserves later evidence as inactive history."
+    because: "Interrupted writes and merged branches can retain several valid versions at once.
+              Choosing the newest file or treating presence as acceptance would change the record
+              without an attributable decision. Binding each publication to a checked baseline and
+              keeping cancelled generations lets recovery preserve both the current decision and the
+              evidence needed to examine it."
+    blocked_on: "observational: falsified by a reproducible interrupted-write or
+                 branch-reconciliation case in which the same validated marker and retained evidence
+                 admit different accepted states, or recovery requires deleting an original claim or
+                 inventing a prior acceptance. Reproduce from retained copies independently of
+                 generated-view checks."
+    seen:
+      p.history_activation_cancellation: "Guarded activation cancellation retains the complete
+                                          candidate as inactive immutable audit, restores authored
+                                          bytes, advances the legacy authority epoch, and binds
+                                          cancellation receipts to the authority and later commits.
+                                          Group recovery validates every member before clearing
+                                          reader guards."
+      p.history_branch_adoption: "Local branch history is captured at pinned Git commits and adopted
+                                  through one prepared mutation with explicit overlap choices.
+                                  Captured source envelopes are retained as immutable audit evidence;
+                                  prior capsule coverage is explicit rather than recursively copied.
+                                  Ordinary target evidence must match exact source bytes, and
+                                  recovery never rereads moved source refs."
+      p.history_replay_audit_evidence: "Adapter audit replay accepts only the current adapter
+                                        identity or an exact full audit in validated causal parent
+                                        receipts. A pending operation cannot witness its own audit.
+                                        An unknown old adapter requires the original verified
+                                        runtime; semantic and native audit changes still refuse."
+      p.history_writer_compatibility: "History batch receipt v6 validates the final staged world
+                                       while retaining per-action admission and original seen.
+                                       Retained v2/v3 operations replay exact bytes. Unicode subjects
+                                       retain exact logical identities through versioned hashed
+                                       physical paths; older raw paths remain readable. Identity
+                                       changes and brief references publish under one reader guard."
   d.home_beside_the_entry:
     verdict: "everything a record keeps beside itself lives in one directory, .kpopper, beside the
               file the reader opens first - hypotheses/, view.yaml, measure.yaml, session.json,
