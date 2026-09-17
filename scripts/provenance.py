@@ -664,7 +664,8 @@ def load_hypotheses(paths):
     _capture_event('directory', d, os.path.isdir(d))
     if not os.path.isdir(d):
         return out
-    for f in sorted(_capture_glob(os.path.join(d, "*.yaml")) + _capture_glob(os.path.join(d, "*.yml"))):
+    for f in sorted(_capture_glob(os.path.join(glob.escape(d), "*.yaml"))
+                    + _capture_glob(os.path.join(glob.escape(d), "*.yml"))):
         name = re.sub(r"\.ya?ml$", "", os.path.basename(f))
         hyp = _hypothesis(name, f)
         try:

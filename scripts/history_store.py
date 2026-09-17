@@ -238,6 +238,11 @@ class Store:
             C._require(isinstance(declaration, dict) and
                        selected_profile in (None, declaration.get('profile')),
                        'incompatible_authored_profiles')
+        if selected_profile == 'core/v1':
+            from .reasoning.contract import capabilities
+            C._require(declaration is not None, 'missing_reasoning_declaration')
+            C._require(capabilities(document)['profile'] == selected_profile,
+                       'incompatible_authored_profiles')
         document.setdefault('meta', {})['history'] = baseline(captured.marker, commits, state)
         return C.encode_document(document)
 

@@ -87,6 +87,17 @@ class HistorySnapshotCapture(unittest.TestCase):
         self.assertEqual(data['context']['history_view']['status'], 'current')
         self.assertEqual(before, {str(path): path.read_bytes() for path in self.root.rglob('*') if path.is_file()})
 
+    def test_hypotheses_in_literal_glob_directory_are_captured(self):
+        import shutil
+        with tempfile.TemporaryDirectory(prefix='hyp [x] ') as target:
+            shutil.copytree(self.root, target, dirs_exist_ok=True)
+            entry = Path(target) / self.entry.name
+            directory = Path(P.layout(entry)['hypotheses'])
+            directory.mkdir(parents=True, exist_ok=True)
+            (directory / 'alternative.yaml').write_text('readings:\n  p.input:\n    v: 2\n')
+            snapshot = Snapshot.capture(entry, read_mode='frozen')
+            self.assertIn('alternative', snapshot.to_data()['hypotheses'])
+
     def test_same_values_new_review_changes_identity_and_roundtrips_actual_review(self):
         first = self.snapshot()
         review = act(self.source, read={'p.input': self.source['id']})

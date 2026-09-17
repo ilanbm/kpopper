@@ -105,6 +105,12 @@ alternatives remain evidence and do not become arbitrarily selected scalar nodes
 Unresolved authored mappings and incompatible selected profiles or field roles
 refuse rendering.
 
+Selected `core/v1` claims require an explicit compatible `meta.reasoning`
+declaration at both commit preparation and capture. The store does not publish a
+core claim that the capture adapter cannot interpret. A bootstrap marker with no
+commit has no authoritative template and cannot be rendered or captured as a
+Snapshot; activation must publish its initial commit in the same guarded change.
+
 `Store.commit(mutation, verify=...)` validates the complete existing-plus-new
 closure, authority, baseline, parents and generated view. It calls the mandatory
 capability/evaluator verifier and rechecks captured inputs before publishing
@@ -146,6 +152,13 @@ coverage, per-subject acceptance/heads/acts, selected claims, pin witnesses and
 integrity findings. `snapshot()` places it in `Snapshot.context.history`, so acts
 or review context change Snapshot identity even when current values are equal.
 Snapshot construction and source-free frozen replay validate this binding.
+
+Disposition marks for retired versions are evidence pointers. Unless a marked
+version also appears among heads, proposals, or review pins, the bounded Snapshot
+does not retain its historical body; displaying that body requires the separate
+verified closure. The generated view's observed status and baseline digest also
+participate in Snapshot identity: stale and refreshed views can have equal
+committed computational inputs but different observed-state identities.
 
 The projection is limited to 8 MiB and contains no full file inventory. Exact
 private inventory remains in the source capture; complete audit replay needs an

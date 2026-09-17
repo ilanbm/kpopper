@@ -111,7 +111,9 @@ class Storage(unittest.TestCase):
         marker.parent.mkdir(parents=True)
         marker.write_bytes(C.encode_document(self.marker))
         self.entry.write_bytes(C.encode_document({
-            'meta': {'schema': 'original', 'history': H.baseline(self.marker, {}, H.reduce({}))},
+            'meta': {'schema': 'original',
+                     'reasoning': {'version': 2, 'profile': 'core/v1', 'requires': ['arithmetic/v1']},
+                     'history': H.baseline(self.marker, {}, H.reduce({}))},
             'readings': {}, 'judgments': {}, 'record': {'keep': True}}))
 
     def mutation(self, objects, op='operation'):
@@ -153,6 +155,25 @@ class Storage(unittest.TestCase):
         Path(self.store.layout['history_authority']).write_bytes(C.encode_document(other))
         with self.assertRaisesRegex(C.HistoryError, 'authority_mismatch'):
             self.store.capture()
+
+    def test_core_claim_without_reasoning_declaration_refuses_before_publication(self):
+        document = C.decode_document(self.entry.read_bytes())
+        del document['meta']['reasoning']
+        self.entry.write_bytes(C.encode_document(document))
+        before = {p: p.read_bytes() for p in self.entry.parent.rglob('*') if p.is_file()}
+        with self.assertRaisesRegex(C.HistoryError, 'missing_reasoning_declaration'):
+            self.publish([claim()])
+        self.assertEqual(before, {p: p.read_bytes() for p in self.entry.parent.rglob('*') if p.is_file()})
+
+    def test_core_claim_with_invalid_capabilities_refuses_before_publication(self):
+        from scripts.reasoning.contract import CapabilityError
+        document = C.decode_document(self.entry.read_bytes())
+        document['meta']['reasoning']['requires'] = ['unknown/v1']
+        self.entry.write_bytes(C.encode_document(document))
+        with self.assertRaises(CapabilityError) as caught:
+            self.publish([claim()])
+        self.assertEqual(caught.exception.code, 'unsupported_capability')
+        self.assertFalse(Path(self.store.layout['history_commits']).exists())
 
     def test_reads_do_not_write_and_observe_bytes_and_membership(self):
         self.publish([claim()])
