@@ -1,6 +1,8 @@
 """Cards derived from the Lean core and exact raw field access."""
 from __future__ import annotations
-from .store import SessionService, encode
+import copy
+
+from .store import CapturedSessionService, SessionService, encode
 from .core import Core
 from ..expressions import text as expression_text
 
@@ -63,3 +65,39 @@ def pointer_value(value,pointer):
         elif isinstance(value,list) and key.isdigit() and int(key)<len(value): value=value[int(key)]
         else: raise ValueError('unknown checked field')
     return value
+
+
+class CoreSessionReader(CapturedSessionService):
+    """Exact reads from a retained ``CapturedAssessment`` projection."""
+    def read_value(self, graph, ref):
+        base, separator, pointer = ref.partition('#')
+        if base.startswith('checked:'):
+            raise ValueError('checked: handles belong to checked-reader/v1; use finding:ID')
+        if base.startswith('finding:'):
+            identifier = base[8:]
+            finding = graph.data.get('core_findings', {}).get(identifier)
+            if finding is None:
+                raise ValueError('unknown core finding')
+            value = copy.deepcopy(finding)
+            return pointer_value(value, pointer) if separator and pointer else value
+        if base.startswith('history:'):
+            identifier = base[8:]
+            finding = graph.data.get('core_history_subjects', {}).get(identifier)
+            if finding is None:
+                raise ValueError('unknown core history subject')
+            value = copy.deepcopy(finding)
+            return pointer_value(value, pointer) if separator and pointer else value
+        if base == 'history':
+            value = copy.deepcopy(graph.data.get('core_history_subjects', {}))
+            return pointer_value(value, pointer) if separator and pointer else value
+        if base.startswith('node:') and base[5:] in graph.nodes:
+            node = graph.nodes[base[5:]]
+            value = {'body': copy.deepcopy(node['body']),
+                     'finding_ref': 'finding:' + base[5:],
+                     'status': copy.deepcopy(node['core_status']),
+                     'status_text': node['core_status_text'],
+                     'dependencies': copy.deepcopy(node['core_dependencies']),
+                     'scope': ('Captured core/v1 findings for this node; world truth and '
+                               'action authority are not certified.')}
+            return pointer_value(value, pointer) if separator and pointer else value
+        return super().read_value(graph, ref)

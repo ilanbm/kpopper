@@ -16,6 +16,7 @@ from .model import RecordMap, BudgetTooSmall, encode, digest
 ROOT=Path(__file__).resolve().parent
 RULES=(ROOT/'rules.txt').read_text(encoding='utf-8').strip()
 BOOTSTRAP=(ROOT/'bootstrap.txt').read_text(encoding='utf-8').strip()
+CORE_CONTEXT_VERSION = 1
 
 
 class TextEncoder:
@@ -209,12 +210,15 @@ class SessionService:
         if revision!=current: raise ValueError('project record changed or revision belongs elsewhere; reopen')
         return graph,current
 
+    def current_revision(self, graph):
+        return digest({'project':self.project,'graph':graph.snapshot})
+
     def opening(self,tokens=700):
         raise NotImplementedError("a session view must supply its projection")
 
     def read_value(self,graph,ref):
         base,separator,pointer=ref.partition('#')
-        current=digest({'project':self.project,'graph':graph.snapshot})
+        current=self.current_revision(graph)
         pending={k:{**v,'stale_base':v['base_revision']!=current} for k,v in self.proposals().items()}
         if base=='pending': value=pending
         elif base=='native': value=graph.data.get('native_hypotheses',{})
@@ -349,3 +353,75 @@ class SessionService:
         saved=atomic_create(self.state_dir/('proposal-'+key+'.json'),proposal)
         if any(saved.get(k)!=v for k,v in core.items()): raise ValueError('proposal collision')
         return encode({'id':key,'status':'proposed','read':'proposal:'+key,'canonical_record_changed':False})
+
+
+class CapturedSessionService(SessionService):
+    """Revision-bound storage for the explicit ``core/v1`` session route.
+
+    An opening captures and assesses once, then persists that detached context under
+    its public session handle.  Follow-up processes load the detached context and
+    recapture only a Snapshot to reject changed source/history inputs; they never
+    run an evaluator merely to serve a read.
+    """
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        if self.reader is None:
+            raise ValueError('core/v1 session requires a native record capture')
+
+    @property
+    def project_identity(self):
+        return {'version': 1, 'project': self.project,
+                'input_path': str(self.input_path)}
+
+    def _context_path(self, revision):
+        if not isinstance(revision, str) or not re.fullmatch(r'[0-9a-f]{64}', revision):
+            raise ValueError('invalid core session revision')
+        return self.state_dir / ('core-context-' + revision + '.json')
+
+    def capture_context(self):
+        from ..reasoning.context import CapturedAssessment
+        context = CapturedAssessment.capture([str(self.input_path)])
+        identity = self.project_identity
+        revision = context.session_revision(identity)
+        payload = {'version': CORE_CONTEXT_VERSION,
+                   'project_identity': identity,
+                   'revision': revision, 'context': context.to_data()}
+        saved = atomic_create(self._context_path(revision), payload)
+        if saved != payload:
+            raise ValueError('core session context collision')
+        return context, revision
+
+    def retained_context(self, revision):
+        from ..reasoning.context import CapturedAssessment
+        identity = self.project_identity
+        path = self._context_path(revision)
+        try:
+            payload = json.loads(path.read_text(encoding='utf-8'))
+        except FileNotFoundError:
+            raise ValueError('unknown core session revision; reopen') from None
+        expected = {'version', 'project_identity', 'revision', 'context'}
+        if not isinstance(payload, dict) or set(payload) != expected \
+                or payload['version'] != CORE_CONTEXT_VERSION \
+                or payload['project_identity'] != identity \
+                or payload['revision'] != revision:
+            raise ValueError('core session context identity mismatch; reopen')
+        context = CapturedAssessment.from_data(payload['context'])
+        if context.session_revision(identity) != revision:
+            raise ValueError('core session context revision mismatch; reopen')
+        return context
+
+    def expect_context(self, revision):
+        """Validate freshness without recomputing semantic findings."""
+        from ..reasoning.snapshot import Snapshot
+        context = self.retained_context(revision)
+        current = Snapshot.capture([str(self.input_path)])
+        if current.snapshot_id != context.snapshot_id:
+            raise ValueError('project record or history changed; reopen')
+        return context, revision
+
+    def current_revision(self, graph):
+        identity = graph.data.get('core_session')
+        if not isinstance(identity, dict) or identity.get('profile') != 'core/v1' \
+                or not isinstance(identity.get('revision'), str):
+            raise ValueError('core session graph is missing its revision identity')
+        return identity['revision']
