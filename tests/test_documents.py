@@ -467,5 +467,151 @@ class RecordSources(unittest.TestCase):
             D.build(self.draft, self.manifest, self.root, NOW)
 
 
+class CoreRecordSources(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self.root = Path(self.tmp.name)
+        self.path = self.root / "GROUNDING.yaml"
+        self.document = {
+            "meta": {"reasoning": {"version": 2, "profile": "core/v1",
+                                    "requires": ["arithmetic/v1"]}},
+            "sources": {"s.report": {"name": "Count report", "file": "report.txt",
+                                        "read": "2026-09-10"}},
+            "known": {
+                "reading.registered": {"name": "Registered", "v": 80,
+                                       "from": "s.report", "at": "registered line",
+                                       "of": "2026-09-10"},
+                "reading.finished": {"name": "Finished", "v": 60,
+                                     "from": "s.report", "at": "finished line"},
+                "reading.private": {"v": "DO NOT EMBED THIS", "from": "s.report"},
+            },
+        }
+        self.save()
+        self.source = {"name": "Core record", "path": "GROUNDING.yaml",
+                       "format": "record", "profile": "core/v1"}
+        self.manifest = {"version": 1, "sources": {"record": self.source}, "claims": [
+            {"id": "registered", "label": "Registered", "kind": "value",
+             "inputs": [{"source": "record", "pointer": "/reading.registered/v"}]},
+            {"id": "rate", "label": "Rate", "kind": "ratio", "inputs": [
+                {"source": "record", "pointer": "/reading.finished/v"},
+                {"source": "record", "pointer": "/reading.registered/v"}],
+             "format": {"scale": 100, "decimals": 0, "suffix": "%"}},
+        ]}
+        self.draft = html('<p>' + span('registered', '80') + ' readers; ' +
+                          span('rate', '75%') + ' finished.</p>')
+
+    def save(self):
+        self.path.write_text(yaml.safe_dump(self.document, sort_keys=False), encoding="utf-8")
+
+    def build(self, now=NOW):
+        return D.build(self.draft, self.manifest, self.root, now)
+
+    def test_explicit_core_source_captures_once_and_embeds_only_selected_v3_findings(self):
+        from scripts.reasoning.snapshot import Snapshot
+        original = Snapshot.capture
+        with patch.object(Snapshot, "capture", wraps=original) as capture:
+            data = self.build()
+        self.assertEqual(capture.call_count, 1)
+        source = data["sources"]["record"]
+        receipt = source["assessment"]
+        self.assertEqual(source["sha256"], receipt["snapshot_id"])
+        self.assertEqual(receipt["assessment_profile"], "core/v1")
+        self.assertEqual(receipt["schema_version"], 3)
+        self.assertEqual(receipt["assessment_selection"],
+                         ["reading.finished", "reading.registered"])
+        self.assertEqual(set(receipt["nodes"]),
+                         {"reading.finished", "reading.registered"})
+        self.assertEqual(receipt["history_selection"], [])
+        finding = D._decode_finding(receipt["nodes"]["reading.registered"])
+        self.assertEqual(finding["body"]["v"], 80)
+        self.assertEqual(data["checks"]["registered"]["status"], "match")
+        self.assertEqual(data["checks"]["rate"]["status"], "match")
+        self.assertNotIn("DO NOT EMBED THIS", D.encoded(data))
+        self.assertNotIn(str(self.root), D.encoded(data))
+
+    def test_replay_is_source_git_and_evaluator_free(self):
+        from scripts.reasoning.context import CapturedAssessment
+        from scripts.reasoning.snapshot import Snapshot
+        standalone = D.render(self.build())
+        with patch.object(Snapshot, "capture", side_effect=AssertionError("source lookup")), \
+                patch.object(CapturedAssessment, "from_snapshot",
+                             side_effect=AssertionError("evaluator")), \
+                patch.object(D, "read_bytes", side_effect=AssertionError("source lookup")), \
+                patch.object(subprocess, "run", side_effect=AssertionError("Git/evaluator")):
+            replay = D.load_artifact(standalone)
+            self.assertEqual(D.render(replay), standalone)
+
+    def test_refresh_rebinds_reread_core_evidence_and_retains_omitted_source(self):
+        initial = self.build()
+        old = initial["sources"]["record"]["assessment"]
+        retained = D.refresh(initial, {}, self.root, LATER)
+        self.assertFalse(retained["sources"]["record"]["reread"])
+        self.assertEqual(retained["sources"]["record"]["assessment"], old)
+
+        self.document["known"]["reading.registered"]["v"] = 100
+        self.save()
+        refreshed = D.refresh(initial, {"record": self.source}, self.root, LATER)
+        current = refreshed["sources"]["record"]["assessment"]
+        self.assertNotEqual(current["snapshot_id"], old["snapshot_id"])
+        self.assertNotEqual(current["findings_revision"], old["findings_revision"])
+        self.assertNotEqual(current["receipt_revision"], old["receipt_revision"])
+        self.assertEqual(current["captured_at"], LATER)
+        self.assertTrue(refreshed["sources"]["record"]["reread"])
+
+    def test_offline_validation_rejects_changed_receipt_and_profile_is_opt_in(self):
+        data = self.build()
+        changed = copy.deepcopy(data)
+        changed["sources"]["record"]["assessment"]["captured_at"] = LATER
+        with self.assertRaisesRegex(D.DocumentError, "receipt changed"):
+            D.validate_artifact(changed)
+        for profile in ("ordinary-reader/v1", "core/v2"):
+            with self.subTest(profile=profile):
+                manifest = copy.deepcopy(self.manifest)
+                manifest["sources"]["record"]["profile"] = profile
+                with self.assertRaisesRegex(D.DocumentError, "only explicit core/v1"):
+                    D.build(self.draft, manifest, self.root, NOW)
+
+    def test_core_finding_encoding_preserves_yaml_date_types(self):
+        self.document["known"]["reading.registered"]["of"] = yaml.safe_load("2026-09-10")
+        self.save()
+        data = self.build()
+        receipt = data["sources"]["record"]["assessment"]
+        finding = D._decode_finding(receipt["nodes"]["reading.registered"])
+        self.assertEqual(str(finding["body"]["of"]), "2026-09-10")
+        D.load_artifact(D.render(data))
+
+    def test_active_history_receipt_keeps_only_the_selected_subject_finding(self):
+        from scripts.reasoning.snapshot import Snapshot
+        from tests.test_reasoning_history_assessment import captured, claim
+        cited = claim("s.report", {"name": "Report", "file": "report.txt"})
+        selected = claim("reading.registered", {
+            "v": 80, "from": "s.report", "at": "registered line"})
+        private = claim("reading.private", {
+            "v": "DO NOT EMBED THIS", "from": "s.report"})
+        history = captured(cited, selected, private).snapshot()
+        key = D.selection_key({"source": "record", "pointer": "/reading.registered/v"})
+        inputs = {key: {"source": "record", "pointer": "/reading.registered/v"}}
+        with patch.object(Snapshot, "capture", return_value=history):
+            values, receipt = D._core_record_source(self.path, inputs, NOW)
+        self.assertEqual(values[key]["value"], {"type": "number", "value": "80"})
+        self.assertEqual(receipt["assessment_selection"], ["reading.registered"])
+        self.assertEqual(receipt["history_selection"], ["reading.registered"])
+        self.assertEqual(set(receipt["history_subjects"]), {"reading.registered"})
+        self.assertNotIn("DO NOT EMBED THIS", D.encoded(receipt))
+
+    def test_existing_document_cli_accepts_the_profile_in_the_manifest(self):
+        (self.root / "manifest.json").write_text(json.dumps(self.manifest), encoding="utf-8")
+        (self.root / "draft.html").write_text(self.draft, encoding="utf-8")
+        result = subprocess.run([
+            sys.executable, str(ROOT / "scripts/cli.py"), "document", "build",
+            "--html", "draft.html", "--manifest", "manifest.json", "--out", "report.html",
+        ], cwd=self.root, text=True, capture_output=True)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        artifact = D.load_artifact((self.root / "report.html").read_text(encoding="utf-8"))
+        self.assertEqual(artifact["sources"]["record"]["profile"], "core/v1")
+        self.assertEqual(artifact["checks"]["rate"]["status"], "match")
+
+
 if __name__ == "__main__":
     unittest.main()
