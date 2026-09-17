@@ -1,8 +1,7 @@
 #!/bin/sh
-# the plugin's stop gate cannot exist here: gemini's SessionEnd "will not wait for this
-# hook to complete and ignores all flow-control fields" - there is no exit code that
-# blocks a session from ending. so this only ever notes, never gates: run check, print
-# what it finds, exit 0 no matter what. GEMINI.md says as much, in words a person reads.
+# Gemini's SessionEnd is best effort and cannot block shutdown. This adapter only
+# notes, never gates: run check, print what it finds, and exit 0. hook.py wraps this
+# internal text as Gemini's JSON systemMessage; do not register this script directly.
 # no `set -e`: check exits 1 on finding problems, which is the normal, expected case
 # here, not a crash - the same reason session_gate.sh never sets it either.
 

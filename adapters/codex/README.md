@@ -7,6 +7,13 @@ out of the Codex path.
 
 ## Native plugin
 
+First run the [private Python setup](../../README.md#prepare-python-for-claude-code-and-codex)
+on the machine and OS account that execute Codex's hooks. Plugin installation alone
+does not install Python dependencies. All commands in `plugin-hooks.json`, including
+the Stop gate, select that runtime; they continue to run scripts from `$PLUGIN_ROOT`.
+If opening reports missing dependencies, run its exact `setup` command and start a
+new task. Compare `doctor`'s `Hook Python` with `KPOPPER_AGENT_CONTEXT.command[0]`.
+
 The Codex package loads the shared skill and these hooks:
 
 | Event | Behavior |
@@ -15,7 +22,7 @@ The Codex package loads the shared skill and these hooks:
 | `PostToolUse`, `UserPromptSubmit` | Asynchronous delivery of newly actionable ingestion results |
 | `Stop` | The existing record gate; no new ingestion wait or approval gate |
 
-The hooks only read the queue. `kpopper ingest capture` retains an explicit report and starts the
+The hooks only read the queue. `kpop ingest capture` retains an explicit report and starts the
 independent processor. Routine completion emits no hook output. Important results enter the next
 available model request while a turn is active. If the task is idle, Codex queues ordinary async
 hook output until the next user turn; the hook does not start one. See the
@@ -36,6 +43,10 @@ References: [plugin-bundled hooks](https://learn.chatgpt.com/docs/hooks#plugin-b
 [background delivery](https://learn.chatgpt.com/docs/hooks#how-background-hooks-run).
 
 ## Plain project configuration
+
+Prepare the same [private runtime](../../docs/plugin-runtime.md) before installing
+project hooks. If using `KPOPPER_RUNTIME_HOME`, pass the same absolute value to setup
+and the Codex process.
 
 `hooks.json` is also provided for installations using project-level hooks rather than a native
 plugin. Codex resolves command paths against the session's working directory, not against the

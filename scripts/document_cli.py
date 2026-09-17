@@ -11,7 +11,7 @@ except ImportError:
 
 
 def parser():
-    result = argparse.ArgumentParser(prog="kpopper document", description="Author and refresh standalone HTML documents with an evidence layer.")
+    result = argparse.ArgumentParser(prog="kpop document", description="Author and refresh standalone HTML documents with an evidence layer.")
     sub = result.add_subparsers(dest="command", required=True)
     sub.add_parser("guide", help="read the authoring contract and examples")
     build = sub.add_parser("build", help="package authored HTML and source checks in one file")

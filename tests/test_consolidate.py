@@ -576,8 +576,8 @@ class TheRefutation(unittest.TestCase):
         self.assertIn("    v: refuted              the value every negative finding of this kind carries", out)
         self.assertIn("--from <ref>", out)
         code, out, _ = kp()
-        self.assertIn("kpopper consolidate", out)
-        self.assertIn("kpopper pull", out)
+        self.assertIn("kpop consolidate", out)
+        self.assertIn("kpop pull", out)
         code, out, _ = kp("pull", "--help")
         self.assertIn("--from REF", out)
 

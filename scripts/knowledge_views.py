@@ -266,7 +266,7 @@ def lines(doc):
     if getattr(doc, 'target_unavailable', None):
         result.append('TARGET UNVERIFIED: ' + doc.target_unavailable)
     if getattr(doc, 'private_drafts', None):
-        result.append(str(len(doc.private_drafts)) + ' private drafts retained; inspect `kpopper knowledge status`')
+        result.append(str(len(doc.private_drafts)) + ' private drafts retained; inspect `kpop knowledge status`')
     return result
 
 

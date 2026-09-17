@@ -4,7 +4,7 @@
 readers keep their legacy interpretation until their consumers are integrated.
 
 ```sh
-kpopper assess m.total d.order --profile core/v1 --record example.yaml
+kpop assess m.total d.order --profile core/v1 --record example.yaml
 ```
 
 ```yaml

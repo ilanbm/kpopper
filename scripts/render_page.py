@@ -647,9 +647,17 @@ def link_target(entry, record_root=None, page_path=None):
     if record_root is not None and page_path is not None:
         local = unquote(parsed.path) if is_url else v
         source = local if os.path.isabs(local) else os.path.join(str(record_root), local)
-        absolute = os.path.abspath(source)
+        # Both ends are spelled the same way before one is subtracted from the other. One
+        # directory can be reached under more than one name - on macOS a temporary directory is
+        # both /var/... and /private/var/..., one of them a link to the other - and a source
+        # named under one spelling, subtracted from a page located under the other, counts the
+        # wrong number of levels: the link climbs past the root and arrives nowhere. Resolved on
+        # both sides it stays within the directory the two files share, so it keeps working when
+        # the page is opened under either name.
+        absolute = os.path.realpath(source)
+        page_dir = os.path.realpath(os.path.dirname(os.path.abspath(page_path)))
         try:
-            relative = os.path.relpath(absolute, os.path.dirname(os.path.abspath(page_path)))
+            relative = os.path.relpath(absolute, page_dir)
             # `local` was decoded for filesystem arithmetic, so '%' is literal here and must be
             # encoded again (an authored %25 must not turn into an incomplete escape). Windows
             # path separators become URL separators; a literal POSIX backslash stays literal.

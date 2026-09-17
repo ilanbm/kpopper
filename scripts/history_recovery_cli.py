@@ -9,7 +9,7 @@ except ImportError:
 
 
 def main(argv=None):
-    parser = argparse.ArgumentParser(prog='kpopper recover')
+    parser = argparse.ArgumentParser(prog='kpop recover')
     parser.add_argument('--record', help='entry file, routed through the current project configuration')
     parser.add_argument('--rollback', action='store_true', help='restore the retained before images')
     parser.add_argument('--json', action='store_true', help='return a structured receipt')

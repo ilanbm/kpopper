@@ -594,6 +594,25 @@ sources:
            decided: the base's condition evaluated on the base, an unfired flip contested and folded
            only by name, every replacement traced beside the record, and a source's own clock in
            place of the day."
+  s.2026_09_15_link_spelling:
+    name: "The session that found a source link measured between two spellings of one place"
+    asked: "tests/test_page_links.py ... fails deterministically on macOS ... while it passes on the
+            Linux CI runner ... find where the renderer builds the relative href for an absolute
+            evidence file, and make the page location and the evidence path use one consistent
+            spelling (both resolved, or both as written) so a browser opening the page at the
+            spelling the CLI writes reaches the file on macOS as well as Linux. Decide whether the
+            test assumption or the renderer is the one to change"
+    of: "The Absolute evidence link on the rendered page left its directory with ten steps where
+         three reach the directory the two files share: it was measured from the resolved location of
+         the page to the source under the name the record spells it with. A temporary directory on
+         macOS is reached as both /var/folders/... and /private/var/folders/..., so the two ends
+         counted different numbers of levels and the link climbed past the root. The test that
+         catches it reads its verdict through urljoin, which discards a step past the root on some
+         versions and not on others: it failed on Python 3.13.13 and passed on 3.9.6 and 3.14.5, so
+         the runs that guard the tree stayed green while the link was wrong on every platform. Both
+         ends are resolved before the subtraction now; a path with no directory link in it produces
+         the same link as before, and the 1327-test suite passes."
+    read: "2026-09-15"
   s.2026_09_15_verdict_conflicts_decided:
     asked: "Closed: implement the rule shaped for issues #98 and #99 and see how it behaves,
             following the delivery workflow - a verdict, or other grounds, laid over a standing
@@ -610,6 +629,23 @@ sources:
            to by-hand once to show the tests fail. The rule itself went into the record as a
            hypothesis for a person to take by name - the new door deciding its own re-decision."
     read: "2026-09-15"
+  s.2026_09_16_page_address:
+    name: "The session that made the address of a page survive the name of its directory"
+    asked: "The path is pasted into the URL unquoted. A record directory whose name contains # ...
+            makes the browser treat everything from the # onward as a fragment, and the page never
+            loads. Spaces and other characters that need percent-encoding have the same problem, and
+            a literal % in a directory name would be read as an escape. Fix: build the URI properly
+            ... then append #tree when the --tree flag was given ... Add a test covering a record
+            directory whose name contains # and a space"
+    of: "The command that opens a written page built its address by pasting the path after a scheme.
+         A record directory named with a number sign ended the address where its name began: the
+         browser was asked for the path up to that point and read the rest as a fragment, so the page
+         never loaded. The name in the test fixtures, record # שלום, is such a name. The path becomes
+         a URL through the same call that escapes it now, and the one fragment the command offers is
+         added after. A test names a directory with a number sign and a space and reads the address
+         handed to the browser: without the change its fragment is the tail of the directory name
+         rather than the flag."
+    read: "2026-09-16"
   s.2026_09_16_versions_core:
     asked: "Close the model behind issues #98 and #99 for good: after the fold's fixes of PR #101,
             shape the smallest core that covers every case the thread raised - a two-branch verdict
@@ -643,6 +679,20 @@ sources:
       commit: d9857cdb184d1daf4df37c09e71be804e1c46c37
       environment: "kpopper source at d9857cdb184d1daf4df37c09e71be804e1c46c37"
     of: "2026-09-17"
+  s.2026_09_17_host_compatibility:
+    asked: "Check how kpopper works in OpenClaw, add usage instructions, and identify and test other
+            environments worth supporting before launch; run bounded compatibility checks in
+            parallel."
+    name: "The session that verified host loading and hook protocols, added OpenClaw and OpenCode
+           guides, and corrected Gemini, Copilot, Cursor and Cowork compatibility claims"
+    of: "2026-09-17"
+  s.2026_09_17_selective_ci:
+    name: "The request to make PR checks selective while retaining the needed coverage"
+    asked: |-
+      נראה לי שהריצות של הchecks שיש לנו כרגע בgithub הן לא יעילות, בעיקר אלה שרצות על כל PR
+      תסתכל בm8t-stack-poc ובריפואים שקשורים אליו אולי שם הטסטים יותר טובים? יודעים לאתר מתי צריך להריץ משהו ומתי לא?
+    read: "2026-09-17"
+    fidelity: quoted
   s.background_ingestion:
     name: "Background capture and selective delivery contract"
     file: "skills/kpopper/INGESTION.md"
@@ -654,6 +704,11 @@ sources:
     file: "scripts/consolidate.py"
     read: "2026-09-10"
     revision: d17225095c856b147d03522981f2c639e57f73e1
+  s.ci_selection:
+    name: "CI family selection and required-results policy"
+    file: ".github/scripts/ci_selection.py"
+    read: "2026-09-17"
+    from: s.2026_09_17_selective_ci
   s.followups_contract:
     name: "Followup task and authority contract"
     file: "skills/kpopper/FOLLOWUPS.md"
@@ -700,6 +755,10 @@ sources:
     at: "How it works / Two working modes; assets/diagrams/two-working-modes.png and
          two-working-modes-mobile.png"
     read: "2026-09-14"
+  doc.contributing:
+    name: "Contribution and developer setup guide"
+    file: CONTRIBUTING.md
+    read: "2026-09-16"
   doc.fact_moves:
     url: "https://claude.ai/code/artifact/ca99e558-60ae-4b22-9221-e3b29d7d7e2b"
     name: "מה קורה כשעובדה זזה - the unified node model"
@@ -798,6 +857,26 @@ sources:
     name: "Focused graph export contract"
     file: "docs/graph-export.md"
     read: "2026-09-14"
+  doc.history_writer_contract_c5cc6a3:
+    name: "History writer, replay and branch adoption contract at c5cc6a3"
+    file: "docs/history-contract.md"
+    at: "Implementation and regression evidence at c5cc6a3b873628d08f338e457f09153962d406f8"
+    read: "2026-09-17"
+    scope:
+      kind: code
+      commit: c5cc6a3b873628d08f338e457f09153962d406f8
+      environment: "source protocol and disposable regression fixtures"
+  doc.host_compatibility:
+    name: "Host compatibility verification and release acceptance"
+    file: "docs/compatibility.md"
+    read: "2026-09-17"
+    from: s.2026_09_17_host_compatibility
+  doc.github_community_guidance:
+    name: "GitHub community profiles and workflow status badges"
+    url: "https://docs.github.com/en/communities/setting-up-your-project-for-healthy-contributions/about-community-profiles-for-public-repositories"
+    of: "Community-profile checklist; badge behavior is documented separately at
+         https://docs.github.com/en/actions/how-tos/monitor-workflows/add-a-status-badge"
+    read: "2026-09-15"
   doc.hub_seam:
     name: "The lab's own decision on why its page stays hand-written - the argument is manual,
            the agenda is derived, and a block becomes a query once its content is anchored"
@@ -807,6 +886,17 @@ sources:
     name: "The source update and recording gate regression contract"
     file: "tests/test_ingestion.py"
     read: "2026-09-07"
+  doc.plugin_runtime:
+    name: "Explicit Python setup and runtime selection for plugin hooks"
+    file: "docs/plugin-runtime.md"
+    read: "2026-09-17"
+  doc.session_test_gates:
+    name: "Checked-session integration test readiness gates"
+    file: "tests/test_predicate_literals.py"
+    of: "PredicateLiteralContract.setUpClass; also ReadableRuntime.setUpClass in
+         tests/test_readable_expressions.py and cache validation in scripts/session/core.py
+         Core.__init__"
+    read: "2026-09-17"
   doc.standalone_html:
     name: "Standalone authored HTML contract"
     from: s.2026_09_10_standalone_html
@@ -1089,6 +1179,12 @@ known:
     name: "Claims about this project that held - checked with a run before they were asserted"
     from: run.claims_scored
     at: "of 6"
+  m.copilot_live_core_verified:
+    v: true
+    name: "Copilot live core sequence passes with explicitly retained source-fidelity gaps"
+    from: doc.host_compatibility
+    at: "Copilot live exercise / core behavior and provenance gaps"
+    of: "2026-09-17"
   m.core.bytes_per_version:
     v: 367
     unit: bytes
@@ -1297,6 +1393,21 @@ known:
     at: "near - the reasons a pair is named; overlap only orders"
     of: "2026-09-04"
     also: [p.sameness_reasons]
+  p.ci_native_build_inputs:
+    name: "Inputs requiring the five-target native build and modified-GMP audit"
+    v: "Native sources, builder, bundled runtime, native loader and replacement probe, notices, and
+        CI selection/native-workflow changes; unknown paths select all checks. Packaging metadata
+        alone tests installation without recompiling native source."
+    from: s.2026_09_17_selective_ci
+    at: "families(path) and select(paths), branch codex/selective-ci"
+    as_of: "2026-09-17"
+  p.community_guidance:
+    name: "Public contribution guidance and truthful workflow status"
+    v: "GitHub recommends discoverable community files and issue templates; workflow status badges
+        report actual workflow results."
+    from: doc.github_community_guidance
+    at: "GitHub Docs: community-profile checklist and workflow status badge guidance; paraphrase"
+    of: "2026-09-15"
   p.contested_meanings:
     v: 1
     name: "Meanings the reader gives the word contested - a rival claim laid against what the record
@@ -1305,6 +1416,17 @@ known:
     at: "contested, and the opener's standing line; the dry run's report and the page's arrangement
          note say the word of the door's refusal and of a question - the same rival claim"
     of: "2026-09-04"
+  p.contributor_session_test_setup:
+    name: "Cached kernel and optional dependencies for checked-session tests"
+    v: "A matching cached kernel from session setup enables kernel-backed integration tests; Lean on
+        PATH alone does not. Some enabled tests import the session extra, so a base-only environment
+        can fail on missing tiktoken. The separate core/v1 packaged runtime needs neither the Lean
+        compiler nor checked-session setup for normal execution."
+    # set 2026-09-17: Correct the activation condition against the test gates and cached-core loader.
+    # set 2026-09-16: Distinguish the legacy checked-session test requirements from the packaged runtime introduced on main.
+    from: doc.session_test_gates
+    at: "PredicateLiteralContract.setUpClass and store import; ReadableRuntime.setUpClass; Core.__init__ cache validation"
+    of: "2026-09-17"
   p.coverage_thresholds:
     v: 0
     name: "Thresholds the coverage report carries in code - a line drawn anywhere but inside a
@@ -1348,10 +1470,9 @@ known:
         restores authored bytes, advances the legacy authority epoch, and binds cancellation receipts
         to the authority and later commits. Group recovery validates every member before clearing
         reader guards."
-    from: s.2026_09_17_history_reasoning_integration
-    at: "docs/history-contract.md, Explicit proposals, groups and generation changes;
-         scripts/history_activation.py; scripts/history_group_activation.py;
-         tests/test_history_generations.py"
+    of: "2026-09-17"
+    from: doc.history_writer_contract_c5cc6a3
+    at: "docs/history-contract.md, Explicit proposals, groups and generation changes; scripts/history_activation.py; scripts/history_group_activation.py; tests/test_history_generations.py"
     scope: "Source protocol and disposable regression fixtures; not a live-record cutover or
             installed release-readiness claim"
   p.history_branch_adoption:
@@ -1359,9 +1480,9 @@ known:
         mutation with explicit overlap choices. Captured source envelopes are retained as immutable
         audit evidence; prior capsule coverage is explicit rather than recursively copied. Ordinary
         target evidence must match exact source bytes, and recovery never rereads moved source refs."
-    from: s.2026_09_17_history_reasoning_integration
-    at: "docs/history-contract.md; scripts/history_branch.py; scripts/history_direct.py;
-         tests/test_history_branch.py; tests/test_history_branch_direct.py"
+    of: "2026-09-17"
+    from: doc.history_writer_contract_c5cc6a3
+    at: "docs/history-contract.md; scripts/history_branch.py; scripts/history_direct.py; tests/test_history_branch.py; tests/test_history_branch_direct.py"
     scope: "Single and bounded multiple local Git sources, no remote publication authority or live
             record activation"
   p.history_capture_contract:
@@ -1382,9 +1503,9 @@ known:
         validated causal parent receipts. A pending operation cannot witness its own audit. An
         unknown old adapter requires the original verified runtime; semantic and native audit changes
         still refuse."
-    from: s.2026_09_17_history_reasoning_integration
-    at: "docs/history-contract.md; scripts/history_authoring.py;
-         tests/test_history_batch_final_world.py"
+    of: "2026-09-17"
+    from: doc.history_writer_contract_c5cc6a3
+    at: "docs/history-contract.md; scripts/history_authoring.py; tests/test_history_batch_final_world.py"
     scope: "Source replay admission contract; recorded provenance is not proof of external source
             truth"
   p.history_writer_compatibility:
@@ -1392,10 +1513,9 @@ known:
         admission and original seen. Retained v2/v3 operations replay exact bytes. Unicode subjects
         retain exact logical identities through versioned hashed physical paths; older raw paths
         remain readable. Identity changes and brief references publish under one reader guard."
-    from: s.2026_09_17_history_reasoning_integration
-    at: "docs/history-contract.md; scripts/history_authoring.py; scripts/history_paths.py;
-         scripts/history_identity.py; tests/test_history_batch_final_world.py;
-         tests/test_history_direct_auxiliary.py"
+    of: "2026-09-17"
+    from: doc.history_writer_contract_c5cc6a3
+    at: "docs/history-contract.md; scripts/history_authoring.py; scripts/history_paths.py; scripts/history_identity.py; tests/test_history_batch_final_world.py; tests/test_history_direct_auxiliary.py"
     scope: "Source implementation with focused disposable regression evidence; full combined and
             installed gates remain separate"
   p.hypothesis_homes:
@@ -1454,6 +1574,12 @@ known:
     at: "the first command of each trial - pull heat, pull pump water; the 13 wrong answers were all
          dates under when., a prefix no question suggests"
     of: "2026-09-11"
+  m.host_compatibility_model_sessions:
+    v: 0
+    name: "Real-model conversations in the initial compatibility pass, before live exercises"
+    from: doc.host_compatibility
+    at: "Verification matrix / initial loader-protocol phase before live exercises"
+    of: "2026-09-17"
   m.letter_prefix_ids:
     v: 214
     unit: entries
@@ -1478,6 +1604,18 @@ known:
     from: run.prefix_survey
     at: "the judgment collection of each record, and the two letters both live records hold"
     of: "2026-09-11"
+  m.named_main_delivery_corrected:
+    v: true
+    name: "Named-main delivery and true-subagent suppression pass all five fixed-hook regressions"
+    from: doc.host_compatibility
+    at: "Scope before launch / guard correction and five passing regression cases"
+    of: "2026-09-17"
+  m.named_main_hooks_suppressed:
+    v: true
+    name: "Named-main suppression reproduced on baseline 5c2062b before the guard correction"
+    from: doc.host_compatibility
+    at: "Scope before launch / initial pre-fix observation on baseline 5c2062b"
+    of: "2026-09-17"
   m.older_records_changed:
     v: 0
     name: "Records written before the field whose reading changed once the reader learned it"
@@ -1556,6 +1694,33 @@ known:
     at: "tool.setuptools.package-data"
     measure: checks_in_the_wheel
     of: "2026-09-03"
+  m.openclaw_bundle_hooks:
+    v: 0
+    name: "Runnable kpopper hooks registered by the existing bundle in OpenClaw 2026.9.4"
+    from: doc.host_compatibility
+    at: "Verification matrix / OpenClaw 2026.9.4: hook inventory confirms no kpopper hook pack"
+    of: "2026-09-17"
+  m.openclaw_bundle_skills:
+    v: 8
+    name: "Eligible model-visible kpopper skills in isolated OpenClaw 2026.9.4 on macOS"
+    from: doc.host_compatibility
+    at: "Verification matrix / OpenClaw 2026.9.4: all eight skills eligible and model-visible"
+    of: "2026-09-17"
+  m.openclaw_isolated_bundle_verified:
+    v: true
+    name: "OpenClaw isolated customization test uses only fresh bundle skills and passes independent
+           recall and change assertions"
+    from: doc.host_compatibility
+    at: "OpenClaw customization-isolated follow-up / negative control, five native inventories and
+         independent assertions"
+    of: "2026-09-17"
+  m.openclaw_live_core_verified:
+    v: true
+    name: "OpenClaw Claude CLI backend passes assisted creation, two-project random recall and
+           preserved-snapshot change checks"
+    from: doc.host_compatibility
+    at: "OpenClaw live exercise / scope, assertions and operator-assisted qualification"
+    of: "2026-09-17"
   m.prompt_hook_10x_kept:
     v: 0.15
     unit: s
@@ -1833,7 +1998,9 @@ known:
     of: "2026-09-10"
 
   m.skill_bytes_largest:
-    v: 22224
+    v: 22189
+    # set 2026-09-17: Measured after the recording example changed src to canonical from; largest skill is skills/record/SKILL.md on branch 89f46e8
+    # set 2026-09-16: measured by skill_bytes_largest at a566286 with the working tree changed
     # Measured on the integrated source at 2218aa3; earlier same-day values describe its parents.
     scope: {kind: code, environment: kpopper skill sources, commit: 2218aa345c292eef51c4205c5437dd1fa93d56c3}
     # set 2026-09-14: Measured by skill_bytes_largest after the recording guidance update
@@ -1843,7 +2010,7 @@ known:
     name: "The largest skill body a session can be handed now, bytes"
     from: "skills/*/SKILL.md"
     at: "bytes of the largest body"
-    of: "2026-09-14"
+    of: "2026-09-17"
     measure: skill_bytes_largest
 
   m.unasked.question_filler:
@@ -1938,6 +2105,14 @@ open:
   q.hypothesis_lifetime: "when is an untested hypothesis stale enough for the opener to say so -
                           by age, by how much rests on it, or only when a person asks?"
 
+  q.verdict_through_a_library: "does a test that follows a link the way a reader would tell a
+                                malformed link from a sound one on every version it runs on - the
+                                page-links test reads its verdict through urljoin, whose treatment of
+                                a step past the root differs by version, and so passed on two of the
+                                three tried while the link was wrong on all of them; would asserting
+                                the shape of the link catch it everywhere, and what else in the suite
+                                takes its verdict from a library that is free to differ?"
+
 judgments:
   d.a_comparison_shows_where_it_parts:
     rests_on: [s.2026_09_04_difference, d.moved_is_a_flag]
@@ -2006,6 +2181,26 @@ judgments:
       d.a_comparison_shows_where_it_parts: "where two readings are printed side by side, each is
                                             clipped to where they part rather than to where they
                                             agree; the head is kept only when they part inside it"
+  d.a_name_becomes_a_url_by_escaping:
+    from: s.2026_09_16_page_address
+    name: "A path reaches a browser as a URL it was turned into, never as text pasted after a
+           scheme"
+    rests_on: [s.2026_09_16_page_address, d.link_ends_share_one_spelling]
+    verdict: "The path is converted by the call that escapes it, and any fragment this adds comes
+              after that conversion."
+    because: "A name is not an address. A number sign in a directory name ends the address where the
+              name begins and the rest is read as a fragment; a space cuts it just as short; a
+              literal percent sign is read as the start of an escape. None of these are unusual
+              names, and the fixtures here already carry one. Pasting a path after a scheme also puts
+              the one fragment the command offers where nothing distinguishes it from a fragment the
+              name produced, so the flag and the accident become the same character. Converting first
+              keeps the name inside the path and leaves the fragment to what asked for it."
+    reopened_by: "A destination is wanted that this conversion cannot spell - an address that is not
+                  a file, or a place a browser is given by some other means than a URL."
+    seen:
+      s.2026_09_16_page_address: "read 2026-09-16"
+      d.link_ends_share_one_spelling: "Both ends are resolved before one is subtracted from the
+                                       other, and the page is opened under the name it resolves to."
   d.a_write_joins_its_own_shard:
     rests_on: [s.2026_09_11_read_once, d.scale_by_federation, d.add_places_by_prefix]
     verdict: "a new entry goes into the file whose collection already holds its neighbours - the
@@ -2281,6 +2476,41 @@ judgments:
       s.2026_09_04_components: "read 2026-09-04"
       d.author_free_build_guarantees: "the session composes freely and the build enforces the
                                        element rules on the output"
+  d.ci_selects_families:
+    name: "Select PR checks by declared input families and require selected work to succeed"
+    from: s.2026_09_17_selective_ci
+    rests_on: [p.ci_native_build_inputs]
+    verdict: "Keep record and cheap contracts unconditional; select expensive families
+              conservatively from the full PR diff, cancel superseded runs, and retain broad consumer
+              checks on main."
+    because: "Skills and prose do not require native compilation. Packaging needs evidence about the
+              installed committed payload, while changed native inputs need compilation and
+              replacement-library integration. Unknown paths select all checks; the aggregate gate
+              refuses an unexpected skip so selecting less cannot silently convert missing work into
+              success."
+    reopened_by: "A changed input affects a skipped family; a selected job is skipped or fails while
+                  ci-required passes; or main no longer exercises all consumer families."
+    seen:
+      p.ci_native_build_inputs: "Native sources, builder, bundled runtime, native loader and
+                                 replacement probe, notices, and CI selection/native-workflow
+                                 changes; unknown paths select all checks. Packaging metadata alone
+                                 tests installation without recompiling native source."
+  d.community_entrypoints:
+    because: "These entrypoints let a new contributor assess the existing checks, install the
+              project, report a reproducible problem and submit a focused change. Badges link to
+              their actual workflows, release or license; forms preserve a blank-issue route.
+              Reporting policies need a real private contact before publication, and community files
+              alone do not establish release readiness."
+    name: "Make contributing discoverable and show actual project status"
+    reopened_by: "A newcomer cannot complete setup or find the right reporting route from these
+                  files, the forms prevent a useful report, or a badge no longer represents the
+                  workflow, release or license it claims."
+    rests_on: [p.community_guidance]
+    verdict: "Keep a small set of truthful badges and lightweight issue forms, with newcomer setup
+              and reporting routes in the contribution guide."
+    seen:
+      p.community_guidance: "GitHub recommends discoverable community files and issue templates;
+                             workflow status badges report actual workflow results."
   d.components_follow_shape:
     rests_on: [s.2026_09_04_components, d.groupings_declared, doc.hub_seam]
     verdict: "The existing shapes carry the hub components; an axis is reviewed text with signed
@@ -2944,6 +3174,24 @@ judgments:
     seen:
       s.2026_09_13_readme_direction: "read 2026-09-13"
       s.2026_09_13_reasoning_overview: "read 2026-09-13"
+  d.link_ends_share_one_spelling:
+    from: s.2026_09_15_link_spelling
+    name: "A source link is measured between two paths spelled the same way"
+    rests_on: [s.2026_09_15_link_spelling]
+    verdict: "Both ends are resolved before one is subtracted from the other, and the page is opened
+              under the name it resolves to."
+    because: "One directory is reachable under more than one name, and the two ends arrive from
+              different places: a record names its sources under whichever name a person typed, while
+              the location of the page is found by walking up from where the command ran. Subtracting
+              one spelling from the other counts levels that do not correspond, so the link climbs
+              past the root and arrives nowhere - and it arrives nowhere quietly, because a link that
+              escapes the root is discarded by some readers and kept by others. Resolved on both
+              sides the link stays inside the directory the two files share, which holds under either
+              name, so a path with no directory link in it is unaffected."
+    reopened_by: "A record needs its links to keep the name a person typed rather than the one it
+                  resolves to - a page whose readers must see the authored path, or a place where the
+                  resolved name is not reachable."
+    seen: {s.2026_09_15_link_spelling: "read 2026-09-15"}
   d.local_claims_want_a_run:
     rests_on: [s.2026_09_04_calibration, prior.local_needs_a_run, m.claims.general_held,
                m.claims.local_checked_held, m.claims.local_assumed_held, m.reach.general_held,
@@ -3221,6 +3469,19 @@ judgments:
       p.record_parsers: 1
       m.prompt_hook_10x_parsing: 1.3
       m.prompt_hook_10x_kept: 0.15
+  d.plugin_runtime_is_explicit:
+    rests_on: [goal.portable, doc.plugin_runtime]
+    verdict: "Prepare hook dependencies through an explicit private-virtualenv setup; Claude Code
+              and Codex hooks select it while executing code from their active plugin."
+    because: "Plugin installation copies files without supplying Python packages. A dependency
+              environment outside the plugin cache avoids system pip restrictions and interpreter
+              guessing, survives cache replacement, and keeps network installation outside hooks."
+    reopened_by: "A supported hook uses a different interpreter from the repaired runtime, a failed
+                  setup appears ready, plugin versions need incompatible dependency sets in one
+                  environment, or a hook installs packages without an explicit setup command."
+    seen:
+      goal.portable: "usable by any session, in any project, with no author present"
+      doc.plugin_runtime: "read 2026-09-17"
   d.predicate_shape_is_one_reading:
     rests_on: [s.2026_09_04_falsifier_shape, p.predicate_shapes, d.arrangement_sign_is_one_comparison]
     verdict: "what shape a predicate must have to be decided is one reading, asked wherever a

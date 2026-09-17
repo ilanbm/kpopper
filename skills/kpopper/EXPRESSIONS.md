@@ -18,7 +18,7 @@ An older writer may mistake a structured rule for an ordinary entry and save an 
 historical reading such as `present`, or miss its dependencies. Until a compatible reader
 is available, inspect the YAML as text and leave writes, reviews, renames and consolidation
 to the compatible version. A successful old `check` does not establish compatibility.
-On each machine that computes expressions, `kpopper session status` must also report a
+On each machine that computes expressions, `kpop session status` must also report a
 ready core for that installed code; the setup requirements are below. Plain scalar reads
 do not require Lean, but missing computation must remain explicit.
 
@@ -99,8 +99,8 @@ decimal exponents, and computed numerators/denominators to 1024 decimal characte
 ## Computation and review snapshots
 
 The local core is required for structured calculations. Before authoring the first one,
-run `kpopper session status`. If it is not ready, make Lean **4.33.1** available and run
-`kpopper session setup` (or pass `--lean-root /path/to/toolchain`). Both commands work with
+run `kpop session status`. If it is not ready, make Lean **4.33.1** available and run
+`kpop session setup` (or pass `--lean-root /path/to/toolchain`). Both commands work with
 the base Python package; session transport extras are needed only for checked session views.
 Setup compiles the pinned source once. Reads never download or compile it, and there is no
 second arithmetic evaluator. After a package update changes the core source, run setup again.
@@ -153,16 +153,16 @@ continue to work, including comparisons against newly computed structured rules.
 structured expression without writing anything:
 
 ```sh
-kpopper expressions convert 'order.price * order.quantity'
-kpopper expressions convert 'order.total > 150' --predicate
-kpopper expressions convert 'order.price * order.quantity' --readable
+kpop expressions convert 'order.price * order.quantity'
+kpop expressions convert 'order.total > 150' --predicate
+kpop expressions convert 'order.price * order.quantity' --readable
 ```
 
 To preview a record migration, then apply a clean result:
 
 ```sh
-kpopper expressions migrate --record GROUNDING.yaml
-kpopper expressions migrate --record GROUNDING.yaml --apply
+kpop expressions migrate --record GROUNDING.yaml
+kpop expressions migrate --record GROUNDING.yaml --apply
 ```
 
 Migration uses a deterministic grammar, never a model. It converts supported rules and
@@ -189,7 +189,7 @@ until an explicit review captures the current result. It is not reported as a nu
 Pointer, multi-file and hypothesis-backed records require explicit authoring instead.
 
 To convert active tagged trees and supported legacy text to the readable format, preview
-`kpopper expressions migrate --record GROUNDING.yaml --readable`, then add `--apply` to
+`kpop expressions migrate --record GROUNDING.yaml --readable`, then add `--apply` to
 apply a clean result. Existing readable formulas and historical snapshots stay untouched.
 The conversion must round-trip to the same parsed structure; reserved or opaque reference
 names use `ref("...")`. Existing source-value types and decidable conditions keep their

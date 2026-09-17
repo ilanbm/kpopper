@@ -1,6 +1,6 @@
 # Record one source report, with one or many changes
 
-For a source report in an existing single-file record, use `kpopper update --file -` to
+For a source report in an existing single-file record, use `kpop update --file -` to
 send JSON directly, or `--file report.json` for a saved report. Use the same `updates`
 array for one item or many (up to 32). Send the report while its meaning is fresh; do not
 wait for more unrelated information or for the end of the session. Include every supported
@@ -38,7 +38,7 @@ normal checks and commit-time conflict checks still apply. Adding `recorded_for`
 arbitrary source does not grant the exception.
 
 Use the existing graph to find what new information changes while its context is still fresh.
-`kpopper ingest capture` retains a source report immediately and starts a separate worker. The
+`kpop ingest capture` retains a source report immediately and starts a separate worker. The
 worker writes an explicit update through the same writer as `set`, follows declared dependencies,
 and stores a receipt. A move inside a judgment's still-valid condition stays quiet. A newly fired
 condition or a new unresolved review question becomes an attention signal.
@@ -52,7 +52,7 @@ before relying on the changed value. `captured` does not mean `applied` or `chec
 Given an existing scalar entry `stock.packages`:
 
 ```sh
-kpopper ingest capture --file - <<'JSON'
+kpop ingest capture --file - <<'JSON'
 {
   "event_id": "stock-report-2026-09-09-1",
   "source_quote": "There are four completed packages in stock.",
@@ -199,9 +199,9 @@ existing review requirement. No routine user confirmation or second agent review
 ## Status and attention
 
 ```sh
-kpopper ingest status --event-id <event-id>
-kpopper ingest pending
-kpopper ingest acknowledge <signal-id>
+kpop ingest status --event-id <event-id>
+kpop ingest pending
+kpop ingest acknowledge <signal-id>
 ```
 
 Acknowledgment is optional and concerns delivery only. Use it after addressing an important
@@ -214,7 +214,7 @@ events and receipts remain available.
 it is intended for a caller that owns worker execution. Both support `--record <file>` and
 `--state-dir <directory>`, as do the read commands. An override must be a new/empty dedicated
 directory or existing ingestion state for that exact record; it cannot contain the record or
-other unrelated files. Normal operation resolves the same record as `kpopper where`.
+other unrelated files. Normal operation resolves the same record as `kpop where`.
 
 ## Host behavior
 

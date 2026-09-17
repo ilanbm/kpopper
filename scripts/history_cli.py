@@ -11,7 +11,7 @@ except ImportError:
 
 
 def main(argv=None):
-    parser = argparse.ArgumentParser(prog='kpopper history')
+    parser = argparse.ArgumentParser(prog='kpop history')
     parser.add_argument('operation', choices=('status', 'reconcile', 'rebuild', 'migrate', 'capabilities',
                                              'accept', 'refute', 'correct', 'propose', 'retire', 'adopt'))
     parser.add_argument('--record', help='record entry, using current project routing')

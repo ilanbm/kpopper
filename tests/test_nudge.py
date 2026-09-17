@@ -132,7 +132,7 @@ class Gate(Scratch):
         (self.dir / "other.md").write_text("x\n", encoding="utf-8")
         code, _, err = self.hook("session_gate.sh", payload)
         self.assertEqual(code, 2)
-        self.assertIn("`kpopper add`", err)
+        self.assertIn("`kpop add`", err)
 
     def test_outside_git_the_prompts_count_and_the_soft_line_rides_the_grounding_hook(self):
         self.record(commit=False)

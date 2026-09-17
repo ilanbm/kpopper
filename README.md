@@ -3,6 +3,12 @@
 </p>
 
 <p align="center">
+  <a href="https://github.com/ilanbm/kpopper/actions/workflows/check.yml"><img src="https://github.com/ilanbm/kpopper/actions/workflows/check.yml/badge.svg?branch=main" alt="CI tests and record checks"></a>
+  <a href="https://github.com/ilanbm/kpopper/releases/latest"><img src="https://img.shields.io/github/v/release/ilanbm/kpopper" alt="Latest release"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue" alt="License: MIT"></a>
+</p>
+
+<p align="center">
   <a href="#popper-give-a-conclusion-a-way-to-fail">What's going on? Who is this guy?</a>
 </p>
 
@@ -18,7 +24,7 @@ changes, kpopper traces its reach through the record and surfaces what needs ano
 
 **[Get started](#get-started)** · [Examples](#example-1-private-data-exposure-assumption-checks) ·
 [Capabilities](#what-you-can-do-with-kpopper) · [Record format](#the-knowledge-record) ·
-[Why the name?](#popper-give-a-conclusion-a-way-to-fail)
+[Contributing](CONTRIBUTING.md) · [Why the name?](#popper-give-a-conclusion-a-way-to-fail)
 
 <p align="center">
   <a href="assets/diagrams/reasoning-check.png">
@@ -102,7 +108,7 @@ Source locators and the complete record are in the
 
 In the [runnable example](examples/merge-assumptions/README.md), a reviewed measurement
 recipe reads the explicit visibility switch in `search.py`. After PR A enables private
-projects, `kpopper remeasure --run` tests that new reading against the cache decision
+projects, `kpop remeasure --run` tests that new reading against the cache decision
 and fails its condition. It leaves the canonical record unchanged; `check` alone
 would still see the old recorded value.
 
@@ -259,9 +265,39 @@ project work in Claude Cowork and ChatGPT Work. The package includes the
 [method](skills/kpopper/SKILL.md) with one skill per occasion beside it, record tools and host-specific hooks; setup depends on
 the environment.
 
+### Prepare Python for Claude Code and Codex
+
+On macOS or Linux, install **Python 3.9+ with `venv` support**, then run this once
+on the machine where the hooks execute, under the same OS account as the host:
+
+```sh
+git clone https://github.com/ilanbm/kpopper.git "$HOME/kpopper"
+python3 "$HOME/kpopper/scripts/plugin_runtime.py" setup
+python3 "$HOME/kpopper/scripts/plugin_runtime.py" doctor
+```
+
+If you already have a checkout, use its absolute path instead. `setup` explicitly
+downloads the four [package dependencies](pyproject.toml) from PyPI into a private
+virtualenv under `~/.local/share/kpopper/runtimes/`. It works with externally managed
+Python installations: system packages are not modified. On Linux distributions that
+package `venv` separately, install that Python's `venv` support first.
+
+The Claude Code and Codex hooks automatically select this runtime, including after
+a plugin cache update. No activation or PATH change is needed. The hooks run code
+from their own installed plugin; this checkout only prepares dependencies. Hooks
+never create environments or install packages. A standalone `pipx` or `uv tool`
+installation supplies its own CLI environment and does not by itself repair hooks.
+
+`doctor` prints both the bootstrap Python and the selected hook Python. After installing
+the plugin below, confirm the opening's `KPOPPER_AGENT_CONTEXT.command` names that same
+hook Python and the active plugin's `scripts/cli.py`. Use that command for plugin work.
+If dependencies are missing or the private environment breaks, the opener prints the
+exact Python it tried and a quoted `setup` command for the active plugin. Run it in a
+terminal and start a new session. See [runtime troubleshooting](docs/plugin-runtime.md).
+
 ### Claude Code
 
-Run in a terminal with Claude Code installed:
+After the Python setup above, run in a terminal with Claude Code installed:
 
 ```sh
 claude plugin marketplace add ilanbm/kpopper
@@ -280,7 +316,7 @@ Both install from this repository's marketplace. See
 
 ### Codex
 
-Run in a terminal on the machine where Codex runs:
+After the Python setup above, run in a terminal on the machine where Codex runs:
 
 ```sh
 codex plugin marketplace add ilanbm/kpopper
@@ -325,24 +361,25 @@ Then follow the adapter for the host:
 
 | Agent | Install path |
 |---|---|
-| [Cursor](adapters/cursor/README.md#install) | Install the rule and hook wrappers in the project's `.cursor` directory. |
+| [Cursor](adapters/cursor/README.md#install-the-project-adapter) | Install the rule and hook wrappers in the project's `.cursor` directory. |
 | [Gemini CLI](adapters/gemini/README.md#install) | Run `gemini extensions link ./kpopper/adapters/gemini` from the directory where the clone was created. |
 | [Windsurf](adapters/windsurf/README.md#install) | Install the Cascade rule and optional write hook. |
-| [GitHub Copilot](adapters/copilot/README.md#install) | Use the instructions and configuration for VS Code or the cloud agent. |
+| [GitHub Copilot](adapters/copilot/README.md#install) | Use the CLI hook bridge, or the separate instructions for VS Code and the cloud agent. |
+| [OpenClaw](adapters/openclaw/README.md#install) | Link the full repository as a bundle and install the Python runtime; skills load, while opening and checking use explicit commands. |
+| [OpenCode](adapters/opencode/README.md#install) | Load the canonical skills through `skills.paths` and the shared method through `instructions`. |
 
 Keep existing host configuration when adding an adapter. Each guide describes its paths
 and limitations; automatic opening and stop behavior differ by host. See the
-[capability matrix](adapters/README.md#capability-matrix) for the comparison.
+[capability matrix](adapters/README.md#capability-matrix) and
+[verification status](docs/compatibility.md) for the comparison.
 
 ### Start working
 
-The local scripts need **Python 3.9+** and the [package dependencies](pyproject.toml)
-available in the environment used by the host's `python3`. A Python package installation
-includes them. For a plugin-only installation, install them in that environment:
-
-```sh
-python3 -m pip install 'PyYAML>=5.1' 'html5lib>=1.1,<2' 'tinycss2>=1.2,<2' tzdata
-```
+The local scripts need **Python 3.9+** and the [package dependencies](pyproject.toml).
+For Claude Code and Codex use the [private runtime setup above](#prepare-python-for-claude-code-and-codex).
+Other adapters describe their own interpreter configuration. A Python package installation
+includes dependencies in its own environment; do not run pip against an externally managed
+system Python to repair plugin hooks.
 
 Lean is optional; the ordinary reader and page work without it. In a new agent session
 with the project open, start with:
@@ -725,11 +762,11 @@ changed readings as a hypothesis without silently rewriting the canonical record
 
 There are three useful checks:
 
-- **Across branches during work:** `kpopper consolidate --dry-run --from <branch-or-ref>` reads
+- **Across branches during work:** `kpop consolidate --dry-run --from <branch-or-ref>` reads
   another branch's committed record as proposed changes and tests it against the current record.
-- **On the proposed merge result in CI:** `kpopper check` checks the combined record;
-  `kpopper consolidate --dry-run` also tests the hypotheses stored beside it.
-- **Against the actual tree:** `kpopper remeasure --run` runs the deliberately configured recipes
+- **On the proposed merge result in CI:** `kpop check` checks the combined record;
+  `kpop consolidate --dry-run` also tests the hypotheses stored beside it.
+- **Against the actual tree:** `kpop remeasure --run` runs the deliberately configured recipes
   and tests their readings against the declared conditions.
 
 A changed premise that needs review can be reported without failing CI; an affected hypothesis
@@ -953,14 +990,14 @@ decisions and open questions, and can arrange them as a report. See the
 [document layout](examples/greenhouse-report/.kpopper/view.yaml) for a report built from
 recorded readings and a heating judgment.
 
-`kpopper page --open` generates this self-contained HTML from the project's record and a
+`kpop page --open` generates this self-contained HTML from the project's record and a
 chosen layout. **Now** and other project tabs can present reports, plans or comparisons;
 **Record** lists the entries directly, and **Tree** offers an optional graph view. The page
 is a rendered snapshot—regenerate it after the record changes. For layouts, components,
 localization and checks on stale explanatory text, see the [page reference](skills/kpopper/PAGE.md).
 
 To share a small part of the record in a task, document or pull request, use
-`kpopper export`. The excerpt separates readings captured at review from current recorded
+`kpop export`. The excerpt separates readings captured at review from current recorded
 readings and marks values omitted from the selection. From a source checkout:
 
 ```sh
@@ -993,6 +1030,7 @@ requires POSIX file locking.
 | Available within stated limits | Background processing of explicit reports and selective delivery of important findings. |
 | Platform import route documented; runtime not yet validated | ChatGPT Work installation and execution of this plugin. |
 | Experimental, opt-in | Lean-checked session views, revision-bound reads and a project-bound MCP server. |
+| Experimental, opt-in | [Deterministic `core/v1` assessment](docs/reasoning-core.md) with a packaged arithmetic runtime; existing commands retain their legacy interpretation. |
 | Available through the agent | Guided starting choices: learn during ordinary work, map selected existing materials, or investigate a defined subject and period in depth. |
 | Available within host limits | Optional first-use explanations, workspace guidance and the ability to skip or turn guidance off. |
 
@@ -1013,8 +1051,20 @@ forward with reasons you can inspect and revise.
 **Try it on one project you will return to.** [Install kpopper](#get-started), or
 [run the merge examples](examples/merge-assumptions/README.md) before installing a plugin.
 If it helps, star the repository and [tell us what changed in your work](https://github.com/ilanbm/kpopper/issues).
-Questions and reproducible problems belong in [Issues](https://github.com/ilanbm/kpopper/issues);
-see [Contributing](CONTRIBUTING.md) to improve the project.
+Use the [issue chooser](https://github.com/ilanbm/kpopper/issues/new/choose) to report a bug,
+suggest an improvement or ask a question. Documentation fixes, small reproducible examples
+and reports from different agent hosts are useful contributions; see
+[Contributing](CONTRIBUTING.md) for setup and checks.
+
+kpopper is maintained by [Ilan Bar Magen](https://github.com/ilanbm). The package is marked
+beta; the [availability table](#what-is-available-and-what-is-next) describes current limits.
+Support and reviews depend on maintainer availability. Community participation follows the
+[Code of Conduct](CODE_OF_CONDUCT.md); use the [security policy](SECURITY.md) for private
+vulnerability reports.
+
+kpopper's own code is MIT-licensed. The packaged native runtime includes components
+with their own [license notices](scripts/reasoning/third_party/THIRD_PARTY_NOTICES.txt)
+and [source and replacement instructions](scripts/reasoning/native/README.md).
 
 [Command and storage reference](docs/reference.md) · [Contributing and validation](CONTRIBUTING.md) ·
-[Changelog](CHANGELOG.md) · [MIT license](LICENSE)
+[Changelog](CHANGELOG.md) · [Security](SECURITY.md) · [MIT license](LICENSE)

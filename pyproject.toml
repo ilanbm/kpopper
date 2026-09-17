@@ -42,6 +42,9 @@ Source = "https://github.com/ilanbm/kpopper"
 Issues = "https://github.com/ilanbm/kpopper/issues"
 
 [project.scripts]
+# `kpop` is the command. `kpopper` names the project and the package, and stays
+# installed as a second entry point so either spelling runs.
+kpop = "kpopper.cli:main"
 kpopper = "kpopper.cli:main"
 
 [tool.setuptools]
@@ -53,7 +56,7 @@ package-dir = { kpopper = "scripts" }
 
 [tool.setuptools.package-data]
 # The page's own files ship with the renderer that reads them, and the browser checks ship
-# with the command line that runs them - `kpopper page --checks` is only as installable as
+# with the command line that runs them - `kpop page --checks` is only as installable as
 # the file it hands to node.
 kpopper = ["page/*.css", "page/*.js", "verify_page.js", "start-guide.md", "document-guide.md", "document/*.css", "document/*.js", "assessment.schema.json"]
 "kpopper.session" = ["rules.txt", "bootstrap.txt", "lean/*.lean", "lean/lean-toolchain"]

@@ -32,8 +32,8 @@ jobs:
         with:
           python-version: "3.13"
       - run: python -m pip install kpopper==1.2.0
-      - run: kpopper check
-      - run: kpopper consolidate --dry-run
+      - run: kpop check
+      - run: kpop consolidate --dry-run
 ```
 
 Choose the package version deliberately when updating this workflow. The ordinary
@@ -55,17 +55,19 @@ Neither command folds hypotheses or rewrites conclusions in this configuration.
 | A comparable premise moved and needs review, without a fired condition. | Reported; does not by itself fail CI. It blocks folding an affected hypothesis. |
 | A condition is explicitly declared uncheckable or needs human interpretation. | Reported according to the record's declarations; not a proof that the decision holds. |
 
-The repository's own [check workflow](../.github/workflows/check.yml) also runs the test
-suite, measurement recipes and page verification. Those steps are specific to its record
-and page configuration; the two-command example above is the basic integration for another
-project.
+The repository's own [check workflow](../.github/workflows/check.yml) always runs measurement
+recipes and page verification, and selects test families from the changed paths. Its
+`ci-required` job checks that every selected family succeeded. See the
+[contribution guide](../CONTRIBUTING.md#the-loop) for selection and main-branch coverage.
+Those steps are specific to this repository; the two-command example above is the basic
+integration for another project.
 
 ## Inspect another branch before merging
 
 With the other branch or ref already available in the local repository:
 
 ```sh
-kpopper consolidate --dry-run --from other-branch
+kpop consolidate --dry-run --from other-branch
 ```
 
 This reads the branch's committed record and its hypotheses, compares claims by ID, and
@@ -86,8 +88,8 @@ facts that can be measured reproducibly, attach a named `measure` recipe and def
 argument list in `.kpopper/measure.yaml`:
 
 ```sh
-kpopper remeasure       # Inspect what would run
-kpopper remeasure --run # Execute the reviewed recipes and test the resulting readings
+kpop remeasure       # Inspect what would run
+kpop remeasure --run # Execute the reviewed recipes and test the resulting readings
 ```
 
 Add the second command to CI only after those recipes are in place and reviewed as code.

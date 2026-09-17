@@ -263,7 +263,7 @@ regenerating the candidate. Active history authority routes ordinary add/set/rev
 authoring. Generated baselines never enter the legacy direct path. An explicitly inactive legacy marker allows legacy
 writes while retaining its history files without reactivating them.
 
-`kpopper recover --record FILE` exposes forward direct recovery through the same
+`kpop recover --record FILE` exposes forward direct recovery through the same
 project routing as the write. Add `--rollback` to restore before images and
 `--json` for the operation receipt. Recovery reuses the retained mutation and
 refuses changed evidence or routing; it does not prepare a replacement write.
@@ -310,7 +310,7 @@ remain incomplete. Authority transitions use the separate guarded interface belo
 
 ## History commands and portable contributions
 
-`kpopper history status` inspects committed acceptance. `history reconcile` returns
+`kpop history status` inspects committed acceptance. `history reconcile` returns
 baseline-bound edit descriptions, and `history rebuild` resolves a generated Git
 view without creating knowledge acts. `history migrate --record FILE --to DIR`
 publishes only into an absent copy destination after capture and replay validation.

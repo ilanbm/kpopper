@@ -87,7 +87,9 @@ tabs:
              s.2026_09_13_worker_and_research, s.2026_09_13_reasoning_overview,
              s.2026_09_13_remove_duplicate_overview, s.2026_09_13_github_releases,
              s.2026_09_14_working_modes, s.2026_09_15_batch_test_race,
-             s.2026_09_15_branch_verdict_conflicts, s.2026_09_15_verdict_conflicts_decided]
+             s.2026_09_15_branch_verdict_conflicts, s.2026_09_15_verdict_conflicts_decided,
+             s.2026_09_15_link_spelling, s.2026_09_16_page_address,
+             s.2026_09_17_selective_ci]
     sections:
       - title: How to read what follows
         why: a wall of cards is not an argument until you know what separates them
@@ -137,8 +139,15 @@ tabs:
     occasion: "you are weighing a decision here and want to see the ground under it rather than the reasoning on top"
     serves: [s.2026_09_02_priors, s.2026_09_03_language, s.2026_09_01_consolidation,
              s.2026_09_04_calibration, s.2026_09_10_standalone_html,
-             s.2026_09_16_versions_core]
+             s.2026_09_16_versions_core, s.2026_09_17_host_compatibility]
     sections:
+      - title: Host compatibility evidence
+        why: distinguish verified loading and hooks from the conversations still needed before launch
+        pick: [doc.host_compatibility, m.openclaw_bundle_skills, m.openclaw_bundle_hooks,
+               m.host_compatibility_model_sessions, m.named_main_hooks_suppressed,
+               m.named_main_delivery_corrected, m.openclaw_live_core_verified,
+               m.copilot_live_core_verified, m.openclaw_isolated_bundle_verified]
+        as: table
       - title: The ground
         why: measured here, read from the world, or taken from a session's own prior - separated because they are not worth the same
         pick: [run., doc., prior., alt., goal., scope., name., skill.]

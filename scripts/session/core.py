@@ -59,7 +59,7 @@ def setup(lean_root=None, rebuild=False):
         try:
             existing = Core()
         except ValueError as error:
-            raise ValueError("managed core cache is invalid; run kpopper session setup --rebuild") from error
+            raise ValueError("managed core cache is invalid; run kpop session setup --rebuild") from error
         return {**existing.build, "cache": str(existing.root)}
     root = Path(lean_root).expanduser().resolve() if lean_root else None
     if root is None and os.environ.get("KPOPPER_LEAN_ROOT"):
@@ -120,9 +120,9 @@ class Core:
             valid = self.build["source_sha256"] == source_hash() and (
                 hashlib.sha256(self.binary.read_bytes()).hexdigest() == self.build["binary_sha256"])
         except (OSError, KeyError, ValueError) as error:
-            raise ValueError("checked session core is not ready; run kpopper session setup") from error
+            raise ValueError("checked session core is not ready; run kpop session setup") from error
         if not valid:
-            raise ValueError("checked session core changed; run kpopper session setup")
+            raise ValueError("checked session core changed; run kpop session setup")
         self.expressions = expression_module()
         self.expression_path = Path(self.expressions.__file__)
         self.expression_source_hash = self.expressions.LOADED_SOURCE_HASH

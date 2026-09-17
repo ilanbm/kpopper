@@ -2,13 +2,13 @@
 
 Use a known ID with `pull` or the checked reader. Otherwise:
 
-Checked sessions also expose `kpopper_search` / `kpopper session search` for resumable
+Checked sessions also expose `kpopper_search` / `kpop session search` for resumable
 record discovery and `kpopper_context` for support/impact reads. Their session revision
 belongs to that protocol; see [checked-session retrieval](../../docs/retrieval.md).
 
 ```sh
-kpopper search "משלוח Cedar" --chars 4000 --limit 5
-kpopper search --read source:s.contract --revision REV --offset 0 --length 2400
+kpop search "משלוח Cedar" --chars 4000 --limit 5
+kpop search --read source:s.contract --revision REV --offset 0 --length 2400
 ```
 
 `search` returns JSON, including in ordinary CLI mode. Each result carries `scope`,
@@ -60,7 +60,7 @@ Lean core; legacy textual rules remain unevaluated. Search does not infer formul
 
 The SQLite FTS5 index exists only in the command's memory and is rebuilt from authoritative
 inputs. The shared reader may maintain its derived parse cache outside the project; use
-`kpopper --no-cache search ...` to bypass it. Search does not change records or ingestion
+`kpop --no-cache search ...` to bypass it. Search does not change records or ingestion
 state and makes no network/model calls.
 The tool call and returned text still occupy model context. Keep reads focused, batch
 related updates, and surface only findings that matter to the user's work.

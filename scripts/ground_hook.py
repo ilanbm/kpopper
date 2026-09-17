@@ -147,7 +147,7 @@ def hits(prompt, index):
 
 def moves(host):
     form = SKILL_FORMS.get(host or "")
-    return form.format("ground") if form else "kpopper pull"
+    return form.format("ground") if form else "kpop pull"
 
 
 def line(named, host):
@@ -259,7 +259,8 @@ def start(payload, path):
 
 
 def handle(payload, host, mode):
-    if not isinstance(payload, dict) or payload.get("agent_id") or payload.get("agent_type"):
+    # agent_type also names a main session started with --agent.
+    if not isinstance(payload, dict) or payload.get("agent_id"):
         return ""
     path = state_path(payload.get("session_id"))
     if path is None:

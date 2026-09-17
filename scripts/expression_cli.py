@@ -151,7 +151,7 @@ def migrate(record=None, apply=False, readable=False, *, profile=None, destinati
 
 
 def main(argv=None):
-    parser = argparse.ArgumentParser(prog="kpopper expressions", description=__doc__)
+    parser = argparse.ArgumentParser(prog="kpop expressions", description=__doc__)
     sub = parser.add_subparsers(dest="action", required=True)
     convert = sub.add_parser("convert", help="return structured data without writing any record")
     convert.add_argument("text")

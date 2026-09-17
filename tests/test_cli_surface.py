@@ -32,14 +32,14 @@ class PublicCLI(unittest.TestCase):
         result = self.cli("--help")
         self.assertEqual(result.returncode, 0, result.stderr)
         for command in ("open", "map", "config", "check", "pull", "add", "set", "review"):
-            self.assertIn("kpopper " + command, result.stdout)
+            self.assertIn("kpop " + command, result.stdout)
         for internal in ("kpopper start", "choose", "shown", "--request", "_agent"):
             self.assertNotIn(internal, result.stdout)
 
     def test_open_missing_record_has_a_useful_result_without_writes(self):
         result = self.cli("--workspace", str(self.workspace), "open")
         self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertIn("kpopper map", result.stdout)
+        self.assertIn("kpop map", result.stdout)
         self.assertNotIn("_agent", result.stdout)
         self.assertNotIn("KPOPPER_START", result.stdout)
         self.assertEqual(list(self.workspace.iterdir()), [])
@@ -73,7 +73,7 @@ class PublicCLI(unittest.TestCase):
     def test_old_start_is_rejected_with_a_clear_replacement(self):
         result = self.cli("start", "choose", "map")
         self.assertEqual(result.returncode, 2)
-        self.assertIn("kpopper map", result.stderr)
+        self.assertIn("kpop map", result.stderr)
         self.assertFalse((self.root / "state").exists())
 
     def test_unknown_options_and_bad_workspace_fail_without_writes(self):

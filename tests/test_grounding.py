@@ -64,6 +64,22 @@ class Words(unittest.TestCase):
 
 
 class Line(Fixture):
+    def test_named_main_agent_keeps_grounding_read_and_compaction_behavior(self):
+        named = {"agent_type": "planner"}
+        ask = "the heat loss on a -5 night"
+        self.assertEqual(self.hook("ground_hook.py", "claude", "prompt", prompt=ask,
+                                   agent_id="child", **named), "")
+        self.assertIn("heat.loss_kw", self.hook("ground_hook.py", "claude", "prompt",
+                                                prompt=ask, **named))
+        self.hook("ground_hook.py", "claude", "read", tool_response="heat.loss_kw", **named)
+        for _ in range(G.COOLDOWN):
+            self.hook("ground_hook.py", "claude", "prompt", prompt="unrelated", **named)
+        self.assertNotIn("heat.loss_kw", self.hook("ground_hook.py", "claude", "prompt",
+                                                   prompt=ask, **named))
+        self.hook("ground_hook.py", "claude", "start", source="compact", **named)
+        self.assertIn("heat.loss_kw", self.hook("ground_hook.py", "claude", "prompt",
+                                                prompt=ask, **named))
+
     def test_named_on_a_matching_prompt_and_silent_on_the_rest(self):
         line = self.prompt("the heat loss on a -5 night")
         self.assertIn("kpopper: the record holds", line)
@@ -77,7 +93,7 @@ class Line(Fixture):
     def test_the_host_names_its_own_skill_and_a_plain_host_the_reader(self):
         self.assertIn("$ground", self.prompt("the boiler output on the coldest night", "codex"))
         self.hook("ground_hook.py", "claude", "start", hook_event_name="SessionStart", source="startup")
-        self.assertIn("kpopper pull", self.prompt("the boiler output on the coldest night", "plain"))
+        self.assertIn("kpop pull", self.prompt("the boiler output on the coldest night", "plain"))
 
     def test_named_until_read_then_silent_until_its_body_changes(self):
         ask = "the heat loss on a -5 night"
@@ -126,6 +142,12 @@ class Citation(Fixture):
 
     def test_an_absolute_path_inside_the_project_resolves_the_same(self):
         self.assertIn("doc.boiler_sheet", self.edit(str(self.dir / "boiler" / "service-2025.pdf"), session_id="g3"))
+
+    def test_named_main_agent_gets_citation_and_child_does_not_consume_it(self):
+        file = "boiler/service-2025.pdf"
+        self.assertEqual(self.edit(file, agent_type="planner", agent_id="child"), "")
+        self.assertIn("doc.boiler_sheet", self.edit(file, agent_type="planner"))
+        self.assertEqual(self.edit(file, agent_type="planner"), "")
 
 
 class Wiring(unittest.TestCase):

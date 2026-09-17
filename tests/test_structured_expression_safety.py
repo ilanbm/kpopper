@@ -66,7 +66,7 @@ class WithoutCore(RecordCase):
         # A fresh process on an installation without the compiled core, regardless
         # of other tests having cached an evaluator from a different module import.
         for module in {E, P.E, F.P.E, R.P.E}:
-            guard = patch.object(module, "_core_type", side_effect=ValueError("checked session core is not ready; run kpopper session setup"))
+            guard = patch.object(module, "_core_type", side_effect=ValueError("checked session core is not ready; run kpop session setup"))
             guard.start()
             self.addCleanup(guard.stop)
             previous = module._CORE

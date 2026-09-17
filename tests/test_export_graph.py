@@ -230,7 +230,7 @@ class ExportGraph(unittest.TestCase):
         self.assertIn('3 percent', out)
 
     def test_detail_hint_names_the_export_command(self):
-        self.assertIn('kpopper export ID --details', self.cli('d.choice').stdout)
+        self.assertIn('kpop export ID --details', self.cli('d.choice').stdout)
 
     def test_support_and_impact_keep_original_orientation_and_do_not_infer_prose_links(self):
         support = self.packet('d.choice', depth=2)

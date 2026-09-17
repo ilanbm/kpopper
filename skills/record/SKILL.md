@@ -5,9 +5,9 @@ description: "Write what the work found into the project's knowledge record, so 
 
 # Record
 
-Keep what the work produced while it is still in your hands: the source with its location, the rule rather than its result, the conclusion with what it rests on and what would make it wrong. It is a byproduct of the work, written when it exists and not at a ceremony. The command line is `kpopper` where it is on PATH; otherwise the `command` in the `KPOPPER_AGENT_CONTEXT` line the session opener printed (`python3 <plugin>/scripts/cli.py`) runs the same code. Do not guess a path and do not write a second reader - [the method's reference](../kpopper/references/method.md#finding-the-reader) says how to find the installed copy when neither is at hand.
+Keep what the work produced while it is still in your hands: the source with its location, the rule rather than its result, the conclusion with what it rests on and what would make it wrong. It is a byproduct of the work, written when it exists and not at a ceremony. The command line is `kpop` where it is on PATH; otherwise the `command` in the `KPOPPER_AGENT_CONTEXT` line the session opener printed (`python3 <plugin>/scripts/cli.py`) runs the same code. Do not guess a path and do not write a second reader - [the method's reference](../kpopper/references/method.md#finding-the-reader) says how to find the installed copy when neither is at hand.
 
-**For a source report in an existing single-file record, use `kpopper update --file -` where POSIX file locking is available.** Send one `updates` list with everything already known from that report; one item is enough. Record it while the context is fresh, without waiting for unrelated facts or session end. Read the returned state before relying on it. **On native Windows, use ordinary `add`/`set` instead;** verify each result, since separate writes are not an atomic batch. A locking error means the report was not retained. [INGESTION.md](../kpopper/INGESTION.md) gives the contract and layouts. Structured expressions and snapshots require compatible CLI/plugin/CI versions; check [reader compatibility](../kpopper/EXPRESSIONS.md#reader-compatibility) before writing. First writes, other layouts and deliberate judgment reviews retain their ordinary commands.
+**For a source report in an existing single-file record, use `kpop update --file -` where POSIX file locking is available.** Send one `updates` list with everything already known from that report; one item is enough. Record it while the context is fresh, without waiting for unrelated facts or session end. Read the returned state before relying on it. **On native Windows, use ordinary `add`/`set` instead;** verify each result, since separate writes are not an atomic batch. A locking error means the report was not retained. [INGESTION.md](../kpopper/INGESTION.md) gives the contract and layouts. Structured expressions and snapshots require compatible CLI/plugin/CI versions; check [reader compatibility](../kpopper/EXPRESSIONS.md#reader-compatibility) before writing. First writes, other layouts and deliberate judgment reviews retain their ordinary commands.
 
 ## The first write
 
@@ -16,7 +16,7 @@ Privacy comes first: private or unclear permission means a structured private dr
 
 Record the first useful finding within the user's authorization. Sources and facts are valid alone; `add` fills `seen` for actual judgments. Installation creates no record, and a one-off can finish without one.
 
-Where no record resolves for the workspace, `kpopper add` creates `GROUNDING.yaml` at the repository root (the working directory outside git) with that first entry, and a later `add` extends it. A registered record that is unavailable is a location problem: restore it rather than starting another. The [shape reference](../kpopper/references/shape.md) shows the sections, pointer records and how a record lives outside a tree that cannot hold it.
+Where no record resolves for the workspace, `kpop add` creates `GROUNDING.yaml` at the repository root (the working directory outside git) with that first entry, and a later `add` extends it. A registered record that is unavailable is a location problem: restore it rather than starting another. The [shape reference](../kpopper/references/shape.md) shows the sections, pointer records and how a record lives outside a tree that cannot hold it.
 
 **Make a new record useful to its reader.** Link and briefly explain the finding when its explanation is due. Showing the shipped page is optional, when a visual view helps and is supported.
 
@@ -63,7 +63,7 @@ on — a `prior.*` claim whose value is the confidence; see *An agent's prior as
   date.rate_lock:
     name: Rate lock expiry in the pre-approval
     v: 2026-09-18
-    src: ...
+    from: ...
 ```
 
 `name` (or `title`/`label`/`what`) is the only field this method asks for by name rather
@@ -190,13 +190,13 @@ A write that contradicts what the base holds - the same id with a different valu
 ## The write commands
 
 ```bash
-kpopper add <id> field=value ...         # a new entry or judgment, in id order, seen filled
-kpopper set <key> <value> [--why "..."]  # change one value; the reply is the reach
-kpopper set <key> <value> --source <id> --at "..."  # a new reading with its new citation
-kpopper review <id | "section title">    # it still holds: seen rewritten from the record
-kpopper same <a> <b> | distinct <a> <b> "why"   # one subject under two ids, or two that only look alike
-kpopper update --file report.json        # apply related source changes together; return the result
-kpopper followups add ...                # deferred work, linked to the knowledge it waits on
+kpop add <id> field=value ...         # a new entry or judgment, in id order, seen filled
+kpop set <key> <value> [--why "..."]  # change one value; the reply is the reach
+kpop set <key> <value> --source <id> --at "..."  # a new reading with its new citation
+kpop review <id | "section title">    # it still holds: seen rewritten from the record
+kpop same <a> <b> | distinct <a> <b> "why"   # one subject under two ids, or two that only look alike
+kpop update --file report.json        # apply related source changes together; return the result
+kpop followups add ...                # deferred work, linked to the knowledge it waits on
 ```
 
 `set`, `add` and `review` are how the record changes from the command line - `same`, `distinct`
@@ -249,10 +249,10 @@ For opted-in worktree compatibility and shared external facts, use
 needs an explicit environment, source and date before shared capture; confidence alone
 never selects its destination. Continue unrelated work while checks run, and inspect the
 current result before relying on it. Shared facts can be read from any branch with
-`kpopper watch shared`; comparison never changes main or a judgment's `seen`.
+`kpop watch shared`; comparison never changes main or a judgment's `seen`.
 
 **Keep deferred work connected.** When a later check or action is authorized, use
-`kpopper followups` to link it to the relevant knowledge and explicit activation conditions.
+`kpop followups` to link it to the relevant knowledge and explicit activation conditions.
 Prefer the user's existing task destination; a private fallback is available. Strongly recommend
 a short daily review when this first becomes useful, alongside event checks, and respect the
 user's scheduling choice. [FOLLOWUPS.md](../kpopper/FOLLOWUPS.md) covers capture, external owners, claims,

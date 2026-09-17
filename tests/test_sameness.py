@@ -848,8 +848,8 @@ class AlsoIsReadByAbsence(unittest.TestCase):
 class TheHelpNamesTheCommands(unittest.TestCase):
     def test_the_dispatcher_and_the_reader_list_them(self):
         code, out, _ = run(SCRIPTS / "kpopper")
-        self.assertRegex(out, r"kpopper same\s")
-        self.assertRegex(out, r"kpopper distinct\s")
+        self.assertRegex(out, r"kpop same\s")
+        self.assertRegex(out, r"kpop distinct\s")
         for cmd in ("same", "distinct"):
             code, out, _ = run(SCRIPTS / "kpopper", cmd, "--help")
             self.assertEqual(code, 0)

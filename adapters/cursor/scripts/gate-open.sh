@@ -1,7 +1,7 @@
 #!/bin/sh
-# cursor's sessionStart translated to the plugin's own protocol. cursor sends
-# conversation_id, never session_id - so this keeps its own baseline file, keyed by
-# conversation_id, instead of reusing scripts/session_open.sh's baseline convention.
+# cursor's sessionStart translated to the plugin's own protocol. use the common
+# conversation_id across both hooks (sessionStart also documents session_id), with
+# a cursor-prefixed baseline to keep it separate from other hosts.
 # Existing records and first-use guidance use the shared opener.
 # no `set -e`, to match session_open.sh/session_gate.sh: `check` returning 1 because it
 # found problems is the normal case this script exists to handle, not a crash to abort on.

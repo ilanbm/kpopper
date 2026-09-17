@@ -3554,7 +3554,7 @@ def keep_replaced(paths, nid, old, ended, stamp, dropped=None):
         os.makedirs(os.path.dirname(p), exist_ok=True)
     text = yaml.safe_dump(kept, allow_unicode=True, sort_keys=False, width=100)
     _write_text(p, "# Judgments this record's writes replaced, kept whole - read with "
-                   "`kpopper pull <id> --history`.\n" + text)
+                   "`kpop pull <id> --history`.\n" + text)
     return len(versions)
 
 
@@ -5662,7 +5662,7 @@ def untouched(base, paths, turns, host=None, nudged_at=None, workspace=None):
     if not changed and turns < NUDGE_TURNS:
         return None
     form = SKILL_FORMS.get(host or "")
-    record = form.format("record") if form else "`kpopper add`"
+    record = form.format("record") if form else "`kpop add`"
     what = (f"{changed} file{'' if changed == 1 else 's'} of the tree changed" if changed
             else f"{turns} prompts in")
     return (f"kpopper: {what}, the record untouched. If a finding, decision or measurement came "
@@ -5988,7 +5988,7 @@ def write_command(cmd, rest):
     return code
 
 
-HEAD_LINE = "# Kept with kpopper: read it with `kpopper open`, write it with `kpopper add`.\n"
+HEAD_LINE = "# Kept with kpopper: read it with `kpop open`, write it with `kpop add`.\n"
 
 
 def _newborn_only(path):

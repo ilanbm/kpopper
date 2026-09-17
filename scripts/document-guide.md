@@ -35,8 +35,8 @@ is required for viewing and review; no server, CDN, neighboring files or network
    check its actual layout and interactions when available.
 
 ```sh
-kpopper document build --html draft.html --manifest evidence.json --out report.html
-kpopper document inspect report.html
+kpop document build --html draft.html --manifest evidence.json --out report.html
+kpop document inspect report.html
 ```
 
 `--root` defaults to the manifest's directory. Source paths must stay inside it and
@@ -111,7 +111,7 @@ Read the new sources first. Create `sources.json`, an object from existing sourc
 to new input definitions (the same shape as the manifest's `sources` object), then run:
 
 ```sh
-kpopper document refresh report.html --sources sources.json --out report-updated.html
+kpop document refresh report.html --sources sources.json --out report-updated.html
 ```
 
 Only supplied sources are reread. Others retain their old snapshots and are labeled
@@ -138,7 +138,7 @@ A record source can include the canonical 32-character `event_id` returned by ca
 (and an optional source-root-relative `state_dir`)
 to require a matching durably applied ingestion event. Use the existing ingestion tools
 to capture/process an authorized update. Keep the exact envelope/date across retries;
-read `kpopper ingest status --event-id ...` even when a repeated processing pass returns
+read `kpop ingest status --event-id ...` even when a repeated processing pass returns
 no items. The document command reads the outcome; it never processes or writes the record.
 Only a matching current value AND citation establish the event binding.
 
