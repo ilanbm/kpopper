@@ -53,76 +53,151 @@ def _records(root, entry, sha=None, *, include_files=False):
     # Each ref keeps the entry name and companion layout it was committed with.  A
     # checkout can therefore read GROUNDING.yaml while its merge base still has
     # PROVENANCE.yaml (or the reverse).
-    if sha and PurePosixPath(entry).name in P.ENTRY_NAMES:
-        directory = PurePosixPath(entry).parent
-
+    if sha:
         def exists(name):
             result = subprocess.run(['git', '-C', str(root), 'cat-file', '-e', sha + ':' + name],
                                     capture_output=True, timeout=10)
             return result.returncode == 0
 
+    if sha and PurePosixPath(entry).name in P.ENTRY_NAMES:
+        directory = PurePosixPath(entry).parent
         if not exists(entry):
             for candidate in P.ENTRY_NAMES:
                 alternate = str(directory / candidate)
                 if alternate != entry and exists(alternate):
                     entry = alternate
                     break
-    files, queue = {}, [entry]
+    H = P._peer('history_store')
+    HC = H.C
+    layout = P.layout(Path(root) / entry)
+    role_paths = {role: Path(layout[role]).relative_to(root).as_posix()
+                  for role in ('history_authority', 'history', 'history_commits')}
+
+    def read_blob(name, maximum):
+        if sha:
+            size = int(git(root, 'cat-file', '-s', sha + ':' + name))
+            if size > maximum:
+                raise ValueError('record file exceeds captured byte limit')
+            r = subprocess.run(['git', '-C', str(root), 'show', sha + ':' + name],
+                               capture_output=True, timeout=10)
+            if r.returncode:
+                raise ValueError('record unavailable at ' + sha[:12] + ':' + name)
+            return r.stdout
+        path = Path(root) / name
+        path.resolve().relative_to(Path(root).resolve())
+        if path.stat().st_size > maximum:
+            raise ValueError('record file exceeds captured byte limit')
+        return path.read_bytes()
+
+    marker_name = role_paths['history_authority']
+    marker_exists = exists(marker_name) if sha else (Path(root) / marker_name).is_file()
+    marker_raw = read_blob(marker_name, HC.MAX_OBJECT_BYTES) if marker_exists else None
+    marker = HC.validate_authority(HC.decode_document(marker_raw)) if marker_raw else None
+    active = marker is not None and marker['authority'] == 'history'
+    if active and not P._CORE_READS.get():
+        raise P.Refused('unsupported_history_consumer: history target needs captured consumer')
+    files, queue, raw_names = {}, [entry], set()
+    maximum = H.MAX_CAPTURE_BYTES if active else MAX_BYTES
+    maximum_files = 2 * HC.MAX_OBJECTS + MAX_FILES if active else MAX_FILES
+    if active:
+        queue.append(marker_name)
+        raw_names.add(marker_name)
+        if sha:
+            listing = git(root, '--literal-pathspecs', 'ls-tree', '-r', '-z', sha, '--',
+                          role_paths['history'], role_paths['history_commits'])
+            for row in listing.split('\0'):
+                if not row:
+                    continue
+                info, name = row.split('\t', 1)
+                mode, kind, _ = info.split()
+                if mode != '100644' or kind != 'blob':
+                    raise ValueError('history target contains a nonregular file')
+                name = _safe_path(name)
+                queue.append(name)
+                raw_names.add(name)
+        else:
+            for role in ('history', 'history_commits'):
+                folder = Path(root) / role_paths[role]
+                for path in sorted(folder.rglob('*')) if folder.is_dir() else []:
+                    if path.is_symlink():
+                        raise ValueError('history target contains a symlink')
+                    if path.is_file():
+                        name = path.relative_to(root).as_posix()
+                        queue.append(name)
+                        raw_names.add(name)
     hdir = str(PurePosixPath(entry).parent / P.hypotheses_rel(entry))
     if sha:
         listing = git(root, 'ls-tree', '-r', '--name-only', sha, '--', hdir + '/')
         queue += [p for p in listing.splitlines() if p.endswith(('.yaml', '.yml'))]
     else:
-        folder = root / hdir
+        folder = Path(root) / hdir
         if folder.is_dir():
             queue += [p.relative_to(root).as_posix() for p in sorted(folder.iterdir())
                       if p.suffix in ('.yaml', '.yml')]
+    total = 0
     while queue:
         name = _safe_path(queue.pop(0))
         if name in files:
             continue
-        if len(files) >= MAX_FILES:
-            raise ValueError('record closure exceeds 128 files')
-        if sha:
-            size = int(git(root, 'cat-file', '-s', sha + ':' + name))
-            if size > MAX_BYTES:
-                raise ValueError('record file exceeds 4 MiB')
-            # Read blob bytes; git show text.strip() would erase meaningful YAML whitespace.
-            r = subprocess.run(['git', '-C', str(root), 'show', sha + ':' + name],
-                               capture_output=True, timeout=10)
-            if r.returncode:
-                raise ValueError('record unavailable at ' + sha[:12] + ':' + name)
-            data = r.stdout
-        else:
-            path = root / name
-            path.resolve().relative_to(root.resolve())
-            if path.stat().st_size > MAX_BYTES:
-                raise ValueError('record file exceeds 4 MiB')
-            data = path.read_bytes()
-        if len(data) > MAX_BYTES or sum(len(v.encode('utf-8')) for v in files.values()) + len(data) > MAX_BYTES:
-            raise ValueError('record closure exceeds 4 MiB')
-        text = data.decode('utf-8')
-        body = P.yaml.safe_load(text)
+        if len(files) >= maximum_files:
+            raise ValueError('record closure exceeds captured file limit')
+        data = read_blob(name, HC.MAX_REQUEST_BYTES if active else MAX_BYTES)
+        total += len(data)
+        if len(data) > maximum or total > maximum:
+            raise ValueError('record closure exceeds captured byte limit')
+        files[name] = data
+        if name in raw_names:
+            continue
+        body = P.yaml.safe_load(data.decode('utf-8'))
         if not isinstance(body, dict):
             raise ValueError('record is not a mapping: ' + name)
-        files[name] = text
-        for pointer in C._pointers(body):
-            queue.append(_safe_path(posixpath.normpath(posixpath.join(posixpath.dirname(name), pointer))))
+        if active and name == entry:
+            imported = body.get('meta', {}).get('history_import', {})
+            for member in imported.get('members', []):
+                member_name = _safe_path(posixpath.join(posixpath.dirname(entry), member['path']))
+                queue.append(member_name)
+                raw_names.add(member_name)
+        else:
+            for pointer in C._pointers(body):
+                queue.append(_safe_path(posixpath.normpath(posixpath.join(posixpath.dirname(name), pointer))))
+    history = None
     with tempfile.TemporaryDirectory() as directory:
-        for name, text in files.items():
+        for name, raw in files.items():
             path = Path(directory) / name
             path.resolve().relative_to(Path(directory).resolve())
             path.parent.mkdir(parents=True, exist_ok=True)
-            path.write_text(text, encoding='utf-8')
-        doc = P.load([str(Path(directory) / entry)])
-        hyps = []
-        for name, h in doc.hypotheses.items():
-            if h['error']:
-                raise ValueError('unreadable hypothesis ' + name + ': ' + h['error'])
-            hyps.append({'name': name, 'doc': h['doc'], 'head': h['head']})
-    result = {'doc': dict(doc), 'hypotheses': hyps, 'hash': digest(files)}
+            path.write_bytes(raw)
+        if active:
+            S = P._peer('reasoning.snapshot')
+            # Temporary target files are not observations of the checkout. Their
+            # complete bytes are already pinned by this immutable Git tree.
+            token = H.P._CAPTURE_READS.set(None)
+            try:
+                snapshot = S.Snapshot.capture(Path(directory) / entry, read_mode='frozen')
+                captured = H.Store(Path(directory) / entry).capture()
+                history = P._peer('knowledge_views').history_evidence(captured)
+            finally:
+                H.P._CAPTURE_READS.reset(token)
+            data = snapshot.to_data()
+            document = data['document']
+            hyps = [{'name': name, 'doc': hyp['document'], 'head': hyp['head']}
+                    for name, hyp in data['hypotheses'].items() if not hyp['error']]
+            if any(hyp['error'] for hyp in data['hypotheses'].values()):
+                raise ValueError('unreadable target hypothesis')
+        else:
+            doc = P.load([str(Path(directory) / entry)])
+            document, hyps = dict(doc), []
+            for name, h in doc.hypotheses.items():
+                if h['error']:
+                    raise ValueError('unreadable hypothesis ' + name + ': ' + h['error'])
+                hyps.append({'name': name, 'doc': h['doc'], 'head': h['head']})
+    result = {'doc': document, 'hypotheses': hyps,
+              'hash': digest({name: HC.sha256(raw) for name, raw in files.items()}) if active else
+                      digest({name: raw.decode('utf-8') for name, raw in files.items()})}
+    if history is not None:
+        result['history'] = history
     if include_files:
-        result['files'] = dict(files)
+        result['files'] = {name: raw.decode('utf-8') for name, raw in files.items() if name not in raw_names}
     return result
 
 

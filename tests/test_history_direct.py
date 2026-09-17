@@ -156,19 +156,16 @@ class DirectTransactions(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, 'concurrent_edit'):
             P.recover_direct([str(self.entry)])
 
-    def test_external_member_refuses_without_publishing_anything(self):
+    def test_nested_member_publishes_with_its_archive(self):
         outside = self.entry.parent / 'nested'
         outside.mkdir()
         shard = outside / 'judgments.yaml'
         shard.write_text(yaml.safe_dump({'judgments': self.doc.pop('judgments')}, sort_keys=False))
         self.doc['record'] = 'nested/judgments.yaml'
         self.entry.write_text(yaml.safe_dump(self.doc, sort_keys=False))
-        before = (self.entry.read_bytes(), shard.read_bytes())
-        with self.assertRaisesRegex(P.Refused, 'unsupported_external_record_transaction'):
-            self.apply()
-        self.assertEqual((self.entry.read_bytes(), shard.read_bytes()), before)
-        self.assertFalse(Path(P.replaced_path([str(self.entry)])).exists())
-        self.assertEqual(P.bodies(P.load([str(self.entry)]))['c.answer']['verdict'], 'old')
+        self.apply()
+        self.assertTrue(Path(P.replaced_path([str(self.entry)])).exists())
+        self.assertEqual(P.bodies(P.load([str(self.entry)]))['c.answer']['verdict'], 'new')
 
     def test_section_review_prepares_view_bytes(self):
         view = Path(P.layout(self.entry)['view'])

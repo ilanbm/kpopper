@@ -224,10 +224,11 @@ class HistorySnapshotCapture(unittest.TestCase):
         with self.assertRaisesRegex(P.Refused, 'unsupported_capability'):
             self.snapshot('live')
 
-    def test_advanced_live_hold_is_explicit_and_frozen_history_remains_available(self):
+    def test_advanced_live_retains_history_and_frozen_history_remains_available(self):
         M.git(self.root, 'init', '-b', 'test')
-        with self.assertRaisesRegex(SnapshotError, 'history_advanced_live_unsupported'):
-            self.snapshot('live')
+        live = self.snapshot('live').to_data()
+        self.assertEqual(live['context']['read_mode'], 'captured-live')
+        self.assertEqual(live['context']['history']['authority'], self.marker)
         self.assertEqual(self.snapshot().to_data()['context']['read_mode'], 'frozen')
 
     def test_malformed_disposition_and_missing_review_pin_refuse_replay(self):

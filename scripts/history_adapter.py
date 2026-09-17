@@ -38,16 +38,20 @@ def _mapping(obj):
 def _adapt_body(obj):
     authored = _mapping(obj)
     body = copy.deepcopy(obj['body'])
+    if not isinstance(body, dict):
+        return body
     field = authored['fields']['deps']
     pins = obj['pins']
+    gaps = obj.get('pin_gaps', {})
+    names = set(pins) | set(gaps)
     if field in body:
         deps = body[field]
         if isinstance(deps, dict):
-            _require(identity(deps) == identity(pins), 'pin_dependency_mismatch', obj['id'])
-            body[field] = sorted(pins)
+            _require(bool(gaps) or identity(deps) == identity(pins), 'pin_dependency_mismatch', obj['id'])
+            body[field] = sorted(names)
         else:
             _require(isinstance(deps, list) and all(isinstance(dep, str) for dep in deps)
-                     and set(deps) == set(pins), 'pin_dependency_mismatch', obj['id'])
+                     and set(deps) == names, 'pin_dependency_mismatch', obj['id'])
     elif pins or obj['kind'] == 'judgment':
         body[field] = sorted(pins)
     return body
@@ -97,6 +101,13 @@ def capture_history(objects, projection, *, document=None):
         obj = validated.get(version)
         if obj is not None:
             _require(obj['subject'] == subject and obj['kind'] != 'act', 'reference_mismatch', version)
+            for finding in C.pin_gap_findings(obj):
+                # These gaps are explicit immutable evidence, so expose missing
+                # historical support without changing acceptance or original seen.
+                projection['integrity']['complete'] = False
+                projection['coverage']['complete'] = False
+                if finding not in projection['integrity']['findings']:
+                    projection['integrity']['findings'].append(finding)
         if existing is not None:
             _require(existing['subject'] == subject, 'reference_mismatch', version)
             if existing['status'] == 'recorded':
@@ -209,6 +220,11 @@ def from_store_capture(captured):
                   'coverage': {'scope': 'all', 'subjects': sorted(subjects), 'complete': True},
                   'subjects': subjects, 'pins': pins, 'dispositions': dispositions,
                   'integrity': {'complete': True, 'findings': []}}
+    gap_findings = [finding for version in sorted(versions)
+                    for finding in C.pin_gap_findings(objects[version])]
+    if gap_findings:
+        projection['integrity'] = {'complete': False, 'findings': gap_findings}
+        projection['coverage']['complete'] = False
     return capture_history(objects, projection, document=Store._template(captured.commits))
 
 
@@ -262,6 +278,13 @@ def pin_review_evidence(projection, version, *, subject=None):
         return result
     result['profile'] = authored['profile']
     body, fields = obj['body'], authored['fields']
+    if not isinstance(body, dict):
+        try:
+            result.update(value_status='recorded', value=_literal(body))
+        except (ValueError, TypeError, RecursionError):
+            result['findings'].append(_finding('unsupported_history_value', subject, version,
+                                              'stored scalar is outside the computation value profile'))
+        return result
     field = fields.get('value')
     # Only an explicitly stored computation is a historical formula result.
     stored = body if 'computed' in body else body.get(field) if field else None

@@ -62,7 +62,7 @@ def _failures(reader, report):
     return failures
 
 
-def gate(reader, before, after):
+def gate(reader, before, after, *, recorded_pin_subjects=()):
     """Compare actual core findings; old failures and new fired inputs stay distinct."""
     if before.get('assessment_profile') != PROFILE or after.get('assessment_profile') != PROFILE:
         raise ValueError('mixed assessment profiles in core writer gate')
@@ -74,6 +74,10 @@ def gate(reader, before, after):
         if key in was:
             continue
         nid, code, _ = key
+        if code == 'missing_snapshot' and nid in recorded_pin_subjects:
+            # A history writer can attest complete actual version pins separately.
+            # This does not insert seen or waive current computational failures.
+            continue
         old = old_report['nodes'].get(nid)
         current = new_report['nodes'][nid]
         if code == 'fired' and old is not None and old['state']['falsifier']['status'] == 'does_not_hold' \
@@ -94,7 +98,7 @@ def verify_receipt(value, before, prepared):
         raise ValueError('invalid core writer gate evidence')
 
 
-def stage(reader, paths, actions, *, profile=None):
+def stage(reader, paths, actions, *, profile=None, replacement_sink=None):
     """Normalize/validate a complete candidate, then use the existing text editors."""
     doc, before = prepare(reader, paths, {'profile': profile})
     if before is None:
@@ -102,7 +106,7 @@ def stage(reader, paths, actions, *, profile=None):
     ids, jud, fields = reader.infer(doc)
     fields = {**fields, **before.fields}
     candidate = copy.deepcopy(doc)
-    homes = {}
+    homes, replacements = {}, []
     from ..pending_grounding import entries
     initial = entries(doc)
     for action in actions:
@@ -111,9 +115,10 @@ def stage(reader, paths, actions, *, profile=None):
             collection, body = initial[nid]
             candidate[collection][nid] = reader._peer('recording').set_body(body, action)
         else:
-            collection = reader._collection_for(candidate, ids, jud, fields, nid, action['body'], action.get('into'))
-            if nid in initial:
-                raise ValueError(nid + ': batch add cannot replace an existing entry')
+            collection = initial[nid][0] if nid in initial else reader._collection_for(
+                candidate, ids, jud, fields, nid, action['body'], action.get('into'))
+            if nid in initial and not callable(replacement_sink):
+                raise ValueError(nid + ': batch replacement requires retained archive transport')
             candidate.setdefault(collection, {})[nid] = copy.deepcopy(action['body'])
         homes[nid] = collection
     unnormalized = World(reader, candidate, original=before.snapshot)
@@ -130,17 +135,25 @@ def stage(reader, paths, actions, *, profile=None):
     for action in normalized:
         nid = action['id']
         validation_doc = copy.deepcopy(candidate)
-        if action['kind'] == 'set':
+        if action['kind'] == 'set' or nid in initial:
             validation_doc[homes[nid]][nid] = copy.deepcopy(initial[nid][1])
             validation_ids = final_ids
         else:
             validation_doc[homes[nid]].pop(nid)
             validation_ids = final_ids - {nid}
         validation = World(reader, validation_doc, original=before.snapshot)
+        _, validation_jud, _ = reader.infer(validation_doc)
         failures = validation.validate(action, validation_doc, validation_ids,
-                                       {key: item for key, item in final_jud.items() if key != nid}, final_fields)
+                                       validation_jud, final_fields)
         if failures:
             raise ValueError('; '.join(failures))
+        if action['kind'] == 'add' and nid in jud:
+            old = initial[nid][1]
+            _, ended = reader.may_supersede(nid, old, action['body'], validation.raw,
+                validation_ids, validation_jud, final_fields, action.get('as_of'))
+            replacements.append({'id': nid, 'old': copy.deepcopy(old), 'ended': ended,
+                                 'stamp': action.get('as_of'), 'dropped': copy.deepcopy(action.get('drops'))})
+            candidate[homes[nid]][nid].update(reader.judgment_renewal(old, ended, action.get('as_of')))
     budget = OutputBudget(final.bounds['output_bytes'])
     for action in normalized:
         body = candidate[homes[action['id']]][action['id']]
@@ -159,8 +172,11 @@ def stage(reader, paths, actions, *, profile=None):
             if '_record_scope' in action:
                 reader._replace_in(lines, nid, candidate[homes[nid]][nid])
         else:
-            reader._ensure_collection(lines, homes[nid])
-            reader._add_in(lines, nid, candidate[homes[nid]][nid], homes[nid])
+            if nid in initial:
+                reader._replace_in(lines, nid, candidate[homes[nid]][nid])
+            else:
+                reader._ensure_collection(lines, homes[nid])
+                reader._add_in(lines, nid, candidate[homes[nid]][nid], homes[nid])
     declare(lines, reader)
     reader._bump_updated(lines, actions[0]['as_of'])
     encoded = '\n'.join(lines)
@@ -168,4 +184,6 @@ def stage(reader, paths, actions, *, profile=None):
     # Reject a text encoding that changed a typed claim or its historical evidence.
     if digest({nid: [collection, body] for nid, (collection, body) in entries(parsed).items()}) != digest({nid: [collection, body] for nid, (collection, body) in entries(candidate).items()}):
         raise ValueError('staged batch text does not preserve the complete authored entries')
+    if replacements:
+        replacement_sink(copy.deepcopy(replacements))
     return encoded.encode('utf-8'), diagnostics

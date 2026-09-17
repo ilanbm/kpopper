@@ -17,6 +17,9 @@ def main(argv=None):
     try:
         paths = [args.record] if args.record else P.default_paths()
         mutation = P.recover_direct(paths, direction='before' if args.rollback else 'after')
+        if isinstance(mutation, dict):
+            print(json.dumps(mutation, ensure_ascii=False, default=str))
+            return 0 if mutation.get('state') in ('applied', 'needs_primary') else 1
         data = mutation.to_data()
         result = {'state': 'restored' if args.rollback else 'recovered',
                   'operation': data['operation'], 'mutation_digest': data['digest']}

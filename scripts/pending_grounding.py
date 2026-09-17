@@ -318,11 +318,15 @@ def validate_bundle(bundle, *, supported=True):
     interpretation also checks complete current closure, scope and evidence.
     """
     manifest = bundle['manifest']
-    if type(manifest.get('version')) is not int or manifest['version'] not in (1, 2) \
+    if manifest.get('version') == 3:
+        H = _history_bundles()
+        H.C.detached(manifest, H.C.MAX_REQUEST_BYTES)
+        H._files(bundle['files'])
+    if type(manifest.get('version')) is not int or manifest['version'] not in (1, 2, 3) \
             or identity(manifest) != bundle['revision']:
         raise ValueError('stored contribution failed its complete identity check')
     cap = _declared_capabilities(manifest['document'])
-    if manifest['version'] == 2 and identity(manifest.get('reasoning')) != identity(cap):
+    if manifest['version'] in (2, 3) and identity(manifest.get('reasoning')) != identity(cap):
         raise ValueError('contribution manifest and document capabilities disagree')
     _privacy(manifest['document'])
     _privacy(manifest['scope'])
@@ -331,6 +335,15 @@ def validate_bundle(bundle, *, supported=True):
     if set(files) != set(manifest['evidence']) or any(
             hashlib.sha256(files[path]).hexdigest() != digest for path, digest in manifest['evidence'].items()):
         raise ValueError('stored contribution evidence failed its complete identity check')
+    if manifest['version'] == 3:
+        H = _history_bundles()
+        history = H.from_contribution(bundle)
+        checked = _prepare_history(manifest['document'], manifest['roots'], scope=manifest['scope'],
+                                   shareability='project', evidence=files, history=history,
+                                   combined_evidence=True)
+        if checked['revision'] != bundle['revision']:
+            raise ValueError('contribution is not its complete validated history closure')
+        return cap
     if not supported:
         return cap
     cap = document_capabilities(manifest['document'])
@@ -377,8 +390,70 @@ def _portable_files(files):
             raise ValueError('portable evidence must be supplied as bytes')
 
 
-def prepare(doc, roots, *, scope, shareability, evidence=None):
+def _history_bundles():
+    return P._peer('history_bundle')
+
+
+def prepare(doc, roots, *, scope, shareability, evidence=None, history=None):
+    if history is not None:
+        return _prepare_history(doc, roots, scope=scope, shareability=shareability,
+                                evidence=evidence, history=history)
     return _prepare(doc, roots, scope=scope, shareability=shareability, evidence=evidence, version=2)
+
+
+def _prepare_history(doc, roots, *, scope, shareability, evidence, history, combined_evidence=False):
+    H = _history_bundles()
+    captured = H.validate(history)
+    adapted = H.A.from_store_capture(captured).document
+    if not isinstance(roots, (list, tuple)) or not roots or any(not isinstance(x, str) for x in roots):
+        raise ValueError('contribution needs explicit root entry IDs')
+    binding = history['manifest']
+    if sorted(set(roots)) != binding['roots'] or identity(scope) != identity(binding['scope']) \
+            or shareability != binding['shareability']:
+        raise ValueError('history contribution authorization disagrees with captured closure')
+    if not H.matches_document(captured, doc):
+        raise ValueError('history contribution document disagrees with captured closure')
+    plain = copy.deepcopy(adapted)
+    plain['meta'].pop('history')
+    cap = document_capabilities(plain)
+    H._files(evidence or {})
+    files = copy.deepcopy(evidence or {})
+    history_files = {H.PREFIX + path: raw for path, raw in history['files'].items()}
+    if combined_evidence:
+        if any(files.get(path) != raw for path, raw in history_files.items()):
+            raise ValueError('history contribution bytes disagree with closure binding')
+        files = {path: raw for path, raw in files.items() if path not in history_files}
+    if any(path.startswith(H.PREFIX) for path in files):
+        raise ValueError('evidence uses reserved history closure namespace')
+    required = set()
+    for raw in history['files'].values():
+        required.update(_files(H.C.decode_document(raw)))
+    imported = adapted.get('meta', {}).get('history_import')
+    if imported is not None:
+        H.C._mapping(imported, ('version', 'operation', 'recorded_at', 'members'))
+        H.C._require(type(imported['version']) is int and imported['version'] == 1,
+                     'unsupported_history_import')
+        H.C._require(isinstance(imported['members'], list), 'invalid_history_import')
+        seen_members = set()
+        for item in imported['members']:
+            H.C._mapping(item, ('path', 'sha256', 'role'))
+            path = H.C.relative_path(item['path'])
+            H.C._require(path not in seen_members and item['role'] in ('retained_original', 'replaced'),
+                         'invalid_history_import')
+            seen_members.add(path)
+            required.add(path)
+            H.C._require(path in files and H.C.sha256(files[path]) == item['sha256'],
+                         'retained_history_mismatch', path)
+    if set(files) != required:
+        raise ValueError('evidence allowlist must contain exactly all historical referenced files')
+    files.update(history_files)
+    H._files(files)
+    manifest = {'version': 3, 'requires': [H.CAPABILITY], 'roots': binding['roots'],
+                'document': adapted, 'scope': copy.deepcopy(scope), 'reasoning': cap,
+                'history': {'revision': history['revision'], 'manifest': copy.deepcopy(binding)},
+                'evidence': {path: hashlib.sha256(raw).hexdigest() for path, raw in sorted(files.items())}}
+    H.C.detached(manifest, H.C.MAX_REQUEST_BYTES)
+    return {'revision': identity(manifest), 'manifest': manifest, 'files': files}
 
 
 def _prepare(doc, roots, *, scope, shareability, evidence=None, version):
@@ -438,10 +513,28 @@ def semantic_roles(document):
         return None
 
 
-def equivalent(bundle, doc, evidence):
+def equivalent(bundle, doc, evidence, *, history=None):
     """Content-based acceptance: shared subset must match; extra local IDs are fine."""
     validate_bundle(bundle)
     expected = bundle['manifest']
+    if expected['version'] == 3:
+        if history is None:
+            return False
+        H = _history_bundles()
+        if isinstance(history, dict) and 'projection' in history and 'sha256' in history:
+            target = P._peer('knowledge_views').validate_history_evidence(history)
+        else:
+            target = H.validate(history)
+        if not H.matches_document(target, doc):
+            return False
+        source = H.validate(H.from_contribution(bundle))
+        if identity(source.marker) != identity(target.marker) or identity(source.state['rules']) != identity(target.state['rules']):
+            return False
+        if any(target.commits.get(op) != raw for op, raw in source.commits.items()) or any(
+                target.object_bytes.get(key) != raw for key, raw in source.object_bytes.items()):
+            return False
+        return all(path in evidence and hashlib.sha256(evidence[path]).hexdigest() == digest
+                   for path, digest in expected['evidence'].items() if not path.startswith(H.PREFIX))
     meaning = meaning_capabilities(expected['document'])
     if meaning != meaning_capabilities(doc):
         return False
@@ -570,8 +663,13 @@ class Store:
                 raise ValueError('event and contribution IDs must be portable nonempty tokens')
         manifest = bundle['manifest']
         validate_bundle(bundle)
-        verified = _prepare(manifest['document'], manifest['roots'], scope=manifest['scope'],
-                            shareability=shareability, evidence=bundle['files'], version=manifest['version'])
+        if manifest['version'] == 3:
+            verified = _prepare_history(manifest['document'], manifest['roots'], scope=manifest['scope'],
+                                        shareability=shareability, evidence=bundle['files'],
+                                        history=_history_bundles().from_contribution(bundle), combined_evidence=True)
+        else:
+            verified = _prepare(manifest['document'], manifest['roots'], scope=manifest['scope'],
+                                shareability=shareability, evidence=bundle['files'], version=manifest['version'])
         if identity(manifest) != verified['revision'] or bundle['revision'] != verified['revision']:
             raise ValueError('contribution integrity check failed before capture')
         revision = verified['revision']

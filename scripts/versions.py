@@ -482,7 +482,8 @@ def _subject_entry(subject, held, rules, ancestry, *, claim_key=None):
         groups = {}
         for v in frontier:
             at = v.get("at")
-            k = (str(v["body"].get("from")), list(at)[0] if isinstance(at, dict) and len(at) == 1 else None)
+            source = v["body"].get("from") if isinstance(v["body"], dict) else None
+            k = (str(source), list(at)[0] if isinstance(at, dict) and len(at) == 1 else None)
             groups.setdefault(k, []).append(v)
         keep = set(v["id"] for v in frontier)
         for (src, ck), vs in groups.items():

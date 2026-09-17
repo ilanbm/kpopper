@@ -24,6 +24,7 @@ except ImportError:
 MAX_TRANSACTION_BYTES = 64 * 1024 * 1024
 ROLES = ('record', 'record_member', 'view', 'replaced', 'history_authority', 'history_object', 'history_commit')
 _LOCKS = contextvars.ContextVar('history_directory_locks', default=())
+_LOCK_PATHS = contextvars.ContextVar('history_directory_lock_paths', default=())
 
 
 def journal_for(entry, *, root=None):
@@ -33,7 +34,11 @@ def journal_for(entry, *, root=None):
     except ImportError:
         from provenance import layout
     entry = Path(entry).absolute()
-    root = entry.parent if root is None else Path(root).absolute()
+    if root is None:
+        root = entry.parent
+    else:
+        entry = entry.parent.resolve() / entry.name
+        root = Path(root).resolve()
     home = Path(layout(entry)['home'])
     token = C.sha256(entry.name.encode('utf-8'))[:24]
     try:
@@ -342,12 +347,20 @@ def _lock(root, exclusive):
         C._require(held or not exclusive, 'lock_upgrade_refused')
         yield
         return
+    canonical = str(Path(root).resolve())
+    owner = (os.getpid(), threading.get_ident())
+    previous = [path for pid, thread, path in _LOCK_PATHS.get() if (pid, thread) == owner]
+    if previous and canonical < max(previous):
+        os.close(fd)
+        raise C.HistoryError('lock_order_refused', canonical)
     try:
         fcntl.flock(fd, fcntl.LOCK_EX if exclusive else fcntl.LOCK_SH)
         token = _LOCKS.set((*_LOCKS.get(), (key, exclusive)))
+        paths_token = _LOCK_PATHS.set((*_LOCK_PATHS.get(), (*owner, canonical)))
         try:
             yield
         finally:
+            _LOCK_PATHS.reset(paths_token)
             _LOCKS.reset(token)
     finally:
         fcntl.flock(fd, fcntl.LOCK_UN)
@@ -359,6 +372,90 @@ def writer_guard(root):
     """Share one directory lock with direct writers and nested captured reads."""
     with _lock(root, True):
         yield
+
+
+@contextlib.contextmanager
+def directory_guards(roots, *, exclusive):
+    """Acquire a complete participant set in canonical order; never upgrade it."""
+    with contextlib.ExitStack() as stack:
+        for root in sorted({str(Path(root).resolve()) for root in roots}):
+            stack.enter_context(_lock(root, exclusive))
+        yield
+
+
+def transaction_root(entry, members):
+    """The common path is a path namespace, not permission to touch other files."""
+    parents = [str(Path(path).parent.resolve()) for path in [entry, *members]]
+    return Path(os.path.commonpath(parents))
+
+
+def participant_directories(root, mutation):
+    members = mutation._data['baseline'].get('record_members', {})
+    return sorted({*(_target(root, path).parent for path in members),
+                   _target(root, mutation._data['entry']).parent})
+
+
+def _journal_replicas(root, journal, mutation):
+    """A durable local guard protects independently opened external members."""
+    baseline = mutation._data['baseline']
+    if 'transaction_root' not in baseline:
+        return []
+    C._require(str(Path(root).absolute()) == baseline['transaction_root'], 'transaction_root_mismatch')
+    primary = _target(root, journal)
+    directories = {_target(root, path).parent for path in baseline.get('record_members', {})}
+    if len(directories) < 2:
+        return []
+    name = mutation._data['digest'] + '.json'
+    entry_directory = _target(root, mutation._data['entry']).parent
+    return [directory / '.history-local' / name for directory in sorted(directories)
+            if directory != entry_directory]
+
+
+def member_guard(mutation, root, directory):
+    members = mutation._data['baseline'].get('record_members', {})
+    return {'version': 1, 'kind': 'member_guard', 'operation': mutation._data['operation'],
+            'digest': mutation._data['digest'],
+            'members': sorted({_target(root, path).name for path in members
+                               if _target(root, path).parent == directory})}
+
+
+def validate_member_guard(value):
+    C._mapping(value, ('version', 'kind', 'operation', 'digest', 'members'))
+    C._require(type(value['version']) is int and value['version'] == 1
+               and value['kind'] == 'member_guard', 'invalid_member_guard')
+    C._text(value['operation'])
+    C._text(value['digest'], C.HEX)
+    C._require(isinstance(value['members'], list) and value['members']
+               and all(isinstance(v, str) for v in value['members'])
+               and value['members'] == sorted(set(value['members'])), 'invalid_member_guard')
+    for name in value['members']:
+        C.relative_path(name)
+        C._require('/' not in name, 'invalid_member_guard')
+    return value
+
+
+def _prepare_replicas(root, journal, mutation):
+    paths = _journal_replicas(root, journal, mutation)
+    guards = [(path, json_bytes(member_guard(mutation, root, path.parent.parent))) for path in paths]
+    for path, raw in guards:
+        checked = _journal_path(root, path.relative_to(Path(root).resolve()).as_posix(), mutation)
+        existing = _read(checked)
+        C._require(existing is None or existing == raw, 'journal_replica_mismatch', str(path))
+    for path, raw in guards:
+        publish_immutable(path.parent / '.gitignore', b'*\n', root=root)
+        publish_immutable(path, raw, root=root)
+    return paths
+
+
+def _ready_path(primary, mutation):
+    return primary.with_name(primary.name + '.' + mutation._data['digest'] + '.ready')
+
+
+def _remove_journals(primary, replicas):
+    for path in [*replicas, primary]:
+        if path.exists():
+            path.unlink()
+            _sync(path.parent)
 
 
 @contextlib.contextmanager
@@ -415,35 +512,68 @@ def publish_legacy(root, journal, mutation, *, verify, on_committed=None):
     C._require(mutation._data['authority']['authority'] == 'legacy', 'invalid_authority')
     C._require(callable(verify), 'missing_verifier')
     C._require(on_committed is None or callable(on_committed), 'invalid_completion_callback')
-    with _lock(root, True):
+    with directory_guards(participant_directories(root, mutation), exclusive=True):
         journal_path = _journal_path(root, journal, mutation)
         C._require(not journal_path.exists(), 'recovery_required')
         targets = _preflight(root, mutation, recovery=False)
         verify(mutation.to_data())
         _private_journal_home(root, journal, mutation)
         publish_immutable(journal_path, mutation.to_bytes(), root=root)
+        replicas = _prepare_replicas(root, journal, mutation)
+        ready = _ready_path(journal_path, mutation)
+        if replicas:
+            publish_immutable(ready, mutation._data['digest'].encode('ascii'), root=root)
         _apply_legacy(targets, 'after')
         if on_committed is not None:
             on_committed(mutation.to_data())
-        journal_path.unlink()
-        _sync(journal_path.parent)
+        _remove_journals(journal_path, [*replicas, *([ready] if replicas else [])])
 
 
-def recover_legacy(root, journal, *, verify, direction='after', on_committed=None):
+def recover_legacy(root, journal, *, verify, direction='after', on_committed=None, verify_cancel=None):
     """Resume or undo exact prepared bytes, refusing unrelated concurrent edits."""
     C._require(direction in ('before', 'after') and callable(verify), 'invalid_recovery')
     C._require(on_committed is None or callable(on_committed), 'invalid_completion_callback')
-    with _lock(root, True):
-        journal_path = _target(root, journal)
-        C._require(journal_path.is_file(), 'no_recovery_pending')
-        mutation = PreparedMutation.from_bytes(journal_path.read_bytes())
+    C._require(verify_cancel is None or callable(verify_cancel), 'missing_verifier')
+    journal_path = _target(root, journal)
+    C._require(journal_path.is_file(), 'no_recovery_pending')
+    try:
+        raw = journal_path.read_bytes()
+    except FileNotFoundError:
+        raise C.HistoryError('no_recovery_pending') from None
+    mutation = PreparedMutation.from_bytes(raw)
+    with directory_guards(participant_directories(root, mutation), exclusive=True):
+        C._require(_read(journal_path) == raw, 'concurrent_edit', str(journal_path))
         C._require(mutation._data['authority']['authority'] == 'legacy', 'invalid_authority')
         _journal_path(root, journal, mutation)
+        replicas = _journal_replicas(root, journal, mutation)
+        ready = _ready_path(journal_path, mutation)
+        ready_bytes = _read(ready)
+        C._require(ready_bytes in (None, mutation._data['digest'].encode('ascii')), 'invalid_ready_marker')
+        if replicas and ready_bytes is None and direction == 'before':
+            # No image is ever published before this durable marker. Cancelling
+            # preparation leaves any independent newer member write untouched.
+            (verify_cancel or verify)(mutation.to_data())
+            guarded = {_target(root, mutation._data['entry']).parent,
+                       *(path.parent.parent for path in replicas if path.exists())}
+            for item in mutation.files:
+                path = _target(root, item['path'])
+                current = _read(path)
+                if current != item['before']:
+                    C._require(current != item['after'], 'incomplete_readiness', str(path))
+                    C._require(item['role'] == 'record_member' and path.parent not in guarded,
+                               'concurrent_edit', str(path))
+            for path in replicas:
+                expected = json_bytes(member_guard(mutation, root, path.parent.parent))
+                C._require(_read(path) in (None, expected), 'journal_replica_mismatch', str(path))
+            _remove_journals(journal_path, replicas)
+            return mutation
         targets = _preflight(root, mutation, recovery=True)
         verify(mutation.to_data())
+        replicas = _prepare_replicas(root, journal, mutation)
+        if replicas:
+            publish_immutable(ready, mutation._data['digest'].encode('ascii'), root=root)
         _apply_legacy(targets, direction)
         if direction == 'after' and on_committed is not None:
             on_committed(mutation.to_data())
-        journal_path.unlink()
-        _sync(journal_path.parent)
+        _remove_journals(journal_path, [*replicas, *([ready] if replicas else [])])
         return mutation

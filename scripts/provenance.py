@@ -865,40 +865,69 @@ def load(paths, *, read_mode=None):
         return _load(paths, read_mode=read_mode)
 
 
+def _pending_record_journals(entries):
+    """Local guards block direct members without following private journal links."""
+    transaction = _peer('history_transaction')
+    for entry in entries:
+        root = os.path.dirname(entry)
+        if not os.path.isdir(root):
+            continue
+        primary = transaction._target(root, transaction.journal_for(entry))
+        transaction.C._require(not primary.exists(), 'recovery_required')
+        homes = (os.path.join(root, HOME, '.history-local'), os.path.join(root, '.history-local'))
+        pending_paths = sorted({p for home in homes for p in glob.glob(glob.escape(home) + '/*.json')})
+        if len(pending_paths) > 1024:
+            raise Refused('history_limit: too many pending local operations')
+        total = 0
+        for pending in pending_paths:
+            path = transaction._target(root, os.path.relpath(pending, root))
+            total += path.stat().st_size
+            if total > transaction.MAX_TRANSACTION_BYTES:
+                raise Refused('history_limit: pending local operation bytes')
+            try:
+                raw = path.read_bytes()
+                if raw.lstrip().startswith(b'{'):
+                    guard = transaction.validate_member_guard(json.loads(raw))
+                    if path.name != guard['digest'] + '.json':
+                        raise ValueError('member guard filename mismatch')
+                    if os.path.basename(entry) in guard['members']:
+                        raise Refused('recovery_required: incomplete member publication')
+                    continue
+                operation = transaction.PreparedMutation.from_bytes(raw)
+                namespace = operation._data['baseline'].get('transaction_root', root)
+                if not isinstance(namespace, str) or not os.path.isabs(namespace):
+                    raise ValueError('invalid transaction root')
+                members = {str(transaction._target(namespace, relative)) for relative in
+                           operation._data['baseline'].get('record_members', {})}
+                members.update(str(transaction._target(namespace, item['path'])) for item in operation.files)
+                primary = transaction._target(namespace, transaction.journal_for(
+                    os.path.join(namespace, operation._data['entry']), root=namespace))
+                expected = [primary, *transaction._journal_replicas(namespace,
+                    os.path.relpath(primary, namespace), operation)]
+                if path not in expected:
+                    raise ValueError('journal location does not match participants')
+            except (ValueError, OSError) as error:
+                raise Refused('invalid_pending_journal: ' + str(path) + ': ' + str(error)) from error
+            if os.path.realpath(entry) in members:
+                raise Refused('recovery_required: incomplete member publication')
+
+
 @contextlib.contextmanager
 def _record_read_guard(paths):
-    # A staged generation exists only inside the owning direct writer lock.
     if _DIRECT_STAGE.get() is not None:
         yield
         return
     transaction = _peer('history_transaction')
-    with contextlib.ExitStack() as stack:
-        entries = sorted({os.path.abspath(f) for p in paths for f in (glob.glob(p) or [p])})
-        for entry in entries:
-            root = os.path.dirname(entry)
-            if os.path.isdir(root):
-                stack.enter_context(transaction.reader_guard(root, transaction.journal_for(entry)))
-                # A sibling pointer/member can belong to another entry's pending
-                # publication. Same-directory records share its recovery boundary.
-                pending_paths = sorted({pending
-                    for home in (os.path.join(root, HOME, '.history-local'), os.path.join(root, '.history-local'))
-                    for pending in glob.glob(glob.escape(home) + '/*.json')})
-                if len(pending_paths) > 1024:
-                    raise Refused('history_limit: too many pending local operations')
-                total = 0
-                for pending in pending_paths:
-                    path = transaction._target(root, os.path.relpath(pending, root))
-                    total += path.stat().st_size
-                    if total > transaction.MAX_TRANSACTION_BYTES:
-                        raise Refused('history_limit: pending local operation bytes')
-                    try:
-                        operation = transaction.PreparedMutation.from_bytes(path.read_bytes())
-                    except ValueError as error:
-                        raise Refused('invalid_pending_journal: ' + str(path) + ': ' + str(error)) from error
-                    members = {os.path.abspath(os.path.join(root, item['path'])) for item in operation.files}
-                    if entry in members:
-                        raise Refused('recovery_required: incomplete member publication')
+    entries = sorted({os.path.abspath(f) for p in paths for f in (glob.glob(p) or [p])})
+    members = sorted(set(entries + list(map(os.path.abspath, _files_of(paths)))))
+    roots = {os.path.dirname(path) for path in members if os.path.isdir(os.path.dirname(path))}
+    with transaction.directory_guards(roots, exclusive=False):
+        _pending_record_journals(members)
+        current = sorted(set(entries + list(map(os.path.abspath, _files_of(paths)))))
+        if current != members:
+            raise Refused('concurrent_edit: reader-resolved record membership changed')
         yield
+        _pending_record_journals(members)
 
 
 def _load(paths, *, read_mode=None):
@@ -1011,7 +1040,7 @@ def collections_of(doc):
     for k, v in (doc or {}).items():
         if k in ("schema", "record", "also") or not isinstance(v, dict) or not v:
             continue
-        if all(isinstance(x, (dict, str, int, float, bool, type(None))) for x in v.values()):
+        if all(isinstance(x, (dict, str, int, float, bool, datetime.date, type(None))) for x in v.values()):
             out[k] = v
     return out
 
@@ -4369,10 +4398,30 @@ def _locked(path, *, project=None):
 
 @contextlib.contextmanager
 def _directory_locked(path):
-    """Directory-only lock for policy owners; never captures or configures."""
+    """Lock the resolved authored closure before validating or publishing it."""
+    from pathlib import Path
+    transaction = _peer('history_transaction')
     token = _RAW_READS.set(True)
     try:
-        with _peer('history_transaction').writer_guard(os.path.dirname(os.path.abspath(path))):
+        members = list(map(os.path.abspath, _files_of([str(path)])))
+        root = transaction.transaction_root(path, members)
+        roots = {os.path.dirname(os.path.abspath(path)),
+                 *(os.path.dirname(member) for member in members)}
+        # Recovery can need members that a partially published pointer no longer
+        # names. Their exact immutable journal inventory supplies only locks.
+        pending = Path(path).absolute().parent / transaction.journal_for(path)
+        if pending.is_file():
+            try:
+                raw = pending.read_bytes()
+            except FileNotFoundError:
+                raw = None
+            if raw is not None:
+                mutation = transaction.PreparedMutation.from_bytes(raw)
+                namespace = mutation._data['baseline'].get('transaction_root', str(Path(path).absolute().parent))
+                roots.update(map(str, transaction.participant_directories(namespace, mutation)))
+        with transaction.directory_guards(roots, exclusive=True):
+            if list(map(os.path.abspath, _files_of([str(path)]))) != members:
+                raise Refused('concurrent_edit: writer-resolved record membership changed')
             yield
     finally:
         _RAW_READS.reset(token)
@@ -4389,6 +4438,8 @@ def _files_of(paths):
         seen.add(os.path.abspath(f))
         out.append(f)
         d = parse(f) or {}
+        if not isinstance(d, dict):
+            return
         for key in ("record", "also"):
             v = d.get(key)
             v = [v] if isinstance(v, str) else v if isinstance(v, list) else \
@@ -4537,6 +4588,11 @@ def apply(paths, action, diagnostics=None):
     policy = project.config()
     original_paths = list(paths)
     paths = _peer('knowledge_views').write_paths(paths)
+    if _peer('history_direct').active(paths):
+        with _locked(paths[0], project=project):
+            if project.config() != policy or list(_peer('knowledge_views').write_paths(original_paths)) != list(paths):
+                raise Refused('refused - project mode or record destination changed; retry the write')
+            return _peer('history_direct').apply(paths, action, project=project, original_paths=original_paths)
     try:
         receipt = _peer('recording').route(paths, action, sys.modules.get(__name__) or _Reader(),
                                           project=project, expected_policy=policy)
@@ -4853,8 +4909,6 @@ def _direct_ready(paths):
         with _record_read_guard([entry]):
             _direct_authority(entry)
             for member in _files_of([entry]):
-                if os.path.dirname(os.path.abspath(member)) != os.path.dirname(entry):
-                    raise Refused('unsupported_external_record_transaction: record members need a shared directory lock')
                 document = parse(member) or {}
                 meta = document.get('meta') if isinstance(document, dict) else None
                 if isinstance(meta, dict) and 'history' in meta:
@@ -4889,33 +4943,40 @@ class _DirectStage:
         self.after[path] = data
 
 
-def _verify_direct(paths, project, prepared):
+def _verify_direct(paths, project, prepared, *, preparation_only=False):
     """Recheck routing and all observed inputs, allowing only retained file images."""
     from pathlib import Path
     transaction = _peer('history_transaction')
     baseline = prepared['baseline']
     entry = os.path.abspath(_first_of(paths))
-    if (baseline.get('kind') != 'direct/v1' or baseline.get('paths') != list(map(os.path.abspath, paths))
+    if (baseline.get('kind') != 'direct/v1' or list(map(os.path.realpath, baseline.get('paths', []))) != list(map(os.path.realpath, paths))
             or baseline.get('policy') != project.config()
-            or baseline.get('destination') != list(map(os.path.abspath, _peer('knowledge_views').write_paths(paths)))
+            or list(map(os.path.realpath, baseline.get('destination', []))) != list(map(os.path.realpath, _peer('knowledge_views').write_paths(paths)))
             or prepared['authority'] != _direct_authority(entry)
-            or prepared['entry'] != os.path.basename(entry)
+            or prepared['entry'] != os.path.relpath(os.path.realpath(entry), os.path.realpath(baseline.get('transaction_root', os.path.dirname(entry))))
             or not prepared['operation'].startswith('direct-')):
         raise Refused('direct_baseline_mismatch: policy, destination or authority changed')
-    root = Path(entry).parent
+    root = Path(baseline.get('transaction_root', str(Path(entry).parent)))
+    expected_root = transaction.transaction_root(entry, _files_of(paths))
+    if root.resolve() != expected_root.resolve():
+        raise Refused('direct_baseline_mismatch: transaction root changed')
     mutation = transaction.PreparedMutation.from_bytes(transaction.json_bytes(transaction._encode(prepared)))
-    touched = {str(root / item['path']): item for item in mutation.files}
-    members = {os.path.relpath(os.path.abspath(path), root): os.path.abspath(path)
+    touched = {os.path.realpath(root / item['path']): item for item in mutation.files}
+    members = {os.path.relpath(os.path.realpath(path), root.resolve()): os.path.realpath(path)
                for path in _files_of(paths)}
     if set(members) != set(baseline.get('record_members', {})):
         raise Refused('concurrent_edit: reader-resolved record membership changed')
+    if preparation_only:
+        # A missing durable ready marker proves no after image was published.
+        # Cancellation validates identity/routing, preserving newer member bytes.
+        return
     for relative, path in members.items():
         raw = touched[path]['before'] if path in touched else transaction._read(Path(path))
         if raw is None or hashlib.sha256(raw).hexdigest() != baseline['record_members'][relative]:
             raise Refused('concurrent_edit: record member changed: ' + path)
     for event in baseline['reads']:
         kind, path, expected = event['kind'], event['path'], event['value']
-        item = touched.get(path)
+        item = touched.get(os.path.realpath(path))
         if kind == 'bytes':
             current = transaction._read(Path(path))
             if item is not None and current in (item['before'], item['after']):
@@ -4941,7 +5002,7 @@ def _apply(paths, action, diagnostics=None):
     transaction = _peer('history_transaction')
     project = _peer('knowledge_views').project_for(paths)
     entry = Path(_first_of(paths)).absolute()
-    root = entry.parent
+    root = transaction.transaction_root(entry, _files_of(paths))
     stage = _DirectStage()
     output = io.StringIO()
     token = _DIRECT_STAGE.set(stage)
@@ -4962,6 +5023,13 @@ def _apply(paths, action, diagnostics=None):
             return result
         for candidate in stage.after.values():
             parse(text=candidate.decode('utf-8'))
+        for path, before in authored_members.items():
+            if path in stage.after:
+                old = parse(text=before.decode('utf-8')) or {}
+                new = parse(text=stage.after[path].decode('utf-8')) or {}
+                if any(_peer('pending_grounding').identity(old.get(key)) !=
+                       _peer('pending_grounding').identity(new.get(key)) for key in ('record', 'also')):
+                    raise Refused('direct_pointer_change: record membership needs a separate migration')
         after_doc, after_world = _peer('reasoning.authoring').prepare(
             sys.modules.get(__name__) or _Reader(), paths, action)
         after_evidence = after_world.assessment() if after_world is not None else {'document': dict(after_doc)}
@@ -4974,7 +5042,7 @@ def _apply(paths, action, diagnostics=None):
     files = []
     locations = layout(entry)
     for path, after in stage.after.items():
-        relative = os.path.relpath(path, root)
+        relative = os.path.relpath(os.path.realpath(path), root)
         if path == str(entry):
             role = 'record'
         elif path in members:
@@ -4986,15 +5054,15 @@ def _apply(paths, action, diagnostics=None):
         files.append({'path': relative, 'role': role, 'before': stage.before[path], 'after': after})
     baseline = {'kind': 'direct/v1', 'paths': list(map(os.path.abspath, paths)),
                 'destination': list(map(os.path.abspath, _peer('knowledge_views').write_paths(paths))),
-                'policy': project.config(),
-                'record_members': {os.path.relpath(path, root): hashlib.sha256(raw).hexdigest()
+                'policy': project.config(), 'transaction_root': str(root),
+                'record_members': {os.path.relpath(os.path.realpath(path), root): hashlib.sha256(raw).hexdigest()
                                    for path, raw in authored_members.items()},
                 'reads': [{'kind': kind, 'path': path, 'value': value}
                           for (kind, path), value in sorted(stage.observations.items())]}
     mutation = transaction.PreparedMutation(operation='direct-' + uuid.uuid4().hex,
         authority=_direct_authority(entry), baseline=baseline, files=files,
-        receipt=receipt, entry=entry.name)
-    transaction.publish_legacy(root, transaction.journal_for(entry), mutation,
+        receipt=receipt, entry=os.path.relpath(os.path.realpath(entry), root))
+    transaction.publish_legacy(root, transaction.journal_for(entry, root=root), mutation,
         verify=lambda prepared: _verify_direct(paths, project, prepared),
         on_committed=lambda prepared: [forget(root / item['path']) for item in mutation.files])
     print(output.getvalue(), end='')
@@ -5010,12 +5078,24 @@ def recover_direct(paths, *, direction='after'):
     policy = project.config()
     paths = _peer('knowledge_views').write_paths(paths)
     entry = Path(_first_of(paths)).absolute()
+    report_recovery = _peer('history_direct').recover_report(paths, direction=direction)
+    if report_recovery is not None:
+        return report_recovery
     with _locked(entry, project=project):
         if project.config() != policy or list(_peer('knowledge_views').write_paths(original_paths)) != list(paths):
             raise Refused('refused - project mode or record destination changed; retry recovery')
-        return transaction.recover_legacy(entry.parent, transaction.journal_for(entry),
+        if _peer('history_direct').active(paths):
+            return _peer('history_direct').recover(paths, project=project,
+                                                   original_paths=original_paths, direction=direction)
+        journal_path = entry.parent / transaction.journal_for(entry)
+        if not journal_path.is_file():
+            raise transaction.C.HistoryError('no_recovery_pending')
+        mutation = transaction.PreparedMutation.from_bytes(journal_path.read_bytes())
+        root = Path(mutation._data['baseline'].get('transaction_root', str(entry.parent)))
+        return transaction.recover_legacy(root, transaction.journal_for(entry, root=root),
             direction=direction, verify=lambda prepared: _verify_direct(paths, project, prepared),
-            on_committed=lambda prepared: [forget(entry.parent / item['path']) for item in prepared['files']])
+            verify_cancel=lambda prepared: _verify_direct(paths, project, prepared, preparation_only=True),
+            on_committed=lambda prepared: [forget(root / item['path']) for item in prepared['files']])
 
 
 def _apply_candidate(paths, action, diagnostics=None):

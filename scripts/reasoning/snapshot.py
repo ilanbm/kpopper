@@ -134,7 +134,7 @@ def _snapshot_preimage(data):
     return {key: value for key, value in data.items() if key not in ('snapshot_id', 'authored_revision')}
 
 
-def _validate_history(document, context):
+def _validate_history(document, context, hypotheses=None):
     # Shared validation applies both to capture and untrusted frozen replay.
     # Legacy snapshots with no history declaration keep their existing shape.
     if 'history' in context:
@@ -145,6 +145,75 @@ def _validate_history(document, context):
             raise SnapshotError('invalid_history', str(error)) from error
     elif isinstance(document.get('meta'), dict) and 'history' in document['meta']:
         raise SnapshotError('missing_history_context', 'history view requires captured evidence')
+    from .. import pending_grounding as G, history_bundle as B, knowledge_views as V
+    hypotheses = hypotheses or {}
+    bundles = context.get('pending', {}).get('bundles', {})
+    revisions = {revision for revision, bundle in bundles.items()
+                 if isinstance(bundle, dict) and bundle.get('manifest', {}).get('version') == 3}
+    witnesses = context.get('history_contributions', {})
+    if set(witnesses) != revisions:
+        raise SnapshotError('missing_history_context', 'pending history witnesses disagree with captured bundles')
+    if revisions or 'history' in context.get('target', {}).get('snapshot', {}):
+        B.C.detached(context, MAX_REQUEST_BYTES)
+    for revision in sorted(revisions):
+        portable = bundles[revision]
+        bundle = {'revision': portable['revision'], 'manifest': portable['manifest'],
+                  'files': _history_bytes(portable['files'])}
+        G.validate_bundle(bundle)
+        if revision != bundle['revision']:
+            raise SnapshotError('invalid_history', 'pending revision key disagrees')
+        adapted = B.adapt(B.from_contribution(bundle))
+        decision = context['pending'].get('observations', {}).get('decisions', {}).get(revision, {})
+        retired = decision.get('state') in ('withdrawn', 'rejected', 'superseded')
+        expected = {'artifact_revision': bundle['manifest']['history']['revision'],
+                    'projection': adapted.projection, 'scope': bundle['manifest']['scope'],
+                    'roots': bundle['manifest']['roots'], 'status': 'retired' if retired else 'active'}
+        if digest(witnesses[revision]) != digest(expected):
+            raise SnapshotError('invalid_history', 'pending projection disagrees with complete captured evidence')
+        hypothesis = hypotheses.get('pending-' + revision)
+        if retired:
+            if hypothesis is not None:
+                raise SnapshotError('invalid_history', 'retired history is an active hypothesis')
+        elif hypothesis is None or hypothesis.get('kind') != 'contribution' or digest(
+                hypothesis.get('document', hypothesis.get('doc'))) != digest(adapted.document):
+            raise SnapshotError('invalid_history', 'pending history hypothesis disagrees with capture')
+    for name, hypothesis in hypotheses.items():
+        body = hypothesis.get('document', hypothesis.get('doc', {}))
+        if isinstance(body.get('meta'), dict) and 'history' in body['meta'] and name not in {
+                'pending-' + revision for revision in revisions}:
+            raise SnapshotError('missing_history_context', 'history hypothesis requires its independent capture')
+    target = context.get('target', {}).get('snapshot', {})
+    if 'history' in target:
+        evidence = copy.deepcopy(target['history'])
+        evidence['files'] = _history_bytes(evidence['files'])
+        captured = V.validate_history_evidence(evidence)
+        if digest(target['doc']) != digest(B.A.from_store_capture(captured).document):
+            raise SnapshotError('invalid_history', 'target document disagrees with committed history')
+    elif isinstance(target.get('doc', {}).get('meta'), dict) and 'history' in target['doc']['meta']:
+        raise SnapshotError('missing_history_context', 'target history lacks captured closure')
+
+
+def _history_bytes(files):
+    """Decode only explicit, checksummed portable bytes; never resolve a path."""
+    from .. import history_bundle as B
+    if not isinstance(files, dict) or len(files) > 2 * B.C.MAX_OBJECTS + 2:
+        raise SnapshotError('limit', 'history file membership exceeds transport bounds')
+    result, total = {}, 0
+    for path, value in files.items():
+        if not isinstance(value, dict) or set(value) != {'encoding', 'data', 'sha256'} or value['encoding'] != 'hex' \
+                or not isinstance(value['data'], str):
+            raise SnapshotError('invalid_history', 'history files require checksummed bytes')
+        total += len(value['data'])
+        if total > MAX_REQUEST_BYTES or len(value['data']) % 2:
+            raise SnapshotError('limit', 'history bytes exceed snapshot transport bounds')
+        try:
+            raw = bytes.fromhex(value['data'])
+        except ValueError:
+            raise SnapshotError('invalid_history', 'malformed captured history bytes') from None
+        if raw.hex() != value['data'] or _sha(raw) != value['sha256']:
+            raise SnapshotError('invalid_history', 'captured history checksum mismatch')
+        result[path] = raw
+    return result
 
 
 def _check_typed_json(value, depth=0):
@@ -215,7 +284,7 @@ class Snapshot:
         if not isinstance(data['document'], dict) or not isinstance(data['context'], dict) \
                 or not isinstance(data['hypotheses'], dict):
             raise SnapshotError('invalid_snapshot', 'invalid snapshot structure')
-        _validate_history(data['document'], data['context'])
+        _validate_history(data['document'], data['context'], data['hypotheses'])
         _validate_authored_revision(data['authored_revision'])
         if digest(_snapshot_preimage(data)) != data['snapshot_id']:
             raise SnapshotError('stale_snapshot', 'snapshot digest does not match')
@@ -240,11 +309,11 @@ class Snapshot:
         context = copy.deepcopy(context) if context is not None else {
             'read_mode': 'supplied', 'source_collection': 'caller-owned'}
         context.setdefault('read_mode', 'supplied')
-        _validate_history(document, context)
+        normalized_hypotheses = _hypotheses(hypotheses)
+        _validate_history(document, context, normalized_hypotheses)
         if context['read_mode'] not in ('supplied', 'live', 'frozen', 'captured-live'):
             raise SnapshotError('invalid_snapshot', 'unknown captured read mode')
         _validate_authored_revision(authored_revision)
-        normalized_hypotheses = _hypotheses(hypotheses)
         derived_conflicts = _hypothesis_conflicts(normalized_hypotheses)
         if derived_conflicts:
             context['conflicts'] = {**derived_conflicts, **context.get('conflicts', {})}
@@ -600,6 +669,51 @@ class CapturedSource:
 
 
 
+def _retained_history_members(document, entry):
+    """Validate imported source locators without treating originals as authority."""
+    import fnmatch
+    from .. import history_contract as C, history_transaction as T, provenance as P
+    entry = Path(entry).absolute()
+    imported = document.get('meta', {}).get('history_import')
+    members = {}
+    if imported is not None:
+        C._mapping(imported, ('version', 'operation', 'recorded_at', 'members'))
+        C._require(type(imported['version']) is int and imported['version'] == 1,
+                   'unsupported_history_import')
+        C._text(imported['operation'])
+        C._require(isinstance(imported['recorded_at'], str) and imported['recorded_at'], 'invalid_history_import')
+        C._require(isinstance(imported['members'], list) and len(imported['members']) <= C.MAX_OBJECTS,
+                   'history_limit')
+        total = 0
+        for item in imported['members']:
+            C._mapping(item, ('path', 'sha256', 'role'))
+            name = C.relative_path(item['path'])
+            C._text(item['sha256'], C.HEX)
+            C._require(item['role'] in ('retained_original', 'replaced') and name not in members
+                       and name != entry.name, 'invalid_history_import')
+            path = T._target(entry.parent, name)
+            P._capture_event('exists', path, path.exists())
+            C._require(path.is_file() and path.stat().st_size <= C.MAX_REQUEST_BYTES,
+                       'missing_retained_history_file', name)
+            raw = path.read_bytes()
+            total += len(raw)
+            C._require(total <= T.MAX_TRANSACTION_BYTES, 'history_limit')
+            P._capture_event('bytes', path, raw)
+            C._require(C.sha256(raw) == item['sha256'], 'retained_history_mismatch', name)
+            members[name] = item
+    for key in ('record', 'also'):
+        value = document.get(key)
+        values = [value] if isinstance(value, str) else value if isinstance(value, list) else \
+            list(value.values()) if isinstance(value, dict) else []
+        for pointer in values:
+            if isinstance(pointer, str) and pointer.endswith(('.yaml', '.yml')):
+                C.relative_path(pointer)
+                C._require(any(fnmatch.fnmatchcase(name, pointer) and item['role'] == 'retained_original'
+                               for name, item in members.items()), 'history_composite_capture_unsupported',
+                           'history template pointer lacks retained member evidence: ' + pointer)
+    return members
+
+
 def _capture_load(paths, mode, initial):
     """Select explicit history authority before the ordinary loader sees a view."""
     from .. import provenance as P, knowledge_views as V, history_contract as C
@@ -624,9 +738,6 @@ def _capture_load(paths, mode, initial):
         return P.load(paths, read_mode=mode)
     if len(entries) != 1:
         raise SnapshotError('history_composite_capture_unsupported', 'capture one authoritative history entry')
-    if mode == 'live' and initial['config']['mode'] == 'advanced':
-        raise SnapshotError('history_advanced_live_unsupported',
-                            'history contribution and accepted-target capture requires a versioned capability')
     from ..history_store import Store
     from ..history_adapter import from_store_capture
     store = Store(active[0])
@@ -638,13 +749,7 @@ def _capture_load(paths, mode, initial):
         raise SnapshotError('unresolved_view_edit', 'history entry needs reconciliation')
     adapted = from_store_capture(captured)
     document = adapted.document
-    # Authored pointers cannot be silently ignored by this single-entry capture.
-    for key in ('record', 'also'):
-        value = document.get(key)
-        values = [value] if isinstance(value, str) else value if isinstance(value, list) else \
-            list(value.values()) if isinstance(value, dict) else []
-        if any(isinstance(item, str) and item.endswith(('.yaml', '.yml')) for item in values):
-            raise SnapshotError('history_composite_capture_unsupported', 'history template contains record members')
+    _retained_history_members(document, active[0])
     doc = P.Record(document)
     doc.hypotheses = P.load_hypotheses(routed)
     from .contract import capabilities, CapabilityError
@@ -656,13 +761,12 @@ def _capture_load(paths, mode, initial):
             raise P.Refused(error.code + ': ' + str(error)) from None
         if isinstance(body.get('meta'), dict) and 'history' in body['meta']:
             raise SnapshotError('history_hypothesis_unsupported', 'hypothesis needs its own committed capture')
-    doc = V.overlay(routed, doc, read_mode=mode)
     doc.history_projection = adapted.projection
     doc.history_view = {'status': 'current' if current else 'stale_generated',
                         'baseline_digest': digest(captured.document['meta']['history'])}
     doc.history_private_roots = [os.path.abspath(store.layout[name])
                                  for name in ('history', 'history_commits')]
-    return doc
+    return V.overlay(routed, doc, read_mode=mode)
 
 
 def capture_source(paths, *, read_mode=None, as_of=None):
@@ -739,6 +843,8 @@ def capture(paths, *, read_mode=None, as_of=None, _retain_source=False):
         getattr(doc, 'publication', initial.get('publication', {}))), origin)
     context['pending']['contributions'] = _portable([
         _publication_context(item) for item in getattr(doc, 'contributions', [])], origin)
+    if getattr(doc, 'history_contributions', None):
+        context['history_contributions'] = copy.deepcopy(doc.history_contributions)
     if hasattr(doc, 'history_projection'):
         context['history'] = doc.history_projection
         context['history_view'] = doc.history_view

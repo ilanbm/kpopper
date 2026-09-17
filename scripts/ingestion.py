@@ -2,9 +2,9 @@
 """Durable, selective ingestion for explicit provenance reports.
 
 Captured text and queue state live outside the repository by default.  A report may
-update one existing scalar reading or an atomic batch of readings and new grounded
-entries. Interpretation belongs to the calling agent. Unsupported or ambiguous changes
-are retained for review; existing judgments are never rewritten by ingestion.
+update one existing scalar reading or an atomic batch of readings and grounded
+entries. Explicit replacements pass the canonical writer's permission checks and
+retain prior archive/history evidence. Unsupported or ambiguous changes stay pending.
 
 The implementation requires ``fcntl.flock`` for capture, processing, and acknowledgement,
 matching provenance.py's directory lock.  Those writes fail closed on platforms without
@@ -238,7 +238,7 @@ def _validate_envelope(envelope):
         for op in updates:
             if not isinstance(op, dict) or op.get("kind") not in {"set", "add"}:
                 raise ValueError("each update needs kind=set or kind=add")
-            allowed = {"kind", "id", "at", "value"} if op["kind"] == "set" else {"kind", "id", "at", "body", "into"}
+            allowed = {"kind", "id", "at", "value"} if op["kind"] == "set" else {"kind", "id", "at", "body", "into", "drops"}
             required = "value" if op["kind"] == "set" else "body"
             if set(op) - allowed or required not in op:
                 raise ValueError("invalid fields in " + op["kind"] + " update")
@@ -253,6 +253,10 @@ def _validate_envelope(envelope):
                     raise ValueError(field + " must be non-empty text")
             if op["kind"] == "add" and not isinstance(op["body"], dict):
                 raise ValueError("add body must be a mapping")
+            if 'drops' in op and (not isinstance(op['drops'], dict) or any(
+                    not isinstance(k, str) or not isinstance(v, str) or not v.strip()
+                    for k, v in op['drops'].items())):
+                raise ValueError('drops must name dependencies and nonempty reasons')
     return out
 
 
@@ -270,8 +274,21 @@ def _basic_type(value):
     return None
 
 
+def _history_active(record):
+    return P._peer('history_direct').active([str(record)])
+
+
 def _record_world(record, *, core_writer=False):
     paths = [str(record)]
+    if _history_active(record):
+        A = P._peer('history_authoring')
+        captured = P._peer('history_store').Store(record).capture()
+        if captured.document.get('also') or P.load_hypotheses(paths):
+            raise ValueError('multi-file and hypothesis history reports require primary review')
+        doc = A._document(P._peer('history_adapter').from_store_capture(captured).document)
+        ids, judgments, fields = A.READER.infer(doc)
+        world = A._world(doc)
+        return doc, ids, judgments, fields, world.raw if world else P.with_builtins(doc, ids, judgments, fields)
     files = [Path(x).resolve() for x in P._files_of(paths)]
     if len(files) != 1 or files[0] != record.resolve():
         raise ValueError("multi-file and pointer records require primary review")
@@ -398,8 +415,8 @@ def _report_target(record, envelope):
                 raise ValueError(op["id"] + " has a different scalar type")
             homes.add(old["source_collection"])
         else:
-            if op["id"] in ids:
-                raise ValueError(op["id"] + " already exists; batch add never replaces an entry or judgment")
+            # Existing names are replacement intents. The canonical writer must
+            # validate their original body and retain its archive/history evidence.
             body = op["body"]
             if fields.get("snapshot") in body or "seen" in body:
                 raise ValueError("judgment snapshots are computed by the writer")
@@ -545,6 +562,8 @@ def capture(envelope, record=None, state_dir=None, start=True):
 def _graph(record, target=None, measured=False, profile=None):
     doc, ids, judgments, fields, raw = _record_world(record, core_writer=True)
     if getattr(raw, 'world', None) is not None or profile == 'core/v1':
+        if _history_active(record):
+            return _history_graph(record, target)
         return P._peer('reasoning.ingestion').graph(P, record, target, profile)
 
     measurement = None
@@ -583,6 +602,62 @@ def _graph(record, target=None, measured=False, profile=None):
         "reach": {"judgments": sorted(hit), "via": hit,
                   "touched": sorted(touched), "derived": derived},
     }
+
+
+def _history_graph(record, target=None, *, capture=None):
+    """Internal report graph from committed authority, never a YAML-only reader."""
+    A, H = P._peer('history_authoring'), P._peer('history_store')
+    captured = capture or H.Store(record).capture()
+    adapted = P._peer('history_adapter').from_store_capture(captured)
+    doc = A._document(adapted.document)
+    return _history_document_graph(doc, _sha(captured.entry_bytes), target)
+
+
+def _history_document_graph(doc, content_hash, target):
+    A = P._peer('history_authoring')
+    ids, judgments, fields = A.READER.infer(doc)
+    world = A._world(doc)
+    raw = world.raw if world else P.with_builtins(doc, ids, judgments, fields)
+    seeds = target if isinstance(target, list) else [target] if target else []
+    hit, touched, derived = P.reach_of(ids, judgments, raw, seeds)
+    for seed in seeds:
+        if seed in judgments:
+            hit.setdefault(seed, seed)
+    states = {}
+    for nid, judgment in judgments.items():
+        tag, reason = world.state(nid) if world else P._state(nid, judgment, raw, ids, fields, touched=touched)
+        evaluation = ({'holds': True, 'does_not_hold': False}.get(
+            world.assessment()['nodes'][nid]['state']['falsifier']['status']) if world else
+            P.evaluate(judgment['pred'], raw, ids))
+        states[nid] = {'tag': tag, 'reason': reason, 'evaluation': evaluation,
+                       'name': P.named(judgment['body']), 'verdict': judgment['body'].get('verdict')}
+    result = {'hash': content_hash, 'judgments': states,
+              'reach': {'judgments': sorted(hit), 'via': hit,
+                        'touched': sorted(touched), 'derived': derived}}
+    if world:
+        report = world.assessment()
+        result.update(assessment_profile='core/v1', snapshot_id=report['snapshot_id'],
+                      assessment=P._peer('pending_grounding')._encode(report))
+    return result
+
+
+def _history_after_capture(captured, mutation):
+    from dataclasses import replace
+    C, H = P._peer('history_contract'), P._peer('history_store')
+    commits, objects = dict(captured.commits), dict(captured.object_bytes)
+    for item in mutation.files:
+        if item['role'] == 'history_object':
+            obj = C.decode_document(item['after'])
+            objects[(obj['subject'], obj['id'])] = item['after']
+        elif item['role'] == 'history_commit':
+            commits[mutation.to_data()['operation']] = item['after']
+        elif item['role'] == 'record':
+            after = item['after']
+    selected = C.committed_objects(captured.marker, commits, objects)
+    state = H.reduce(selected, captured.state['rules'])
+    return replace(captured, entry_bytes=after, document=C.decode_document(after), commits=commits,
+                   objects=selected, object_bytes=objects, state=state,
+                   baseline=H.baseline(captured.marker, commits, state))
 
 
 def _classify(before, after):
@@ -823,9 +898,14 @@ def _write_context(rec, project):
     marker_path = Path(P.layout(rec)['history_authority']).relative_to(rec.parent).as_posix()
     raw = T._read(T._target(rec.parent, marker_path))
     marker = C.validate_authority(C.decode_document(raw)) if raw is not None else T.legacy_authority(rec)
-    document = P.parse(text=rec.read_bytes()) or {}
-    if marker['authority'] != 'legacy' or isinstance(document.get('meta'), dict) and 'history' in document['meta']:
-        raise ValueError('unsupported_capability: history report preparation is not available')
+    if marker['authority'] == 'history':
+        captured = P._peer('history_store').Store(rec).capture()
+        document = P._peer('history_authoring')._document(
+            P._peer('history_adapter').from_store_capture(captured).document)
+    else:
+        document = P.parse(text=rec.read_bytes()) or {}
+        if isinstance(document.get('meta'), dict) and 'history' in document['meta']:
+            raise ValueError('authority_mismatch: generated history view has no active authority')
     # Validate all declared and historical reasoning requirements before staging.
     P._peer('pending_grounding').document_capabilities(document)
     destination = str(Path(P._peer('knowledge_views').write_paths([str(rec)])[0]).resolve())
@@ -918,6 +998,227 @@ def _committed(root, event, journal):
     return save
 
 
+def _report_actions(event, envelope):
+    source_id = 's.ingest_' + event['event_id']
+    cited = envelope.get('source', source_id)
+    if cited == source_id and 'source' in envelope:
+        raise ValueError('a report cannot cite its own capture as an existing source')
+    seeds = _report_seeds(envelope)
+    source = {'name': 'Captured report', 'file': event['source_file'], 'read': envelope['date'],
+              'recorded_for': 'Update ' + (', '.join(seeds) if isinstance(seeds, list) else seeds) + ' from this captured report.'}
+    if 'source' in envelope:
+        source['from'] = cited
+        if 'at' in envelope:
+            source['at'] = envelope['at']
+    actions = [{'kind': 'add', 'id': source_id, 'body': source, 'as_of': envelope['date'],
+                'into': event['target_snapshot']['source_collection']}]
+    operations = envelope['updates'] if 'updates' in envelope else [
+        {'kind': 'set', 'id': envelope['target'], 'value': envelope['value']}]
+    for operation in sorted(operations, key=lambda op: op['kind'] != 'set'):
+        action = copy.deepcopy(operation)
+        action.update(as_of=envelope['date'], why=envelope.get('reason'))
+        location = action.pop('at', envelope.get('at', 'entire captured report'))
+        if 'scope' in envelope:
+            action['_record_scope'] = copy.deepcopy(envelope['scope'])
+        if action['kind'] == 'set':
+            action.update(source=cited, at=location)
+        else:
+            body = action['body']
+            if 'scope' in envelope:
+                if 'scope' in body and body['scope'] != envelope['scope']:
+                    raise ValueError('entry scope differs from report scope: ' + action['id'])
+                body['scope'] = copy.deepcopy(envelope['scope'])
+            if 'v' in body or 'quoted' in body:
+                body.update({'from': cited, 'at': location, 'of': envelope['date']})
+        actions.append(action)
+    return actions
+
+
+def _history_report_binding(event, context):
+    return {'kind': 'report-history/v1', 'event_id': event['event_id'],
+            'source_sha256': event['source_sha256'], 'envelope_sha256': event['envelope_sha256'],
+            'context': context}
+
+
+def _history_shared(rec):
+    return rec.parent / P._peer('history_direct').journal(rec)
+
+
+def _history_report_envelope(rec, root, event, mutation):
+    T, C = P._peer('history_transaction'), P._peer('history_contract')
+    value = {'version': 1, 'kind': 'report-history/v1', 'record': str(rec), 'state_dir': str(root),
+             'event_id': event['event_id'], 'mutation': T._blob(mutation.to_bytes())}
+    return {**value, 'digest': P._peer('pending_grounding').identity(value)}
+
+
+def _history_pin_support(mutation):
+    """Only final newly written claims with complete actual pins waive absent seen."""
+    C, G = P._peer('history_contract'), P._peer('pending_grounding')
+    document = mutation.to_data()['receipt']['after']['document']
+    support = set()
+    for item in mutation.files:
+        if item['role'] != 'history_object':
+            continue
+        obj = C.validate_object(C.decode_document(item['after']))
+        if obj['kind'] != 'judgment' or obj.get('pin_gaps'):
+            continue
+        field = obj['authored']['fields']['deps']
+        deps = obj['body'].get(field, [])
+        current = document.get(obj['authored']['collection'], {}).get(obj['subject'])
+        if isinstance(deps, (list, dict)) and set(deps) == set(obj['pins']) and \
+                G.identity(current) == G.identity(obj['body']):
+            support.add(obj['subject'])
+    return sorted(support)
+
+
+def _verify_history_report(rec, root, event, envelope, journal, project, supplied):
+    mutation = _mutation_from_journal(journal)
+    expected = mutation.to_data()
+    G = P._peer('pending_grounding')
+    if G.identity(supplied) != G.identity(expected) or supplied['operation'] != 'report-' + event['event_id']:
+        raise ValueError('prepared history report differs from retained event')
+    _, error = _capture_payload(root, event)
+    if error:
+        raise ValueError(error)
+    bound = expected['receipt']['before']['authoring']['context']
+    if G.identity(bound) != G.identity(_history_report_binding(event, _write_context(rec, project))):
+        raise ValueError('history report authority, source, routing, policy or pending ref changed')
+    if G.identity(expected['receipt']['before']['authoring']['actions']) != G.identity(_report_actions(event, envelope)):
+        raise ValueError('history report intents differ from the retained envelope')
+    record = next(item for item in mutation.files if item['role'] == 'record')
+    for role, graph_key in (('before', 'before_graph'), ('after', 'prepared_graph')):
+        graph = _history_document_graph(expected['receipt'][role]['document'], _sha(record[role]),
+                                        _report_seeds(envelope))
+        if G.identity(graph) != G.identity(journal[graph_key]):
+            raise ValueError('history report graph differs from retained semantic evidence')
+    if journal['before_graph'].get('assessment_profile') == 'core/v1':
+        gate = P._peer('reasoning.ingestion')
+        gate.verify_receipt(journal.get('core_gate'), journal['before_graph'], journal['prepared_graph'])
+        failures = gate.gate(P, journal['before_graph'], journal['prepared_graph'],
+                             recorded_pin_subjects=_history_pin_support(mutation))
+        if failures:
+            raise ValueError('; '.join(failures))
+
+
+def _publish_history_report(rec, root, event, envelope, journal, project):
+    T, C, A = (P._peer(name) for name in ('history_transaction', 'history_contract', 'history_authoring'))
+    mutation = _mutation_from_journal(journal)
+    pending = _history_shared(rec)
+    encoded = C.encode_document(_history_report_envelope(rec, root, event, mutation))
+    if pending.exists() and pending.read_bytes() != encoded:
+        raise ValueError('recovery_required: another history operation owns the record journal')
+    _verify_history_report(rec, root, event, envelope, journal, project, mutation.to_data())
+    T.publish_immutable(pending.parent / '.gitignore', b'*\n', root=rec.parent)
+    T.publish_immutable(pending, encoded, root=rec.parent)
+    A.commit(rec, mutation, verify=lambda supplied:
+             _verify_history_report(rec, root, event, envelope, journal, project, supplied))
+    _committed(root, event, journal)(mutation.to_data())
+    pending.unlink()
+    T._sync(pending.parent)
+    P.forget(rec)
+
+
+def _finish_history_report(rec, root, event, envelope, journal, *, recovered):
+    after = _history_graph(rec, _report_seeds(envelope))
+    target = (_batch_fingerprint(rec, envelope['updates']) if 'updates' in envelope else
+              _target(rec, envelope['target'], core_writer=True)['body_sha256'])
+    if target != journal['target_after_sha256']:
+        return _question(root, event, envelope, 'the committed report was changed later; it will not be replayed', record_committed=True)
+    fired, actionable = _classify(journal['before_graph'], after)
+    return _finish(root, event, envelope, 'applied', None,
+        _signals(event['event_id'], envelope, after, fired, actionable),
+        graph_before=journal['before_graph']['hash'], graph_after=after['hash'], reach=after['reach'],
+        newly_fired_judgments=fired, actionable_judgments=actionable, recovered=recovered,
+        diagnostics=journal.get('diagnostics', []), target_after_sha256=target)
+
+
+def _process_history_report(rec, root, event, envelope, *, crash_after_commit=False):
+    with _event_lock(rec, event) as project:
+        scope = envelope.get('scope')
+        if project.config()['mode'] == 'advanced' and envelope.get('shareability') == 'project' and \
+                isinstance(scope, dict) and scope.get('kind') in ('project', 'external'):
+            return _question(root, event, envelope, 'history_contribution_write_pending: scoped history report needs complete authorized contribution transport')
+        captured = P._peer('history_store').Store(rec).capture()
+        document = P._peer('history_authoring')._document(
+            P._peer('history_adapter').from_store_capture(captured).document)
+        if _report_private(document, envelope):
+            return _question(root, event, envelope, 'private or unclear original source permission; report retained privately')
+        target = _report_target(rec, envelope)
+        if target['body_sha256'] != event['target_snapshot']['body_sha256']:
+            return _question(root, event, envelope, 'target changed after capture; report was retained without overwriting it')
+        context = _write_context(rec, project)
+        before = _history_graph(rec, _report_seeds(envelope), capture=captured)
+        A = P._peer('history_authoring')
+        mutation = A.prepare_batch(rec, _report_actions(event, envelope), operation='report-' + event['event_id'],
+            capture=captured, context=_history_report_binding(event, context))
+        candidate = _history_after_capture(captured, mutation)
+        after = _history_graph(rec, _report_seeds(envelope), capture=candidate)
+        if _report_private(A._document(P._peer('history_adapter').from_store_capture(candidate).document), envelope):
+            return _question(root, event, envelope, 'private or unclear prepared source permission')
+        target_bodies = P.bodies(A._document(P._peer('history_adapter').from_store_capture(candidate).document))
+        target_hash = (_body_hash({op['id']: target_bodies.get(op['id']) for op in envelope['updates']})
+                       if 'updates' in envelope else _body_hash(target_bodies[envelope['target']]))
+        journal = {'event_id': event['event_id'], 'phase': 'prepared', 'history': True,
+                   'before_hash': _sha(captured.entry_bytes), 'after_hash': _sha(candidate.entry_bytes),
+                   'before_graph': before, 'prepared_graph': after, 'source_id': 's.ingest_' + event['event_id'],
+                   'target_after_sha256': target_hash, 'diagnostics': [],
+                   'mutation': base64.b64encode(mutation.to_bytes()).decode('ascii')}
+        if before.get('assessment_profile') == 'core/v1':
+            gate = P._peer('reasoning.ingestion')
+            failures = gate.gate(P, before, after, recorded_pin_subjects=_history_pin_support(mutation))
+            if failures:
+                return _question(root, event, envelope, '; '.join(failures), validation_issues=failures)
+            journal['core_gate'] = gate.receipt(before, after)
+        _save(root / 'journals' / (event['event_id'] + '.json'), journal)
+        _publish_history_report(rec, root, event, envelope, journal, project)
+    if crash_after_commit:
+        raise _CrashAfterCommit('simulated interruption after history commit')
+    return _finish_history_report(rec, root, event, envelope, journal, recovered=False)
+
+
+def recover_history(record, state_dir, event_id, *, direction='after', _processor_locked=False):
+    """Recover/cancel the exact report-history/v1 journal; never regenerate intents."""
+    rec, root = _existing_layout(record, state_dir)[:2]
+    if not _processor_locked:
+        with _file_lock(root / 'processor.lock'):
+            return recover_history(rec, root, event_id, direction=direction, _processor_locked=True)
+    event = _load(_event_file(root, event_id))
+    journal = _load(root / 'journals' / (event_id + '.json'))
+    if not event or not journal or not journal.get('history'):
+        raise ValueError('no_recovery_pending')
+    envelope, error = _capture_payload(root, event)
+    if error:
+        raise ValueError(error)
+    mutation = _mutation_from_journal(journal)
+    with _event_lock(rec, event) as project:
+        if direction == 'before':
+            live = P._peer('history_store').Store(rec).capture()
+            if mutation.to_data()['operation'] in live.commits:
+                raise ValueError('history_already_committed: committed evidence needs an explicit new act')
+            pending = _history_shared(rec)
+            encoded = P._peer('history_contract').encode_document(_history_report_envelope(rec, root, event, mutation))
+            if not pending.is_file() or pending.read_bytes() != encoded:
+                raise ValueError('history report recovery journal mismatch')
+            journal['phase'] = 'cancelled'
+            P._peer('history_transaction')._replace(root / 'journals' / (event_id + '.json'), _json_bytes(journal))
+            result = _question(root, event, envelope, 'report cancelled before history commit')
+            pending.unlink()
+            P._peer('history_transaction')._sync(pending.parent)
+            return result
+        if direction != 'after':
+            raise ValueError('invalid recovery direction')
+        _verify_history_report(rec, root, event, envelope, journal, project, mutation.to_data())
+        if journal.get('phase') == 'record_committed':
+            live = P._peer('history_store').Store(rec).capture()
+            manifest = next(item['after'] for item in mutation.files if item['role'] == 'history_commit')
+            if journal.get('committed_mutation') != mutation.to_data()['digest'] or \
+                    live.commits.get(mutation.to_data()['operation']) != manifest:
+                raise ValueError('history report completion has no matching committed operation')
+        if journal.get('phase') != 'record_committed' or _history_shared(rec).exists():
+            _publish_history_report(rec, root, event, envelope, journal, project)
+    return _finish_history_report(rec, root, event, envelope, journal, recovered=True)
+
+
 def _prepare_core(rec, root, event, envelope, before_bytes):
     """Prepare one final core world; public legacy mark/gate remain dormant."""
     eid = event['event_id']
@@ -954,9 +1255,14 @@ def _prepare_core(rec, root, event, envelope, before_bytes):
         actions.append(action)
     core = P._peer('reasoning.ingestion')
     before = _graph(shadow, seeds, profile=envelope.get('profile'))
+    replacements = []
     with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):
-        after_bytes, diagnostics = core.stage(P, [str(shadow)], actions, profile=envelope.get('profile'))
+        after_bytes, diagnostics = core.stage(P, [str(shadow)], actions, profile=envelope.get('profile'),
+                                              replacement_sink=replacements.extend)
     _atomic(shadow, after_bytes)
+    for replacement in replacements:
+        P.keep_replaced([str(shadow)], replacement['id'], replacement['old'], replacement['ended'],
+                        replacement['stamp'], replacement['dropped'])
     after = _graph(shadow, seeds)
     failures = core.gate(P, before, after)
     if failures:
@@ -1010,6 +1316,8 @@ def _prepare(rec, root, event, envelope, before_bytes):
         for op in operations:
             action = {"kind": op["kind"], "id": op["id"], "as_of": date, "why": None,
                       "into": op.get("into"), "hypothesis": None, "source": None, "at": None}
+            if 'drops' in op:
+                action['drops'] = copy.deepcopy(op['drops'])
             if envelope.get('scope') is not None:
                 action['_record_scope'] = copy.deepcopy(envelope['scope'])
             location = op.get("at", envelope.get("at", "entire captured report"))
@@ -1094,6 +1402,8 @@ def _recover(rec, root, event, envelope, journal):
         committed = journal.get("phase") == "record_committed"
         return _integrity_question(root, event, integrity, committed)
     T = P._peer('history_transaction')
+    if journal.get('history'):
+        return recover_history(rec, root, event['event_id'], _processor_locked=True)
     if 'mutation' in journal:
         mutation = _mutation_from_journal(journal)
         data = mutation.to_data()
@@ -1182,6 +1492,8 @@ def _process_event(rec, root, event, crash_after_commit=False):
     if integrity:
         committed = bool(journal and journal.get("phase") == "record_committed")
         return _integrity_question(root, event, integrity, committed)
+    if journal and journal.get('phase') == 'cancelled':
+        return _question(root, event, envelope, 'report cancelled before history commit')
     if journal and journal.get('pending_event_id'):
         G = P._peer('pending_grounding')
         pending = G.Store(event['project_root']).receipt(journal['pending_event_id'])
@@ -1218,6 +1530,8 @@ def _process_event(rec, root, event, crash_after_commit=False):
         parsed_date = None
     if parsed_date is None or parsed_date.isoformat() != date:
         return _question(root, event, envelope, "the report needs an ISO date (YYYY-MM-DD)")
+    if _history_active(rec):
+        return _process_history_report(rec, root, event, envelope, crash_after_commit=crash_after_commit)
     for attempt in range(MAX_REPREPARES + 1):
         with _event_lock(rec, event) as project:
             try:
@@ -1369,9 +1683,9 @@ def process(record=None, state_dir=None, event_id=None, max_events=32,
         for event in events[:max_events]:
             try:
                 out.append(_process_event(rec, root, event, _crash_after_commit))
-            except (ValueError, OSError) as error:
+            except (ValueError, OSError, P._peer('history_authoring').P.Refused) as error:
                 T = P._peer('history_transaction')
-                if (rec.parent / T.journal_for(rec)).exists():
+                if (rec.parent / T.journal_for(rec)).exists() or _history_shared(rec).exists():
                     # Keep interrupted operations retryable without spawning an
                     # unbounded retry loop or manufacturing a terminal receipt.
                     event.update(state='recovery_required', reason=str(error))

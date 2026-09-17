@@ -5,6 +5,7 @@ consistency, never source authenticity, acceptance, or permission to publish.
 Readers choose authority through the record's marker, not a directory's presence.
 """
 import copy
+import datetime
 from collections import deque
 import hashlib
 import re
@@ -125,18 +126,58 @@ def _authored(value):
         _require(isinstance(value['locator'], dict), 'invalid_locator')
 
 
+def validate_pin_gaps(value):
+    """Declared missing historical evidence is not a positive version reference."""
+    gaps = value.get('pin_gaps', {})
+    _require(isinstance(gaps, dict), 'invalid_pin_gaps')
+    for subject, reason in gaps.items():
+        _text(subject, SUBJECT)
+        _require(reason in ('not_recorded', 'unavailable'), 'invalid_pin_gaps')
+    pins = value['pins']
+    _require(not set(pins) & set(gaps), 'overlapping_pin_gap')
+    if not gaps:
+        return gaps
+    body = value['body']
+    field = value['authored']['fields'].get('deps')
+    _require(isinstance(body, dict) and field in body, 'pin_dependency_mismatch')
+    deps = body[field]
+    _require(isinstance(deps, (list, dict)), 'pin_dependency_mismatch')
+    _require(all(isinstance(dep, str) for dep in deps) and
+             set(deps) == set(pins) | set(gaps), 'pin_dependency_mismatch')
+    if isinstance(deps, dict):
+        for dep, original in deps.items():
+            if dep in pins:
+                _require(original == pins[dep], 'pin_dependency_mismatch')
+            else:
+                # A retained actual ID cannot be relabelled unknown to bypass
+                # positive-reference closure checking.
+                _require(not isinstance(original, str) or not OBJECT_ID.fullmatch(original),
+                         'positive_reference_pin_gap', dep)
+    return gaps
+
+
+def pin_gap_findings(value):
+    """Evidence-coverage findings; these never change recorded acceptance."""
+    return [{'code': 'dependency_pin_' + reason, 'subject': value['subject'],
+             'object_id': value['id'], 'detail': dependency}
+            for dependency, reason in sorted(value.get('pin_gaps', {}).items())]
+
+
 def validate_object(value):
     """Validate a v2 claim/act, or preserve an existing prototype identity."""
     value = detached(value)
     _mapping(value, ('id', 'subject', 'kind', 'by', 'on', 'op', 'body', 'saw'),
-             ('id_scheme', 'schema_version', 'authored', 'pins', 'at', 'applies'))
+             ('id_scheme', 'schema_version', 'authored', 'pins', 'pin_gaps', 'at', 'applies'))
     _text(value['subject'], SUBJECT)
     _text(value['id'], OBJECT_ID)
     _text(value['op'])
     _require(value['kind'] in ('reading', 'judgment', 'act'), 'invalid_kind')
     _require(value['by'] is None or isinstance(value['by'], str), 'invalid_actor')
     _require(isinstance(value['on'], str) and value['on'], 'invalid_recorded_time')
-    _require(isinstance(value['body'], dict), 'invalid_body')
+    scalar_reading = value.get('id_scheme') == ID_SCHEME and value['kind'] == 'reading'
+    _require(isinstance(value['body'], dict) or scalar_reading and (
+        value['body'] is None or isinstance(value['body'],
+            (str, bool, int, float, datetime.date, datetime.datetime))), 'invalid_body')
     _ids(value['saw'], unique='id_scheme' in value)
     if 'id_scheme' in value:
         _require(value['id_scheme'] == ID_SCHEME and type(value.get('schema_version')) is int
@@ -145,10 +186,13 @@ def validate_object(value):
             _require('authored' in value and 'pins' in value, 'missing_authored_mapping')
             _authored(value['authored'])
             _pins(value['pins'])
+            validate_pin_gaps(value)
+            if not isinstance(value['body'], dict):
+                _require(not value['pins'] and not value.get('pin_gaps'), 'pin_dependency_mismatch')
         else:
-            _require('authored' not in value and 'pins' not in value, 'invalid_act')
+            _require(not set(value) & {'authored', 'pins', 'pin_gaps'}, 'invalid_act')
     else:
-        _require(not set(value) & {'schema_version', 'authored', 'pins'}, 'unsupported_identity')
+        _require(not set(value) & {'schema_version', 'authored', 'pins', 'pin_gaps'}, 'unsupported_identity')
         if value['kind'] == 'judgment':
             _pins(value['body'].get('rests_on', {}))
     if value['kind'] == 'act':
@@ -165,12 +209,14 @@ def validate_object(value):
 
 
 def make_object(*, subject, kind, by, on, operation, body, saw=(), authored=None,
-                pins=None, at=None, applies=None):
+                pins=None, pin_gaps=None, at=None, applies=None):
     """The caller captures operation/time once and retains this envelope for retries."""
     value = {'schema_version': 2, 'id_scheme': ID_SCHEME, 'subject': subject, 'kind': kind,
              'by': by, 'on': on, 'op': operation, 'body': body, 'saw': sorted(saw)}
     if kind != 'act':
         value.update(authored=authored, pins={} if pins is None else pins)
+    if pin_gaps is not None:
+        value['pin_gaps'] = pin_gaps
     if at is not None:
         value['at'] = at
     if applies is not None:
@@ -407,6 +453,8 @@ def commit_frontier(commits):
 def claim_meaning(obj):
     """Authored interpretation affects agreement; an evidence locator does not."""
     value = {key: copy.deepcopy(obj.get(key)) for key in ('kind', 'body', 'pins', 'authored')}
+    if obj.get('pin_gaps'):
+        value['pin_gaps'] = copy.deepcopy(obj['pin_gaps'])
     if isinstance(value['authored'], dict):
         value['authored'].pop('locator', None)
     return value
@@ -558,6 +606,11 @@ def validate_projection(value):
     for finding in integrity['findings']:
         _mapping(finding, ('code', 'subject', 'object_id', 'detail'))
         _require(all(isinstance(finding[k], str) for k in finding), 'invalid_integrity')
+    for witness in value['pins'].values():
+        if witness['status'] == 'recorded':
+            for finding in pin_gap_findings(witness['object']):
+                _require(not integrity['complete'] and not coverage['complete'] and
+                         finding in integrity['findings'], 'unreported_pin_gap')
     _require(not integrity['complete'] or (not integrity['findings'] and coverage['complete']),
              'invalid_integrity')
     return value

@@ -55,8 +55,10 @@ def _portable(record, path):
 def _extend_inventory(source, record):
     """Observe layout adjuncts using reader-owned names, never rediscover records."""
     inventory = source.inventory
+    optional_authorities = {P.layout(path)['history_authority']
+                            for path in [str(record), *source.files]}
     for (kind, path), exists in list(inventory.events.items()):
-        if kind == 'exists' and not exists:
+        if kind == 'exists' and not exists and path not in optional_authorities:
             raise ValueError('missing referenced migration source: ' + path)
     layout = P.layout(record)
     other = P.layout(record.parent / (P.ENTRY if layout['legacy'] else P.LEGACY_ENTRY))

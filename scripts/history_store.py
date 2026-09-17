@@ -4,6 +4,7 @@ Activation belongs to migration. Acceptance is reduced here independently of
 falsifier computation, dependency assessment, and review sufficiency.
 """
 import copy
+import re
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -12,6 +13,82 @@ from .pending_grounding import identity
 
 MAX_CAPTURE_BYTES = T.MAX_TRANSACTION_BYTES
 MAX_REDUCTION_WORK = 4_000_000
+MAX_RECONCILIATION_WORK = 4_000_000
+
+
+def _view_alternatives(raw):
+    """Split complete, column-zero Git markers; YAML text is never a marker.
+
+    Parse valid YAML first: quoted/block strings containing marker-like text
+    remain ordinary authored content. Invalid/nested/truncated conflicts refuse.
+    Each side includes all common lines, preserving edits outside the hunks.
+    """
+    try:
+        return (('view', raw, C.decode_document(raw)),)
+    except C.HistoryError:
+        pass
+    marker = re.compile(rb'^(<{7,}|\|{7,}|={7,}|>{7,})(?:[ \t].*)?$')
+    sides = {'ours': [], 'theirs': [], 'base': []}
+    active, width, count, bases = None, None, 0, 0
+    for line in raw.splitlines(keepends=True):
+        match = marker.fullmatch(line.rstrip(b'\r\n'))
+        if match is None:
+            if active is None:
+                for output in sides.values():
+                    output.append(line)
+            else:
+                sides[active].append(line)
+            continue
+        token = match[1]
+        kind = token[:1]
+        if kind == b'<':
+            C._require(active is None, 'invalid_view_conflict', 'nested marker')
+            active, width = 'ours', len(token)
+            count += 1
+        else:
+            C._require(active is not None and len(token) == width,
+                       'invalid_view_conflict', 'unmatched marker')
+            if kind == b'|':
+                C._require(active == 'ours', 'invalid_view_conflict')
+                active = 'base'
+                bases += 1
+            elif kind == b'=':
+                C._require(active in ('ours', 'base') and
+                           line.rstrip(b'\r\n') == token, 'invalid_view_conflict')
+                active = 'theirs'
+            else:
+                C._require(active == 'theirs', 'invalid_view_conflict')
+                active, width = None, None
+    C._require(count and active is None, 'invalid_view_conflict', 'missing complete conflict')
+    # A mixture of ordinary and diff3 hunks has no complete reconstructed base.
+    C._require(bases in (0, count), 'invalid_view_conflict', 'incomplete base alternative')
+    names = ('ours', 'theirs', 'base') if count == bases else ('ours', 'theirs')
+    return tuple((name, b''.join(sides[name]), C.decode_document(b''.join(sides[name])))
+                 for name in names)
+
+
+def _view_changes(before, after):
+    """Typed leaf differences, including presence, without inventing act intent."""
+    changes = []
+
+    def walk(left, right, path):
+        if identity(left) == identity(right):
+            return
+        if isinstance(left, dict) and isinstance(right, dict):
+            for key in sorted(set(left) | set(right)):
+                if key in left and key in right:
+                    walk(left[key], right[key], path + [key])
+                else:
+                    changes.append({'path': path + [key], 'before_present': key in left,
+                                    'after_present': key in right,
+                                    **({'before': copy.deepcopy(left[key])} if key in left else {}),
+                                    **({'after': copy.deepcopy(right[key])} if key in right else {})})
+        else:
+            changes.append({'path': path, 'before_present': True, 'after_present': True,
+                            'before': copy.deepcopy(left), 'after': copy.deepcopy(right)})
+
+    walk(before, after, [])
+    return changes
 
 
 def _claim_key(obj):
@@ -82,6 +159,8 @@ class Capture:
     state: dict
     baseline: dict
     inventory: dict
+    authority_bytes: bytes = b''
+    view_alternatives: tuple = ()
 
 
 class Store:
@@ -105,7 +184,17 @@ class Store:
         with T.reader_guard(self.root, T.journal_for(self.entry)):
             return self._capture(rules=rules, ancestry=ancestry)
 
-    def _capture(self, *, rules=None, ancestry=None):
+    def capture_reconciliation(self, *, allow_conflicts=False):
+        """Read-only opt-in capture retaining exact Git conflict alternatives.
+
+        Normal readers keep using ``capture`` and reject invalid generated YAML.
+        This loader does not certify an alternative as an authentic baseline.
+        ``prepare_reconciliation`` performs that complete-closure check.
+        """
+        with T.reader_guard(self.root, T.journal_for(self.entry)):
+            return self._capture(allow_conflicts=allow_conflicts)
+
+    def _capture(self, *, rules=None, ancestry=None, allow_conflicts=False):
         from .reasoning.snapshot import _Inventory
         inventory = _Inventory(retain_bytes=True)
         total = 0
@@ -144,12 +233,16 @@ class Store:
         marker_path = self._path(self.layout['history_authority'])
         event('exists', marker_path, marker_path.exists())
         C._require(marker_path.exists(), 'history_not_active')
-        marker = C.validate_authority(C.decode_document(read(marker_path, C.MAX_OBJECT_BYTES)))
+        authority_bytes = read(marker_path, C.MAX_OBJECT_BYTES)
+        marker = C.validate_authority(C.decode_document(authority_bytes))
         C._require(marker['authority'] == 'history', 'history_not_active')
-        document = C.decode_document(entry_bytes)
-        meta = document.get('meta', {})
-        C._require(isinstance(meta, dict) and 'history' in meta, 'baseline_mismatch')
-        C.bind_authority(marker, meta['history'])
+        alternatives = _view_alternatives(entry_bytes) if allow_conflicts else (
+            ('view', entry_bytes, C.decode_document(entry_bytes)),)
+        document = alternatives[0][2]
+        for _, _, alternative in alternatives:
+            meta = alternative.get('meta', {})
+            C._require(isinstance(meta, dict) and 'history' in meta, 'baseline_mismatch')
+            C.bind_authority(marker, meta['history'])
         commits, objects = {}, {}
         for path in listing(self.layout['history_commits']):
             C._require(path.suffix == '.yaml' and path.is_file(), 'invalid_history_path')
@@ -166,18 +259,21 @@ class Store:
         selected = C.committed_objects(marker, commits, objects)
         # A stale view may name older heads, which remain in complete history.
         # Missing manifest membership cannot turn that evidence into empty state.
-        for role, kind in (('heads', 'claim'), ('open_acts', 'act')):
-            for subject, ids in meta['history'][role].items():
-                for vid in ids:
-                    obj = selected.get(vid)
-                    C._require(obj is not None, 'incomplete_view_baseline', vid)
-                    C._require(obj['subject'] == subject and
-                               (obj['kind'] == 'act') == (kind == 'act'), 'baseline_reference_mismatch', vid)
+        for _, _, alternative in alternatives:
+            for role, kind in (('heads', 'claim'), ('open_acts', 'act')):
+                for subject, ids in alternative['meta']['history'][role].items():
+                    for vid in ids:
+                        obj = selected.get(vid)
+                        C._require(obj is not None, 'incomplete_view_baseline', vid)
+                        C._require(obj['subject'] == subject and
+                                   (obj['kind'] == 'act') == (kind == 'act'),
+                                   'baseline_reference_mismatch', vid)
         state = reduce(selected, rules, ancestry)
         current = baseline(marker, commits, state)
         inventory.verify()
         return Capture(entry_bytes, document, marker, commits, objects, selected,
-                       state, current, copy.deepcopy(inventory.events))
+                       state, current, copy.deepcopy(inventory.events), authority_bytes,
+                       tuple(copy.deepcopy(alternatives)))
 
     def state(self, capture=None, *, rules=None, ancestry=None):
         captured = capture or self.capture(rules=rules, ancestry=ancestry)
@@ -278,17 +374,155 @@ class Store:
                 return True
         return False
 
-    def rebuild(self, capture=None, *, write=False):
+    def _baseline_views(self, captured, wanted, retained_baselines):
+        """Find exact historical closures without guessing arbitrary subsets."""
+        manifests = {op: C.validate_commit(C.decode_document(raw))
+                     for op, raw in captured.commits.items()}
+        work = 0
+        examined, found = set(), {}
+
+        def closure(frontier):
+            nonlocal work
+            result, pending = set(), list(frontier)
+            while pending:
+                op = pending.pop()
+                if op not in result:
+                    work += 1
+                    C._require(work <= MAX_RECONCILIATION_WORK, 'history_limit', 'baseline search')
+                    C._require(op in manifests, 'incomplete_view_baseline', op)
+                    result.add(op)
+                    pending.extend(manifests[op]['parents'])
+            return tuple(sorted(result))
+
+        def candidates():
+            yield tuple(sorted(manifests))
+            for retained in retained_baselines:
+                C._require(isinstance(retained, Capture), 'invalid_retained_baseline')
+                C._require(identity(retained.marker) == identity(captured.marker), 'authority_mismatch')
+                C._require(all(captured.commits.get(op) == raw
+                               for op, raw in retained.commits.items()), 'incomplete_view_baseline')
+                yield closure(retained.commits)
+            for op, manifest in sorted(manifests.items()):
+                yield closure([op])
+                yield closure(manifest['parents'])
+
+        for operations in candidates():
+            if operations in examined:
+                continue
+            examined.add(operations)
+            work += len(operations)
+            C._require(work <= MAX_RECONCILIATION_WORK, 'history_limit', 'baseline search')
+            commits = {op: captured.commits[op] for op in operations}
+            digest = C.committed_set_digest(commits)
+            if digest not in wanted:
+                continue
+            objects = C.committed_objects(captured.marker, commits, captured.object_bytes)
+            state = reduce(objects, captured.state['rules'])
+            bound = baseline(captured.marker, commits, state)
+            if commits:
+                document = C.decode_document(self.render(captured, objects=objects, commits=commits))
+            else:
+                # An initial import retains its original empty render template.
+                templates = {identity(m['view_template']): m['view_template']
+                             for m in manifests.values() if not m['parents']
+                             and m['baseline_digest'] == identity(bound) and 'view_template' in m}
+                C._require(len(templates) == 1, 'unresolved_template')
+                document = copy.deepcopy(next(iter(templates.values())))
+                document.setdefault('meta', {})['history'] = bound
+            found[digest] = (bound, document, objects, state)
+            if set(found) == wanted:
+                break
+        C._require(set(found) == wanted, 'incomplete_view_baseline', 'retained committed closure required')
+        return found
+
+    def prepare_reconciliation(self, capture=None, *, allow_conflicts=False, retained_baselines=()):
+        """Describe manual edits against complete immutable original evidence.
+
+        This is a read-only preparation description, not a prepared writer
+        mutation. It infers no acceptance, correction, deletion or review acts.
+        ``changes`` retain exact typed before/after values and missing keys.
+        Body edits are proposal candidates; recorded claim matches and recorded
+        acts are evidence only. Headers need an explicit template-authoring path.
+        Historical union views can supply retained Captures when their frontier
+        is not discoverable from current manifest ancestry. Their manifest bytes
+        must already exist identically in the live committed closure.
+        """
+        live = self.capture_reconciliation(allow_conflicts=allow_conflicts)
+        if capture is not None:
+            C._require(live.inventory == capture.inventory, 'stale_baseline')
+        alternatives = live.view_alternatives
+        wanted = {doc['meta']['history']['committed_set_digest'] for _, _, doc in alternatives}
+        views = self._baseline_views(live, wanted, retained_baselines)
+        descriptions = []
+        for name, raw, document in alternatives:
+            observed = document['meta']['history']
+            bound, original, objects, state = views[observed['committed_set_digest']]
+            C._require(identity(observed) == identity(bound), 'baseline_mismatch')
+            changes = _view_changes(original, document)
+            if not changes and raw != C.encode_document(original):
+                # Comments and formatting have no typed representation. Without
+                # exact retained generated bytes they are still authored edits.
+                changes.append({'path': [], 'kind': 'text_edit',
+                                'before_sha256': C.sha256(C.encode_document(original)),
+                                'after_sha256': C.sha256(raw)})
+            collections = set(P.collections_of(original)) - {'meta'}
+            recorded_bodies, edited_matches = {}, {}
+            for vid, obj in objects.items():
+                if obj['kind'] != 'act':
+                    key = (obj['subject'], obj.get('authored', {}).get('collection'),
+                           identity(obj['body']))
+                    recorded_bodies.setdefault(key, []).append(vid)
+            for change in changes:
+                if change.get('kind') == 'text_edit':
+                    continue
+                path = change['path']
+                if len(path) >= 2 and path[0] in collections:
+                    subject = path[1]
+                    key = (subject, path[0])
+                    if key not in edited_matches:
+                        body = document.get(path[0], {}).get(subject)
+                        edited_matches[key] = sorted(recorded_bodies.get((*key, identity(body)), []))
+                    change.update(kind='proposal_candidate', subject=subject,
+                                  baseline_heads=bound['heads'].get(subject, []),
+                                  recorded_claim_matches=edited_matches[key])
+                else:
+                    change['kind'] = 'header_edit'
+            descriptions.append({'name': name, 'entry_sha256': C.sha256(raw),
+                                 'baseline': bound, 'changes': changes,
+                                 'original_view': original, 'edited_view': document,
+                                 'original_versions': {
+                                     subject: sorted(set(entry['heads']) | set(entry['proposals']))
+                                     for subject, entry in state['subjects'].items()},
+                                 'recorded_acts': sorted(vid for vid, obj in objects.items()
+                                                         if obj['kind'] == 'act')})
+        result = C.detached({'version': 1, 'authority': live.marker,
+                             'entry_sha256': C.sha256(live.entry_bytes),
+                             'current_baseline': live.baseline,
+                             'conflicted': alternatives[0][0] != 'view',
+                             'alternatives': descriptions,
+                             'rebuild_safe': not any(d['changes'] for d in descriptions)},
+                            C.MAX_PROJECTION_BYTES)
+        C._require(self.capture_reconciliation(allow_conflicts=allow_conflicts).inventory == live.inventory,
+                   'stale_baseline')
+        return result
+
+    def rebuild(self, capture=None, *, write=False, allow_conflicts=False, retained_baselines=()):
         """Regenerate a known view; stale or edited unknown baselines require reconciliation."""
         with T.writer_guard(self.root):
-            live = self.capture()
+            live = self.capture_reconciliation(allow_conflicts=allow_conflicts)
             if capture is not None:
                 C._require(live.inventory == capture.inventory, 'stale_baseline')
             rendered = self.render(live)
-            C._require(self._known_view(live) or identity(live.document) ==
-                       identity(C.decode_document(rendered)), 'unresolved_view_edit')
+            if allow_conflicts:
+                description = self.prepare_reconciliation(live, allow_conflicts=True,
+                                                          retained_baselines=retained_baselines)
+                C._require(description['rebuild_safe'], 'unresolved_view_edit')
+            else:
+                C._require(self._known_view(live) or identity(live.document) ==
+                           identity(C.decode_document(rendered)), 'unresolved_view_edit')
             if write:
-                C._require(self.capture().inventory == live.inventory, 'stale_baseline')
+                C._require(self.capture_reconciliation(allow_conflicts=allow_conflicts).inventory ==
+                           live.inventory, 'stale_baseline')
                 T._replace(self._path(self.entry), rendered)
             return rendered
 

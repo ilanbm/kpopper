@@ -86,8 +86,8 @@ def draft(project, action, doc, reason):
     return {'state': 'private draft', 'path': str(path), 'reason': reason}
 
 
-def private_route(paths, action, reader, project=None):
-    doc = reader._peer('reasoning.authoring').load(reader, paths)
+def private_route(paths, action, reader, project=None, *, document=None):
+    doc = document if document is not None else reader._peer('reasoning.authoring').load(reader, paths)
     # This locked check is conservative: entry/source privacy cannot be weakened by
     # an edit while a routed local writer waits to acquire the directory.
     value = copy.deepcopy(action.get('body', {}))
@@ -129,7 +129,7 @@ def set_body(old, action):
     return body
 
 
-def route(paths, action, reader, project=None, expected_policy=None):
+def route(paths, action, reader, project=None, expected_policy=None, *, document=None):
     """Return a durable receipt or None for an intentional local-file mutation.
 
     Legacy unannotated writes retain local semantics, never implicit publication.
@@ -147,11 +147,12 @@ def route(paths, action, reader, project=None, expected_policy=None):
                      for path in G.P._files_of(paths)}
     if not Path(paths[0]).exists():
         source_hashes[str(paths[0])] = None
-    doc = reader._peer('reasoning.authoring').load(reader, paths) if Path(paths[0]).exists() else reader.Record()
+    doc = document if document is not None else (reader._peer('reasoning.authoring').load(reader, paths)
+                                                if Path(paths[0]).exists() else reader.Record())
     if any((hashlib.sha256(Path(path).read_bytes()).hexdigest() if Path(path).is_file() else None) != digest
            for path, digest in source_hashes.items()):
         raise ValueError('record changed while preparing the write; retry')
-    existing_private = private_route(paths, action, reader, project) if Path(paths[0]).exists() else None
+    existing_private = private_route(paths, action, reader, project, document=doc) if Path(paths[0]).exists() else None
     if existing_private is not None:
         return existing_private
     scope = action.get('scope', 'unclear')
