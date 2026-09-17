@@ -17,6 +17,7 @@ concurrency:
 
 jobs:
   changes:
+    timeout-minutes: 10
     runs-on: ubuntu-latest
     outputs:
       python: ${{ steps.select.outputs.python }}
@@ -49,6 +50,7 @@ jobs:
           fi
 
   record:
+    timeout-minutes: 20
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -101,13 +103,20 @@ jobs:
         run: git diff --exit-code
 
   check:
+    # The full suite has taken 67 minutes at its longest successful run; the short
+    # ones are the document-only selection. The cap is here to bound a hang, not
+    # to pace an honest run.
+    timeout-minutes: 90
     needs: changes
     if: needs.changes.outputs.python == 'true' || needs.changes.outputs.documents == 'true'
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
-        python: ["3.9", "3.13"]
+        # A pull request answers for both ends of the supported range. The push
+        # that lands it re-reads the merged tree once, on the version the
+        # package is built against.
+        python: ${{ github.event_name == 'pull_request' && fromJSON('["3.9", "3.13"]') || fromJSON('["3.13"]') }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -128,6 +137,7 @@ jobs:
           fi
 
   document-ui:
+    timeout-minutes: 15
     needs: changes
     if: needs.changes.outputs.documents == 'true'
     runs-on: ubuntu-latest
@@ -154,6 +164,15 @@ jobs:
     needs: changes
     if: needs.changes.outputs.session == 'true'
     uses: ./.github/workflows/session.yml
+    with:
+      # A pull request checks the two platforms nobody here develops on. Darwin
+      # bills at ten times the Linux rate per minute, and the branch it would
+      # check is the one its author runs on a Darwin machine all day; the push
+      # that lands the branch checks it before anything is released from main.
+      platforms: >-
+        ${{ github.event_name == 'pull_request'
+            && '["ubuntu-latest", "windows-latest"]'
+            || '["ubuntu-latest", "macos-latest", "windows-latest"]' }}
 
   reasoning-runtime:
     needs: changes
@@ -163,6 +182,7 @@ jobs:
       rebuild: ${{ needs.changes.outputs.native == 'true' }}
 
   ci-required:
+    timeout-minutes: 10
     needs: [changes, record, check, document-ui, session, reasoning-runtime]
     if: always()
     runs-on: ubuntu-latest
