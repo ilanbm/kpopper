@@ -12,6 +12,10 @@ import re
 from pathlib import PurePosixPath
 
 import yaml
+try:
+    from . import history_paths as HP
+except ImportError:
+    import history_paths as HP
 
 try:
     from .pending_grounding import identity
@@ -52,7 +56,21 @@ def _mapping(value, required, optional=()):
 
 
 def _text(value, pattern=TOKEN):
+    if pattern is SUBJECT:
+        return _subject(value)
     _require(isinstance(value, str) and pattern.fullmatch(value) is not None, 'invalid_identifier')
+
+
+def _subject(value):
+    try:
+        return HP.validate_subject(value)
+    except HP.HistoryPathError as error:
+        raise HistoryError(error.code, str(error)) from error
+
+
+def _collection(value):
+    # Collection labels are authored data, never storage path components.
+    return _subject(value)
 
 
 def _integer(value):
@@ -115,9 +133,17 @@ def object_identity(value):
     return ident(value)
 
 
+def hypothesis_name(value):
+    """Preserve reader-supported filename stems without allowing path traversal."""
+    _require(isinstance(value, str) and value and len(value.encode('utf-8')) <= 255
+             and not value.startswith('.') and not any(c in value for c in ('/', '\\'))
+             and not any(ord(c) < 32 or ord(c) == 127 for c in value), 'invalid_history_hypothesis')
+    return value
+
+
 def _authored(value):
     _mapping(value, ('collection', 'fields', 'profile'), ('locator', 'hypothesis'))
-    _text(value['collection'], SUBJECT)
+    _collection(value['collection'])
     _require(isinstance(value['fields'], dict) and all(
         isinstance(k, str) and isinstance(v, str) and v
         for k, v in value['fields'].items()), 'invalid_field_roles')
@@ -128,9 +154,9 @@ def _authored(value):
     if 'hypothesis' in value:
         group = value['hypothesis']
         _mapping(group, ('version', 'name', 'head'))
-        _require(type(group['version']) is int and group['version'] == 1 and
-                 isinstance(group['name'], str) and re.fullmatch(r'[A-Za-z0-9][A-Za-z0-9_-]*', group['name'])
+        _require(type(group['version']) is int and group['version'] == 1
                  and isinstance(group['head'], dict), 'invalid_history_hypothesis')
+        hypothesis_name(group['name'])
 
 
 def validate_pin_gaps(value):
@@ -314,20 +340,106 @@ def encode_document(value):
     return raw
 
 
-def authority(*, record_id, authority, generation, profile=PROFILE):
-    return validate_authority({'version': 1, 'record_id': record_id, 'authority': authority,
-                               'generation': generation, 'profile': profile})
+CANCELLATION_CAPABILITY = 'generation-cancellation/v1'
+
+
+def authority(*, record_id, authority, generation, profile=PROFILE, cancellations=None):
+    value = {'version': 1, 'record_id': record_id, 'authority': authority,
+             'generation': generation, 'profile': profile}
+    if cancellations:
+        value.update(version=2, cancellations=copy.deepcopy(cancellations),
+                     requires=[CANCELLATION_CAPABILITY])
+    return validate_authority(value)
 
 
 def validate_authority(value):
     value = detached(value)
-    _mapping(value, ('version', 'record_id', 'authority', 'generation', 'profile'))
-    _require(type(value['version']) is int and value['version'] == 1, 'unsupported_authority')
+    _mapping(value, ('version', 'record_id', 'authority', 'generation', 'profile'), ('cancellations', 'requires'))
+    _require(type(value['version']) is int and value['version'] in (1, 2), 'unsupported_authority')
     _text(value['record_id'])
     _integer(value['generation'])
     _require(value['authority'] in ('legacy', 'history') and value['profile'] == PROFILE,
              'unsupported_authority')
+    if value['version'] == 1:
+        _require('cancellations' not in value and 'requires' not in value, 'unsupported_authority')
+    else:
+        _require(value.get('requires') == [CANCELLATION_CAPABILITY] and
+                 isinstance(value.get('cancellations'), dict) and value['cancellations'], 'unsupported_authority')
+        paths = set()
+        for generation, item in value['cancellations'].items():
+            _require(isinstance(generation, str) and generation.isdigit() and str(int(generation)) == generation,
+                     'invalid_cancellation_generation')
+            _mapping(item, ('operation', 'path', 'sha256', 'reserved_generation', 'legacy_generation'))
+            _text(item['operation'])
+            _text(item['sha256'], HEX)
+            _require(type(item['reserved_generation']) is int and type(item['legacy_generation']) is int and
+                     int(generation) == item['reserved_generation'] >= 1 and
+                     item['legacy_generation'] == item['reserved_generation'] + 1 <= value['generation'],
+                     'invalid_cancellation_generation')
+            _require(item['path'] == item['operation'] + '.yaml' and item['path'] not in paths,
+                     'invalid_cancellation_path')
+            paths.add(item['path'])
     return value
+
+
+def validate_cancellation(value):
+    value = detached(value, MAX_REQUEST_BYTES)
+    _mapping(value, ('version', 'kind', 'record_id', 'operation', 'reserved_generation', 'legacy_generation',
+                     'before_authority_digest', 'reserved_authority_digest', 'mutation_digest',
+                     'entry', 'original_entry_sha256', 'manifest_sha256', 'objects', 'artifacts', 'visibility'))
+    _require(type(value['version']) is int and value['version'] == 1 and
+             value['kind'] == CANCELLATION_CAPABILITY and value['visibility'] == 'never_released_to_readers',
+             'invalid_cancellation_receipt')
+    _text(value['record_id']); _text(value['operation'])
+    _require(type(value['reserved_generation']) is int and value['reserved_generation'] >= 1 and
+             type(value['legacy_generation']) is int and value['legacy_generation'] == value['reserved_generation'] + 1,
+             'invalid_cancellation_generation')
+    for key in ('before_authority_digest', 'reserved_authority_digest', 'mutation_digest',
+                'original_entry_sha256', 'manifest_sha256'):
+        _text(value[key], HEX)
+    relative_path(value['entry'])
+    _require('/' not in value['entry'], 'invalid_cancellation_path')
+    _require(isinstance(value['objects'], dict) and len(value['objects']) <= MAX_OBJECTS and
+             isinstance(value['artifacts'], dict) and len(value['artifacts']) <= MAX_OBJECTS, 'history_limit')
+    for version, item in value['objects'].items():
+        _text(version, OBJECT_ID); _mapping(item, ('subject', 'sha256'))
+        _text(item['subject'], SUBJECT); _text(item['sha256'], HEX)
+    for path, digest in value['artifacts'].items():
+        relative_path(path)
+        _require(path.startswith('.kpopper-history-migration/'), 'invalid_cancellation_path')
+        _text(digest, HEX)
+    return value
+
+
+def validate_cancellations(marker, files, commits, objects):
+    marker = validate_authority(marker)
+    bindings = marker.get('cancellations', {})
+    _require(isinstance(files, dict) and set(files) == {item['path'] for item in bindings.values()},
+             'cancellation_membership_mismatch')
+    for generation, binding in bindings.items():
+        raw = files[binding['path']]
+        _require(sha256(raw) == binding['sha256'], 'cancellation_bytes_mismatch')
+        receipt = validate_cancellation(decode_document(raw))
+        _require(receipt['record_id'] == marker['record_id'] and all(receipt[key] == binding[key]
+                 for key in ('operation', 'reserved_generation', 'legacy_generation')), 'cancellation_binding_mismatch')
+        older = {key: item for key, item in bindings.items() if int(key) < int(generation)}
+        before = authority(record_id=marker['record_id'], authority='legacy', generation=int(generation) - 1,
+                           cancellations=older)
+        reserved = authority(record_id=marker['record_id'], authority='history', generation=int(generation),
+                             cancellations=older)
+        _require(identity(before) == receipt['before_authority_digest'] and
+                 identity(reserved) == receipt['reserved_authority_digest'], 'cancellation_authority_mismatch')
+        raw_commit = commits.get(binding['operation'])
+        _require(raw_commit is not None and sha256(raw_commit) == receipt['manifest_sha256'],
+                 'cancellation_manifest_mismatch')
+        manifest = validate_commit(decode_document(raw_commit))
+        _require(manifest['record_id'] == marker['record_id'] and
+                 manifest['authority_generation'] == int(generation), 'cancellation_manifest_mismatch')
+        inventory = {item['id']: {'subject': item['subject'], 'sha256': item['sha256']} for item in manifest['objects']}
+        _require(inventory == receipt['objects'], 'cancellation_object_mismatch')
+        _require(all(sha256(objects.get((item['subject'], version))) == item['sha256']
+                     for version, item in inventory.items()), 'cancellation_object_mismatch')
+    return copy.deepcopy(files)
 
 
 def validate_baseline(value):
@@ -366,7 +478,7 @@ def relative_path(value):
 def validate_commit(value):
     value = detached(value, MAX_REQUEST_BYTES)
     _mapping(value, ('version', 'record_id', 'authority_generation', 'operation', 'parents',
-                     'baseline_digest', 'objects', 'receipt', 'view_sha256'), ('view_template', 'requires'))
+                     'baseline_digest', 'objects', 'receipt', 'view_sha256'), ('view_template', 'requires', 'authority_digest'))
     _require(type(value['version']) is int and value['version'] == 1, 'unsupported_commit')
     if 'requires' in value:
         validate_history_requires(value['requires'])
@@ -380,6 +492,8 @@ def validate_commit(value):
         _require(operation != value['operation'], 'invalid_parents')
     _text(value['baseline_digest'], HEX)
     _text(value['view_sha256'], HEX)
+    if 'authority_digest' in value:
+        _text(value['authority_digest'], HEX)
     _require(isinstance(value['receipt'], dict) and value['receipt'], 'missing_receipt')
     _require(isinstance(value['objects'], list) and len(value['objects']) <= MAX_OBJECTS,
              'history_limit')
@@ -400,7 +514,7 @@ def validate_commit(value):
 
 def validate_history_requires(value):
     _require(isinstance(value, list) and all(isinstance(item, str) for item in value)
-             and value == sorted(set(value)) and all(item == EXPLICIT_ROOT_DISPOSITION for item in value), 'unsupported_history_capability')
+             and value == sorted(set(value)) and all(item in (EXPLICIT_ROOT_DISPOSITION, HP.CAPABILITY) for item in value), 'unsupported_history_capability')
     return value
 
 
@@ -438,6 +552,7 @@ def make_commit(*, marker, operation, parents, baseline, objects, receipt, view,
         inventory.append({'subject': obj['subject'], 'id': obj['id'], 'sha256': sha256(raw)})
     return validate_commit({'version': 1, 'record_id': marker['record_id'],
                             'authority_generation': marker['generation'], 'operation': operation,
+                            **({'authority_digest': identity(marker)} if marker['version'] == 2 else {}),
                             'parents': parents, 'baseline_digest': identity(baseline),
                             'objects': sorted(inventory, key=lambda item: item['id']),
                             'receipt': receipt, 'view_sha256': sha256(view),
@@ -491,6 +606,13 @@ def commit_frontier(commits):
     return {operation: sha256(raw) for operation, raw in sorted(commits.items()) if operation not in parents}
 
 
+def require_interpretable_claim(obj):
+    interpretation = obj.get('authored', {}).get('locator', {}).get('interpretation', {})
+    _require(not (interpretation.get('scope') == 'retained_archive_only' and
+                  interpretation.get('original_condition_profile') == 'unknown'),
+             'profile_resolution_required', obj.get('subject', ''))
+
+
 def claim_meaning(obj):
     """Authored interpretation affects agreement; an evidence locator does not."""
     value = {key: copy.deepcopy(obj.get(key)) for key in ('kind', 'body', 'pins', 'authored')}
@@ -500,6 +622,32 @@ def claim_meaning(obj):
         value['authored'].pop('locator', None)
         value['authored'].pop('hypothesis', None)
     return value
+
+
+def objects_from_storage(commits, storage):
+    """Resolve only manifest-declared objects; malformed orphan bytes stay private."""
+    _require(isinstance(storage, dict) and len(storage) <= MAX_OBJECTS, 'history_limit')
+    objects, paths = {}, {}
+    try:
+        for path, raw in storage.items():
+            parsed = HP.parse_object_path(path)
+            if parsed.scheme == HP.LEGACY:
+                objects[(parsed.legacy_subject, parsed.version)] = raw
+        for raw in commits.values():
+            manifest = validate_commit(decode_document(raw))
+            for item in manifest['objects']:
+                key = item['subject'], item['id']
+                try:
+                    path = HP.resolve_object_path(storage, *key)
+                except HP.HistoryPathError as error:
+                    if error.code == 'missing_history_object_path':
+                        raise HistoryError('incomplete_commit', item['id']) from error
+                    raise
+                HP.validate_path_capability([path], manifest.get('requires', []))
+                objects[key], paths[key] = storage[path], path
+    except HP.HistoryPathError as error:
+        raise HistoryError(error.code, str(error)) from error
+    return objects, paths
 
 
 def committed_objects(marker, commits, objects):
@@ -521,6 +669,8 @@ def committed_objects(marker, commits, objects):
         _require(operation == manifest['operation'], 'operation_mismatch')
         _require(manifest['record_id'] == marker['record_id']
                  and manifest['authority_generation'] == marker['generation'], 'authority_mismatch')
+        _require((marker['version'] == 1 and 'authority_digest' not in manifest) or
+                 manifest.get('authority_digest') == identity(marker), 'authority_digest_mismatch')
         manifests[operation] = manifest
         for item in manifest['objects']:
             key = (item['subject'], item['id'])
@@ -574,11 +724,52 @@ def committed_objects(marker, commits, objects):
     return validate_closure(selected)
 
 
+def committed_generations(marker, commits, objects, cancellations=None):
+    """Validate every retained generation; authority never follows the maximum id.
+
+    Returned groups retain raw committed bytes. A legacy marker has no active
+    group; only strictly earlier history generations can then be retained.
+    """
+    marker = validate_authority(marker)
+    _require(isinstance(commits, dict) and len(commits) <= MAX_OBJECTS, 'history_limit')
+    _require(isinstance(objects, dict) and len(objects) <= MAX_OBJECTS, 'history_limit')
+    validate_cancellations(marker, cancellations or {}, commits, objects)
+    grouped = {}
+    for operation, raw in commits.items():
+        manifest = validate_commit(decode_document(raw))
+        _require(manifest['operation'] == operation, 'operation_mismatch')
+        _require(manifest['record_id'] == marker['record_id'], 'foreign_history_generation')
+        generation = manifest['authority_generation']
+        _require(generation <= marker['generation'] and
+                 (marker['authority'] == 'history' or generation < marker['generation']),
+                 'future_history_generation')
+        grouped.setdefault(str(generation), {})[operation] = raw
+    result = {}
+    for generation, raw_commits in sorted(grouped.items(), key=lambda item: int(item[0])):
+        authority_marker = authority(record_id=marker['record_id'], authority='history', generation=int(generation),
+            cancellations={key: value for key, value in marker.get('cancellations', {}).items() if int(key) < int(generation)})
+        selected = committed_objects(authority_marker, raw_commits, objects)
+        raw_objects = {(obj['subject'], version): objects[(obj['subject'], version)]
+                       for version, obj in selected.items()}
+        digest = identity({'authority': authority_marker,
+                           'commits': {operation: sha256(raw) for operation, raw in raw_commits.items()},
+                           'objects': {version: {'subject': obj['subject'],
+                               'sha256': sha256(raw_objects[(obj['subject'], version)])}
+                               for version, obj in selected.items()}})
+        cancellation = marker.get('cancellations', {}).get(generation)
+        if cancellation is not None:
+            _require(set(raw_commits) == {cancellation['operation']}, 'cancelled_generation_changed')
+        result[generation] = {'authority': authority_marker, 'commits': dict(raw_commits),
+                              'objects': selected, 'object_bytes': raw_objects, 'digest': digest,
+                              **({'disposition': 'cancelled', 'cancellation': cancellation} if cancellation else {})}
+    return result
+
+
 def validate_subset_origin(value):
     value = detached(value, MAX_PROJECTION_BYTES)
     _mapping(value, ('version', 'kind', 'operation', 'recorded_at', 'source_authority',
                      'source_capture_digest', 'source_entry', 'roots', 'disclosed_locators',
-                     'prepared_digest', 'subjects'))
+                     'prepared_digest', 'subjects'), ('inactive_audit',))
     _require(type(value['version']) is int and value['version'] == 1 and
              value['kind'] == 'selected-subject-observation', 'invalid_subset_origin')
     _text(value['operation'])
@@ -602,6 +793,10 @@ def validate_subset_origin(value):
         relative_path(item['path'])
         if item['sha256'] is not None:
             _text(item['sha256'], HEX)
+    if 'inactive_audit' in value:
+        _mapping(value['inactive_audit'], ('status', 'digest'))
+        _require(value['inactive_audit']['status'] == 'not_transferred', 'invalid_subset_origin')
+        _text(value['inactive_audit']['digest'], HEX)
     if value['prepared_digest'] is not None:
         _text(value['prepared_digest'], HEX)
     _require(not any(item['source_state'] == 'prepared_candidate' for item in value['subjects'].values())
@@ -759,5 +954,17 @@ class CapturedHistory:
         context = copy.deepcopy(context) if context is not None else {}
         _require('history' not in context, 'duplicate_history_context')
         context['history'] = self.projection
+        from . import history_hypotheses as HH
+        from .reasoning.snapshot import _hypotheses
+        named, index = HH.layers(self.projection, self.document)
+        if named:
+            _require('history_hypotheses' not in context or identity(context['history_hypotheses']) == identity(index),
+                     'history_hypothesis_index_mismatch')
+            context['history_hypotheses'] = index
+            hypotheses = copy.deepcopy(hypotheses or {})
+            for name, hypothesis in named.items():
+                _require(name not in hypotheses or identity(_hypotheses({name: hypotheses[name]})) ==
+                         identity(_hypotheses({name: hypothesis})), 'history_hypothesis_layer_mismatch', name)
+                hypotheses[name] = hypothesis
         return Snapshot.from_data(self.document, context=context, hypotheses=hypotheses,
                                   as_of=as_of, authored_revision=authored_revision)

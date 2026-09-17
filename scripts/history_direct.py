@@ -161,6 +161,8 @@ def _writer(mutation):
         return P._peer('history_edits')
     if 'hypothesis_authoring' in before:
         return P._peer('history_hypotheses')
+    if 'identity_authoring' in before:
+        return P._peer('history_identity')
     return A
 
 
@@ -250,10 +252,14 @@ def recover(paths, *, project, original_paths, direction='after'):
     _verify_routing(routing, original_paths, paths, project)
     C._require(pending.read_bytes() == raw, 'concurrent_edit')
     if direction == 'before':
-        live = H.Store(entry).capture()
-        C._require(mutation.to_data()['operation'] not in live.commits,
-                   'history_already_committed', 'committed evidence requires an explicit new act')
-        _writer(mutation).verify_prepared(entry, mutation)
+        if T.auxiliary_view(mutation) is not None:
+            H.Store(entry).cancel_auxiliary(mutation, verify=lambda data:
+                _verify_routing(routing, original_paths, paths, project))
+        else:
+            live = H.Store(entry).capture()
+            C._require(mutation.to_data()['operation'] not in live.commits,
+                       'history_already_committed', 'committed evidence requires an explicit new act')
+            _writer(mutation).verify_prepared(entry, mutation)
     else:
         _writer(mutation).commit(entry, mutation, verify=lambda data: _verify_routing(routing, original_paths, paths, project))
     pending.unlink()
@@ -322,6 +328,38 @@ def finish_hypotheses(paths, names, *, kind, because, take=(), drops=None, by=No
         P.forget(entry)
         return {'state': 'folded' if kind == 'fold' else 'refuted', 'hypotheses': names,
                 'operation': mutation.to_data()['operation']}
+
+
+def identity_write(paths, a, b, *, kind, keep=None, because=None, as_of=None):
+    original_paths = list(paths)
+    V = P._peer('knowledge_views')
+    project = V.project_for(paths)
+    policy = project.config()
+    paths = V.write_paths(paths)
+    entry = Path(paths[0]).resolve()
+    pending = T._target(entry.parent, journal(entry))
+    module = P._peer('history_identity')
+    with P._locked(str(entry), project=project):
+        C._require(project.config() == policy, 'history_routing_changed')
+        C._require(not pending.exists(), 'recovery_required')
+        options = {} if as_of is None else {'as_of': as_of}
+        mutation = module.prepare_same(entry, a, b, keep=keep, **options) if kind == 'same' else \
+            module.prepare_distinct(entry, a, b, because, **options)
+        authored = [C.decode_document(item['after']) for item in mutation.files if item['role'] == 'history_object']
+        if recording.private_marker(authored):
+            receipt = recording.draft(project, {'kind': kind, 'ids': [a, b]}, {'history': authored},
+                                       'private identity change retained for review')
+            print(json.dumps(receipt, ensure_ascii=False))
+            return 0
+        routing = _routing(original_paths, paths, project)
+        T.publish_immutable(pending.parent / '.gitignore', b'*\n', root=entry.parent)
+        T.publish_immutable(pending, C.encode_document(_envelope(mutation, routing)), root=entry.parent)
+        module.commit(entry, mutation, verify=lambda data: _verify_routing(routing, original_paths, paths, project))
+        pending.unlink()
+        T._sync(pending.parent)
+        P.forget(entry)
+    print('history committed: ' + mutation.to_data()['operation'] + ' (' + kind + ' ' + a + ', ' + b + ')')
+    return 0
 
 
 def adopt(paths, revision, choices, *, by=None, project, original_paths):

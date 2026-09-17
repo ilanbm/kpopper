@@ -3,8 +3,9 @@
 `scripts.history_contract` defines the versioned evidence boundary used by the
 callable history store, pure capture adapter, and prepared legacy writes. These
 interfaces do not activate history for an existing record. Direct history writes, local source reports, copied migration and captured Simple/Advanced
-reads use these interfaces. Public combined assessment, default consumer policy and
-live authority transitions remain separate integration work.
+reads use these interfaces. Guarded authority transitions are callable for explicitly
+selected records. Public combined assessment and default consumer policy remain
+separate integration work.
 
 ## Objects and identity
 
@@ -30,6 +31,14 @@ refuse instead of falling back. Typed identities distinguish dates from strings,
 booleans from numbers, absent fields from null, and ordered sequences. They do
 not recover precision or lexemes already lost while parsing a legacy source.
 
+Logical subject and collection names retain exact Unicode text. New object files
+use a reserved `~` directory key derived from the exact subject's UTF-8 bytes and
+declare `subject-paths/v2`; their immutable object IDs do not change. Existing raw
+subject directories remain readable, and retained operations replay their original
+path scheme. Capture resolves paths from validated manifest membership, so case or
+Unicode normalization cannot silently merge names. Duplicate physical representations
+refuse. Malformed orphan staging files stay outside committed interpretation.
+
 `validate_closure` checks every reference's subject and kind and refuses missing
 objects. It never returns a valid-looking partial subset. This bounded in-memory
 helper admits at most 20,000 objects; a larger closure requires another explicitly
@@ -43,16 +52,19 @@ identity; newly typed objects require sorted unique reference lists.
 
 ## Authority and visibility
 
-The reader-owned layout names three roles:
+The reader-owned layout names these roles:
 
 | Role | GROUNDING.yaml | Legacy and custom entry names |
 |---|---|---|
 | `history` | `.kpopper/history/` | `PROVENANCE.history/` |
 | `history_commits` | `.kpopper/history-commits/` | `PROVENANCE.history-commits/` |
 | `history_authority` | `.kpopper/history.yaml` | `PROVENANCE.history.yaml` |
+| `history_cancellations` | `.kpopper/history-cancellations/` | `PROVENANCE.history-cancellations/` |
 
-The authority marker binds version 1, record id, authority (`legacy` or `history`),
-generation, and profile `history/v1`. A directory's existence does not choose
+The authority marker binds record id, authority (`legacy` or `history`),
+generation, and profile `history/v1`. Version 1 remains readable; version 2 adds
+hash-bound cancellation receipts for reserved generations. Its commits bind the
+complete marker digest. A directory's existence does not choose
 authority. Changing authority requires a separate guarded migration; ordinary
 prepared writes refuse authority changes.
 
@@ -257,18 +269,33 @@ prepared transport, verifies source, routing, capabilities and assessment
 receipts, and recovers through the same publication journal. Its durable event
 receipt distinguishes a completed operation from coincidentally matching bytes.
 History-backed local reports retain one aggregate prepared mutation: sequential
-actions are validated in detached captures, and one final manifest publishes the
-complete batch. Recovery replays the retained operation and records durable event
+actions are staged into a complete final world, and one final manifest publishes the
+complete batch. New authoring receipt version 6 validates final names, computations
+and dependency pins while retaining each action's replacement admission and ordered
+evidence. A judgment may refer to an input introduced later in the same batch.
+Unrelated original `seen` values remain unchanged; an unrepresentable cycle among
+new immutable dependency IDs refuses before publication. Retained version-2/3
+receipts keep their original sequential replay semantics and bytes.
+
+Recovery replays the retained operation and records durable event
 acknowledgement before removing its private retry envelope. Legacy core batches
 carry exact replacement archives through the same prepared transport. Advanced scoped history reports retain an independent portable contribution;
 they do not commit candidate claims into the checkout.
+
+Replay re-evaluates semantic evidence. If only the Python adapter source hash has
+changed, it can retain the receipt's validated original implementation audit while
+checking every computed result, basis, diagnostic and other native implementation
+field. This does not claim the old adapter executed during recovery. Semantic or
+native runtime changes still refuse exact replay; retained receipts are never
+rewritten to conceal their original implementation.
 
 The prepared legacy boundary also covers newborn absence, named hypotheses,
 fold/refute, same/distinct and expression migration. Hypothesis additions and
 deletions bind exact membership and protect separately opened files. Shared
 watch reports retain exact prepared generations and durable event completion
-receipts; interrupted storage remains retryable in their owning processor. Public combined assessment and default consumer binding remain incomplete. Authority migration, live activation, temporal recovery
-policy and combined consumer policy are not supplied by these components.
+receipts; interrupted storage remains retryable in their owning processor. Public
+combined assessment, default consumer binding and temporal applicability policy
+remain incomplete. Authority transitions use the separate guarded interface below.
 
 
 ## History commands and portable contributions
@@ -346,7 +373,18 @@ edits retire superseded proposals; reviews preserve actual version pins and orig
 seen. `consolidate --dry-run` prepares without committing; explicit fold/refute
 creates one manifest and preserves base evidence. Standing judgment replacements
 still require the established admission or an explicit named take. Physical legacy
-group collisions require explicit import; they are not silently overwritten.
+groups are preserved by migration as immutable proposals with exact original
+headers, profiles, field roles, bytes and provenance gaps. A hash-bound import map
+keeps those retained files from contributing a second live layer. A later physical
+file change or unmapped name collision refuses.
+
+An identity `same` operation also rewrites supported brief references through the
+existing transformation rules. Its version-2 receipt retains exact original brief
+bytes, and a reader guard covers publication of the manifest, record and brief.
+Forward recovery completes those exact images; cancellation before the manifest
+leaves knowledge unchanged. A committed identity operation requires forward repair
+or a new explicit act. Unrelated edits and mismatched retry envelopes cannot clear
+the guard. An unchanged brief and `distinct` retain the older receipt format.
 
 Copied migration can retain external member topology and sealed Advanced pending,
 publication and target observations. `replay_from_copy` restores captured context;
@@ -360,6 +398,47 @@ caller-owned deployment exclusion guard plus fresh explicit launcher probes. The
 first manifest, objects, marker and view publish under the shared recovery boundary.
 Deactivation preserves immutable history and refuses newer knowledge or pending
 evidence. Existing pending ledgers remain independent and unchanged. Distinct
-worktree authorities require a group transition; retained-generation reactivation
-requires its explicit mapping. These callables do not select or activate real
+worktree authorities use `history_group_activation` with one guarded transition
+across all related authorities in the same configured Git project. Every member's
+reader guard is installed before publication; a group journal and completion proof
+coordinate recovery. Individual recovery cannot bypass the group boundary.
+
+The marker selects the exact active generation. Complete earlier generations remain
+auditable and cannot become current just because their generation is largest.
+Full artifacts retain this audit evidence; scoped artifacts explicitly label any
+omitted audit coverage. Each migration generation has separate immutable artifacts.
+Here, complete history closure means the committed claims, acts, manifests and
+cancellation receipts. The migration backup files named by a cancellation receipt
+are a separate retained input: an ordinary history capture or full history bundle
+does not verify or transfer those backup bytes. Copy restoration and later
+activation validate their required files and hashes separately and refuse missing
+evidence. A portable history bundle alone is not a promise of lossless downgrade.
+Copy receipts retain unchanged immutable originals by verified path and hash instead
+of recursively copying old migration directories. Version-1 copy receipts still
+restore independently from their original sources.
+
+Cancelling a prepared activation retains the complete intended generation as
+inactive audit evidence, restores original authored bytes, and advances to a new
+legacy epoch. For example, cancelling reserved history generation 3 from legacy
+generation 2 produces legacy generation 4; a later activation uses generation 5.
+It does not restore the old authority marker verbatim. A durable cancellation
+receipt binds the reserved generation and original images before guards are cleared.
+Recovery reports the cancelled generation, resulting authority and receipt path.
+Interrupted compensation must finish in the same direction; missing or altered
+proofs refuse. Group cancellation validates every member before any guard clears.
+
+If an independent edit changes a member during interrupted group cancellation,
+recovery preserves the reader guards and refuses. Save the divergent file before
+restoring that member to an exact retained transaction image, verify the expected
+hash reported by recovery, and resume cancellation with the original deployment
+guard. Do not discard the edit, remove journals or resume forward activation once
+cancellation has begun.
+
+Older history clients may report retained generations as `authority_mismatch` or
+newer markers as `invalid_schema`; these are refusals, not evidence that a record
+should be repaired by deleting history. Deployment probes must establish required
+generation and cancellation support before a transition. Adding a marker field
+cannot retrofit a more specific diagnostic into an already installed old client.
+
+These callables do not select or activate real
 records, and source-level probes do not establish installed release readiness.

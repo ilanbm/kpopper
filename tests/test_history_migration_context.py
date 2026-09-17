@@ -209,3 +209,42 @@ class MigrationContext(unittest.TestCase):
             with self.subTest(change=change), self.assertRaisesRegex(ValueError, 'snapshot_changed'):
                 plan.publish(destination)
             self.assertFalse(destination.exists())
+
+    def test_physical_hypotheses_become_named_proposals_without_duplicate_authority(self):
+        entry = self.root / 'GROUNDING.yaml'
+        entry.write_text('known: {p.base: {v: 1}}\n')
+        original_layers = {}
+        for name in ('alt.v2', 'with space', 'חלופה'):
+            path = Path(P.layout(entry)['hypotheses']) / (name + '.yaml')
+            path.parent.mkdir(parents=True, exist_ok=True)
+            body = {'hypothesis': {'claim': name, 'folds': 'never', 'wrong_if': 'manual'},
+                    'known': {'p.base': {'v': 2}, 'p.new': {'v': 3}}}
+            raw = b'# exact original\r\n' + C.encode_document(body).replace(b'\n', b'\r\n')
+            path.write_bytes(raw)
+            original_layers[name] = (body, raw)
+        plan = M.prepare(entry, operation='import-layers', recorded_at='now')
+        copied = self.root / 'named-copy'
+        result = plan.publish(copied)
+        snapshot = Snapshot.capture(result['record'], read_mode='frozen')
+        data = snapshot.to_data()
+        self.assertEqual(data['document']['known']['p.base']['v'], 1)
+        self.assertNotIn('p.new', G.entries(data['document']))
+        self.assertEqual(set(data['hypotheses']), set(original_layers))
+        self.assertEqual(set(data['context']['history_hypotheses']['groups']), set(original_layers))
+        self.assertEqual(data['context']['history']['subjects']['p.new']['acceptance'], 'proposed')
+        for name, (body, raw) in original_layers.items():
+            self.assertEqual(data['hypotheses'][name]['head'], body['hypothesis'])
+            self.assertEqual(data['hypotheses'][name]['document'], {'known': body['known']})
+            self.assertEqual((copied / '.kpopper/hypotheses' / (name + '.yaml')).read_bytes(), raw)
+        self.assertEqual(Snapshot.from_json(snapshot.to_json()).snapshot_id, snapshot.snapshot_id)
+        from scripts import history_adapter as HA
+        detached = HA.from_store_capture(H.Store(result['record']).capture()).snapshot()
+        self.assertEqual(set(detached.to_data()['hypotheses']), set(original_layers))
+        self.assertEqual(Snapshot.from_json(detached.to_json()).snapshot_id, detached.snapshot_id)
+        restored = M.restore_from_copy(copied, self.root / 'named-restored')
+        for name, (_, raw) in original_layers.items():
+            self.assertEqual((Path(restored['record']).parent / '.kpopper/hypotheses' / (name + '.yaml')).read_bytes(), raw)
+        changed = copied / '.kpopper/hypotheses/alt.v2.yaml'
+        changed.write_bytes(changed.read_bytes() + b'# changed')
+        with self.assertRaisesRegex(ValueError, 'imported_hypothesis_changed|retained_history_mismatch'):
+            Snapshot.capture(result['record'], read_mode='frozen')

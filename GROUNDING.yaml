@@ -1343,6 +1343,17 @@ known:
     of: "2026-09-13"
     distinct_from: lit.github_registries
     # distinct 2026-09-14: one reading of the same table, two jobs: the list is what a person reads to see which ecosystems are served, the count is the one number a falsifier can compare against
+  p.history_activation_cancellation:
+    v: "Guarded activation cancellation retains the complete candidate as inactive immutable audit,
+        restores authored bytes, advances the legacy authority epoch, and binds cancellation receipts
+        to the authority and later commits. Group recovery validates every member before clearing
+        reader guards."
+    from: s.2026_09_17_history_reasoning_integration
+    at: "docs/history-contract.md, Explicit proposals, groups and generation changes;
+         scripts/history_activation.py; scripts/history_group_activation.py;
+         tests/test_history_generations.py"
+    scope: "Source protocol and disposable regression fixtures; not a live-record cutover or
+            installed release-readiness claim"
   p.history_capture_contract:
     name: "Committed history capture contract"
     fidelity: paraphrase
@@ -1356,6 +1367,17 @@ known:
     from: "s.2026_09_17_history_reasoning_integration"
     at: "docs/history-contract.md, History store and Capture and replay; scripts/history_contract.py and scripts/reasoning/snapshot.py at d9857cdb184d1daf4df37c09e71be804e1c46c37"
     of: "2026-09-17"
+  p.history_writer_compatibility:
+    v: "History batch receipt v6 validates the final staged world while retaining per-action
+        admission and original seen. Retained v2/v3 operations replay exact bytes. Unicode subjects
+        retain exact logical identities through versioned hashed physical paths; older raw paths
+        remain readable. Identity changes and brief references publish under one reader guard."
+    from: s.2026_09_17_history_reasoning_integration
+    at: "docs/history-contract.md; scripts/history_authoring.py; scripts/history_paths.py;
+         scripts/history_identity.py; tests/test_history_batch_final_world.py;
+         tests/test_history_direct_auxiliary.py"
+    scope: "Source implementation with focused disposable regression evidence; full combined and
+            installed gates remain separate"
   p.hypothesis_homes:
     v: 1
     name: "Places the reader reads hypothesis files from"

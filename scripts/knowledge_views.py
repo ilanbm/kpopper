@@ -49,12 +49,10 @@ def history_evidence(captured):
     """Complete committed observation, independent of contribution sharing scope."""
     B = P._peer('history_bundle')
     C = B.C
-    files = {'authority.yaml': captured.authority_bytes, 'entry.yaml': captured.entry_bytes}
-    files.update({'commits/' + op + '.yaml': raw for op, raw in captured.commits.items()})
-    files.update({'objects/' + obj['subject'] + '/' + version + '.yaml':
-                  captured.object_bytes[(obj['subject'], version)]
-                  for version, obj in captured.objects.items()})
-    result = {'version': 1, 'files': files, 'sha256': {path: C.sha256(raw) for path, raw in files.items()},
+    files = B.captured_files(captured)
+    retained = {generation: value['digest'] for generation, value in captured.inactive_generations.items()}
+    result = {'version': 2 if retained else 1,
+              **({'inactive_generations': retained} if retained else {}), 'files': files, 'sha256': {path: C.sha256(raw) for path, raw in files.items()},
               'rules': copy.deepcopy(captured.state['rules']), 'baseline': copy.deepcopy(captured.baseline),
               'projection': B.A.from_store_capture(captured).projection}
     validate_history_evidence(result)
@@ -65,8 +63,8 @@ def validate_history_evidence(evidence):
     """Pure captured target/member replay, without sharing or acceptance inference."""
     B = P._peer('history_bundle')
     C = B.C
-    C._mapping(evidence, ('version', 'files', 'sha256', 'rules', 'baseline', 'projection'))
-    C._require(type(evidence['version']) is int and evidence['version'] == 1,
+    C._mapping(evidence, ('version', 'files', 'sha256', 'rules', 'baseline', 'projection'), ('inactive_generations',))
+    C._require(type(evidence['version']) is int and evidence['version'] in (1, 2),
                'unsupported_history_observation')
     files = evidence['files']
     B._files(files)
@@ -75,6 +73,10 @@ def validate_history_evidence(evidence):
     C._require(all(C.sha256(raw) == evidence['sha256'][path] for path, raw in files.items()),
                'history_bundle_checksum')
     captured = B._capture(files, evidence['rules'])
+    retained = {generation: value['digest'] for generation, value in captured.inactive_generations.items()}
+    C._require((evidence['version'] == 2 and retained and evidence.get('inactive_generations') == retained) or
+               (evidence['version'] == 1 and not retained and 'inactive_generations' not in evidence),
+               'history_generation_capability_required')
     C._require(G.identity(captured.baseline) == G.identity(evidence['baseline']), 'baseline_mismatch')
     adapted = B.A.from_store_capture(captured)
     C._require(G.identity(adapted.projection) == G.identity(evidence['projection']), 'projection_mismatch')
@@ -186,6 +188,11 @@ def overlay(paths, doc, *, read_mode='live'):
                         layered.setdefault(collection, {}).update(copy.deepcopy(members))
                     if 'schema' in hyp['doc']:
                         layered['schema'] = copy.deepcopy(hyp['doc']['schema'])
+                    # Collections deliberately exclude metadata. A hypothesis's
+                    # declared profile still defines its comparison meaning.
+                    meta = hyp['doc'].get('meta')
+                    if isinstance(meta, dict) and 'reasoning' in meta:
+                        layered.setdefault('meta', {})['reasoning'] = copy.deepcopy(meta['reasoning'])
                     target_docs.append(('target:' + ref + ':hypothesis:' + hyp['name'], layered))
                 for label, target_doc in target_docs:
                     for nid, pair in G.entries(target_doc).items():
@@ -326,14 +333,21 @@ def materialize(project, revision, destination, *, ref=None):
             captured = B.validate(B.from_contribution(bundle))
             layout = P.layout(root / 'GROUNDING.yaml')
             images = {Path(layout['history_authority']): captured.authority_bytes}
+            images.update({Path(layout['history_cancellations']) / name: raw
+                           for name, raw in captured.cancellation_bytes.items()})
             images.update({Path(layout['history_commits']) / (op + '.yaml'): raw
-                           for op, raw in captured.commits.items()})
-            images.update({Path(layout['history']) / subject / (version + '.yaml'): raw
-                           for (subject, version), raw in captured.object_bytes.items()})
+                           for group in [{'commits': captured.commits}, *captured.inactive_generations.values()]
+                           for op, raw in group['commits'].items()})
+            # The portable capture has validated exact committed membership.
+            # Preserve observed raw/hashed paths rather than inventing aliases.
+            images.update({Path(layout['history']) / relative: raw
+                           for relative, raw in captured.storage_bytes.items()})
             images[root / 'GROUNDING.yaml'] = object.__new__(B.H.Store).render(captured)
             for path, raw in images.items():
                 if path.exists():
-                    raise ValueError('evidence conflicts with history snapshot authority')
+                    if not path.is_file() or path.read_bytes() != raw:
+                        raise ValueError('evidence conflicts with history snapshot authority')
+                    continue  # An explicitly retained immutable original is byte-identical.
                 path.parent.mkdir(parents=True, exist_ok=True)
                 path.write_bytes(raw)
         else:

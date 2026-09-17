@@ -10,6 +10,7 @@ from pathlib import Path
 import re
 import uuid
 
+from . import history_paths as HP
 from . import history_contract as C, history_store as H, history_transaction as T
 from . import history_adapter as D, history_authoring as A, provenance as P, recording
 from .pending_grounding import identity, entries
@@ -19,9 +20,7 @@ KIND = 'named-history-hypothesis/v1'
 
 
 def _name(name):
-    C._require(isinstance(name, str) and re.fullmatch(r'[A-Za-z0-9][A-Za-z0-9_-]*', name),
-               'invalid_history_hypothesis')
-    return name
+    return C.hypothesis_name(name)
 
 
 def layers(projection, document):
@@ -43,11 +42,28 @@ def layers(projection, document):
             item['claims'][version] = obj
     result, index = {}, {}
     for name, item in sorted(groups.items()):
-        body = {'schema': copy.deepcopy(document.get('schema', {}))}
-        declaration = document.get('meta', {}).get('reasoning')
-        if declaration is not None:
-            body['meta'] = {'reasoning': copy.deepcopy(declaration)}
         errors = []
+        headers = {identity(obj['authored'].get('locator', {}).get('document_headers')):
+                   obj['authored'].get('locator', {}).get('document_headers')
+                   for obj in item['claims'].values()
+                   if 'document_headers' in obj['authored'].get('locator', {})}
+        profiles = {obj['authored']['profile'] for obj in item['claims'].values()}
+        fields, conflicting_fields = {}, False
+        for obj in item['claims'].values():
+            for role, field in obj['authored']['fields'].items():
+                if role in fields and fields[role] != field:
+                    conflicting_fields = True
+                fields[role] = field
+        if len(headers) > 1 or len(profiles) != 1 or conflicting_fields:
+            errors.append('contested hypothesis interpretation')
+        if headers:
+            body = copy.deepcopy(next(iter(headers.values())))
+            C._require(isinstance(body, dict), 'invalid_hypothesis_headers')
+        else:
+            body = {'schema': copy.deepcopy(document.get('schema', {}))}
+            declaration = document.get('meta', {}).get('reasoning')
+            if declaration is not None:
+                body['meta'] = {'reasoning': copy.deepcopy(declaration)}
         if len(item['heads']) != 1:
             errors.append('contested hypothesis head')
         for subject, versions in sorted(item['versions'].items()):
@@ -59,9 +75,32 @@ def layers(projection, document):
             body.setdefault(obj['authored']['collection'], {})[subject] = D._adapt_body(obj)
         head = copy.deepcopy(next(iter(item['heads'].values()))) if len(item['heads']) == 1 else {}
         result[name] = {'kind': KIND, 'doc': body, 'head': head, 'error': '; '.join(errors) or None,
-                        'ids': set(entries(body)), 'raw': P.bodies(body), 'name': name}
+                        'ids': set(entries(body)), 'raw': P.bodies(body), 'name': name,
+                        'profile': next(iter(profiles)) if len(profiles) == 1 else None,
+                        'fields': fields if not conflicting_fields else None}
         index[name] = {subject: sorted(versions) for subject, versions in sorted(item['versions'].items())}
     return result, {'version': 1, 'groups': index}
+
+
+def active_physical(document, entry, physical):
+    """Exact imported files remain original evidence, not a second group authority."""
+    mapping = document.get('meta', {}).get('history_hypothesis_import')
+    if mapping is None:
+        return physical
+    from . import history_hypothesis_import as I
+    entry = Path(entry).resolve()
+    mapping = I.validate_mapping(mapping, entry=entry.name)
+    result = dict(physical)
+    for item in mapping['physical']:
+        hypothesis = result.get(item['name'])
+        path = T._target(entry.parent, item['path'])
+        C._require(hypothesis is not None and Path(hypothesis['path']).resolve() == path,
+                   'missing_imported_hypothesis', item['name'])
+        raw = path.read_bytes()
+        P._capture_event('bytes', str(path), raw)
+        C._require(C.sha256(raw) == item['sha256'], 'imported_hypothesis_changed', item['name'])
+        del result[item['name']]
+    return result
 
 
 def _capture(entry, captured=None):
@@ -70,7 +109,7 @@ def _capture(entry, captured=None):
     C._require(captured.commits and captured.entry_bytes == store.render(captured), 'unresolved_view_edit')
     adapted = D.from_store_capture(captured)
     groups, index = layers(adapted.projection, adapted.document)
-    physical = P.load_hypotheses([str(store.entry)])
+    physical = active_physical(adapted.document, store.entry, P.load_hypotheses([str(store.entry)]))
     C._require(not set(groups) & set(physical), 'hypothesis_authority_collision')
     # Any physical context is retained; new groups may not claim its name.
     return store, captured, A._document(adapted.document), groups, index, physical
@@ -159,14 +198,14 @@ def _mutation(store, captured, objects, intent, before_document, after_document)
     pairs = [(obj, C.encode_document(obj)) for obj in objects]
     arguments = dict(marker=captured.marker, operation=operation, parents=C.commit_frontier(captured.commits),
         baseline=captured.baseline, objects=pairs, receipt=receipt, view_template=template,
-        requires=[C.EXPLICIT_ROOT_DISPOSITION])
+        requires=HP.commit_requires([C.EXPLICIT_ROOT_DISPOSITION]))
     draft = C.make_commit(**arguments, view=b'')
     selected = {**captured.objects, **{obj['id']: obj for obj in objects}}
     commits = {**captured.commits, operation: C.encode_document(draft)}
     rendered = store.render(captured, objects=selected, commits=commits)
     manifest = C.make_commit(**arguments, view=rendered)
     files = [{'path': store.entry.name, 'role': 'record', 'before': captured.entry_bytes, 'after': rendered}]
-    files.extend({'path': (Path(store.layout['history']) / obj['subject'] / (obj['id'] + '.yaml')).relative_to(store.root).as_posix(),
+    files.extend({'path': (Path(store.layout['history']) / HP.path_for_object(obj, captured)).relative_to(store.root).as_posix(),
                   'role': 'history_object', 'before': None, 'after': raw} for obj, raw in pairs)
     files.append({'path': (Path(store.layout['history_commits']) / (operation + '.yaml')).relative_to(store.root).as_posix(),
                   'role': 'history_commit', 'before': None, 'after': C.encode_document(manifest)})
@@ -196,6 +235,8 @@ def prepare(entry, name, action, *, head=None, by=None, operation=None, recorded
         C._require(isinstance(head, dict), 'invalid_history_hypothesis')
         groups[name] = {'name': name, 'kind': KIND, 'doc': {}, 'head': head, 'ids': set(), 'raw': {}, 'error': None}
     document = _layer(base, groups, [name])
+    C._require(groups[name].get('profile') in (None, capabilities(document)['profile']),
+               'history_hypothesis_profile_migration_required')
     C._require(action.get('profile') in (None, capabilities(document)['profile']),
                'history_profile_migration_required')
     before_document = copy.deepcopy(document)
@@ -241,6 +282,11 @@ def prepare(entry, name, action, *, head=None, by=None, operation=None, recorded
                 document, ids, judgments, fields, subject, body, normalized.get('into'))
             authored = {'collection': collection, 'profile': capabilities(document)['profile'],
                         'fields': {role: field for role, field in fields.items() if field}}
+            group_headers = {key: copy.deepcopy(value) for key, value in groups[name]['doc'].items()
+                             if key in ('meta', 'schema', 'record', 'also')}
+            if any('document_headers' in captured.objects[version].get('authored', {}).get('locator', {})
+                   for versions in index['groups'].get(name, {}).values() for version in versions):
+                authored['locator'] = {'document_headers': group_headers}
         authored['hypothesis'] = {'version': 1, 'name': name, 'head': copy.deepcopy(head)}
         deps = body.get(fields['deps'], []) if isinstance(body, dict) else []
         pins, gaps = _pins(captured, index, name, deps, blocked=bool(P._blocked_text(body)))
@@ -334,6 +380,7 @@ def prepare_refute(entry, names, *, because, by=None, operation=None, recorded_a
                    recorded_at=recorded_at, capture=capture)
 
 
+@HP.replay_mutation
 def verify_prepared(entry, mutation):
     """Replay exact original intent against its complete committed parent closure."""
     C._require(isinstance(mutation, T.PreparedMutation), 'invalid_mutation')

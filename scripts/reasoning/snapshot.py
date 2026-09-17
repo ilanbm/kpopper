@@ -775,6 +775,8 @@ def _capture_load(paths, mode, initial):
     doc = P.Record(document)
     doc.hypotheses = P.load_hypotheses(routed)
     from .. import history_hypotheses as HH
+    doc.hypotheses = HH.active_physical(document, active[0], doc.hypotheses)
+    from .. import history_hypotheses as HH
     named, _ = HH.layers(adapted.projection, document)
     C._require(not set(named) & set(doc.hypotheses), 'hypothesis_authority_collision')
     doc.hypotheses.update(named)

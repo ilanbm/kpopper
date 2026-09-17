@@ -27,6 +27,12 @@ class EditedProposals(unittest.TestCase):
     def commit_edit(self, mutation):
         return E.commit(self.entry, mutation, verify=lambda data: None)
 
+    def test_new_collection_refusal_names_the_unhandled_collection(self):
+        raw = self.edit(lambda document: document.update(questions={'q.new': 'New question'}))
+        with self.assertRaisesRegex(C.HistoryError, 'template_disposition_required.*questions'):
+            self.prepare_edit()
+        self.assertEqual(self.entry.read_bytes(), raw)
+
     def test_existing_body_is_only_proposed_and_raw_comments_are_retained(self):
         original = self.store.capture()
         raw = self.edit(lambda d: d['readings']['p.input'].update(v=2))

@@ -13,6 +13,10 @@ import os
 from pathlib import Path
 import tempfile
 import threading
+try:
+    from . import history_paths as HP
+except ImportError:
+    import history_paths as HP
 
 try:
     from . import history_contract as C
@@ -25,6 +29,8 @@ MAX_TRANSACTION_BYTES = 64 * 1024 * 1024
 ROLES = ('record', 'record_member', 'hypothesis', 'view', 'replaced', 'history_authority', 'history_object', 'history_commit', 'history_retained', 'history_evidence')
 _LOCKS = contextvars.ContextVar('history_directory_locks', default=())
 _LOCK_PATHS = contextvars.ContextVar('history_directory_lock_paths', default=())
+_AUXILIARY_READS = contextvars.ContextVar('history_auxiliary_reads', default=())
+AUXILIARY_KIND = 'history-auxiliary/v1'
 
 
 def journal_for(entry, *, root=None):
@@ -157,7 +163,7 @@ class PreparedMutation:
             C.relative_path(path)
             candidate = Path('/' + path)
             C._require(candidate.parent == Path(paths['hypotheses']) and candidate.suffix in ('.yaml', '.yml')
-                       and bool(__import__('re').fullmatch(r'[A-Za-z0-9][A-Za-z0-9_-]*', candidate.stem)),
+                       and bool(candidate.stem),
                        'invalid_hypothesis_members', path)
             if digest is not None:
                 C._text(digest, C.HEX)
@@ -186,7 +192,13 @@ class PreparedMutation:
                 expected = '/' + item['path']
             elif role == 'history_object':
                 obj = C.validate_object(C.decode_document(item['after']))
-                expected = paths['history'] + '/' + obj['subject'] + '/' + obj['id'] + '.yaml'
+                prefix = paths['history'].lstrip('/') + '/'
+                C._require(item['path'].startswith(prefix), 'role_path_mismatch', item['path'])
+                try:
+                    HP.validate_object_path(item['path'][len(prefix):], obj['subject'], obj['id'])
+                except HP.HistoryPathError as error:
+                    raise C.HistoryError('role_path_mismatch', str(error)) from error
+                expected = '/' + item['path']
             elif role == 'history_commit':
                 expected = paths['history_commits'] + '/' + operation + '.yaml'
             elif role == 'history_evidence':
@@ -257,6 +269,11 @@ class PreparedMutation:
             # File roles are not assertions: bind them to the actual commit.
             commit_item = next(item for item in files if item['role'] == 'history_commit')
             commit = C.validate_commit(C.decode_document(commit_item['after']))
+            try:
+                HP.validate_path_capability([item['path'][len(paths['history'].lstrip('/')) + 1:]
+                    for item in files if item['role'] == 'history_object'], commit.get('requires', []))
+            except HP.HistoryPathError as error:
+                raise C.HistoryError(error.code, str(error)) from error
             C._require(commit['operation'] == operation and commit['record_id'] == commit_marker['record_id']
                        and commit['authority_generation'] == commit_marker['generation']
                        and commit['baseline_digest'] == identity(commit_baseline)
@@ -287,6 +304,8 @@ class PreparedMutation:
             payload['transition'] = {'version': 1, 'after': next_marker}
         payload = C.detached(payload, MAX_TRANSACTION_BYTES)
         self._data = {**payload, 'digest': identity(payload)}
+        if history and next_marker is None:
+            auxiliary_view(self)
 
     def to_data(self):
         return C.detached(self._data, MAX_TRANSACTION_BYTES)
@@ -309,6 +328,10 @@ class PreparedMutation:
                                  parse_constant=_json_constant)
             _check_typed_json(encoded)
             value = _decode(encoded)
+            if isinstance(value, dict) and value.get('kind') == 'history-authority-group-guard/v1':
+                raise C.HistoryError('group_recovery_required', str(value.get('coordinator', '')))
+            if isinstance(value, dict) and value.get('kind') == AUXILIARY_KIND:
+                raise C.HistoryError('history_auxiliary_recovery_required')
             C._require(_encode(value) == encoded, 'invalid_journal')
             C._mapping(value, ('version', 'operation', 'entry', 'authority', 'baseline', 'files', 'receipt', 'digest'), ('transition',))
             C._require(type(value['version']) is int and value['version'] in (1, 2) and
@@ -329,6 +352,82 @@ class PreparedMutation:
     def files(self):
         return [{**item, 'before': _unblob(item['before']), 'after': _unblob(item['after'])}
                 for item in self._data['files']]
+
+
+def auxiliary_view(mutation):
+    """Bind the sole supported history auxiliary file to its exact identity receipt."""
+    data = mutation.to_data()
+    items = [item for item in mutation.files if item['role'] == 'view']
+    intent = data['receipt']['before'].get('identity_authoring', {})
+    if not items:
+        C._require(intent.get('version') != 2, 'missing_identity_brief')
+        return None
+    C._require(data['authority']['authority'] == 'history' and 'transition' not in data and
+               len(items) == 1 and intent.get('version') == 2 and intent.get('kind') == 'same',
+               'invalid_history_auxiliary')
+    item = items[0]
+    brief = intent.get('brief')
+    C._mapping(brief, ('path', 'before_utf8', 'before_sha256', 'after_sha256'))
+    C._require(type(item['before']) is bytes and type(item['after']) is bytes and
+               item['before'] != item['after'] and isinstance(brief['before_utf8'], str), 'invalid_history_auxiliary')
+    C._require(brief['path'] == item['path'] and brief['before_utf8'].encode('utf-8') == item['before'] and
+               brief['before_sha256'] == C.sha256(item['before']) == intent.get('view_sha256') and
+               brief['after_sha256'] == C.sha256(item['after']) ==
+               data['receipt']['after'].get('identity_authoring', {}).get('view_sha256'),
+               'identity_brief_mismatch')
+    return item
+
+
+def auxiliary_envelope(mutation):
+    C._require(auxiliary_view(mutation) is not None, 'invalid_history_auxiliary')
+    body = {'version': 1, 'kind': AUXILIARY_KIND, 'mutation': _blob(mutation.to_bytes())}
+    raw = json_bytes(_encode({**body, 'digest': identity(body)}))
+    C._require(len(raw) <= MAX_TRANSACTION_BYTES, 'history_limit')
+    return raw
+
+
+def _exclusive_owned(root):
+    stat = Path(root).stat()
+    key = (stat.st_dev, stat.st_ino, os.getpid(), threading.get_ident())
+    return any(lock == key and exclusive for lock, exclusive in _LOCKS.get())
+
+
+def _owned_auxiliary(root, path, raw):
+    return _exclusive_owned(root) and (str(path), C.sha256(raw), os.getpid(), threading.get_ident()) in _AUXILIARY_READS.get()
+
+
+@contextlib.contextmanager
+def auxiliary_owner(root, journal, mutation):
+    """Allow only this exact locked writer to read its own pending auxiliary journal."""
+    C._require(_exclusive_owned(root), 'auxiliary_writer_lock_required')
+    C._require(journal == journal_for(Path(root) / mutation.to_data()['entry'], root=root), 'invalid_auxiliary_journal')
+    primary = _journal_path(root, journal, mutation)
+    raw = auxiliary_envelope(mutation)
+    C._require(_read(primary) in (None, raw), 'recovery_required')
+    key = (str(primary), C.sha256(raw), os.getpid(), threading.get_ident())
+    token = _AUXILIARY_READS.set((*_AUXILIARY_READS.get(), key))
+    try:
+        yield
+    finally:
+        _AUXILIARY_READS.reset(token)
+
+
+def publish_auxiliary_journal(root, journal, mutation):
+    primary = _journal_path(root, journal, mutation)
+    raw = auxiliary_envelope(mutation)
+    C._require(_owned_auxiliary(root, primary, raw), 'auxiliary_writer_lock_required')
+    _private_journal_home(root, journal, mutation)
+    publish_immutable(primary, raw, root=root)
+
+
+def clear_auxiliary_journal(root, journal, mutation):
+    primary = _journal_path(root, journal, mutation)
+    raw = auxiliary_envelope(mutation)
+    C._require(_owned_auxiliary(root, primary, raw), 'auxiliary_writer_lock_required')
+    C._require(_read(primary) in (None, raw), 'recovery_required')
+    if primary.exists():
+        primary.unlink()
+        _sync(primary.parent)
 
 
 def _target(root, relative):
@@ -557,9 +656,15 @@ def _remove_journals(primary, replicas):
 def reader_guard(root, journal):
     """A reader sees a complete legacy generation or an explicit recovery refusal."""
     with _lock(root, False):
-        C._require(not _target(root, journal).exists(), 'recovery_required')
+        path = _target(root, journal)
+        def check():
+            if path.exists():
+                C._require(path.stat().st_size <= MAX_TRANSACTION_BYTES, 'history_limit')
+                raw = _read(path)
+                C._require(_owned_auxiliary(root, path, raw), 'recovery_required')
+        check()
         yield
-        C._require(not _target(root, journal).exists(), 'recovery_required')
+        check()
 
 
 def _preflight(root, mutation, *, recovery):
@@ -714,6 +819,7 @@ def publish_transition(root, journal, mutation, *, verify, on_committed=None):
     retained inactive after rollback, never deleted by the transition primitive.
     """
     C._require(isinstance(mutation, PreparedMutation) and callable(verify), 'missing_verifier')
+    C._require('group' not in mutation._data['baseline'], 'group_recovery_required')
     C._require(on_committed is None or callable(on_committed), 'invalid_completion_callback')
     with directory_guards(participant_directories(root, mutation), exclusive=True):
         primary = _journal_path(root, journal, mutation)
@@ -744,11 +850,25 @@ def recover_transition(root, journal, *, verify, direction='after', on_committed
     raw = _read(primary)
     C._require(raw is not None, 'no_recovery_pending')
     mutation = PreparedMutation.from_bytes(raw)
+    C._require('group' not in mutation._data['baseline'], 'group_recovery_required')
     with directory_guards(participant_directories(root, mutation), exclusive=True):
         C._require(_read(primary) == raw, 'concurrent_edit')
         _journal_path(root, journal, mutation)
+        cancellation_receipt = None
+        if mutation._data['baseline'].get('direction') == 'activate':
+            try:
+                from .provenance import layout
+            except ImportError:
+                from provenance import layout
+            entry = Path(root).resolve() / mutation._data['entry']
+            receipt = Path(layout(entry)['history_cancellations']) / (mutation._data['operation'] + '.yaml')
+            receipt = _target(root, receipt.relative_to(Path(root).resolve()).as_posix())
+            cancellation_receipt = receipt
+            C._require(not cancellation_receipt.exists(), 'cancellation_recovery_required')
         immutable, mutable = _transition_targets(root, mutation)
         verify(mutation.to_data())
+        C._require(cancellation_receipt is None or not cancellation_receipt.exists(),
+                   'cancellation_recovery_required')
         immutable, mutable = _transition_targets(root, mutation)
         replicas = _prepare_replicas(root, journal, mutation)
         ready = _ready_path(primary, mutation)

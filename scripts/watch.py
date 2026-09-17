@@ -71,7 +71,7 @@ def _records(root, entry, sha=None, *, include_files=False):
     HC = H.C
     layout = P.layout(Path(root) / entry)
     role_paths = {role: Path(layout[role]).relative_to(root).as_posix()
-                  for role in ('history_authority', 'history', 'history_commits')}
+                  for role in ('history_authority', 'history', 'history_commits', 'history_cancellations')}
 
     def read_blob(name, maximum):
         if sha:
@@ -104,7 +104,7 @@ def _records(root, entry, sha=None, *, include_files=False):
         raw_names.add(marker_name)
         if sha:
             listing = git(root, '--literal-pathspecs', 'ls-tree', '-r', '-z', sha, '--',
-                          role_paths['history'], role_paths['history_commits'])
+                          role_paths['history'], role_paths['history_commits'], role_paths['history_cancellations'])
             for row in listing.split('\0'):
                 if not row:
                     continue
@@ -116,7 +116,7 @@ def _records(root, entry, sha=None, *, include_files=False):
                 queue.append(name)
                 raw_names.add(name)
         else:
-            for role in ('history', 'history_commits'):
+            for role in ('history', 'history_commits', 'history_cancellations'):
                 folder = Path(root) / role_paths[role]
                 for path in sorted(folder.rglob('*')) if folder.is_dir() else []:
                     if path.is_symlink():

@@ -156,7 +156,7 @@ class Publisher:
         B = G.P._peer('history_bundle')
         layout = G.P.layout(self.project.record())
         paths = {role: Path(layout[role]).relative_to(self.project.root).as_posix()
-                 for role in ('history_authority', 'history', 'history_commits')}
+                 for role in ('history_authority', 'history', 'history_commits', 'history_cancellations')}
         total = 0
         def read(path, maximum=B.C.MAX_REQUEST_BYTES):
             nonlocal total
@@ -173,23 +173,31 @@ class Publisher:
         marker = B.C.validate_authority(B.C.decode_document(marker_raw))
         if marker['authority'] != 'history':
             return None
-        commits, objects = {}, {}
+        commits, storage, cancellations = {}, {}, {}
         for path in files:
             if path.startswith(paths['history_commits'] + '/'):
                 name = path[len(paths['history_commits']) + 1:]
                 if '/' in name or not name.endswith('.yaml'):
                     raise Attention('invalid target history commit membership')
                 commits[name[:-5]] = read(path)
+            elif path.startswith(paths['history_cancellations'] + '/'):
+                name = path[len(paths['history_cancellations']) + 1:]
+                if '/' in name or not name.endswith('.yaml'):
+                    raise Attention('invalid cancellation membership')
+                cancellations[name] = read(path)
             elif path.startswith(paths['history'] + '/'):
                 parts = path[len(paths['history']) + 1:].split('/')
                 if len(parts) != 2 or not parts[1].endswith('.yaml'):
                     raise Attention('invalid target history object membership')
-                objects[(parts[0], parts[1][:-5])] = read(path, B.C.MAX_OBJECT_BYTES)
-        selected = B.C.committed_objects(marker, commits, objects)
+                storage['/'.join(parts)] = read(path, B.C.MAX_OBJECT_BYTES)
+        objects, object_paths = B.C.objects_from_storage(commits, storage)
+        groups = B.C.committed_generations(marker, commits, objects, cancellations)
+        selected = {version: obj for group in groups.values() for version, obj in group['objects'].items()}
         raw = {'authority.yaml': marker_raw,
                'entry.yaml': read(self.project.config()['record'])}
+        raw.update({'cancellations/' + name: data for name, data in cancellations.items()})
         raw.update({'commits/' + operation + '.yaml': data for operation, data in commits.items()})
-        raw.update({'objects/' + obj['subject'] + '/' + version + '.yaml': objects[(obj['subject'], version)]
+        raw.update({'objects/' + object_paths[(obj['subject'], version)]: objects[(obj['subject'], version)]
                     for version, obj in selected.items()})
         B._files(raw)
         captured = B._capture(raw, None)
@@ -412,6 +420,10 @@ class Publisher:
             if artifact['manifest']['version'] == 2:
                 raise Attention('scoped history contribution requires explicit adoption choices')
             incoming = B.validate(artifact)
+            if any(generation not in captured.inactive_generations or
+                   captured.inactive_generations[generation]['digest'] != evidence['digest']
+                   for generation, evidence in incoming.inactive_generations.items()):
+                raise Attention('retained generation evidence requires explicit target reconciliation')
             if G.identity(incoming.marker) != G.identity(captured.marker):
                 raise Attention('different history authority requires explicit adoption')
             if G.identity(incoming.state['rules']) != G.identity(captured.state['rules']):

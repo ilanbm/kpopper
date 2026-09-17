@@ -22,7 +22,7 @@ class Activation(unittest.TestCase):
         self.entry = fixture.fixture(core=True)
         self.original = self.entry.read_bytes()
         root = Path(A.__file__).resolve().parent
-        self.inventory = [{'id': 'fixture-source', 'argv': [str(Path(sys.executable).resolve()), '-B', str(root / 'kpopper')],
+        self.inventory = [{'id': 'fixture-source', 'argv': [sys.executable, '-B', str(root / 'kpopper')],
                            'package_root': str(root), 'executable': str(Path(sys.executable).resolve())}]
         declaration = R.describe('fixture_declaration_nonce_0123456789')
         self.expected = {'fixture-source': {key: declaration[key]['digest'] for key in ('sources', 'schemas', 'native')}}
@@ -116,9 +116,14 @@ class Activation(unittest.TestCase):
         self.assertTrue(any(before.values()))
         A.recover(self.entry, deployment_guard=self.guard, direction='before')
         self.assertEqual(self.entry.read_bytes(), self.original)
-        self.assertEqual(before, {path: A._tree(self.entry.parent, path) for path in A._trees(self.entry)})
+        after = {path: A._tree(self.entry.parent, path) for path in A._trees(self.entry)}
+        cancellation_dir = Path(P.layout(self.entry)['history_cancellations']).relative_to(self.entry.parent).as_posix()
+        self.assertEqual({key: value for key, value in before.items() if key != cancellation_dir},
+                         {key: value for key, value in after.items() if key != cancellation_dir})
+        self.assertEqual(len(after[cancellation_dir]), 1)
         marker = Path(P.layout(self.entry)['history_authority'])
-        self.assertTrue(not marker.exists() or C.decode_document(marker.read_bytes())['authority'] == 'legacy')
+        authority = C.decode_document(marker.read_bytes())
+        self.assertEqual((authority['version'], authority['authority'], authority['generation']), (2, 'legacy', 2))
         Snapshot.capture([str(self.entry)], read_mode='frozen')
 
     def test_changed_archive_hypothesis_or_runtime_proof_refuses_before_publication(self):

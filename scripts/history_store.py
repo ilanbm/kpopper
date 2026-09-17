@@ -5,11 +5,12 @@ falsifier computation, dependency assessment, and review sufficiency.
 """
 import copy
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 
 from . import history_contract as C, history_transaction as T, provenance as P, versions as V
 from .pending_grounding import identity
+from . import history_paths as HP
 
 MAX_CAPTURE_BYTES = T.MAX_TRANSACTION_BYTES
 MAX_REDUCTION_WORK = 4_000_000
@@ -163,6 +164,10 @@ class Capture:
     inventory: dict
     authority_bytes: bytes = b''
     view_alternatives: tuple = ()
+    inactive_generations: dict = field(default_factory=dict)
+    cancellation_bytes: dict = field(default_factory=dict)
+    storage_bytes: dict = field(default_factory=dict)
+    object_paths: dict = field(default_factory=dict)
 
 
 class Store:
@@ -245,20 +250,39 @@ class Store:
             meta = alternative.get('meta', {})
             C._require(isinstance(meta, dict) and 'history' in meta, 'baseline_mismatch')
             C.bind_authority(marker, meta['history'])
-        commits, objects = {}, {}
+        commits, storage = {}, {}
         for path in listing(self.layout['history_commits']):
             C._require(path.suffix == '.yaml' and path.is_file(), 'invalid_history_path')
             C._text(path.stem)
             commits[path.stem] = read(path, C.MAX_REQUEST_BYTES)
         for directory in listing(self.layout['history']):
             C._require(directory.is_dir(), 'invalid_history_path')
-            C._text(directory.name, C.SUBJECT)
+            C._require(HP.HASHED_DIRECTORY.fullmatch(directory.name) is not None or
+                       HP.LEGACY_DIRECTORY.fullmatch(directory.name) is not None, 'invalid_history_path')
             for path in listing(directory):
                 C._require(path.suffix == '.yaml' and path.is_file(), 'invalid_history_path')
                 C._text(path.stem, C.OBJECT_ID)
-                C._require(len(objects) < C.MAX_OBJECTS, 'history_limit')
-                objects[(directory.name, path.stem)] = read(path, C.MAX_OBJECT_BYTES)
-        selected = C.committed_objects(marker, commits, objects)
+                C._require(len(storage) < C.MAX_OBJECTS, 'history_limit')
+                relative = directory.name + '/' + path.name
+                try:
+                    HP.parse_object_path(relative)
+                except HP.HistoryPathError as error:
+                    raise C.HistoryError(error.code, str(error)) from error
+                storage[relative] = read(path, C.MAX_OBJECT_BYTES)
+        objects, object_paths = C.objects_from_storage(commits, storage)
+        cancellation_bytes = {}
+        cancellation_members = listing(self.layout['history_cancellations'])
+        import glob
+        hidden_pattern = glob.escape(str(self._path(self.layout['history_cancellations']))) + '/.*'
+        hidden = sorted(glob.glob(hidden_pattern))
+        event('glob', hidden_pattern, hidden)
+        C._require(not hidden, 'cancellation_membership_mismatch')
+        for path in cancellation_members:
+            C._require(path.is_file() and path.suffix == '.yaml', 'invalid_history_path')
+            cancellation_bytes[path.name] = read(path, C.MAX_REQUEST_BYTES)
+        generations = C.committed_generations(marker, commits, objects, cancellation_bytes)
+        active = generations.pop(str(marker['generation']), {'commits': {}, 'objects': {}})
+        commits, selected = active['commits'], active['objects']
         # A stale view may name older heads, which remain in complete history.
         # Missing manifest membership cannot turn that evidence into empty state.
         for _, _, alternative in alternatives:
@@ -275,7 +299,8 @@ class Store:
         inventory.verify()
         return Capture(entry_bytes, document, marker, commits, objects, selected,
                        state, current, copy.deepcopy(inventory.events), authority_bytes,
-                       tuple(copy.deepcopy(alternatives)))
+                       tuple(copy.deepcopy(alternatives)), generations, cancellation_bytes,
+                       storage, object_paths)
 
     def state(self, capture=None, *, rules=None, ancestry=None):
         captured = capture or self.capture(rules=rules, ancestry=ancestry)
@@ -319,6 +344,8 @@ class Store:
             if entry['acceptance'] != 'accepted':
                 continue
             C._require('head' in entry, 'unresolved_projection', subject)
+            for version in entry['heads']:
+                C.require_interpretable_claim(objects[version])
             obj = objects[entry['head']]
             authored = obj['authored']
             C._require(selected_profile in (None, authored['profile']),
@@ -529,6 +556,38 @@ class Store:
             return rendered
 
     def commit(self, mutation, *, verify):
+        """Publish history, with a reader-visible guard when its brief also changes."""
+        C._require(isinstance(mutation, T.PreparedMutation) and callable(verify), 'missing_verifier')
+        if T.auxiliary_view(mutation) is not None:
+            with T.writer_guard(self.root):
+                with T.auxiliary_owner(self.root, T.journal_for(self.entry), mutation):
+                    return self._commit(mutation, verify=verify)
+        return self._commit(mutation, verify=verify)
+
+    def cancel_auxiliary(self, mutation, *, verify):
+        """Cancel an uncommitted identity/brief operation without deleting history."""
+        C._require(isinstance(mutation, T.PreparedMutation) and callable(verify), 'missing_verifier')
+        auxiliary = T.auxiliary_view(mutation)
+        C._require(auxiliary is not None, 'invalid_history_auxiliary')
+        with T.writer_guard(self.root):
+            with T.auxiliary_owner(self.root, T.journal_for(self.entry), mutation):
+                live = self.capture()
+                data = mutation.to_data()
+                C._require(data['operation'] not in live.commits, 'history_already_committed')
+                C._require(identity(data['authority']) == identity(live.marker) and
+                           identity(data['baseline']) == identity(live.baseline), 'stale_baseline')
+                record = next(item for item in mutation.files if item['role'] == 'record')
+                C._require(live.entry_bytes == record['before'] and
+                           T._read(self._path(self.root / auxiliary['path'])) == auxiliary['before'], 'concurrent_edit')
+                from . import history_identity
+                history_identity.verify_prepared(self.entry, mutation)
+                verify(data)
+                C._require(self.capture().inventory == live.inventory and
+                           T._read(self._path(self.root / auxiliary['path'])) == auxiliary['before'], 'concurrent_edit')
+                T.clear_auxiliary_journal(self.root, T.journal_for(self.entry), mutation)
+                return {'state': 'cancelled', 'operation': data['operation']}
+
+    def _commit(self, mutation, *, verify):
         """Verify live baseline, stage objects, publish manifest, refresh exact view.
 
         `verify(prepared_data)` rechecks caller capability/evaluator evidence. It is
@@ -540,15 +599,28 @@ class Store:
         C._require(data['entry'] == self.entry.name, 'entry_mismatch')
         C._require(data['authority']['authority'] == 'history', 'history_not_active')
         with T.writer_guard(self.root):
+            auxiliary = T.auxiliary_view(mutation)
+            if auxiliary is not None:
+                journal = T._target(self.root, T.journal_for(self.entry))
+                C._require(T._owned_auxiliary(self.root, journal, T.auxiliary_envelope(mutation)),
+                           'auxiliary_writer_lock_required')
             live = self.capture()
             C._require(identity(data['authority']) == identity(live.marker), 'authority_mismatch')
             files = mutation.files
-            C._require(all(i['role'] in ('record', 'history_object', 'history_commit', 'history_evidence') for i in files),
+            C._require(all(i['role'] in ('record', 'history_object', 'history_commit', 'history_evidence', 'view') for i in files),
                        'unsupported_file_role')
             manifest_item = next(i for i in files if i['role'] == 'history_commit')
             record = next(i for i in files if i['role'] == 'record')
             operation = data['operation']
+            C._require(not any(operation in generation['commits'] for generation in live.inactive_generations.values()),
+                       'operation_collision', 'operation belongs to retained inactive history')
             prior = live.commits.get(operation)
+            if auxiliary is not None:
+                current_brief = T._read(self._path(self.root / auxiliary['path']))
+                C._require(current_brief in ((auxiliary['before'], auxiliary['after']) if prior is not None
+                                             else (auxiliary['before'],)), 'concurrent_brief_edit')
+                from . import history_identity
+                history_identity.verify_prepared(self.entry, mutation)
             edit_receipt = data['receipt']['before'].get('history_edit')
             if edit_receipt is not None:
                 C._require(edit_receipt == {'version': 1, 'kind': 'view-edit-proposals'}, 'invalid_edit_receipt')
@@ -590,6 +662,9 @@ class Store:
             # The callback may consult external evidence or accidentally change
             # local files. Its return never waives optimistic source checks.
             C._require(self.capture().inventory == live.inventory, 'stale_baseline')
+            if auxiliary is not None:
+                C._require(T._read(self._path(self.root / auxiliary['path'])) == current_brief, 'concurrent_brief_edit')
+                T.publish_auxiliary_journal(self.root, T.journal_for(self.entry), mutation)
             for item in files:
                 if item['role'] in ('history_object', 'history_evidence'):
                     T.publish_immutable(self.root / item['path'], item['after'], root=self.root)
@@ -598,4 +673,16 @@ class Store:
             C._require(current_entry in (record['before'], record['after']), 'concurrent_edit')
             if current_entry != record['after']:
                 T._replace(self._path(self.entry), record['after'])
+            if auxiliary is not None:
+                brief_path = self._path(self.root / auxiliary['path'])
+                C._require(T._read(brief_path) == current_brief, 'concurrent_brief_edit')
+                if current_brief != auxiliary['after']:
+                    T._replace(brief_path, auxiliary['after'])
+                terminal = self.capture()
+                history_identity.verify_prepared(self.entry, mutation)
+                verify(data)
+                C._require(self.capture().inventory == terminal.inventory, 'stale_baseline')
+                C._require(T._read(self._path(self.entry)) == record['after'] and
+                           T._read(brief_path) == auxiliary['after'], 'concurrent_edit')
+                T.clear_auxiliary_journal(self.root, T.journal_for(self.entry), mutation)
             return C.validate_commit(commit)

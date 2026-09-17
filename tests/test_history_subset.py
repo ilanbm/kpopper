@@ -108,7 +108,7 @@ class Subsets(unittest.TestCase):
         artifact = self.subset()
         bundle = G.prepare(B.adapt(artifact).document, ['p.input'], scope=fixture.SCOPE,
                            shareability='project', history=artifact)
-        self.assertEqual(bundle['manifest']['requires'], ['history-closure/v1', 'history-subset/v1'])
+        self.assertEqual(bundle['manifest']['requires'], ['history-closure/v1', 'history-subset/v1', 'subject-paths/v2'])
         G.validate_bundle(bundle)
         bad = copy.deepcopy(artifact)
         bad['manifest']['version'] = 1

@@ -658,6 +658,8 @@ def _mentions(R, worlds, fields, brief):
 def same(paths, a, b, keep=None, as_of=None):
     project = P._peer('knowledge_views').project_for(paths)
     paths = P._peer('knowledge_views').write_paths(paths)
+    if P._peer('history_direct').active(paths):
+        return P._peer('history_direct').identity_write(paths, a, b, kind='same', keep=keep, as_of=as_of)
     if not P._RAW_READS.get():
         with P._locked(paths[0], project=project):
             return same(paths, a, b, keep, as_of)
@@ -925,6 +927,8 @@ def _same_unlocked(paths, a, b, keep=None, as_of=None):
 def distinct(paths, a, b, why, as_of=None):
     project = P._peer('knowledge_views').project_for(paths)
     paths = P._peer('knowledge_views').write_paths(paths)
+    if P._peer('history_direct').active(paths):
+        return P._peer('history_direct').identity_write(paths, a, b, kind='distinct', because=why, as_of=as_of)
     if not P._RAW_READS.get():
         with P._locked(paths[0], project=project):
             return distinct(paths, a, b, why, as_of)

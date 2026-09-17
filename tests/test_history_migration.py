@@ -123,24 +123,36 @@ class Migration(unittest.TestCase):
         plan.publish(destination)
         relative = path.relative_to(record.parent)
         self.assertEqual((destination / relative).read_bytes(), raw)
-        self.assertEqual((destination / M.ARTIFACTS / 'originals' / relative).read_bytes(), raw)
+        stored = plan.manifest['originals'][relative.as_posix()]
+        self.assertEqual((destination / stored['path']).read_bytes(), raw)
         self.assertNotIn(prototype['id'], H.Store(destination / record.name).capture().objects)
         restored = self.root / 'prototype-restored'
         M.restore_from_copy(destination, restored)
         self.assertEqual((restored / relative).read_bytes(), raw)
 
-    def test_unknown_archive_successor_blocks_activation_but_preserves_preparation(self):
+    def test_archive_without_current_successor_is_retired_with_unknown_original_collection(self):
         record = self.fixture()
         archive = Path(P.layout(record)['replaced'])
         document = C.decode_document(archive.read_bytes())
         document['d.missing'] = copy.deepcopy(document['d.stable'])
         archive.write_bytes(C.encode_document(document))
         plan = M.prepare(record)
-        self.assertIn('archive_successor_unknown: d.missing', plan.problems)
-        destination = self.root / 'blocked-copy'
-        with self.assertRaisesRegex(C.HistoryError, 'incomplete_history_import'):
-            plan.publish(destination)
-        self.assertFalse(destination.exists())
+        self.assertFalse(plan.problems)
+        destination = self.root / 'retired-copy'
+        result = plan.publish(destination)
+        capture = H.Store(result['record']).capture()
+        self.assertEqual(capture.state['subjects']['d.missing']['acceptance'], 'retired')
+        self.assertNotIn('d.missing', entries(capture.document))
+        retired = next(obj for obj in capture.objects.values()
+                       if obj['subject'] == 'd.missing' and obj['kind'] == 'act' and obj['body']['act'] == 'retire')
+        self.assertIsNone(retired['by'])
+        self.assertEqual(retired['on'], plan.recorded_at)
+        location = retired['at']['imported_retirement']
+        self.assertIsNone(location['original_collection'])
+        self.assertEqual(location['mapping'], 'retained_archive_container')
+        self.assertEqual(retired['body']['because'], document['d.missing'][-1]['ended'])
+        inverse = plan.restore_copy(destination, self.root / 'retired-restored')
+        self.assertEqual(Path(P.layout(inverse['record'])['replaced']).read_bytes(), archive.read_bytes())
 
     def test_changed_source_and_interrupted_validation_publish_no_destination(self):
         record = self.fixture()
@@ -165,7 +177,7 @@ class Migration(unittest.TestCase):
         raw = C.encode_document({'d.stable': [old]})
         archive.write_bytes(raw)
         plan = M.prepare(record)
-        self.assertIn('archive_condition_profile_unknown: d.stable:1', plan.problems)
+        self.assertFalse(plan.problems)
         retired = next(obj for obj in plan.objects.values()
                        if obj.get('authored', {}).get('locator', {}).get('archive_index') == 1)
         self.assertEqual(retired['body'], old)
@@ -173,8 +185,27 @@ class Migration(unittest.TestCase):
         self.assertEqual(retired['authored']['locator']['interpretation']['scope'], 'retained_archive_only')
         self.assertEqual(archive.read_bytes(), raw)
         self.assertEqual(plan.files[M.ARTIFACTS + '/originals/.kpopper/replaced.yaml'], raw)
-        with self.assertRaisesRegex(C.HistoryError, 'archive_condition_profile_unknown'):
-            plan.publish(self.root / 'unsupported-core-archive')
+        result = plan.publish(self.root / 'retained-core-archive')
+        capture = H.Store(result['record']).capture()
+        self.assertEqual(capture.document['judgments']['d.stable']['verdict'], 'stable')
+        with self.assertRaisesRegex(C.HistoryError, 'profile_resolution_required'):
+            W.prepare_act(result['record'], {'kind': 'accept', 'id': 'd.stable', 'of': retired['id'],
+                'over': capture.state['subjects']['d.stable']['heads'], 'because': 'explicit return'})
+        from scripts import history_adapter as A
+        projection = A.from_store_capture(capture).projection
+        projection['pins'][retired['id']] = {'subject': 'd.stable', 'version': retired['id'],
+                                            'status': 'recorded', 'object': retired}
+        projection['integrity']['complete'] = False
+        projection['coverage']['complete'] = False
+        for finding in C.pin_gap_findings(retired):
+            if finding not in projection['integrity']['findings']:
+                projection['integrity']['findings'].append(finding)
+        evidence = A.pin_review_evidence(projection, retired['id'])
+        self.assertEqual(evidence['body'], old)
+        self.assertIsNone(evidence['profile'])
+        self.assertEqual(evidence['value_status'], 'unavailable')
+        self.assertEqual(evidence['basis_status'], 'unavailable')
+        self.assertIn('profile_resolution_required', {finding['code'] for finding in evidence['findings']})
 
     def test_standalone_restore_survives_original_source_edit_and_deletion(self):
         import shutil
@@ -248,7 +279,7 @@ class Migration(unittest.TestCase):
             M.restore_from_copy(copied, target)
         self.assertFalse(target.exists())
 
-    def test_inactive_prior_generation_preview_is_blocked_without_deleting_history(self):
+    def test_inactive_prior_generation_copy_selects_new_authority_without_deleting_history(self):
         record = self.fixture(core=True)
         first = M.prepare(record)
         copied = self.root / 'inactive-original'
@@ -263,10 +294,13 @@ class Migration(unittest.TestCase):
         retained = {p.relative_to(copied).as_posix(): p.read_bytes()
                     for p in Path(layout['history_commits']).rglob('*') if p.is_file()}
         next_plan = M.prepare(entry)
-        self.assertFalse(next_plan.summary()['complete'])
-        self.assertIn('history_reactivation_requires_generation_mapping', next_plan.problems)
-        with self.assertRaisesRegex(C.HistoryError, 'history_reactivation_requires_generation_mapping'):
-            next_plan.publish(self.root / 'reactivated-copy')
+        self.assertTrue(next_plan.summary()['complete'])
+        result = next_plan.publish(self.root / 'reactivated-copy')
+        capture = H.Store(result['record']).capture()
+        self.assertEqual(capture.marker['generation'], 3)
+        self.assertEqual(set(capture.commits), {next_plan.operation})
+        self.assertEqual(capture.inactive_generations['1']['commits'],
+                         {Path(path).stem: raw for path, raw in retained.items()})
         self.assertEqual(retained, {p.relative_to(copied).as_posix(): p.read_bytes()
                                    for p in Path(layout['history_commits']).rglob('*') if p.is_file()})
 

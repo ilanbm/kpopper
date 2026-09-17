@@ -368,9 +368,12 @@ class Project:
             # Lock order for routed writers: project policy, then record directories.
             # Existing file writers already honor the latter. Keep them out between
             # checking equality, retaining rollback bytes and committing the policy.
-            with contextlib.ExitStack() as locks:
-                for directory in sorted({path.parent for path in paths if path.parent.is_dir()}):
-                    locks.enter_context(I.P._directory_locked(str(directory / 'record')))
+            directories = {str(path.parent) for path in paths if path.parent.is_dir()}
+            # Acquire the complete set through the common canonical ordering.
+            # pathlib's component ordering can disagree with the lock protocol's
+            # string ordering for adjacent names such as .kpopper and
+            # .kpopper-migration, even when both sets look individually sorted.
+            with I.P._peer('history_transaction').directory_guards(directories, exclusive=True):
                 report = self.transition_report(mode or current['mode'], record, _pending_proof=proof,
                                                 migration_receipt=migration_receipt, rollback=rollback)
                 if report['blockers']:

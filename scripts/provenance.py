@@ -336,6 +336,7 @@ def layout(first):
                 "replaced": os.path.join(d, "PROVENANCE.replaced.yaml"),
                 "history": os.path.join(d, "PROVENANCE.history"),
                 "history_commits": os.path.join(d, "PROVENANCE.history-commits"),
+                "history_cancellations": os.path.join(d, "PROVENANCE.history-cancellations"),
                 "history_authority": os.path.join(d, "PROVENANCE.history.yaml"),
                 "build": None, "page": "record.html"}
     home = os.path.join(d, HOME)
@@ -348,6 +349,7 @@ def layout(first):
             "replaced": os.path.join(home, "replaced.yaml"),
             "history": os.path.join(home, "history"),
             "history_commits": os.path.join(home, "history-commits"),
+            "history_cancellations": os.path.join(home, "history-cancellations"),
             "history_authority": os.path.join(home, "history.yaml"),
             "build": os.path.join(home, "build"), "page": os.path.join(home, "build", "page.html")}
 
@@ -368,7 +370,7 @@ def leftovers(paths):
     other = layout(os.path.join(d, ENTRY if lay["legacy"] else LEGACY_ENTRY))
     out = []
     for role in ("hypotheses", "view", "measure", "session", "replaced",
-                 "history", "history_commits", "history_authority"):
+                 "history", "history_commits", "history_authority", "history_cancellations"):
         there = other[role]
         if not os.path.exists(there):
             continue
@@ -4465,7 +4467,21 @@ def _directory_locked(path, *, hypotheses=False):
             except FileNotFoundError:
                 raw = None
             if raw is not None:
-                mutation = transaction.PreparedMutation.from_bytes(raw)
+                try:
+                    mutation = transaction.PreparedMutation.from_bytes(raw)
+                except transaction.C.HistoryError as error:
+                    if error.code != 'history_auxiliary_recovery_required':
+                        raise
+                    direct = _peer('history_direct')
+                    entry = Path(path).absolute()
+                    retained = transaction._read(transaction._target(entry.parent, direct.journal(entry)))
+                    if retained is None:
+                        raise error
+                    mutation, _ = direct._read_envelope(retained)
+                    transaction.C._require(transaction.auxiliary_envelope(mutation) == raw,
+                                           'invalid_history_auxiliary')
+                    # This supplies lock membership only. Ordinary reads still
+                    # refuse the guard; only its exact owner may recover it.
                 namespace = mutation._data['baseline'].get('transaction_root', str(Path(path).absolute().parent))
                 roots.update(map(str, transaction.participant_directories(namespace, mutation)))
         with transaction.directory_guards(roots, exclusive=True):
@@ -5201,10 +5217,26 @@ def recover_direct(paths, *, direction='after'):
     with _locked(entry, project=project):
         if project.config() != policy or list(_peer('knowledge_views').write_paths(original_paths)) != list(paths):
             raise Refused('refused - project mode or record destination changed; retry recovery')
+        journal_path = entry.parent / transaction.journal_for(entry)
+        if journal_path.is_file():
+            try:
+                retained = transaction.PreparedMutation.from_bytes(journal_path.read_bytes())
+            except transaction.C.HistoryError as error:
+                direct = _peer('history_direct')
+                if (error.code != 'history_auxiliary_recovery_required' or not direct.active(paths)
+                        or not (entry.parent / direct.journal(entry)).is_file()):
+                    raise
+                # The retained direct envelope supplies routing and the exact
+                # mutation. Its writer must match the normal reader guard byte
+                # for byte before it can read or finish either mutable image.
+                return direct.recover(paths, project=project,
+                                      original_paths=original_paths, direction=direction)
+            if retained.to_data().get('transition') is not None:
+                raise transaction.C.HistoryError('transition_recovery_required',
+                    'history_activation.recover requires the original managed-deployment guard')
         if _peer('history_direct').active(paths):
             return _peer('history_direct').recover(paths, project=project,
                                                    original_paths=original_paths, direction=direction)
-        journal_path = entry.parent / transaction.journal_for(entry)
         if not journal_path.is_file():
             raise transaction.C.HistoryError('no_recovery_pending')
         mutation = transaction.PreparedMutation.from_bytes(journal_path.read_bytes())
@@ -5881,9 +5913,11 @@ def write_command(cmd, rest):
                       f"today; date it the day it was read")
     if opts.get("why") and "\n" in opts["why"]:
         raise Refused("--why is one line: a second line would be a line of the record")
-    if opts.get("hypothesis") and not HYPOTHESIS_NAME.match(opts["hypothesis"]):
-        raise Refused("--hypothesis takes a name - letters, digits, underscores, dashes - that "
-                      "becomes <name>.yaml in the hypotheses directory beside the record")
+    if opts.get("hypothesis"):
+        try:
+            _peer('history_contract').hypothesis_name(opts['hypothesis'])
+        except ValueError:
+            raise Refused('a hypothesis name must be one visible filename without path separators or control characters') from None
     action = {"kind": cmd, "id": nid, "as_of": as_of, "why": opts.get("why"), "into": opts.get("in"),
               "hypothesis": opts.get("hypothesis"), "source": opts.get("source"), "at": opts.get("at")}
     if drops:

@@ -12,6 +12,7 @@ from dataclasses import replace
 from pathlib import Path
 import uuid
 
+from . import history_paths as HP
 from . import history_authoring as A, history_contract as C
 from . import history_store as H, history_transaction as T
 from .pending_grounding import entries, identity
@@ -23,9 +24,11 @@ def _selection(store, captured, subjects):
                identity(captured.baseline), 'stale_edit_baseline')
     original = store.render(captured)
     document = C.decode_document(original)
-    C._require(identity(C.document_template(document)) ==
-               identity(C.document_template(captured.document)),
-               'template_disposition_required')
+    before_template, after_template = C.document_template(document), C.document_template(captured.document)
+    changed_headers = sorted(key for key in set(before_template) | set(after_template)
+                             if identity(before_template.get(key)) != identity(after_template.get(key)))
+    C._require(not changed_headers, 'template_disposition_required',
+               'changed collections or headers: ' + ', '.join(changed_headers))
     before, after = entries(document), entries(captured.document)
     C._require(set(before) <= set(after), 'deletion_disposition_required')
     changed = []
@@ -91,7 +94,7 @@ def _prepare(entry, captured, *, because, by, operation, recorded_at, subjects):
     arguments = dict(marker=captured.marker, operation=operation,
         parents=C.commit_frontier(captured.commits), baseline=captured.baseline,
         objects=pairs, receipt=receipt, view_template=store._template(captured.commits),
-        requires=[C.EXPLICIT_ROOT_DISPOSITION])
+        requires=HP.commit_requires([C.EXPLICIT_ROOT_DISPOSITION]))
     draft = C.make_commit(**arguments, view=b'')
     rendered = store.render(canonical, objects=selected,
                            commits={**captured.commits, operation: C.encode_document(draft)})
@@ -144,6 +147,7 @@ def raw_edit_evidence(receipt):
     return raw
 
 
+@HP.replay_mutation
 def verify_prepared(entry, mutation):
     """Replay original edited bytes against its exact committed parent closure.
 

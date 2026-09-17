@@ -151,6 +151,8 @@ def capture_history(objects, projection, *, document=None):
         representations = {identity(C.claim_meaning(obj))
                            for obj in heads}
         _require(len(representations) == 1, 'ambiguous_accepted_selection', subject)
+        for obj in heads:
+            C.require_interpretable_claim(obj)
         selected = min(heads, key=lambda obj: obj['id'])
         authored = _mapping(selected)
         _require(chosen_profile in (None, authored['profile']), 'incompatible_authored_profiles', subject)
@@ -221,10 +223,12 @@ def from_store_capture(captured):
                   'coverage': {'scope': 'all', 'subjects': sorted(subjects), 'complete': True},
                   'subjects': subjects, 'pins': pins, 'dispositions': dispositions,
                   'integrity': {'complete': True, 'findings': []}}
-    if any(C.EXPLICIT_ROOT_DISPOSITION in C.decode_document(raw).get('requires', [])
-           for raw in captured.commits.values()) or any(
-            obj['kind'] == 'act' and obj['body']['act'] in ('propose', 'retire') for obj in objects.values()):
-        projection['requires'] = [C.EXPLICIT_ROOT_DISPOSITION]
+    required = {capability for raw in captured.commits.values()
+                for capability in C.validate_commit(C.decode_document(raw)).get('requires', [])}
+    if any(obj['kind'] == 'act' and obj['body']['act'] in ('propose', 'retire') for obj in objects.values()):
+        required.add(C.EXPLICIT_ROOT_DISPOSITION)
+    if required:
+        projection['requires'] = sorted(required)
     gap_findings = [finding for version in sorted(versions)
                     for finding in C.pin_gap_findings(objects[version])]
     if gap_findings:
@@ -300,6 +304,12 @@ def pin_review_evidence(projection, version, *, subject=None):
     if authored is None:
         result['findings'].append(_finding('unresolved_authored_mapping', subject, version,
                                           'recorded profile and value role are unavailable'))
+        return result
+    try:
+        C.require_interpretable_claim(obj)
+    except C.HistoryError as error:
+        result['basis_status'] = 'unavailable'
+        result['findings'].append(_finding(error.code, subject, version, 'original condition profile is unknown'))
         return result
     result['profile'] = authored['profile']
     body, fields = obj['body'], authored['fields']

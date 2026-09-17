@@ -31,9 +31,15 @@ import uuid
 
 
 HERE = Path(__file__).resolve().parent
-_SPEC = importlib.util.spec_from_file_location("kpopper_ingestion_provenance", HERE / "provenance.py")
-P = importlib.util.module_from_spec(_SPEC)
-_SPEC.loader.exec_module(P)
+if __package__:
+    # Package writers and snapshot readers must use the same lock registry.
+    # A second file-loaded reader would import a second transaction module and
+    # deadlock when a captured read re-enters a held directory lock.
+    from . import provenance as P
+else:
+    _SPEC = importlib.util.spec_from_file_location("kpopper_ingestion_provenance", HERE / "provenance.py")
+    P = importlib.util.module_from_spec(_SPEC)
+    _SPEC.loader.exec_module(P)
 
 TERMINAL = {"applied", "project_captured", "needs_primary", "superseded", "error"}
 ACTIONABLE = {"MOVED", "UNCHECKED", "BROKEN", "BLOCKED", "UNKNOWN"}
@@ -1198,10 +1204,21 @@ def _scoped_artifact(rec, event, envelope, journal, captured):
     B = P._peer('history_bundle')
     mutation = _mutation_from_journal(journal)
     intent = mutation.to_data()['receipt']['before']['authoring']
-    return B.prepare_subset(captured, roots=_scoped_roots(event, envelope), scope=envelope['scope'],
+    def prepare():
+        return B.prepare_subset(captured, roots=_scoped_roots(event, envelope), scope=envelope['scope'],
         shareability='project', operation='report-subset-' + event['event_id'],
         recorded_at=intent['recorded_at'], source_entry=rec.name, prepared=mutation,
         disclosed_locators=envelope.get('disclosed_locators', []))
+
+    if 'pending_bundle' in journal:
+        # A retained artifact's declared physical layout is replay evidence.
+        # Fresh preparation cannot silently repackage an older pending revision.
+        HP = P._peer('history_paths')
+        G = P._peer('pending_grounding')
+        retained = G._decode(journal['pending_bundle']['manifest'])
+        with HP.replay_layout(retained):
+            return prepare()
+    return prepare()
 
 
 def _prepare_scoped_history_report(rec, root, event, envelope, journal, captured):

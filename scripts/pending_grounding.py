@@ -535,6 +535,10 @@ def equivalent(bundle, doc, evidence, *, history=None):
         else:
             if identity(source.marker) != identity(target.marker) or identity(source.state['rules']) != identity(target.state['rules']):
                 return False
+            if any(generation not in target.inactive_generations or
+                   target.inactive_generations[generation]['digest'] != prior['digest']
+                   for generation, prior in source.inactive_generations.items()):
+                return False
             if any(target.commits.get(op) != raw for op, raw in source.commits.items()) or any(
                     target.object_bytes.get(key) != raw for key, raw in source.object_bytes.items()):
                 return False

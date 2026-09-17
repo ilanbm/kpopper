@@ -18,7 +18,7 @@ class BatchReceipts(unittest.TestCase):
             for i in range(count)], operation='batch-' + str(count), recorded_at='2026-09-17T12:00:00Z', **kwargs)
 
     def test_step_receipts_are_digest_witnesses_and_replay_remains_exact(self):
-        mutation = self.batch(8)
+        mutation = self.batch(8, _receipt_version=3)
         receipt = mutation.to_data()['receipt']
         self.assertEqual(receipt['before']['authoring']['version'], 3)
         for step in receipt['after']['authoring']['steps']:

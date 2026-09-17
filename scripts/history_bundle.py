@@ -7,10 +7,12 @@ consistency of captured evidence, not authenticity or publication permission.
 """
 import copy
 
+from . import history_paths as HP
 from . import history_contract as C, history_store as H, history_adapter as A
 from . import pending_grounding as G
 
 CAPABILITY = 'history-closure/v1'
+GENERATIONS_CAPABILITY = 'history-generations/v1'
 MAX_BYTES = H.MAX_CAPTURE_BYTES
 PREFIX = 'history-closure/'
 
@@ -42,6 +44,9 @@ def _authorization(captured, roots, scope, shareability, *, subset=False):
                    'invalid_history_scope')
     G._privacy(scope)
     subjects = {obj['subject'] for obj in captured.objects.values()}
+    if not subset:
+        subjects.update(obj['subject'] for generation in captured.inactive_generations.values()
+                        for obj in generation['objects'].values())
     C._require(set(roots) <= subjects, 'invalid_history_roots')
     C._require(subset or set(roots) == subjects, 'history_export_requires_full_authorization',
                ', '.join(sorted(subjects - set(roots))))
@@ -59,28 +64,37 @@ def _authorization(captured, roots, scope, shareability, *, subset=False):
 def _capture(files, rules):
     marker = C.validate_authority(C.decode_document(files['authority.yaml']))
     document = C.decode_document(files['entry.yaml'])
-    commits, objects = {}, {}
+    commits, storage, cancellations = {}, {}, {}
     for path, raw in files.items():
         parts = path.split('/')
         if len(parts) == 2 and parts[0] == 'commits' and parts[1].endswith('.yaml'):
             op = parts[1][:-5]
             C._text(op)
             commits[op] = raw
+        elif len(parts) == 2 and parts[0] == 'cancellations' and parts[1].endswith('.yaml'):
+            cancellations[parts[1]] = raw
         elif len(parts) == 3 and parts[0] == 'objects' and parts[2].endswith('.yaml'):
-            subject, version = parts[1], parts[2][:-5]
-            C._text(subject, C.SUBJECT)
-            C._text(version, C.OBJECT_ID)
-            objects[(subject, version)] = raw
+            relative = '/'.join(parts[1:])
+            HP.parse_object_path(relative)
+            storage[relative] = raw
         else:
             C._require(path in ('authority.yaml', 'entry.yaml'), 'invalid_history_bundle_path')
-    selected = C.committed_objects(marker, commits, objects)
-    C._require(set(objects) == {(o['subject'], vid) for vid, o in selected.items()},
+    objects, object_paths = C.objects_from_storage(commits, storage)
+    generations = C.committed_generations(marker, commits, objects, cancellations)
+    C._require(set(storage) == set(object_paths.values()), 'history_bundle_membership')
+    selected_group = generations.pop(str(marker['generation']), {'commits': {}, 'objects': {}})
+    commits, selected = selected_group['commits'], selected_group['objects']
+    complete_objects = dict(selected)
+    for generation in generations.values():
+        complete_objects.update(generation['objects'])
+    C._require(set(objects) == {(o['subject'], vid) for vid, o in complete_objects.items()},
                'history_bundle_membership', 'uncommitted objects are not portable authority')
     state = H.reduce(selected, rules=rules)
     baseline = H.baseline(marker, commits, state)
     C.bind_authority(marker, document.get('meta', {}).get('history'))
     captured = H.Capture(files['entry.yaml'], document, marker, commits, objects,
-                         selected, state, baseline, {}, authority_bytes=files['authority.yaml'])
+                         selected, state, baseline, {}, authority_bytes=files['authority.yaml'], inactive_generations=generations, cancellation_bytes=cancellations,
+                         storage_bytes=storage, object_paths=object_paths)
     # These methods consume only the supplied evidence; never open a store.
     store = object.__new__(H.Store)
     rendered = store.render(captured)
@@ -103,10 +117,12 @@ def validate(artifact):
                'invalid_history_bundle')
     manifest = C.detached(artifact['manifest'], C.MAX_REQUEST_BYTES)
     C._mapping(manifest, ('version', 'requires', 'roots', 'scope', 'shareability', 'rules',
-                          'baseline', 'files'))
-    C._require(type(manifest['version']) is int and manifest['version'] in (1, 2)
-               and manifest['requires'] == ([CAPABILITY] if manifest['version'] == 1 else
-                                            [CAPABILITY, SUBSET_CAPABILITY]), 'unsupported_history_bundle')
+                          'baseline', 'files'), ('inactive_generations',))
+    C._require(isinstance(manifest['requires'], list), 'unsupported_history_bundle')
+    base_requires = [item for item in manifest['requires'] if item != HP.CAPABILITY]
+    C._require(type(manifest['version']) is int and manifest['version'] in (1, 2, 3)
+               and base_requires in ([CAPABILITY], [CAPABILITY, SUBSET_CAPABILITY],
+                    [CAPABILITY, GENERATIONS_CAPABILITY], [CAPABILITY, GENERATIONS_CAPABILITY, C.CANCELLATION_CAPABILITY]), 'unsupported_history_bundle')
     C._require(G.identity(manifest) == artifact['revision'], 'history_bundle_identity')
     files = artifact['files']
     _files(files)
@@ -116,8 +132,21 @@ def validate(artifact):
         C._require(C.sha256(raw) == manifest['files'][path], 'history_bundle_checksum', path)
         G._privacy(C.decode_document(raw))
     captured = _capture(files, manifest['rules'])
+    if manifest['version'] != 2:
+        C._require('history_subset' not in captured.document.get('meta', {}), 'subset_capability_required')
     C._require(G.identity(captured.state['rules']) == G.identity(manifest['rules']), 'rules_mismatch')
     C._require(G.identity(captured.baseline) == G.identity(manifest['baseline']), 'baseline_mismatch')
+    required_capabilities = {1: [CAPABILITY], 2: [CAPABILITY, SUBSET_CAPABILITY],
+                             3: [CAPABILITY, GENERATIONS_CAPABILITY]}[manifest['version']]
+    if captured.cancellation_bytes:
+        required_capabilities = [CAPABILITY, GENERATIONS_CAPABILITY, C.CANCELLATION_CAPABILITY]
+    if any(HP.parse_object_path(path).scheme == HP.HASHED for path in captured.storage_bytes):
+        required_capabilities = [*required_capabilities, HP.CAPABILITY]
+    C._require(manifest['requires'] == required_capabilities, 'history_generation_capability_required')
+    retained = {generation: value['digest'] for generation, value in captured.inactive_generations.items()}
+    C._require((manifest['version'] == 3 and retained and manifest.get('inactive_generations') == retained) or
+               (manifest['version'] != 3 and not retained and 'inactive_generations' not in manifest),
+               'history_generation_capability_required')
     if manifest['version'] == 2:
         _validate_subset(captured, manifest)
     else:
@@ -140,15 +169,19 @@ def export(captured, *, roots, scope, shareability, authority_bytes=None):
     C._require(G.identity(C.decode_document(raw)) == G.identity(captured.marker), 'authority_mismatch')
     digests = {digest for (kind, _), digest in captured.inventory.items() if kind == 'bytes'}
     C._require(C.sha256(raw) in digests, 'uncaptured_authority_bytes')
-    files = {'authority.yaml': raw, 'entry.yaml': captured.entry_bytes}
-    files.update({'commits/' + op + '.yaml': data for op, data in captured.commits.items()})
-    files.update({'objects/' + obj['subject'] + '/' + vid + '.yaml':
-                  captured.object_bytes[(obj['subject'], vid)] for vid, obj in captured.objects.items()})
+    files = captured_files(captured, authority_bytes=raw)
     _files(files)
-    manifest = {'version': 1, 'requires': [CAPABILITY], 'roots': sorted(set(roots)),
+    retained = {generation: value['digest'] for generation, value in captured.inactive_generations.items()}
+    manifest = {'version': 3 if retained else 1,
+                'requires': ([CAPABILITY, GENERATIONS_CAPABILITY, C.CANCELLATION_CAPABILITY] if captured.cancellation_bytes else
+                             [CAPABILITY, GENERATIONS_CAPABILITY]) if retained else [CAPABILITY],
+                **({'inactive_generations': retained} if retained else {}), 'roots': sorted(set(roots)),
                 'scope': copy.deepcopy(scope), 'shareability': shareability,
                 'rules': copy.deepcopy(captured.state['rules']), 'baseline': copy.deepcopy(captured.baseline),
                 'files': {path: C.sha256(data) for path, data in sorted(files.items())}}
+    if any(HP.parse_object_path(path[len('objects/'):]).scheme == HP.HASHED
+           for path in files if path.startswith('objects/')):
+        manifest['requires'].append(HP.CAPABILITY)
     artifact = {'revision': G.identity(manifest), 'manifest': manifest, 'files': files}
     validate(artifact)
     return artifact
@@ -244,6 +277,11 @@ def _subset_subjects(captured, roots):
             C._require(isinstance(seen, dict), 'invalid_subset_dependencies')
             deps.update(seen)
             deps.update(obj.get('pin_gaps', {}))
+            # Direct source IDs are authored text, not an ASCII expression token.
+            # Match existing subjects exactly, as the ordinary closure does.
+            sources = body.get('from', [])
+            sources = [sources] if isinstance(sources, str) else sources if isinstance(sources, list) else []
+            deps.update(source for source in sources if isinstance(source, str) and source in by_subject)
             for text in G._strings(body):
                 deps.update(G.P.refs_in(text))
             deps.update(x for x in G.P._mentioned(body) if x in by_subject)
@@ -345,6 +383,9 @@ def prepare_subset(captured, roots, *, scope, shareability, operation, recorded_
                   obj['subject'] == subject and vid not in captured.objects for vid, obj in objects.items()) else 'committed',
                   'objects_digest': G.identity(_subject_inventory(candidate, subject)),
                   'reduction_digest': G.identity(state['subjects'][subject])} for subject in sorted(subjects)}}
+    if captured.inactive_generations:
+        origin['inactive_audit'] = {'status': 'not_transferred', 'digest': G.identity({
+            generation: value['digest'] for generation, value in captured.inactive_generations.items()})}
     C.validate_subset_origin(origin)
     marker = C.authority(record_id='subset-' + G.identity({'source': captured.marker, 'operation': operation}),
                          authority='history', generation=1)
@@ -364,19 +405,21 @@ def prepare_subset(captured, roots, *, scope, shareability, operation, recorded_
     pairs = [(obj, raw_objects[(obj['subject'], vid)]) for vid, obj in objects.items()]
     before = H.baseline(marker, {}, H.reduce({}))
     draft = C.make_commit(marker=marker, operation=operation, parents={}, baseline=before,
-                          objects=pairs, receipt=receipt, view=b'', view_template=template)
+                          objects=pairs, receipt=receipt, view=b'', view_template=template, requires=HP.commit_requires())
     commits = {operation: C.encode_document(draft)}
     empty = replace(candidate, marker=marker, objects=objects, object_bytes=raw_objects, commits=commits,
                     state=state, baseline=H.baseline(marker, commits, state))
     rendered = object.__new__(H.Store).render(empty)
     manifest = C.make_commit(marker=marker, operation=operation, parents={}, baseline=before,
-                             objects=pairs, receipt=receipt, view=rendered, view_template=template)
+                             objects=pairs, receipt=receipt, view=rendered, view_template=template, requires=HP.commit_requires())
     files = {'authority.yaml': C.encode_document(marker), 'entry.yaml': rendered,
              'commits/' + operation + '.yaml': C.encode_document(manifest)}
-    files.update({'objects/' + subject + '/' + vid + '.yaml': raw for (subject, vid), raw in raw_objects.items()})
+    files.update({'objects/' + HP.object_path(subject, vid): raw for (subject, vid), raw in raw_objects.items()})
     binding = {'version': 2, 'requires': [CAPABILITY, SUBSET_CAPABILITY], 'roots': sorted(set(roots)),
                'scope': copy.deepcopy(scope), 'shareability': shareability, 'rules': state['rules'],
                'baseline': empty.baseline, 'files': {path: C.sha256(raw) for path, raw in sorted(files.items())}}
+    if HP.CAPABILITY in HP.commit_requires([]):
+        binding['requires'].append(HP.CAPABILITY)
     artifact = {'revision': G.identity(binding), 'manifest': binding, 'files': files}
     validate(artifact)
     return artifact
@@ -502,7 +545,7 @@ def prepare_adoption(entry, artifact, *, choices, by, operation, recorded_at, ca
     adopted = {**source.objects, **{obj['id']: obj for obj in resolutions}}
     pairs = [(obj, raw_objects[(obj['subject'], vid)]) for vid, obj in adopted.items()]
     args = dict(marker=target.marker, operation=operation, parents=C.commit_frontier(target.commits),
-                baseline=target.baseline, objects=pairs, receipt=receipt, view_template=template)
+                baseline=target.baseline, objects=pairs, receipt=receipt, view_template=template, requires=HP.commit_requires())
     draft = C.make_commit(**args, view=b'')
     commits = {**target.commits, operation: C.encode_document(draft)}
     candidate = replace(target, objects=combined, object_bytes=raw_objects, commits=commits, state=state,
@@ -513,7 +556,7 @@ def prepare_adoption(entry, artifact, *, choices, by, operation, recorded_at, ca
     files = [{'path': store.entry.name, 'role': 'record', 'before': target.entry_bytes, 'after': rendered}]
     for obj, raw in pairs:
         key = obj['subject'], obj['id']
-        path = Path(store.layout['history']) / key[0] / (key[1] + '.yaml')
+        path = Path(store.layout['history']) / HP.path_for_object(obj, target)
         files.append({'path': path.relative_to(store.root).as_posix(), 'role': 'history_object',
                       'before': None, 'after': raw})
     path = Path(store.layout['history_commits']) / (operation + '.yaml')
@@ -547,6 +590,7 @@ def adopted_by(target, artifact):
     return False
 
 
+@HP.replay_mutation
 def verify_adoption(entry, mutation, artifact, *, capture=None):
     """Verify an exact retained adoption against its committed parent closure."""
     from dataclasses import replace
@@ -586,3 +630,23 @@ def commit_adoption(entry, mutation, artifact, *, verify):
         verify_adoption(entry, mutation, artifact)
         verify(data)
     return H.Store(entry).commit(mutation, verify=checked)
+
+
+def captured_files(captured, *, authority_bytes=None):
+    """All committed generation evidence, without orphan staging residue."""
+    files = {'authority.yaml': captured.authority_bytes if authority_bytes is None else authority_bytes,
+             'entry.yaml': captured.entry_bytes}
+    files.update({'cancellations/' + name: raw for name, raw in captured.cancellation_bytes.items()})
+    groups = [{'commits': captured.commits, 'objects': captured.objects,
+               'object_bytes': captured.object_bytes}, *captured.inactive_generations.values()]
+    for group in groups:
+        for operation, raw in group['commits'].items():
+            path = 'commits/' + operation + '.yaml'
+            C._require(path not in files or files[path] == raw, 'operation_collision')
+            files[path] = raw
+        for version, obj in group['objects'].items():
+            path = 'objects/' + HP.path_for_object(obj, captured)
+            raw = group['object_bytes'][(obj['subject'], version)]
+            C._require(path not in files or files[path] == raw, 'object_bytes_mismatch')
+            files[path] = raw
+    return files

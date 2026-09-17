@@ -166,6 +166,29 @@ class DirectHistory(unittest.TestCase):
         manifest = C.decode_document(captured.commits[operation])
         self.assertEqual(E.raw_edit_evidence(manifest['receipt']), edited)
 
+    def test_cli_same_and_distinct_use_immutable_identity_operations(self):
+        import subprocess
+        import sys
+        from tests import test_history_identity as identity
+        fixture = identity.Identity()
+        fixture.setUp()
+        self.addCleanup(fixture.doCleanups)
+        before = fixture.store.capture()
+        cli = Path(P.__file__).with_name('cli.py')
+        result = subprocess.run([sys.executable, str(cli), 'same', 'p.input', 'p.other', str(fixture.entry)],
+                                capture_output=True, text=True, timeout=20)
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        after = fixture.store.capture()
+        self.assertEqual(after.state['subjects']['p.other']['acceptance'], 'retired')
+        self.assertEqual(after.objects[fixture.other['id']], fixture.other)
+        self.assertEqual(len(after.commits), len(before.commits) + 1)
+        fixture.publish(fixtures.claim('p.third', operation='third'), operation='third')
+        result = subprocess.run([sys.executable, str(cli), 'distinct', 'p.input', 'p.third',
+                                 'different measured subjects', str(fixture.entry)],
+                                capture_output=True, text=True, timeout=20)
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertEqual(fixture.store.capture().document['readings']['p.input']['distinct_from'], 'p.third')
+
 
 if __name__ == '__main__':
     unittest.main()
