@@ -191,9 +191,14 @@ def convert_snapshot(snapshot, *, reader, runtime=None, operational_limits=None)
     return _finish(report, operational_limits)
 
 
-def _typed(value, reader):
+def _typed(value, reader, *, legacy_numeric=False):
     if value is None:
         return {'type': 'null'}
+    if legacy_numeric:
+        number = reader.E.number(value)
+        if number is not None:
+            return {'type': 'number', 'numerator': str(number.numerator),
+                    'denominator': str(number.denominator)}
     if isinstance(value, list):
         items = [_typed(item, reader) for item in value]
         return {'type': 'list', 'items': items} if all(item is not None for item in items) else None
@@ -213,7 +218,11 @@ def _typed(value, reader):
 def _legacy_observation(reader, raw, ids, nid, body, field, predicate, runtime_report):
     value = reader.evaluate(body.get(field), raw, ids) if predicate else reader.value_of(raw, ids, nid)
     if value is not None:
-        typed = _typed(value, reader)
+        # The legacy scalar evaluator represents exact fractions as a private
+        # ``{rational: [n, d]}`` sentinel. Interpret that shape only when it is
+        # the result of a legacy calculation/predicate. A stored T3 record with
+        # the same keys is an ordinary record and must never be guessed numeric.
+        typed = _typed(value, reader, legacy_numeric=predicate or field == 'rule')
         return {'status': 'known' if typed is not None else 'unrepresentable', 'value': typed}
     explicit = field != 'collection_scope' and isinstance(body, dict) and isinstance(body.get(field), dict)
     dependent = bool(set(reader.predicate_refs(body.get(field))) & {

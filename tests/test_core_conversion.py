@@ -174,11 +174,16 @@ class ConversionTests(unittest.TestCase):
         self.assertFalse(convert(doc)['complete'])
 
     def test_stored_list_and_record_complete_conversion(self):
-        doc = {'known': {'p.container': {'v': [1, {'ok': True}, None, []]}}}
+        doc = {'known': {
+            'p.container': {'v': [1, {'ok': True}, None, []]},
+            'p.record': {'v': {'rational': ['1', '3']}},
+        }}
         result = convert(doc)
         self.assertTrue(result['complete'], result['blockers'])
         comparison = next(item for item in result['comparisons'] if item['id'] == 'p.container')
         self.assertEqual(comparison['after']['value']['type'], 'list')
+        record = next(item for item in result['comparisons'] if item['id'] == 'p.record')
+        self.assertEqual(record['after']['value']['type'], 'record')
 
     def test_supported_scope_conversion_captures_typed_summary(self):
         doc = {'items': {}, 'scopes': {'scope.items': {'collection_scope': {'collection': 'items', 'fields': []}}}}
