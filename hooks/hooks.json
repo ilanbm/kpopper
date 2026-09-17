@@ -18,7 +18,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python3 \"$CLAUDE_PLUGIN_ROOT/scripts/watch_hook.py\" claude start",
+            "command": "\"$CLAUDE_PLUGIN_ROOT/scripts/hook.sh\" \"watch_hook.py\" claude start",
             "timeout": 10
           }
         ]
@@ -27,7 +27,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python3 \"$CLAUDE_PLUGIN_ROOT/scripts/ground_hook.py\" claude start",
+            "command": "\"$CLAUDE_PLUGIN_ROOT/scripts/hook.sh\" \"ground_hook.py\" claude start",
             "timeout": 10
           }
         ]
@@ -58,7 +58,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python3 \"$CLAUDE_PLUGIN_ROOT/scripts/followups_hook.py\"",
+            "command": "\"$CLAUDE_PLUGIN_ROOT/scripts/hook.sh\" \"followups_hook.py\"",
             "timeout": 10
           }
         ]
@@ -67,7 +67,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python3 \"$CLAUDE_PLUGIN_ROOT/scripts/watch_hook.py\" claude wait",
+            "command": "\"$CLAUDE_PLUGIN_ROOT/scripts/hook.sh\" \"watch_hook.py\" claude wait",
             "timeout": 130,
             "asyncRewake": true
           }
@@ -77,7 +77,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python3 \"$CLAUDE_PLUGIN_ROOT/scripts/ground_hook.py\" claude read",
+            "command": "\"$CLAUDE_PLUGIN_ROOT/scripts/hook.sh\" \"ground_hook.py\" claude read",
             "timeout": 10
           }
         ]
@@ -98,7 +98,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python3 \"$CLAUDE_PLUGIN_ROOT/scripts/watch_hook.py\" claude wait",
+            "command": "\"$CLAUDE_PLUGIN_ROOT/scripts/hook.sh\" \"watch_hook.py\" claude wait",
             "timeout": 130,
             "asyncRewake": true
           }
@@ -108,7 +108,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python3 \"$CLAUDE_PLUGIN_ROOT/scripts/ground_hook.py\" claude prompt",
+            "command": "\"$CLAUDE_PLUGIN_ROOT/scripts/hook.sh\" \"ground_hook.py\" claude prompt",
             "timeout": 15
           }
         ]
@@ -120,7 +120,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python3 \"$CLAUDE_PLUGIN_ROOT/scripts/edit_hook.py\" claude",
+            "command": "\"$CLAUDE_PLUGIN_ROOT/scripts/hook.sh\" \"edit_hook.py\" claude",
             "timeout": 10
           }
         ]
