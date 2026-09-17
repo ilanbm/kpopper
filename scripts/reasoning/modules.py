@@ -44,7 +44,41 @@ class CompositionModule:
                 'expression': copy.deepcopy(expression), 'declared': list(declared), 'limits': dict(limits)}
 
 
-REGISTRY = {ArithmeticModule.identity: ArithmeticModule, CompositionModule.identity: CompositionModule}
+class QueryModule:
+    """The reviewed finite-scope adapter; native code owns row semantics."""
+    identity = 'query/v1'
+    specification = MODULES[identity]
+
+    @classmethod
+    def prepare(cls, capture, authored_operation, *, request_id, root_witness,
+                declared_capabilities, limits):
+        from . import query
+        return query.prepare(
+            capture, authored_operation, request_id=request_id,
+            root_witness=root_witness,
+            declared_capabilities=declared_capabilities, limits=limits)
+
+    @staticmethod
+    def validate(prepared):
+        from . import query
+        return query.validate_prepared(prepared)
+
+    @staticmethod
+    def decode_response(response, prepared):
+        from . import query
+        return query.validate_response(response, prepared)
+
+    @staticmethod
+    def finalize_basis(prepared, response):
+        from . import query
+        return query.finalize_basis(prepared, response)
+
+
+REGISTRY = {
+    ArithmeticModule.identity: ArithmeticModule,
+    CompositionModule.identity: CompositionModule,
+    QueryModule.identity: QueryModule,
+}
 
 
 def module(identity):

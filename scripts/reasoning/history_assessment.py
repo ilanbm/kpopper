@@ -44,6 +44,53 @@ def _validate_ids(value, message):
              and len(value) == len(set(value)), message)
 
 
+def _validate_canonical_ids(value, message):
+    _require(isinstance(value, list) and all(isinstance(item, str) for item in value)
+             and value == sorted(set(value)), message)
+
+
+def _witness_key(value):
+    """Canonical closed witness identity: nodes precede scopes, then exact fields."""
+    _require(isinstance(value, dict), 'v2 schema: invalid dependency witness')
+    if value.get('kind') == 'node':
+        _require(set(value) == {'kind', 'id', 'fingerprint'}
+                 and isinstance(value['id'], str) and value['id']
+                 and _is_digest(value['fingerprint']),
+                 'v2 schema: invalid node witness')
+        return (0, value['id'], value['fingerprint'])
+    if value.get('kind') == 'scope':
+        _require(set(value) == {'kind', 'scope_id', 'definition_digest',
+                                'membership_digest', 'projected_inputs_digest'}
+                 and isinstance(value['scope_id'], str) and value['scope_id']
+                 and all(_is_digest(value[key]) for key in (
+                     'definition_digest', 'membership_digest', 'projected_inputs_digest')),
+                 'v2 schema: invalid scope witness')
+        return (1, value['scope_id'], value['definition_digest'],
+                value['membership_digest'], value['projected_inputs_digest'])
+    raise ValueError('v2 schema: invalid dependency witness kind')
+
+
+def _validate_witnesses(value, message):
+    _require(isinstance(value, list), message)
+    keys = [_witness_key(item) for item in value]
+    _require(keys == sorted(set(keys)), message)
+    return keys
+
+
+def _validate_locations(value):
+    _require(isinstance(value, list), 'v2 schema: invalid diagnostic locations')
+    keys = []
+    for item in value:
+        _require(isinstance(item, dict) and set(item) == {'candidate', 'column', 'phase'}
+                 and all(isinstance(item[key], str) for key in ('candidate', 'column', 'phase'))
+                 and item['candidate'] and item['column']
+                 and item['phase'] in ('where', 'value', 'preflight', 'aggregate'),
+                 'v2 schema: invalid diagnostic location')
+        keys.append((item['candidate'], item['column'], item['phase']))
+    _require(keys == sorted(set(keys)), 'v2 schema: noncanonical diagnostic locations')
+    return tuple(keys)
+
+
 def _validate_attention(value):
     _require(isinstance(value, list), 'v2 schema: attention must be an array')
     for action in value:
@@ -64,16 +111,20 @@ def _validate_bounds(value, message='v2 operational limits mismatch'):
 
 
 def _validate_result(result, snapshot_id):
-    required = {'schema_version', 'profile', 'modules', 'snapshot_id', 'computation_id',
+    common = {'schema_version', 'profile', 'modules', 'snapshot_id', 'computation_id',
                 'implementation', 'resource_profile', 'status', 'value', 'diagnostics',
                 'executed_reads', 'potential_dependencies', 'potential_ids', 'basis',
                 'assurance', 'cost', 'operational_limits'}
-    _require(isinstance(result, dict) and required <= set(result)
+    _require(isinstance(result, dict) and result.get('schema_version') in (1, 2),
+             'v2 schema: invalid computation result')
+    required = common | ({'query_counts'} if result['schema_version'] == 2 else set())
+    _require(required <= set(result)
              and not set(result) - required - {'interpretation'},
              'v2 schema: invalid computation result')
-    _require(result['schema_version'] == 1 and result['profile'] == PROFILE
+    _require(result['profile'] == PROFILE
              and result['snapshot_id'] == snapshot_id
              and isinstance(result['modules'], list)
+             and result['modules'] == sorted(set(result['modules']))
              and all(isinstance(item, str) for item in result['modules'])
              and (result['computation_id'] is None
                   or isinstance(result['computation_id'], str))
@@ -81,19 +132,27 @@ def _validate_result(result, snapshot_id):
                   or isinstance(result['implementation'], dict)),
              'v2 schema: invalid computation identity')
     resources = result['resource_profile']
-    common = {'version', 'steps', 'depth', 'digits'}
-    extended = common | {'value_nodes', 'value_depth', 'value_bytes'}
+    resource_common = {'version', 'steps', 'depth', 'digits'}
+    extended = resource_common | {'value_nodes', 'value_depth', 'value_bytes'}
+    query_resources = extended | {'candidates', 'field_reads'}
     valid_resources = isinstance(resources, dict) and (
-        resources.get('version') == 'resources/v2' and set(resources) == common
-        or resources.get('version') == 'resources/v3' and set(resources) == extended)
+        resources.get('version') == 'resources/v2' and set(resources) == resource_common
+        or resources.get('version') == 'resources/v3' and set(resources) == extended
+        or resources.get('version') == 'resources/v4' and set(resources) == query_resources)
     _require(valid_resources and all(type(resources[key]) is int and resources[key] >= 0
                                      for key in ('steps', 'depth', 'digits')),
              'v2 schema: invalid resource profile')
-    if resources['version'] == 'resources/v3':
+    if resources['version'] in ('resources/v3', 'resources/v4'):
         _require(0 < resources['value_nodes'] <= 10_000
                  and 0 < resources['value_depth'] <= 128
                  and 0 < resources['value_bytes'] <= 16_777_216,
                  'v2 schema: invalid resource profile')
+    if resources['version'] == 'resources/v4':
+        _require(0 < resources['candidates'] <= 10_000
+                 and 0 < resources['field_reads'] <= 100_000,
+                 'v2 schema: invalid resource profile')
+    _require((result['schema_version'] == 2) == (resources['version'] == 'resources/v4'),
+             'v2 schema: result/resource version mismatch')
     status = result['status']
     _require(status in ('ok', 'unknown', 'error', 'limit',
                         'unsupported_capability', 'operational_error'),
@@ -104,27 +163,29 @@ def _validate_result(result, snapshot_id):
         _require(result['value'] is None, 'v2 schema: non-ok computation has a value')
     diagnostics = result['diagnostics']
     _require(isinstance(diagnostics, list), 'v2 schema: invalid diagnostics')
+    diagnostic_keys = []
     for item in diagnostics:
-        _require(isinstance(item, dict) and set(item) == {'code', 'related_ids'}
+        expected = {'code', 'related_ids'} | ({'locations'} if result['schema_version'] == 2 else set())
+        _require(isinstance(item, dict) and set(item) == expected
                  and isinstance(item['code'], str) and isinstance(item['related_ids'], list)
+                 and item['related_ids'] == sorted(set(item['related_ids']))
                  and all(isinstance(value, str) for value in item['related_ids']),
                  'v2 schema: invalid diagnostic')
-    executed = result['executed_reads']
-    _require(isinstance(executed, list), 'v2 schema: invalid executed reads')
-    for item in executed:
-        _require(isinstance(item, dict) and set(item) == {'kind', 'id', 'fingerprint'}
-                 and item['kind'] == 'node' and isinstance(item['id'], str)
-                 and isinstance(item['fingerprint'], str)
-                 and len(item['fingerprint']) == 64
-                 and all(char in '0123456789abcdef' for char in item['fingerprint']),
-                 'v2 schema: invalid executed read')
-    potential = result['potential_dependencies']
-    _require(isinstance(potential, list)
-             and all(isinstance(item, dict) and item.get('kind') in ('node', 'scope')
-                     for item in potential), 'v2 schema: invalid potential dependencies')
-    _require(isinstance(result['potential_ids'], list)
-             and all(isinstance(item, str) for item in result['potential_ids']),
-             'v2 schema: invalid potential ids')
+        locations = _validate_locations(item['locations']) if result['schema_version'] == 2 else ()
+        diagnostic_keys.append((item['code'], tuple(item['related_ids']), locations))
+    _require(diagnostic_keys == sorted(set(diagnostic_keys)),
+             'v2 schema: noncanonical diagnostics')
+    executed = _validate_witnesses(result['executed_reads'], 'v2 schema: invalid executed reads')
+    potential = _validate_witnesses(result['potential_dependencies'],
+                                    'v2 schema: invalid potential dependencies')
+    _require(set(executed) <= set(potential),
+             'v2 schema: executed reads exceed potential dependencies')
+    _validate_canonical_ids(result['potential_ids'], 'v2 schema: invalid potential ids')
+    if result['schema_version'] == 2:
+        witness_ids = sorted(item['id'] if item['kind'] == 'node' else item['scope_id']
+                             for item in result['potential_dependencies'])
+        _require(result['potential_ids'] == witness_ids,
+                 'v2 schema: potential ids disagree with dependency witnesses')
     _require(result['basis'] is None or isinstance(result['basis'], dict),
              'v2 schema: invalid computation basis')
     assurance = result['assurance']
@@ -138,14 +199,101 @@ def _validate_result(result, snapshot_id):
                   or isinstance(assurance['implementation'], str)),
              'v2 schema: invalid assurance')
     cost = result['cost']
+    cost_fields = {'steps', 'preflight_steps', 'node_evaluations'} | (
+        {'candidates', 'field_reads', 'evaluated_field_reads'}
+        if result['schema_version'] == 2 else set())
     _require(isinstance(cost, dict)
-             and set(cost) == {'steps', 'preflight_steps', 'node_evaluations'}
+             and set(cost) == cost_fields
              and type(cost['steps']) is int and cost['steps'] >= 0
              and type(cost['preflight_steps']) is int and cost['preflight_steps'] >= 0
              and isinstance(cost['node_evaluations'], dict)
              and all(isinstance(key, str) and type(value) is int and value >= 0
                      for key, value in cost['node_evaluations'].items()),
              'v2 schema: invalid computation cost')
+    if result['schema_version'] == 2:
+        _require(all(type(cost[key]) is int and cost[key] >= 0 for key in (
+            'candidates', 'field_reads', 'evaluated_field_reads')),
+            'v2 schema: invalid computation cost')
+        counts = result['query_counts']
+        if counts is not None:
+            count_fields = {'input_count', 'definite_match_count',
+                            'unknown_membership_count', 'unknown_value_count', 'error_count'}
+            _require(isinstance(counts, dict) and set(counts) == count_fields
+                     and all(type(value) is int and value >= 0 for value in counts.values()),
+                     'v2 schema: invalid query counts')
+            _require(counts['definite_match_count'] <= counts['input_count']
+                     and counts['unknown_membership_count'] <= counts['input_count']
+                     and counts['unknown_value_count'] <= counts['definite_match_count']
+                     and counts['error_count'] <= counts['input_count']
+                     and cost['candidates'] == counts['input_count'],
+                     'v2 schema: inconsistent query counts')
+        _require(counts is None or status in ('ok', 'unknown', 'error'),
+                 'v2 schema: preflight status cannot claim query counts')
+        _require((counts is None) == (result['basis'] is None),
+                 'v2 schema: query counts and finalized basis disagree')
+        _require(counts is not None or result['computation_id'] is None,
+                 'v2 schema: preflight query cannot claim computation identity')
+        if counts is not None:
+            _require(executed == potential,
+                     'v2 schema: completed query reads disagree with prepared witnesses')
+            basis = result['basis']
+            basis_keys = {'version', 'recipe', 'profile', 'modules', 'as_of', 'operation',
+                          'scope', 'dependencies', 'resources', 'preflight_cost',
+                          'query_counts', 'digest'}
+            _require(isinstance(basis, dict) and set(basis) == basis_keys
+                     and basis.get('version') == 1
+                     and basis.get('recipe') == 'query-inputs/v1'
+                     and basis.get('profile') == PROFILE
+                     and basis.get('modules') == result['modules']
+                     and basis.get('dependencies') == result['potential_dependencies']
+                     and basis.get('resources') == result['resource_profile']
+                     and basis.get('query_counts') == counts
+                     and isinstance(basis.get('digest'), str)
+                     and digest({key: value for key, value in basis.items() if key != 'digest'})
+                     == basis['digest'],
+                     'v2 schema: invalid finalized query basis')
+            operation = basis.get('operation')
+            query = operation.get('query') if isinstance(operation, dict) else None
+            scope = basis.get('scope')
+            scope_witnesses = [item for item in result['potential_dependencies']
+                               if item.get('kind') == 'scope']
+            _require(isinstance(query, dict) and set(operation) == {'query'}
+                     and isinstance(query.get('scope'), str)
+                     and isinstance(scope, dict) and len(scope_witnesses) == 1
+                     and scope.get('witness') == scope_witnesses[0]
+                     and query['scope'] == scope_witnesses[0]['scope_id']
+                     and isinstance(scope.get('digest'), str)
+                     and digest({key: value for key, value in scope.items() if key != 'digest'})
+                     == scope['digest'],
+                     'v2 schema: invalid finalized query scope basis')
+            preflight = basis.get('preflight_cost')
+            _require(isinstance(preflight, dict)
+                     and set(preflight) == {'candidates', 'field_reads',
+                                            'preflight_steps', 'step_upper_bound'}
+                     and all(type(value) is int and value >= 0 for value in preflight.values())
+                     and preflight['candidates'] == cost['candidates']
+                     and preflight['field_reads'] == cost['field_reads']
+                     and preflight['preflight_steps'] == cost['preflight_steps'],
+                     'v2 schema: query preflight cost disagrees with result')
+            expected_computation = digest({'snapshot_id': result['snapshot_id'],
+                                           'basis': basis,
+                                           'resources': result['resource_profile']})
+            _require(result['computation_id'] == expected_computation,
+                     'v2 schema: query computation identity disagrees with basis')
+        _require(status != 'ok' or counts is not None,
+                 'v2 schema: successful query lacks counts')
+        if status == 'ok':
+            fields = result['value'].get('fields') if isinstance(result['value'], dict) else None
+            expected_fields = {'input_count', 'definite_match_count',
+                               'unknown_membership_count', 'unknown_value_count',
+                               'error_count', 'result'}
+            _require(result['value'].get('type') == 'record' and isinstance(fields, dict)
+                     and set(fields) == expected_fields,
+                     'v2 schema: invalid successful query result')
+            for key, expected in counts.items():
+                _require(fields[key] == {'type': 'number', 'numerator': str(expected),
+                                         'denominator': '1'},
+                         'v2 schema: query result/count mismatch')
     _validate_bounds(result['operational_limits'], 'v2 schema: invalid result limits')
     if 'interpretation' in result:
         interpretation = result['interpretation']

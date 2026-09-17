@@ -1,0 +1,148 @@
+{
+  "schema_version": 1,
+  "scope": "Public synthetic query/v1 finite-scope examples. Member and field order is canonical; expected results are checked by an independent Fraction-based Python oracle.",
+  "cases": [
+    {
+      "id": "filter-ids",
+      "fields": ["enabled"],
+      "members": [
+        {"id": "a", "fields": {"enabled": {"status": "known", "value": {"type": "boolean", "value": true}}}},
+        {"id": "b", "fields": {"enabled": {"status": "known", "value": {"type": "boolean", "value": false}}}},
+        {"id": "c", "fields": {"enabled": {"status": "known", "value": {"type": "boolean", "value": true}}}}
+      ],
+      "operation": {"op": "filter", "where": {"column": "enabled"}},
+      "expected": {"status": "ok", "counts": [3, 2, 0, 0, 0], "result": {"type": "list", "items": [{"type": "text", "value": "a"}, {"type": "text", "value": "c"}]}, "diagnostic_codes": []}
+    },
+    {
+      "id": "project-values",
+      "fields": ["amount"],
+      "members": [
+        {"id": "a", "fields": {"amount": {"status": "known", "value": {"type": "number", "numerator": "1", "denominator": "1"}}}},
+        {"id": "b", "fields": {"amount": {"status": "known", "value": {"type": "number", "numerator": "5", "denominator": "2"}}}},
+        {"id": "c", "fields": {"amount": {"status": "known", "value": {"type": "number", "numerator": "-3", "denominator": "1"}}}}
+      ],
+      "operation": {"op": "project", "value": {"column": "amount"}},
+      "expected": {"status": "ok", "counts": [3, 3, 0, 0, 0], "result": {"type": "list", "items": [{"type": "number", "numerator": "1", "denominator": "1"}, {"type": "number", "numerator": "5", "denominator": "2"}, {"type": "number", "numerator": "-3", "denominator": "1"}]}, "diagnostic_codes": []}
+    },
+    {
+      "id": "select-values",
+      "fields": ["amount", "enabled"],
+      "members": [
+        {"id": "a", "fields": {"amount": {"status": "known", "value": {"type": "number", "numerator": "2", "denominator": "1"}}, "enabled": {"status": "known", "value": {"type": "boolean", "value": true}}}},
+        {"id": "b", "fields": {"amount": {"status": "known", "value": {"type": "number", "numerator": "7", "denominator": "1"}}, "enabled": {"status": "known", "value": {"type": "boolean", "value": false}}}}
+      ],
+      "operation": {"op": "select", "where": {"column": "enabled"}, "value": {"column": "amount"}},
+      "expected": {"status": "ok", "counts": [2, 1, 0, 0, 0], "result": {"type": "list", "items": [{"type": "number", "numerator": "2", "denominator": "1"}]}, "diagnostic_codes": []}
+    },
+    {
+      "id": "count-comparison",
+      "fields": ["amount"],
+      "members": [
+        {"id": "a", "fields": {"amount": {"status": "known", "value": {"type": "number", "numerator": "1", "denominator": "1"}}}},
+        {"id": "b", "fields": {"amount": {"status": "known", "value": {"type": "number", "numerator": "3", "denominator": "1"}}}},
+        {"id": "c", "fields": {"amount": {"status": "known", "value": {"type": "number", "numerator": "5", "denominator": "1"}}}}
+      ],
+      "operation": {"op": "count", "where": {"op": "gt", "args": [{"column": "amount"}, {"num": "2"}]}},
+      "expected": {"status": "ok", "counts": [3, 2, 0, 0, 0], "result": {"type": "number", "numerator": "2", "denominator": "1"}, "diagnostic_codes": []}
+    },
+    {
+      "id": "sum-exact",
+      "fields": ["amount"],
+      "members": [
+        {"id": "a", "fields": {"amount": {"status": "known", "value": {"type": "number", "numerator": "1", "denominator": "1"}}}},
+        {"id": "b", "fields": {"amount": {"status": "known", "value": {"type": "number", "numerator": "5", "denominator": "2"}}}},
+        {"id": "c", "fields": {"amount": {"status": "known", "value": {"type": "number", "numerator": "-3", "denominator": "1"}}}}
+      ],
+      "operation": {"op": "sum", "value": {"column": "amount"}},
+      "expected": {"status": "ok", "counts": [3, 3, 0, 0, 0], "result": {"type": "number", "numerator": "1", "denominator": "2"}, "diagnostic_codes": []}
+    },
+    {
+      "id": "all-dominates-uncertainty",
+      "fields": ["enabled"],
+      "members": [
+        {"id": "a", "fields": {"enabled": {"status": "known", "value": {"type": "boolean", "value": false}}}},
+        {"id": "b", "fields": {"enabled": {"status": "missing"}}},
+        {"id": "c", "fields": {"enabled": {"status": "contested"}}}
+      ],
+      "operation": {"op": "all", "where": {"column": "enabled"}},
+      "expected": {"status": "ok", "counts": [3, 0, 2, 0, 0], "result": {"type": "boolean", "value": false}, "diagnostic_codes": ["contested_column", "missing_column", "where_unknown", "where_unknown"]}
+    },
+    {
+      "id": "any-dominates-uncertainty",
+      "fields": ["enabled"],
+      "members": [
+        {"id": "a", "fields": {"enabled": {"status": "known", "value": {"type": "boolean", "value": true}}}},
+        {"id": "b", "fields": {"enabled": {"status": "missing"}}}
+      ],
+      "operation": {"op": "any", "where": {"column": "enabled"}},
+      "expected": {"status": "ok", "counts": [2, 1, 1, 0, 0], "result": {"type": "boolean", "value": true}, "diagnostic_codes": ["missing_column", "where_unknown"]}
+    },
+    {
+      "id": "filter-retains-unknown-membership",
+      "fields": ["enabled"],
+      "members": [
+        {"id": "a", "fields": {"enabled": {"status": "known", "value": {"type": "boolean", "value": true}}}},
+        {"id": "b", "fields": {"enabled": {"status": "contested"}}}
+      ],
+      "operation": {"op": "filter", "where": {"column": "enabled"}},
+      "expected": {"status": "unknown", "counts": [2, 1, 1, 0, 0], "result": null, "diagnostic_codes": ["contested_column", "where_unknown"]}
+    },
+    {
+      "id": "project-unavailable-value",
+      "fields": ["published"],
+      "members": [
+        {"id": "a", "fields": {"published": {"status": "unavailable", "reason": "formula_value"}}}
+      ],
+      "operation": {"op": "project", "value": {"column": "published"}},
+      "expected": {"status": "unknown", "counts": [1, 1, 0, 1, 0], "result": null, "diagnostic_codes": ["column_type_error", "value_error"]}
+    },
+    {
+      "id": "selected-value-error",
+      "fields": ["amount", "enabled"],
+      "members": [
+        {"id": "a", "fields": {"amount": {"status": "known", "value": {"type": "number", "numerator": "1", "denominator": "1"}}, "enabled": {"status": "known", "value": {"type": "boolean", "value": true}}}}
+      ],
+      "operation": {"op": "select", "where": {"column": "enabled"}, "value": {"op": "div", "args": [{"column": "amount"}, {"num": "0"}]}},
+      "expected": {"status": "error", "counts": [1, 1, 0, 0, 1], "result": null, "diagnostic_codes": ["division_by_zero", "value_error"]}
+    },
+    {
+      "id": "any-dominates-row-runtime-error",
+      "fields": ["amount"],
+      "members": [
+        {"id": "a", "fields": {"amount": {"status": "known", "value": {"type": "number", "numerator": "1", "denominator": "1"}}}}
+      ],
+      "operation": {"op": "any", "where": {"op": "or", "args": [{"bool": true}, {"op": "eq", "args": [{"op": "div", "args": [{"column": "amount"}, {"num": "0"}]}, {"num": "0"}]}]}},
+      "expected": {"status": "ok", "counts": [1, 1, 0, 0, 1], "result": {"type": "boolean", "value": true}, "diagnostic_codes": ["division_by_zero", "where_error"]}
+    },
+    {
+      "id": "empty-project",
+      "fields": ["amount"],
+      "members": [],
+      "operation": {"op": "project", "value": {"column": "amount"}},
+      "expected": {"status": "ok", "counts": [0, 0, 0, 0, 0], "result": {"type": "list", "items": []}, "diagnostic_codes": []}
+    },
+    {
+      "id": "empty-all",
+      "fields": ["enabled"],
+      "members": [],
+      "operation": {"op": "all", "where": {"column": "enabled"}},
+      "expected": {"status": "ok", "counts": [0, 0, 0, 0, 0], "result": {"type": "boolean", "value": true}, "diagnostic_codes": []}
+    },
+    {
+      "id": "empty-any",
+      "fields": ["enabled"],
+      "members": [],
+      "operation": {"op": "any", "where": {"column": "enabled"}},
+      "expected": {"status": "ok", "counts": [0, 0, 0, 0, 0], "result": {"type": "boolean", "value": false}, "diagnostic_codes": []}
+    },
+    {
+      "id": "field-from-authored-record",
+      "fields": ["amount"],
+      "members": [
+        {"id": "a", "fields": {"amount": {"status": "known", "value": {"type": "number", "numerator": "9", "denominator": "2"}}}}
+      ],
+      "operation": {"op": "project", "value": {"field": {"record": {"x": {"column": "amount"}}}, "key": "x"}},
+      "expected": {"status": "ok", "counts": [1, 1, 0, 0, 0], "result": {"type": "list", "items": [{"type": "number", "numerator": "9", "denominator": "2"}]}, "diagnostic_codes": []}
+    }
+  ]
+}

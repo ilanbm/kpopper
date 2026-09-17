@@ -7,9 +7,11 @@ Use Snapshot.to_json()/from_json() for portable typed JSON; to_data() remains
 a Python mapping with authored date/datetime objects intact.
 """
 import copy
+import datetime
 import glob
 import hashlib
 import json
+import math
 import os
 from pathlib import Path
 
@@ -418,11 +420,72 @@ class Snapshot:
     def capture_scope(self, scope_id, *, limits=None):
         return ScopeCapture(self, scope_id, limits=limits)
 
+    def capture_query_scope(self, scope_id, *, limits=None):
+        """Capture one complete query row set or refuse incomplete history.
+
+        Ordinary scope summaries deliberately remain available for partial
+        review projections.  A collection query is different: its result would
+        silently change if an accepted member were absent, so active history
+        must prove complete, all-subject coverage before the capture escapes.
+        """
+        history = self.__data['context'].get('history')
+        if history is not None:
+            coverage, integrity = history['coverage'], history['integrity']
+            if coverage['scope'] != 'all' or not coverage['complete'] \
+                    or not integrity['complete'] or integrity['findings']:
+                raise SnapshotError('incomplete_history_scope', scope_id)
+        capture = ScopeCapture(self, scope_id, limits=limits, query=True)
+        if history is not None and not set(capture._member_ids()) <= set(
+                history['coverage']['subjects']):
+            raise SnapshotError('incomplete_history_scope', scope_id)
+        capture._validate_query_fields()
+        return capture
+
+
+def _query_value(value, depth=0):
+    """Project an authored literal to the finite typed algebra, without evaluation."""
+    from .contract import validate_value
+    from .. import expressions as E
+    if depth > 128:
+        raise ValueError('authored value exceeds query depth')
+    if isinstance(value, dict) and 'type' in value:
+        # A value that claims to be typed is never reinterpreted as a record
+        # when its tagged representation is malformed.
+        typed = copy.deepcopy(validate_value(value))
+        pending = [typed]
+        while pending:
+            item = pending.pop()
+            if item['type'] == 'number':
+                numerator, denominator = int(item['numerator']), int(item['denominator'])
+                if math.gcd(abs(numerator), denominator) != 1:
+                    raise ValueError('authored exact number is not canonical')
+            elif item['type'] == 'list':
+                pending.extend(item['items'])
+            elif item['type'] == 'record':
+                pending.extend(item['fields'].values())
+        return typed
+    if type(value) is bool:
+        return {'type': 'boolean', 'value': value}
+    if value is None:
+        return {'type': 'null'}
+    if isinstance(value, str):
+        return {'type': 'text', 'value': value}
+    number = E.number(value)
+    if number is not None:
+        return {'type': 'number', 'numerator': str(number.numerator),
+                'denominator': str(number.denominator)}
+    if isinstance(value, list):
+        return {'type': 'list', 'items': [_query_value(item, depth + 1) for item in value]}
+    if isinstance(value, dict) and all(type(key) is str for key in value):
+        return {'type': 'record', 'fields': {
+            key: _query_value(value[key], depth + 1) for key in sorted(value)}}
+    raise TypeError('authored value is outside the finite typed algebra')
+
 
 class ScopeCapture:
     __slots__ = ('__snapshot', '__data')
 
-    def __init__(self, snapshot, scope_id, *, limits=None):
+    def __init__(self, snapshot, scope_id, *, limits=None, query=False):
         data = snapshot.to_data()
         nodes = data['nodes']
         node = nodes.get(scope_id)
@@ -437,6 +500,8 @@ class ScopeCapture:
         fields = definition['fields']
         if fields != sorted(set(fields)):
             raise SnapshotError('invalid_scope', 'scope fields must be sorted and unique')
+        if query and any(field in ('rule', 'computed') for field in fields):
+            raise SnapshotError('invalid_scope', 'formula and computed fields cannot be query inputs')
         normalized = {'collection': collection, 'fields': fields}
         source = data['document'].get(collection)
         if not isinstance(source, dict) or collection in ('meta', 'schema', 'record', 'also'):
@@ -449,12 +514,17 @@ class ScopeCapture:
         members = sorted(source)
         bound = MAX_COLLECTION
         if limits is not None:
-            if not isinstance(limits, dict) or set(limits) - {'members'}:
+            if not isinstance(limits, dict) or set(limits) - {'members', 'field_cells'}:
                 raise SnapshotError('invalid_limits', 'unknown scope limit')
             bound = limits.get('members', bound)
             if type(bound) is not int or not 0 < bound <= MAX_COLLECTION:
                 raise SnapshotError('invalid_limits', 'invalid collection bound')
-        if len(members) * len(fields) > MAX_EDGES:
+            field_cells = limits.get('field_cells', MAX_EDGES)
+            if type(field_cells) is not int or not 0 < field_cells <= MAX_EDGES:
+                raise SnapshotError('invalid_limits', 'invalid field cell bound')
+        else:
+            field_cells = MAX_EDGES
+        if len(members) * len(fields) > field_cells:
             raise SnapshotError('limit', 'scope candidate field limit exceeded')
         if len(members) > bound:
             raise SnapshotError('limit', 'collection member limit exceeded')
@@ -469,6 +539,9 @@ class ScopeCapture:
                 conflicts = data['context'].get('conflicts', {}).get(member)
                 present = isinstance(body, dict) and field in body
                 observation = {'status': 'contested' if conflicts else ('known' if present else 'missing')}
+                if query and not conflicts and not present and field == 'v' \
+                        and isinstance(body, dict) and 'rule' in body:
+                    observation = {'status': 'unavailable', 'reason': 'formula_value'}
                 if present:
                     observation['value'] = copy.deepcopy(body[field])
                 if conflicts:
@@ -478,7 +551,7 @@ class ScopeCapture:
                         [name, {field: copy.deepcopy(variant[field])}
                          if isinstance(variant, dict) and field in variant else {}]
                         for name, variant in conflicts]
-                if field in ('v', 'rule') and isinstance(body, dict) and 'rule' in body:
+                if not query and field in ('v', 'rule') and isinstance(body, dict) and 'rule' in body:
                     observation['computed_basis'] = snapshot._input_basis().summary(member)
                 fingerprint_input = {key: value for key, value in observation.items() if key != 'alternatives'}
                 if conflicts:
@@ -523,6 +596,51 @@ class ScopeCapture:
     @property
     def candidates(self):
         return copy.deepcopy(self.__data['candidates'])
+
+    def _member_ids(self):
+        return tuple(self.__data['basis']['members'])
+
+    def _validate_query_fields(self):
+        fields = self.__data['definition']['fields']
+        if any(field in ('rule', 'computed') for field in fields):
+            raise SnapshotError('invalid_scope', 'formula and computed fields cannot be query inputs')
+
+    def query_rows(self):
+        """Return canonical authored-only query cells in member-ID order.
+
+        The row adapter never evaluates ``rule`` and never substitutes a
+        computed basis for an absent authored value.  Existing ``candidates``
+        and ``view`` retain their richer review evidence unchanged.
+        """
+        self._validate_query_fields()
+        result = []
+        for member in self.__data['basis']['members']:
+            fields = {}
+            for field in self.__data['definition']['fields']:
+                observation = self.__data['candidates'][member][field]
+                if observation['status'] == 'contested':
+                    fields[field] = {'status': 'contested'}
+                    continue
+                if observation['status'] == 'missing':
+                    fields[field] = ({'status': 'unavailable', 'reason': 'formula_value'}
+                                     if field == 'v' and 'computed_basis' in observation
+                                     else {'status': 'missing'})
+                    continue
+                if observation['status'] == 'unavailable':
+                    fields[field] = {'status': 'unavailable', 'reason': observation['reason']}
+                    continue
+                value = observation.get('value')
+                if isinstance(value, (datetime.date, datetime.datetime)):
+                    fields[field] = {'status': 'unavailable', 'reason': 'unsupported_type'}
+                    continue
+                try:
+                    fields[field] = {'status': 'known', 'value': _query_value(value)}
+                except TypeError:
+                    fields[field] = {'status': 'unavailable', 'reason': 'unsupported_type'}
+                except (ValueError, RecursionError, OverflowError):
+                    fields[field] = {'status': 'unavailable', 'reason': 'invalid_value'}
+            result.append({'id': member, 'fields': fields})
+        return result
 
     def view(self):
         return SnapshotView(self.__snapshot, scopes=[self.__data['scope_id']])

@@ -77,6 +77,15 @@ jobs:
                           'tests.test_reasoning_composition_kernel',
                           'tests.test_reasoning_composition_review'],
                          env=env, check=True)
+      - name: Execute the freshly built archive against query conformance
+        shell: python
+        run: |
+          import os, pathlib, subprocess, sys
+          archive = pathlib.Path('scripts/reasoning/native/${{ matrix.target }}.zip').resolve()
+          env = dict(os.environ, KPOPPER_QUERY_ARCHIVE=str(archive))
+          subprocess.run([sys.executable, '-m', 'unittest',
+                          'tests.test_reasoning_query_runtime', '-v'],
+                         env=env, check=True)
       - name: Upload immutable target candidate
         uses: actions/upload-artifact@v4
         with:

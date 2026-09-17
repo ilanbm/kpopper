@@ -36,7 +36,7 @@ def sha256(path):
 def source_hash(lean_dir):
     lean_dir = Path(lean_dir)
     files = {p.relative_to(lean_dir).as_posix(): sha256(p)
-             for p in lean_dir.glob("*.lean")
+             for p in lean_dir.rglob("*.lean")
              if not p.name.startswith(("Proof", "Audit"))}
     # lakefile.lean is build configuration, if present; current package uses TOML.
     return hashlib.sha256(json.dumps(files, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
@@ -108,7 +108,8 @@ __attribute__((constructor)) static void kpopper_gmp_replacement_probe(void) {
 def validate_axiom_audit(output):
     """Compiling a proof is insufficient: Lean also accepts admitted axioms."""
     required = {'Kpopper.evaluate', 'Kpopper.arithmetic', 'Kpopper.Proof.binary_sound',
-                'Kpopper.Proof.evaluate_closedRat_sound', 'Kpopper.Proof.evaluate_literal_success'}
+                'Kpopper.Proof.evaluate_closedRat_sound', 'Kpopper.Proof.evaluate_literal_success',
+                'Kpopper.Query.prepare', 'Kpopper.Query.execute', 'Kpopper.Query.responseFor'}
     allowed = {'propext', 'Classical.choice', 'Quot.sound'}
     found = set()
     for name, names in re.findall(r"'([^']+)'\s+depends on axioms:\s*\[([^\]]*)\]", output):
@@ -251,10 +252,13 @@ def build_archive(source_root, lean_root, output, target, *, gmp_prefix=None):
         bundle.mkdir()
         snapshot = work / "source"
         snapshot.mkdir()
-        for path in source_root.glob("*.lean"):
-            shutil.copyfile(path, snapshot / path.name)
+        for path in source_root.rglob("*.lean"):
+            relative = path.relative_to(source_root)
+            (snapshot / relative).parent.mkdir(parents=True, exist_ok=True)
+            shutil.copyfile(path, snapshot / relative)
         source_digest = source_hash(snapshot)
-        sources = {p.stem: p for p in snapshot.glob("*.lean")}
+        sources = {p.relative_to(snapshot).with_suffix('').as_posix().replace('/', '.'): p
+                   for p in snapshot.rglob("*.lean")}
         env["LEAN_PATH"] = str(work)
         objects = []
         compiled = set()
@@ -262,22 +266,29 @@ def build_archive(source_root, lean_root, output, target, *, gmp_prefix=None):
             if name in compiled:
                 return
             path = sources[name]
-            for imported in re.findall(r"^import\s+(\w+)", path.read_text(encoding="utf-8"), re.M):
+            for imported in re.findall(r"^import\s+([A-Za-z0-9_.]+)",
+                                       path.read_text(encoding="utf-8"), re.M):
                 if imported in sources:
                     if runtime and imported.startswith(("Proof", "Audit")):
                         raise ValueError("runtime imports proof-only module")
                     compile_module(imported, runtime)
-            shutil.copyfile(path, work / path.name)
-            argv = [lean, "-o", work / (name + ".olean")]
+            relative = Path(*name.split('.'))
+            source_path = (work / relative).with_suffix('.lean')
+            source_path.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copyfile(path, source_path)
+            olean = (work / relative).with_suffix('.olean')
+            olean.parent.mkdir(parents=True, exist_ok=True)
+            argv = [lean, "-o", olean]
             if runtime:
-                argv += ["-c", work / (name + ".c")]
-            compiled_output = run(argv + [work / path.name], cwd=work, env=env)
+                argv += ["-c", (work / relative).with_suffix('.c')]
+            compiled_output = run(argv + [source_path], cwd=work, env=env)
             print(compiled_output, flush=True)
             if name == 'Audit':
                 validate_axiom_audit(compiled_output)
             if runtime:
-                obj = work / (name + ".o")
-                print(run([leanc, "-O3", "-c", "-o", obj, work / (name + ".c")], env=env), flush=True)
+                obj = work / (name.replace('.', '_') + ".o")
+                print(run([leanc, "-O3", "-c", "-o", obj,
+                           (work / relative).with_suffix('.c')], env=env), flush=True)
                 objects.append(obj)
             compiled.add(name)
         compile_module("Main")
@@ -332,10 +343,10 @@ def build_archive(source_root, lean_root, output, target, *, gmp_prefix=None):
         (bundle / "linkage.json").write_bytes((json.dumps(audit, indent=2, sort_keys=True) + "\n").encode())
         if source_hash(source_root) != source_digest:
             raise ValueError("runtime sources changed during build")
-        return archive_payload(bundle, output, {"version": 2, "protocols": ["KP2", "KP3"], "target": target,
+        return archive_payload(bundle, output, {"version": 3, "protocols": ["KP2", "KP3", "KP4"], "target": target,
             "min_os": audit["min_os"], "lean_version": LEAN_VERSION,
             "source_sha256": source_digest, "executable": executable.name,
-            "libraries": [library], "modules": ["arithmetic/v1", "composition/v1"]})
+            "libraries": [library], "modules": ["arithmetic/v1", "composition/v1", "query/v1"]})
 
 
 def audit_linkage(executable, library, target, lean_root):
@@ -533,10 +544,10 @@ def check_bundles(native_dir=None, source_root=None):
                 required = {"version", "protocols", "target", "min_os", "lean_version", "source_sha256",
                             "files", "executable", "libraries", "modules"}
                 if not isinstance(manifest, dict) or set(manifest) != required \
-                        or type(manifest["version"]) is not int or manifest["version"] != 2 \
-                        or manifest["protocols"] != ["KP2", "KP3"] or manifest["target"] != target \
+                        or type(manifest["version"]) is not int or manifest["version"] != 3 \
+                        or manifest["protocols"] != ["KP2", "KP3", "KP4"] or manifest["target"] != target \
                         or manifest["lean_version"] != LEAN_VERSION \
-                        or manifest["modules"] != ["arithmetic/v1", "composition/v1"] \
+                        or manifest["modules"] != ["arithmetic/v1", "composition/v1", "query/v1"] \
                         or not isinstance(manifest["min_os"], str) or not manifest["min_os"].strip() \
                         or not isinstance(manifest["files"], dict):
                     raise ValueError("malformed runtime manifest: " + target)

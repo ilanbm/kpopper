@@ -6,7 +6,7 @@ offline: no compiler, network download, or checked-session setup is needed. The
 Python wrapper is portable; native computation requires a matching verified
 archive.
 
-The data-only executable has two closed transports. KP2/KR2 retains the scalar
+The data-only executable has three closed transports. KP2/KR2 retains the scalar
 arithmetic request, response and `resources/v2` accounting byte-for-byte. A
 request whose potential closure contains a composed node or stored list/record
 uses explicit KP3/KR3 and `resources/v3`; no composition tag is accepted on the
@@ -15,21 +15,23 @@ field access, with fixed maxima of 10,000 recursively expanded value nodes,
 depth 128 and 16 MiB of canonical value tokens. KR3 keeps potential and executed
 reads distinct and returns recursive typed values. Old KP1/KR1 archives are
 refused; source/protocol changes require rebuilt archives for every target.
+KP4/KR4 adds canonical length-framed JSON for the finite `query/v1` scope
+extension and `resources/v4`; KP2 and KP3 lines remain byte-for-byte unchanged.
 
-Manifest schema version 2 advertises both protocol and module sets exactly:
+Manifest schema version 3 advertises both protocol and module sets exactly:
 
 ```json
 {
-  "version": 2,
-  "protocols": ["KP2", "KP3"],
-  "modules": ["arithmetic/v1", "composition/v1"]
+  "version": 3,
+  "protocols": ["KP2", "KP3", "KP4"],
+  "modules": ["arithmetic/v1", "composition/v1", "query/v1"]
 }
 ```
 
 The remaining manifest fields bind the target, minimum OS, Lean version, runtime
 source identity, executable, libraries and every payload digest. The adapter
 checks the requested protocol and required modules before encoding, requires the
-matching KR2 or KR3 response for each request, and preserves KP2 as the reported
+matching KR2, KR3 or KR4 response for each request, and preserves KP2 as the reported
 implementation for scalar closures even when the record declares composition.
 A missing capability or mismatched/stale archive is a refusal, never a semantic
 fallback.
