@@ -133,6 +133,60 @@ class BranchDirect(unittest.TestCase):
         self.assertEqual(H.Store(self.entry).capture().inventory, captured.inventory)
         self.assertFalse((self.entry.parent / D.journal(self.entry)).exists())
 
+    def test_ignored_uncommitted_history_is_not_a_clean_branch_target(self):
+        (self.repo / '.gitignore').write_text('.kpopper/history/\n.kpopper/history-commits/\n')
+        G.git(self.repo, 'add', '.gitignore')
+        G.git(self.repo, '-c', 'commit.gpgsign=false', 'commit', '-m', 'Ignore local history')
+        A.commit(self.entry, A.prepare(self.entry, {'kind': 'set', 'id': 'p.value', 'value': 3}),
+                 verify=lambda data: None)
+        G.git(self.repo, 'add', 'GROUNDING.yaml')
+        G.git(self.repo, '-c', 'commit.gpgsign=false', 'commit', '-m', 'Entry without ignored history')
+        captured = H.Store(self.entry).capture()
+        with self.assertRaisesRegex(ValueError, 'branch_target_uncommitted'):
+            self.adopt()
+        self.assertEqual(H.Store(self.entry).capture().inventory, captured.inventory)
+        self.assertFalse((self.entry.parent / D.journal(self.entry)).exists())
+
+    def test_adoption_preflight_refuses_oversized_write_envelope_before_prepare_or_journal(self):
+        source = Branch.capture(self.repo, 'incoming', entry='GROUNDING.yaml')
+        source_raw = Branch.to_bytes(source)
+        limit = D._base64_length(len(source_raw)) * 2 - 1
+        pending = self.entry.parent / D.journal(self.entry)
+        with mock.patch.object(C, 'MAX_REQUEST_BYTES', limit), \
+             mock.patch.object(Branch, 'prepare_adoption', side_effect=AssertionError('prepared too late')), \
+             self.assertRaisesRegex(ValueError, 'branch_adoption_limit'):
+            self.adopt()
+        self.assertEqual(H.Store(self.entry).capture().inventory, self.before.inventory)
+        self.assertFalse(pending.exists())
+        self.assertFalse(pending.parent.exists())
+
+    def test_adoption_serialization_limit_has_named_error_before_journal_write(self):
+        pending = self.entry.parent / D.journal(self.entry)
+        encode = C.encode_document
+        attempts = []
+        def limit_journal(value, *args, **kwargs):
+            if value.get('kind') == 'history-branch-adoption/v1':
+                attempts.append(value['kind'])
+                raise C.HistoryError('history_limit', 'encoded journal bytes')
+            return encode(value, *args, **kwargs)
+        with mock.patch.object(C, 'encode_document', side_effect=limit_journal), \
+             mock.patch.object(T, 'publish_immutable', side_effect=AssertionError('journal write too early')), \
+             self.assertRaisesRegex(ValueError, 'branch_adoption_limit'):
+            self.adopt()
+        self.assertEqual(attempts, ['history-branch-adoption/v1'])
+        self.assertEqual(H.Store(self.entry).capture().inventory, self.before.inventory)
+        self.assertFalse(pending.exists())
+        self.assertFalse(pending.parent.exists())
+
+    def test_preparation_limits_are_named_without_hiding_other_refusals(self):
+        for code, expected in [('history_limit', 'branch_adoption_limit'),
+                               ('adoption_profile_mismatch', 'adoption_profile_mismatch')]:
+            with self.subTest(code=code), mock.patch.object(Branch, 'prepare_adoption',
+                    side_effect=C.HistoryError(code, 'fixture limit')), self.assertRaisesRegex(ValueError, expected):
+                self.adopt()
+            self.assertEqual(H.Store(self.entry).capture().inventory, self.before.inventory)
+            self.assertFalse((self.entry.parent / D.journal(self.entry)).exists())
+
     def test_two_divergent_refs_commit_once_with_one_global_choice(self):
         second, second_commit = self.second_source()
         preview = D.adopt_branches([str(self.entry)], ['incoming', 'incoming-two'], preview=True)

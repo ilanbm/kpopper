@@ -405,9 +405,44 @@ def _branch_destination_clean(entry, captured, project):
         except ValueError:
             raise C.HistoryError('branch_target_outside_checkout', str(path)) from None
     status = P._peer('project_modes').git(project.root, '--literal-pathspecs', 'status', '--porcelain=v1', '-z',
-        '--untracked-files=all', '--', *sorted(relative)).stdout
+        '--untracked-files=all', '--ignored=matching', '--', *sorted(relative)).stdout
     C._require(not status, 'branch_target_uncommitted',
                'commit the target record and its history before adopting a branch')
+
+
+def _base64_length(size):
+    return 4 * ((size + 2) // 3)
+
+
+def _adoption_preflight(source_bytes):
+    """Reject a captured source that cannot fit in the private write envelope."""
+    C._require(isinstance(source_bytes, (list, tuple)) and source_bytes and
+               all(type(raw) is bytes for raw in source_bytes), 'invalid_branch_capture')
+    encoded_sources = sum(_base64_length(len(raw)) for raw in source_bytes)
+    minimum = encoded_sources + _base64_length(encoded_sources)
+    C._require(minimum <= C.MAX_REQUEST_BYTES, 'branch_adoption_limit',
+               'capture fits its branch limit but not the private write envelope')
+
+
+def _serialize_adoption_envelope(envelope):
+    """Name the narrower private-journal limit without hiding other failures."""
+    try:
+        return C.encode_document(envelope)
+    except C.HistoryError as error:
+        if error.code == 'history_limit':
+            raise C.HistoryError('branch_adoption_limit',
+                                 'capture fits its branch limit but not the private write envelope') from None
+        raise
+
+
+def _prepare_branch_mutation(prepare, *args, **kwargs):
+    try:
+        return prepare(*args, **kwargs)
+    except C.HistoryError as error:
+        if error.code == 'history_limit':
+            raise C.HistoryError('branch_adoption_limit',
+                                 'captured source exceeds target write limits: ' + str(error)) from error
+        raise
 
 
 def adopt_branch(paths, ref, *, choices=None, by=None, preview=False, as_of=None,
@@ -439,21 +474,25 @@ def adopt_branch(paths, ref, *, choices=None, by=None, preview=False, as_of=None
         C._require(H.Store(entry).capture().inventory == captured.inventory, 'stale_baseline')
         return {**result, 'state': 'prepared', 'admission': 'requires_explicit_choices',
                 'source_ref': ref}
+    source_raw = Branch.to_bytes(source)
+    _adoption_preflight([source_raw])
     with P._locked(str(entry), project=project):
         _verify_routing(routing, original_paths, paths, project)
         C._require(not pending.exists(), 'recovery_required')
         captured = H.Store(entry).capture()
         _branch_destination_clean(entry, captured, project)
         operation = 'branch-adopt-' + uuid.uuid4().hex
-        mutation = Branch.prepare_adoption(entry, source, choices={} if choices is None else choices, by=by,
+        mutation = _prepare_branch_mutation(Branch.prepare_adoption, entry, source,
+            choices={} if choices is None else choices, by=by,
             operation=operation, recorded_at=datetime.datetime.now(datetime.timezone.utc).isoformat(),
             capture=captured)
         value = {'version': 1, 'kind': 'history-branch-adoption/v1', 'routing': routing,
-                 'mutation': T._blob(mutation.to_bytes()), 'source': T._blob(Branch.to_bytes(source)),
+                 'mutation': T._blob(mutation.to_bytes()), 'source': T._blob(source_raw),
                  'source_ref': ref}
         envelope = {**value, 'digest': identity(value)}
+        encoded = _serialize_adoption_envelope(envelope)
         T.publish_immutable(pending.parent / '.gitignore', b'*\n', root=entry.parent)
-        T.publish_immutable(pending, C.encode_document(envelope), root=entry.parent)
+        T.publish_immutable(pending, encoded, root=entry.parent)
         Branch.commit_adoption(entry, mutation, source, verify=lambda data:
             _verify_routing(routing, original_paths, paths, project))
         pending.unlink()
@@ -501,9 +540,9 @@ def adopt_branches(paths, refs, *, choices=None, by=None, preview=False, as_of=N
         sources.append((ref, source))
     ordered, _, source_set_revision = Branch._source_set([source for _, source in sources])
     by_revision = {source['revision']: ref for ref, source in sources}
-    source_list = [{'ref': by_revision[source['revision']],
-                    'revision': source['revision'], 'source': T._blob(Branch.to_bytes(source))}
-                   for source in ordered]
+    source_bytes = [Branch.to_bytes(source) for source in ordered]
+    source_list = [{'ref': by_revision[source['revision']], 'revision': source['revision'],
+                    'source': T._blob(raw)} for source, raw in zip(ordered, source_bytes)]
     if expected_source_revision is not None:
         C._require(source_set_revision == expected_source_revision, 'branch_source_changed')
     routing = _routing(original_paths, paths, project)
@@ -517,20 +556,23 @@ def adopt_branches(paths, refs, *, choices=None, by=None, preview=False, as_of=N
         C._require(H.Store(entry).capture().inventory == captured.inventory, 'stale_baseline')
         return {**result, 'state': 'prepared', 'admission': 'requires_explicit_choices',
                 'source_refs': [item['ref'] for item in source_list]}
+    _adoption_preflight(source_bytes)
     with P._locked(str(entry), project=project):
         _verify_routing(routing, original_paths, paths, project)
         C._require(not pending.exists(), 'recovery_required')
         captured = H.Store(entry).capture()
         _branch_destination_clean(entry, captured, project)
         operation = 'branch-adopt-set-' + uuid.uuid4().hex
-        mutation = Branch.prepare_adoption_set(entry, envelopes, choices={} if choices is None else choices,
+        mutation = _prepare_branch_mutation(Branch.prepare_adoption_set, entry, envelopes,
+            choices={} if choices is None else choices,
             by=by, operation=operation, recorded_at=datetime.datetime.now(datetime.timezone.utc).isoformat(),
             capture=captured)
         value = {'version': 1, 'kind': 'history-branch-adoption-set/v1', 'routing': routing,
                  'mutation': T._blob(mutation.to_bytes()), 'sources': source_list}
         envelope = {**value, 'digest': identity(value)}
+        encoded = _serialize_adoption_envelope(envelope)
         T.publish_immutable(pending.parent / '.gitignore', b'*\n', root=entry.parent)
-        T.publish_immutable(pending, C.encode_document(envelope), root=entry.parent)
+        T.publish_immutable(pending, encoded, root=entry.parent)
         Branch.commit_adoption_set(entry, mutation, envelopes, verify=lambda data:
             _verify_routing(routing, original_paths, paths, project))
         pending.unlink()
