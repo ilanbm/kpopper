@@ -731,8 +731,10 @@ def prepare (resources : Resources) (scope : Scope) (operation : Operation) : Ex
   let nodes := operationNodeCount operation
   let edges := if nodes == 0 then 0 else nodes - (exprs operation).length
   let preflightSteps := nodes + edges + fieldReads
+  if preflightSteps > resources.steps || scope.members.length * (nodes + 1) > resources.steps then
+    throw "step_limit"
   let executionBound := operationExecutionUpper scope operation
-  if preflightSteps > resources.steps || executionBound > resources.steps then throw "step_limit"
+  if executionBound > resources.steps then throw "step_limit"
   let upper := resultResourceUpper scope operation
   if upper.peak.size.nodes > min 10000 resources.valueNodes ||
       upper.peak.size.depth > min 128 resources.valueDepth ||

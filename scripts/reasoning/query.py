@@ -789,6 +789,18 @@ def preflight_counts(normalized_operation, scope, resources):
     ir_edges = sum(item['edges'] for item in stats)
     maximum_depth = max([0] + [item['depth'] for item in stats])
     maximum_digits = max([0] + [item['digits'] for item in stats])
+    preflight = ir_nodes + ir_edges + field_reads
+    static_execution_upper = candidate_count * (ir_nodes + 1)
+    early_checks = (
+        ('candidate_limit', candidate_count, resources['candidates']),
+        ('field_read_limit', field_reads, resources['field_reads']),
+        ('depth_limit', maximum_depth, resources['depth']),
+        ('digit_limit', maximum_digits, resources['digits']),
+        ('step_limit', max(preflight, static_execution_upper), resources['steps']),
+    )
+    for code, actual, bound in early_checks:
+        if actual > bound:
+            raise ValueError(code)
     _, peak = _result_resource_upper(normalized_operation, scope)
     value_nodes = peak['nodes']
     value_depth = peak['depth']
@@ -802,14 +814,10 @@ def preflight_counts(normalized_operation, scope, resources):
                 value_depth = max(value_depth, item['depth'])
                 value_bytes = max(value_bytes, item['bytes'])
                 maximum_digits = max(maximum_digits, item['digits'])
-    preflight = ir_nodes + ir_edges + field_reads
     # Every row may take every authored branch; equality/field traversal and
     # the aggregate transition are included exactly as the native preflight does.
     step_upper_bound = _operation_execution_upper(normalized_operation, scope)
     checks = (
-        ('candidate_limit', candidate_count, resources['candidates']),
-        ('field_read_limit', field_reads, resources['field_reads']),
-        ('depth_limit', maximum_depth, resources['depth']),
         ('value_limit', value_nodes, resources['value_nodes']),
         ('value_limit', value_depth, resources['value_depth']),
         ('value_limit', value_bytes, resources['value_bytes']),

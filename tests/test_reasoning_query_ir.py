@@ -2,6 +2,7 @@
 import copy
 import datetime
 import unittest
+from unittest import mock
 
 from scripts.reasoning import query as Q
 from scripts.reasoning.snapshot import Snapshot
@@ -234,6 +235,10 @@ class ScopeAndPreparationTests(unittest.TestCase):
             prepared(limits={'candidates': 1})
         with self.assertRaisesRegex(ValueError, 'field_read_limit'):
             prepared(limits={'field_reads': 7})
+        with mock.patch.object(Q, '_result_resource_upper',
+                               side_effect=AssertionError('expensive row pass')):
+            with self.assertRaisesRegex(ValueError, 'step_limit'):
+                prepared(limits={'steps': 1})
         huge_exponent = authored('count', where={'op': 'eq', 'args': [
             {'column': 'amount'}, {'num': '1e' + '9' * 1000}]})
         with self.assertRaisesRegex(ValueError, 'digit_limit'):
