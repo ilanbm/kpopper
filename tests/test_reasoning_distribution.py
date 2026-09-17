@@ -209,9 +209,10 @@ class CommittedBundleTests(unittest.TestCase):
             shutil.copytree(ROOT / "scripts/reasoning/third_party", payload / "licenses")
             shutil.copyfile(payload / "licenses/THIRD_PARTY_NOTICES.txt", payload / "THIRD_PARTY_NOTICES.txt")
             builder.archive_payload(payload, self.native / (target + ".zip"), {
-                "version": 1, "protocol": "KP2", "target": target, "min_os": "test fixture",
+                "version": 2, "protocols": ["KP2", "KP3"], "target": target, "min_os": "test fixture",
                 "lean_version": builder.LEAN_VERSION, "source_sha256": builder.source_hash(self.source),
-                "files": {}, "executable": "evaluator", "libraries": ["libgmp"], "modules": ["arithmetic/v1"]})
+                "files": {}, "executable": "evaluator", "libraries": ["libgmp"],
+                "modules": ["arithmetic/v1", "composition/v1"]})
         builder.source_bundle(self.upstream, self.native / "gmp-source-and-build.tar.gz")
 
     def check(self):
@@ -261,6 +262,21 @@ class CommittedBundleTests(unittest.TestCase):
         self.rewrite_zip(lambda members: [(entry, b"{broken" if entry.filename == "manifest.json" else data)
                                          for entry, data in members])
         with self.assertRaisesRegex(ValueError, "invalid runtime archive"):
+            self.check()
+
+    def test_scalar_only_manifest_cannot_claim_the_composition_build(self):
+        def downgrade(members):
+            changed = []
+            for entry, data in members:
+                if entry.filename == "manifest.json":
+                    manifest = json.loads(data)
+                    manifest["protocols"] = ["KP2"]
+                    manifest["modules"] = ["arithmetic/v1"]
+                    data = json.dumps(manifest).encode()
+                changed.append((entry, data))
+            return changed
+        self.rewrite_zip(downgrade)
+        with self.assertRaisesRegex(ValueError, "malformed runtime manifest"):
             self.check()
 
     def test_mismatched_payload_refuses(self):
@@ -316,9 +332,11 @@ else:
 def make_runtime():
     return Runtime(os.environ.get("KPOPPER_TEST_ARCHIVE"))
 runtime = make_runtime()
+assert runtime.implementation["protocol"] == "KP2", runtime.implementation
 result = runtime.request({"nodes": {}, "declared": [], "expression": {"op": "div", "args": [{"num": "1"}, {"num": "3"}]}})
 assert result["status"] == "ok", result
 assert result["value"] == {"type": "number", "numerator": "1", "denominator": "3"}, result
+assert runtime.implementation_for({"protocol": "KP3", "nodes": {}, "declared": [], "limits": {}, "expression": {"list": []}})["protocol"] == "KP3"
 print(json.dumps({"result": result, "implementation": runtime.implementation}, sort_keys=True))
 corpus = json.loads(pathlib.Path(os.environ["KPOPPER_TEST_CORPUS"]).read_text(encoding="utf-8"))
 responses = runtime.request_many([case["request"] for case in corpus["cases"]])

@@ -1176,6 +1176,16 @@ def infer(doc):
                         unresolved.setdefault(f, []).append(
                             (nid, [x for x in val if x not in ids]))
     sch = doc.get("schema") or {}
+    reasoning = doc.get("meta", {}).get("reasoning", {}) \
+        if isinstance(doc.get("meta"), dict) else {}
+    core = isinstance(reasoning, dict) and reasoning.get("profile") == "core/v1"
+
+    def judgment_shaped(body, fields):
+        """A blocked structured value is still a value, not a hidden judgment."""
+        matched = fields.intersection(body)
+        if matched == {"blocked_on"} and core and isinstance(body.get("rule"), dict):
+            return False
+        return bool(matched)
 
     def pick(role):
         if sch.get(role):
@@ -1190,7 +1200,7 @@ def infer(doc):
                 if source_collections and set(source_collections) <= {'known', 'sources', 'open', 'questions'} \
                         and all(sch.get(k) for k in ('deps', 'snapshot', 'predicate')) \
                         and not cand['deps'] and set(unresolved) <= {'labels', 'tags', 'v', 'quoted'} \
-                        and not any(judgment_fields.intersection(body)
+                        and not any(judgment_shaped(body, judgment_fields)
                             for group in source_collections.values() for body in group.values()
                             if isinstance(body, dict)):
                     # A portable source/fact closure may retain the explicit parent
@@ -1227,7 +1237,7 @@ def infer(doc):
         newborn = bool(doc) and set(doc) <= {"meta"}
         if (newborn or source_collections and set(source_collections) <= {"known", "sources", "open", "questions"}) \
                 and not unresolved and not any(
-                    judgment_fields.intersection(body) for group in source_collections.values()
+                    judgment_shaped(body, judgment_fields) for group in source_collections.values()
                     for body in group.values() if isinstance(body, dict)):
             return {nid for group in source_collections.values() for nid in group} | (ids & set(COMPUTED)), {}, \
                 {"deps": "rests_on", "snapshot": "seen", "predicate": "wrong_if"}

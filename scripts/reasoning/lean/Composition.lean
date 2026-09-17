@@ -477,35 +477,49 @@ def refWork : Nat → List RefFrame → List String → Except String (List Stri
 
 def refs (expr : Expr) : Except String (List String) := refWork 1000000 [.expr expr] []
 
-/-- Empty queue frames do not consume an edge. This preserves the scalar closure's
-edge accounting while avoiding uncharged list append/copy operations. -/
-def nextEdge : List (List String) → Option (String × List (List String))
-  | [] => none
-  | [] :: tail => nextEdge tail
-  | (id :: tail) :: rest => some (id, tail :: rest)
+/-- DFS exit frames keep the active path exact without copying child lists.
+Empty and exit frames do not consume an edge; every reference occurrence does,
+including memoized fan-in and the back edge that establishes a cycle. -/
+inductive ClosureFrame where
+  | edges (values : List String)
+  | exit (id : String)
 
-def closureWork : Nat → Std.HashMap String Expr → List (List String) → Std.HashSet String →
+def nextEdge : List ClosureFrame → Std.HashSet String →
+    Option (String × List ClosureFrame × Std.HashSet String)
+  | [], _ => none
+  | .edges [] :: tail, active => nextEdge tail active
+  | .exit id :: tail, active => nextEdge tail (active.erase id)
+  | .edges (id :: tail) :: rest, active => some (id, .edges tail :: rest, active)
+
+def closureResult (cyclic : Bool) (seen : Std.HashSet String) :
+    Except (String × Std.HashSet String) (Std.HashSet String) :=
+  if cyclic then .error ("cyclic_reference", seen) else .ok seen
+
+def closureWork : Nat → Std.HashMap String Expr → List ClosureFrame →
+    Std.HashSet String → Std.HashSet String → Bool →
     Except (String × Std.HashSet String) (Std.HashSet String)
-  | 0, _, pending, seen =>
-    match nextEdge pending with
-    | none => .ok seen
+  | 0, _, pending, seen, active, cyclic =>
+    match nextEdge pending active with
+    | none => closureResult cyclic seen
     | some _ => .error ("edge_limit", seen)
-  | fuel + 1, nodes, pending, seen =>
-    match nextEdge pending with
-    | none => .ok seen
-    | some (id, rest) =>
-      if seen.contains id then closureWork fuel nodes rest seen
+  | fuel + 1, nodes, pending, seen, active, cyclic =>
+    match nextEdge pending active with
+    | none => closureResult cyclic seen
+    | some (id, rest, active) =>
+      if active.contains id then closureWork fuel nodes rest seen active true
+      else if seen.contains id then closureWork fuel nodes rest seen active cyclic
       else
         let seen := seen.insert id
         match nodes[id]? with
-        | none => closureWork fuel nodes rest seen
+        | none => closureWork fuel nodes rest seen active cyclic
         | some expr =>
           match refs expr with
           | .error code => .error (code, seen)
-          | .ok found => closureWork fuel nodes (found :: rest) seen
+          | .ok found => closureWork fuel nodes
+              (.edges found :: .exit id :: rest) seen (active.insert id) cyclic
 
 def closure (fuel : Nat) (nodes : Std.HashMap String Expr) (pending : List String)
     (seen : Std.HashSet String) : Except (String × Std.HashSet String) (Std.HashSet String) :=
-  closureWork (min 100000 fuel) nodes [pending] seen
+  closureWork (min 100000 fuel) nodes [.edges pending] seen {} false
 
 end Kpopper.Composition
