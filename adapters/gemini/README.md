@@ -10,10 +10,17 @@ You need Gemini CLI, Python 3.9 or newer with kpopper's dependencies, and a POSI
 shell. Keep the whole checkout: the adapter reuses its `scripts/` directory.
 
 ```sh
-python3 -m pip install -e "/absolute/path/to/kpopper"
-gemini extensions link "/absolute/path/to/kpopper/adapters/gemini"
+KPOPPER_CHECKOUT=/absolute/path/to/kpopper
+python3 -m venv "$KPOPPER_CHECKOUT/.venv"
+"$KPOPPER_CHECKOUT/.venv/bin/python" -m pip install -e "$KPOPPER_CHECKOUT"
+export PATH="$KPOPPER_CHECKOUT/.venv/bin:$PATH"
+gemini extensions link "$KPOPPER_CHECKOUT/adapters/gemini"
 gemini extensions list
 ```
+
+Launch Gemini from that shell so its hook commands resolve `python3` to the same
+environment. A different launcher must provide that runtime path too; installing
+dependencies in one interpreter does not make them available to another.
 
 Accept Gemini's extension prompt after reviewing the checkout, then restart Gemini
 in the project you want to work on. The extension list should show `kpopper` enabled
