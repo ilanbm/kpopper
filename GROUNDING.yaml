@@ -1586,6 +1586,14 @@ known:
     from: doc.host_compatibility
     at: "Verification matrix / OpenClaw 2026.9.4: all eight skills eligible and model-visible"
     of: "2026-09-17"
+  m.openclaw_isolated_bundle_verified:
+    v: true
+    name: "OpenClaw isolated customization test uses only fresh bundle skills and passes independent
+           recall and change assertions"
+    from: doc.host_compatibility
+    at: "OpenClaw customization-isolated follow-up / negative control, five native inventories and
+         independent assertions"
+    of: "2026-09-17"
   m.openclaw_live_core_verified:
     v: true
     name: "OpenClaw Claude CLI backend passes assisted creation, two-project random recall and

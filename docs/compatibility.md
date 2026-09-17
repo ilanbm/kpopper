@@ -16,7 +16,7 @@ supported end-to-end integration.
 |---|---|---|
 | **Claude Code / Codex shared scripts** | Record birth, reopen, relocation, Claude-to-Codex payload handoff, failure reporting and stop continuation in real subprocesses; named-main regression fixed | Installation and consumption in clean clients, live named-main delivery, active/idle background delivery. |
 | **Codex CLI 0.153.3** | Two real ephemeral sessions using the existing profile: CLI-authored source/readings/judgment and independent recall of a random code after reading the record and source | Clean plugin installation, changed-premise live turn, Desktop/IDE behavior and active/idle delivery. |
-| **OpenClaw 2026.9.4** | Bundle/skill discovery; live Claude CLI backend writes, independent random-code recall in two projects, changed-premise detection with unchanged decision and snapshot | Clean Claude profile, other providers, sandbox/remote paths, automatic hooks and delivery. |
+| **OpenClaw 2026.9.4** | Bundle/skill discovery; fresh checkout/runtime and native user/project customizations excluded; live Claude CLI writes, independent random-code recall in two projects, changed-premise detection with unchanged judgment and snapshot | New account/OS profile, other providers, sandbox/remote paths, automatic hooks and delivery. |
 | **OpenCode 1.18.31** | Isolated native binary accepts configuration and discovers all eight canonical skills at original paths | Model tool use, session resumption, Desktop/IDE behavior. |
 | **Gemini CLI 0.43.0** | Isolated extension link/list; installed host hook runner and aggregator accept startup JSON context; adapter regression tests | Live probe stopped before a model call because the selected API-key authentication had no key in the test environment; lifecycle/shutdown, resume and sandbox execution remain unverified. |
 | **Copilot CLI 1.0.75** | Actual CLI hooks and native payloads; real-model creation, fresh record read and changed-premise detection with canonical skills | Complete citation metadata, randomized fresh-session recall, live cross-agent handoff and other operating systems. |
@@ -52,6 +52,32 @@ that policy to unrestricted execution. The backend retained an existing Claude
 login/profile, including native skills/hooks, so its own hook output cannot prove
 OpenClaw bundle-hook support. The virtualenv CLI was verified independently.
 Messaging, sandboxing, remote execution and automated delivery remain untested.
+
+### OpenClaw customization-isolated follow-up
+
+A second run closed the native-plugin fallback gap: a fresh checkout at the merged
+commit and fresh Python environment were used in separate OpenClaw state. A
+test-only launcher removed user/project setting sources while preserving OpenClaw's
+explicit plugin, MCP/transport and permission arguments. Auto memory was disabled;
+existing subscription authentication and managed policy remained. This isolates
+customizations, not the account or operating system.
+
+A negative control exposed no kpopper skills. Native initialization in all five
+accepted sessions listed only `openclaw-skills`, and captured symlink targets led
+to the fresh checkout. Independent assertions checked two distinct random-code
+recalls, observed record reads before answers, unchanged records during recall,
+and a source change from capacity 53 to 23 against requirement 37. The entire
+decision and its historical snapshot stayed unchanged, and the unrelated project
+stayed intact. Session-history tools were unavailable. An earlier read that
+overlapped source revision was excluded and replaced by a stable fresh read.
+
+The original long inline writes failed before approval. The revised guide asks for
+JSON source reports with a short `update --file` command and names the exact report
+contract. One first report was rejected for missing fields; the model corrected it
+after reading that contract. The accepted run used ordinary scoped tool approvals,
+not unrestricted execution, and no hand-edited record. This is functional proof
+with visible setup/authoring friction, not unattended-operation or all-provider
+certification.
 
 ### Copilot live exercise
 

@@ -1,10 +1,12 @@
 # kpopper for OpenClaw
 
 **Status: bundle installation, all eight skills and a live record workflow were
-verified with OpenClaw 2026.9.4. The live test used its Claude CLI backend with
-Fable 5.1, an existing authenticated Claude profile and explicit tool approvals.
+verified with OpenClaw 2026.9.4. The live tests used its Claude CLI backend with
+Fable 5.1 and explicit tool approvals. A follow-up excluded native user/project
+customizations and verified that every selected skill came from the fresh bundle.
 Automatic opening, stop checks and background delivery are not connected by this
-bundle. Other providers and clean native-client profiles remain unverified.**
+bundle. Existing subscription authentication was retained; other providers and a
+new account/OS profile remain unverified.**
 
 OpenClaw detects this repository as a **Codex bundle**, because it contains
 `.codex-plugin/plugin.json`. It loads the canonical `skills/` directory. The
@@ -55,9 +57,11 @@ An exec allowlist with no approval route can list the skills while refusing thei
 use. For a CLI backend, keep an operator approval interface available when the
 policy asks; approve only the intended project operations.
 
-The tested allowlist accepted simple CLI calls but refused some longer write
-commands. The agent then used the documented file-based route: write a JSON source
-report inside the project and run `kpop update --file /absolute/path/to/report.json`.
+The tested Claude CLI backend refused oversized serialized Bash inputs before
+requesting approval, even when the executable was allowlisted. Long inline
+judgments can hit that limit. For writes after the initial source entry, use the
+documented file-based route: write a JSON source report inside the project and run
+`kpop update --file /absolute/path/to/report.json`.
 This route retains the writer's source/hash checks and requires the same write
 authority. A refused tool call is not a successful record update.
 
@@ -79,6 +83,13 @@ At the start of work, run the command with --workspace /absolute/path/to/project
 Use pull for the relevant subject before relying on recorded facts, and check
 before finishing record changes. Report changed premises without rewriting old
 judgments automatically. Mapping and scheduling require the user's chosen scope.
+For writes after the initial source entry, use a JSON source report and the CLI
+update --file /absolute/path/to/report.json route described in the record skill.
+Before composing a report, read
+/absolute/path/to/kpopper/skills/kpopper/INGESTION.md for the required envelope.
+Keep Bash commands short: this host can refuse long serialized tool inputs before
+asking for approval. Use the native file-writing tool for the JSON report, never
+for GROUNDING.yaml. A reported refusal is not a successful update.
 ```
 
 These are agent instructions, not a mechanical session hook. Confirm their
@@ -146,6 +157,32 @@ native profile's Python hooks were observed; they are not evidence that OpenClaw
 executed the bundle's hooks. The explicit virtualenv CLI completed the checks.
 No messaging channel, sandbox, default embedded provider, scheduling or other OS
 was validated. See the [CLI backend contract](https://docs.openclaw.ai/gateway/cli-backends).
+
+### Follow-up without a native kpopper installation supplying context
+
+A separate checkout of the merged package and a fresh Python environment were
+installed in new OpenClaw state. A test-only launcher replaced the backend's
+`--setting-sources user` with an empty setting-source list and disabled auto memory
+for that process. It preserved OpenClaw's explicit plugin, transport and permission
+arguments, and retained the existing subscription login. Managed policy and global
+client configuration were not bypassed.
+
+The negative control listed no native plugins or kpopper skills. Every accepted
+live session then listed only the `openclaw-skills` plugin, whose selected skill
+paths resolved into the fresh checkout. The two projects independently recalled
+different random codes after actual record reads. Updating one room's capacity
+from 53 to 23 fired its decision against a requirement of 37; the entire judgment
+and its `seen` values stayed unchanged. The second project's record was unchanged.
+Earlier sessions and source values were absent from the recall prompts, and
+session-history tools were unavailable.
+
+This proves the bundle's skills can support the explicit-command workflow without
+the preinstalled native kpopper plugin. It is still an operator-approved workflow:
+the initial guide's long inline writes were refused, and one JSON report needed
+correction by the model. The revised instructions above put the file-based route
+and its exact contract path into the agent context. Successful checker output
+alone was not the pass criterion; the generated records and captured tool reads
+were also checked independently.
 
 Official references:
 
