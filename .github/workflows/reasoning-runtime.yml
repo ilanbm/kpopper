@@ -66,6 +66,7 @@ jobs:
         shell: python
         run: |
           import os, pathlib, subprocess, sys
+          sys.path.insert(0, str(pathlib.Path.cwd()))
           from scripts.reasoning.runtime import Runtime
           archive = pathlib.Path('scripts/reasoning/native/${{ matrix.target }}.zip').resolve()
           native = Runtime(archive)
