@@ -115,6 +115,8 @@ jobs:
           python-version: ${{ matrix.python }}
       - name: Install the package the way a user gets it
         run: pip install .
+      - name: Install test-only schema validator
+        run: python -m pip install "jsonschema>=4,<5"
       - name: The reader and the page keep their contract
         env:
           FULL_SUITE: ${{ needs.changes.outputs.python }}
