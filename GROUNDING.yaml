@@ -1466,6 +1466,7 @@ known:
     distinct_from: lit.github_registries
     # distinct 2026-09-14: one reading of the same table, two jobs: the list is what a person reads to see which ecosystems are served, the count is the one number a falsifier can compare against
   p.history_activation_cancellation:
+    name: "Activation cancellation and guarded group recovery"
     v: "Guarded activation cancellation retains the complete candidate as inactive immutable audit,
         restores authored bytes, advances the legacy authority epoch, and binds cancellation receipts
         to the authority and later commits. Group recovery validates every member before clearing
@@ -1476,6 +1477,7 @@ known:
     scope: "Source protocol and disposable regression fixtures; not a live-record cutover or
             installed release-readiness claim"
   p.history_branch_adoption:
+    name: "Pinned branch capture and adoption"
     v: "Local branch history is captured at pinned Git commits and adopted through one prepared
         mutation with explicit overlap choices. Captured source envelopes are retained as immutable
         audit evidence; prior capsule coverage is explicit rather than recursively copied. Ordinary
@@ -1499,6 +1501,7 @@ known:
     at: "docs/history-contract.md, History store and Capture and replay; scripts/history_contract.py and scripts/reasoning/snapshot.py at d9857cdb184d1daf4df37c09e71be804e1c46c37"
     of: "2026-09-17"
   p.history_replay_audit_evidence:
+    name: "Adapter audit replay witness"
     v: "Adapter audit replay accepts only the current adapter identity or an exact full audit in
         validated causal parent receipts. A pending operation cannot witness its own audit. An
         unknown old adapter requires the original verified runtime; semantic and native audit changes
@@ -1509,6 +1512,7 @@ known:
     scope: "Source replay admission contract; recorded provenance is not proof of external source
             truth"
   p.history_writer_compatibility:
+    name: "History writer compatibility"
     v: "History batch receipt v6 validates the final staged world while retaining per-action
         admission and original seen. Retained v2/v3 operations replay exact bytes. Unicode subjects
         retain exact logical identities through versioned hashed physical paths; older raw paths

@@ -89,7 +89,7 @@ tabs:
              s.2026_09_14_working_modes, s.2026_09_15_batch_test_race,
              s.2026_09_15_branch_verdict_conflicts, s.2026_09_15_verdict_conflicts_decided,
              s.2026_09_15_link_spelling, s.2026_09_16_page_address,
-             s.2026_09_17_selective_ci]
+             s.2026_09_17_selective_ci, s.2026_09_17_history_reasoning_integration]
     sections:
       - title: How to read what follows
         why: a wall of cards is not an argument until you know what separates them
@@ -129,6 +129,12 @@ tabs:
                       same moved-since-reviewed tint without pretending it argues - it states, and a
                       sentence that would deserve a falsifier is a judgment that belongs in the
                       record."
+      - title: The history contracts
+        why: the record's history writes, recovery, branch adoption and replay rules are kept together for the next implementation session
+        pick: [p.history_capture_contract, p.prepared_legacy_recovery,
+               p.history_activation_cancellation, p.history_branch_adoption,
+               p.history_replay_audit_evidence, p.history_writer_compatibility]
+        as: table
       - title: The decisions that hold
         why: every one says what would make it wrong - hover any reference in the reasoning to see the value it was decided against
         pick: judgments
