@@ -69,7 +69,195 @@ def _record_files(record):
     return sorted(files)
 
 
-def corpus(record=None, state_dir=None, source_roots=None):
+def _core_modules():
+    try:
+        from .reasoning.context import CapturedAssessment
+    except ImportError:
+        root = str(Path(__file__).resolve().parents[1])
+        if root not in sys.path:
+            sys.path.insert(0, root)
+        from scripts.reasoning.context import CapturedAssessment
+    return CapturedAssessment
+
+
+def _core_source_ids(nid, nodes, projected):
+    """Traverse captured declarations and projected witnesses, never expressions."""
+    found, seen, pending = set(), set(), [nid]
+    while pending:
+        key = pending.pop()
+        if key in seen:
+            continue
+        seen.add(key)
+        finding = nodes.get(key)
+        body = finding.get('body') if isinstance(finding, dict) else None
+        if not isinstance(body, dict):
+            continue
+        if not any(field in body for field in finding['fields'].values()) \
+                and any(body.get(field) for field in ('file', 'url', 'asked', 'read')):
+            found.add(key)
+        citation = body.get('from')
+        if isinstance(citation, str) and citation in nodes:
+            pending.append(citation)
+        deps = body.get(finding['fields']['deps'])
+        if isinstance(deps, list):
+            pending.extend(dep for dep in deps if isinstance(dep, str) and dep in nodes)
+        view = projected.get(key, {})
+        pending.extend(item['id'] for item in view.get('dependencies', [])
+                       if item.get('id') in nodes)
+    return sorted(found)
+
+
+def _core_record_sha(snapshot, record):
+    files = snapshot.get('authored_revision', {}).get('files', [])
+    named = [item.get('sha256') for item in files
+             if item.get('status') == 'read' and item.get('origin') == 'origin:' + record.name]
+    if len(named) == 1:
+        return named[0]
+    readable = [item.get('sha256') for item in files
+                if item.get('status') == 'read' and item.get('sha256')]
+    return readable[0] if len(readable) == 1 else None
+
+
+def _core_source_path(filename, record, snapshot, roots):
+    locator = Path(filename).expanduser()
+    if locator.is_absolute():
+        return locator.resolve()
+    directories = {record.parent, *roots}
+    for item in snapshot.get('authored_revision', {}).get('files', []):
+        origin = item.get('origin')
+        if isinstance(origin, str) and origin.startswith('origin:'):
+            directories.add((record.parent / origin[len('origin:'):]).resolve().parent)
+    existing = {candidate.resolve() for directory in directories
+                for candidate in (directory / locator,) if candidate.is_file()}
+    if len(existing) > 1:
+        raise ValueError('core_search_source_origin_ambiguous: ' + filename)
+    return next(iter(existing), (record.parent / locator).resolve())
+
+
+def _core_corpus(record=None, state_dir=None, source_roots=None):
+    """Bind a secondary text corpus to one already-computed shared assessment."""
+    if state_dir is not None:
+        raise ValueError('core_profile_option_unsupported: --state-dir')
+    mode = 'frozen' if P._RAW_READS.get() else os.environ.get('KPOPPER_READ_MODE', 'live')
+    if mode not in ('live', 'frozen'):
+        raise ValueError('read mode must be live or frozen')
+    rec = Path(I._record_path(record)).resolve()
+    roots = sorted({rec.parent.resolve(), *(Path(root).expanduser().resolve()
+                                            for root in (source_roots or []))})
+    if any(not root.is_dir() for root in roots):
+        raise ValueError('source roots must be existing directories')
+
+    CapturedAssessment = _core_modules()
+    context = CapturedAssessment.capture([str(rec)])
+    assessment, view, snapshot = context.assessment, context.view, context.snapshot.to_data()
+    nodes = assessment['nodes']
+    rows, diagnostics, source_stamps = [], [], {}
+    for nid in sorted(nodes):
+        finding, projection = nodes[nid], view['nodes'][nid]
+        body, fields = finding['body'], finding['fields']
+        if mode == 'frozen' and isinstance(body, dict):
+            try:
+                P._peer('pending_grounding')._privacy(body)
+            except ValueError:
+                diagnostics.append({'ref': 'node:' + nid,
+                                    'reason': 'private source excluded from frozen search'})
+                continue
+        dependencies = body.get(fields['deps'], []) if isinstance(body, dict) else []
+        dependencies = dependencies if isinstance(dependencies, list) \
+            and all(isinstance(dep, str) for dep in dependencies) else []
+        sources = _core_source_ids(nid, nodes, view['nodes'])
+        rule_dependencies = sorted({item['id'] for item in projection['dependencies']
+                                    if item['id'] != nid and item['id'] in nodes})
+        content = P.yaml.safe_dump(body, allow_unicode=True, sort_keys=False)
+        row = {'ref': 'node:' + nid, 'id': nid,
+               'kind': 'judgment' if finding['state']['basis']['status'] != 'not_applicable' else 'entry',
+               'scope': 'record', 'status': projection['status'], 'findings': projection,
+               'name': P.named(body), 'sources': sources, 'dependencies': dependencies,
+               'rule_dependencies': rule_dependencies, 'content': content}
+        value_text = projection['status']['computation']['value_text']
+        if value_text is not None:
+            row['value_text'] = value_text
+        rows.append(row)
+
+        if not isinstance(body, dict) or nid not in sources:
+            continue
+        source_ref = 'source:' + nid
+        filename = body.get('file')
+        if not isinstance(filename, str):
+            if body.get('url'):
+                diagnostics.append({'ref': source_ref, 'reason': 'remote source not fetched'})
+            continue
+        source = _core_source_path(filename, rec, snapshot, roots)
+        try:
+            if mode == 'frozen' and rec.parent not in source.parents:
+                raise ValueError('external evidence')
+            if not any(source == root or root in source.parents for root in roots):
+                raise ValueError('outside allowed source roots; pass --source-root for an authorized directory')
+            if source.suffix.lower() not in TEXT_SUFFIXES:
+                raise ValueError('only local UTF-8 text sources are indexed')
+            with source.open('rb') as handle:
+                data = handle.read(SOURCE_BYTES + 1)
+            if len(data) > SOURCE_BYTES:
+                raise ValueError('source exceeds the 1 MiB search limit; read it directly')
+            source_content = data.decode('utf-8')
+            if '\0' in source_content:
+                raise ValueError('binary content is not indexed')
+        except (OSError, UnicodeError, ValueError) as error:
+            diagnostics.append({'ref': source_ref, 'reason': str(error)})
+            continue
+        source_stamps[str(source)] = I._sha(data)
+        rows.append({'ref': source_ref, 'id': nid, 'kind': 'source', 'scope': 'record',
+                     'status': 'SOURCE', 'name': P.named(body), 'content': source_content,
+                     'file': str(source), 'sources': [nid], 'dependencies': []})
+
+    # Hypothesis bodies are captured searchable text, never current findings.
+    for name, hypothesis in sorted(snapshot['hypotheses'].items()):
+        if hypothesis.get('error'):
+            diagnostics.append({'ref': 'hypothesis:' + name, 'reason': hypothesis['error']})
+            continue
+        document = hypothesis.get('document', {})
+        for collection, members in P.collections_of(document).items():
+            if collection == 'meta' or not isinstance(members, dict):
+                continue
+            for nid, body in sorted(members.items()):
+                if mode == 'frozen' and isinstance(body, dict):
+                    try:
+                        P._peer('pending_grounding')._privacy(body)
+                    except ValueError:
+                        diagnostics.append({'ref': 'hypothesis:' + name + ':node:' + nid,
+                                            'reason': 'private source excluded from frozen search'})
+                        continue
+                rows.append({'ref': 'hypothesis:' + name + ':node:' + nid, 'id': nid,
+                             'kind': 'entry', 'scope': 'hypothesis:' + name,
+                             'status': 'HYPOTHESIS', 'name': P.named(body), 'sources': [],
+                             'dependencies': [], 'rule_dependencies': [],
+                             'content': P.yaml.safe_dump(body, allow_unicode=True, sort_keys=False)})
+
+    for path, stamp in source_stamps.items():
+        try:
+            if I._sha(Path(path).read_bytes()) != stamp:
+                raise ValueError('source changed during search; retry')
+        except OSError as error:
+            raise ValueError('source changed during search; retry') from error
+    secondary = {'record': str(rec), 'source_files': source_stamps,
+                 'source_roots': [str(root) for root in roots], 'rows': rows,
+                 'unindexed': diagnostics}
+    revision = digest(encode({'snapshot_id': context.snapshot_id,
+                              'findings_revision': context.findings_revision,
+                              'corpus': secondary}))
+    return {'read_mode': mode, 'record': str(rec), 'revision': revision,
+            'revision_kind': 'search-corpus', 'corpus_revision': revision,
+            'snapshot_id': context.snapshot_id,
+            'findings_revision': context.findings_revision,
+            'record_sha256': _core_record_sha(snapshot, rec), 'rows': rows,
+            'unindexed': diagnostics}
+
+
+def corpus(record=None, state_dir=None, source_roots=None, profile=None):
+    if profile is not None:
+        if profile != 'core/v1':
+            raise ValueError('unsupported search profile')
+        return _core_corpus(record, state_dir, source_roots)
     views = P._peer('knowledge_views')
     mode = 'frozen' if P._RAW_READS.get() else os.environ.get('KPOPPER_READ_MODE', 'live')
     if mode not in ('live', 'frozen'):
@@ -249,13 +437,24 @@ def _excerpt(content, terms, size=320):
             "total_characters": len(content)}
 
 
-def search(query, record=None, state_dir=None, limit=5, chars=6000, source_roots=None):
+def _searchable_content(row):
+    content = row['content']
+    if row.get('value_text') is not None:
+        return content + '\n' + row['value_text']
+    calculation = row.get('calculation', {})
+    if calculation.get('value') is not None:
+        return content + '\n' + P.E.display_value(calculation['value'])
+    return content
+
+
+def search(query, record=None, state_dir=None, limit=5, chars=6000, source_roots=None,
+           profile=None):
     if not isinstance(query, str) or not query.strip() or len(query) > 2000:
         raise ValueError("query must contain 1..2000 characters")
     if not 1 <= limit <= 50 or not 500 <= chars <= 100000:
         raise ValueError("limit must be 1..50; chars must be 500..100000")
     terms = list(dict.fromkeys(re.findall(r"[^\W_]+", query.casefold())))[:32]
-    data = corpus(record, state_dir, source_roots)
+    data = corpus(record, state_dir, source_roots, profile)
     rows = data.pop("rows")
     matches = []
     if terms:
@@ -263,8 +462,7 @@ def search(query, record=None, state_dir=None, limit=5, chars=6000, source_roots
         try:
             connection.execute("CREATE VIRTUAL TABLE evidence USING fts5(identity, name, content, tokenize='unicode61')")
             connection.executemany("INSERT INTO evidence(rowid, identity, name, content) VALUES (?, ?, ?, ?)",
-                                   [(i + 1, row["id"], row["name"], row["content"] +
-                                     ("\n" + P.E.display_value(row["calculation"]["value"]) if row.get("calculation", {}).get("value") is not None else ""))
+                                   [(i + 1, row['id'], row['name'], _searchable_content(row))
                                     for i, row in enumerate(rows)])
             expression = " OR ".join('"' + term.replace('"', '""') + '"' for term in terms)
             hits = connection.execute("SELECT rowid FROM evidence WHERE evidence MATCH ? ORDER BY bm25(evidence, 8, 4, 1), rowid", (expression,))
@@ -291,8 +489,9 @@ def search(query, record=None, state_dir=None, limit=5, chars=6000, source_roots
     return result
 
 
-def read(ref, revision, record=None, state_dir=None, offset=0, length=4000, source_roots=None):
-    data = corpus(record, state_dir, source_roots)
+def read(ref, revision, record=None, state_dir=None, offset=0, length=4000, source_roots=None,
+         profile=None):
+    data = corpus(record, state_dir, source_roots, profile)
     if revision != data["revision"]:
         raise ValueError("record, capture state or source changed; search again")
     row = next((r for r in data["rows"] if r["ref"] == ref), None)
@@ -306,7 +505,10 @@ def read(ref, revision, record=None, state_dir=None, offset=0, length=4000, sour
             "content": content[offset:end], "offset": offset, "next_offset": end if end < len(content) else None,
             "complete": offset == 0 and end == len(content), "total_characters": len(content),
             "sha256": digest(content)}
-    for key in ('calculation', 'assessment', 'publication', 'conflict'):
+    for key in ('snapshot_id', 'findings_revision', 'corpus_revision'):
+        if key in data:
+            result[key] = data[key]
+    for key in ('calculation', 'assessment', 'publication', 'conflict', 'findings', 'value_text'):
         if key in row:
             result[key] = row[key]
     return result
@@ -329,6 +531,8 @@ def main(argv=None):
     parser.add_argument("--offset", type=int, default=0)
     parser.add_argument("--length", type=int, default=4000)
     parser.add_argument("--json", action="store_true")
+    parser.add_argument('--profile', choices=('core/v1',),
+                        help='explicit shared assessment profile; omitted keeps legacy output')
     args = parser.parse_args(argv)
     if args.frozen:
         os.environ['KPOPPER_READ_MODE'] = 'frozen'
@@ -336,11 +540,13 @@ def main(argv=None):
         if args.read:
             if args.query or not args.revision:
                 raise ValueError("--read requires --revision and no query")
-            result = read(args.read, args.revision, args.record, args.state_dir, args.offset, args.length, args.source_root)
+            result = read(args.read, args.revision, args.record, args.state_dir, args.offset,
+                          args.length, args.source_root, args.profile)
         else:
             if args.revision or args.offset:
                 raise ValueError("--revision and --offset require --read")
-            result = search(args.query, args.record, args.state_dir, args.limit, args.chars, args.source_root)
+            result = search(args.query, args.record, args.state_dir, args.limit, args.chars,
+                            args.source_root, args.profile)
     except (ValueError, OSError, sqlite3.Error, P.yaml.YAMLError, SystemExit) as error:
         print(encode({"error": str(error)}) if args.json else str(error), file=sys.stderr)
         return 2

@@ -3,12 +3,27 @@ import argparse
 from collections import defaultdict, deque
 import json
 import re
+import sys
 import textwrap
+from pathlib import Path
 
 try:
     from . import provenance as P
 except ImportError:
     import provenance as P
+
+
+def _core_modules():
+    try:
+        from .reasoning.context import CapturedAssessment
+        from .reasoning.projection import render_expression, render_value
+    except ImportError:
+        root = str(Path(__file__).resolve().parents[1])
+        if root not in sys.path:
+            sys.path.insert(0, root)
+        from scripts.reasoning.context import CapturedAssessment
+        from scripts.reasoning.projection import render_expression, render_value
+    return CapturedAssessment, render_expression, render_value
 
 
 MAX_EDGES = 96
@@ -20,6 +35,8 @@ RELATIONS = {
     'rests_on': 'declared premise',
     'from': 'recorded source',
     'rule_reads': 'input named by a rule',
+    'impact': 'executed read projected from shared findings',
+    'potential_impact': 'potential read projected from shared findings',
     'refutes': 'recorded refutation, not a dependency or a newly evaluated condition',
 }
 STATE_MEANINGS = {
@@ -91,8 +108,156 @@ def review_readings(judgment, raw, ids, judgments, selected, state=None):
     return rows, max(0, len(dependencies) - PREMISE_ROWS)
 
 
-def project(paths, seeds, direction='support', depth=1, max_nodes=12):
+def _core_readings(node, selected):
+    """Project review rows from the captured v3 finding without evaluating them."""
+    _, _, render_value = _core_modules()
+
+    rows = []
+    dependencies = node['state']['basis']['dependencies']
+    for dep, finding in list(dependencies.items())[:PREMISE_ROWS]:
+        prior, current = finding['at_review'], finding['current']
+        row = {'id': dep, 'has_review': prior['status'] == 'recorded',
+               'at_review': prior.get('value'),
+               'current_status': current['status'],
+               'comparison': finding['comparison'] if finding['comparison'] in {
+                   'same', 'changed', 'unknown'} else 'unknown',
+               'formula_changed': finding.get('rule_changed')}
+        if current['status'] == 'ok' and current.get('value') is not None:
+            row['current_status'] = 'shown'
+            row['current'] = render_value(current['value'])
+            row['current_calculated'] = True
+        elif current['status'] in ('unknown', 'error', 'limit', 'operational_error',
+                                   'unsupported_capability'):
+            row['current_status'] = 'unavailable'
+        if row['comparison'] == 'unknown':
+            row['comparison'] = 'not_compared'
+        if dep not in selected:
+            row['current_status'] = 'omitted'
+            row.pop('current', None)
+            row.pop('current_calculated', None)
+        rows.append(row)
+    return rows, max(0, len(dependencies) - PREMISE_ROWS)
+
+
+def _core_project(paths, seeds, direction='support', depth=1, max_nodes=12):
+    """Export one immutable shared assessment; projection never reloads or evaluates."""
+    CapturedAssessment, render_expression, _ = _core_modules()
+
+    if direction not in {'support', 'impact'}:
+        raise ValueError('direction must be support or impact')
+    if type(depth) is not int or not 0 <= depth <= 4:
+        raise ValueError('depth must be 0..4')
+    if type(max_nodes) is not int or not 1 <= max_nodes <= 32:
+        raise ValueError('max-nodes must be 1..32')
+    seeds = list(dict.fromkeys(seeds))
+    if not 1 <= len(seeds) <= min(8, max_nodes):
+        raise ValueError('supply 1..8 exact IDs; max-nodes must include every seed')
+
+    context = CapturedAssessment.capture(paths)
+    assessment, view, snapshot = context.assessment, context.view, context.snapshot.to_data()
+    all_nodes = assessment['nodes']
+    unknown = [nid for nid in seeds if nid not in all_nodes]
+    if unknown:
+        raise ValueError('unknown exact ID(s): ' + ', '.join(unknown) + '; use kpop open or pull')
+
+    # Shared impact witnesses are the only dependency classification used here.
+    edges = {(edge['to'], 'impact' if edge['classification'] == 'executed'
+              else 'potential_impact', edge['from']) for edge in view['impacts']}
+    for nid, finding in all_nodes.items():
+        body = finding['body']
+        source = body.get('from') if isinstance(body, dict) else None
+        if isinstance(source, str) and source in all_nodes:
+            edges.add((nid, 'from', source))
+    edges = sorted(edges)
+    adjacent = defaultdict(list)
+    for start, relation, end in edges:
+        source, target = (start, end) if direction == 'support' else (end, start)
+        adjacent[source].append(target)
+    distances = dict.fromkeys(seeds, 0)
+    queue = deque(seeds)
+    while queue:
+        nid = queue.popleft()
+        if distances[nid] >= depth:
+            continue
+        for neighbor in sorted(set(adjacent[nid])):
+            if neighbor not in distances and len(distances) < max_nodes:
+                distances[neighbor] = distances[nid] + 1
+                queue.append(neighbor)
+
+    nodes = {}
+    for nid in distances:
+        finding = all_nodes.get(nid)
+        if finding is None:
+            nodes[nid] = {'body': None, 'missing': True, 'states': [], 'kind': 'missing'}
+            continue
+        body, projected = finding['body'], view['nodes'][nid]
+        status = projected['status']
+        states = []
+        if status['falsifier']['holds'] is True:
+            states.append('falsified')
+        if status['contention'] == 'detected':
+            states.append('contested')
+        if status['falsifier']['status'] in ('unknown', 'error') \
+                or status['computation']['status'] in ('unknown', 'error', 'operational_error'):
+            states.append('unknown')
+        collection = snapshot['nodes'][nid]['collection']
+        node = {'body': body, 'missing': False, 'states': sorted(states),
+                'kind': 'judgment' if finding['state']['basis']['status'] != 'not_applicable'
+                else 'computed' if isinstance(body, dict) and 'rule' in body else collection,
+                'status': status, 'status_text': projected['status_text']}
+        computation = finding.get('computation')
+        if isinstance(computation, dict):
+            node['calculation'] = {
+                'value': status['computation']['value_text'],
+                'reason': status['computation']['status'],
+            }
+        if node['kind'] == 'judgment':
+            fields = finding['fields']
+            expression = finding['state']['falsifier']['expression']
+            issues = finding['state']['integrity']['issues']
+            node['condition'] = {
+                'expression': expression,
+                'expression_text': render_expression(expression) if isinstance(expression, dict) else expression,
+                'result': status['falsifier']['holds'],
+                'undeclared_reads': [ref for issue in issues
+                                     if issue.get('code') == 'undeclared_predicate_dependencies'
+                                     for ref in issue.get('related_ids', [])],
+                'missing_reads': [ref for issue in issues
+                                  if issue.get('code') == 'missing_dependency'
+                                  for ref in issue.get('related_ids', [])],
+                'unparsed_mentions': [ref for issue in issues
+                                      if issue.get('code') == 'unsupported_predicate'
+                                      for ref in issue.get('related_ids', [])],
+            }
+            node['readings'], node['omitted_readings'] = _core_readings(finding, distances)
+        nodes[nid] = node
+
+    internal = [edge for edge in edges if edge[0] in nodes and edge[2] in nodes]
+    frontier = [edge for edge in edges if (edge[0] in nodes) != (edge[2] in nodes)]
+    hypotheses = snapshot['hypotheses']
+    return {'profile': 'core/v1', 'nodes': nodes, 'edges': internal[:MAX_EDGES], 'seeds': seeds,
+            'direction': direction, 'depth': depth, 'max_nodes': max_nodes,
+            'snapshot': context.snapshot_id[:16], 'snapshot_id': context.snapshot_id,
+            'findings_revision': context.findings_revision,
+            'outside_nodes': len(set(all_nodes) - set(nodes)), 'frontier_edges': len(frontier),
+            'omitted_edges': max(0, len(internal) - MAX_EDGES),
+            'hypotheses': len(hypotheses),
+            'contributions': len(snapshot['context'].get('pending', {}).get('contributions', [])),
+            'hypothesis_errors': {name: hyp['error'] for name, hyp in hypotheses.items()
+                                  if hyp.get('error')},
+            'fields': next(iter(all_nodes.values()))['fields'] if all_nodes else {
+                'deps': 'rests_on', 'snapshot': 'seen', 'predicate': 'wrong_if'},
+            'assessment': {key: assessment[key] for key in (
+                'schema_version', 'assessment_profile', 'snapshot_id', 'findings_revision',
+                'envelope_revision', 'history')}}
+
+
+def project(paths, seeds, direction='support', depth=1, max_nodes=12, profile=None):
     """Use the ordinary reader's roles, values and flags; never evaluate a partial record."""
+    if profile is not None:
+        if profile != 'core/v1':
+            raise ValueError('unsupported export profile')
+        return _core_project(paths, seeds, direction, depth, max_nodes)
     if direction not in {'support', 'impact'}:
         raise ValueError('direction must be support or impact')
     if type(depth) is not int or not 0 <= depth <= 4:
@@ -216,7 +381,11 @@ def markdown(value):
 
 
 def boundaries(packet):
-    return (f"Record {packet['snapshot']}; {packet['direction']} depth {packet['depth']}; "
+    identity = f"Record {packet['snapshot']}"
+    if packet.get('profile') == 'core/v1':
+        identity = (f"Shared assessment {packet['snapshot_id']}; "
+                    f"findings {packet['findings_revision']}")
+    return (f"{identity}; {packet['direction']} depth {packet['depth']}; "
             f"{len(packet['nodes'])} nodes shown (limit {packet['max_nodes']}), "
             f"{packet['outside_nodes']} outside selection; {packet['frontier_edges']} boundary links; "
             f"{packet['omitted_edges']} internal links omitted (cap {MAX_EDGES}).")
@@ -239,6 +408,7 @@ def reading_table(node):
     lines = ['| Dependency | `at_review` (historical) | `current` (recorded or calculated) | Comparison |',
              '|---|---|---|---|']
     comparisons = {'same': 'unchanged', 'moved': 'changed; review flag',
+                   'changed': 'changed',
                    'muted': 'changed; within condition; no review flag',
                    'crossed': 'changed; declared condition holds',
                    'unreviewed': 'no historical reading', 'not_compared': 'not compared by reader',
@@ -302,6 +472,8 @@ def render_markdown(packet, details=False):
         body = body if isinstance(body, dict) else {'v': body}
         is_judgment = node['kind'] == 'judgment'
         roles = packet['fields']
+        if packet.get('profile') == 'core/v1':
+            lines.extend(['- shared assessment: ' + clipped(node['status_text']), ''])
         special = {roles.get(role) for role in ('deps', 'snapshot', 'predicate')} if is_judgment else set()
         for field, value in body.items():
             if field in special:
@@ -311,7 +483,11 @@ def render_markdown(packet, details=False):
                 label += ' (human condition; not evaluated)'
             elif is_judgment and field in P.BLOCKED:
                 label += ' (recorded declaration)'
-            shown = P.predicate_text(value) if field == 'rule' and isinstance(value, dict) else value
+            if packet.get('profile') == 'core/v1' and field == 'rule' and isinstance(value, dict):
+                _, render_expression, _ = _core_modules()
+                shown = render_expression(value)
+            else:
+                shown = P.predicate_text(value) if field == 'rule' and isinstance(value, dict) else value
             lines.append(f'- {markdown(label)}: {clipped(shown)}')
         if 'calculation' in node:
             calculation = node['calculation']
@@ -326,7 +502,7 @@ def render_markdown(packet, details=False):
                 outcome = ('true' if result else 'false') + ' on current recorded values' \
                     if result is not None else 'not evaluated: missing or unsupported reading/condition'
                 lines.append(f"- {markdown(roles.get('predicate') or 'wrong_if')}: "
-                             f"{clipped(P.predicate_text(condition['expression']))} → {outcome}.")
+                             f"{clipped(condition.get('expression_text') or P.predicate_text(condition['expression']))} → {outcome}.")
             else:
                 lines.append('- No executable condition declared.')
             if condition['undeclared_reads']:
@@ -426,9 +602,12 @@ def main(argv=None):
     parser.add_argument('--depth', type=int, default=1, help='0..4 hops, default 1')
     parser.add_argument('--max-nodes', type=int, default=12, help='1..32 nodes including seeds, default 12')
     parser.add_argument('--details', action='store_true', help='include original recorded fields in text output')
+    parser.add_argument('--profile', choices=('core/v1',),
+                        help='explicit shared assessment profile; omitted keeps legacy output')
     args = parser.parse_args(argv)
     try:
-        packet = project(args.record or P.default_paths(), args.ids, args.direction, args.depth, args.max_nodes)
+        packet = project(args.record or P.default_paths(), args.ids, args.direction, args.depth,
+                         args.max_nodes, args.profile)
         if args.details and args.format == 'mermaid':
             raise ValueError('--details needs a text format: markdown or markdown-mermaid')
         output = render_mermaid(packet) if args.format == 'mermaid' else render_markdown(packet, args.details)
