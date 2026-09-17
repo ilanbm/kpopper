@@ -3,8 +3,8 @@ import copy
 import hashlib
 from pathlib import Path
 
-from .authoring import World, prepare, declare
-from .contract import PROFILE, digest, OutputBudget
+from .authoring import World, prepare, declare, declare_document
+from .contract import PROFILE, digest, OutputBudget, admitted
 
 
 def graph(reader, record, target=None, profile=None):
@@ -40,20 +40,25 @@ def _failures(reader, report):
         blocked = bool(reader._blocked_text(body))
         issues = node['state']['integrity']['issues']
         for issue in issues:
-            if blocked and issue['code'] in ('missing_dependency', 'missing_reference'):
+            if blocked and issue['code'] in ('missing_dependency', 'missing_reference', 'missing_field'):
                 continue
             key = (nid, issue['code'], tuple(issue.get('related_ids', [])))
             failures[key] = f"{nid}: {issue['code']}"
         result = node['computation']
-        if isinstance(body.get('rule'), dict) and result and result['status'] != 'ok':
+        computational = not isinstance(node['body'], dict) or isinstance(body.get('rule'), dict) or any(
+            key in body for key in ('v', 'quoted', 'collection_scope'))
+        if computational and result and not admitted(result, blocked=blocked):
             for diagnostic in result['diagnostics']:
-                if blocked and diagnostic['code'] == 'missing_reference':
-                    continue
                 key = (nid, diagnostic['code'], tuple(diagnostic.get('related_ids', [])))
                 failures[key] = f"{nid}: {diagnostic['code']}"
         fields = node['fields']
         if fields['deps'] in body:
             predicate = node['state']['falsifier']
+            computation = predicate.get('computation')
+            if computation and not admitted(computation, blocked=blocked):
+                for diagnostic in computation['diagnostics']:
+                    key = (nid, diagnostic['code'], tuple(diagnostic.get('related_ids', [])))
+                    failures[key] = f"{nid}: {diagnostic['code']}"
             if predicate['status'] == 'holds':
                 failures[(nid, 'fired', ())] = f'{nid}: wrong_if holds'
             elif predicate['status'] in ('unknown', 'error', 'not_declared') and not blocked \
@@ -121,6 +126,7 @@ def stage(reader, paths, actions, *, profile=None, replacement_sink=None):
                 raise ValueError(nid + ': batch replacement requires retained archive transport')
             candidate.setdefault(collection, {})[nid] = copy.deepcopy(action['body'])
         homes[nid] = collection
+    candidate = declare_document(candidate)
     unnormalized = World(reader, candidate, original=before.snapshot)
     normalized, diagnostics = [], []
     for action in actions:
@@ -129,6 +135,7 @@ def stage(reader, paths, actions, *, profile=None, replacement_sink=None):
         diagnostics.extend(notes)
         if authored['kind'] == 'add':
             candidate[homes[authored['id']]][authored['id']] = authored['body']
+    candidate = declare_document(candidate)
     final = World(reader, candidate, original=before.snapshot)
     final_ids, final_jud, final_fields = reader.infer(candidate)
     final_fields = {**final_fields, **final.fields}

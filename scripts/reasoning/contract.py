@@ -16,7 +16,13 @@ MODULES = MappingProxyType({
         'discovery': 'transitive-node-closure/v1',
         'executor': 'KP2',
     }),
+    'composition/v1': MappingProxyType({
+        'operators': ('and', 'or', 'not'),
+        'inputs': ('number', 'boolean', 'text', 'null', 'list', 'record'),
+        'discovery': 'transitive-node-closure/v1', 'executor': 'KP3',
+    }),
 })
+COMPOSITION_LIMITS = MappingProxyType({'value_nodes': 10000, 'value_depth': 128, 'value_bytes': 16777216})
 DEFAULT_LIMITS = MappingProxyType({'steps': 1000000, 'depth': 128, 'digits': 256})
 MAX_LIMITS = MappingProxyType({'steps': 10000000, 'depth': 4096, 'digits': 4096})
 MAX_NODES = 20000
@@ -281,3 +287,12 @@ def node_basis(snapshot_data, node_id):
     """Generate one complete basis; repeated reads should share InputBasis."""
     from .basis import InputBasis
     return InputBasis(snapshot_data).basis(node_id)
+
+
+def admitted(result, *, blocked=False):
+    """Admission is stricter than a dominated boolean computational result."""
+    diagnostics = result.get('diagnostics', [])
+    if result['status'] == 'ok' and not diagnostics:
+        return True
+    return bool(blocked and result['status'] in ('ok', 'unknown') and diagnostics and all(
+        item['code'] in ('missing_reference', 'missing_field') for item in diagnostics))

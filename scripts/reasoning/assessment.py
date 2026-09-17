@@ -84,6 +84,7 @@ def dependency_result(snapshot, dependency, evaluator=None):
         if cap.get('experimental_override'):
             result['interpretation'] = {'declared_profile': cap['declared_profile'], 'explicit_override': PROFILE}
         capture = snapshot.capture_scope(dependency)
+        result['modules'] = list(capture.basis['modules'])
         result.update(status='ok', value=capture.value, basis=capture.basis,
                       potential_dependencies=[capture.witness],
                       potential_ids=sorted({dependency, *capture.candidates}))

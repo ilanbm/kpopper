@@ -29,7 +29,7 @@ def _text(value):
         raise ValueError("invalid UTF-8 text") from exc
 
 
-def encode_request(request):
+def _encode_request_v2(request):
     """Encode nodes/expression/declared/limits without computing their meaning.
 
     ``declared`` is the adapter's complete allowed transitive closure. The public
@@ -107,7 +107,7 @@ def encode_request(request):
     return line
 
 
-def decode_response(line):
+def _decode_response_v2(line):
     """Decode one canonical KR2 response, refusing ambiguous or forged framing."""
     if not isinstance(line, str) or len(line) > MAX_RESPONSE_BYTES:
         raise ValueError("invalid response")
@@ -194,3 +194,243 @@ def decode_response(line):
             "potential_reads": potential, "executed_reads": executed,
             "steps": steps, "preflight_steps": preflight_steps,
             "node_evaluations": dict(counts)}
+
+
+VALUE_LIMITS = {'value_nodes': 10000, 'value_depth': 128, 'value_bytes': 16777216}
+DIAGNOSTICS_V3 = DIAGNOSTICS | frozenset(('missing_field', 'collection_limit'))
+
+
+def encode_request(request):
+    """Select an explicit grammar; KP2 never silently accepts composed nodes."""
+    if isinstance(request, dict) and request.get('protocol') == 'KP3':
+        return _encode_request_v3(request)
+    return _encode_request_v2(request)
+
+
+def _encode_request_v3(request):
+    allowed = {'protocol', 'nodes', 'expression', 'declared', 'limits'}
+    if request.keys() - allowed or not {'protocol', 'nodes', 'expression', 'declared'} <= request.keys():
+        raise ValueError('invalid request fields')
+    limits = request.get('limits')
+    limits = {} if limits is None else limits
+    hard = dict(HARD_LIMITS, **VALUE_LIMITS)
+    if not isinstance(limits, dict) or limits.keys() - hard.keys():
+        raise ValueError('invalid limits')
+    bounds = dict(DEFAULT_LIMITS, **VALUE_LIMITS)
+    bounds.update(limits)
+    if any(type(value) is not int or not 0 < value <= hard[key] for key, value in bounds.items()):
+        raise ValueError('invalid limits')
+    declared, nodes = request['declared'], request['nodes']
+
+    def identifier(value):
+        return isinstance(value, str) and 0 < len(value) <= 500
+
+    if not isinstance(declared, (list, tuple)) or len(declared) > 100000 \
+            or not all(identifier(value) for value in declared) or len(set(declared)) != len(declared):
+        raise ValueError('invalid declared IDs')
+    if not isinstance(nodes, dict) or len(nodes) > 20000 or not all(identifier(key) for key in nodes):
+        raise ValueError('invalid nodes')
+    tokens, used, count, active = [], 0, 0, set()
+
+    def put(*values):
+        nonlocal used
+        for value in values:
+            size = len(value) + bool(tokens)
+            if used + size > MAX_BYTES:
+                raise ValueError('transport limit')
+            used += size
+            tokens.append(value)
+
+    def text(value):
+        if not isinstance(value, str) or len(value) > MAX_BYTES // 2:
+            raise ValueError('invalid or oversized text')
+        try:
+            data = value.encode('utf-8')
+        except UnicodeError as error:
+            raise ValueError('invalid UTF-8 text') from error
+        if used + 2 * len(data) + bool(tokens) > MAX_BYTES:
+            raise ValueError('transport limit')
+        return data.hex()
+
+    def expression(item, depth=0):
+        nonlocal count
+        count += 1
+        if count > 1000000 or depth > 128:
+            raise ValueError('expression limit')
+        if not isinstance(item, dict) or id(item) in active:
+            raise ValueError('invalid or cyclic expression')
+        active.add(id(item))
+        try:
+            keys = set(item)
+            if keys == {'num'}:
+                value = item['num']
+                if not isinstance(value, str) or len(value) > 8200 or not NUMBER.fullmatch(value):
+                    raise ValueError('invalid number lexeme')
+                put('n', value)
+            elif keys == {'bool'} and type(item['bool']) is bool:
+                put('b', '1' if item['bool'] else '0')
+            elif keys == {'text'}:
+                put('s', text(item['text']))
+            elif keys == {'null'} and item['null'] is True:
+                put('z')
+            elif keys == {'ref'} and identifier(item['ref']):
+                put('r', text(item['ref']))
+            elif keys == {'unavailable'} and isinstance(item['unavailable'], str) and item['unavailable'] in UNAVAILABLE:
+                put('u', item['unavailable'])
+            elif keys == {'op', 'args'}:
+                name, args = item['op'], item['args']
+                if not isinstance(name, str) or not re.fullmatch(r'[a-z][a-z0-9_./-]*', name, re.ASCII) \
+                        or not isinstance(args, (list, tuple)) or len(args) != (1 if name == 'not' else 2):
+                    raise ValueError('invalid operation')
+                put('o', name, str(len(args)))
+                for child in args:
+                    expression(child, depth + 1)
+            elif keys == {'if', 'then', 'else'}:
+                put('i')
+                for key in ('if', 'then', 'else'):
+                    expression(item[key], depth + 1)
+            elif keys == {'list'} and isinstance(item['list'], list) and len(item['list']) <= 10000:
+                put('l', str(len(item['list'])))
+                for child in item['list']:
+                    expression(child, depth + 1)
+            elif keys == {'record'} and isinstance(item['record'], dict) and len(item['record']) <= 10000:
+                fields = item['record']
+                if not all(isinstance(key, str) and len(key) <= 500 for key in fields):
+                    raise ValueError('invalid record key')
+                put('m', str(len(fields)))
+                for key in sorted(fields):
+                    put(text(key))
+                    expression(fields[key], depth + 1)
+            elif keys == {'field', 'key'} and isinstance(item['key'], str) and len(item['key']) <= 500:
+                put('f', text(item['key']))
+                expression(item['field'], depth + 1)
+            else:
+                raise ValueError('invalid expression')
+        finally:
+            active.remove(id(item))
+
+    put('KP3', *(str(bounds[key]) for key in ('steps', 'depth', 'digits', 'value_nodes', 'value_depth', 'value_bytes')))
+    put(str(len(declared)))
+    for name in sorted(declared):
+        put(text(name))
+    put(str(len(nodes)))
+    for name in sorted(nodes):
+        put(text(name))
+        expression(nodes[name])
+    expression(request['expression'])
+    return '\t'.join(tokens)
+
+
+def decode_response(line):
+    if isinstance(line, str) and line.startswith('KR3\t'):
+        return _decode_response_v3(line)
+    return _decode_response_v2(line)
+
+
+def _decode_response_v3(line):
+    if len(line) > MAX_RESPONSE_BYTES:
+        raise ValueError('invalid response')
+    if line.endswith('\n'):
+        line = line[:-1]
+    if '\n' in line or '\r' in line or not line.isascii():
+        raise ValueError('invalid response framing')
+    position, value_start, value_nodes = 0, None, 0
+
+    def take():
+        nonlocal position
+        if position > len(line):
+            raise ValueError('truncated response')
+        end = line.find('\t', position)
+        if end < 0:
+            end = len(line)
+        if value_start is not None and end - value_start > VALUE_LIMITS['value_bytes']:
+            raise ValueError('value byte limit')
+        token = line[position:end]
+        position = end + 1
+        return token
+
+    def natural(bound):
+        token = take()
+        if len(token) > 8 or not NATURAL.fullmatch(token) or int(token) > bound:
+            raise ValueError('invalid count')
+        return int(token)
+
+    def text():
+        token = take()
+        if not HEX.fullmatch(token):
+            raise ValueError('invalid hex')
+        try:
+            return bytes.fromhex(token).decode('utf-8')
+        except UnicodeError as error:
+            raise ValueError('invalid UTF-8') from error
+
+    def value(depth=0):
+        nonlocal value_nodes
+        value_nodes += 1
+        if value_nodes > VALUE_LIMITS['value_nodes'] or depth > VALUE_LIMITS['value_depth']:
+            raise ValueError('value collection limit')
+        tag = take()
+        if tag == 'u' and depth == 0:
+            return None
+        if tag == 'n':
+            numerator, denominator = take(), take()
+            if len(numerator.lstrip('-')) > 4096 or len(denominator) > 4096 \
+                    or not INTEGER.fullmatch(numerator) or not NATURAL.fullmatch(denominator) \
+                    or denominator == '0' or math.gcd(int(numerator), int(denominator)) != 1:
+                raise ValueError('invalid rational value')
+            return {'type': 'number', 'numerator': numerator, 'denominator': denominator}
+        if tag == 'b':
+            token = take()
+            if token not in ('0', '1'):
+                raise ValueError('invalid boolean')
+            return {'type': 'boolean', 'value': token == '1'}
+        if tag == 's':
+            return {'type': 'text', 'value': text()}
+        if tag == 'z':
+            return {'type': 'null'}
+        if tag == 'l':
+            return {'type': 'list', 'items': [value(depth + 1) for _ in range(natural(10000))]}
+        if tag == 'm':
+            fields, previous = {}, None
+            for _ in range(natural(10000)):
+                key = text()
+                if len(key) > 500 or (previous is not None and key <= previous):
+                    raise ValueError('noncanonical or duplicate record key')
+                previous = key
+                fields[key] = value(depth + 1)
+            return {'type': 'record', 'fields': fields}
+        raise ValueError('invalid value tag')
+
+    def ordered(values):
+        if values != sorted(set(values)):
+            raise ValueError('noncanonical or duplicate response fields')
+        return values
+
+    if take() != 'KR3':
+        raise ValueError('unsupported response protocol')
+    status = take()
+    if status not in ('ok', 'unknown', 'error', 'limit', 'unsupported_capability'):
+        raise ValueError('invalid status')
+    value_start = position
+    result = value()
+    value_start = None
+    if (status == 'ok') != (result is not None):
+        raise ValueError('status/value mismatch')
+    diagnostics = ordered([take() for _ in range(natural(len(DIAGNOSTICS_V3)))])
+    if any(code not in DIAGNOSTICS_V3 for code in diagnostics):
+        raise ValueError('invalid diagnostic')
+    potential = ordered([text() for _ in range(natural(100000))])
+    executed = ordered([text() for _ in range(natural(100000))])
+    if not set(executed) <= set(potential):
+        raise ValueError('executed reads outside potential closure')
+    steps, preflight = natural(10000000), natural(10000000)
+    counts = [(text(), natural(1)) for _ in range(natural(20000))]
+    ordered([name for name, _ in counts])
+    executed_set = set(executed)
+    if any(count != 1 or name not in executed_set for name, count in counts):
+        raise ValueError('invalid node evaluation count')
+    if position <= len(line):
+        raise ValueError('trailing response data')
+    return {'status': status, 'value': result, 'diagnostics': diagnostics,
+            'potential_reads': potential, 'executed_reads': executed,
+            'steps': steps, 'preflight_steps': preflight, 'node_evaluations': dict(counts)}

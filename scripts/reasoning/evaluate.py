@@ -3,8 +3,8 @@ import copy
 import subprocess
 
 from .contract import (PROFILE, CapabilityError, capabilities, digest,
-                       resource_limits, operational_bounds, OperationalLimit, OutputBudget)
-from .language import closure, lower, references
+                       resource_limits, operational_bounds, OperationalLimit, OutputBudget, COMPOSITION_LIMITS)
+from .language import closure, lower, references, required_modules
 from .runtime import Runtime, RuntimeUnavailable
 from .snapshot import SnapshotView
 from .modules import module
@@ -40,18 +40,25 @@ class Evaluator:
         direct = references(tree)
         undeclared = set(direct) - set(declared)
         component = closure(self.data, direct)
+        modules = sorted(set(required_modules(tree, *component['nodes'].values())) |
+                         set(self.snapshot._input_basis().modules(direct)))
+        if set(modules) - set(cap['requires']):
+            raise CapabilityError('unsupported_capability', 'undeclared modules: ' + ', '.join(sorted(set(modules) - set(cap['requires']))))
+        composed = 'composition/v1' in modules
+        limits = {**self.limits, **(COMPOSITION_LIMITS if composed else {})}
+        resources = {'version': 'resources/v3' if composed else 'resources/v2', **limits}
         witnesses = self.snapshot._input_basis().dependencies(direct)
         potential_ids = [item['id'] for item in witnesses]
-        basis = {'version': 1, 'recipe': 'merkle-inputs/v1', 'profile': PROFILE, 'modules': cap['requires'],
+        basis = {'version': 1, 'recipe': 'merkle-inputs/v1', 'profile': PROFILE, 'modules': modules,
                  'as_of': self.data.get('as_of'),
                  'expression': tree, 'dependencies': witnesses}
         basis['digest'] = digest(basis)
         identity = {'snapshot_id': self.snapshot.snapshot_id, 'expression': tree,
-                    'profile': PROFILE, 'modules': cap['requires'], 'declared': sorted(set(declared)),
-                    'as_of': self.data.get('as_of'), 'resources': {'version': 'resources/v2', **self.limits}}
-        result = {'schema_version': 1, 'profile': PROFILE, 'modules': cap['requires'],
+                    'profile': PROFILE, 'modules': modules, 'declared': sorted(set(declared)),
+                    'as_of': self.data.get('as_of'), 'resources': resources}
+        result = {'schema_version': 1, 'profile': PROFILE, 'modules': modules,
                   'snapshot_id': self.snapshot.snapshot_id, 'computation_id': digest(identity),
-                  'implementation': None, 'resource_profile': {'version': 'resources/v2', **self.limits},
+                  'implementation': None, 'resource_profile': resources,
                   'operational_limits': dict(self.operational_limits),
                   'status': 'unknown', 'value': None, 'diagnostics': [], 'executed_reads': [],
                   'potential_dependencies': witnesses, 'potential_ids': potential_ids,
@@ -67,7 +74,8 @@ class Evaluator:
                           for nid, code in sorted(component['errors'].items())])
             return None, result
         view = SnapshotView(self.snapshot, nodes=potential_ids)
-        request = module('arithmetic/v1').prepare(view, tree, component['nodes'], potential_ids, self.limits)
+        request = module('composition/v1' if composed else 'arithmetic/v1').prepare(
+            view, tree, component['nodes'], potential_ids, limits)
         return request, result
 
     def evaluate_many(self, requests):
@@ -113,6 +121,8 @@ class Evaluator:
                             or not set(response['potential_reads']) <= set(result['potential_ids']):
                         raise RuntimeUnavailable('native dependency witness disagrees with captured closure')
                 for (request, result), response in zip(active, responses):
+                    implementation = self.runtime.implementation_for(request) if callable(
+                        getattr(self.runtime, 'implementation_for', None)) else self.runtime.implementation
                     result.update(status=response['status'], value=response['value'],
                                   diagnostics=[_diagnostic(code) for code in response['diagnostics']],
                                   executed_reads=[{'kind': 'node', 'id': nid,
@@ -120,8 +130,8 @@ class Evaluator:
                                       for nid in response['executed_reads']],
                                   cost={'steps': response['steps'], 'preflight_steps': response['preflight_steps'],
                                         'node_evaluations': response['node_evaluations']},
-                                  implementation=copy.deepcopy(self.runtime.implementation))
-                    result['assurance']['implementation'] = digest(self.runtime.implementation)
+                                  implementation=copy.deepcopy(implementation))
+                    result['assurance']['implementation'] = digest(implementation)
                     pending = [request['expression']]
                     closed_rational = True
                     while pending:

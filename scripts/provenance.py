@@ -1093,10 +1093,14 @@ def _load(paths, *, read_mode=None):
 def collections_of(doc):
     """Any mapping-of-mappings is a candidate collection of entries."""
     out = {}
+    meta = (doc or {}).get('meta', {})
+    reasoning = meta.get('reasoning', {}) if isinstance(meta, dict) else {}
+    core = isinstance(reasoning, dict) and reasoning.get('profile') == 'core/v1'
     for k, v in (doc or {}).items():
         if k in ("meta", "schema", "record", "also") or not isinstance(v, dict) or not v:
             continue
-        if all(isinstance(x, (dict, str, int, float, bool, datetime.date, type(None))) for x in v.values()):
+        if all(isinstance(x, (dict, str, int, float, bool, datetime.date, type(None)))
+               or core and isinstance(x, list) for x in v.values()):
             out[k] = v
     return out
 
@@ -3322,7 +3326,9 @@ def _sound_dependencies(a, doc, ids, jud, fields, raw):
             out.append(f"rests on {d}, which is not an entry - add it first, or declare it "
                        f"missing with blocked_on")
     pred = predicate_of(body, fields)
-    for tok in sorted(set(predicate_refs(pred))):
+    refs = _peer('reasoning.language').references(_peer('reasoning.language').lower(pred)) \
+        if getattr(raw, 'world', None) is not None and isinstance(pred, dict) else predicate_refs(pred)
+    for tok in sorted(set(refs)):
         if (isinstance(pred, dict) or tok in ids or is_builtin(tok)) and tok not in deps:
             out.append(f"wrong_if reads {tok}, which the judgment does not rest on")
     return out
@@ -3813,16 +3819,19 @@ def _disagreement(a, body, raw, ids, jud, fields, page=None):
     if not isinstance(body, dict):
         return None
     old = value_of(raw, ids, k)
-    if (old is None and not (getattr(raw, 'world', None) is not None and raw.world.result(k)['status'] == 'ok')) or isinstance(old, (list, dict)):
+    core_world = getattr(raw, 'world', None)
+    if (old is None and not (core_world is not None and core_world.result(k)['status'] == 'ok')) or (isinstance(old, (list, dict)) and core_world is None):
         return None
     if a["kind"] == "set":
         new = a["value"]
     else:
         b = a["body"] if isinstance(a["body"], dict) else {}
         new = b.get("v") if b.get("v") is not None else b.get("quoted")
-        if new is None or isinstance(new, (list, dict)):
+        if core_world is not None and any(key in b for key in ('v', 'quoted')):
+            new = b['v'] if 'v' in b else b['quoted']
+        elif new is None or isinstance(new, (list, dict)):
             return None
-    if _writer_same(raw, old, new):
+    if (core_world.same_value(k, new) if core_world is not None else _writer_same(raw, old, new)):
         return None
     may, why = may_supersede(k, body, new, raw, ids, jud, fields, a.get("as_of"))
     return "value", old, new, may, why, _read_on(body, raw)
