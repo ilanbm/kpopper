@@ -132,6 +132,16 @@ class PluginRuntime(unittest.TestCase):
         self.assertIn("setup", result.stdout)
         self.assertNotIn("KPOPPER_AGENT_CONTEXT", result.stdout)
 
+    def test_launcher_errors_do_not_block_but_hook_exit_two_is_preserved(self):
+        self.repaired()
+        for script in ("nonexistent.py", "../cli.py"):
+            with self.subTest(script=script):
+                result = self.hook("hook.sh", (script,))
+                self.assertEqual(result.returncode, 0, result.stderr)
+                self.assertIn("requires an existing script", result.stderr)
+        (self.plugin / "scripts/exit_two.py").write_text("raise SystemExit(2)\n")
+        self.assertEqual(self.hook("hook.sh", ("exit_two.py",)).returncode, 2)
+
     def test_runtime_survives_plugin_cache_replacement(self):
         python, _ = self.repaired()
         updated = self.root / "updated plugin"

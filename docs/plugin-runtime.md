@@ -22,6 +22,9 @@ python3 "/absolute/path/to/kpopper/scripts/plugin_runtime.py" doctor
 Python must include working `venv`/`ensurepip` support. A failed venv or pip command
 returns nonzero and prints its error; setup is not complete until it prints `Ready`.
 After correcting network or Python/venv availability, rerun the same command.
+Setup uses pip's `--isolated` mode, so user pip settings and `PIP_INDEX_URL` do not
+configure it. This documented path requires access to PyPI; private-index setup is
+not provided by this command.
 
 The default location is `~/.local/share/kpopper/runtimes/<dependency-set-hash>`.
 Claude and Codex use the same environment under the same OS account even when their

@@ -146,7 +146,9 @@ def main(argv=None):
             print(status["python"])
             return 0
         if not args.args or Path(args.args[0]).name != args.args[0] or not (HERE / args.args[0]).is_file():
-            parser.error("hook requires a script filename from this plugin")
+            print("kpopper runtime: hook requires an existing script filename from this plugin",
+                  file=sys.stderr)
+            return 0  # launcher errors must not become a host's block/rewake signal
         # exec preserves stdin, host exit codes (including Stop/rewake 2), and
         # signal handling. The absolute script is always from the active plugin.
         os.execv(status["python"], [status["python"], str(HERE / args.args[0]), *args.args[1:]])
