@@ -736,6 +736,10 @@ sources:
     at: "How it works / Two working modes; assets/diagrams/two-working-modes.png and
          two-working-modes-mobile.png"
     read: "2026-09-14"
+  doc.contributing:
+    name: "Contribution and developer setup guide"
+    file: CONTRIBUTING.md
+    read: "2026-09-16"
   doc.fact_moves:
     url: "https://claude.ai/code/artifact/ca99e558-60ae-4b22-9221-e3b29d7d7e2b"
     name: "מה קורה כשעובדה זזה - the unified node model"
@@ -839,6 +843,12 @@ sources:
     file: "docs/compatibility.md"
     read: "2026-09-17"
     from: s.2026_09_17_host_compatibility
+  doc.github_community_guidance:
+    name: "GitHub community profiles and workflow status badges"
+    url: "https://docs.github.com/en/communities/setting-up-your-project-for-healthy-contributions/about-community-profiles-for-public-repositories"
+    of: "Community-profile checklist; badge behavior is documented separately at
+         https://docs.github.com/en/actions/how-tos/monitor-workflows/add-a-status-badge"
+    read: "2026-09-15"
   doc.hub_seam:
     name: "The lab's own decision on why its page stays hand-written - the argument is manual,
            the agenda is derived, and a block becomes a query once its content is anchored"
@@ -848,6 +858,17 @@ sources:
     name: "The source update and recording gate regression contract"
     file: "tests/test_ingestion.py"
     read: "2026-09-07"
+  doc.plugin_runtime:
+    name: "Explicit Python setup and runtime selection for plugin hooks"
+    file: "docs/plugin-runtime.md"
+    read: "2026-09-17"
+  doc.session_test_gates:
+    name: "Checked-session integration test readiness gates"
+    file: "tests/test_predicate_literals.py"
+    of: "PredicateLiteralContract.setUpClass; also ReadableRuntime.setUpClass in
+         tests/test_readable_expressions.py and cache validation in scripts/session/core.py
+         Core.__init__"
+    read: "2026-09-17"
   doc.standalone_html:
     name: "Standalone authored HTML contract"
     from: s.2026_09_10_standalone_html
@@ -1352,6 +1373,13 @@ known:
     from: s.2026_09_17_selective_ci
     at: "families(path) and select(paths), branch codex/selective-ci"
     as_of: "2026-09-17"
+  p.community_guidance:
+    name: "Public contribution guidance and truthful workflow status"
+    v: "GitHub recommends discoverable community files and issue templates; workflow status badges
+        report actual workflow results."
+    from: doc.github_community_guidance
+    at: "GitHub Docs: community-profile checklist and workflow status badge guidance; paraphrase"
+    of: "2026-09-15"
   p.contested_meanings:
     v: 1
     name: "Meanings the reader gives the word contested - a rival claim laid against what the record
@@ -1360,6 +1388,17 @@ known:
     at: "contested, and the opener's standing line; the dry run's report and the page's arrangement
          note say the word of the door's refusal and of a question - the same rival claim"
     of: "2026-09-04"
+  p.contributor_session_test_setup:
+    name: "Cached kernel and optional dependencies for checked-session tests"
+    v: "A matching cached kernel from session setup enables kernel-backed integration tests; Lean on
+        PATH alone does not. Some enabled tests import the session extra, so a base-only environment
+        can fail on missing tiktoken. The separate core/v1 packaged runtime needs neither the Lean
+        compiler nor checked-session setup for normal execution."
+    # set 2026-09-17: Correct the activation condition against the test gates and cached-core loader.
+    # set 2026-09-16: Distinguish the legacy checked-session test requirements from the packaged runtime introduced on main.
+    from: doc.session_test_gates
+    at: "PredicateLiteralContract.setUpClass and store import; ReadableRuntime.setUpClass; Core.__init__ cache validation"
+    of: "2026-09-17"
   p.coverage_thresholds:
     v: 0
     name: "Thresholds the coverage report carries in code - a line drawn anywhere but inside a
@@ -2335,6 +2374,22 @@ judgments:
                                  replacement probe, notices, and CI selection/native-workflow
                                  changes; unknown paths select all checks. Packaging metadata alone
                                  tests installation without recompiling native source."
+  d.community_entrypoints:
+    because: "These entrypoints let a new contributor assess the existing checks, install the
+              project, report a reproducible problem and submit a focused change. Badges link to
+              their actual workflows, release or license; forms preserve a blank-issue route.
+              Reporting policies need a real private contact before publication, and community files
+              alone do not establish release readiness."
+    name: "Make contributing discoverable and show actual project status"
+    reopened_by: "A newcomer cannot complete setup or find the right reporting route from these
+                  files, the forms prevent a useful report, or a badge no longer represents the
+                  workflow, release or license it claims."
+    rests_on: [p.community_guidance]
+    verdict: "Keep a small set of truthful badges and lightweight issue forms, with newcomer setup
+              and reporting routes in the contribution guide."
+    seen:
+      p.community_guidance: "GitHub recommends discoverable community files and issue templates;
+                             workflow status badges report actual workflow results."
   d.components_follow_shape:
     rests_on: [s.2026_09_04_components, d.groupings_declared, doc.hub_seam]
     verdict: "The existing shapes carry the hub components; an axis is reviewed text with signed
@@ -3293,6 +3348,19 @@ judgments:
       p.record_parsers: 1
       m.prompt_hook_10x_parsing: 1.3
       m.prompt_hook_10x_kept: 0.15
+  d.plugin_runtime_is_explicit:
+    rests_on: [goal.portable, doc.plugin_runtime]
+    verdict: "Prepare hook dependencies through an explicit private-virtualenv setup; Claude Code
+              and Codex hooks select it while executing code from their active plugin."
+    because: "Plugin installation copies files without supplying Python packages. A dependency
+              environment outside the plugin cache avoids system pip restrictions and interpreter
+              guessing, survives cache replacement, and keeps network installation outside hooks."
+    reopened_by: "A supported hook uses a different interpreter from the repaired runtime, a failed
+                  setup appears ready, plugin versions need incompatible dependency sets in one
+                  environment, or a hook installs packages without an explicit setup command."
+    seen:
+      goal.portable: "usable by any session, in any project, with no author present"
+      doc.plugin_runtime: "read 2026-09-17"
   d.predicate_shape_is_one_reading:
     rests_on: [s.2026_09_04_falsifier_shape, p.predicate_shapes, d.arrangement_sign_is_one_comparison]
     verdict: "what shape a predicate must have to be decided is one reading, asked wherever a

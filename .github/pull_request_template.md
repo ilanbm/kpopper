@@ -1,15 +1,16 @@
 ## What changed
 
-<!-- A sentence or two, as a change to the product. -->
+<!-- Describe the problem and resulting behavior in a sentence or two. Link a related
+     issue if there is one; use "Closes #123" only when this PR resolves it. -->
 
 ## Why
 
 ## How it was exercised
 
-<!-- The commands, or the path through the page. Every pull request already runs
-     `kpop check` and `kpop page --verify`; this is for what those cannot see. -->
+<!-- Commands and results, or the path through the page. Note relevant skipped checks
+     and include screenshots for visible changes when useful. -->
 
-Bump: minor
+Bump: patch
 
 <!-- patch: a fix, a doc, tooling - nothing a user of the reader, the page or the hooks
      has to learn. minor: something added - a command, a field the reader accepts, a

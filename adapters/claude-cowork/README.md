@@ -25,7 +25,9 @@ available to a local Claude Code session must not be assumed to exist there.
    existing record. If no hook opening appeared, invoke `/kpopper:ground` explicitly.
 2. Confirm `python3` can run the installed plugin's `scripts/cli.py` and its required
    dependencies inside the task environment. Use the installed plugin path, not a
-   path copied from a different client's cache.
+   path copied from a different client's cache. The shared hooks now select the
+   [private runtime](../../docs/plugin-runtime.md); its setup and dependencies must
+   exist inside Cowork's VM. A runtime prepared on the host Mac does not supply it.
 3. In a disposable project, save one sourced fact and a judgment, reopen the task,
    then change the fact and run `check` to confirm the judgment is flagged.
 4. Confirm the saved `GROUNDING.yaml` and its `.kpopper/` companions persist in the
