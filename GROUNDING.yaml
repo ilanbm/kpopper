@@ -736,6 +736,10 @@ sources:
     at: "How it works / Two working modes; assets/diagrams/two-working-modes.png and
          two-working-modes-mobile.png"
     read: "2026-09-14"
+  doc.contributing:
+    name: "Contribution and developer setup guide"
+    file: CONTRIBUTING.md
+    read: "2026-09-16"
   doc.fact_moves:
     url: "https://claude.ai/code/artifact/ca99e558-60ae-4b22-9221-e3b29d7d7e2b"
     name: "מה קורה כשעובדה זזה - the unified node model"
@@ -839,6 +843,12 @@ sources:
     file: "docs/compatibility.md"
     read: "2026-09-17"
     from: s.2026_09_17_host_compatibility
+  doc.github_community_guidance:
+    name: "GitHub community profiles and workflow status badges"
+    url: "https://docs.github.com/en/communities/setting-up-your-project-for-healthy-contributions/about-community-profiles-for-public-repositories"
+    of: "Community-profile checklist; badge behavior is documented separately at
+         https://docs.github.com/en/actions/how-tos/monitor-workflows/add-a-status-badge"
+    read: "2026-09-15"
   doc.hub_seam:
     name: "The lab's own decision on why its page stays hand-written - the argument is manual,
            the agenda is derived, and a block becomes a query once its content is anchored"
@@ -1352,6 +1362,13 @@ known:
     from: s.2026_09_17_selective_ci
     at: "families(path) and select(paths), branch codex/selective-ci"
     as_of: "2026-09-17"
+  p.community_guidance:
+    name: "Public contribution guidance and truthful workflow status"
+    v: "GitHub recommends discoverable community files and issue templates; workflow status badges
+        report actual workflow results."
+    from: doc.github_community_guidance
+    at: "GitHub Docs: community-profile checklist and workflow status badge guidance; paraphrase"
+    of: "2026-09-15"
   p.contested_meanings:
     v: 1
     name: "Meanings the reader gives the word contested - a rival claim laid against what the record
@@ -1360,6 +1377,15 @@ known:
     at: "contested, and the opener's standing line; the dry run's report and the page's arrangement
          note say the word of the door's refusal and of a question - the same rival claim"
     of: "2026-09-04"
+  p.contributor_session_test_setup:
+    name: "Session dependencies for contributors whose environment includes Lean"
+    v: "When Lean is on PATH, legacy checked-session tests require the session extra in the test
+        environment. The separate experimental core/v1 profile uses a packaged native runtime and its
+        normal execution needs neither a Lean compiler nor checked-session setup."
+    # set 2026-09-16: Distinguish the legacy checked-session test requirements from the packaged runtime introduced on main.
+    from: doc.contributing
+    at: "Make and submit a change: optional session dependencies and the separate core/v1 runtime"
+    of: "2026-09-16"
   p.coverage_thresholds:
     v: 0
     name: "Thresholds the coverage report carries in code - a line drawn anywhere but inside a
@@ -2327,6 +2353,22 @@ judgments:
                                  replacement probe, notices, and CI selection/native-workflow
                                  changes; unknown paths select all checks. Packaging metadata alone
                                  tests installation without recompiling native source."
+  d.community_entrypoints:
+    because: "These entrypoints let a new contributor assess the existing checks, install the
+              project, report a reproducible problem and submit a focused change. Badges link to
+              their actual workflows, release or license; forms preserve a blank-issue route.
+              Reporting policies need a real private contact before publication, and community files
+              alone do not establish release readiness."
+    name: "Make contributing discoverable and show actual project status"
+    reopened_by: "A newcomer cannot complete setup or find the right reporting route from these
+                  files, the forms prevent a useful report, or a badge no longer represents the
+                  workflow, release or license it claims."
+    rests_on: [p.community_guidance]
+    verdict: "Keep a small set of truthful badges and lightweight issue forms, with newcomer setup
+              and reporting routes in the contribution guide."
+    seen:
+      p.community_guidance: "GitHub recommends discoverable community files and issue templates;
+                             workflow status badges report actual workflow results."
   d.components_follow_shape:
     rests_on: [s.2026_09_04_components, d.groupings_declared, doc.hub_seam]
     verdict: "The existing shapes carry the hub components; an axis is reviewed text with signed

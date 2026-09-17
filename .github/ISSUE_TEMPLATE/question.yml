@@ -1,0 +1,23 @@
+name: Question or documentation feedback
+description: Ask about using kpopper or point out an unclear explanation.
+labels: [question]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        The [README](https://github.com/ilanbm/kpopper#readme),
+        [command reference](https://github.com/ilanbm/kpopper/blob/main/docs/reference.md)
+        and [host guides](https://github.com/ilanbm/kpopper/tree/main/adapters) may help.
+        Use invented examples and keep private records and documents out of attachments.
+  - type: textarea
+    id: question
+    attributes:
+      label: What would you like to understand?
+      description: For documentation feedback, link the page or section and explain what was unclear.
+    validations:
+      required: true
+  - type: textarea
+    id: context
+    attributes:
+      label: Context (optional)
+      description: What are you trying to do? Include your host, kpopper version and what you have tried if relevant.

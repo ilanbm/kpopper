@@ -1,16 +1,114 @@
-# Working on kpopper
+# Contributing to kpopper
 
-`main` is what ships. Changes reach it through a pull request.
+Contributions are welcome: bug reports, clearer documentation, reproducible examples,
+host compatibility reports and code changes. You can contribute without installing an
+agent plugin. Community participation follows the [Code of Conduct](CODE_OF_CONDUCT.md).
 
-## The loop
+## Find the right place
 
-```
+- Search [existing issues](https://github.com/ilanbm/kpopper/issues) before opening a new one.
+- Use the [issue chooser](https://github.com/ilanbm/kpopper/issues/new/choose) for bugs,
+  improvements and usage questions. Include a small example with invented data, the
+  installed version and the host where it happened. Remove private records, source
+  documents, credentials and personal information from attachments and logs.
+- Follow [SECURITY.md](SECURITY.md) for a suspected vulnerability.
+- Small fixes can go straight to a pull request. Discuss new commands, record fields,
+  dependencies or substantial behavior changes in an issue first.
+
+For a first contribution, look at
+[good first issues](https://github.com/ilanbm/kpopper/issues?q=is%3Aissue%20is%3Aopen%20label%3A%22good%20first%20issue%22)
+or improve an example you tried. Maintainers review scope and compatibility before merging;
+there is no guaranteed response time.
+
+## Local setup
+
+Use Python 3.9 or newer; Python 3.13 matches the primary CI environment. Fork the
+repository on GitHub, then clone your fork (replace `YOUR-USERNAME`):
+
+```sh
+git clone https://github.com/YOUR-USERNAME/kpopper.git
+cd kpopper
+git remote add upstream https://github.com/ilanbm/kpopper.git
 git switch -c my-change
-# work
-python3 -m unittest discover -s tests
+python3 -m venv .venv
+source .venv/bin/activate
+python -m pip install -e .
+```
+
+On Windows, create the environment with `py -m venv .venv` and activate it in PowerShell
+with `.venv\Scripts\Activate.ps1`. Ordinary CLI checks work without Lean. Native Windows
+does not support durable report batching, which requires POSIX file locking.
+
+| If you are changing… | Start here |
+|---|---|
+| The CLI, reader or record writes | `scripts/`, `tests/` and the [reference](docs/reference.md) |
+| The record page or standalone documents | `scripts/page/`, `scripts/document/` and `tests/` |
+| Agent guidance or integration | `skills/`, `hooks/` and [adapters](adapters/README.md) |
+| An example or explanation | `examples/`, `docs/` and `README.md` |
+| The optional checked-session runtime | `scripts/session/` and [checked sessions](docs/checked-sessions.md) |
+| The experimental deterministic core | `scripts/reasoning/` and [core/v1](docs/reasoning-core.md) |
+
+## Make and submit a change
+
+`main` is what ships. Changes reach it through a pull request from your fork or a branch.
+Keep changes focused and preserve compatibility with existing records. Add a regression
+test when a bug fix or behavior change needs one; documentation-only changes need accurate
+examples and working links.
+
+Run the relevant test module while working, for example:
+
+```sh
+python -m unittest discover -s tests -p 'test_release.py'
+```
+
+Before submitting a code change, run the ordinary test suite and record checks:
+
+```sh
+python -m unittest discover -s tests
+kpop --frozen check
+kpop --frozen consolidate --dry-run
+kpop --frozen page --verify
+```
+
+If `.kpopper/view.yaml` changes because you updated the record, include that generated view.
+Read the measurement recipes before running `kpop --frozen remeasure --run`; the
+[measurement checks](#record-and-measurement-checks) below explain what executes.
+Optional runtimes may skip tests locally. Changes to them need their documented setup and
+the corresponding CI job; skips are not proof that the integration passes.
+
+If Lean is already on your `PATH`, some tests exercise the checked-session runtime.
+Install its optional dependencies in the same environment before running the full suite:
+
+```sh
+python -m pip install -e '.[session]'
+```
+
+For changes to that runtime, follow the full [checked-session setup](docs/checked-sessions.md)
+and use the toolchain pinned in `scripts/session/lean/lean-toolchain`. Python 3.13 matches
+the checked-session CI job. The base package's Python minimum does not imply that every
+optional dependency supports that version.
+
+The experimental `core/v1` profile uses a separate packaged native runtime. Its normal
+execution needs no Lean compiler or checked-session setup. For changes to that core,
+follow the [runtime build and validation guide](scripts/reasoning/native/README.md),
+including the platform checks and third-party notices required when changing a bundle.
+
+Then push and open a pull request using GitHub or the optional `gh` CLI:
+
+```sh
 git push -u origin HEAD
 gh pr create
 ```
+
+Describe the problem, the resulting behavior and how you checked it. Include a
+`Bump: patch`, `Bump: minor` or `Bump: major` line; [Releasing](#releasing) explains the choices.
+Feature pull requests leave version numbers and generated release notes to the release process.
+
+When a change makes a lasting design decision, add it to `GROUNDING.yaml` with its reasons
+and what would prompt reconsideration. Routine fixes need no new decision entry. The
+[recording guide](skills/record/SKILL.md) describes the format; a maintainer can help with it.
+
+## Record and measurement checks
 
 Every pull request runs the skill/release contracts, CI selection tests, `kpop check`,
 `kpop consolidate --dry-run`, `kpop remeasure --run` and `kpop page --verify` on

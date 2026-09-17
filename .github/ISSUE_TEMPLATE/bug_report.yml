@@ -1,0 +1,49 @@
+name: Bug report
+description: Report a reproducible problem with kpopper.
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Search existing issues first. Use invented data in examples and remove private
+        records, source documents, credentials and personal information from logs.
+        For suspected vulnerabilities, follow [SECURITY.md](https://github.com/ilanbm/kpopper/blob/main/SECURITY.md).
+  - type: textarea
+    id: behavior
+    attributes:
+      label: What happened, and what did you expect?
+      description: Describe the effect on your work, including the error message if there is one.
+    validations:
+      required: true
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: How can we reproduce it?
+      description: Include the smallest example record, commands or actions needed to see the problem.
+      placeholder: |
+        1. Create a record containing…
+        2. Run this command or ask the agent to…
+        3. Observe…
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: kpopper version and installation method
+      description: Use the version shown in your host's plugin manager, pip show kpopper, or the checkout commit. Say if unknown.
+      placeholder: "1.6.0; Claude Code marketplace / Codex plugin / pip / source checkout"
+    validations:
+      required: true
+  - type: input
+    id: environment
+    attributes:
+      label: Environment
+      description: Host and version, operating system, Python version; browser for page or document problems.
+      placeholder: "Codex desktop; macOS; Python 3.13; Chrome"
+    validations:
+      required: true
+  - type: textarea
+    id: output
+    attributes:
+      label: Logs or screenshots (optional)
+      description: Review attachments for private information before posting. Avoid uploading a whole project record.
