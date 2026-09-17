@@ -847,6 +847,14 @@ sources:
          (39 entries, Hebrew and English names), the hook run per prompt and its line placed in the
          developer instructions of one arm, the same opener in both"
     read: "2026-09-11"
+  run.history_record_measurement_a0e5e9b:
+    name: "History authority record measurement"
+    file: ".kpopper/measure.yaml"
+    at: "blocked_on_reopeners recipe evaluated against GROUNDING.yaml at
+         a0e5e9bbca859db59ccc607de2c3c1fd20fcc886; observed 64"
+    read: "2026-09-17"
+    scope: "Repository text count only; it does not review the adequacy of each observational
+            falsifier"
   run.hub_vs_now:
     name: "A hand-written page and this plugin's Now tab, rendered from the same record and
            read side by side"
@@ -1150,19 +1158,18 @@ known:
          half drifts while the total holds"
     measure: blocked_on_implementation
   m.blocked_on_reopeners:
-    v: 63
+    v: 64
+    # set 2026-09-17: remeasured after the explicit history authority decision
     # set 2026-09-14: this branch added two judgments that declare an observational hole
     # set 2026-09-11: measured by blocked_on_reopeners at a51bc75 with the working tree changed
     # reconciled 2026-09-05 after the same-day write rule refused a second reading: this tree adds
     # five observational declarations to the 55 measured earlier that day
-    of: "2026-09-14"
+    of: "2026-09-17"
     name: "Judgments that declare a hole with blocked_on - the count. Whether each names a sign
            that would re-open the decision, or an input the record lacks, is read by hand and said
            beside it"
-    from: run.blocked_on_reread
-    at: "of 61 declared holes - 57 say observational and 4 implementation, the second half
-         measured beside this one; none is written as what the record is missing, and the one
-         that names an entry names one the record holds"
+    from: run.history_record_measurement_a0e5e9b
+    at: "blocked_on_reopeners recipe against GROUNDING.yaml at a0e5e9bbca859db59ccc607de2c3c1fd20fcc886, after adding explicit history authority"
     measure: blocked_on_reopeners
   m.claims.general_held:
     v: 3
