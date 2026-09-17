@@ -666,6 +666,13 @@ sources:
            conflicts under git where one file per version merges clean, acts can conflict, the two
            times need exact meaning, the merged entry file is rebuilt and never read as an edit - and
            hardened by two review rounds of the module itself"
+  s.2026_09_17_selective_ci:
+    name: "The request to make PR checks selective while retaining the needed coverage"
+    asked: |-
+      נראה לי שהריצות של הchecks שיש לנו כרגע בgithub הן לא יעילות, בעיקר אלה שרצות על כל PR
+      תסתכל בm8t-stack-poc ובריפואים שקשורים אליו אולי שם הטסטים יותר טובים? יודעים לאתר מתי צריך להריץ משהו ומתי לא?
+    read: "2026-09-17"
+    fidelity: quoted
   s.background_ingestion:
     name: "Background capture and selective delivery contract"
     file: "skills/kpopper/INGESTION.md"
@@ -681,6 +688,7 @@ sources:
     name: "CI family selection and required-results policy"
     file: ".github/scripts/ci_selection.py"
     read: "2026-09-17"
+    from: s.2026_09_17_selective_ci
   s.followups_contract:
     name: "Followup task and authority contract"
     file: "skills/kpopper/FOLLOWUPS.md"
@@ -1323,7 +1331,7 @@ known:
     v: "Native sources, builder, bundled runtime, native loader and replacement probe, notices, and
         CI selection/native-workflow changes; unknown paths select all checks. Packaging metadata
         alone tests installation without recompiling native source."
-    from: s.ci_selection
+    from: s.2026_09_17_selective_ci
     at: "families(path) and select(paths), branch codex/selective-ci"
     as_of: "2026-09-17"
   p.contested_meanings:
@@ -2246,6 +2254,7 @@ judgments:
                                        element rules on the output"
   d.ci_selects_families:
     name: "Select PR checks by declared input families and require selected work to succeed"
+    from: s.2026_09_17_selective_ci
     rests_on: [p.ci_native_build_inputs]
     verdict: "Keep record and cheap contracts unconditional; select expensive families
               conservatively from the full PR diff, cancel superseded runs, and retain broad consumer
