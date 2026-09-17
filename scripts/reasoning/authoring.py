@@ -29,12 +29,17 @@ def declaration(document):
             try:
                 expression = node_expression({'body': body})
             except (ValueError, TypeError, SyntaxError, RecursionError):
-                if isinstance(body, dict) and isinstance(body.get('rule'), dict):
-                    raise
+                # Capability discovery is not the expression validator. Invalid
+                # structured syntax is still refused by World with the entry/field
+                # location; do not let this earlier metadata pass leak a raw error.
                 expression = {}
         modules.update(required_modules(expression))
         if isinstance(body, dict) and isinstance(body.get(fields['predicate']), dict):
-            modules.update(required_modules(lower(body[fields['predicate']])))
+            try:
+                modules.update(required_modules(lower(body[fields['predicate']])))
+            except (ValueError, TypeError, SyntaxError, RecursionError):
+                # World is the fail-closed validator for structured predicates.
+                pass
     return {**DECLARATION, 'requires': sorted(modules)}
 
 
@@ -489,17 +494,56 @@ def declare(lines, reader):
         at = root.start_mark.line if root is not None else 0
         lines[at:at] = ['meta:', *['  ' + line for line in encoded], '']
         return
-    # The supported v1/v2 declarations have identical profile/modules. Upgrade
-    # only the scalar format version, in either block or flow style.
+    # Rewrite only generated value nodes. PyYAML's end mark for a block mapping
+    # or sequence includes following comments and blank lines, so replacing the
+    # whole declaration would silently delete hand-authored surrounding text.
     value = next(value for key, value in root.value if key.value == 'meta')
     if 'reasoning' in meta:
         key, declaration_node = next((key, child) for key, child in value.value if key.value == 'reasoning')
         if declaration_node.start_mark.index < key.end_mark.index:
             raise reader.Refused('requires explicit migration: aliased reasoning declaration')
-        replacement = yaml.safe_dump(desired, default_flow_style=True, sort_keys=False, width=100000).strip()
-        if not declaration_node.flow_style:
-            replacement += '\n' + ' ' * declaration_node.end_mark.column
-        text = text[:declaration_node.start_mark.index] + replacement + text[declaration_node.end_mark.index:]
+        members = {child_key.value: (child_key, child)
+                   for child_key, child in declaration_node.value}
+        edits = []
+        version_key, version_node = members['version']
+        if meta['reasoning']['version'] != desired['version']:
+            if version_node.start_mark.index < version_key.end_mark.index:
+                raise reader.Refused('requires explicit migration: aliased reasoning declaration')
+            edits.append((version_node.start_mark.index, version_node.end_mark.index,
+                          str(desired['version'])))
+        requires_key, requires_node = members['requires']
+        existing = meta['reasoning']['requires']
+        if existing != desired['requires']:
+            if requires_node.start_mark.index < requires_key.end_mark.index:
+                raise reader.Refused('requires explicit migration: aliased reasoning declaration')
+            if requires_node.flow_style:
+                replacement = yaml.safe_dump(desired['requires'], default_flow_style=True,
+                                             sort_keys=False, width=100000).strip()
+                edits.append((requires_node.start_mark.index, requires_node.end_mark.index,
+                              replacement))
+            else:
+                # Requirements only grow: declarations are validated before this
+                # point and declaration() unions retained modules with inferred
+                # ones. Insert missing block items without spanning their comments.
+                missing = [item for item in desired['requires'] if item not in existing]
+                indent = ' ' * requires_node.start_mark.column
+                for item in missing:
+                    following = next((node for current, node in zip(existing, requires_node.value)
+                                      if current > item), None)
+                    rendered = yaml.safe_dump(item, default_flow_style=True).splitlines()[0]
+                    if following is not None:
+                        at = text.rfind('\n', 0, following.start_mark.index) + 1
+                        edits.append((at, at, indent + '- ' + rendered + '\n'))
+                    else:
+                        last = requires_node.value[-1]
+                        newline = text.find('\n', last.end_mark.index)
+                        if newline < 0:
+                            edits.append((len(text), len(text), '\n' + indent + '- ' + rendered))
+                        else:
+                            at = newline + 1
+                            edits.append((at, at, indent + '- ' + rendered + '\n'))
+        for start, end, replacement in sorted(edits, reverse=True):
+            text = text[:start] + replacement + text[end:]
         lines[:] = text.split('\n')
         return
     if value.flow_style:

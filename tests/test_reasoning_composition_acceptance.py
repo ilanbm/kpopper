@@ -86,6 +86,7 @@ print(json.dumps({
     "source_sha256": native.implementation["source_sha256"],
     "target": native.implementation["target"],
     "tests_run": result.testsRun,
+    "tests_skipped": len(result.skipped),
 }, sort_keys=True))
 '''
 

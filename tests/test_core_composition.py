@@ -49,6 +49,18 @@ class CoreComposition(unittest.TestCase):
             P.apply([str(self.entry)], action)
         return yaml.safe_load(self.entry.read_text())
 
+    def test_read_only_runtime_routes_scalar_and_container_closures(self):
+        engine = Evaluator(Snapshot.from_data(self.doc), runtime=self.native)
+        container = engine.evaluate({'ref': 'p.empty'}, declared=['p.empty'])
+        scalar = engine.evaluate({'ref': 'p.scalar'}, declared=['p.scalar'])
+        self.assertEqual((container['status'], container['value']['type'],
+                          container['implementation']['protocol']),
+                         ('ok', 'record', 'KP3'))
+        self.assertEqual((scalar['status'], scalar['value']['type'],
+                          scalar['implementation']['protocol']),
+                         ('ok', 'number', 'KP2'))
+
+    @unittest.skipUnless(os.name == 'posix', 'record writers require POSIX locks')
     def test_public_authoring_infers_composition_and_retains_after_scalar_edit(self):
         original = copy.deepcopy(self.doc)
         original['meta']['reasoning']['requires'] = ['arithmetic/v1']
@@ -65,6 +77,7 @@ class CoreComposition(unittest.TestCase):
         scalar = Evaluator(Snapshot.from_data(doc), runtime=self.native).evaluate({'ref': 'p.scalar'}, declared=['p.scalar'])
         self.assertEqual(scalar['implementation']['protocol'], 'KP2')
 
+    @unittest.skipUnless(os.name == 'posix', 'record writers require POSIX locks')
     def test_real_dominance_diagnostics_cannot_bypass_writer_admission(self):
         self.entry.write_text(yaml.safe_dump(self.doc, sort_keys=False))
         original = self.entry.read_bytes()
@@ -107,6 +120,7 @@ class CoreComposition(unittest.TestCase):
             target.write_bytes(bytes.fromhex(contents))
         return T.PreparedMutation.from_bytes(bytes.fromhex(data['pending']))
 
+    @unittest.skipUnless(os.name == 'posix', 'history mutation fixture is POSIX-bound')
     def test_original_t2_committed_history_accepts_new_composition_without_rewriting(self):
         self.load_t2()
         store = H.Store(self.entry)
@@ -125,6 +139,7 @@ class CoreComposition(unittest.TestCase):
         result = engine.evaluate({'ref': 'p.composed'}, declared=['p.composed'])
         self.assertEqual(authoring.authored_value(result['value']), [2, {'ok': True}])
 
+    @unittest.skipUnless(os.name == 'posix', 'history mutation fixture is POSIX-bound')
     def test_original_t2_pending_receipt_cannot_rebind_to_new_native_implementation(self):
         pending = self.load_t2()
         before = H.Store(self.entry).capture()

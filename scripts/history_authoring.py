@@ -388,7 +388,9 @@ def prepare_act(entry, action, *, by=None, operation=None, recorded_at=None, cap
     parents = C.commit_frontier(captured.commits)
     template = store._template(captured.commits)
     # The effect digest excludes the receipt and generated-view hash, so this
-    # provisional envelope can render the exact after projection without a cycle.
+    # provisional envelope can derive the exact accepted projection without a
+    # cycle. Capability declarations follow that projection; a proposal's
+    # hypothetical declaration is not promoted until an explicit act selects it.
     placeholder = T.semantic_receipt(profile=cap['profile'], capabilities=cap, before={}, after={})
     draft = C.make_commit(marker=captured.marker, operation=operation, parents=parents,
         baseline=captured.baseline, objects=pairs, receipt=placeholder, view=b'', view_template=template,
@@ -396,12 +398,22 @@ def prepare_act(entry, action, *, by=None, operation=None, recorded_at=None, cap
     combined = {**captured.commits, operation: C.encode_document(draft)}
     selected = {**captured.objects, obj['id']: obj}
     state = H.reduce(selected, captured.state['rules'])
+    candidate = replace(captured, objects=selected, commits=combined, state=state,
+        object_bytes={**captured.object_bytes, (obj['subject'], obj['id']): raw},
+        baseline=H.baseline(captured.marker, combined, state))
+    projected = _destination(_document(history_adapter.from_store_capture(candidate).document))
+    _declare_template(template, projected)
+    draft = C.make_commit(marker=captured.marker, operation=operation, parents=parents,
+        baseline=captured.baseline, objects=pairs, receipt=placeholder, view=b'', view_template=template,
+        requires=HP.commit_requires([C.EXPLICIT_ROOT_DISPOSITION] if _strict else None))
+    combined = {**captured.commits, operation: C.encode_document(draft)}
     rendered = store.render(captured, objects=selected, commits=combined)
     candidate = replace(captured, entry_bytes=rendered, document=C.decode_document(rendered),
         objects=selected, commits=combined, state=state,
         object_bytes={**captured.object_bytes, (obj['subject'], obj['id']): raw},
         baseline=H.baseline(captured.marker, combined, state))
     after_document = _document(history_adapter.from_store_capture(candidate).document)
+    cap = capabilities(after_document, profile=target['authored']['profile'])
     before = _evidence(before_document, _world(before_document))
     before['authoring'] = {'version': 4, 'kind': 'act', 'action': action, 'by': by,
         'recorded_at': recorded_at, 'archive': frozen_archive, 'baseline': captured.baseline}
@@ -487,8 +499,6 @@ def prepare_proposal(entry, subject, body=None, collection=None, *, because=None
     # The accepted computational view is unchanged. Hypothetical assessment is
     # labelled separately and is never used as a reducer acceptance decision.
     accepted_document = copy.deepcopy(document)
-    if capabilities(hypothetical)['profile'] == 'core/v1':
-        accepted_document['meta']['reasoning'] = copy.deepcopy(hypothetical['meta']['reasoning'])
     cap = capabilities(accepted_document, profile=cap['profile'])
     after = _evidence(accepted_document, _world(accepted_document))
     after['proposal'] = _evidence(hypothetical, _world(hypothetical))
