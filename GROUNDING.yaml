@@ -2059,6 +2059,16 @@ known:
                     7a682ff825990cf173daeac0e10f8966379a07937c7ea03dd553511393b0d517"
       kind: "executable review"
 
+  m.t3_verified_candidate_e669d9d:
+    name: "T3 composition candidate passed source, distribution, and platform gates"
+    v: "Commit e669d9dfe094ea08f690eb1819cb227f7ef5e58a passed 2454 immutable-source tests locally
+        in 2078.481 seconds; workflow 35250090592 passed all 23 jobs including Python 3.9 and 3.13,
+        five native targets, installed wheel and sdist channels, extracted plugin and ci-required.
+        Local wheel and sdist each passed six composition/history acceptance cases, and the committed
+        bundle audit matched all five target archives."
+    from: s.2026_09_17_t3_integration
+    at: "final candidate verification and GitHub Actions run 35250090592"
+    of: "2026-09-17"
   m.unasked.question_filler:
     v: 0
     unit: entries
