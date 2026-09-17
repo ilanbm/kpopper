@@ -328,11 +328,14 @@ Then follow the adapter for the host:
 | [Cursor](adapters/cursor/README.md#install) | Install the rule and hook wrappers in the project's `.cursor` directory. |
 | [Gemini CLI](adapters/gemini/README.md#install) | Run `gemini extensions link ./kpopper/adapters/gemini` from the directory where the clone was created. |
 | [Windsurf](adapters/windsurf/README.md#install) | Install the Cascade rule and optional write hook. |
-| [GitHub Copilot](adapters/copilot/README.md#install) | Use the instructions and configuration for VS Code or the cloud agent. |
+| [GitHub Copilot](adapters/copilot/README.md#install) | Use the CLI hook bridge, or the separate instructions for VS Code and the cloud agent. |
+| [OpenClaw](adapters/openclaw/README.md#install) | Link the full repository as a bundle and install the Python runtime; skills load, while opening and checking use explicit commands. |
+| [OpenCode](adapters/opencode/README.md#install) | Load the canonical skills through `skills.paths` and the shared method through `instructions`. |
 
 Keep existing host configuration when adding an adapter. Each guide describes its paths
 and limitations; automatic opening and stop behavior differ by host. See the
-[capability matrix](adapters/README.md#capability-matrix) for the comparison.
+[capability matrix](adapters/README.md#capability-matrix) and
+[verification status](docs/compatibility.md) for the comparison.
 
 ### Start working
 

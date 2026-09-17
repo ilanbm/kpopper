@@ -64,6 +64,16 @@ class IngestionHooks(unittest.TestCase):
         self.assertIn(notice["id"], err)
         self.assertIn("contradiction", err)
 
+    def test_named_claude_main_agent_gets_notice_and_child_does_not_consume_it(self):
+        self.prepare(True); I.process(self.record, self.state)
+        notice = I.pending(self.record, self.state)[0]
+        named = {**self.payload, "agent_type": "planner"}
+        self.assertEqual(self.handle("claude", payload={**named, "agent_id": "child"}), ("", "", 0))
+        out, err, code = self.handle("claude", payload=named)
+        self.assertEqual((out, code), ("", 2))
+        self.assertIn(notice["id"], err)
+        self.assertEqual(self.handle("claude", payload=named), ("", "", 0))
+
     def test_task_notification_never_recaptures_or_rewakes_itself(self):
         self.prepare(True); I.process(self.record, self.state)
         self.assertEqual(self.handle("claude")[2], 2)

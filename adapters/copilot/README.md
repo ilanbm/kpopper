@@ -1,94 +1,171 @@
 # kpopper for GitHub Copilot
 
-Two different Copilot surfaces, two different mechanisms: VS Code's local agent reads
-Markdown instructions and (in Preview) can run hooks; the cloud coding agent gets no
-interactive session at all, so the method has to show up as CI instead.
+Copilot CLI, VS Code, and the cloud agent have separate installation and verification
+paths. Use the instructions for the surface you actually run.
 
-## What this installs
+| Surface | Route | Verification, 2026-09-16 |
+|---|---|---|
+| **Copilot CLI** | Canonical skills, shared instructions and the [CLI hook bridge](cli/hook.py) | CLI 1.0.75 on macOS: actual hook discovery, context delivery and one stop continuation passed against a local stub provider. Six component tests passed. See the live-workflow qualification below. |
+| **VS Code local agent** | [Instructions](vscode/copilot-instructions.md); optional hook sketch | Documentation reviewed; no VS Code runtime test. |
+| **Copilot cloud agent** | [Setup workflow](cloud-agent/copilot-setup-steps.yml) and [PR check](cloud-agent/provenance-check.yml) | Documentation reviewed; no hosted job tested. |
 
-| file | does |
-|---|---|
-| `vscode/copilot-instructions.md` | the condensed method + explicit open/close instructions. |
-| `vscode/hooks.json` | SessionStart/Stop, VS Code's Preview hook schema. **Not load-bearing** — see below. |
-| `cloud-agent/copilot-setup-steps.yml` | installs PyYAML, runs `provenance.py open` once, visible in the coding agent's setup logs. |
-| `cloud-agent/provenance-check.yml` | runs `provenance.py check` on every PR as a status check — the closest thing the cloud agent has to a stop gate. |
+## Copilot CLI
 
-## Verified against docs
+The CLI bridge opens the record at `sessionStart`, including resume, and checks changes
+at `agentStop`. It translates the shared opener's text into `additionalContext` JSON
+and a shared gate failure into `decision: "block"` with a reason. The existing
+`stop_hook_active` guard lets the next completion through. It preserves the session
+identity and resolves the workspace from the hook payload, including paths with spaces.
 
-Sources: `https://code.visualstudio.com/docs/agent-customization/hooks`,
-`https://code.visualstudio.com/docs/agent-customization/custom-instructions`,
-`https://docs.github.com/en/copilot/how-tos/use-copilot-agents/coding-agent/customize-the-agent-environment`,
-fetched 2026-09-01.
+These are Copilot's native hook contracts; exiting with code 2 alone does **not** block
+`agentStop`. [GitHub hook reference](https://docs.github.com/en/copilot/reference/hooks-reference)
 
-- **`copilot-instructions.md` and `AGENTS.md` are both read automatically** for the
-  VS Code local agent — no setting needed for either (a separate setting,
-  `chat.useAgentsMdFile`, exists to turn `AGENTS.md` support off, but it defaults on).
-  This adapter ships the Copilot-specific filename since that's what the BUILD asked
-  for; if the project already has an `AGENTS.md` (e.g. from the Codex adapter),
-  Copilot reads that too and there is no need to duplicate the method into both.
-- **Hooks are explicitly Preview**: "the configuration format and behavior might
-  change in future releases," and an organization can disable them by policy. The
-  schema is close to Claude Code's — `hooks.<EventName>` is an array of flat
-  `{ "type": "command", "command", "timeout" }` objects (no `matcher`/nested `hooks[]`
-  wrapper the way Claude/Codex/Gemini have it) — PascalCase event names including
-  `SessionStart` and `Stop`, exit code `2` blocking. **Notably, the docs list
-  `.claude/settings.json` and `.claude/settings.local.json` as hook file locations VS
-  Code reads directly** — i.e. Copilot has its own compatibility layer for Claude
-  Code's hook format specifically. This adapter still ships its own
-  `.github/hooks/*.json`-shaped file rather than relying on that, since depending on
-  an undocumented-elsewhere compatibility layer for another vendor's config format
-  seems the more fragile choice long-term.
-- **`copilot-setup-steps.yml` has a hard contract**: the job must be named exactly
-  `copilot-setup-steps`, only `steps`/`permissions`/`runs-on`/`services`/`snapshot`/
-  `timeout-minutes` are honored (anything else in the job is silently ignored by the
-  agent, though the file still runs as a normal workflow otherwise), it only fires
-  from the *default* branch, and Ubuntu/Windows runners only (no macOS).
-- **`copilot-setup-steps.yml` and `provenance-check.yml` both need to find this
-  checkout's `scripts/provenance.py`.** There's no portable in-repo convention for
-  where a plugin like kpopper lives once vendored into an arbitrary project, so both
-  workflows read a `KPOPPER_ROOT` repository variable rather than guessing a path —
-  set it under Settings → Secrets and variables → Actions → Variables, or hardcode the
-  path directly in the workflow if this project vendors kpopper at a fixed location.
+The native payload deliberately mixes naming styles: `sessionId` is camelCase,
+`source` is `startup`, `resume` or `new`, and `agentStop.stop_hook_active` is
+snake_case. The bridge translates only the session ID. CLI 1.0.75 emitted
+`source: "new"`, then stop payloads with `stop_hook_active: false` and `true` in
+the recorded two-response probe. The guard applies to that forced continuation;
+a later user turn can still trigger a new check.
 
-## Install
+### Install
 
-    mkdir -p .github/hooks .github/workflows
-    cp <plugin>/adapters/copilot/vscode/copilot-instructions.md .github/copilot-instructions.md
-    cp <plugin>/adapters/copilot/vscode/hooks.json .github/hooks/kpopper.json
-    cp <plugin>/adapters/copilot/cloud-agent/copilot-setup-steps.yml .github/workflows/copilot-setup-steps.yml
-    cp <plugin>/adapters/copilot/cloud-agent/provenance-check.yml .github/workflows/provenance-check.yml
+Use a local checkout of kpopper and Python 3.9+ with its dependencies installed. The
+bridge calls the existing shell stop gate, so this route requires a POSIX shell
+(macOS, Linux or WSL). Native Windows has not been validated.
 
-Then set the `KPOPPER_ROOT` repository variable (or edit the two workflow files
-directly) so the two cloud-agent workflows can find `scripts/provenance.py`, and edit
-`hooks.json`'s two relative `command` paths the same way you would for the Codex
-adapter — same caveat, immediately below.
+From the **project where you want to keep the record**, using the Python environment
+that can run kpopper:
 
-## Not load-bearing: `vscode/hooks.json`
+```sh
+mkdir -p .github/hooks
+python3 /absolute/path/to/kpopper/adapters/copilot/cli/hook.py config > .github/hooks/kpopper-cli.json
+```
 
-This ships because the BUILD asked for it, not because it's something to depend on:
+If that file already exists, merge or review it before replacing it. The generator
+prints configuration only; it records absolute paths to this checkout and the selected
+Python interpreter. Regenerate after moving either. Those machine-specific paths should
+remain local unless everyone uses the same layout. Keep other hook files unchanged.
 
-1. It's Preview, can change shape, and an org can turn it off entirely.
-2. Its `command` paths (`../../../scripts/session_open.sh`, matching this file's own
-   position three directories below the kpopper checkout root) assume hook commands
-   run with the workspace root as cwd — the same assumption the Codex adapter has to
-   make, for the same reason: no fetched doc states the execution cwd for this
-   specific hook system, only that a `cwd` field is *sent to* the hook, which is not
-   the same claim. Treat this file as a documented sketch of what SessionStart/Stop
-   would look like here, not a working install step, until you've confirmed the cwd
-   assumption in your own VS Code build.
-3. Whether the Stop payload includes a `stop_hook_active`-equivalent field at all was
-   not confirmed by the fetched docs (only a general "common fields" table, which
-   didn't list it) — reusing `session_gate.sh` unmodified risks it re-bouncing every
-   single stop instead of yielding after one, if that field is simply absent here.
+Also add the contents of
+[`vscode/copilot-instructions.md`](vscode/copilot-instructions.md) to the project's
+`.github/copilot-instructions.md`, preserving any existing instructions, and replace
+`<plugin>` with the checkout's absolute path. If the project's `AGENTS.md` already carries
+the method, avoid duplicating it. The same condensed instructions apply to CLI use.
 
-`copilot-instructions.md` carries the actual obligation for the local agent, the same
-way `rules/kpopper.md` does for Windsurf; the workflows carry it for the cloud agent.
-Nothing here depends on `hooks.json` working.
+Install the canonical skill directories as well. The condensed instructions alone
+do not provide the full authoring reference. Keep their supporting files in the
+complete checkout, and preserve any existing skills with these names:
 
-## Not verified
+```sh
+KPOPPER_CHECKOUT=/absolute/path/to/kpopper
+mkdir -p .agents/skills
+for skill in "$KPOPPER_CHECKOUT"/skills/*/; do
+  ln -s "$skill" ".agents/skills/$(basename "$skill")"
+done
+```
 
-- Whether `chat.hookFilesLocations` needs to be edited to pick up `.github/hooks/*.json`
-  by default, or whether that's already the default (one fetch said it's included by
-  default; another showed it being explicitly listed in an example — consistent with
-  "on by default, shown for clarity," but not stated in so many words).
-- The exact wording/UI of the org-policy control that can disable hooks entirely.
+Copilot discovers these project skills without importing the repository's Claude
+plugin hooks. If a name already exists, check its target before continuing; do not
+overwrite a different skill. Start a fresh session after installing them and verify
+that invoking `record` loads the chosen checkout's `skills/record/SKILL.md`.
+
+Start a new trusted Copilot CLI session in the project. If no opening arrives, ask it
+to run the following explicitly:
+
+```sh
+python3 /absolute/path/to/kpopper/scripts/cli.py open
+python3 /absolute/path/to/kpopper/scripts/cli.py check
+```
+
+This route does not install async ingestion, watch, grounding, edit or follow-up
+hooks. The canonical skills and shared instructions carry the method.
+It also does not configure checked-session MCP transport. Test those separately before
+claiming parity with Claude Code or Codex.
+
+### Native plugin loading is a separate capability
+
+Copilot CLI recognizes `.claude-plugin/plugin.json`, skills, and plugin hooks. The local
+command below discovered this checkout as `kpopper` on CLI 1.0.75:
+
+```sh
+copilot --plugin-dir /absolute/path/to/kpopper plugin list
+```
+
+This is a **discovery check**, not the recommended kpopper installation. Loading the
+repository root also selects its Claude hooks, whose output and background behavior
+have not been adapted for Copilot. Do not combine that import with the CLI bridge and
+assume they are equivalent. The repository hook route above deliberately selects only
+the two translated events.
+
+Copilot supports installation from repositories and marketplaces, but discovery alone
+does not verify the installed plugin's runtime behavior.
+[CLI plugin reference](https://docs.github.com/en/copilot/reference/copilot-cli-reference/cli-plugin-reference)
+
+### What has been tested
+
+`python3 -m unittest discover -s tests -p test_copilot_adapter.py` checks the bridge
+against real temporary records: payload workspace selection, opening context and session
+identity, a new failure returning block JSON, continuation yielding, resume preserving
+the original baseline, first use without creating a record, and configuration generation.
+
+A separate offline CLI run used isolated `COPILOT_HOME` and `COPILOT_CACHE_HOME`, a
+temporary Git repository and a localhost provider that returned fixed responses. The
+provider received the opening context, then received the new failure after the stop
+hook forced one continuation. This verifies the host protocol, not whether a model
+chooses skills, records useful findings or completes a task correctly. Linux, WSL,
+native Windows, live-model behavior and cross-agent handoff still need runtime checks.
+
+A subsequent real-model probe exposed issues the protocol tests could not detect.
+An instructions-only run guessed field names and produced no executable judgment.
+A run with the canonical `record` skill used `v`, `rests_on`, `wrong_if` and `seen`
+and produced a clean checker result; fresh reading and changed-premise detection
+also worked. The model and tool permissions changed between the two runs, so this
+comparison does not isolate the effect of skills. The installation includes the
+full catalog to provide the actual authoring reference.
+
+The successful core sequence still omitted some source metadata and did not
+complete a structured citation update. A clean checker result does not prove that
+the model recorded every requested source detail. Consult the
+[current verification matrix](../../docs/compatibility.md) for the exact limits.
+
+## VS Code local agent
+
+Merge [`vscode/copilot-instructions.md`](vscode/copilot-instructions.md) into
+`.github/copilot-instructions.md`, replacing `<plugin>` with the checkout path. VS Code
+reads that file automatically and also supports `AGENTS.md`.
+[Custom instructions](https://code.visualstudio.com/docs/agent-customization/custom-instructions)
+
+[`vscode/hooks.json`](vscode/hooks.json) remains an **unverified sketch**, not an install
+step. Its relative commands must be replaced with valid paths for the project. VS Code
+hooks are Preview, may be disabled by organization policy, and are discovered under
+`.github/hooks/*.json` by default. The current documentation also describes CLI-format
+compatibility, but the CLI bridge's direct `exec` configuration has not been validated
+in VS Code. Keep explicit opening/checking instructions until a local-agent session
+proves the chosen hook route.
+[VS Code hooks](https://code.visualstudio.com/docs/agent-customization/hooks)
+
+## Copilot cloud agent
+
+The cloud agent now supports repository hooks, including session start and stop events.
+This adapter still uses setup plus CI; it does not claim a tested cloud lifecycle gate.
+The CLI generator emits local absolute paths and `exec` entries, so do **not** copy its
+generated configuration into a cloud job.
+[Cloud hook behavior](https://docs.github.com/en/copilot/reference/hooks-reference)
+
+Copy or merge these workflow files into the repository's `.github/workflows/`:
+
+- [`cloud-agent/copilot-setup-steps.yml`](cloud-agent/copilot-setup-steps.yml) installs
+  PyYAML and opens an existing root record in the setup logs.
+- [`cloud-agent/provenance-check.yml`](cloud-agent/provenance-check.yml) checks a root
+  record on pull requests. It is a CI result; merge enforcement requires the project's
+  own branch protection configuration.
+
+Set the repository variable `KPOPPER_ROOT` to the location of a kpopper checkout available
+inside the job, or edit the workflows to use the project's actual vendored path. The
+setup workflow does not fetch kpopper itself. Without this variable the setup opening
+skips; the PR check fails when a root record exists and the tool cannot be located.
+
+The setup job must be named `copilot-setup-steps`, and the workflow must be present on
+the default branch for the cloud agent to use it. Review and validate the setup logs in
+the target repository before relying on it.
+[Cloud environment setup](https://docs.github.com/en/copilot/how-tos/copilot-on-github/customize-copilot/customize-cloud-agent/customize-the-agent-environment)

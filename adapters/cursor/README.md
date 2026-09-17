@@ -1,79 +1,94 @@
 # kpopper for Cursor
 
-Cursor's hook payloads carry `conversation_id`, never `session_id` — the plugin's own
-`scripts/session_open.sh` / `session_gate.sh` key their baseline file by `session_id`
-and would silently never fire if pointed at directly. This adapter is a pair of
-translating wrapper scripts instead, keyed by `conversation_id`, that call the same
-harness-neutral `scripts/provenance.py` underneath.
+This project adapter supplies a rule and two native Cursor hook wrappers. The
+wrappers call kpopper's shared reader and checker; they translate opening context
+and a stop follow-up into Cursor's response format.
+
+**Status:** wrapper smoke tests pass on macOS. Installation, context delivery and
+follow-up delivery inside Cursor still need a live session test. A passing shell
+test does not establish desktop, CLI or cloud runtime parity.
 
 ## What this installs
 
-| file | does |
+| File | Behavior |
 |---|---|
-| `hooks.json` | sessionStart → `gate-open.sh`, stop → `gate-stop.sh`. |
-| `scripts/gate-open.sh` | writes `${TMPDIR}/kpopper-base-cursor-<conversation_id>`, prints the opening. |
-| `scripts/gate-stop.sh` | compares the current FAIL count to that baseline; bounces once. |
-| `rules/kpopper.mdc` | the condensed method, `.mdc` frontmatter, agent-requested + auto-attached on `GROUNDING.yaml` or `PROVENANCE.yaml`. |
+| `hooks.json` | `sessionStart` → `gate-open.sh`; `stop` → `gate-stop.sh`. |
+| `scripts/gate-open.sh` | Opens the record in `additional_context` and saves a temporary baseline keyed by `conversation_id`. |
+| `scripts/gate-stop.sh` | Requests a follow-up when the FAIL count exceeds the baseline and `loop_count` is zero; otherwise yields. |
+| `rules/kpopper.mdc` | Condensed method, requested by relevance or attached when a record file is in context. |
 
-## Verified against docs
+This adapter does not install the root plugin's other hooks, optional background
+workers or full skill collection. Its stop check compares failure counts; it is
+not equivalent to all checks performed by the Claude Code stop hook.
 
-Source: `https://cursor.com/docs/hooks`, plus `https://ntorres.dev/blog/cursor-hooks-json-guide`
-(a third-party schema writeup cross-checked against the same page), fetched 2026-09-01.
+## Cursor's documented contract
 
-- **`conversation_id`, not `session_id`.** Confirmed on both the sessionStart and stop
-  payloads — this is why a wrapper exists at all rather than pointing hooks.json at the
-  existing scripts.
-- **sessionStart is fire-and-forget** — "the agent loop does not wait for or enforce a
-  blocking response" — and its response shape is `{"additional_context": "..."}`, not
-  bare stdout the way Claude Code and Codex both accept. `gate-open.sh` wraps its output
-  in that shape. Whether Cursor *also* tolerates bare stdout for this event is not
-  documented either way — shipped the documented form since it's the only one confirmed.
-- **stop has no block/deny field.** The permission-style response (`{"permission":
-  "allow"|"ask"|"deny"}`) is documented for `beforeShellExecution`, `beforeMCPExecution`,
-  `preToolUse`, and `subagentStart` — not for `stop`. The only lever `stop` has is
-  `{"followup_message": "..."}`, which Cursor resubmits as the next user turn, capped by
-  a `loop_limit` (default 5) tracked in the payload's `loop_count` field (0 on the first
-  stop of a conversation, incremented each time a followup_message fires). `gate-stop.sh`
-  treats `loop_count == 0` as the translation of `stop_hook_active == false` — bounce
-  once via `followup_message`, then go quiet on any later stop for the same conversation,
-  printing the failures to stderr instead. **This is our own translation, not a
-  documented Cursor "block" primitive** — Cursor never actually prevents the turn from
-  ending, it just queues another one.
-- **Command paths are workspace-root-relative, not `hooks.json`-relative.** For
-  project hooks, Cursor runs with the project root as cwd, and the documented convention
-  is to write the `.cursor/` prefix explicitly (`.cursor/scripts/foo.sh`, not
-  `./scripts/foo.sh` or `scripts/foo.sh`). `hooks.json` above does this.
-- **Do not symlink the `.cursor` directory itself** — there's a filed Cursor forum
-  report of relative hook paths breaking specifically under a symlinked `.cursor/`.
-  Symlinking the individual script files (see install, below) is a different, unaffected
-  case, and is what lets `gate-open.sh`/`gate-stop.sh` self-locate the kpopper checkout.
-- **`.mdc` frontmatter** is `description` (used for agent-requested matching),
-  `globs` (comma-separated, auto-attaches the rule when a matching file is in context),
-  `alwaysApply` (bypasses both — loads for every request, so used sparingly per Cursor's
-  own guidance). `rules/kpopper.mdc` sets both `description` and `globs: GROUNDING.yaml,PROVENANCE.yaml`
-  so it attaches either by relevance or the moment that file is touched, and leaves
-  `alwaysApply: false`.
+Checked against [Cursor's hooks reference](https://cursor.com/docs/hooks) on
+2026-09-16:
 
-## Install
+- The common payload includes `conversation_id`. `sessionStart` also documents
+  `session_id`, equal to that conversation ID. This adapter uses `conversation_id`
+  consistently across both hooks.
+- `sessionStart` returns `additional_context`. It is nonblocking, so it cannot
+  guarantee the agent waits for the record before starting work.
+- Native `stop` uses `followup_message` to request another turn. `loop_count`
+  counts automatic follow-ups, and `loop_limit` defaults to five. This adapter
+  requests one only while that count is zero.
+- Project hook commands run from the project root. Keep the `.cursor/` prefix in
+  `hooks.json`; when the payload has no `cwd`, the wrappers use that working directory.
+- Hosted cloud agents run `stop` but do not run `sessionStart`. Self-hosted workers
+  have a different lifecycle contract.
 
-    mkdir -p .cursor/scripts .cursor/rules
-    cp <plugin>/adapters/cursor/hooks.json .cursor/hooks.json
-    cp <plugin>/adapters/cursor/rules/kpopper.mdc .cursor/rules/kpopper.mdc
-    ln -s <plugin>/adapters/cursor/scripts/gate-open.sh .cursor/scripts/gate-open.sh
-    ln -s <plugin>/adapters/cursor/scripts/gate-stop.sh .cursor/scripts/gate-stop.sh
+Without the opening baseline, this adapter's stop wrapper exits without a
+follow-up. **Hosted cloud agents therefore do not receive the automatic opening
+or stop check from this pair.** Run `kpop open` and `kpop check` explicitly
+there. Local symlink targets also need to exist in any remote execution environment.
 
-Symlinking the two scripts (not copying them, not symlinking the directory) is what
-lets them find `scripts/provenance.py` on their own, by resolving their own real
-location. If you'd rather copy them, set `KPOPPER_ROOT=/absolute/path/to/kpopper` in
-the environment Cursor runs hooks in — both scripts check that first.
+## Install the project adapter
 
-## Not verified
+Use a trusted project, a kpopper checkout, and Python 3.9+ with the dependencies
+from the repository's installation instructions. Run from the project root,
+replacing `<plugin>` with the absolute checkout path. If `.cursor/hooks.json`
+already exists, merge this adapter's two hook entries into it instead of copying
+over it. Preserve existing rules and scripts with the same names as well.
 
-- Whether `stop`'s `followup_message` is honored identically across Cursor's surfaces
-  (desktop app vs CLI vs background agent) — docs describe one mechanism, not
-  per-surface differences.
-- The exact shell Cursor invokes `command` through (direct exec vs `sh -c`) — the
-  scripts' self-location logic reads `$0`, which is reliable under direct exec and
-  under most `sh -c "path"` forms, but not guaranteed universally. `KPOPPER_ROOT` is
-  the documented-safe fallback if self-location ever comes back empty (both scripts
-  print a diagnostic to stderr and exit 0 rather than silently doing nothing).
+```sh
+mkdir -p .cursor/scripts .cursor/rules
+cp "<plugin>/adapters/cursor/hooks.json" .cursor/hooks.json
+cp "<plugin>/adapters/cursor/rules/kpopper.mdc" .cursor/rules/kpopper.mdc
+ln -s "<plugin>/adapters/cursor/scripts/gate-open.sh" .cursor/scripts/gate-open.sh
+ln -s "<plugin>/adapters/cursor/scripts/gate-stop.sh" .cursor/scripts/gate-stop.sh
+```
+
+Symlink the individual scripts so they can resolve the checkout containing the
+reader. For copied scripts, set `KPOPPER_ROOT=/absolute/path/to/kpopper` in the
+environment Cursor uses for hooks. A missing checkout produces a diagnostic on
+stderr and the wrapper yields. These shell instructions have not been validated
+on native Windows.
+
+## Plugins and Claude hook imports
+
+Cursor now has its own plugin packaging and an Agent Plugins format. The latter
+packages skills and MCP servers; Cursor-specific hooks require Cursor's format.
+This directory remains a project adapter, not a Cursor marketplace package.
+[Cursor plugin documentation](https://cursor.com/docs/plugins)
+
+Cursor also documents importing Claude hooks from `.claude/settings*.json` when
+third-party imports are enabled. It translates a Claude `Stop` block response into
+a follow-up. That is another integration path, not proof that installing kpopper's
+Claude package supplies every capability in Cursor. Do not configure both paths
+for the same kpopper hooks: all matching hooks can run.
+[Third-party hook documentation](https://cursor.com/docs/reference/third-party-hooks)
+
+## Verification
+
+The existing `tests.test_start.FirstUse.test_cursor_first_use_json_and_first_record_stop_use_the_same_baseline`
+checks opening JSON, the first-record baseline and a stop follow-up. A separate
+2026-09-16 smoke test also exercised executable symlinks, a project path with
+spaces and documented payload fields without `cwd`.
+
+Before claiming a host is verified, start a fresh conversation in that host,
+confirm the opening reaches the agent, introduce a checker failure in a disposable
+record, and confirm one follow-up reaches the conversation. Test resume and
+compaction separately; this adapter installs no compaction hook. Multi-root
+workspace selection and remote execution remain unverified.

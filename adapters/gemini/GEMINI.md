@@ -45,12 +45,15 @@ a fact only in its stated scope. Merge accepts content; it never proves truth, i
 confidence or refreshes `seen`. Remote publication needs explicit project authority.
 <!-- /kpopper:method -->
 
-## This harness cannot enforce the stop gate
+## This adapter's end check is advisory
 
-`SessionStart` opens an existing record or supplies first-use guidance. There is no `SessionEnd` equivalent of
-the stop gate the Claude Code plugin ships — Gemini CLI does not wait for a
-`SessionEnd` hook and ignores any flow-control field it returns, so nothing can stop
-a session from ending, however far `check` has regressed. `hooks/checknote.sh` still
-runs `check` and prints what it finds, but treat that as a request, not a gate: a
-message you can walk away from, not one that stops you. Before finishing work you
-were asked to leave in a state worth returning to, run `check` yourself and read it.
+`SessionStart` opens an existing record or supplies first-use guidance through
+Gemini's JSON `additionalContext` field. Reuse that opening and the CLI command it
+provides. The extension supplies this condensed method; it does not install the
+separate kpopper skills.
+
+`SessionEnd` requests a check through `scripts/checknote.sh`, wrapped as a JSON
+`systemMessage`. Gemini does not guarantee that this shutdown hook finishes and
+ignores its flow-control fields. This adapter does not implement an `AfterAgent`
+gate. Before finishing work you were asked to leave in a state worth returning to,
+run `kpop check` yourself and read the result.

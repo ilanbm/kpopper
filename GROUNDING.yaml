@@ -666,6 +666,13 @@ sources:
            conflicts under git where one file per version merges clean, acts can conflict, the two
            times need exact meaning, the merged entry file is rebuilt and never read as an edit - and
            hardened by two review rounds of the module itself"
+  s.2026_09_17_host_compatibility:
+    asked: "Check how kpopper works in OpenClaw, add usage instructions, and identify and test other
+            environments worth supporting before launch; run bounded compatibility checks in
+            parallel."
+    name: "The session that verified host loading and hook protocols, added OpenClaw and OpenCode
+           guides, and corrected Gemini, Copilot, Cursor and Cowork compatibility claims"
+    of: "2026-09-17"
   s.2026_09_17_selective_ci:
     name: "The request to make PR checks selective while retaining the needed coverage"
     asked: |-
@@ -827,6 +834,11 @@ sources:
     name: "Focused graph export contract"
     file: "docs/graph-export.md"
     read: "2026-09-14"
+  doc.host_compatibility:
+    name: "Host compatibility verification and release acceptance"
+    file: "docs/compatibility.md"
+    read: "2026-09-17"
+    from: s.2026_09_17_host_compatibility
   doc.hub_seam:
     name: "The lab's own decision on why its page stays hand-written - the argument is manual,
            the agenda is derived, and a block becomes a query once its content is anchored"
@@ -1436,6 +1448,12 @@ known:
     at: "the first command of each trial - pull heat, pull pump water; the 13 wrong answers were all
          dates under when., a prefix no question suggests"
     of: "2026-09-11"
+  m.host_compatibility_model_sessions:
+    v: 0
+    name: "Real-model conversations in the initial compatibility pass, before live exercises"
+    from: doc.host_compatibility
+    at: "Verification matrix / initial loader-protocol phase before live exercises"
+    of: "2026-09-17"
   m.letter_prefix_ids:
     v: 214
     unit: entries
@@ -1460,6 +1478,18 @@ known:
     from: run.prefix_survey
     at: "the judgment collection of each record, and the two letters both live records hold"
     of: "2026-09-11"
+  m.named_main_delivery_corrected:
+    v: true
+    name: "Named-main delivery and true-subagent suppression pass all five fixed-hook regressions"
+    from: doc.host_compatibility
+    at: "Scope before launch / guard correction and five passing regression cases"
+    of: "2026-09-17"
+  m.named_main_hooks_suppressed:
+    v: true
+    name: "Named-main suppression reproduced on baseline 5c2062b before the guard correction"
+    from: doc.host_compatibility
+    at: "Scope before launch / initial pre-fix observation on baseline 5c2062b"
+    of: "2026-09-17"
   m.older_records_changed:
     v: 0
     name: "Records written before the field whose reading changed once the reader learned it"
@@ -1538,6 +1568,18 @@ known:
     at: "tool.setuptools.package-data"
     measure: checks_in_the_wheel
     of: "2026-09-03"
+  m.openclaw_bundle_hooks:
+    v: 0
+    name: "Runnable kpopper hooks registered by the existing bundle in OpenClaw 2026.9.4"
+    from: doc.host_compatibility
+    at: "Verification matrix / OpenClaw 2026.9.4: hook inventory confirms no kpopper hook pack"
+    of: "2026-09-17"
+  m.openclaw_bundle_skills:
+    v: 8
+    name: "Eligible model-visible kpopper skills in isolated OpenClaw 2026.9.4 on macOS"
+    from: doc.host_compatibility
+    at: "Verification matrix / OpenClaw 2026.9.4: all eight skills eligible and model-visible"
+    of: "2026-09-17"
   m.prompt_hook_10x_kept:
     v: 0.15
     unit: s

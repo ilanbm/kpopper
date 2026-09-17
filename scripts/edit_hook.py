@@ -47,7 +47,8 @@ def cited(record, rel):
 
 
 def context(payload, host):
-    if not isinstance(payload, dict) or payload.get("agent_id") or payload.get("agent_type"):
+    # agent_type also names a main session started with --agent.
+    if not isinstance(payload, dict) or payload.get("agent_id"):
         return ""
     if payload.get("tool_name") not in TOOLS:
         return ""

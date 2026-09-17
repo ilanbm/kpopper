@@ -85,6 +85,17 @@ class SharedTests(fixture.WatchFixture, unittest.TestCase):
             self.assertEqual(code, 2)
             self.assertIn('KPOPPER_WATCH', err)
 
+    def test_named_claude_main_agent_gets_watch_notice_and_child_does_not_consume_it(self):
+        payload = {'cwd': str(self.work), 'session_id': 'named-main', 'agent_type': 'planner'}
+        with patch.object(W, 'launch'):
+            self.changed()
+            self.watch.process()
+            self.assertEqual(H.handle({**payload, 'agent_id': 'child'}, 'claude', 'wait', 0), ('', '', 0))
+            out, err, code = H.handle(payload, 'claude', 'wait', 0)
+            self.assertEqual((out, code), ('', 2))
+            self.assertIn('KPOPPER_WATCH', err)
+            self.assertEqual(H.handle(payload, 'claude', 'wait', 0), ('', '', 0))
+
     def test_shared_crash_after_replace_is_recovered_once(self):
         self.capture()
         real = W.I._replace_record
