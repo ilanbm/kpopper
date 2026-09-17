@@ -5,7 +5,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "${extensionPath}/../../scripts/session_open.sh"
+            "command": "python3 \"${extensionPath}/scripts/hook.py\" SessionStart"
           }
         ]
       }
@@ -15,7 +15,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "${extensionPath}/scripts/checknote.sh"
+            "command": "python3 \"${extensionPath}/scripts/hook.py\" SessionEnd"
           }
         ]
       }

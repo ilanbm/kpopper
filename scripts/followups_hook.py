@@ -9,7 +9,8 @@ except ImportError:
 
 
 def handle(payload):
-    if not isinstance(payload, dict) or payload.get("agent_id") or payload.get("agent_type"):
+    # agent_type also names a main session started with --agent.
+    if not isinstance(payload, dict) or payload.get("agent_id"):
         return ""
     owner = payload.get("session_id")
     if not isinstance(owner, str) or not owner or len(owner) > 200:
