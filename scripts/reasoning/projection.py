@@ -206,7 +206,8 @@ def _witness_ids(items, name):
         raise ValueError(name + ' must be a list')
     result = set()
     for item in items:
-        identifier = item.get('id') if isinstance(item, dict) else item if isinstance(item, str) else None
+        identifier = (item.get('id') or item.get('scope_id')) \
+            if isinstance(item, dict) else item if isinstance(item, str) else None
         if not isinstance(identifier, str) or not identifier:
             raise ValueError(name + ' contains an invalid witness')
         result.add(identifier)

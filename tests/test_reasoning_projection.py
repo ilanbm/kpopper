@@ -187,6 +187,17 @@ class ProjectionTests(unittest.TestCase):
              'witnesses': [{'context': 'falsifier', 'classification': 'potential'}]},
         ])
 
+    def test_scope_witness_uses_its_declared_scope_id(self):
+        projected = project_witnesses({
+            'potential_dependencies': [{
+                'kind': 'scope', 'scope_id': 'scope.inputs',
+                'definition_digest': 'a' * 64, 'membership_digest': 'b' * 64,
+                'projected_inputs_digest': 'c' * 64}],
+            'potential_ids': ['scope.inputs'], 'executed_reads': [],
+        })
+        self.assertEqual(projected['potential'], ['scope.inputs'])
+        self.assertEqual(projected['unexecuted'], ['scope.inputs'])
+
     def test_projection_uses_findings_not_clipping_or_attention(self):
         computation = {'status': 'ok', 'value': {'type': 'boolean', 'value': True},
                        'potential_ids': ['a', 'b'], 'executed_reads': ['a'],

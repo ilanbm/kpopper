@@ -5689,11 +5689,13 @@ def _report(paths, kind, nid, doc, ids, jud, fields, raw):
     """The reach, as the write's return value: worked-out entries that read it, every
     judgment reached and its state now, the texts of the brief that saw it."""
     if getattr(raw, 'world', None) is not None:
-        report = raw.world.assessment()
+        base = raw.world.assessment()
+        report = _peer('reasoning.history_assessment').from_v2(raw.world.snapshot, base)
+        projected = _peer('reasoning.projection').project_findings(report)
         for name, node in report['nodes'].items():
             if fields['deps'] in (node['body'] if isinstance(node['body'], dict) else {}):
-                tag, why = raw.world.state(name)
-                print(f"  {name} {tag.lower()}: {why}")
+                print('  ' + name + ' core/v1: ' + projected['nodes'][name]['status_text'])
+        print('  snapshot ' + report['snapshot_id'] + '; findings ' + report['findings_revision'])
         return
     if kind == "review":
         tag, why = _state(nid, jud[nid], raw, ids, fields)

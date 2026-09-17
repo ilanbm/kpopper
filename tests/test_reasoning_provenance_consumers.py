@@ -6,8 +6,11 @@ import subprocess
 import sys
 import tempfile
 import unittest
+from types import SimpleNamespace
 
 from scripts import provenance as P
+from scripts.reasoning import assessment as V2
+from scripts.reasoning.snapshot import Snapshot
 
 
 DOCUMENT = '''meta:
@@ -66,6 +69,33 @@ class CoreProvenanceConsumers(unittest.TestCase):
             result = subprocess.run(command, capture_output=True, text=True, check=False)
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertIn('core/v1 snapshot ', result.stdout)
+
+    def test_core_writer_summary_wraps_cached_v2_without_another_evaluation(self):
+        snapshot = Snapshot.from_data({
+            'meta': {'reasoning': {
+                'version': 2, 'profile': 'core/v1', 'requires': ['arithmetic/v1']}},
+            'decisions': {'d.ready': {'rests_on': [], 'wrong_if': 'terms change'}},
+        })
+        base = V2.assess(snapshot)
+
+        class World:
+            def __init__(self):
+                self.snapshot = snapshot
+                self.calls = 0
+
+            def assessment(self):
+                self.calls += 1
+                return base
+
+        world = World()
+        raw = SimpleNamespace(world=world)
+        code, output = self.capture_output(
+            P._report, [], 'add', 'd.ready', {}, set(), {},
+            {'deps': 'rests_on', 'snapshot': 'seen', 'predicate': 'wrong_if'}, raw)
+        self.assertIsNone(code)
+        self.assertEqual(world.calls, 1)
+        self.assertIn('d.ready core/v1:', output)
+        self.assertIn('snapshot ' + snapshot.snapshot_id + '; findings ', output)
 
 
 if __name__ == '__main__':
