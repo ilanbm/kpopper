@@ -112,6 +112,60 @@ class DirectHistory(unittest.TestCase):
         self.assertTrue(receipt['recovered'])
         self.assertEqual(len(report.store.capture().commits), 2)
 
+    def test_cli_explicit_refutation_and_return_preserve_claim_body(self):
+        import json
+        import subprocess
+        import sys
+        cli = Path(P.__file__).with_name('cli.py')
+        for operation, expected in [('refute', 'refuted'), ('accept', 'accepted')]:
+            result = subprocess.run([sys.executable, str(cli), 'history', operation,
+                '--record', str(self.entry), '--subject', 'p.input', '--of', self.source['id'],
+                '--because', 'explicit fixture decision', '--json'], capture_output=True, text=True, timeout=20)
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+            self.assertEqual(json.loads(result.stdout)['state'], 'committed')
+            captured = H.Store(self.entry).capture()
+            self.assertEqual(captured.state['subjects']['p.input']['acceptance'], expected)
+            self.assertEqual(captured.objects[self.source['id']], self.source)
+
+    def test_cli_named_hypothesis_and_consolidation_are_history_operations(self):
+        import subprocess
+        import sys
+        cli = Path(P.__file__).with_name('cli.py')
+        def run(*args):
+            result = subprocess.run([sys.executable, str(cli), *args, str(self.entry)],
+                                    capture_output=True, text=True, timeout=20)
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+            return result
+        run('set', 'p.input', '5', '--hypothesis', 'alternative')
+        data = Snapshot.capture(self.entry).to_data()
+        self.assertEqual(data['nodes']['p.input']['body']['v'], 1)
+        self.assertEqual(data['hypotheses']['alternative']['document']['readings']['p.input']['v'], 5)
+        before = H.Store(self.entry).capture().commits
+        run('consolidate', '--dry-run', 'alternative')
+        self.assertEqual(before, H.Store(self.entry).capture().commits)
+        run('consolidate', 'alternative')
+        self.assertEqual(Snapshot.capture(self.entry).to_data()['nodes']['p.input']['body']['v'], 5)
+
+    def test_cli_records_edited_view_as_proposal_and_retains_original_text(self):
+        import json
+        import subprocess
+        import sys
+        from scripts import history_contract as C, history_edits as E
+        document = C.decode_document(self.entry.read_bytes())
+        document['readings']['p.input']['v'] = 8
+        edited = C.encode_document(document) + b'# authored edit note\n'
+        self.entry.write_bytes(edited)
+        cli = Path(P.__file__).with_name('cli.py')
+        result = subprocess.run([sys.executable, str(cli), 'history', 'reconcile', '--record', str(self.entry),
+            '--record-proposals', '--because', 'explicitly retain this edit', '--json'],
+            capture_output=True, text=True, timeout=20)
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        operation = json.loads(result.stdout)['operation']
+        captured = H.Store(self.entry).capture()
+        self.assertEqual(captured.state['subjects']['p.input']['body']['v'], 1)
+        manifest = C.decode_document(captured.commits[operation])
+        self.assertEqual(E.raw_edit_evidence(manifest['receipt']), edited)
+
 
 if __name__ == '__main__':
     unittest.main()

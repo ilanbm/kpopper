@@ -639,7 +639,7 @@ class TwoBranchesRefusedOnOneId(unittest.TestCase):
             self.assertEqual((left, right), ("heat_loss_kw_bc80ee", "heat_loss_kw_df920f"))
             for branch in ("left", "right"):
                 self.assertEqual(git(d, "merge", "--no-edit", "-q", branch)[0], 0)
-            self.assertEqual(sorted(p.name for p in (pathlib.Path(d) / "PROVENANCE.d").iterdir()),
+            self.assertEqual(sorted(p.name for p in (pathlib.Path(d) / "PROVENANCE.d").glob("*.yaml")),
                              [f"{left}.yaml", f"{right}.yaml"])
             self.assertEqual(git(d, "status", "--short")[1], "")
             code, out, err = run(SCRIPTS / "kpopper", "consolidate", "--dry-run", rec)

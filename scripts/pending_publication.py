@@ -408,7 +408,10 @@ class Publisher:
             G.validate_bundle(bundle)
             if bundle['manifest']['version'] != 3:
                 raise Attention('history publication requires versioned history contributions')
-            incoming = B.validate(B.from_contribution(bundle))
+            artifact = B.from_contribution(bundle)
+            if artifact['manifest']['version'] == 2:
+                raise Attention('scoped history contribution requires explicit adoption choices')
+            incoming = B.validate(artifact)
             if G.identity(incoming.marker) != G.identity(captured.marker):
                 raise Attention('different history authority requires explicit adoption')
             if G.identity(incoming.state['rules']) != G.identity(captured.state['rules']):

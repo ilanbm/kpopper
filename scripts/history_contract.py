@@ -23,6 +23,7 @@ except ImportError:
 
 ID_SCHEME = 'typed-history/v2'
 LEGACY_SCHEME = 'prototype/v1'
+EXPLICIT_ROOT_DISPOSITION = 'explicit-root-disposition/v1'
 PROFILE = 'history/v1'
 TOKEN = re.compile(r'[A-Za-z0-9][A-Za-z0-9_.-]{0,159}\Z')
 SUBJECT = re.compile(r'[A-Za-z0-9_][A-Za-z0-9_.-]*\Z')
@@ -115,7 +116,7 @@ def object_identity(value):
 
 
 def _authored(value):
-    _mapping(value, ('collection', 'fields', 'profile'), ('locator',))
+    _mapping(value, ('collection', 'fields', 'profile'), ('locator', 'hypothesis'))
     _text(value['collection'], SUBJECT)
     _require(isinstance(value['fields'], dict) and all(
         isinstance(k, str) and isinstance(v, str) and v
@@ -124,6 +125,12 @@ def _authored(value):
              'unsupported_profile')
     if 'locator' in value:
         _require(isinstance(value['locator'], dict), 'invalid_locator')
+    if 'hypothesis' in value:
+        group = value['hypothesis']
+        _mapping(group, ('version', 'name', 'head'))
+        _require(type(group['version']) is int and group['version'] == 1 and
+                 isinstance(group['name'], str) and re.fullmatch(r'[A-Za-z0-9][A-Za-z0-9_-]*', group['name'])
+                 and isinstance(group['head'], dict), 'invalid_history_hypothesis')
 
 
 def validate_pin_gaps(value):
@@ -198,7 +205,12 @@ def validate_object(value):
     if value['kind'] == 'act':
         body = value['body']
         _mapping(body, ('act', 'of', 'over', 'because'), ('read',))
-        _require(body['act'] in ('accept', 'refute', 'review', 'correct'), 'invalid_act')
+        _require(body['act'] in (('accept', 'refute', 'review', 'correct', 'propose', 'retire')
+                                if value.get('id_scheme') == ID_SCHEME else
+                                ('accept', 'refute', 'review', 'correct')), 'invalid_act')
+        if body['act'] in ('propose', 'retire'):
+            _require(body['over'] == [] and isinstance(body['because'], str) and bool(body['because'].strip()),
+                     'invalid_act')
         _text(body['of'], OBJECT_ID)
         _ids(body['over'], unique='id_scheme' in value)
         _require(isinstance(body['because'], str), 'invalid_act')
@@ -354,8 +366,10 @@ def relative_path(value):
 def validate_commit(value):
     value = detached(value, MAX_REQUEST_BYTES)
     _mapping(value, ('version', 'record_id', 'authority_generation', 'operation', 'parents',
-                     'baseline_digest', 'objects', 'receipt', 'view_sha256'), ('view_template',))
+                     'baseline_digest', 'objects', 'receipt', 'view_sha256'), ('view_template', 'requires'))
     _require(type(value['version']) is int and value['version'] == 1, 'unsupported_commit')
+    if 'requires' in value:
+        validate_history_requires(value['requires'])
     _text(value['record_id'])
     _integer(value['authority_generation'])
     _text(value['operation'])
@@ -383,7 +397,33 @@ def validate_commit(value):
     return value
 
 
-def make_commit(*, marker, operation, parents, baseline, objects, receipt, view, view_template=None):
+
+def validate_history_requires(value):
+    _require(isinstance(value, list) and all(isinstance(item, str) for item in value)
+             and value == sorted(set(value)) and all(item == EXPLICIT_ROOT_DISPOSITION for item in value), 'unsupported_history_capability')
+    return value
+
+
+def validate_root_dispositions(manifest, objects, *, prior_ids=()):
+    """A strict contribution carries each new root's explicit standing choice.
+
+    Existing roots reachable through its parents keep their original compatible
+    interpretation. A strict independently imported root is new to that authority
+    and must carry its recorded accept/propose/retire act; no import invents one.
+    """
+    manifest = validate_commit(manifest)
+    if EXPLICIT_ROOT_DISPOSITION not in manifest.get('requires', []):
+        return
+    members = {item['id']: objects[item['id']] for item in manifest['objects']}
+    disposed = {obj['body']['of'] for obj in members.values() if obj['kind'] == 'act'
+                and obj['body']['act'] in ('accept', 'propose', 'retire')}
+    prior_ids = set(prior_ids)
+    for version, obj in members.items():
+        if obj['kind'] != 'act' and not obj['saw'] and version not in prior_ids:
+            _require(version in disposed, 'missing_root_disposition', version)
+
+
+def make_commit(*, marker, operation, parents, baseline, objects, receipt, view, view_template=None, requires=None):
     """Bind exact new object bytes and intended view; references need closure validation.
 
     `objects` is an iterable of (validated object, serialized bytes). A storage
@@ -401,7 +441,8 @@ def make_commit(*, marker, operation, parents, baseline, objects, receipt, view,
                             'parents': parents, 'baseline_digest': identity(baseline),
                             'objects': sorted(inventory, key=lambda item: item['id']),
                             'receipt': receipt, 'view_sha256': sha256(view),
-                            **({'view_template': view_template} if view_template is not None else {})})
+                            **({'view_template': view_template} if view_template is not None else {}),
+                            **({'requires': requires} if requires is not None else {})})
 
 
 def document_template(document):
@@ -457,6 +498,7 @@ def claim_meaning(obj):
         value['pin_gaps'] = copy.deepcopy(obj['pin_gaps'])
     if isinstance(value['authored'], dict):
         value['authored'].pop('locator', None)
+        value['authored'].pop('hypothesis', None)
     return value
 
 
@@ -508,7 +550,63 @@ def committed_objects(marker, commits, objects):
             if not remaining[child]:
                 ready.append(child)
     _require(visited == len(manifests), 'cyclic_commits')
+    membership = {op: {item['id'] for item in manifest['objects']} for op, manifest in manifests.items()}
+    work = 0
+    for operation, manifest in manifests.items():
+        if EXPLICIT_ROOT_DISPOSITION not in manifest.get('requires', []):
+            continue
+        disposed = {selected[vid]['body']['of'] for vid in membership[operation]
+                    if selected[vid]['kind'] == 'act' and
+                    selected[vid]['body']['act'] in ('accept', 'propose', 'retire')}
+        unresolved = {vid for vid in membership[operation] if selected[vid]['kind'] != 'act'
+                      and not selected[vid]['saw'] and vid not in disposed}
+        prior, examined, pending = set(), set(), list(manifest['parents'])
+        while unresolved - prior and pending:
+            parent = pending.pop()
+            if parent in examined:
+                continue
+            examined.add(parent)
+            work += 1
+            _require(work <= 4_000_000, 'history_limit', 'root disposition ancestry')
+            prior.update(unresolved & membership[parent])
+            pending.extend(manifests[parent]['parents'])
+        validate_root_dispositions(manifest, selected, prior_ids=prior)
     return validate_closure(selected)
+
+
+def validate_subset_origin(value):
+    value = detached(value, MAX_PROJECTION_BYTES)
+    _mapping(value, ('version', 'kind', 'operation', 'recorded_at', 'source_authority',
+                     'source_capture_digest', 'source_entry', 'roots', 'disclosed_locators',
+                     'prepared_digest', 'subjects'))
+    _require(type(value['version']) is int and value['version'] == 1 and
+             value['kind'] == 'selected-subject-observation', 'invalid_subset_origin')
+    _text(value['operation'])
+    _require(isinstance(value['recorded_at'], str) and value['recorded_at'], 'invalid_subset_origin')
+    _require(validate_authority(value['source_authority'])['authority'] == 'history', 'invalid_subset_origin')
+    _text(value['source_capture_digest'], HEX)
+    relative_path(value['source_entry'])
+    _require(isinstance(value['roots'], list) and value['roots'] and
+             value['roots'] == sorted(set(value['roots'])), 'invalid_subset_origin')
+    _require(isinstance(value['subjects'], dict) and set(value['roots']) <= set(value['subjects']),
+             'invalid_subset_origin')
+    for subject, item in value['subjects'].items():
+        _text(subject, SUBJECT)
+        _mapping(item, ('source_state', 'objects_digest', 'reduction_digest'))
+        _require(item['source_state'] in ('committed', 'prepared_candidate'), 'invalid_source_state')
+        _text(item['objects_digest'], HEX)
+        _text(item['reduction_digest'], HEX)
+    _require(isinstance(value['disclosed_locators'], list), 'invalid_subset_origin')
+    for item in value['disclosed_locators']:
+        _mapping(item, ('path', 'sha256'))
+        relative_path(item['path'])
+        if item['sha256'] is not None:
+            _text(item['sha256'], HEX)
+    if value['prepared_digest'] is not None:
+        _text(value['prepared_digest'], HEX)
+    _require(not any(item['source_state'] == 'prepared_candidate' for item in value['subjects'].values())
+             or value['prepared_digest'] is not None, 'invalid_source_state')
+    return value
 
 
 def validate_projection(value):
@@ -520,10 +618,12 @@ def validate_projection(value):
     value = detached(value, MAX_PROJECTION_BYTES)
     _mapping(value, ('projection_version', 'authority', 'baseline', 'identity_schemes', 'rules',
                      'rules_digest', 'closure_digest', 'coverage', 'subjects', 'pins', 'integrity'),
-             ('dispositions',))
+             ('dispositions', 'origin', 'requires'))
     _require(type(value['projection_version']) is int and value['projection_version'] == 1,
              'unsupported_projection')
     bind_authority(value['authority'], value['baseline'])
+    if 'requires' in value:
+        validate_history_requires(value['requires'])
     schemes = value['identity_schemes']
     _require(isinstance(schemes, list) and all(s in (ID_SCHEME, LEGACY_SCHEME) for s in schemes)
              and schemes == sorted(set(schemes)), 'unsupported_identity')
@@ -543,10 +643,14 @@ def validate_projection(value):
     if coverage['scope'] == 'all':
         _require(set(value['baseline']['heads']) | set(value['baseline']['open_acts'])
                  <= set(coverage['subjects']), 'invalid_coverage')
+    if 'origin' in value:
+        origin = validate_subset_origin(value['origin'])
+        _require(coverage['scope'] == 'selected' and set(origin['subjects']) == set(value['subjects']),
+                 'invalid_subset_coverage')
     for subject, result in value['subjects'].items():
         _mapping(result, ('acceptance', 'heads', 'open_acts'))
         _require(result['acceptance'] in ('accepted', 'proposed', 'contested', 'refuted',
-                                         'corrected', 'unreviewed', 'unavailable'), 'invalid_acceptance')
+                                         'corrected', 'retired', 'unreviewed', 'unavailable'), 'invalid_acceptance')
         _ids(result['heads'])
         _ids(result['open_acts'])
         _require(result['heads'] == value['baseline']['heads'].get(subject, [])
@@ -571,11 +675,16 @@ def validate_projection(value):
     _require(isinstance(dispositions, dict) and set(dispositions) <= set(value['subjects']),
              'invalid_dispositions')
     for subject, disposition in dispositions.items():
-        _mapping(disposition, ('marks', 'proposals', 'contested_claims', 'reviews', 'implied'))
+        _mapping(disposition, ('marks', 'proposals', 'contested_claims', 'reviews', 'implied'), ('source_state',))
+        if 'origin' in value:
+            _require(disposition.get('source_state') == value['origin']['subjects'][subject]['source_state'],
+                     'invalid_source_state')
+        elif 'source_state' in disposition:
+            _require(False, 'missing_subset_origin')
         _require(isinstance(disposition['marks'], dict), 'invalid_dispositions')
         for vid, mark in disposition['marks'].items():
             _text(vid, OBJECT_ID)
-            _require(mark in ('corrected', 'refuted', 'replaced', 'superseded'), 'invalid_dispositions')
+            _require(mark in ('corrected', 'refuted', 'retired', 'replaced', 'superseded'), 'invalid_dispositions')
         _ids(disposition['proposals'])
         _ids(disposition['contested_claims'])
         _require(isinstance(disposition['reviews'], list), 'invalid_dispositions')
@@ -584,7 +693,8 @@ def validate_projection(value):
             review = validate_object(review)
             _require(review['subject'] == subject and review['kind'] == 'act'
                      and review['body']['act'] == 'review'
-                     and review['body']['of'] in value['subjects'][subject]['heads'], 'invalid_review_scope')
+                     and review['body']['of'] in (value['subjects'][subject]['heads'] + disposition['proposals']),
+                     'invalid_review_scope')
             _require((ID_SCHEME if 'id_scheme' in review else LEGACY_SCHEME) in schemes,
                      'unsupported_identity')
             for dependency, vid in review['body'].get('read', {}).items():
@@ -599,6 +709,8 @@ def validate_projection(value):
                      and isinstance(finding['why'], str), 'invalid_dispositions')
             _text(finding['superseded'], OBJECT_ID)
             _text(finding['by'], OBJECT_ID)
+    if 'origin' in value:
+        _require(set(dispositions) == set(value['subjects']), 'invalid_subset_coverage')
     integrity = value['integrity']
     _mapping(integrity, ('complete', 'findings'))
     _require(type(integrity['complete']) is bool and isinstance(integrity['findings'], list),
@@ -626,6 +738,10 @@ class CapturedHistory:
         _require(isinstance(meta, dict) and 'history' in meta, 'baseline_mismatch')
         actual = validate_baseline(meta['history'])
         _require(identity(actual) == identity(self._projection['baseline']), 'baseline_mismatch')
+        origin = meta.get('history_subset')
+        if origin is not None or 'origin' in self._projection:
+            _require(origin is not None and identity(validate_subset_origin(origin)) ==
+                     identity(self._projection.get('origin')), 'subset_origin_mismatch')
 
     @property
     def document(self):

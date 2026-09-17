@@ -141,6 +141,18 @@ def _validate_history(document, context, hypotheses=None):
         from ..history_contract import CapturedHistory, HistoryError
         try:
             CapturedHistory(document, context['history'])
+            from .. import history_hypotheses as HH
+            derived, index = HH.layers(context['history'], document)
+            if derived or 'history_hypotheses' in context:
+                if digest(context.get('history_hypotheses')) != digest(index):
+                    raise HistoryError('history_hypothesis_index_mismatch')
+                normalized = _hypotheses(derived)
+                for name, expected in normalized.items():
+                    if digest((hypotheses or {}).get(name)) != digest(expected):
+                        raise HistoryError('history_hypothesis_layer_mismatch', name)
+            for name, hypothesis in (hypotheses or {}).items():
+                if hypothesis.get('kind') == HH.KIND and name not in derived:
+                    raise HistoryError('unrecorded_history_hypothesis', name)
         except HistoryError as error:
             raise SnapshotError('invalid_history', str(error)) from error
     elif isinstance(document.get('meta'), dict) and 'history' in document['meta']:
@@ -310,6 +322,16 @@ class Snapshot:
             'read_mode': 'supplied', 'source_collection': 'caller-owned'}
         context.setdefault('read_mode', 'supplied')
         normalized_hypotheses = _hypotheses(hypotheses)
+        if 'history' in context:
+            from .. import history_hypotheses as HH
+            derived, index = HH.layers(context['history'], document)
+            for name, hypothesis in _hypotheses(derived).items():
+                if name in normalized_hypotheses and normalized_hypotheses[name].get('kind') != HH.KIND:
+                    raise SnapshotError('hypothesis_authority_collision', name)
+                if name not in normalized_hypotheses:
+                    normalized_hypotheses[name] = hypothesis
+            if derived:
+                context.setdefault('history_hypotheses', index)
         _validate_history(document, context, normalized_hypotheses)
         if context['read_mode'] not in ('supplied', 'live', 'frozen', 'captured-live'):
             raise SnapshotError('invalid_snapshot', 'unknown captured read mode')
@@ -752,6 +774,10 @@ def _capture_load(paths, mode, initial):
     _retained_history_members(document, active[0])
     doc = P.Record(document)
     doc.hypotheses = P.load_hypotheses(routed)
+    from .. import history_hypotheses as HH
+    named, _ = HH.layers(adapted.projection, document)
+    C._require(not set(named) & set(doc.hypotheses), 'hypothesis_authority_collision')
+    doc.hypotheses.update(named)
     from .contract import capabilities, CapabilityError
     for hypothesis in doc.hypotheses.values():
         body = hypothesis['doc']

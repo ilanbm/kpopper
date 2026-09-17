@@ -72,8 +72,7 @@ def read(paths, names=(), refs=()):
         if h['path'].startswith('git:'):
             h['text'] = P.yaml.safe_dump(h['doc'], allow_unicode=True, sort_keys=False).split('\n')
         else:
-            with io.open(h["path"], encoding="utf-8") as fh:
-                h["text"] = fh.read().split("\n")
+            h["text"] = P._text_of_or_none(h["path"]).split("\n")
         pool[n] = h
     for ref in list(dict.fromkeys(refs)):
         for h in from_ref(paths, ref, doc):
@@ -157,7 +156,13 @@ def _check_of(udoc):
         p = os.path.join(d, P.ENTRY)
         with io.open(p, "w", encoding="utf-8") as f:
             yaml.safe_dump(body, f, sort_keys=False, allow_unicode=True, width=1000)
-        fail, _, moved, _, _ = P.check_lines([p])
+        # This disposable reduction world is derived from already captured input.
+        # Its short-lived files must not become live publication preconditions.
+        token = P._DIRECT_STAGE.set(P._DirectStage())
+        try:
+            fail, _, moved, _, _ = P.check_lines([p])
+        finally:
+            P._DIRECT_STAGE.reset(token)
     return fail, moved
 
 
@@ -628,8 +633,7 @@ def _rel(paths, p):
 
 
 def _text_of(f):
-    with io.open(f, encoding="utf-8") as fh:
-        return fh.read()
+    return P._text_of_or_none(f)
 
 
 def _guard_private_hypotheses(paths, doc, hyps, action, extra_roots=()):
@@ -740,6 +744,21 @@ def _next_command(paths, files, refs):
 
 
 def fold(paths, names=(), refs=(), stamp=None, take=(), drops=None):
+    project = P._peer('knowledge_views').project_for(paths)
+    paths = P._peer('knowledge_views').write_paths(paths)
+    if P._peer('history_direct').active(paths):
+        if refs:
+            raise P.Refused('history_branch_adoption_required: capture the branch history contribution explicitly')
+        result = P._peer('history_direct').finish_hypotheses(paths, names, kind='fold',
+            because='explicit consolidation', take=take, drops=drops)
+        print(result['state'] + ': ' + ', '.join(result['hypotheses']))
+        return 0
+    with P._locked(paths[0], project=project):
+        return P._mutate_legacy(paths, {'kind': 'consolidate', 'as_of': stamp},
+            lambda: _fold_candidate(paths, names, refs, stamp, take, drops))
+
+
+def _fold_candidate(paths, names=(), refs=(), stamp=None, take=(), drops=None):
     """The union written into the base, under one lock from the reading to the deletion:
     the record and its hypotheses read, the union tested and its report printed, then -
     only when the test is clean - every id that arrived or was replaced carried over whole
@@ -750,7 +769,7 @@ def fold(paths, names=(), refs=(), stamp=None, take=(), drops=None):
     stamp = stamp or datetime.date.today().isoformat()
     project = P._peer('knowledge_views').project_for(paths)
     paths = P._peer('knowledge_views').write_paths(paths)
-    with P._locked(paths[0], project=project):
+    with contextlib.nullcontext():
         doc, hyps = read(paths, names, refs)
         _guard_private_hypotheses(paths, doc, hyps, {'kind': 'consolidate'})
         if not hyps:
@@ -851,7 +870,7 @@ def fold(paths, names=(), refs=(), stamp=None, take=(), drops=None):
         # safely written; a keeping that fails undoes the record too, so the trail on a
         # judgment and the version beside the record never disagree
         kept, side = [], P.replaced_path(paths)
-        side_before = _text_of(side) if os.path.isfile(side) else None
+        side_before = _text_of(side) if P._exists(side) else None
         try:
             for k, h, replace in writes:
                 if replace and k in trailed and isinstance(h["raw"].get(k), dict):
@@ -864,19 +883,19 @@ def fold(paths, names=(), refs=(), stamp=None, take=(), drops=None):
             for f in changed:
                 P._write_text(f, originals[f])
             if side_before is None:
-                if os.path.isfile(side):
-                    os.remove(side)
+                if P._exists(side):
+                    P._remove_file(side)
             else:
                 P._write_text(side, side_before)
             raise P.Refused(f"the fold could not keep what it replaced and was undone: {e}")
         deleted = []
         for h in c.hyps:
-            if h.get("path") and os.path.isfile(h["path"]):
-                os.remove(h["path"])
+            if h.get("path") and P._exists(h["path"]):
+                P._remove_file(h["path"])
                 P.forget(h["path"])
                 deleted.append(h["path"])
         d = P.hypothesis_dir(paths)
-        if os.path.isdir(d) and not os.listdir(d):
+        if P._DIRECT_STAGE.get() is None and os.path.isdir(d) and not os.listdir(d):
             os.rmdir(d)
     names_ = ", ".join(h["name"] for h in c.hyps)
     if not writes:
@@ -923,6 +942,17 @@ def _session_source(doc, ids, raw, given=None):
 
 
 def refute(paths, name, why, source=None, stamp=None):
+    project = P._peer('knowledge_views').project_for(paths)
+    paths = P._peer('knowledge_views').write_paths(paths)
+    if P._peer('history_direct').active(paths):
+        result = P._peer('history_direct').finish_hypotheses(paths, [name], kind='refute', because=why, by=source)
+        return [result['state'] + ': ' + name]
+    with P._locked(paths[0], project=project):
+        return P._mutate_legacy(paths, {'kind': 'refute', 'as_of': stamp},
+            lambda: _refute_candidate(paths, name, why, source, stamp))
+
+
+def _refute_candidate(paths, name, why, source=None, stamp=None):
     """The hypothesis's claim written into the base as a negative finding - `hyp.<name>`,
     `v: refuted`, its claim as the name, the why as `at:`, from a session source, dated - and
     its file deleted, under one lock and undone together: a finding without the deletion, or
@@ -931,7 +961,7 @@ def refute(paths, name, why, source=None, stamp=None):
     if not why or not why.strip():
         raise P.Refused("refused - a refutation says why: consolidate --refute <hypothesis> \"<why>\"")
     stamp = stamp or datetime.date.today().isoformat()
-    with P._locked(paths[0]):
+    with contextlib.nullcontext():
         doc = P.load(paths)
         h = doc.hypotheses.get(name)
         if h is None:
@@ -964,7 +994,7 @@ def refute(paths, name, why, source=None, stamp=None):
         with contextlib.redirect_stdout(buf):
             P._apply(paths, action)              # the write path, inside the lock already held
         try:
-            os.remove(h["path"])
+            P._remove_file(h["path"])
             P.forget(h["path"])
         except OSError as e:
             for f in files:
@@ -973,7 +1003,7 @@ def refute(paths, name, why, source=None, stamp=None):
             raise P.Refused(f"refused - {h['path']} could not be deleted, so the finding was not "
                             f"written either: {e}")
         d = P.hypothesis_dir(paths)
-        if os.path.isdir(d) and not os.listdir(d):
+        if P._DIRECT_STAGE.get() is None and os.path.isdir(d) and not os.listdir(d):
             os.rmdir(d)
         written = [f for f in files if _text_of(f) != originals[f]]
     out = [l for l in buf.getvalue().split("\n") if l.strip()]
@@ -1077,7 +1107,11 @@ def from_ref(paths, ref, doc=None):
             with io.open(local, "w", encoding="utf-8") as f:
                 f.write(text)
             htexts[re.sub(r"\.ya?ml$", "", posixpath.basename(path))] = text.split("\n")
-        rdoc = P.load([os.path.join(t, *rel.split("/"))])
+        token = P._DIRECT_STAGE.set(P._DirectStage())
+        try:
+            rdoc = P.load([os.path.join(t, *rel.split("/"))])
+        finally:
+            P._DIRECT_STAGE.reset(token)
     bids, bjud, bfields, braw = _view(doc)
     rraw = P.bodies(rdoc)
     pruned = {}
@@ -1269,6 +1303,14 @@ def main(argv=None):
         raise P.Refused("--as names the session source of a refutation: it goes with --refute")
     if not dry:
         return fold(paths, names, refs, as_of, take, drops)
+    routed = P._peer('knowledge_views').write_paths(paths)
+    if P._peer('history_direct').active(routed):
+        if refs:
+            raise P.Refused('history_branch_adoption_required: capture the branch history contribution explicitly')
+        result = P._peer('history_direct').finish_hypotheses(routed, names, kind='fold',
+            because='consolidation preview', take=take, drops=drops, dry=True)
+        print(result['state'] + ': ' + ', '.join(result['hypotheses']))
+        return 0
     doc, hyps = read(paths, names, refs)
     if not hyps:
         print("no hypotheses beside the record - nothing to consolidate")

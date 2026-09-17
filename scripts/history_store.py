@@ -122,10 +122,12 @@ def reduce(objects, rules=None, ancestry=None):
             acceptance = 'contested'
         elif entry['proposals']:
             acceptance = 'proposed'
-        elif 'refuted' in entry['marks'].values():
-            acceptance = 'refuted'
         elif 'corrected' in entry['marks'].values():
             acceptance = 'corrected'
+        elif 'refuted' in entry['marks'].values():
+            acceptance = 'refuted'
+        elif 'retired' in entry['marks'].values():
+            acceptance = 'retired'
         else:
             acceptance = 'unavailable'
         entry['acceptance'] = acceptance
@@ -541,12 +543,17 @@ class Store:
             live = self.capture()
             C._require(identity(data['authority']) == identity(live.marker), 'authority_mismatch')
             files = mutation.files
-            C._require(all(i['role'] in ('record', 'history_object', 'history_commit') for i in files),
+            C._require(all(i['role'] in ('record', 'history_object', 'history_commit', 'history_evidence') for i in files),
                        'unsupported_file_role')
             manifest_item = next(i for i in files if i['role'] == 'history_commit')
             record = next(i for i in files if i['role'] == 'record')
             operation = data['operation']
             prior = live.commits.get(operation)
+            edit_receipt = data['receipt']['before'].get('history_edit')
+            if edit_receipt is not None:
+                C._require(edit_receipt == {'version': 1, 'kind': 'view-edit-proposals'}, 'invalid_edit_receipt')
+                from . import history_edits
+                history_edits.verify_prepared(self.entry, mutation)
             if prior is not None:
                 C._require(prior == manifest_item['after'], 'operation_collision')
             else:
@@ -554,7 +561,7 @@ class Store:
                 C._require(identity(live.document['meta']['history']) == identity(live.baseline),
                            'stale_view')
                 C._require(live.entry_bytes == record['before'], 'concurrent_edit')
-                if live.commits:
+                if live.commits and edit_receipt is None:
                     C._require(identity(live.document) == identity(C.decode_document(self.render(live))),
                                'unresolved_view_edit')
             C._require(live.entry_bytes in (record['before'], record['after']), 'concurrent_edit')
@@ -562,6 +569,9 @@ class Store:
             staged = dict(live.object_bytes)
             for item in files:
                 self._path(self.root / item['path'])
+                if item['role'] == 'history_evidence':
+                    C._require(T._read(self._path(self.root / item['path'])) in (None, item['after']),
+                               'immutable_collision', item['path'])
                 if item['role'] == 'history_object':
                     obj = C.validate_object(C.decode_document(item['after']))
                     key = (obj['subject'], obj['id'])
@@ -581,7 +591,7 @@ class Store:
             # local files. Its return never waives optimistic source checks.
             C._require(self.capture().inventory == live.inventory, 'stale_baseline')
             for item in files:
-                if item['role'] == 'history_object':
+                if item['role'] in ('history_object', 'history_evidence'):
                     T.publish_immutable(self.root / item['path'], item['after'], root=self.root)
             T.publish_immutable(self.root / manifest_item['path'], manifest_item['after'], root=self.root)
             current_entry = T._read(self._path(self.entry))

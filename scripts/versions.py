@@ -445,6 +445,8 @@ def _subject_entry(subject, held, rules, ancestry, *, claim_key=None):
                                                     + b["of"]))
         elif b["act"] == "refute" and b["of"] in claims:
             words.setdefault(b["of"], []).append((a, "out"))
+        elif b["act"] in ("propose", "retire") and b["of"] in claims:
+            words.setdefault(b["of"], []).append((a, "proposed" if b["act"] == "propose" else "retired"))
         elif b["act"] == "review" and b["of"] in claims:
             reviews.append({"of": b["of"], "by": a["by"], "read": b.get("read") or {}})
     standing, proposals, disputed, mark, accepted_by, open_acts = [], [], set(), {}, {}, {}
@@ -464,8 +466,11 @@ def _subject_entry(subject, held, rules, ancestry, *, claim_key=None):
         if kinds == {"stands"}:
             standing.append(c)
             accepted_by[c] = open_words[-1][0]["by"]
+        elif kinds == {"proposed"}:
+            proposals.append(c)
         elif "stands" not in kinds:
-            mark[c] = "corrected" if "corrected" in kinds else "refuted" if "out" in kinds else "replaced"
+            mark[c] = ("corrected" if "corrected" in kinds else "refuted" if "out" in kinds
+                       else "retired" if "retired" in kinds else "replaced")
         else:
             standing.append(c)
             disputed.add(c)

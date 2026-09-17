@@ -197,6 +197,7 @@ class DirectTransactions(unittest.TestCase):
                 P._apply_first_add({'kind': 'add', 'id': 'p.value', 'body': {'v': 2}})
         journal = self.entry.parent / T.journal_for(self.entry)
         mutation = T.PreparedMutation.from_bytes(journal.read_bytes())
-        self.assertEqual(self.entry.read_bytes(), next(i['before'] for i in mutation.files if i['role'] == 'record'))
+        self.assertFalse(self.entry.exists())
+        self.assertIsNone(next(i['before'] for i in mutation.files if i['role'] == 'record'))
         P.recover_direct([str(self.entry)])
         self.assertEqual(P.bodies(P.load([str(self.entry)]))['p.value']['v'], 2)

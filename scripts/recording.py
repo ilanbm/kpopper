@@ -13,7 +13,8 @@ except ImportError:
     import knowledge_views as V
     import pending_grounding as G
 
-ROUTING = {'shareability', 'scope', 'environment', 'commit', 'event_id', 'contribution_id', 'evidence', 'evidence_root'}
+ROUTING = {'shareability', 'scope', 'environment', 'commit', 'event_id', 'contribution_id', 'evidence', 'evidence_root',
+           'disclosed_locators'}
 
 
 def private_drafts(project):

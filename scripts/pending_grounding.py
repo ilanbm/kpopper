@@ -448,7 +448,7 @@ def _prepare_history(doc, roots, *, scope, shareability, evidence, history, comb
         raise ValueError('evidence allowlist must contain exactly all historical referenced files')
     files.update(history_files)
     H._files(files)
-    manifest = {'version': 3, 'requires': [H.CAPABILITY], 'roots': binding['roots'],
+    manifest = {'version': 3, 'requires': list(binding['requires']), 'roots': binding['roots'],
                 'document': adapted, 'scope': copy.deepcopy(scope), 'reasoning': cap,
                 'history': {'revision': history['revision'], 'manifest': copy.deepcopy(binding)},
                 'evidence': {path: hashlib.sha256(raw).hexdigest() for path, raw in sorted(files.items())}}
@@ -527,12 +527,17 @@ def equivalent(bundle, doc, evidence, *, history=None):
             target = H.validate(history)
         if not H.matches_document(target, doc):
             return False
-        source = H.validate(H.from_contribution(bundle))
-        if identity(source.marker) != identity(target.marker) or identity(source.state['rules']) != identity(target.state['rules']):
-            return False
-        if any(target.commits.get(op) != raw for op, raw in source.commits.items()) or any(
-                target.object_bytes.get(key) != raw for key, raw in source.object_bytes.items()):
-            return False
+        artifact = H.from_contribution(bundle)
+        source = H.validate(artifact)
+        if artifact['manifest']['version'] == 2:
+            if not H.adopted_by(target, artifact):
+                return False
+        else:
+            if identity(source.marker) != identity(target.marker) or identity(source.state['rules']) != identity(target.state['rules']):
+                return False
+            if any(target.commits.get(op) != raw for op, raw in source.commits.items()) or any(
+                    target.object_bytes.get(key) != raw for key, raw in source.object_bytes.items()):
+                return False
         return all(path in evidence and hashlib.sha256(evidence[path]).hexdigest() == digest
                    for path, digest in expected['evidence'].items() if not path.startswith(H.PREFIX))
     meaning = meaning_capabilities(expected['document'])
@@ -636,10 +641,10 @@ class Store:
         return M.git(self.root, 'update-ref', REF, new, old or zero, check=False).returncode == 0
 
     def capture(self, bundle, *, event_id, contribution_id, shareability, expected_generation=None, expected_policy=None,
-                expected_sources=None):
+                expected_sources=None, verify_source=None):
         receipt = self._capture(bundle, event_id=event_id, contribution_id=contribution_id,
                                 shareability=shareability, expected_generation=expected_generation,
-                                expected_policy=expected_policy, expected_sources=expected_sources)
+                                expected_policy=expected_policy, expected_sources=expected_sources, verify_source=verify_source)
         # The durable acknowledgement is established and the policy lock released
         # before a publisher is even started. Publication failure cannot erase or
         # turn a successfully retained contribution into a failed capture.
@@ -654,7 +659,7 @@ class Store:
         return receipt
 
     def _capture(self, bundle, *, event_id, contribution_id, shareability, expected_generation=None, expected_policy=None,
-                 expected_sources=None):
+                 expected_sources=None, verify_source=None):
         # Validate again at the object-write boundary, including supplied identity.
         if shareability != 'project':
             raise ValueError('private or unclear sharing permission belongs in a private draft')
@@ -676,6 +681,11 @@ class Store:
         event = {'event_id': event_id, 'contribution_id': contribution_id, 'revision': revision}
         event_path = 'events/' + event_id + '.json'
         with self.project.lock():
+            if verify_source is not None:
+                if not callable(verify_source):
+                    raise ValueError('source verifier must be callable')
+                if verify_source() is False:
+                    raise ValueError('source changed before capture')
             # Coordinated source writers also hold this policy lock. A prepared
             # contribution cannot outlive a permission/body change in its inputs.
             if expected_sources is not None and any(

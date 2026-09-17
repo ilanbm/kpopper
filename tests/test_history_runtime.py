@@ -61,6 +61,8 @@ class Runtime(unittest.TestCase):
         value = self.read()
         self.assertEqual(before, self.inventory())
         self.assertEqual(value['sources']['inclusion'], R.INCLUSION)
+        self.assertIn('history_activation.py', value['sources']['required'])
+        self.assertEqual(value['schemas']['history']['prepared_mutation'], [1, 2])
         self.assertEqual(value['resolved']['package_root'], str(self.package))
         self.assertEqual(value['resolved']['cli'], str(self.package / 'cli.py'))
         self.assertEqual(value['native']['status'], 'archive_validated')
@@ -176,6 +178,15 @@ class Runtime(unittest.TestCase):
         value['schemas'] = R._seal({key: item for key, item in value['schemas'].items() if key != 'digest'})
         with self.assertRaisesRegex(R.RuntimeDeclarationError, 'unsupported_runtime_schema'):
             R._validate_declaration(value, self.nonce)
+
+    def test_old_transition_schema_refuses_even_when_expected_digest_matches(self):
+        value = copy.deepcopy(self.declaration)
+        value['schemas']['history']['prepared_mutation'] = [1]
+        value['schemas'] = R._seal({key: item for key, item in value['schemas'].items() if key != 'digest'})
+        expected = {'managed': {key: value[key]['digest'] for key in ('sources', 'schemas', 'native')}}
+        with mock.patch.object(R.R, '_run_bounded', return_value=json.dumps(value).encode()):
+            with self.assertRaisesRegex(R.RuntimeDeclarationError, 'unsupported_runtime_schema'):
+                R.probe_launchers([self.item], expected, self.nonce)
 
     def test_invalid_inventory_is_rejected_before_execution(self):
         with mock.patch.object(R.R, '_run_bounded', side_effect=AssertionError('must not run')):

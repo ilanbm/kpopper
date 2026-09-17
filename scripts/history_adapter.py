@@ -191,7 +191,8 @@ def from_store_capture(captured):
     reviews = {subject: [] for subject in subjects}
     for version, obj in sorted(objects.items()):
         if obj['kind'] == 'act' and obj['body']['act'] == 'review' \
-                and obj['body']['of'] in subjects[obj['subject']]['heads']:
+                and obj['body']['of'] in (subjects[obj['subject']]['heads'] +
+                                          captured.state['subjects'][obj['subject']]['proposals']):
             reviews[obj['subject']].append(obj)
     dispositions = {subject: {'marks': state['marks'], 'proposals': sorted(state['proposals']),
                               'contested_claims': sorted(state['disputed_acts']),
@@ -220,12 +221,36 @@ def from_store_capture(captured):
                   'coverage': {'scope': 'all', 'subjects': sorted(subjects), 'complete': True},
                   'subjects': subjects, 'pins': pins, 'dispositions': dispositions,
                   'integrity': {'complete': True, 'findings': []}}
+    if any(C.EXPLICIT_ROOT_DISPOSITION in C.decode_document(raw).get('requires', [])
+           for raw in captured.commits.values()) or any(
+            obj['kind'] == 'act' and obj['body']['act'] in ('propose', 'retire') for obj in objects.values()):
+        projection['requires'] = [C.EXPLICIT_ROOT_DISPOSITION]
     gap_findings = [finding for version in sorted(versions)
                     for finding in C.pin_gap_findings(objects[version])]
     if gap_findings:
         projection['integrity'] = {'complete': False, 'findings': gap_findings}
         projection['coverage']['complete'] = False
-    return capture_history(objects, projection, document=Store._template(captured.commits))
+    template = Store._template(captured.commits)
+    origin = template.get('meta', {}).get('history_subset')
+    if origin is not None:
+        origin = C.validate_subset_origin(origin)
+        C._require(set(origin['subjects']) == set(subjects), 'invalid_subset_coverage')
+        C._require(len(captured.commits) == 1, 'invalid_subset_commits')
+        commit = C.decode_document(next(iter(captured.commits.values())))
+        C._require(commit['operation'] == origin['operation'] and not commit['parents'] and
+                   identity(commit['receipt'].get('after')) == identity({'history_subset': origin}),
+                   'invalid_subset_receipt')
+        for subject, evidence in origin['subjects'].items():
+            inventory = {vid: C.sha256(captured.object_bytes[(subject, vid)])
+                         for vid, obj in objects.items() if obj['subject'] == subject}
+            C._require(evidence['objects_digest'] == identity(inventory) and
+                       evidence['reduction_digest'] == identity(captured.state['subjects'][subject]),
+                       'invalid_subset_receipt')
+        projection['coverage']['scope'] = 'selected'
+        projection['origin'] = origin
+        for subject in subjects:
+            projection['dispositions'][subject]['source_state'] = origin['subjects'][subject]['source_state']
+    return capture_history(objects, projection, document=template)
 
 
 def _literal(value):

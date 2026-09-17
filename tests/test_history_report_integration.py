@@ -53,7 +53,9 @@ class HistoryReports(unittest.TestCase):
         self.assertEqual(current.objects[self.reading['id']], self.reading)
         self.assertEqual(current.objects[self.decision['id']]['body']['seen'], {'p.input': 1})
         source_id = 's.ingest_' + self.event_id
-        self.assertEqual(current.state['subjects'][source_id]['body']['file'], result['source_file'])
+        portable = '.kpopper/evidence/reports/' + self.event_id + '.txt'
+        self.assertEqual(current.state['subjects'][source_id]['body']['file'], portable)
+        self.assertEqual((self.entry.parent / portable).read_bytes(), self.report['source_quote'].encode())
         self.assertEqual(Path(result['source_file']).read_text(), self.report['source_quote'])
         mutation = I._mutation_from_journal(self.journal())
         self.assertEqual(len([f for f in mutation.files if f['role'] == 'history_commit']), 1)
@@ -62,6 +64,57 @@ class HistoryReports(unittest.TestCase):
         self.assertFalse(I._history_shared(self.entry).exists())
         self.assertEqual(I.capture(self.report, self.entry, self.state, start=False), result)
         self.assertEqual(I.process(self.entry, self.state), [])
+
+    def test_new_complete_pin_judgment_is_not_self_flagged_for_missing_seen(self):
+        self.capture({'event_id': 'new-judgment', 'date': '2026-09-17', 'source_quote': 'New decision.',
+            'record_sha256': I._sha(self.entry.read_bytes()), 'updates': [
+                {'kind': 'add', 'id': 'd.new', 'body': {'verdict': 'new',
+                    'rests_on': ['p.input'], 'wrong_if': {'expr': 'p.input > 20'}}}]})
+        result = self.process()
+        self.assertEqual(result['state'], 'applied', result)
+        self.assertNotIn('d.new', result['actionable_judgments'])
+        held = self.store.state()['subjects']['d.new']['body']
+        self.assertNotIn('seen', held)
+        graph = I._history_graph(self.entry, ['d.new'])
+        self.assertEqual(graph['judgments']['d.new']['tag'], 'UNKNOWN')
+        mutation = I._mutation_from_journal(self.journal())
+        # An actual unavailable condition must still prompt review.
+        changed = copy.deepcopy(graph)
+        decoded = I.P._peer('pending_grounding')._decode(changed['assessment'])
+        decoded['nodes']['d.new']['state']['falsifier']['status'] = 'unknown'
+        changed['assessment'] = I.P._peer('pending_grounding')._encode(decoded)
+        self.assertIn('d.new', I._classify({'assessment_profile': 'core/v1', 'judgments': {}}, changed,
+                                          recorded_pin_subjects=I._history_pin_support(mutation))[1])
+        replacement = self.A.prepare(self.entry, {'kind': 'set', 'id': 'p.input', 'value': 4,
+                                                   'as_of': '2026-09-17'})
+        self.A.commit(self.entry, replacement, verify=lambda data: None)
+        current = self.H.Store(self.entry).capture()
+        self.assertNotIn('d.new', I._history_pin_support(mutation, capture=current))
+
+    def test_evidence_fault_before_manifest_cannot_commit_dangling_source(self):
+        self.capture()
+        original = self.T.publish_immutable
+        def fail_evidence(path, *args, **kwargs):
+            if Path(path).suffix == '.txt':
+                raise OSError('evidence unavailable')
+            return original(path, *args, **kwargs)
+        with mock.patch.object(self.T, 'publish_immutable', side_effect=fail_evidence):
+            result = self.process()
+        self.assertEqual(result['state'], 'recovery_required', result)
+        self.assertEqual(len(self.store.capture().commits), 1)
+        self.assertEqual(self.process()['state'], 'applied')
+
+    def test_evidence_path_and_digest_cannot_be_forged(self):
+        mutation = self.A.prepare_batch(self.entry, [{'kind': 'set', 'id': 'p.input', 'value': 2}],
+                                        evidence={'.kpopper/evidence/reports/test.txt': b'source'})
+        data = mutation.to_data()
+        for bad_path, raw in [('arbitrary.txt', b'source'), ('.kpopper/evidence/reports/test.txt', b'changed')]:
+            files = mutation.files
+            evidence = next(f for f in files if f['role'] == 'history_evidence')
+            evidence.update(path=bad_path, after=raw)
+            with self.assertRaisesRegex(ValueError, 'history_evidence'):
+                self.T.PreparedMutation(operation=data['operation'], authority=data['authority'],
+                    baseline=data['baseline'], files=files, receipt=data['receipt'], entry=data['entry'])
 
     def test_batch_reading_and_judgment_replacement_is_one_generation(self):
         envelope = {'event_id': 'batch', 'date': '2026-09-17', 'source_quote': 'Input is 8; decision repaired.',

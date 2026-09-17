@@ -22,7 +22,7 @@ except ImportError:
     from pending_grounding import _encode, _decode, json_bytes, identity
 
 MAX_TRANSACTION_BYTES = 64 * 1024 * 1024
-ROLES = ('record', 'record_member', 'view', 'replaced', 'history_authority', 'history_object', 'history_commit')
+ROLES = ('record', 'record_member', 'hypothesis', 'view', 'replaced', 'history_authority', 'history_object', 'history_commit', 'history_retained', 'history_evidence')
 _LOCKS = contextvars.ContextVar('history_directory_locks', default=())
 _LOCK_PATHS = contextvars.ContextVar('history_directory_lock_paths', default=())
 
@@ -116,7 +116,7 @@ class PreparedMutation:
     the entry and captured SHA256 values. This proves internal consistency only:
     the publication verifier must re-resolve reader membership and its hashes.
     """
-    def __init__(self, *, operation, authority, baseline, files, receipt, entry='GROUNDING.yaml'):
+    def __init__(self, *, operation, authority, baseline, files, receipt, entry='GROUNDING.yaml', transition=None):
         C._text(operation)
         C.relative_path(entry)
         try:
@@ -126,11 +126,40 @@ class PreparedMutation:
         paths = layout('/' + entry)
         marker = C.validate_authority(authority)
         C._require(isinstance(baseline, dict), 'invalid_baseline')
+        next_marker = None
+        if transition is not None:
+            C._mapping(transition, ('version', 'after'))
+            C._require(type(transition['version']) is int and transition['version'] == 1,
+                       'invalid_authority_transition')
+            next_marker = C.validate_authority(transition['after'])
+            C._require(next_marker['record_id'] == marker['record_id'] and
+                       next_marker['generation'] == marker['generation'] + 1 and
+                       next_marker['authority'] != marker['authority'] and
+                       baseline.get('kind') == 'history-authority-transition/v1' and
+                       baseline.get('direction') == ('activate' if next_marker['authority'] == 'history' else 'deactivate'),
+                       'invalid_authority_transition')
         members = baseline.get('record_members')
         if 'record_members' in baseline:
             C._require(isinstance(members, dict) and entry in members, 'invalid_record_members')
             for path, digest in members.items():
                 C.relative_path(path)
+                if digest is None:
+                    C._require(path == entry and baseline.get('source_absent') is True and
+                               marker['authority'] == 'legacy', 'invalid_record_members')
+                else:
+                    C._text(digest, C.HEX)
+        if baseline.get('source_absent') is True:
+            C._require(members == {entry: None} and marker['authority'] == 'legacy',
+                       'invalid_record_members')
+        hypotheses = baseline.get('hypothesis_members', {})
+        C._require(isinstance(hypotheses, dict), 'invalid_hypothesis_members')
+        for path, digest in hypotheses.items():
+            C.relative_path(path)
+            candidate = Path('/' + path)
+            C._require(candidate.parent == Path(paths['hypotheses']) and candidate.suffix in ('.yaml', '.yml')
+                       and bool(__import__('re').fullmatch(r'[A-Za-z0-9][A-Za-z0-9_-]*', candidate.stem)),
+                       'invalid_hypothesis_members', path)
+            if digest is not None:
                 C._text(digest, C.HEX)
         receipt = validate_receipt(receipt)
         C._require(isinstance(files, list) and files, 'empty_mutation')
@@ -149,37 +178,88 @@ class PreparedMutation:
                            and C.sha256(item['before']) == members[item['path']],
                            'record_member_mismatch', item['path'])
                 expected = '/' + item['path']
+            elif role == 'hypothesis':
+                C._require(marker['authority'] == 'legacy' and item['path'] in hypotheses,
+                           'invalid_hypothesis_members', item['path'])
+                before_hash = C.sha256(item['before']) if item['before'] is not None else None
+                C._require(before_hash == hypotheses[item['path']], 'hypothesis_member_mismatch')
+                expected = '/' + item['path']
             elif role == 'history_object':
                 obj = C.validate_object(C.decode_document(item['after']))
                 expected = paths['history'] + '/' + obj['subject'] + '/' + obj['id'] + '.yaml'
             elif role == 'history_commit':
                 expected = paths['history_commits'] + '/' + operation + '.yaml'
+            elif role == 'history_evidence':
+                candidate = Path('/' + item['path'])
+                C._require(marker['authority'] == 'history' and next_marker is None and
+                           ((candidate.parent == Path(paths['home']) / 'evidence' / 'reports' and candidate.suffix == '.txt') or
+                            (candidate.parent == Path(paths['home']) / 'evidence' / 'view-edits' and candidate.suffix == '.yaml'
+                             and receipt['before'].get('history_edit') == {'version': 1, 'kind': 'view-edit-proposals'}
+                             and receipt['before'].get('authoring', {}).get('kind') == 'view-edit-proposals')),
+                           'invalid_history_evidence')
+                C._text(candidate.stem)
+                expected = '/' + item['path']
+            elif role == 'history_retained':
+                retained = baseline.get('retained_files', {})
+                C._require(next_marker is not None and next_marker['authority'] == 'history' and
+                           isinstance(retained, dict) and item['path'] in retained and
+                           item['before'] is None and type(item['after']) is bytes and
+                           C.sha256(item['after']) == retained[item['path']], 'invalid_retained_file')
+                # Explicit evidence inventory is confined to its dedicated import
+                # artifact directory; it is never arbitrary filesystem authority.
+                home = str(Path(paths['entry']).parent / '.kpopper-history-migration')
+                C._require(('/' + item['path']).startswith(home.rstrip('/') + '/'), 'invalid_retained_file')
+                expected = '/' + item['path']
             else:
                 expected = paths['entry' if role == 'record' else role]
             C._require(item['path'] == expected.lstrip('/'), 'role_path_mismatch', item['path'])
             if role == 'record' and members is not None:
-                C._require(type(item['before']) is bytes
-                           and C.sha256(item['before']) == members[entry],
+                C._require((C.sha256(item['before']) if item['before'] is not None else None) == members[entry],
                            'record_member_mismatch', entry)
-            if item['role'] in ('history_object', 'history_commit'):
+            if item['role'] in ('history_object', 'history_commit', 'history_retained', 'history_evidence'):
                 C._require(item['before'] is None and item['after'] is not None,
                            'immutable_mutation')
             encoded.append({**item, 'before': _blob(item['before']), 'after': _blob(item['after'])})
         encoded.sort(key=lambda item: item['path'])
         C._require(len({item['path'] for item in encoded}) == len(encoded), 'duplicate_path')
-        history = marker['authority'] == 'history'
+        if next_marker is not None:
+            C._require(all(item['role'] in ('record', 'history_authority', 'history_object',
+                                          'history_commit', 'history_retained') for item in files),
+                       'invalid_transition_role')
+            authorities = [item for item in files if item['role'] == 'history_authority']
+            C._require(len(authorities) == 1, 'missing_authority_transition')
+            authority_file = authorities[0]
+            C._require(C.validate_authority(C.decode_document(authority_file['after'])) == next_marker,
+                       'authority_transition_mismatch')
+            if authority_file['before'] is None:
+                C._require(marker['authority'] == 'legacy' and marker['generation'] == 0,
+                           'authority_transition_mismatch')
+            else:
+                C._require(C.validate_authority(C.decode_document(authority_file['before'])) == marker,
+                           'authority_transition_mismatch')
+            C._require(sum(item['role'] == 'record' for item in files) == 1,
+                       'missing_transition_record')
+            retained = {item['path']: C.sha256(item['after']) for item in files if item['role'] == 'history_retained'}
+            C._require(retained == baseline.get('retained_files', {}), 'invalid_retained_file')
+        history = (next_marker or marker)['authority'] == 'history'
         if history:
-            C.bind_authority(marker, baseline)
+            evidence = {item['path']: C.sha256(item['after']) for item in files if item['role'] == 'history_evidence'}
+            declared_evidence = receipt['before'].get('authoring', {}).get('evidence', {})
+            C._require(isinstance(declared_evidence, dict) and evidence == declared_evidence,
+                       'history_evidence_mismatch')
+            commit_marker = next_marker or marker
+            commit_baseline = baseline.get('history_baseline') if next_marker else baseline
+            C.bind_authority(commit_marker, commit_baseline)
             C._require(sum(item['role'] == 'history_commit' for item in encoded) == 1,
                        'missing_commit')
-            C._require(not any(item['role'] in ('replaced', 'history_authority') for item in encoded),
+            C._require(next_marker is not None or not any(item['role'] in ('replaced', 'history_authority', 'history_retained') for item in encoded),
                        'authority_transition_required')
             # File roles are not assertions: bind them to the actual commit.
             commit_item = next(item for item in files if item['role'] == 'history_commit')
             commit = C.validate_commit(C.decode_document(commit_item['after']))
-            C._require(commit['operation'] == operation and commit['record_id'] == marker['record_id']
-                       and commit['authority_generation'] == marker['generation']
-                       and commit['baseline_digest'] == identity(baseline)
+            C._require(commit['operation'] == operation and commit['record_id'] == commit_marker['record_id']
+                       and commit['authority_generation'] == commit_marker['generation']
+                       and commit['baseline_digest'] == identity(commit_baseline)
                        and identity(commit['receipt']) == identity(receipt), 'commit_mismatch')
             inventory = []
             for item in files:
@@ -192,11 +272,19 @@ class PreparedMutation:
             views = [item for item in files if item['role'] == 'record']
             C._require(len(views) == 1 and views[0]['after'] is not None
                        and C.sha256(views[0]['after']) == commit['view_sha256'], 'commit_view_mismatch')
+            if next_marker is not None:
+                C._require(not commit['parents'], 'transition_requires_initial_commit')
+                objects = {(C.decode_document(item['after'])['subject'], C.decode_document(item['after'])['id']): item['after']
+                           for item in files if item['role'] == 'history_object'}
+                C.committed_objects(commit_marker, {operation: commit_item['after']}, objects)
         else:
-            C._require(not any(item['role'] in ('history_object', 'history_commit', 'history_authority')
+            C._require(not any(item['role'] in ('history_object', 'history_commit', 'history_retained')
+                               or item['role'] == 'history_authority' and next_marker is None
                                for item in encoded), 'authority_transition_required')
-        payload = {'version': 1, 'operation': operation, 'entry': entry, 'authority': marker,
+        payload = {'version': 2 if next_marker else 1, 'operation': operation, 'entry': entry, 'authority': marker,
                    'baseline': baseline, 'files': encoded, 'receipt': receipt}
+        if next_marker is not None:
+            payload['transition'] = {'version': 1, 'after': next_marker}
         payload = C.detached(payload, MAX_TRANSACTION_BYTES)
         self._data = {**payload, 'digest': identity(payload)}
 
@@ -222,12 +310,14 @@ class PreparedMutation:
             _check_typed_json(encoded)
             value = _decode(encoded)
             C._require(_encode(value) == encoded, 'invalid_journal')
-            C._mapping(value, ('version', 'operation', 'entry', 'authority', 'baseline', 'files', 'receipt', 'digest'))
-            C._require(type(value['version']) is int and value['version'] == 1, 'invalid_journal')
+            C._mapping(value, ('version', 'operation', 'entry', 'authority', 'baseline', 'files', 'receipt', 'digest'), ('transition',))
+            C._require(type(value['version']) is int and value['version'] in (1, 2) and
+                       ('transition' in value) == (value['version'] == 2), 'invalid_journal')
             files = [{**item, 'before': _unblob(item['before']), 'after': _unblob(item['after'])}
                      for item in value['files']]
             result = cls(operation=value['operation'], authority=value['authority'],
-                         baseline=value['baseline'], files=files, receipt=value['receipt'], entry=value['entry'])
+                         baseline=value['baseline'], files=files, receipt=value['receipt'], entry=value['entry'],
+                         transition=value.get('transition'))
             C._require(identity(result._data) == identity(value), 'invalid_journal')
             return result
         except (ValueError, TypeError, KeyError, RecursionError, AttributeError) as error:
@@ -389,8 +479,13 @@ def transaction_root(entry, members):
     return Path(os.path.commonpath(parents))
 
 
+def _participant_members(mutation):
+    baseline = mutation._data['baseline']
+    return set(baseline.get('record_members', {})) | set(baseline.get('hypothesis_members', {}))
+
+
 def participant_directories(root, mutation):
-    members = mutation._data['baseline'].get('record_members', {})
+    members = _participant_members(mutation)
     return sorted({*(_target(root, path).parent for path in members),
                    _target(root, mutation._data['entry']).parent})
 
@@ -402,7 +497,7 @@ def _journal_replicas(root, journal, mutation):
         return []
     C._require(str(Path(root).absolute()) == baseline['transaction_root'], 'transaction_root_mismatch')
     primary = _target(root, journal)
-    directories = {_target(root, path).parent for path in baseline.get('record_members', {})}
+    directories = {_target(root, path).parent for path in _participant_members(mutation)}
     if len(directories) < 2:
         return []
     name = mutation._data['digest'] + '.json'
@@ -412,7 +507,7 @@ def _journal_replicas(root, journal, mutation):
 
 
 def member_guard(mutation, root, directory):
-    members = mutation._data['baseline'].get('record_members', {})
+    members = _participant_members(mutation)
     return {'version': 1, 'kind': 'member_guard', 'operation': mutation._data['operation'],
             'digest': mutation._data['digest'],
             'members': sorted({_target(root, path).name for path in members
@@ -509,10 +604,14 @@ def publish_legacy(root, journal, mutation, *, verify, on_committed=None):
     reuses the stored envelope. Readers must share reader_guard at integration.
     """
     C._require(isinstance(mutation, PreparedMutation), 'invalid_mutation')
-    C._require(mutation._data['authority']['authority'] == 'legacy', 'invalid_authority')
+    C._require(mutation._data['authority']['authority'] == 'legacy' and
+               'transition' not in mutation._data, 'invalid_authority')
     C._require(callable(verify), 'missing_verifier')
     C._require(on_committed is None or callable(on_committed), 'invalid_completion_callback')
-    with directory_guards(participant_directories(root, mutation), exclusive=True):
+    directories = participant_directories(root, mutation)
+    for directory in directories:
+        directory.mkdir(parents=True, exist_ok=True)
+    with directory_guards(directories, exclusive=True):
         journal_path = _journal_path(root, journal, mutation)
         C._require(not journal_path.exists(), 'recovery_required')
         targets = _preflight(root, mutation, recovery=False)
@@ -543,7 +642,8 @@ def recover_legacy(root, journal, *, verify, direction='after', on_committed=Non
     mutation = PreparedMutation.from_bytes(raw)
     with directory_guards(participant_directories(root, mutation), exclusive=True):
         C._require(_read(journal_path) == raw, 'concurrent_edit', str(journal_path))
-        C._require(mutation._data['authority']['authority'] == 'legacy', 'invalid_authority')
+        C._require(mutation._data['authority']['authority'] == 'legacy' and
+               'transition' not in mutation._data, 'invalid_authority')
         _journal_path(root, journal, mutation)
         replicas = _journal_replicas(root, journal, mutation)
         ready = _ready_path(journal_path, mutation)
@@ -577,3 +677,86 @@ def recover_legacy(root, journal, *, verify, direction='after', on_committed=Non
             on_committed(mutation.to_data())
         _remove_journals(journal_path, [*replicas, *([ready] if replicas else [])])
         return mutation
+
+
+def _transition_targets(root, mutation):
+    C._require(mutation._data.get('version') == 2 and 'transition' in mutation._data,
+               'invalid_authority_transition')
+    immutable, mutable = [], []
+    for item in mutation.files:
+        path = _target(root, item['path'])
+        current = _read(path)
+        if item['role'] in ('history_object', 'history_commit', 'history_retained'):
+            C._require(current in (None, item['after']), 'immutable_collision', item['path'])
+            immutable.append((item, path))
+        else:
+            C._require(current in (item['before'], item['after']), 'concurrent_edit', item['path'])
+            mutable.append((item, path))
+    return immutable, mutable
+
+
+def _apply_transition(immutable, mutable, direction, root):
+    if direction == 'after':
+        for item, path in immutable:
+            publish_immutable(path, item['after'], root=root)
+    # The journal protects the entire marker/view switch; standalone snapshots
+    # and legacy readers must refuse until its final completion callback succeeds.
+    for item, path in sorted(mutable, key=lambda pair: pair[0]['role'] == 'history_authority'):
+        if _read(path) != item[direction]:
+            _replace(path, item[direction])
+
+
+def publish_transition(root, journal, mutation, *, verify, on_committed=None):
+    """Publish an explicit v2 authority transition under the shared reader guard.
+
+    The mandatory verifier authenticates runtime/policy and retained source and
+    candidate meaning. Immutable history/evidence is exclusively created. It is
+    retained inactive after rollback, never deleted by the transition primitive.
+    """
+    C._require(isinstance(mutation, PreparedMutation) and callable(verify), 'missing_verifier')
+    C._require(on_committed is None or callable(on_committed), 'invalid_completion_callback')
+    with directory_guards(participant_directories(root, mutation), exclusive=True):
+        primary = _journal_path(root, journal, mutation)
+        C._require(not primary.exists(), 'recovery_required')
+        immutable, mutable = _transition_targets(root, mutation)
+        C._require(all(_read(path) == item['before'] for item, path in mutable), 'concurrent_edit')
+        verify(mutation.to_data())
+        # Callbacks cannot waive optimistic byte preconditions.
+        immutable, mutable = _transition_targets(root, mutation)
+        C._require(all(_read(path) == item['before'] for item, path in mutable), 'concurrent_edit')
+        _private_journal_home(root, journal, mutation)
+        publish_immutable(primary, mutation.to_bytes(), root=root)
+        replicas = _prepare_replicas(root, journal, mutation)
+        ready = _ready_path(primary, mutation)
+        if replicas:
+            publish_immutable(ready, mutation._data['digest'].encode('ascii'), root=root)
+        _apply_transition(immutable, mutable, 'after', root)
+        if on_committed is not None:
+            on_committed(mutation.to_data())
+        _remove_journals(primary, [*replicas, *([ready] if replicas else [])])
+
+
+def recover_transition(root, journal, *, verify, direction='after', on_committed=None):
+    """Resume retained v2 bytes or restore marker/view while keeping immutable evidence."""
+    C._require(direction in ('before', 'after') and callable(verify), 'invalid_recovery')
+    C._require(on_committed is None or callable(on_committed), 'invalid_completion_callback')
+    primary = _target(root, journal)
+    raw = _read(primary)
+    C._require(raw is not None, 'no_recovery_pending')
+    mutation = PreparedMutation.from_bytes(raw)
+    with directory_guards(participant_directories(root, mutation), exclusive=True):
+        C._require(_read(primary) == raw, 'concurrent_edit')
+        _journal_path(root, journal, mutation)
+        immutable, mutable = _transition_targets(root, mutation)
+        verify(mutation.to_data())
+        immutable, mutable = _transition_targets(root, mutation)
+        replicas = _prepare_replicas(root, journal, mutation)
+        ready = _ready_path(primary, mutation)
+        C._require(_read(ready) in (None, mutation._data['digest'].encode('ascii')), 'invalid_ready_marker')
+        if replicas:
+            publish_immutable(ready, mutation._data['digest'].encode('ascii'), root=root)
+        _apply_transition(immutable, mutable, direction, root)
+        if direction == 'after' and on_committed is not None:
+            on_committed(mutation.to_data())
+        _remove_journals(primary, [*replicas, *([ready] if replicas else [])])
+    return mutation

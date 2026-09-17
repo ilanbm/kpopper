@@ -20,8 +20,9 @@ profile; an optional locator retains import provenance. `pins` maps dependency
 subjects to immutable version ids. It does not replace or rewrite original
 `seen`. Optional `pin_gaps` records `not_recorded` or `unavailable` support without
 inventing a version id. Pins and gaps account for the declared dependencies; gaps
-make historical support coverage incomplete without changing acceptance. Acts carry `accept`, `refute`, `review`, or `correct` with their explicit
-targets and causal observations. Recorded time alone grants no precedence.
+make historical support coverage incomplete without changing acceptance. Acts carry `accept`, `refute`, `review`, `correct`, `propose`, or `retire` with
+explicit targets and causal observations. A proposal is unaccepted; retirement
+records noncurrent standing without claiming falsehood or inventing a successor. Recorded time alone grants no precedence.
 
 `validate_object` dispatches by the declared identity scheme. Existing prototype
 objects retain their 40-character ids and original envelopes. Unknown schemes
@@ -259,13 +260,14 @@ History-backed local reports retain one aggregate prepared mutation: sequential
 actions are validated in detached captures, and one final manifest publishes the
 complete batch. Recovery replays the retained operation and records durable event
 acknowledgement before removing its private retry envelope. Legacy core batches
-carry exact replacement archives through the same prepared transport. Advanced
-scoped history report construction remains an explicit unsupported seam.
+carry exact replacement archives through the same prepared transport. Advanced scoped history reports retain an independent portable contribution;
+they do not commit candidate claims into the checkout.
 
-The prepared boundary covers the existing-record paths above. Newborn record
-bootstrap still precedes creation of the prepared mutation. Named hypotheses,
-folds, and legacy expression/watch helpers are not claimed transactional through
-this interface. Public combined assessment and default consumer binding remain incomplete. Authority migration, live activation, temporal recovery
+The prepared legacy boundary also covers newborn absence, named hypotheses,
+fold/refute, same/distinct and expression migration. Hypothesis additions and
+deletions bind exact membership and protect separately opened files. Shared
+watch reports retain exact prepared generations and durable event completion
+receipts; interrupted storage remains retryable in their owning processor. Public combined assessment and default consumer binding remain incomplete. Authority migration, live activation, temporal recovery
 policy and combined consumer policy are not supplied by these components.
 
 
@@ -296,7 +298,16 @@ excluded. Materialization publishes the exact authority, immutable commits and
 objects plus canonical view, retaining original artifact evidence. Publication
 can union complete contributions into the same authority and rules; a different
 authority requires explicit adoption. Retaining an artifact does not prove it was
-accepted. Scoped single-action contribution construction remains separate work.
+accepted. Scoped single-action and report contributions use artifact version 2 inside the
+version-3 pending envelope. The transport contains whole histories of selected
+subjects and their dependency closure. It preserves object IDs and original
+scopes, labels prepared candidates, and reports selected rather than original
+store completeness. Source completeness is an observation, not authenticated
+membership proof. Retained non-entry locators require explicit path/hash disclosure
+consent; `--disclose-locator PATH=SHA256` records that consent without reading the
+named file. Every overlapping target subject requires an explicit adoption choice.
+Acceptance is checked against an actual committed adoption receipt and exact
+object inventory, never against artifact retention or equal YAML alone.
 
 `history capabilities --nonce TOKEN --json` declares supported protocol versions,
 resolved launch paths and hashes of installed source/schema/native archive files.
@@ -306,3 +317,49 @@ inventory and reviewed expected digests, reject old or mismatched endpoints, and
 never choose a different PATH or cache installation. The caller must keep the
 selected installation immutable through a transition. Actual installed validation
 is still required; a source declaration is not a release gate.
+
+
+## Explicit proposals, groups and generation changes
+
+New strict manifests declare `explicit-root-disposition/v1`: a newly introduced
+root claim carries an explicit accept, propose or retire disposition. Original
+compatibility manifests and their IDs remain readable without retroactive acts.
+Transport snapshots of inherited compatibility roots remain explicitly scoped
+observations. `propose` and `retire` are rejected by older object readers.
+
+`history accept|refute|correct|propose|retire --subject ID --of VERSION --because TEXT`
+records an explicit act; `--over VERSION` names replacement alternatives. Acceptance
+and condition outcome remain independent. No act refreshes original seen values.
+`history adopt --revision REV --preview` shows choices. Actual adoption names
+`--by ACTOR` and `--choose SUBJECT=VERSION` for every overlapping subject.
+
+`history reconcile` only describes edits. Adding `--record-proposals --because TEXT`
+explicitly records all selected current-baseline body edits as unaccepted proposals.
+Exact edited UTF-8 bytes and comments survive in the immutable receipt and a bounded
+evidence file. Header edits, deletions, collection moves, stale/conflicted edits and
+partial subject selections refuse with the original file intact. Recovery reuses
+the original prepared operation; it never temporarily rewrites the view to bypass
+validation.
+
+History-backed `--hypothesis NAME` records immutable named proposal layers. Group
+edits retire superseded proposals; reviews preserve actual version pins and original
+seen. `consolidate --dry-run` prepares without committing; explicit fold/refute
+creates one manifest and preserves base evidence. Standing judgment replacements
+still require the established admission or an explicit named take. Physical legacy
+group collisions require explicit import; they are not silently overwritten.
+
+Copied migration can retain external member topology and sealed Advanced pending,
+publication and target observations. `replay_from_copy` restores captured context;
+an ordinary frozen read does not silently install that context. `restore_from_copy`
+uses only the copy's verified originals and refuses newer or tampered evidence.
+Absolute original pointers are explicitly nonrepresentable as an exact relocated
+inverse; the mapped copy and archived original bytes remain available.
+
+Callable authority transitions use prepared-mutation version 2 and a required
+caller-owned deployment exclusion guard plus fresh explicit launcher probes. The
+first manifest, objects, marker and view publish under the shared recovery boundary.
+Deactivation preserves immutable history and refuses newer knowledge or pending
+evidence. Existing pending ledgers remain independent and unchanged. Distinct
+worktree authorities require a group transition; retained-generation reactivation
+requires its explicit mapping. These callables do not select or activate real
+records, and source-level probes do not establish installed release readiness.

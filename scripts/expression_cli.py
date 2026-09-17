@@ -29,104 +29,125 @@ def migrate(record=None, apply=False, readable=False, *, profile=None, destinati
     if destination is not None:
         raise ValueError('copy migration needs an explicit --profile core/v1')
     rec, project, policy = I._routed_record(record)
+    inventory = P._peer('reasoning.snapshot')._Inventory()
     with P._locked(str(rec), project=project):
         if project.config() != policy:
             raise ValueError('project mode or record destination changed; retry migration')
-        doc, ids, judgments, fields, raw = I._record_world(rec)
-        before = rec.read_bytes()
-        changes, skipped, bodies = [], [], {}
-        for nid, body in P.bodies(doc).items():
-            if nid not in ids or not isinstance(body, dict):
+        token = P._CAPTURE_READS.set(inventory)
+        try:
+            doc, ids, judgments, fields, raw = I._record_world(rec)
+            before = rec.read_bytes()
+            inventory('bytes', str(rec), before)
+        finally:
+            P._CAPTURE_READS.reset(token)
+    changes, skipped, bodies = [], [], {}
+    for nid, body in P.bodies(doc).items():
+        if nid not in ids or not isinstance(body, dict):
+            continue
+        candidates = []
+        if nid in judgments:
+            candidates.append((fields["predicate"], True))
+        else:
+            candidates.append(("rule", False))
+            if "rule" not in body and isinstance(body.get("v"), str) and P.rule_refs(body, ids):
+                candidates.append(("v", False))
+        for field, predicate in candidates:
+            value = body.get(field)
+            old_tree = readable and isinstance(value, dict) and 'expr' not in value
+            if not old_tree and (not isinstance(value, str) or not value.strip()):
                 continue
-            candidates = []
-            if nid in judgments:
-                candidates.append((fields["predicate"], True))
-            else:
-                candidates.append(("rule", False))
-                if "rule" not in body and isinstance(body.get("v"), str) and P.rule_refs(body, ids):
-                    candidates.append(("v", False))
-            for field, predicate in candidates:
-                value = body.get(field)
-                old_tree = readable and isinstance(value, dict) and 'expr' not in value
-                if not old_tree and (not isinstance(value, str) or not value.strip()):
-                    continue
-                try:
-                    if old_tree:
-                        converted = E.lower(value, predicate)
-                    else:
-                        comparison = P.CMP.match(value) if predicate else None
-                        converted = E.convert_authored(value, predicate=predicate,
-                            legacy_rhs=comparison.group(3) if comparison else None)
-                    unknown = set(E.refs(converted)) - ids
-                    if unknown:
-                        raise ValueError("unknown or ambiguous bare names: " + ", ".join(sorted(unknown)))
-                    if predicate and set(E.refs(converted)) - set(judgments[nid]["deps"]):
-                        raise ValueError("predicate references are not declared in rests_on")
-                    if readable:
-                        converted = E.readable(converted, predicate)
-                except (ValueError, SyntaxError, RecursionError) as error:
-                    skipped.append({"id": nid, "field": field, "reason": str(error)})
-                    continue
-                target = "rule" if field == "v" else field
-                replacement = bodies.setdefault(nid, copy.deepcopy(body))
-                if target != field:
-                    del replacement[field]
-                replacement[target] = converted
-                changes.append({"id": nid, "field": field, "target": target, "before": value, "after": converted})
-        answer = {"record": str(rec), "before_sha256": I._sha(before), "changes": changes,
-                  "skipped": skipped, "applied": False, "problems": [], "fired": []}
-        if not changes:
-            return answer
-        with tempfile.TemporaryDirectory(prefix="kpopper-expression-migration-") as directory:
-            shadow = Path(directory) / rec.name
-            # The editor matches logical lines; retain the record's newline style
-            # when writing bytes so Windows does not translate them a second time.
-            source = before.decode("utf-8")
-            newline = "\r\n" if source.count("\r\n") > source.count("\n") / 2 else "\n"
-            lines = source.replace("\r\n", "\n").split("\n")
             try:
-                from .sameness import _set_fields
-            except ImportError:
-                from sameness import _set_fields
-            original_bodies = P.bodies(doc)
-            for nid, replacement in bodies.items():
-                _set_fields(lines, nid, replacement, original_bodies[nid])
-            shadow.write_bytes(newline.join(lines).encode("utf-8"))
-            brief = P._brief_beside(str(rec))
-            if brief:
-                target_brief = Path(P.layout(shadow)["view"])
-                target_brief.parent.mkdir(parents=True, exist_ok=True)
-                target_brief.write_bytes(Path(brief).read_bytes())
-            baseline = set(P.check_lines([str(rec)])[0])
-            errors = P.check_lines([str(shadow)])[0]
-            discovered = set()
-            _, after_ids, after_judgments, _, after_raw = I._record_world(shadow)
-            for nid, judgment in judgments.items():
-                old_result = P.evaluate(judgment["pred"], raw, ids)
-                new_result = P.evaluate(after_judgments[nid]["pred"], after_raw, after_ids)
-                # Newly executable rules can turn unknown into a result. A condition
-                # that already had a result must retain it, including false -> unknown.
-                if old_result is not None and new_result is not old_result:
-                    answer["problems"].append(f"{nid}: migration changes condition result from {old_result} to {new_result}; author the typed reading explicitly")
-                elif old_result is None and new_result is True and not P.is_arrangement(judgment, raw):
-                    # A newly executable calculation can expose a contradiction.
-                    # Keep it visible in check without blocking its recording or
-                    # refreshing the judgment's historical review snapshot.
-                    answer["fired"].append(nid)
-                    discovered.add(P._fired_failure(nid, after_judgments[nid]))
-            answer["fired"].sort()
-            answer["problems"] = [error for error in errors if error not in baseline and error not in discovered] + answer["problems"]
-            after = shadow.read_bytes()
-            answer["after_sha256"] = I._sha(after)
-            if apply and not answer["problems"]:
-                report = {'updates': [{'kind': 'add', 'id': nid, 'body': body} for nid, body in bodies.items()]}
-                if I._report_private(doc, report):
-                    raise ValueError('private or unclear source permission; migration left the record unchanged')
-                if rec.read_bytes() != before:
-                    raise ValueError("record changed during migration; retry")
-                I._replace_record(rec, after)
-                answer["applied"] = True
+                if old_tree:
+                    converted = E.lower(value, predicate)
+                else:
+                    comparison = P.CMP.match(value) if predicate else None
+                    converted = E.convert_authored(value, predicate=predicate,
+                        legacy_rhs=comparison.group(3) if comparison else None)
+                unknown = set(E.refs(converted)) - ids
+                if unknown:
+                    raise ValueError("unknown or ambiguous bare names: " + ", ".join(sorted(unknown)))
+                if predicate and set(E.refs(converted)) - set(judgments[nid]["deps"]):
+                    raise ValueError("predicate references are not declared in rests_on")
+                if readable:
+                    converted = E.readable(converted, predicate)
+            except (ValueError, SyntaxError, RecursionError) as error:
+                skipped.append({"id": nid, "field": field, "reason": str(error)})
+                continue
+            target = "rule" if field == "v" else field
+            replacement = bodies.setdefault(nid, copy.deepcopy(body))
+            if target != field:
+                del replacement[field]
+            replacement[target] = converted
+            changes.append({"id": nid, "field": field, "target": target, "before": value, "after": converted})
+    answer = {"record": str(rec), "before_sha256": I._sha(before), "changes": changes,
+              "skipped": skipped, "applied": False, "problems": [], "fired": []}
+    if not changes:
         return answer
+    with tempfile.TemporaryDirectory(prefix="kpopper-expression-migration-") as directory:
+        shadow = Path(directory) / rec.name
+        # The editor matches logical lines; retain the record's newline style
+        # when writing bytes so Windows does not translate them a second time.
+        source = before.decode("utf-8")
+        newline = "\r\n" if source.count("\r\n") > source.count("\n") / 2 else "\n"
+        lines = source.replace("\r\n", "\n").split("\n")
+        try:
+            from .sameness import _set_fields
+        except ImportError:
+            from sameness import _set_fields
+        original_bodies = P.bodies(doc)
+        for nid, replacement in bodies.items():
+            _set_fields(lines, nid, replacement, original_bodies[nid])
+        shadow.write_bytes(newline.join(lines).encode("utf-8"))
+        brief = P._brief_beside(str(rec))
+        if brief:
+            target_brief = Path(P.layout(shadow)["view"])
+            target_brief.parent.mkdir(parents=True, exist_ok=True)
+            brief_bytes = Path(brief).read_bytes()
+            inventory('bytes', str(brief), brief_bytes)
+            target_brief.write_bytes(brief_bytes)
+        else:
+            inventory('exists', P.layout(rec)['view'], False)
+        baseline = set(P.check_lines([str(rec)])[0])
+        errors = P.check_lines([str(shadow)])[0]
+        discovered = set()
+        _, after_ids, after_judgments, _, after_raw = I._record_world(shadow)
+        for nid, judgment in judgments.items():
+            old_result = P.evaluate(judgment["pred"], raw, ids)
+            new_result = P.evaluate(after_judgments[nid]["pred"], after_raw, after_ids)
+            # Newly executable rules can turn unknown into a result. A condition
+            # that already had a result must retain it, including false -> unknown.
+            if old_result is not None and new_result is not old_result:
+                answer["problems"].append(f"{nid}: migration changes condition result from {old_result} to {new_result}; author the typed reading explicitly")
+            elif old_result is None and new_result is True and not P.is_arrangement(judgment, raw):
+                # A newly executable calculation can expose a contradiction.
+                # Keep it visible in check without blocking its recording or
+                # refreshing the judgment's historical review snapshot.
+                answer["fired"].append(nid)
+                discovered.add(P._fired_failure(nid, after_judgments[nid]))
+        answer["fired"].sort()
+        answer["problems"] = [error for error in errors if error not in baseline and error not in discovered] + answer["problems"]
+        after = shadow.read_bytes()
+        answer["after_sha256"] = I._sha(after)
+        if apply and not answer["problems"]:
+            report = {'updates': [{'kind': 'add', 'id': nid, 'body': body} for nid, body in bodies.items()]}
+            if I._report_private(doc, report):
+                raise ValueError('private or unclear source permission; migration left the record unchanged')
+            if rec.read_bytes() != before:
+                raise ValueError("record changed during migration; retry")
+            def publish_candidate():
+                inventory.verify()
+                if rec.read_bytes() != before:
+                    raise ValueError('record changed during migration; retry')
+                P._write_text(str(rec), after.decode('utf-8'))
+            with P._locked(str(rec), project=project):
+                if project.config() != policy:
+                    raise ValueError('project mode or record destination changed; retry migration')
+                P._mutate_legacy([str(rec)], {'kind': 'migration', 'id': 'expression-migration'},
+                                 publish_candidate)
+            answer["applied"] = True
+        if not answer['applied']:
+            inventory.verify()
+    return answer
 
 
 def main(argv=None):

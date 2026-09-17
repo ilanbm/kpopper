@@ -125,6 +125,9 @@ class Migration(unittest.TestCase):
         self.assertEqual((destination / relative).read_bytes(), raw)
         self.assertEqual((destination / M.ARTIFACTS / 'originals' / relative).read_bytes(), raw)
         self.assertNotIn(prototype['id'], H.Store(destination / record.name).capture().objects)
+        restored = self.root / 'prototype-restored'
+        M.restore_from_copy(destination, restored)
+        self.assertEqual((restored / relative).read_bytes(), raw)
 
     def test_unknown_archive_successor_blocks_activation_but_preserves_preparation(self):
         record = self.fixture()
@@ -172,6 +175,100 @@ class Migration(unittest.TestCase):
         self.assertEqual(plan.files[M.ARTIFACTS + '/originals/.kpopper/replaced.yaml'], raw)
         with self.assertRaisesRegex(C.HistoryError, 'archive_condition_profile_unknown'):
             plan.publish(self.root / 'unsupported-core-archive')
+
+    def test_standalone_restore_survives_original_source_edit_and_deletion(self):
+        import shutil
+        for shape in ('single', 'pointer', 'hypothesis'):
+            with self.subTest(shape=shape):
+                record = self.fixture(shape=shape, name='custom.yml', core=True)
+                original_files = {p.relative_to(record.parent).as_posix(): p.read_bytes()
+                                  for p in record.parent.rglob('*') if p.is_file()}
+                plan = M.prepare(record)
+                copied = self.root / ('standalone-' + shape)
+                plan.publish(copied)
+                record.write_text('unrelated source changed: true\n')
+                first = self.root / ('restored-edited-' + shape)
+                plan.restore_copy(copied, first)
+                self.assertEqual({p.relative_to(first).as_posix(): p.read_bytes()
+                                  for p in first.rglob('*') if p.is_file()}, original_files)
+                shutil.rmtree(record.parent)
+                second = self.root / ('restored-deleted-' + shape)
+                M.restore_from_copy(copied, second)
+                self.assertEqual({p.relative_to(second).as_posix(): p.read_bytes()
+                                  for p in second.rglob('*') if p.is_file()}, original_files)
+
+    def test_standalone_restore_refuses_tampering_extra_deletion_symlink_and_target(self):
+        record = self.fixture()
+        plan = M.prepare(record)
+        copied = self.root / 'standalone-tampered'
+        plan.publish(copied)
+        target = self.root / 'not-created'
+        archived = copied / M.ARTIFACTS / 'originals' / record.name
+        raw = archived.read_bytes()
+        for change in ('bytes', 'delete', 'symlink', 'extra'):
+            with self.subTest(change=change):
+                if change == 'bytes':
+                    archived.write_bytes(raw + b'# changed\n')
+                elif change == 'delete':
+                    archived.unlink()
+                elif change == 'symlink':
+                    archived.unlink()
+                    archived.symlink_to(record)
+                else:
+                    (copied / 'unknown-extra').write_text('must refuse')
+                with self.assertRaises((C.HistoryError, ValueError)):
+                    M.restore_from_copy(copied, target)
+                self.assertFalse(target.exists())
+                if archived.is_symlink():
+                    archived.unlink()
+                archived.write_bytes(raw)
+                if (copied / 'unknown-extra').exists():
+                    (copied / 'unknown-extra').unlink()
+        target.mkdir()
+        (target / 'keep').write_text('existing directory')
+        with self.assertRaisesRegex(C.HistoryError, 'migration_destination_exists'):
+            M.restore_from_copy(copied, target)
+        self.assertEqual((target / 'keep').read_text(), 'existing directory')
+
+    def test_standalone_original_mapping_must_match_immutable_import_receipt(self):
+        record = self.fixture()
+        plan = M.prepare(record)
+        copied = self.root / 'forged-mapping'
+        plan.publish(copied)
+        receipt_path = copied / M.ARTIFACTS / 'receipt.json'
+        receipt = M._copy_receipt(receipt_path.read_bytes())
+        extra = M.ARTIFACTS + '/originals/injected.txt'
+        (copied / extra).write_bytes(b'injected original')
+        digest = C.sha256(b'injected original')
+        receipt['originals']['injected.txt'] = {'path': extra, 'sha256': digest}
+        receipt['destination'][extra] = digest
+        receipt_path.write_bytes(M._json(receipt))
+        target = self.root / 'forged-target'
+        with self.assertRaisesRegex(C.HistoryError, 'invalid_original_mapping'):
+            M.restore_from_copy(copied, target)
+        self.assertFalse(target.exists())
+
+    def test_inactive_prior_generation_preview_is_blocked_without_deleting_history(self):
+        record = self.fixture(core=True)
+        first = M.prepare(record)
+        copied = self.root / 'inactive-original'
+        first.publish(copied)
+        entry = copied / record.name
+        layout = P.layout(entry)
+        marker = C.decode_document(Path(layout['history_authority']).read_bytes())
+        entry.write_bytes(first.source_files[str(record)])
+        marker['authority'] = 'legacy'
+        marker['generation'] += 1
+        Path(layout['history_authority']).write_bytes(C.encode_document(marker))
+        retained = {p.relative_to(copied).as_posix(): p.read_bytes()
+                    for p in Path(layout['history_commits']).rglob('*') if p.is_file()}
+        next_plan = M.prepare(entry)
+        self.assertFalse(next_plan.summary()['complete'])
+        self.assertIn('history_reactivation_requires_generation_mapping', next_plan.problems)
+        with self.assertRaisesRegex(C.HistoryError, 'history_reactivation_requires_generation_mapping'):
+            next_plan.publish(self.root / 'reactivated-copy')
+        self.assertEqual(retained, {p.relative_to(copied).as_posix(): p.read_bytes()
+                                   for p in Path(layout['history_commits']).rglob('*') if p.is_file()})
 
     def test_restore_refuses_new_committed_knowledge(self):
         record = self.fixture(core=True)

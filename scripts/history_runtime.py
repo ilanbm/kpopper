@@ -21,7 +21,7 @@ ENDPOINT = 'history/capabilities'
 INCLUSION = ['*.py', 'reasoning/*.py', 'session/*.py']
 REQUIRED = sorted(['__init__.py', 'cli.py', 'history_cli.py', 'history_runtime.py',
     'history_contract.py', 'history_store.py', 'history_adapter.py', 'history_transaction.py',
-    'history_authoring.py', 'history_direct.py', 'history_bundle.py', 'history_migration.py',
+    'history_authoring.py', 'history_direct.py', 'history_bundle.py', 'history_migration.py', 'history_activation.py',
     'provenance.py', 'pending_grounding.py', 'knowledge_views.py', 'reasoning/__init__.py',
     'reasoning/contract.py', 'reasoning/snapshot.py', 'reasoning/evaluate.py',
     'reasoning/runtime.py', 'session/__init__.py'])
@@ -150,7 +150,7 @@ def _schemas(root):
         _strict_json(raw)
         resources.append({'path': name, 'sha256': hashlib.sha256(raw).hexdigest()})
     return _seal({'version': 1, 'history': {'authority': [1], 'baseline': [1], 'commit': [1],
-        'typed_object': [2], 'prepared_mutation': [1], 'projection': [1], 'import': [1]},
+        'typed_object': [2], 'prepared_mutation': [1, 2], 'projection': [1], 'import': [1]},
         'identity_schemes': ['prototype/v1', 'typed-history/v2'], 'resources': resources})
 
 
@@ -260,7 +260,7 @@ def _validate_declaration(value, nonce):
     schemas = value['schemas']
     _require(set(schemas) == {'version', 'history', 'identity_schemes', 'resources', 'digest'}
              and schemas['history'] == {'authority': [1], 'baseline': [1], 'commit': [1],
-                 'typed_object': [2], 'prepared_mutation': [1], 'projection': [1], 'import': [1]}
+                 'typed_object': [2], 'prepared_mutation': [1, 2], 'projection': [1], 'import': [1]}
              and schemas['identity_schemes'] == ['prototype/v1', 'typed-history/v2']
              and isinstance(schemas['resources'], list), 'unsupported_runtime_schema')
     resources = schemas['resources']
