@@ -265,9 +265,39 @@ project work in Claude Cowork and ChatGPT Work. The package includes the
 [method](skills/kpopper/SKILL.md) with one skill per occasion beside it, record tools and host-specific hooks; setup depends on
 the environment.
 
+### Prepare Python for Claude Code and Codex
+
+On macOS or Linux, install **Python 3.9+ with `venv` support**, then run this once
+on the machine where the hooks execute, under the same OS account as the host:
+
+```sh
+git clone https://github.com/ilanbm/kpopper.git "$HOME/kpopper"
+python3 "$HOME/kpopper/scripts/plugin_runtime.py" setup
+python3 "$HOME/kpopper/scripts/plugin_runtime.py" doctor
+```
+
+If you already have a checkout, use its absolute path instead. `setup` explicitly
+downloads the four [package dependencies](pyproject.toml) from PyPI into a private
+virtualenv under `~/.local/share/kpopper/runtimes/`. It works with externally managed
+Python installations: system packages are not modified. On Linux distributions that
+package `venv` separately, install that Python's `venv` support first.
+
+The Claude Code and Codex hooks automatically select this runtime, including after
+a plugin cache update. No activation or PATH change is needed. The hooks run code
+from their own installed plugin; this checkout only prepares dependencies. Hooks
+never create environments or install packages. A standalone `pipx` or `uv tool`
+installation supplies its own CLI environment and does not by itself repair hooks.
+
+`doctor` prints both the bootstrap Python and the selected hook Python. After installing
+the plugin below, confirm the opening's `KPOPPER_AGENT_CONTEXT.command` names that same
+hook Python and the active plugin's `scripts/cli.py`. Use that command for plugin work.
+If dependencies are missing or the private environment breaks, the opener prints the
+exact Python it tried and a quoted `setup` command for the active plugin. Run it in a
+terminal and start a new session. See [runtime troubleshooting](docs/plugin-runtime.md).
+
 ### Claude Code
 
-Run in a terminal with Claude Code installed:
+After the Python setup above, run in a terminal with Claude Code installed:
 
 ```sh
 claude plugin marketplace add ilanbm/kpopper
@@ -286,7 +316,7 @@ Both install from this repository's marketplace. See
 
 ### Codex
 
-Run in a terminal on the machine where Codex runs:
+After the Python setup above, run in a terminal on the machine where Codex runs:
 
 ```sh
 codex plugin marketplace add ilanbm/kpopper
@@ -345,13 +375,11 @@ and limitations; automatic opening and stop behavior differ by host. See the
 
 ### Start working
 
-The local scripts need **Python 3.9+** and the [package dependencies](pyproject.toml)
-available in the environment used by the host's `python3`. A Python package installation
-includes them. For a plugin-only installation, install them in that environment:
-
-```sh
-python3 -m pip install 'PyYAML>=5.1' 'html5lib>=1.1,<2' 'tinycss2>=1.2,<2' tzdata
-```
+The local scripts need **Python 3.9+** and the [package dependencies](pyproject.toml).
+For Claude Code and Codex use the [private runtime setup above](#prepare-python-for-claude-code-and-codex).
+Other adapters describe their own interpreter configuration. A Python package installation
+includes dependencies in its own environment; do not run pip against an externally managed
+system Python to repair plugin hooks.
 
 Lean is optional; the ordinary reader and page work without it. In a new agent session
 with the project open, start with:

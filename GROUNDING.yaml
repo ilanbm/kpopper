@@ -858,6 +858,10 @@ sources:
     name: "The source update and recording gate regression contract"
     file: "tests/test_ingestion.py"
     read: "2026-09-07"
+  doc.plugin_runtime:
+    name: "Explicit Python setup and runtime selection for plugin hooks"
+    file: "docs/plugin-runtime.md"
+    read: "2026-09-17"
   doc.session_test_gates:
     name: "Checked-session integration test readiness gates"
     file: "tests/test_predicate_literals.py"
@@ -3336,6 +3340,19 @@ judgments:
       p.record_parsers: 1
       m.prompt_hook_10x_parsing: 1.3
       m.prompt_hook_10x_kept: 0.15
+  d.plugin_runtime_is_explicit:
+    rests_on: [goal.portable, doc.plugin_runtime]
+    verdict: "Prepare hook dependencies through an explicit private-virtualenv setup; Claude Code
+              and Codex hooks select it while executing code from their active plugin."
+    because: "Plugin installation copies files without supplying Python packages. A dependency
+              environment outside the plugin cache avoids system pip restrictions and interpreter
+              guessing, survives cache replacement, and keeps network installation outside hooks."
+    reopened_by: "A supported hook uses a different interpreter from the repaired runtime, a failed
+                  setup appears ready, plugin versions need incompatible dependency sets in one
+                  environment, or a hook installs packages without an explicit setup command."
+    seen:
+      goal.portable: "usable by any session, in any project, with no author present"
+      doc.plugin_runtime: "read 2026-09-17"
   d.predicate_shape_is_one_reading:
     rests_on: [s.2026_09_04_falsifier_shape, p.predicate_shapes, d.arrangement_sign_is_one_comparison]
     verdict: "what shape a predicate must have to be decided is one reading, asked wherever a
