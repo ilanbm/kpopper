@@ -2,6 +2,9 @@
 import copy
 from pathlib import Path
 import unittest
+import json
+import subprocess
+import sys
 from unittest import mock
 
 from scripts import history_identity as I, history_hypotheses as HH
@@ -446,6 +449,159 @@ class Identity(unittest.TestCase):
         target.write_bytes(item['after'])
         self.commit(mutation)
         self.assertEqual(path.read_bytes(), T.auxiliary_view(mutation)['after'])
+
+    def test_non_utf8_brief_is_typed_refusal_and_keeps_sources_exact(self):
+        path = Path(self.store.layout['view'])
+        path.parent.mkdir(parents=True, exist_ok=True)
+        for raw in (b'# invalid byte: \xe9\n', b'sections: [{text: "{{p.other}} \xe9"}]\n'):
+            with self.subTest(raw=raw):
+                path.write_bytes(raw)
+                before = {str(item): item.read_bytes() for item in self.entry.parent.rglob('*') if item.is_file()}
+                with self.assertRaises(C.HistoryError) as caught:
+                    I.prepare_same(self.entry, 'p.input', 'p.other')
+                self.assertEqual(caught.exception.code, 'invalid_brief_encoding')
+                self.assertEqual(before, {str(item): item.read_bytes() for item in self.entry.parent.rglob('*') if item.is_file()})
+
+    def test_auxiliary_decoder_requires_exact_canonical_envelope(self):
+        from scripts.pending_grounding import _decode, _encode, json_bytes, identity
+        _, _, mutation = self.brief_mutation()
+        raw = T.auxiliary_envelope(mutation)
+        self.assertEqual(T.decode_auxiliary_envelope(raw).to_bytes(), mutation.to_bytes())
+        corrupt = [raw + b'\n', b'\xff', mutation.to_bytes()]
+        for field, value in (('kind', 'unowned/v1'), ('version', True), ('extra', 'not allowed')):
+            data = _decode(json.loads(raw))
+            data[field] = value
+            data['digest'] = identity({key: item for key, item in data.items() if key != 'digest'})
+            corrupt.append(json_bytes(_encode(data)))
+        data = _decode(json.loads(raw))
+        data['digest'] = 'f' * 64
+        corrupt.append(json_bytes(_encode(data)))
+        for bad in corrupt:
+            with self.subTest(prefix=bad[:60]):
+                with self.assertRaises(C.HistoryError):
+                    T.decode_auxiliary_envelope(bad)
+        with self.assertRaisesRegex(C.HistoryError, 'no_recovery_pending'):
+            self.store.recover_auxiliary(verify=lambda data: None)
+
+    def test_auxiliary_api_recovers_crashed_process_without_caller_retained_mutation(self):
+        crash_script = r"""
+import os, sys
+from pathlib import Path
+from scripts import history_identity as I, history_store as H, history_transaction as T
+entry = Path(sys.argv[1])
+store = H.Store(entry)
+mutation = I.prepare_same(entry, 'p.input', 'p.other', operation='api-aux-crash', recorded_at='2026-09-17')
+if sys.argv[2] == 'before':
+    publish = T.publish_immutable
+    def crash(path, *args, **kwargs):
+        if Path(path).parent == Path(store.layout['history_commits']):
+            os._exit(47)
+        return publish(path, *args, **kwargs)
+    T.publish_immutable = crash
+else:
+    replace = T._replace
+    def crash(path, raw):
+        if Path(path) == Path(store.layout['view']):
+            os._exit(47)
+        return replace(path, raw)
+    T._replace = crash
+I.commit(entry, mutation, verify=lambda data: None)
+raise AssertionError('expected process termination')
+"""
+        recover_script = r"""
+import json, sys
+from pathlib import Path
+from scripts import history_store as H, history_contract as C
+entry = Path(sys.argv[1])
+calls = []
+def verify(data):
+    calls.append(data['operation'])
+    if sys.argv[4] == 'deny':
+        raise C.HistoryError('application_verifier_refused')
+    assert data['entry'] == entry.name
+    assert data['authority']['record_id'] == sys.argv[3]
+    assert data['operation'] == 'api-aux-crash'
+try:
+    result = H.Store(entry).recover_auxiliary(direction=sys.argv[2], verify=verify)
+except C.HistoryError as error:
+    if sys.argv[4] != 'deny' or error.code != 'application_verifier_refused':
+        raise
+    result = {'refusal': error.code}
+print(json.dumps({'result': result, 'calls': calls}))
+"""
+        repository = str(Path(__file__).resolve().parent.parent)
+        for direction in ('before', 'after'):
+            with self.subTest(direction=direction):
+                fixture_case = Identity()
+                fixture_case.setUp()
+                self.addCleanup(fixture_case.doCleanups)
+                entry, store = fixture_case.entry, fixture_case.store
+                view = Path(store.layout['view'])
+                view.parent.mkdir(parents=True, exist_ok=True)
+                before_view = b'sections: [{text: "{{p.other}}"}]\n'
+                view.write_bytes(before_view)
+                before_record = entry.read_bytes()
+                record_id = store.capture().marker['record_id']
+                crashed = subprocess.run([sys.executable, '-B', '-c', crash_script, str(entry), direction],
+                    cwd=repository, capture_output=True, text=True, timeout=30)
+                self.assertEqual(crashed.returncode, 47, crashed.stderr)
+                journal = T._target(entry.parent, T.journal_for(entry))
+                self.assertTrue(journal.is_file())
+                self.assertFalse(Path(str(journal) + '.history').exists(), 'API recovery must not depend on a CLI envelope')
+                journal_bytes = journal.read_bytes()
+                with self.assertRaisesRegex(C.HistoryError, 'missing_verifier'):
+                    store.recover_auxiliary(direction=direction, verify=None)
+                denied = subprocess.run([sys.executable, '-B', '-c', recover_script, str(entry), direction,
+                    record_id, 'deny'], cwd=repository, capture_output=True, text=True, timeout=30)
+                self.assertEqual(denied.returncode, 0, denied.stderr)
+                self.assertEqual(json.loads(denied.stdout)['result']['refusal'], 'application_verifier_refused')
+                self.assertEqual(journal.read_bytes(), journal_bytes)
+                with self.assertRaisesRegex(C.HistoryError, 'recovery_required'):
+                    store.capture()
+                recovered = subprocess.run([sys.executable, '-B', '-c', recover_script, str(entry), direction,
+                    record_id, 'allow'], cwd=repository, capture_output=True, text=True, timeout=30)
+                self.assertEqual(recovered.returncode, 0, recovered.stderr)
+                report = json.loads(recovered.stdout)
+                self.assertEqual(report['result'], {'state': 'recovered', 'direction': direction,
+                                                   'operation': 'api-aux-crash'})
+                self.assertTrue(report['calls'])
+                self.assertFalse(journal.exists())
+                captured = store.capture()
+                self.assertEqual('api-aux-crash' in captured.commits, direction == 'after')
+                if direction == 'before':
+                    self.assertEqual(entry.read_bytes(), before_record)
+                    self.assertEqual(view.read_bytes(), before_view)
+                else:
+                    self.assertEqual(C.decode_document(view.read_bytes())['sections'][0]['text'], '{{p.input}}')
+
+    def test_api_recovery_rechecks_archive_after_application_verifier(self):
+        _, _, mutation = self.brief_mutation()
+        publish = T.publish_immutable
+        def crash(path, *args, **kwargs):
+            if Path(path).parent == Path(self.store.layout['history_commits']):
+                raise OSError('pre-manifest API crash')
+            return publish(path, *args, **kwargs)
+        with mock.patch.object(T, 'publish_immutable', side_effect=crash):
+            with self.assertRaisesRegex(OSError, 'pre-manifest API crash'):
+                self.commit(mutation)
+        archive = Path(self.store.layout['replaced'])
+        old = T._read(archive)
+        calls = []
+        def changed(data):
+            calls.append(data['operation'])
+            if len(calls) == 2:
+                archive.write_bytes(b'# concurrent archive edit\n')
+        with self.assertRaisesRegex(C.HistoryError, 'identity_source_changed'):
+            self.store.recover_auxiliary(verify=changed)
+        self.assertTrue(T._target(self.entry.parent, T.journal_for(self.entry)).exists())
+        with self.assertRaisesRegex(C.HistoryError, 'recovery_required'):
+            self.store.capture()
+        if old is None:
+            archive.unlink()
+        else:
+            archive.write_bytes(old)
+        self.store.recover_auxiliary(verify=lambda data: None)
+        self.assertEqual(len(self.store.capture().commits), 3)
 
 if __name__ == '__main__':
     unittest.main()

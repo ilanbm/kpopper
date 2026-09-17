@@ -118,7 +118,8 @@ class Writer(unittest.TestCase):
         with mock.patch.object(H.Store, 'capture', side_effect=AssertionError('live read')):
             replay = Snapshot.from_json(after.to_json())
         self.assertEqual(replay.snapshot_id, after.snapshot_id)
-        self.assertEqual(replay.to_data()['context']['history']['requires'], [C.EXPLICIT_ROOT_DISPOSITION])
+        self.assertEqual(replay.to_data()['context']['history']['requires'],
+                         [C.EXPLICIT_ROOT_DISPOSITION, 'subject-paths/v2'])
         self.assertEqual(self.store.rebuild(), self.entry.read_bytes())
 
     def test_proposal_can_be_explicitly_accepted_then_retired(self):
@@ -138,7 +139,7 @@ class Writer(unittest.TestCase):
         objects = [C.decode_document(item['after']) for item in mutation.files if item['role'] == 'history_object']
         self.assertEqual({obj['kind'] for obj in objects}, {'reading', 'act'})
         manifest = C.decode_document(next(item['after'] for item in mutation.files if item['role'] == 'history_commit'))
-        self.assertEqual(manifest['requires'], [C.EXPLICIT_ROOT_DISPOSITION])
+        self.assertEqual(manifest['requires'], [C.EXPLICIT_ROOT_DISPOSITION, 'subject-paths/v2'])
         root = next(obj for obj in objects if obj['kind'] != 'act')
         manifest['objects'] = [item for item in manifest['objects'] if item['id'] == root['id']]
         capture = self.store.capture()
@@ -181,7 +182,8 @@ class Writer(unittest.TestCase):
         self.publish(old)
         self.publish(T.PreparedMutation.from_bytes(raw))
         self.assertEqual(old.to_bytes(), raw)
-        self.assertNotIn('requires', C.decode_document(next(item['after'] for item in old.files if item['role'] == 'history_commit')))
+        self.assertEqual(C.decode_document(next(item['after'] for item in old.files if item['role'] == 'history_commit'))['requires'],
+                         ['subject-paths/v2'])
 
     def test_proposal_review_retains_actual_pin_without_promoting_judgment(self):
         self.publish(A.prepare_proposal(self.entry, 'd.proposed', {'verdict': 'not accepted',

@@ -564,6 +564,39 @@ class Store:
                     return self._commit(mutation, verify=verify)
         return self._commit(mutation, verify=verify)
 
+    def recover_auxiliary(self, *, direction='after', verify):
+        """Recover the owned journal with the original application's verifier.
+
+        The journal retains the mutation, not routing or policy permission. The
+        caller must supply its application verifier; no project is inferred.
+        """
+        C._require(direction in ('before', 'after'), 'invalid_recovery')
+        C._require(callable(verify), 'missing_verifier')
+        with T.writer_guard(self.root):
+            primary = self._path(self.root / T.journal_for(self.entry))
+            C._require(primary.exists(), 'no_recovery_pending')
+            C._require(primary.is_file(), 'invalid_auxiliary_journal')
+            def read_journal():
+                with primary.open('rb') as stream:
+                    raw = stream.read(T.MAX_TRANSACTION_BYTES + 1)
+                C._require(len(raw) <= T.MAX_TRANSACTION_BYTES, 'history_limit')
+                return raw
+            raw = read_journal()
+            mutation = T.decode_auxiliary_envelope(raw)
+            C._require(mutation.to_data()['entry'] == self.entry.name, 'entry_mismatch')
+            C._require(read_journal() == raw, 'concurrent_edit')
+            def checked(data):
+                verify(data)
+                # Preserve the authoring boundary's source recheck after the
+                # application callback, including archive and hypothesis bytes.
+                from . import history_identity
+                history_identity.verify_prepared(self.entry, mutation)
+            if direction == 'after':
+                self.commit(mutation, verify=checked)
+            else:
+                self.cancel_auxiliary(mutation, verify=checked)
+            return {'state': 'recovered', 'direction': direction, 'operation': mutation.to_data()['operation']}
+
     def cancel_auxiliary(self, mutation, *, verify):
         """Cancel an uncommitted identity/brief operation without deleting history."""
         C._require(isinstance(mutation, T.PreparedMutation) and callable(verify), 'missing_verifier')
@@ -622,6 +655,18 @@ class Store:
                 from . import history_identity
                 history_identity.verify_prepared(self.entry, mutation)
             edit_receipt = data['receipt']['before'].get('history_edit')
+            branch_evidence = None
+            if 'history_branch_adoption' in data['receipt']['after']:
+                from . import history_branch
+                source_envelopes = history_branch.audit_evidences(mutation)
+                branch_adoption = data['receipt']['after']['history_branch_adoption']
+                if branch_adoption['version'] == 2:
+                    history_branch.verify_adoption_set(self.entry, mutation, source_envelopes, capture=live)
+                    bindings = branch_adoption['sources']
+                else:
+                    history_branch.verify_adoption(self.entry, mutation, source_envelopes[0], capture=live)
+                    bindings = [branch_adoption['source']]
+                branch_evidence = [copy.deepcopy(binding['required_evidence']) for binding in bindings]
             if edit_receipt is not None:
                 C._require(edit_receipt == {'version': 1, 'kind': 'view-edit-proposals'}, 'invalid_edit_receipt')
                 from . import history_edits
@@ -659,6 +704,9 @@ class Store:
             if prior is None:
                 C._require(commit['parents'] == expected_parents, 'parent_baseline_mismatch')
             verify(data)
+            if branch_evidence is not None:
+                for required in branch_evidence:
+                    history_branch._require_target_evidence(self.entry, required)
             # The callback may consult external evidence or accidentally change
             # local files. Its return never waives optimistic source checks.
             C._require(self.capture().inventory == live.inventory, 'stale_baseline')

@@ -116,6 +116,9 @@ _RAW_READS = contextvars.ContextVar('raw_record_reads', default=False)
 _CORE_READS = contextvars.ContextVar('core_record_reads', default=False)
 # Strict capture observes actual reads, including cache hits; ordinary reads are inert.
 _CAPTURE_READS = contextvars.ContextVar('record_capture_reads', default=None)
+# A no-cache logical read parses each observed byte image once. This never
+# survives its read guard or bypasses a filesystem read/capture observation.
+_READ_PARSES = contextvars.ContextVar('record_read_parses', default=None)
 # Configured/file-path and package imports share the candidate generation. Page
 # rendering loads this reader by another module name in the same process.
 if not hasattr(E, '_direct_stage'):
@@ -679,7 +682,14 @@ def parse(path=None, *, text=None):
         raise
     _capture_event('bytes', path, data)
     if os.environ.get(NO_CACHE, "") not in ("", "0"):
-        return yaml.safe_load(data.decode("utf-8"))
+        reads = _READ_PARSES.get()
+        held = reads.get(path) if reads is not None else None
+        if held is not None and held[0] == data:
+            return copy.deepcopy(held[1])
+        doc = yaml.safe_load(data.decode("utf-8"))
+        if reads is not None:
+            reads[path] = (data, copy.deepcopy(doc))
+        return doc
     try:
         identity = _identity(path, data)
     except OSError:
@@ -960,18 +970,22 @@ def _record_read_guard(paths):
     if _DIRECT_STAGE.get() is not None:
         yield
         return
-    transaction = _peer('history_transaction')
-    entries = sorted({os.path.abspath(f) for p in paths for f in (glob.glob(p) or [p])})
-    members = sorted(set(entries + list(map(os.path.abspath, _files_of(paths)))))
-    roots = {os.path.dirname(path) for path in members if os.path.isdir(os.path.dirname(path))}
-    roots.update(layout(path)['hypotheses'] for path in entries if os.path.isdir(layout(path)['hypotheses']))
-    with transaction.directory_guards(roots, exclusive=False):
-        _pending_record_journals(members)
-        current = sorted(set(entries + list(map(os.path.abspath, _files_of(paths)))))
-        if current != members:
-            raise Refused('concurrent_edit: reader-resolved record membership changed')
-        yield
-        _pending_record_journals(members)
+    token = _READ_PARSES.set({})
+    try:
+        transaction = _peer('history_transaction')
+        entries = sorted({os.path.abspath(f) for p in paths for f in (glob.glob(p) or [p])})
+        members = sorted(set(entries + list(map(os.path.abspath, _files_of(paths)))))
+        roots = {os.path.dirname(path) for path in members if os.path.isdir(os.path.dirname(path))}
+        roots.update(layout(path)['hypotheses'] for path in entries if os.path.isdir(layout(path)['hypotheses']))
+        with transaction.directory_guards(roots, exclusive=False):
+            _pending_record_journals(members)
+            current = sorted(set(entries + list(map(os.path.abspath, _files_of(paths)))))
+            if current != members:
+                raise Refused('concurrent_edit: reader-resolved record membership changed')
+            yield
+            _pending_record_journals(members)
+    finally:
+        _READ_PARSES.reset(token)
 
 
 def _load(paths, *, read_mode=None):
@@ -4476,7 +4490,8 @@ def _directory_locked(path, *, hypotheses=False):
                     entry = Path(path).absolute()
                     retained = transaction._read(transaction._target(entry.parent, direct.journal(entry)))
                     if retained is None:
-                        raise error
+                        raise transaction.C.HistoryError('history_auxiliary_recovery_required',
+                            'use history_store.Store(entry).recover_auxiliary with the original application verifier') from error
                     mutation, _ = direct._read_envelope(retained)
                     transaction.C._require(transaction.auxiliary_envelope(mutation) == raw,
                                            'invalid_history_auxiliary')
@@ -5917,7 +5932,7 @@ def write_command(cmd, rest):
         try:
             _peer('history_contract').hypothesis_name(opts['hypothesis'])
         except ValueError:
-            raise Refused('a hypothesis name must be one visible filename without path separators or control characters') from None
+            raise Refused('--hypothesis takes a name: a hypothesis name must be one visible filename without path separators or control characters') from None
     action = {"kind": cmd, "id": nid, "as_of": as_of, "why": opts.get("why"), "into": opts.get("in"),
               "hypothesis": opts.get("hypothesis"), "source": opts.get("source"), "at": opts.get("at")}
     if drops:

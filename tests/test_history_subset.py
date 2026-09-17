@@ -36,6 +36,13 @@ class Subsets(unittest.TestCase):
     def publish(self, mutation):
         self.target.store.commit(mutation, verify=lambda _: None)
 
+    def test_existing_scoped_adoption_wire_identity_is_unchanged(self):
+        artifact = self.subset()
+        mutation = self.adoption(artifact, {'p.input': self.source.first['id']})
+        self.assertEqual(artifact['revision'], '391c63ff73d18455f400f918d796a091ca6bc4072aa2893814d7e7431c1b5631')
+        self.assertEqual(C.sha256(mutation.to_bytes()),
+                         'a4711d80990952c5b46f171e96e8c821b1a882d98cbfa2077dc5b83fc44db0fd')
+
     def test_subset_omits_private_sibling_and_original_manifests_retry_exact(self):
         private = fixture.reading('private.sibling', operation='private', private=True)
         self.source.publish([private], 'private-commit-name')

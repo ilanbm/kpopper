@@ -1354,6 +1354,16 @@ known:
          tests/test_history_generations.py"
     scope: "Source protocol and disposable regression fixtures; not a live-record cutover or
             installed release-readiness claim"
+  p.history_branch_adoption:
+    v: "Local branch history is captured at pinned Git commits and adopted through one prepared
+        mutation with explicit overlap choices. Captured source envelopes are retained as immutable
+        audit evidence; prior capsule coverage is explicit rather than recursively copied. Ordinary
+        target evidence must match exact source bytes, and recovery never rereads moved source refs."
+    from: s.2026_09_17_history_reasoning_integration
+    at: "docs/history-contract.md; scripts/history_branch.py; scripts/history_direct.py;
+         tests/test_history_branch.py; tests/test_history_branch_direct.py"
+    scope: "Single and bounded multiple local Git sources, no remote publication authority or live
+            record activation"
   p.history_capture_contract:
     name: "Committed history capture contract"
     fidelity: paraphrase
@@ -1367,6 +1377,16 @@ known:
     from: "s.2026_09_17_history_reasoning_integration"
     at: "docs/history-contract.md, History store and Capture and replay; scripts/history_contract.py and scripts/reasoning/snapshot.py at d9857cdb184d1daf4df37c09e71be804e1c46c37"
     of: "2026-09-17"
+  p.history_replay_audit_evidence:
+    v: "Adapter audit replay accepts only the current adapter identity or an exact full audit in
+        validated causal parent receipts. A pending operation cannot witness its own audit. An
+        unknown old adapter requires the original verified runtime; semantic and native audit changes
+        still refuse."
+    from: s.2026_09_17_history_reasoning_integration
+    at: "docs/history-contract.md; scripts/history_authoring.py;
+         tests/test_history_batch_final_world.py"
+    scope: "Source replay admission contract; recorded provenance is not proof of external source
+            truth"
   p.history_writer_compatibility:
     v: "History batch receipt v6 validates the final staged world while retaining per-action
         admission and original seen. Retained v2/v3 operations replay exact bytes. Unicode subjects

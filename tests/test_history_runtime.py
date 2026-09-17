@@ -62,12 +62,14 @@ class Runtime(unittest.TestCase):
         self.assertEqual(before, self.inventory())
         self.assertEqual(value['sources']['inclusion'], R.INCLUSION)
         self.assertIn('history_activation.py', value['sources']['required'])
-        for name in ('history_paths.py', 'history_identity.py', 'history_edits.py'):
+        for name in ('history_paths.py', 'history_identity.py', 'history_edits.py', 'history_branch.py'):
             self.assertIn(name, value['sources']['required'])
         self.assertEqual(value['schemas']['history']['prepared_mutation'], [1, 2])
         self.assertEqual(value['schemas']['history']['authoring_receipt'], [1, 2, 3, 4, 5, 6])
         self.assertEqual(value['schemas']['history']['identity_receipt'], [1, 2])
         self.assertEqual(value['schemas']['history']['history_auxiliary'], [1])
+        self.assertEqual(value['schemas']['history']['branch_capture'], [1, 2])
+        self.assertEqual(value['schemas']['history']['branch_adoption'], [1, 2])
         self.assertEqual(value['resolved']['package_root'], str(self.package))
         self.assertEqual(value['resolved']['cli'], str(self.package / 'cli.py'))
         self.assertEqual(value['native']['status'], 'archive_validated')

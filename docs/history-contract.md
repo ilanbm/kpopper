@@ -247,6 +247,10 @@ absent journal reports `no_recovery_pending`. Filesystem aliases for the chosen
 root are permitted, but symlinks below it and journal/member ancestry collisions
 refuse.
 
+`Store.recover_auxiliary(direction=..., verify=...)` recovers the owned auxiliary
+journal with the required original application verifier. The journal retains the
+mutation, not routing or policy permission; recovery infers no routing permission.
+
 ## Integrated write scope
 
 For existing unactivated records, ordinary `provenance.apply` direct writes stage
@@ -282,12 +286,18 @@ acknowledgement before removing its private retry envelope. Legacy core batches
 carry exact replacement archives through the same prepared transport. Advanced scoped history reports retain an independent portable contribution;
 they do not commit candidate claims into the checkout.
 
-Replay re-evaluates semantic evidence. If only the Python adapter source hash has
-changed, it can retain the receipt's validated original implementation audit while
-checking every computed result, basis, diagnostic and other native implementation
-field. This does not claim the old adapter executed during recovery. Semantic or
-native runtime changes still refuse exact replay; retained receipts are never
-rewritten to conceal their original implementation.
+Replay re-evaluates semantic evidence. A retained adapter audit is accepted only
+when its source hash matches the actual current adapter or its exact full audit
+appears in a validated causal parent receipt. The incoming operation, its own
+pending or committed retry receipt, sibling receipts and caller-supplied hashes
+are not witnesses. Thus a first old pending operation after an adapter update,
+with no such parent witness, refuses `unknown_retained_adapter_audit` and
+requires the original verified runtime; it is not automatically regenerated or
+replaced by a native fallback. When replay is witnessed, every computed result,
+basis, diagnostic and other native implementation field is still checked. This
+does not claim the old adapter executed during recovery. Semantic or native
+runtime changes still refuse exact replay; retained receipts are never rewritten
+to conceal their original implementation.
 
 The prepared legacy boundary also covers newborn absence, named hypotheses,
 fold/refute, same/distinct and expression migration. Hypothesis additions and
@@ -335,6 +345,24 @@ consent; `--disclose-locator PATH=SHA256` records that consent without reading t
 named file. Every overlapping target subject requires an explicit adoption choice.
 Acceptance is checked against an actual committed adoption receipt and exact
 object inventory, never against artifact retention or equal YAML alone.
+
+Branch transport resolves a pinned local Git source and captures its exact
+objects, profiles and proposals. `preview_adoption` and
+`preview_adoption_set` expose explicit choices for overlapping subjects; the
+required ordinary target evidence must byte-match before adoption. The
+`prepare_adoption`/`prepare_adoption_set` and corresponding commit APIs each
+prepare or publish one target commit under the caller's verifier, with no ledger
+publication. Each adoption retains the exact source audit capsule under
+`evidence/branches`; version-2 captures mark prior capsules
+`not_transferred`, avoiding recursive copying. The source association records a
+local capture observation and is not standalone authenticated Git inclusion
+proof.
+
+`consolidate --from REF --dry-run` previews a branch; repeated `--from` flags
+preview one atomic source set. Actual adoption requires `--by` and `--choose`
+for every overlap. `--source-revision` binds the exact preview. `pull ID --from REF`
+shows branch and current standing without adopting either. Recovery reuses the
+retained sources even after their refs disappear; it never loops over partial folds.
 
 `history capabilities --nonce TOKEN --json` declares supported protocol versions,
 resolved launch paths and hashes of installed source/schema/native archive files.

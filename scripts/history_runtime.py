@@ -22,7 +22,7 @@ INCLUSION = ['*.py', 'reasoning/*.py', 'session/*.py']
 REQUIRED = sorted(['__init__.py', 'cli.py', 'history_cli.py', 'history_runtime.py',
     'history_contract.py', 'history_store.py', 'history_adapter.py', 'history_transaction.py', 'history_paths.py',
     'history_authoring.py', 'history_identity.py', 'history_edits.py', 'history_direct.py', 'history_bundle.py', 'history_migration.py', 'history_activation.py',
-    'history_group_activation.py', 'history_hypotheses.py', 'history_hypothesis_import.py',
+    'history_group_activation.py', 'history_hypotheses.py', 'history_hypothesis_import.py', 'history_branch.py',
     'provenance.py', 'pending_grounding.py', 'knowledge_views.py', 'reasoning/__init__.py',
     'reasoning/contract.py', 'reasoning/snapshot.py', 'reasoning/evaluate.py',
     'reasoning/runtime.py', 'session/__init__.py'])
@@ -149,6 +149,7 @@ def _history_schemas():
             'typed_object': [2], 'prepared_mutation': [1, 2], 'projection': [1], 'import': [1, 2],
             'authoring_receipt': [1, 2, 3, 4, 5, 6], 'identity_receipt': [1, 2], 'history_auxiliary': [1],
             'group_transition': [1], 'named_hypotheses': [1], 'physical_hypothesis_import': [1],
+            'branch_capture': [1, 2], 'branch_adoption': [1, 2],
             'bundle': [1, 2, 3], 'contribution': [1, 2, 3], 'retained_generations': [1], 'cancellation': [1],
             'commit_capabilities': ['explicit-root-disposition/v1', 'subject-paths/v2'],
             'bundle_capabilities': ['generation-cancellation/v1', 'history-closure/v1', 'history-generations/v1', 'history-subset/v1', 'subject-paths/v2'],

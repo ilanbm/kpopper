@@ -248,6 +248,10 @@ def recover(paths, *, project, original_paths, direction='after'):
     kind = C.decode_document(raw).get('kind')
     if kind == 'history-adoption/v1':
         return _recover_adoption(entry, raw, project, original_paths, paths, direction)
+    if kind == 'history-branch-adoption/v1':
+        return _recover_branch_adoption(entry, raw, project, original_paths, paths, direction)
+    if kind == 'history-branch-adoption-set/v1':
+        return _recover_branch_adoption_set(entry, raw, project, original_paths, paths, direction)
     mutation, routing = _read_envelope(raw)
     _verify_routing(routing, original_paths, paths, project)
     C._require(pending.read_bytes() == raw, 'concurrent_edit')
@@ -388,6 +392,223 @@ def adopt(paths, revision, choices, *, by=None, project, original_paths):
         T._sync(pending.parent)
         P.forget(entry)
     return {'state': 'adopted', 'revision': revision, 'operation': operation}
+
+
+def _branch_destination_clean(entry, captured, project):
+    """Branch folding starts from committed target knowledge, as legacy folding does."""
+    relative = set()
+    candidates = [entry, Path(P.layout(entry)['view'])]
+    candidates.extend(Path(path) for kind, path in captured.inventory if kind in ('file', 'bytes'))
+    for path in candidates:
+        try:
+            relative.add(path.resolve().relative_to(project.root).as_posix())
+        except ValueError:
+            raise C.HistoryError('branch_target_outside_checkout', str(path)) from None
+    status = P._peer('project_modes').git(project.root, '--literal-pathspecs', 'status', '--porcelain=v1', '-z',
+        '--untracked-files=all', '--', *sorted(relative)).stdout
+    C._require(not status, 'branch_target_uncommitted',
+               'commit the target record and its history before adopting a branch')
+
+
+def adopt_branch(paths, ref, *, choices=None, by=None, preview=False, as_of=None,
+                 expected_source_revision=None):
+    """Capture one local ref once, then preview or retain one exact local operation."""
+    from . import history_branch as Branch
+    original_paths = list(paths)
+    views = P._peer('knowledge_views')
+    project = views.project_for(original_paths)
+    policy = project.config()
+    paths = views.write_paths(original_paths)
+    C._require(project.git and len(paths) == 1, 'branch_history_requires_git_record')
+    entry = Path(paths[0]).resolve()
+    try:
+        source_entry = entry.relative_to(project.root).as_posix()
+    except ValueError:
+        raise C.HistoryError('branch_target_outside_checkout', str(entry)) from None
+    C._require(active(paths), 'history_not_active')
+    source = Branch.capture(project.root, ref, entry=source_entry, as_of=as_of)
+    if expected_source_revision is not None:
+        C._require(source['revision'] == expected_source_revision, 'branch_source_changed')
+    routing = _routing(original_paths, paths, project)
+    C._require(routing['policy'] == policy, 'history_routing_changed')
+    pending = T._target(entry.parent, journal(entry))
+    if preview:
+        captured = H.Store(entry).capture()
+        result = Branch.preview_adoption(captured, source, entry=entry)
+        _verify_routing(routing, original_paths, paths, project)
+        C._require(H.Store(entry).capture().inventory == captured.inventory, 'stale_baseline')
+        return {**result, 'state': 'prepared', 'admission': 'requires_explicit_choices',
+                'source_ref': ref}
+    with P._locked(str(entry), project=project):
+        _verify_routing(routing, original_paths, paths, project)
+        C._require(not pending.exists(), 'recovery_required')
+        captured = H.Store(entry).capture()
+        _branch_destination_clean(entry, captured, project)
+        operation = 'branch-adopt-' + uuid.uuid4().hex
+        mutation = Branch.prepare_adoption(entry, source, choices={} if choices is None else choices, by=by,
+            operation=operation, recorded_at=datetime.datetime.now(datetime.timezone.utc).isoformat(),
+            capture=captured)
+        value = {'version': 1, 'kind': 'history-branch-adoption/v1', 'routing': routing,
+                 'mutation': T._blob(mutation.to_bytes()), 'source': T._blob(Branch.to_bytes(source)),
+                 'source_ref': ref}
+        envelope = {**value, 'digest': identity(value)}
+        T.publish_immutable(pending.parent / '.gitignore', b'*\n', root=entry.parent)
+        T.publish_immutable(pending, C.encode_document(envelope), root=entry.parent)
+        Branch.commit_adoption(entry, mutation, source, verify=lambda data:
+            _verify_routing(routing, original_paths, paths, project))
+        pending.unlink()
+        T._sync(pending.parent)
+        P.forget(entry)
+    return {'state': 'adopted', 'source_revision': source['revision'],
+            'source_commit': source['manifest']['source']['commit'], 'operation': operation}
+
+
+def adopt_branches(paths, refs, *, choices=None, by=None, preview=False, as_of=None,
+                   expected_source_revision=None):
+    """Atomically adopt a bounded, pinned set of local branch captures.
+
+    The retained journal contains every captured source byte.  Recovery therefore
+    never needs the named refs (or Git) again.
+    """
+    from . import history_branch as Branch
+    C._require(isinstance(refs, (list, tuple)) and refs, 'invalid_branch_source_set')
+    if len(refs) == 1:
+        return adopt_branch(paths, refs[0], choices=choices, by=by, preview=preview,
+                            as_of=as_of, expected_source_revision=expected_source_revision)
+    C._require(2 <= len(refs) <= 16 and all(isinstance(ref, str) and ref for ref in refs),
+               'invalid_branch_source_set')
+    original_paths = list(paths)
+    views = P._peer('knowledge_views')
+    project = views.project_for(original_paths)
+    policy = project.config()
+    paths = views.write_paths(original_paths)
+    C._require(project.git and len(paths) == 1, 'branch_history_requires_git_record')
+    entry = Path(paths[0]).resolve()
+    try:
+        source_entry = entry.relative_to(project.root).as_posix()
+    except ValueError:
+        raise C.HistoryError('branch_target_outside_checkout', str(entry)) from None
+    C._require(active(paths), 'history_not_active')
+
+    # Check the aggregate as each pinned source arrives, before admitting the
+    # next source into the operation.  _source_set then validates and orders the
+    # exact same bytes used by preview, preparation and replay.
+    sources, total = [], 0
+    for ref in refs:
+        source = Branch.capture(project.root, ref, entry=source_entry, as_of=as_of)
+        total += sum(len(raw) for raw in source['files'].values())
+        C._require(total <= Branch.MAX_BYTES, 'branch_capture_limit')
+        sources.append((ref, source))
+    ordered, _, source_set_revision = Branch._source_set([source for _, source in sources])
+    by_revision = {source['revision']: ref for ref, source in sources}
+    source_list = [{'ref': by_revision[source['revision']],
+                    'revision': source['revision'], 'source': T._blob(Branch.to_bytes(source))}
+                   for source in ordered]
+    if expected_source_revision is not None:
+        C._require(source_set_revision == expected_source_revision, 'branch_source_changed')
+    routing = _routing(original_paths, paths, project)
+    C._require(routing['policy'] == policy, 'history_routing_changed')
+    pending = T._target(entry.parent, journal(entry))
+    envelopes = ordered
+    if preview:
+        captured = H.Store(entry).capture()
+        result = Branch.preview_adoption_set(captured, envelopes, entry=entry)
+        _verify_routing(routing, original_paths, paths, project)
+        C._require(H.Store(entry).capture().inventory == captured.inventory, 'stale_baseline')
+        return {**result, 'state': 'prepared', 'admission': 'requires_explicit_choices',
+                'source_refs': [item['ref'] for item in source_list]}
+    with P._locked(str(entry), project=project):
+        _verify_routing(routing, original_paths, paths, project)
+        C._require(not pending.exists(), 'recovery_required')
+        captured = H.Store(entry).capture()
+        _branch_destination_clean(entry, captured, project)
+        operation = 'branch-adopt-set-' + uuid.uuid4().hex
+        mutation = Branch.prepare_adoption_set(entry, envelopes, choices={} if choices is None else choices,
+            by=by, operation=operation, recorded_at=datetime.datetime.now(datetime.timezone.utc).isoformat(),
+            capture=captured)
+        value = {'version': 1, 'kind': 'history-branch-adoption-set/v1', 'routing': routing,
+                 'mutation': T._blob(mutation.to_bytes()), 'sources': source_list}
+        envelope = {**value, 'digest': identity(value)}
+        T.publish_immutable(pending.parent / '.gitignore', b'*\n', root=entry.parent)
+        T.publish_immutable(pending, C.encode_document(envelope), root=entry.parent)
+        Branch.commit_adoption_set(entry, mutation, envelopes, verify=lambda data:
+            _verify_routing(routing, original_paths, paths, project))
+        pending.unlink()
+        T._sync(pending.parent)
+        P.forget(entry)
+    return {'state': 'adopted', 'source_set_revision': source_set_revision,
+            'source_revisions': [source['revision'] for source in envelopes],
+            'source_commits': [source['manifest']['source']['commit'] for source in envelopes],
+            'operation': operation}
+
+
+def _recover_branch_adoption(entry, raw, project, original_paths, paths, direction):
+    from . import history_branch as Branch
+    envelope = C.decode_document(raw)
+    C._mapping(envelope, ('version', 'kind', 'routing', 'mutation', 'source', 'source_ref', 'digest'))
+    C._require(type(envelope['version']) is int and envelope['version'] == 1 and
+               envelope['kind'] == 'history-branch-adoption/v1' and
+               envelope['digest'] == identity({key: value for key, value in envelope.items() if key != 'digest'}),
+               'invalid_history_journal')
+    mutation = T.PreparedMutation.from_bytes(T._unblob(envelope['mutation']))
+    source = Branch.from_bytes(T._unblob(envelope['source']))
+    _verify_routing(envelope['routing'], original_paths, paths, project)
+    pending = T._target(entry.parent, journal(entry))
+    C._require(pending.read_bytes() == raw, 'concurrent_edit')
+    if direction == 'before':
+        C._require(mutation.to_data()['operation'] not in H.Store(entry).capture().commits,
+                   'history_already_committed')
+        Branch.verify_adoption(entry, mutation, source)
+    else:
+        Branch.commit_adoption(entry, mutation, source, verify=lambda data:
+            _verify_routing(envelope['routing'], original_paths, paths, project))
+    C._require(pending.read_bytes() == raw, 'concurrent_edit')
+    pending.unlink()
+    T._sync(pending.parent)
+    P.forget(entry)
+    return mutation
+
+
+def _recover_branch_adoption_set(entry, raw, project, original_paths, paths, direction):
+    """Replay or cancel a retained multi-source branch operation without Git."""
+    from . import history_branch as Branch
+    envelope = C.decode_document(raw)
+    C._mapping(envelope, ('version', 'kind', 'routing', 'mutation', 'sources', 'digest'))
+    C._require(type(envelope['version']) is int and envelope['version'] == 1 and
+               envelope['kind'] == 'history-branch-adoption-set/v1' and
+               envelope['digest'] == identity({key: value for key, value in envelope.items() if key != 'digest'}),
+               'invalid_history_journal')
+    C._require(isinstance(envelope['sources'], list) and 2 <= len(envelope['sources']) <= 16,
+               'invalid_history_journal')
+    sources, revisions = [], []
+    for item in envelope['sources']:
+        C._mapping(item, ('ref', 'revision', 'source'))
+        C._require(isinstance(item['ref'], str) and item['ref'], 'invalid_history_journal')
+        source = Branch.from_bytes(T._unblob(item['source']))
+        C._require(source['revision'] == item['revision'], 'invalid_history_journal')
+        sources.append(source)
+        revisions.append(item['revision'])
+    ordered, _, revision = Branch._source_set(sources)
+    C._require([item['revision'] for item in ordered] == revisions, 'invalid_history_journal')
+    mutation = T.PreparedMutation.from_bytes(T._unblob(envelope['mutation']))
+    adoption = mutation.to_data()['receipt']['after'].get('history_branch_adoption', {})
+    C._require(adoption.get('version') == 2 and adoption.get('source_set_revision') == revision,
+               'invalid_history_journal')
+    _verify_routing(envelope['routing'], original_paths, paths, project)
+    pending = T._target(entry.parent, journal(entry))
+    C._require(pending.read_bytes() == raw, 'concurrent_edit')
+    if direction == 'before':
+        C._require(mutation.to_data()['operation'] not in H.Store(entry).capture().commits,
+                   'history_already_committed')
+        Branch.verify_adoption_set(entry, mutation, ordered)
+    else:
+        Branch.commit_adoption_set(entry, mutation, ordered, verify=lambda data:
+            _verify_routing(envelope['routing'], original_paths, paths, project))
+    C._require(pending.read_bytes() == raw, 'concurrent_edit')
+    pending.unlink()
+    T._sync(pending.parent)
+    P.forget(entry)
+    return mutation
 
 
 def _recover_adoption(entry, raw, project, original_paths, paths, direction):

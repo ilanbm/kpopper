@@ -4,7 +4,7 @@ import datetime
 import unittest
 from unittest import mock
 
-from scripts import history_contract as H, history_transaction as T, provenance as P, versions as V
+from scripts import history_contract as H, history_paths as HP, history_transaction as T, provenance as P, versions as V
 from scripts.pending_grounding import identity
 from scripts.reasoning.snapshot import Snapshot
 
@@ -97,9 +97,14 @@ class TypedObjects(unittest.TestCase):
             H.validate_closure({v['id']: v for v in (source, act, obj)})
 
     def test_subject_and_operation_cannot_escape_store(self):
-        for key in ('subject', 'operation'):
-            with self.subTest(key=key), self.assertRaises(H.HistoryError):
-                claim(**{key: '../escape'})
+        with self.assertRaises(H.HistoryError):
+            claim(operation='../escape')
+        obj = claim(subject='../escape')
+        self.assertEqual(obj['subject'], '../escape')
+        path = HP.object_path(obj['subject'], obj['id'])
+        self.assertTrue(path.split('/')[0].startswith('~'))
+        self.assertNotIn('..', path.split('/'))
+        self.assertEqual(HP.validate_object_path(path, obj['subject'], obj['id']), HP.HASHED)
 
 
 class CapturedEvidence(unittest.TestCase):

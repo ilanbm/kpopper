@@ -207,7 +207,10 @@ class PreparedMutation:
                            ((candidate.parent == Path(paths['home']) / 'evidence' / 'reports' and candidate.suffix == '.txt') or
                             (candidate.parent == Path(paths['home']) / 'evidence' / 'view-edits' and candidate.suffix == '.yaml'
                              and receipt['before'].get('history_edit') == {'version': 1, 'kind': 'view-edit-proposals'}
-                             and receipt['before'].get('authoring', {}).get('kind') == 'view-edit-proposals')),
+                             and receipt['before'].get('authoring', {}).get('kind') == 'view-edit-proposals') or
+                            (candidate.parent == Path(paths['home']) / 'evidence' / 'branches' and
+                             candidate.suffix == '.json' and C.HEX.fullmatch(candidate.stem) and
+                             'history_branch_adoption' in receipt['after'])),
                            'invalid_history_evidence')
                 C._text(candidate.stem)
                 expected = '/' + item['path']
@@ -234,6 +237,9 @@ class PreparedMutation:
             encoded.append({**item, 'before': _blob(item['before']), 'after': _blob(item['after'])})
         encoded.sort(key=lambda item: item['path'])
         C._require(len({item['path'] for item in encoded}) == len(encoded), 'duplicate_path')
+        if 'history_branch_adoption' in receipt['after']:
+            from . import history_branch
+            history_branch.audit_evidences({'entry': entry, 'receipt': receipt, 'files': files})
         if next_marker is not None:
             C._require(all(item['role'] in ('record', 'history_authority', 'history_object',
                                           'history_commit', 'history_retained') for item in files),
@@ -384,6 +390,32 @@ def auxiliary_envelope(mutation):
     raw = json_bytes(_encode({**body, 'digest': identity(body)}))
     C._require(len(raw) <= MAX_TRANSACTION_BYTES, 'history_limit')
     return raw
+
+
+def decode_auxiliary_envelope(raw):
+    """Decode the exact owned journal, without treating its data as write permission."""
+    C._require(type(raw) is bytes and len(raw) <= MAX_TRANSACTION_BYTES, 'history_limit')
+    try:
+        try:
+            from .reasoning.snapshot import _json_object, _json_constant, _check_typed_json
+        except ImportError:
+            from reasoning.snapshot import _json_object, _json_constant, _check_typed_json
+        encoded = json.loads(raw.decode('utf-8'), object_pairs_hook=_json_object, parse_constant=_json_constant)
+        _check_typed_json(encoded)
+        value = _decode(encoded)
+        C._require(_encode(value) == encoded, 'invalid_auxiliary_journal')
+        C._mapping(value, ('version', 'kind', 'mutation', 'digest'))
+        C._require(type(value['version']) is int and value['version'] == 1 and
+                   value['kind'] == AUXILIARY_KIND, 'invalid_auxiliary_journal')
+        C._require(value['digest'] == identity({key: item for key, item in value.items() if key != 'digest'}),
+                   'invalid_auxiliary_journal')
+        mutation = PreparedMutation.from_bytes(_unblob(value['mutation']))
+        C._require(raw == auxiliary_envelope(mutation), 'invalid_auxiliary_journal')
+        return mutation
+    except (ValueError, TypeError, KeyError, RecursionError, AttributeError) as error:
+        if isinstance(error, C.HistoryError):
+            raise
+        raise C.HistoryError('invalid_auxiliary_journal') from error
 
 
 def _exclusive_owned(root):

@@ -81,7 +81,7 @@ def _native_audit_key(implementation):
 
 
 def _recorded_adapter_audit(receipt):
-    """Authenticate retained hash structure; never assert historical code ran now."""
+    """Validate internal audit hashes; this alone does not establish provenance."""
     audits = {}
     pending = [receipt]
     while pending:
@@ -112,6 +112,34 @@ def _recorded_adapter_audit(receipt):
             if isinstance(step, dict) and 'receipt' in step:
                 pending.append(step['receipt'])
     return audits
+
+
+
+def _witnessed_adapter_audit(receipt, parents):
+    """Trust only the current adapter or audit already recorded by causal parents.
+
+    The incoming operation, its own committed retry manifest, sibling commits,
+    and caller-supplied hashes cannot establish historical adapter provenance.
+    A first pending operation from an otherwise unwitnessed older adapter must
+    finish using its original verified runtime; it is never silently regenerated.
+    """
+    from .reasoning import adapter_identity
+    actual = adapter_identity()
+    witnessed = set()
+    for raw in parents.values():
+        parent = C.validate_commit(C.decode_document(raw))
+        prior = parent['receipt']
+        # Legacy low-level bootstrap receipts may carry no semantic assessment.
+        # They remain readable, but cannot witness an adapter they never named.
+        if not {'before', 'after', 'capabilities', 'profile', 'digest'} <= set(prior):
+            continue
+        witnessed.update(reasoning_digest(audit) for audit in _recorded_adapter_audit(prior).values())
+    recorded = _recorded_adapter_audit(receipt)
+    for audit in recorded.values():
+        C._require(audit['adapter_source_sha256'] == actual or reasoning_digest(audit) in witnessed,
+                   'unknown_retained_adapter_audit',
+                   'no current or committed causal-parent witness; use the original verified runtime')
+    return recorded
 
 
 def _retain_adapter_audit(report):
@@ -846,7 +874,7 @@ def verify_prepared(entry, mutation):
     before = next(i['before'] for i in mutation.files if i['role'] == 'record')
     captured = replace(live, entry_bytes=before, document=C.decode_document(before), commits=commits,
                        objects=objects, state=state, baseline=H.baseline(live.marker, commits, state))
-    token = _REPLAY_AUDIT.set(_recorded_adapter_audit(data['receipt']))
+    token = _REPLAY_AUDIT.set(_witnessed_adapter_audit(data['receipt'], commits))
     try:
         strict = C.EXPLICIT_ROOT_DISPOSITION in manifest.get('requires', [])
         if intent['version'] == 5:

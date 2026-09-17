@@ -307,13 +307,23 @@ class Components(unittest.TestCase):
         self.assertIn('data-id="repair.status">waiting on <span class="fx in" data-id="repair.grant">', page)
 
     def test_short_ids_cannot_be_used_as_unlabelled_reading_text(self):
-        for label, key in [('record language', 'language'), ('record name', 'name'), ('last updated', 'updated')]:
-            failures, _ = self.lint(lambda page: page.replace(
-                '<td class="kl" dir="auto">' + label + '</td>', '<td class="kl" dir="auto">' + key + '</td>'))
+        entries = {
+            'language': {'v': 'English', 'name': 'Record language'},
+            'name': {'v': 'Greenhouse', 'name': 'Record name'},
+            'updated': {'v': '2026-09-03', 'name': 'Last updated'},
+            'approval': {'v': 'waiting', 'name': 'Approval status'},
+        }
+        self.change(self.record, lambda d: d['known'].update(entries))
+        self.change(self.brief, lambda d: d['tabs'][0]['sections'].append(
+            {'title': 'Record details', 'why': 'Short identifiers need readable labels', 'text': ''}))
+        section = lambda d: d['tabs'][0]['sections'][-1]
+        for key in entries:
+            self.change(self.brief, lambda d, key=key: section(d).update(text=key))
+            failures, _ = self.lint()
             self.assertTrue(any('bare key on the reading surface: ' + key in x for x in failures), failures)
-        self.change(self.record, lambda d: d['known'].update({'approval': {'v': 'waiting'}}))
-        self.change(self.brief, lambda d: d['tabs'][0]['sections'][4].update(text='approval'))
-        self.assertTrue(any('bare key on the reading surface: approval' in x for x in self.lint()[0]))
+        self.change(self.brief, lambda d: section(d).update(text='{{approval}}'))
+        failures, _ = self.lint()
+        self.assertFalse(any('bare key on the reading surface: approval' in x for x in failures), failures)
 
     def test_awaited_namespaces_remain_distinguishable(self):
         self.change(self.record, lambda d: d['judgments']['c.ready'].update(

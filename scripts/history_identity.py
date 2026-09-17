@@ -19,12 +19,20 @@ from . import history_paths as HP
 _UNSET = object()
 
 
+def _brief_text(raw):
+    C._require(type(raw) is bytes, 'invalid_brief_encoding')
+    try:
+        return raw.decode('utf-8')
+    except UnicodeDecodeError:
+        raise C.HistoryError('invalid_brief_encoding', 'brief must be valid UTF-8') from None
+
+
 def _rewrite_brief(raw, retired, survivor, fields):
     """Apply the established brief migration without manufacturing review evidence."""
     if raw is None:
         return None
     C._require(type(raw) is bytes and len(raw) <= C.MAX_REQUEST_BYTES, 'history_limit')
-    text = raw.decode('utf-8')
+    text = _brief_text(raw)
     if not S._token(retired).search(text):
         return raw
     document = C.decode_document(raw)
@@ -178,7 +186,7 @@ def _finish(store, captured, objects, template, intent, before, after, *, brief_
     intent = {**intent, 'version': 2 if changed_view else 1}
     if changed_view:
         intent['brief'] = {'path': Path(store.layout['view']).relative_to(store.root).as_posix(),
-            'before_utf8': view.decode('utf-8'), 'before_sha256': C.sha256(view), 'after_sha256': C.sha256(view_after)}
+            'before_utf8': _brief_text(view), 'before_sha256': C.sha256(view), 'after_sha256': C.sha256(view_after)}
     view_hash = C.sha256(view) if view is not None else None
     before_evidence = A._evidence(before, A._world(before))
     before_evidence['identity_authoring'] = {**intent, 'baseline': captured.baseline,

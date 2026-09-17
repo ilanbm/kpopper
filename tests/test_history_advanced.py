@@ -6,7 +6,7 @@ import shutil
 import unittest
 from unittest import mock
 
-from scripts import history_bundle as B, history_contract as C, history_store as H
+from scripts import history_bundle as B, history_contract as C, history_paths as HP, history_store as H
 from scripts import pending_grounding as G, knowledge_views as V, project_modes as M
 from scripts.reasoning import snapshot as S
 from tests import test_history_bundles as fixture
@@ -224,14 +224,37 @@ class HistoryPublication(unittest.TestCase):
         self.seed_target(source)
         initial_raw = source.store.capture().commits['initial']
         newer = fixture.reading(value=12, operation='newer')
-        source.publish([newer, act(newer, 'correct', operation='correct', over=[source.first['id']])], 'newer')
+        correction = act(newer, 'correct', operation='correct', over=[source.first['id']])
+        source.publish([newer, correction], 'newer')
+        # The target started with the fixture's old literal subject directory.
+        # Retain this source's newer entries under their validated hashed paths,
+        # so publication must carry both physical layouts exactly.
+        manifest_path = Path(source.store.layout['history_commits']) / 'newer.yaml'
+        manifest = C.decode_document(manifest_path.read_bytes())
+        manifest['requires'] = [HP.CAPABILITY]
+        manifest_path.write_bytes(C.encode_document(manifest))
+        source.entry.write_bytes(source.store.render(source.store.capture()))
+        for obj in (newer, correction):
+            old = Path(source.store.layout['history']) / obj['subject'] / (obj['id'] + '.yaml')
+            relative = HP.object_path(obj['subject'], obj['id'])
+            fresh = Path(source.store.layout['history']) / relative
+            fresh.parent.mkdir(parents=True, exist_ok=True)
+            old.replace(fresh)
         bundle = self.queue(source)
+        incoming = B.validate(B.from_contribution(bundle))
+        for obj in (newer, correction):
+            self.assertEqual(incoming.object_paths[(obj['subject'], obj['id'])],
+                             HP.object_path(obj['subject'], obj['id']))
         before = (self.root / 'GROUNDING.yaml').read_bytes()
         proposed = self.publisher.run(force_retry=True)
         self.assertEqual(proposed['outcome'], 'proposed', proposed)
         self.assertEqual((self.root / 'GROUNDING.yaml').read_bytes(), before)
         head = self.remote_head()
         self.assertEqual(M.git(self.remote, 'show', head + ':.kpopper/history-commits/initial.yaml').stdout, initial_raw)
+        for obj in (newer, correction):
+            path = incoming.object_paths[(obj['subject'], obj['id'])]
+            self.assertEqual(M.git(self.remote, 'show', head + ':.kpopper/history/' + path).stdout,
+                             incoming.storage_bytes[path])
         self.assertEqual(M.git(self.remote, 'show', head + ':app.txt').stdout, b'target code\n')
         self.assertTrue(M.git(self.remote, 'show', head + ':.kpopper-contributions/' + bundle['revision'] + '/manifest.json').stdout)
         self.merge('squash')

@@ -450,30 +450,59 @@ def _validate_subset(captured, manifest):
 def preview_adoption(target, artifact):
     """Read-only overlapping subjects and explicit immutable choices available."""
     source = validate(artifact)
+    C._require(artifact['manifest']['version'] == 2, 'subset_adoption_required')
+    C._require(target.marker['record_id'] != source.marker['record_id'], 'independent_adoption_required')
+    return _preview_capture_adoption(target, source, artifact['revision'])
+
+
+def _preview_capture_adoption(target, source, revision, observations=None, *, additional_sources=(), required_choices=()):
+    """Read-only overlapping subjects and explicit immutable choices available."""
     actual = C.committed_objects(target.marker, target.commits, target.object_bytes)
     C._require(G.identity(actual) == G.identity(target.objects) and
                G.identity(H.reduce(actual, target.state['rules'])) == G.identity(target.state),
                'invalid_target_capture')
-    C._require(artifact['manifest']['version'] == 2, 'subset_adoption_required')
-    C._require(target.marker['record_id'] != source.marker['record_id'], 'independent_adoption_required')
+    incoming = {}
+    source_subjects = {}
+    for captured in (source, *additional_sources):
+        for subject in captured.state['subjects']:
+            source_subjects[subject] = source_subjects.get(subject, 0) + 1
+        for version, obj in captured.objects.items():
+            C._require(version not in incoming or G.identity(incoming[version]) == G.identity(obj), 'identity_mismatch')
+            incoming[version] = obj
+    incoming.update(observations or {})
+    C.validate_closure(incoming)
+    incoming_state = H.reduce(incoming, source.state['rules'])
     combined = dict(target.objects)
-    for version, obj in source.objects.items():
+    for version, obj in incoming.items():
         C._require(version not in combined or G.identity(combined[version]) == G.identity(obj), 'identity_mismatch')
         combined[version] = obj
     state = H.reduce(combined, target.state['rules'])
-    overlap = set(target.state['subjects']) & set(source.state['subjects'])
-    return {'artifact_revision': artifact['revision'], 'target_authority': copy.deepcopy(target.marker),
+    overlap = (set(target.state['subjects']) & set(incoming_state['subjects'])) | set(required_choices) | {
+        subject for subject, count in source_subjects.items() if count > 1}
+    return {'artifact_revision': revision, 'target_authority': copy.deepcopy(target.marker),
             'target_baseline': copy.deepcopy(target.baseline),
             'subjects': {subject: {'requires_choice': subject in overlap,
                 'target_heads': target.state['subjects'].get(subject, {}).get('heads', []),
-                'incoming_heads': source.state['subjects'][subject]['heads'],
+                'incoming_heads': incoming_state['subjects'][subject]['heads'],
                 'combined_heads': state['subjects'][subject]['heads'],
                 'claims': sorted(version for version, obj in combined.items()
                                  if obj['subject'] == subject and obj['kind'] != 'act')}
-                for subject in sorted(source.state['subjects'])}}
+                for subject in sorted(incoming_state['subjects'])}}
 
 
 def prepare_adoption(entry, artifact, *, choices, by, operation, recorded_at, capture=None):
+    """Prepare the existing scoped contribution protocol without changing its identity."""
+    source = validate(artifact)
+    C._require(artifact['manifest']['version'] == 2, 'subset_adoption_required')
+    target = capture or H.Store(entry).capture()
+    C._require(target.marker['record_id'] != source.marker['record_id'], 'independent_adoption_required')
+    return _prepare_capture_adoption(entry, source, artifact['revision'], choices=choices, by=by,
+                                     operation=operation, recorded_at=recorded_at, capture=target)
+
+
+def _prepare_capture_adoption(entry, source, revision, *, choices, by, operation, recorded_at,
+                              capture=None, source_binding=None, observations=None, audit_files=None,
+                              additional_sources=(), required_choices=()):
     """Prepare explicit target adoption; the caller still owns publication authority.
 
     Every overlapping subject (including dependencies) requires one chosen claim.
@@ -485,20 +514,28 @@ def prepare_adoption(entry, artifact, *, choices, by, operation, recorded_at, ca
     from . import history_transaction as T
     store = H.Store(entry)
     target = capture or store.capture()
-    source = validate(artifact)
-    preview = preview_adoption(target, artifact)
+    observations = observations or {}
+    preview = _preview_capture_adoption(target, source, revision, observations,
+        additional_sources=additional_sources, required_choices=required_choices)
     C._text(operation)
     C._require(operation not in target.commits, 'operation_already_prepared')
     C._require(isinstance(by, str) and by and isinstance(recorded_at, str) and recorded_at, 'invalid_adopter')
     C._require(isinstance(choices, dict), 'invalid_adoption_choices')
     overlap = {s for s, item in preview['subjects'].items() if item['requires_choice']}
     C._require(overlap <= set(choices) <= set(preview['subjects']), 'adoption_choice_required')
-    C._require(G.identity(source.state['rules']) == G.identity(target.state['rules']), 'rules_mismatch')
-    combined = {**target.objects, **source.objects}
+    sources = (source, *additional_sources)
+    incoming = {}
     raw_objects = dict(target.object_bytes)
-    for key, raw in source.object_bytes.items():
-        C._require(key not in raw_objects or raw_objects[key] == raw, 'object_bytes_mismatch')
-        raw_objects[key] = raw
+    for captured in sources:
+        C._require(G.identity(captured.state['rules']) == G.identity(target.state['rules']), 'rules_mismatch')
+        incoming.update(captured.objects)
+        for key, raw in captured.object_bytes.items():
+            C._require(key not in raw_objects or raw_objects[key] == raw, 'object_bytes_mismatch')
+            raw_objects[key] = raw
+    incoming.update(observations)
+    combined = {**target.objects, **incoming}
+    for version, obj in observations.items():
+        raw_objects[(obj['subject'], version)] = C.encode_document(obj)
     before_state = H.reduce(combined, target.state['rules'])
     resolutions = []
     for subject, chosen in sorted(choices.items()):
@@ -510,7 +547,7 @@ def prepare_adoption(entry, artifact, *, choices, by, operation, recorded_at, ca
         obj = C.make_object(subject=subject, kind='act', by=by, on=recorded_at,
             operation=operation, saw=saw,
             body={'act': 'accept', 'of': chosen, 'over': sorted(competing - {chosen}),
-                  'because': 'explicit adoption of ' + artifact['revision']})
+                  'because': ('explicit branch adoption of ' if source_binding else 'explicit adoption of ') + revision})
         resolutions.append(obj)
         combined[obj['id']] = obj
         raw_objects[(subject, obj['id'])] = C.encode_document(obj)
@@ -522,27 +559,40 @@ def prepare_adoption(entry, artifact, *, choices, by, operation, recorded_at, ca
             for vid in actual['heads']), 'unresolved_adoption_choice', subject)
     template = H.Store._template(target.commits)
     C._require('history_subset' not in template.get('meta', {}), 'cannot_adopt_into_transport_authority')
-    incoming_template = H.Store._template(source.commits)
     # Adopter cannot silently promote/change profiles or reinterpret field roles.
-    C._require(G.identity(template.get('schema', {})) == G.identity(incoming_template.get('schema', {})) and
-               G.identity(template.get('meta', {}).get('reasoning')) ==
-               G.identity(incoming_template.get('meta', {}).get('reasoning')), 'adoption_profile_mismatch')
-    for obj in source.objects.values():
+    for captured in sources:
+        incoming_template = H.Store._template(captured.commits)
+        C._require(G.identity(template.get('schema', {})) == G.identity(incoming_template.get('schema', {})) and
+                   G.identity(template.get('meta', {}).get('reasoning')) ==
+                   G.identity(incoming_template.get('meta', {}).get('reasoning')), 'adoption_profile_mismatch')
+    for obj in incoming.values():
         if obj['kind'] != 'act':
             template.setdefault(obj['authored']['collection'], {})
-    inventory = {vid: {'subject': obj['subject'], 'sha256': C.sha256(source.object_bytes[(obj['subject'], vid)])}
-                 for vid, obj in sorted(source.objects.items())}
-    adoption = {'version': 1, 'artifact_revision': artifact['revision'], 'objects': inventory,
+    inventory = {vid: {'subject': obj['subject'], 'sha256': C.sha256(raw_objects[(obj['subject'], vid)])}
+                 for vid, obj in sorted(incoming.items())}
+    adoption = {'version': 1, 'artifact_revision': revision, 'objects': inventory,
                 'choices': copy.deepcopy(choices), 'by': by, 'recorded_at': recorded_at,
                 'resolutions': sorted(obj['id'] for obj in resolutions)}
+    if source_binding is not None:
+        adoption.pop('artifact_revision')
+        if source_binding.get('version') == 2:
+            adoption.update(version=2, source_set_revision=revision,
+                source_revisions=copy.deepcopy(source_binding['source_revisions']),
+                sources=copy.deepcopy(source_binding['sources']), observed_proposals=sorted(observations))
+        else:
+            adoption.update(source_revision=revision, source=copy.deepcopy(source_binding),
+                            observed_proposals=sorted(observations))
     cap_doc = copy.deepcopy(template)
     cap_doc.get('meta', {}).pop('history', None)
     cap = G.document_capabilities(cap_doc)
+    before_receipt = {'baseline': target.baseline}
+    if audit_files:
+        before_receipt['authoring'] = {'evidence': {path: C.sha256(raw) for path, raw in audit_files.items()}}
     receipt = T.semantic_receipt(profile=cap['profile'], capabilities=cap,
-                                  before={'baseline': target.baseline}, after={'history_adoption': adoption})
+                                  before=before_receipt, after={'history_branch_adoption' if source_binding is not None else 'history_adoption': adoption})
     # Inventory repeats already-held contribution objects to prove exact adoption
     # within this particular committed receipt; publication need not rewrite them.
-    adopted = {**source.objects, **{obj['id']: obj for obj in resolutions}}
+    adopted = {**incoming, **{obj['id']: obj for obj in resolutions}}
     pairs = [(obj, raw_objects[(obj['subject'], vid)]) for vid, obj in adopted.items()]
     args = dict(marker=target.marker, operation=operation, parents=C.commit_frontier(target.commits),
                 baseline=target.baseline, objects=pairs, receipt=receipt, view_template=template, requires=HP.commit_requires())
@@ -551,7 +601,11 @@ def prepare_adoption(entry, artifact, *, choices, by, operation, recorded_at, ca
     candidate = replace(target, objects=combined, object_bytes=raw_objects, commits=commits, state=state,
                         baseline=H.baseline(target.marker, commits, state))
     rendered = store.render(candidate)
-    A.from_store_capture(candidate)
+    adapted = A.from_store_capture(candidate)
+    if source_binding is not None:
+        from . import history_hypotheses as HH
+        groups, _ = HH.layers(adapted.projection, adapted.document)
+        C._require(all(not group['error'] for group in groups.values()), 'branch_hypothesis_conflict')
     commit = C.make_commit(**args, view=rendered)
     files = [{'path': store.entry.name, 'role': 'record', 'before': target.entry_bytes, 'after': rendered}]
     for obj, raw in pairs:
@@ -562,6 +616,8 @@ def prepare_adoption(entry, artifact, *, choices, by, operation, recorded_at, ca
     path = Path(store.layout['history_commits']) / (operation + '.yaml')
     files.append({'path': path.relative_to(store.root).as_posix(), 'role': 'history_commit',
                   'before': None, 'after': C.encode_document(commit)})
+    for path, raw in sorted((audit_files or {}).items()):
+        files.append({'path': path, 'role': 'history_evidence', 'before': None, 'after': raw})
     return T.PreparedMutation(operation=operation, authority=target.marker, baseline=target.baseline,
                               files=files, receipt=receipt, entry=store.entry.name)
 
@@ -590,14 +646,8 @@ def adopted_by(target, artifact):
     return False
 
 
-@HP.replay_mutation
-def verify_adoption(entry, mutation, artifact, *, capture=None):
-    """Verify an exact retained adoption against its committed parent closure."""
+def _adoption_before(live, mutation):
     from dataclasses import replace
-    from . import history_transaction as T
-    mutation = T.PreparedMutation.from_bytes(mutation.to_bytes())
-    data = mutation.to_data()
-    live = capture or H.Store(entry).capture()
     manifest = C.decode_document(next(item['after'] for item in mutation.files if item['role'] == 'history_commit'))
     known, pending = set(), list(manifest['parents'])
     while pending:
@@ -611,11 +661,21 @@ def verify_adoption(entry, mutation, artifact, *, capture=None):
     objects = C.committed_objects(live.marker, commits, live.object_bytes)
     state = H.reduce(objects, live.state['rules'])
     record = next(item for item in mutation.files if item['role'] == 'record')
-    before = replace(live, entry_bytes=record['before'], document=C.decode_document(record['before']),
+    return replace(live, entry_bytes=record['before'], document=C.decode_document(record['before']),
                      commits=commits, objects=objects,
                      object_bytes={(obj['subject'], version): live.object_bytes[(obj['subject'], version)]
                                    for version, obj in objects.items()},
                      state=state, baseline=H.baseline(live.marker, commits, state))
+
+
+@HP.replay_mutation
+def verify_adoption(entry, mutation, artifact, *, capture=None):
+    """Verify an exact retained adoption against its committed parent closure."""
+    from . import history_transaction as T
+    mutation = T.PreparedMutation.from_bytes(mutation.to_bytes())
+    data = mutation.to_data()
+    live = capture or H.Store(entry).capture()
+    before = _adoption_before(live, mutation)
     adoption = data['receipt']['after'].get('history_adoption', {})
     expected = prepare_adoption(entry, artifact, choices=adoption.get('choices'), by=adoption.get('by'),
                                  operation=data['operation'], recorded_at=adoption.get('recorded_at'), capture=before)

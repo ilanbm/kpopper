@@ -400,6 +400,7 @@ class Publisher:
         if captured is None:
             raise Attention('history contribution requires explicit target history migration')
         commits, objects = dict(captured.commits), dict(captured.object_bytes)
+        storage, object_paths = dict(captured.storage_bytes), dict(captured.object_paths)
         parent = PurePosixPath(self.project.config()['record']).parent
         layout = G.P.layout(self.project.record())
         additions = {}
@@ -435,7 +436,19 @@ class Publisher:
             for key, raw in incoming.object_bytes.items():
                 if key in objects and objects[key] != raw:
                     raise Attention('immutable history object collision: ' + key[1])
+                path = incoming.object_paths.get(key)
+                if path is None or path not in incoming.storage_bytes or incoming.storage_bytes[path] != raw:
+                    raise Attention('invalid incoming history object path: ' + key[1])
+                if key in object_paths and object_paths[key] != path:
+                    raise Attention('incompatible immutable history object representation: ' + key[1])
+                for existing_key, existing_path in object_paths.items():
+                    if existing_path == path and existing_key != key:
+                        raise Attention('incompatible immutable history storage path: ' + path)
+                if path in storage and storage[path] != incoming.storage_bytes[path]:
+                    raise Attention('immutable history storage collision: ' + path)
                 objects[key] = raw
+                storage[path] = incoming.storage_bytes[path]
+                object_paths[key] = path
             archive = parent / '.kpopper-contributions' / revision
             add(archive / 'manifest.json', G.json_bytes(G._encode(bundle['manifest'])))
             for name, raw in bundle['files'].items():
@@ -445,15 +458,19 @@ class Publisher:
         selected = B.C.committed_objects(captured.marker, commits, objects)
         state = B.H.reduce(selected, rules=captured.state['rules'])
         merged = replace(captured, commits=commits, object_bytes=objects, objects=selected,
-                         state=state, baseline=B.H.baseline(captured.marker, commits, state))
+                         state=state, baseline=B.H.baseline(captured.marker, commits, state),
+                         storage_bytes=storage, object_paths=object_paths)
         rendered = object.__new__(B.H.Store).render(merged)
         generated = B.C.decode_document(rendered)
         merged = replace(merged, entry_bytes=rendered, document=generated)
         observation = G.P._peer('knowledge_views').history_evidence(merged)
         for operation, raw in commits.items():
             add(Path(layout['history_commits']).relative_to(self.project.root) / (operation + '.yaml'), raw)
-        for (subject, version), raw in objects.items():
-            add(Path(layout['history']).relative_to(self.project.root) / subject / (version + '.yaml'), raw)
+        for key, raw in objects.items():
+            path = object_paths.get(key)
+            if path is None or storage.get(path) != raw:
+                raise Attention('invalid merged history object path: ' + key[1])
+            add(Path(layout['history']).relative_to(self.project.root) / path, raw)
         record = self.project.config()['record']
         if record in additions:
             raise Attention('evidence collides with history target entry')

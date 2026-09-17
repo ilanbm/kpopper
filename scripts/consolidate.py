@@ -25,6 +25,7 @@ it over this base as hypotheses named after the ref - a pull, never a push.
 """
 import contextlib, datetime, glob, io, os, posixpath, re, shlex, subprocess, sys, tempfile
 import yaml
+from pathlib import Path
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import provenance as P  # noqa: E402
@@ -743,12 +744,15 @@ def _next_command(paths, files, refs):
     return out
 
 
-def fold(paths, names=(), refs=(), stamp=None, take=(), drops=None):
+def fold(paths, names=(), refs=(), stamp=None, take=(), drops=None, *, by=None, choices=None,
+         expected_source_revision=None):
+    original_paths = list(paths)
     project = P._peer('knowledge_views').project_for(paths)
     paths = P._peer('knowledge_views').write_paths(paths)
     if P._peer('history_direct').active(paths):
         if refs:
-            raise P.Refused('history_branch_adoption_required: capture the branch history contribution explicitly')
+            return _history_adopt_from(original_paths, refs, names=names, take=take, drops=drops,
+                by=by, choices=choices, as_of=stamp, expected_source_revision=expected_source_revision)
         result = P._peer('history_direct').finish_hypotheses(paths, names, kind='fold',
             because='explicit consolidation', take=take, drops=drops)
         print(result['state'] + ': ' + ', '.join(result['hypotheses']))
@@ -1150,10 +1154,169 @@ def from_ref(paths, ref, doc=None):
     return out
 
 
+
+
+def _history_adopt_from(paths, refs, *, names=(), take=(), drops=None, by=None, choices=None,
+                        as_of=None, expected_source_revision=None, preview=False):
+    if not refs:
+        raise P.Refused('--from needs a committed source')
+    if names or take or drops:
+        raise P.Refused('history_branch_choices_required: --from cannot mix named hypotheses, --take or --drop; use --choose')
+    if not preview and (not isinstance(by, str) or not by.strip()):
+        raise P.Refused('--by ACTOR is required for explicit history branch adoption')
+    try:
+        result = P._peer('history_direct').adopt_branches(paths, refs, choices=choices or {}, by=by,
+            preview=preview, as_of=as_of, expected_source_revision=expected_source_revision)
+    except ValueError as error:
+        raise P.Refused(str(error)) from None
+    print('BRANCH ADOPTION PREVIEW — no target acceptance' if preview else 'BRANCH ADOPTED')
+    print(P._peer('history_contract').encode_document(result).decode('utf-8'), end='')
+    return 0
+
+
+def _history_read_current(entry):
+    """Capture standing history and physical/named proposals without parser caches."""
+    H, T, C, A, HH = (P._peer(name) for name in
+                     ('history_store', 'history_transaction', 'history_contract', 'history_adapter', 'history_hypotheses'))
+    store = H.Store(entry)
+    with T.reader_guard(store.root, T.journal_for(store.entry)):
+        captured = store.capture()
+        rendered = store.render(captured)
+        C._require(captured.entry_bytes == rendered or store._known_view(captured), 'unresolved_view_edit')
+        adapted = A.from_store_capture(captured)
+        physical, observed, total = {}, {}, 0
+        directory = Path(store.layout['hypotheses'])
+        listing = sorted(str(path) for suffix in ('*.yaml', '*.yml') for path in directory.glob(suffix))
+        C._require(len(listing) <= C.MAX_OBJECTS, 'history_limit')
+        for name in listing:
+            path = store._path(name)
+            C._require(path.is_file() and path.stat().st_size <= C.MAX_REQUEST_BYTES, 'history_limit')
+            raw = path.read_bytes()
+            total += len(raw)
+            C._require(total <= C.MAX_REQUEST_BYTES, 'history_limit')
+            observed[name] = raw
+            subject = C.hypothesis_name(path.stem)
+            C._require(subject not in physical, 'ambiguous_branch_hypothesis', subject)
+            document = C.decode_document(raw)
+            head = document.pop('hypothesis', {})
+            C._require(isinstance(head, dict), 'invalid_branch_hypothesis')
+            P._peer('reasoning.contract').capabilities(document)
+            physical[subject] = {'name': subject, 'path': str(path), 'doc': document,
+                                 'head': head, 'error': None}
+        physical = HH.active_physical(adapted.document, store.entry, physical)
+        named, _ = HH.layers(adapted.projection, adapted.document)
+        C._require(not set(named) & set(physical), 'hypothesis_authority_collision')
+        snapshot = adapted.snapshot(context={'read_mode': 'frozen'}, hypotheses={**physical, **named})
+        C._require(store.capture().inventory == captured.inventory, 'snapshot_changed')
+        C._require(listing == sorted(str(path) for suffix in ('*.yaml', '*.yml') for path in directory.glob(suffix)),
+                   'snapshot_changed')
+        C._require(all(Path(path).read_bytes() == raw for path, raw in observed.items()), 'snapshot_changed')
+        return captured, snapshot
+
+
+def _history_branch_context(paths, ref):
+    V, C, B = (P._peer(name) for name in ('knowledge_views', 'history_contract', 'history_branch'))
+    routed = V.write_paths(paths)
+    C._require(len(routed) == 1, 'history_branch_single_entry_required')
+    entry = Path(routed[0]).expanduser().resolve()
+    project = V.project_for(routed)
+    policy = project.config()
+    C._require(project.git, 'history_branch_git_required')
+    try:
+        relative = entry.relative_to(project.root).as_posix()
+    except ValueError:
+        raise P.Refused('history_branch_entry_outside_project: --from needs a record in the selected Git checkout') from None
+    envelope = B.capture(project.root, ref, entry=relative)
+    branch = B.validate(envelope)
+    branch_snapshot = B.snapshot(envelope)
+    current, current_snapshot = _history_read_current(entry)
+    C._require(project.config() == policy and list(map(os.path.realpath, V.write_paths(paths))) ==
+               list(map(os.path.realpath, routed)), 'history_routing_changed')
+    return entry, project, envelope, branch, branch_snapshot, current, current_snapshot
+
+
+def _history_pull_from(paths, ref, seeds, budget):
+    C, G = P._peer('history_contract'), P._peer('pending_grounding')
+    C._require(type(budget) is int and 1 <= budget <= 1000, 'invalid_pull_budget')
+    entry, project, envelope, branch, branch_snapshot, current, current_snapshot = _history_branch_context(paths, ref)
+    snapshots = {'current': current_snapshot.to_data(), 'branch': branch_snapshot.to_data()}
+    captures = {'current': current, 'branch': branch}
+    candidates = set(current.state['subjects']) | set(branch.state['subjects'])
+    for data in snapshots.values():
+        for hypothesis in data['hypotheses'].values():
+            candidates.update(G.entries(hypothesis['document']))
+    selected, unmatched = set(), []
+    for seed in seeds:
+        found = {subject for subject in candidates if subject == seed or subject.startswith(seed.rstrip('.') + '.')}
+        if not found:
+            unmatched.append(seed)
+        selected.update(found)
+    ordered = sorted(selected)
+    visible = ordered[:budget]
+    source = envelope['manifest']['source']
+    lines = ['BRANCH OBSERVATION — no target acceptance or adoption',
+             'source ref: ' + ref, 'source commit: ' + source['commit'],
+             'source entry: ' + source['entry'],
+             'branch authority: ' + branch.marker['record_id'] + ' / generation ' + str(branch.marker['generation']),
+             'branch committed set: ' + branch.baseline['committed_set_digest'], 'current record: ' + str(entry),
+             'current authority: ' + current.marker['record_id'] + ' / generation ' + str(current.marker['generation']),
+             'current committed set: ' + current.baseline['committed_set_digest'],
+             'subjects shown: ' + str(len(visible)) + '; omitted by budget: ' + str(len(ordered) - len(visible))]
+    if unmatched:
+        lines.append('unmatched seeds: ' + ', '.join(unmatched))
+    output_size = sum(len(line.encode('utf-8')) + 1 for line in lines)
+    def append_yaml(value):
+        nonlocal output_size
+        raw = C.encode_document(value)
+        output_size += len(raw) + 3 * (raw.count(b'\n') + 1)
+        C._require(output_size <= 1024 * 1024, 'branch_pull_output_limit')
+        lines.extend('  ' + line for line in raw.decode('utf-8').rstrip().splitlines())
+    for side, data in snapshots.items():
+        metadata = {key: value for key, value in data['document'].get('meta', {}).items() if key != 'history'}
+        if metadata:
+            lines.append(side + ' record metadata (generated baseline identified above):')
+            append_yaml(metadata)
+    for subject in visible:
+        lines.append('')
+        lines.append('SUBJECT ' + subject)
+        for side in ('current', 'branch'):
+            captured, data = captures[side], snapshots[side]
+            state = captured.state['subjects'].get(subject)
+            finding = {'standing': state['acceptance'] if state else 'absent',
+                       'heads': list(state['heads']) if state else [], 'original_claims': []}
+            if state:
+                for version in sorted(set(state['heads']) | set(state['proposals'])):
+                    obj = captured.objects[version]
+                    finding['original_claims'].append({'version': version,
+                        'disposition': 'head' if version in state['heads'] else 'proposal',
+                        'kind': obj['kind'], 'by': obj['by'], 'on': obj['on'], 'operation': obj['op'],
+                        'authored': obj.get('authored'), 'pins': obj.get('pins', {}),
+                        'pin_gaps': obj.get('pin_gaps', {}), 'body': obj['body']})
+            proposals = {}
+            for name, hypothesis in sorted(data['hypotheses'].items()):
+                pair = G.entries(hypothesis['document']).get(subject)
+                if pair is not None:
+                    proposals[name] = {'standing': 'proposal', 'head': hypothesis['head'],
+                        'collection': pair[0], 'body': pair[1], 'error': hypothesis.get('error')}
+            finding['named_proposals'] = proposals
+            lines.append(side + ':')
+            append_yaml(finding)
+    output = '\n'.join(lines)
+    C._require(len(output.encode('utf-8')) <= 1024 * 1024, 'branch_pull_output_limit')
+    print(output)
+    return 0
+
+
 def pull_from(paths, ref, seeds, budget=40):
     """`pull`, with another branch's committed record laid beside this one: what it proposes
     for the seed, said the way a hypothesis file's proposal is - the record loaded once, the
     branch's hypotheses laid over it, and handed to the reader's own pull."""
+    routed = P._peer('knowledge_views').write_paths(paths)
+    if P._peer('history_direct').active(routed):
+        try:
+            return _history_pull_from(paths, ref, seeds, budget)
+        except ValueError as error:
+            raise P.Refused(str(error)) from None
     hyps = from_ref(paths, ref)
     doc = P.load(paths)
     doc.hypotheses = dict(doc.hypotheses, **{h["name"]: h for h in hyps})
@@ -1164,6 +1327,15 @@ def pull_from(paths, ref, seeds, budget=40):
 HELP = """  consolidate [--dry-run] [<hypothesis> ...] [--from <ref>] [--take <id>] [--drop "<id>: <why>"] [--as-of YYYY-MM-DD] [file]
   consolidate --refute <hypothesis> "<why>" [--as s.<source>] [--as-of YYYY-MM-DD] [file]
   pull <seed> [...] --from <ref> [--budget N] [file]
+  history branch choices: --by ACTOR --choose SUBJECT=VERSION (repeat for each subject)
+  history branch binding: --source-revision REVISION (from the dry-run result)
+
+For active history, --from names a pinned committed branch observation. Repeat --from
+to adopt a bounded source set in one target commit. An actual adoption requires --by
+and exact --choose versions for target/source and source/source overlaps.
+--source-revision binds the previewed capture or source set; a single source may also
+be pinned by commit SHA. Mixing branch choices with named hypotheses/--take/--drop
+refuses before publication.
 
 Consolidation is a test. The dry run lays the hypotheses named - every one beside the
 record, when none is - over the base by id, in name order, and runs the reader's own check
@@ -1238,11 +1410,17 @@ def main(argv=None):
             if rest[i] == "--from":
                 if i + 1 >= len(rest):
                     raise P.Refused("--from needs a ref")
+                if ref is not None:
+                    raise P.Refused('pull accepts one --from ref; multiple sources need an explicit combined observation')
                 ref = rest[i + 1]; i += 2; continue
             if rest[i] == "--budget":
                 if i + 1 >= len(rest):
                     raise P.Refused("--budget needs a number")
-                budget = int(rest[i + 1]); i += 2; continue
+                try:
+                    budget = int(rest[i + 1])
+                except ValueError:
+                    raise P.Refused('--budget needs a number') from None
+                i += 2; continue
             (files if rest[i].endswith((".yaml", ".yml")) else seeds).append(rest[i])
             i += 1
         if not ref:
@@ -1252,13 +1430,13 @@ def main(argv=None):
             raise P.Refused("pull needs a seed: an entry, or a prefix")
         return pull_from(files or P.default_paths(), ref, seeds, budget)
     dry, refs, refute_, source, as_of, names, files, why = False, [], None, None, None, [], [], None
-    take, drops = [], {}
+    take, drops, by, choose, source_revision = [], {}, None, {}, None
     i = 0
     while i < len(argv):
         a = argv[i]
         if a == "--dry-run":
             dry = True; i += 1
-        elif a in ("--from", "--refute", "--as", "--as-of", "--take", "--drop"):
+        elif a in ("--from", "--refute", "--as", "--as-of", "--take", "--drop", "--by", "--choose", "--source-revision"):
             if i + 1 >= len(argv):
                 raise P.Refused(f"{a} needs a value")
             v = argv[i + 1]
@@ -1268,6 +1446,23 @@ def main(argv=None):
                 refute_ = v
             elif a == "--as":
                 source = v
+            elif a == "--source-revision":
+                if source_revision is not None or not re.fullmatch(r"[0-9a-f]{64}", v):
+                    raise P.Refused("--source-revision needs one exact captured revision")
+                source_revision = v
+            elif a == "--by":
+                if by is not None or not v.strip():
+                    raise P.Refused('--by needs one nonempty actor')
+                by = v
+            elif a == "--choose":
+                if '=' not in v:
+                    raise P.Refused('--choose takes SUBJECT=VERSION')
+                subject, version = v.rsplit('=', 1)
+                if not subject.strip() or not re.fullmatch(r'(?:[0-9a-f]{40}|[0-9a-f]{64})', version):
+                    raise P.Refused('--choose takes SUBJECT=VERSION with an exact history version id')
+                if subject in choose:
+                    raise P.Refused('duplicate --choose subject: ' + subject)
+                choose[subject] = version
             elif a == "--take":
                 take.append(v)
             elif a == "--drop":
@@ -1293,6 +1488,11 @@ def main(argv=None):
         raise P.Refused(f"--as-of {as_of} is after today ({P.latest_today().isoformat()}) - a day "
                         f"is the record's clock, and a fold is not dated ahead")
     paths = files or P.default_paths()
+    routed = P._peer('knowledge_views').write_paths(paths)
+    active_history = P._peer('history_direct').active(routed)
+    if by is not None or choose or source_revision is not None:
+        if not active_history or not refs or refute_:
+            raise P.Refused('--by, --choose and --source-revision require active-history --from')
     if refute_:
         if refs or names or dry:
             raise P.Refused("--refute takes one hypothesis and its why, and nothing else")
@@ -1302,11 +1502,13 @@ def main(argv=None):
     if source:
         raise P.Refused("--as names the session source of a refutation: it goes with --refute")
     if not dry:
-        return fold(paths, names, refs, as_of, take, drops)
+        return fold(paths, names, refs, as_of, take, drops, by=by, choices=choose,
+                    expected_source_revision=source_revision)
     routed = P._peer('knowledge_views').write_paths(paths)
     if P._peer('history_direct').active(routed):
         if refs:
-            raise P.Refused('history_branch_adoption_required: capture the branch history contribution explicitly')
+            return _history_adopt_from(paths, refs, names=names, take=take, drops=drops, by=by,
+                choices=choose, as_of=as_of, expected_source_revision=source_revision, preview=True)
         result = P._peer('history_direct').finish_hypotheses(routed, names, kind='fold',
             because='consolidation preview', take=take, drops=drops, dry=True)
         print(result['state'] + ': ' + ', '.join(result['hypotheses']))
