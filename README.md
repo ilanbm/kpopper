@@ -3,6 +3,12 @@
 </p>
 
 <p align="center">
+  <a href="https://github.com/ilanbm/kpopper/actions/workflows/check.yml"><img src="https://github.com/ilanbm/kpopper/actions/workflows/check.yml/badge.svg?branch=main" alt="CI tests and record checks"></a>
+  <a href="https://github.com/ilanbm/kpopper/releases/latest"><img src="https://img.shields.io/github/v/release/ilanbm/kpopper" alt="Latest release"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue" alt="License: MIT"></a>
+</p>
+
+<p align="center">
   <a href="#popper-give-a-conclusion-a-way-to-fail">What's going on? Who is this guy?</a>
 </p>
 
@@ -18,7 +24,7 @@ changes, kpopper traces its reach through the record and surfaces what needs ano
 
 **[Get started](#get-started)** · [Examples](#example-1-private-data-exposure-assumption-checks) ·
 [Capabilities](#what-you-can-do-with-kpopper) · [Record format](#the-knowledge-record) ·
-[Why the name?](#popper-give-a-conclusion-a-way-to-fail)
+[Contributing](CONTRIBUTING.md) · [Why the name?](#popper-give-a-conclusion-a-way-to-fail)
 
 <p align="center">
   <a href="assets/diagrams/reasoning-check.png">
@@ -355,7 +361,7 @@ Then follow the adapter for the host:
 
 | Agent | Install path |
 |---|---|
-| [Cursor](adapters/cursor/README.md#install) | Install the rule and hook wrappers in the project's `.cursor` directory. |
+| [Cursor](adapters/cursor/README.md#install-the-project-adapter) | Install the rule and hook wrappers in the project's `.cursor` directory. |
 | [Gemini CLI](adapters/gemini/README.md#install) | Run `gemini extensions link ./kpopper/adapters/gemini` from the directory where the clone was created. |
 | [Windsurf](adapters/windsurf/README.md#install) | Install the Cascade rule and optional write hook. |
 | [GitHub Copilot](adapters/copilot/README.md#install) | Use the CLI hook bridge, or the separate instructions for VS Code and the cloud agent. |
@@ -1024,6 +1030,7 @@ requires POSIX file locking.
 | Available within stated limits | Background processing of explicit reports and selective delivery of important findings. |
 | Platform import route documented; runtime not yet validated | ChatGPT Work installation and execution of this plugin. |
 | Experimental, opt-in | Lean-checked session views, revision-bound reads and a project-bound MCP server. |
+| Experimental, opt-in | [Deterministic `core/v1` assessment](docs/reasoning-core.md) with a packaged arithmetic runtime; existing commands retain their legacy interpretation. |
 | Available through the agent | Guided starting choices: learn during ordinary work, map selected existing materials, or investigate a defined subject and period in depth. |
 | Available within host limits | Optional first-use explanations, workspace guidance and the ability to skip or turn guidance off. |
 
@@ -1044,8 +1051,20 @@ forward with reasons you can inspect and revise.
 **Try it on one project you will return to.** [Install kpopper](#get-started), or
 [run the merge examples](examples/merge-assumptions/README.md) before installing a plugin.
 If it helps, star the repository and [tell us what changed in your work](https://github.com/ilanbm/kpopper/issues).
-Questions and reproducible problems belong in [Issues](https://github.com/ilanbm/kpopper/issues);
-see [Contributing](CONTRIBUTING.md) to improve the project.
+Use the [issue chooser](https://github.com/ilanbm/kpopper/issues/new/choose) to report a bug,
+suggest an improvement or ask a question. Documentation fixes, small reproducible examples
+and reports from different agent hosts are useful contributions; see
+[Contributing](CONTRIBUTING.md) for setup and checks.
+
+kpopper is maintained by [Ilan Bar Magen](https://github.com/ilanbm). The package is marked
+beta; the [availability table](#what-is-available-and-what-is-next) describes current limits.
+Support and reviews depend on maintainer availability. Community participation follows the
+[Code of Conduct](CODE_OF_CONDUCT.md); use the [security policy](SECURITY.md) for private
+vulnerability reports.
+
+kpopper's own code is MIT-licensed. The packaged native runtime includes components
+with their own [license notices](scripts/reasoning/third_party/THIRD_PARTY_NOTICES.txt)
+and [source and replacement instructions](scripts/reasoning/native/README.md).
 
 [Command and storage reference](docs/reference.md) · [Contributing and validation](CONTRIBUTING.md) ·
-[Changelog](CHANGELOG.md) · [MIT license](LICENSE)
+[Changelog](CHANGELOG.md) · [Security](SECURITY.md) · [MIT license](LICENSE)
