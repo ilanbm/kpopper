@@ -364,6 +364,13 @@ for every overlap. `--source-revision` binds the exact preview. `pull ID --from 
 shows branch and current standing without adopting either. Recovery reuses the
 retained sources even after their refs disappear; it never loops over partial folds.
 
+The target record and its history must be committed, including files matched by
+Git ignore rules. Standalone capture and adoption have separate size limits: a
+valid audit capture may be too large for the encoded write envelope. Adoption
+checks a lower bound before preparation and validates the complete envelope before
+creating journal files; size failures report `branch_adoption_limit` without a
+partial knowledge write.
+
 `history capabilities --nonce TOKEN --json` declares supported protocol versions,
 resolved launch paths and hashes of installed source/schema/native archive files.
 It reports native readiness as untested. These hashes identify files rather than
