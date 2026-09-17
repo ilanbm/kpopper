@@ -18,6 +18,26 @@ class Selection(unittest.TestCase):
         selected = CI.select(["skills/ground/SKILL.md", "GROUNDING.yaml", "tests/test_skills.py"])
         self.assertFalse(any(selected.values()), selected)
 
+    def test_community_pr_keeps_only_mandatory_checks(self):
+        paths = [".github/ISSUE_TEMPLATE/bug_report.yml", ".github/ISSUE_TEMPLATE/config.yml",
+                 ".github/ISSUE_TEMPLATE/feature_request.yml", ".github/ISSUE_TEMPLATE/question.yml",
+                 ".github/pull_request_template.md", ".gitignore", "CODE_OF_CONDUCT.md",
+                 "CONTRIBUTING.md", "GROUNDING.yaml", "README.md", "SECURITY.md"]
+        for path in paths:
+            with self.subTest(path=path):
+                self.assertFalse(any(CI.select([path]).values()))
+        self.assertFalse(any(CI.select(paths).values()))
+
+    def test_selector_and_its_tests_use_the_mandatory_contract_job(self):
+        self.assertFalse(any(CI.select([".github/scripts/ci_selection.py",
+                                       "tests/test_ci_selection.py"]).values()))
+
+    def test_community_paths_do_not_hide_mixed_runtime_changes(self):
+        selected = CI.select(["SECURITY.md", ".github/ISSUE_TEMPLATE/bug_report.yml",
+                              "scripts/document/layer.js"])
+        self.assertEqual(selected, dict.fromkeys(CI.LANES, False) | {"documents": True})
+        self.assertTrue(all(CI.select(["SECURITY.md", "scripts/reasoning/lean/Kernel.lean"]).values()))
+
     def test_documents_run_python_and_dom_document_tests(self):
         for path in ("scripts/documents.py", "scripts/document/layer.js", "scripts/document-guide.md",
                      "tests/test_document_cli.py", "tests/test_documents.py", "tests/document_ui_fixture.py",
@@ -63,7 +83,8 @@ class Selection(unittest.TestCase):
     def test_unknown_files_and_ci_changes_fail_open_to_full_checks(self):
         for path in ("new-component/config.toml", "new-file.md", "skills/ground/helper.py",
                      "docs/check.py", ".kpopper/new-hook.sh", ".github/workflows/reasoning-runtime.yml",
-                     ".github/scripts/ci_selection.py", "tests/test_ci_selection.py"):
+                     ".github/scripts/new-helper.py", ".github/ISSUE_TEMPLATE/helper.py",
+                     ".github/ISSUE_TEMPLATE/nested/config.yml", ".github/workflows/new.yml"):
             with self.subTest(path=path):
                 self.assertTrue(all(CI.select([path]).values()))
 

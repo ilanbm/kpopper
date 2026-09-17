@@ -12,17 +12,27 @@ RUNTIME = set(LANES) - {"native"}
 
 
 def families(path):
+    # Community metadata does not change runtime or build inputs. Keep this list
+    # narrow: scripts, workflows and unknown files still take their checks below.
+    if (path in {"SECURITY.md", "CODE_OF_CONDUCT.md", ".gitignore",
+                 ".github/pull_request_template.md"}
+            or (Path(path).parent.as_posix() == ".github/ISSUE_TEMPLATE"
+                and Path(path).suffix in {".md", ".yml", ".yaml"})):
+        return set()
+    # The mandatory record job executes selector regressions and workflow-contract
+    # tests on every PR, including changes to this selector and its test module.
+    if path in {".github/scripts/ci_selection.py", "tests/test_ci_selection.py"}:
+        return set()
     # These workflows never compile the reasoning runtime. Changes still exercise
     # all consumers; the selector and native workflow themselves take the full audit.
     if path in {".github/workflows/check.yml", ".github/workflows/session.yml",
-                ".github/pull_request_template.md", "skills/watch/agents/openai.yaml"}:
+                "skills/watch/agents/openai.yaml"}:
         return RUNTIME
     # These inputs can change compilation, its audit, or modified GMP loading.
     if (path.startswith(("scripts/reasoning/lean/", "scripts/reasoning/native/",
                          "scripts/reasoning/third_party/", ".github/"))
             or path in {"scripts/reasoning/build_runtime.py", "scripts/reasoning/runtime.py",
-                        "tests/test_reasoning_runtime.py", "tests/test_reasoning_distribution.py",
-                        "tests/test_ci_selection.py"}):
+                        "tests/test_reasoning_runtime.py", "tests/test_reasoning_distribution.py"}):
         return set(LANES)
     # The record and skill contracts run on every PR, independent of these flags.
     if (path in {"GROUNDING.yaml", "README.md", "CONTRIBUTING.md", "CHANGELOG.md", "tests/test_skills.py"}
