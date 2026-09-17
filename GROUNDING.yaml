@@ -1,5 +1,5 @@
 meta:
-  updated: 2026-09-17
+  updated: 2026-09-18
   name: kpopper
   scope: "What this plugin is for and the decisions that shaped it, kept in its own format -
           the tools eat their own cooking, and every session here opens grounded."
@@ -2069,6 +2069,18 @@ known:
     from: s.2026_09_17_t3_integration
     at: "final candidate verification and GitHub Actions run 35250090592"
     of: "2026-09-17"
+  m.t4_verified_candidate_4a6dab2:
+    name: "T4 shared assessment candidate passed review, source, distribution, and platform gates"
+    v: "Commit 4a6dab215168686c01404a1f97a12da3e6e22971 passed 2543 immutable-source tests locally
+        in 2243.882 seconds with 20 declared skips; workflow 35273116667 passed all 19 selected jobs.
+        Independent implementation review reproduced nine boundary defects and three follow-up
+        defects; all were fixed with regression tests, and the final narrow review found no remaining
+        blockers. Core browser checks passed 16 of 16 and the unchanged legacy browser checks passed
+        50 of 50. A fresh installed wheel passed explicit core assess, check, pull, affects, export,
+        search, and page routes."
+    from: s.2026_09_17_t3_integration
+    at: "T4 final candidate verification and GitHub Actions run 35273116667"
+    of: "2026-09-18"
   m.unasked.question_filler:
     v: 0
     unit: entries

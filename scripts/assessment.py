@@ -180,7 +180,8 @@ def attention(state, policy=POLICY):
     reasons = []
     falsifier = state['falsifier']
     if falsifier['status'] == 'holds':
-        reasons.append({'code': 'falsifier_holds'})
+        reasons.append({'code': 'falsifier_holds',
+                        'related_ids': sorted(set(falsifier.get('reads') or []))})
     if policy == POLICY:
         reads = set(falsifier.get('reads') or [])
         for dep, finding in state['basis'].get('dependencies', {}).items():
@@ -203,7 +204,10 @@ def attention(state, policy=POLICY):
         if gaps:
             items.append({'action': 'resolve_gap', 'reasons': gaps})
         if state['contention']['status'] == 'detected':
-            items.append({'action': 'inspect_alternatives', 'reasons': [{'code': 'competing_hypotheses'}]})
+            related = sorted({item.get('id') for item in state['contention'].get('alternatives', [])
+                              if isinstance(item, dict) and isinstance(item.get('id'), str)})
+            items.append({'action': 'inspect_alternatives', 'reasons': [
+                {'code': 'competing_hypotheses', 'related_ids': related}]})
     return items
 
 
@@ -316,11 +320,18 @@ def assess(doc, ids, judgments, fields, raw, policy=POLICY):
                 'states': {nid: node['state'] for nid, node in nodes.items()}})}
 
 
-def load(paths, policy=POLICY, *, profile=PROFILE, as_of=None, selection=None):
+def load(paths, policy=POLICY, *, profile=PROFILE, as_of=None, selection=None,
+         history=False, display_selection=None):
     if profile == 'core/v1':
-        core = P._peer('reasoning.assessment')
         snapshot = P._peer('reasoning.snapshot').Snapshot.capture(paths, as_of=as_of)
+        if history:
+            combined = P._peer('reasoning.history_assessment')
+            return combined.assess(snapshot, selection, policy=policy,
+                                   display_selection=display_selection)
+        core = P._peer('reasoning.assessment')
         return core.assess(snapshot, selection, policy=policy)
+    if history:
+        raise ValueError('--history requires --profile core/v1')
     doc = P.load(paths)
     P._peer('reasoning.contract').capabilities(doc, profile=profile)
     if as_of is not None:
@@ -343,24 +354,31 @@ def main(argv=None):
     parser.add_argument('--profile', choices=[PROFILE, 'core/v1'], default=PROFILE,
                         help='core/v1 is an experimental read-only interpretation')
     parser.add_argument('--as-of', help='explicit ISO date or timezone-aware timestamp for core/v1')
+    parser.add_argument('--history', action='store_true',
+                        help='return the history-aware schema-v3 core assessment')
     parser.add_argument('--attention-only', action='store_true', help='only relevant actions from this assessment')
     args = parser.parse_args(argv)
     try:
+        if args.history and args.attention_only:
+            raise ValueError('--attention-only is not yet a versioned schema-v3 projection')
         report = load(args.record or P.default_paths(), args.policy, profile=args.profile,
-                      as_of=args.as_of, selection=args.ids)
+                      as_of=args.as_of, selection=args.ids, history=args.history,
+                      display_selection=args.ids if args.history else None)
         if set(args.ids) - set(report['nodes']):
             raise ValueError('unknown assessment ID; use open or pull to find an entry')
-        report['selection'] = args.ids
-        if args.attention_only:
-            report['attention'] = selected_attention(report, args.ids)
-            del report['nodes']
-        else:
-            report['nodes'] = {nid: report['nodes'][nid] for nid in dict.fromkeys(args.ids)}
+        if not args.history:
+            report['selection'] = args.ids
+            if args.attention_only:
+                report['attention'] = selected_attention(report, args.ids)
+                del report['nodes']
+            else:
+                report['nodes'] = {nid: report['nodes'][nid] for nid in dict.fromkeys(args.ids)}
         if args.profile == 'core/v1':
             # Account for the final selection/attention projection too. Compact
             # output keeps emitted UTF-8 within the compact ASCII JSON budget.
             contract = P._peer('reasoning.contract')
-            contract.OutputBudget(report['operational_limits']['output_bytes'] - 1).add(report)
+            if not args.history:
+                contract.OutputBudget(report['operational_limits']['output_bytes'] - 1).add(report)
             print(json.dumps(report, ensure_ascii=False, default=str, separators=(',', ':')))
         else:
             print(json.dumps(report, ensure_ascii=False, default=str, indent=2))

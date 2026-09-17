@@ -30,6 +30,9 @@ MAX_SOURCE = 8_000_000
 MAX_ARTIFACT = 40_000_000
 ID = re.compile(r"[A-Za-z][A-Za-z0-9_.-]{0,127}\Z")
 KINDS = {"value", "quote", "sum", "difference", "product", "ratio", "inference"}
+CORE_PROFILE = "core/v1"
+CORE_EVIDENCE_VERSION = 1
+CORE_FINDING_ENCODING = "kpopper-typed-json/v1"
 FRAME_CSP = ("default-src 'none'; script-src 'unsafe-inline' 'unsafe-eval' data: blob:; "
              "style-src 'unsafe-inline'; img-src data:; font-src data:; media-src data:; "
              "connect-src 'none'; frame-src 'none'; object-src 'none'; base-uri 'none'; "
@@ -240,7 +243,7 @@ def _atom(value):
 
 
 def _source_spec(spec):
-    _keys(spec, {"name", "path", "format", "uri", "unavailable", "representation", "event_id", "state_dir"}, "source")
+    _keys(spec, {"name", "path", "format", "uri", "unavailable", "representation", "event_id", "state_dir", "profile"}, "source")
     _text(spec.get("name"), "source name", limit=300)
     if "uri" in spec:
         uri = _text(spec["uri"], "source URI", limit=4000)
@@ -254,6 +257,9 @@ def _source_spec(spec):
         raise DocumentError("A source needs a local path and json, text or record format")
     if spec.get("representation", "file") not in {"file", "extraction"}:
         raise DocumentError("representation must be file or extraction")
+    if "profile" in spec and (spec["profile"] != CORE_PROFILE or
+                              ("unavailable" not in spec and spec.get("format") != "record")):
+        raise DocumentError("source.profile supports only explicit core/v1 record sources")
     if "event_id" in spec:
         if not isinstance(spec["event_id"], str) or not re.fullmatch(r"[0-9a-f]{32}", spec["event_id"]):
             raise DocumentError("event_id must be the canonical 32-character ID returned by ingestion")
@@ -325,6 +331,178 @@ def _record_selections(path, raw, inputs):
             except DocumentError as error:
                 result[key] = {"status": "unavailable", "reason": str(error)}
     return result
+
+
+def _record_pointer(inp):
+    pointer = inp.get("pointer", "")
+    pieces = [x.replace("~1", "/").replace("~0", "~") for x in pointer.split("/")[1:]]
+    if len(pieces) != 2 or pieces[1] not in {"v", "quoted"}:
+        raise DocumentError("Record selectors are /ENTRY/v or /ENTRY/quoted for stored readings")
+    return pieces
+
+
+def _peer(name):
+    """Load a sibling through the reader's package-aware standalone bridge."""
+    try:
+        from . import provenance as P
+    except ImportError:
+        import provenance as P
+    return P._peer(name)
+
+
+def _typed_finding(value):
+    """Encode one exact finding without coercing YAML dates or other typed scalars."""
+    return _peer("pending_grounding")._encode(value)
+
+
+def _decode_finding(value):
+    codec = _peer("pending_grounding")
+    try:
+        decoded = codec._decode(value)
+    except (TypeError, ValueError, RecursionError) as error:
+        raise DocumentError("Invalid embedded core finding") from error
+    if codec._encode(decoded) != value:
+        raise DocumentError("Invalid embedded core finding")
+    return decoded
+
+
+def _core_receipt_revision(receipt):
+    # Findings are already canonical typed JSON, so the document's canonical JSON
+    # digest is sufficient and keeps offline validation independent of the reader.
+    return digest(encoded({key: value for key, value in receipt.items()
+                           if key != "receipt_revision"}))
+
+
+def _core_record_source(path, inputs, now):
+    """Capture one core Snapshot and retain only findings selected by this source.
+
+    Document arithmetic remains downstream and Decimal-based.  The assessment is
+    immutable evidence about the selected record nodes, not a replacement document
+    evaluator, and its typed encoding is replayable without source or Git access.
+    """
+    CapturedAssessment = _peer("reasoning.context").CapturedAssessment
+    Snapshot = _peer("reasoning.snapshot").Snapshot
+    selected = []
+    parsed = {}
+    for key, inp in inputs.items():
+        if len(inp) == 1:
+            continue
+        nid, field = _record_pointer(inp)
+        parsed[key] = (nid, field)
+        if nid not in selected:
+            selected.append(nid)
+    selected.sort()
+    # This is the only source capture for this record source.  All selection,
+    # citation and evidence work below is a pure projection of the same Snapshot.
+    snapshot = Snapshot.capture([str(path)], read_mode="frozen")
+    context = CapturedAssessment.from_snapshot(snapshot)
+    report = context.assessment
+    snapshot_data = snapshot.to_data()
+    nodes = snapshot_data["nodes"]
+    result = {}
+    for key, (nid, field) in parsed.items():
+        try:
+            node = nodes[nid]
+            body = node["body"]
+            if not isinstance(body, dict) or field not in body:
+                raise DocumentError("The selected record field is unavailable")
+            value = _atom(body[field])
+            cited_id = body.get("from")
+            cited = nodes.get(cited_id, {}).get("body") if isinstance(cited_id, str) else None
+            if not isinstance(cited, dict):
+                raise DocumentError("The reading has no recorded source")
+            P = _peer("provenance")
+            citation = {"source": cited_id, "name": P.named(cited) or cited_id,
+                        "at": str(body.get("at", "Location not recorded")),
+                        "date": str(body.get("of", cited.get("read", "Date not recorded")))}
+            result[key] = {"status": "available", "value": value, "citation": citation}
+        except (KeyError, DocumentError) as error:
+            result[key] = {"status": "unavailable", "reason": str(error)}
+    finding_nodes = {nid: _typed_finding(report["nodes"][nid]) for nid in selected}
+    finding_history = {nid: _typed_finding(report["history_subjects"][nid])
+                       for nid in selected if nid in report["history_subjects"]}
+    receipt = {
+        "version": CORE_EVIDENCE_VERSION,
+        "assessment_profile": CORE_PROFILE,
+        "schema_version": report["schema_version"],
+        "finding_encoding": CORE_FINDING_ENCODING,
+        "captured_at": now,
+        "snapshot_id": context.snapshot_id,
+        "findings_revision": context.findings_revision,
+        "assessment_selection": list(report["assessment_selection"]),
+        "embedded_selection": selected,
+        "history_selection": sorted(finding_history),
+        "nodes": finding_nodes,
+        "history_subjects": finding_history,
+    }
+    receipt["receipt_revision"] = _core_receipt_revision(receipt)
+    return result, receipt
+
+
+def _validate_core_receipt(receipt, selections):
+    expected = {"version", "assessment_profile", "schema_version", "finding_encoding",
+                "captured_at", "snapshot_id", "findings_revision", "assessment_selection",
+                "embedded_selection",
+                "history_selection", "nodes", "history_subjects", "receipt_revision"}
+    if not isinstance(receipt, dict) or set(receipt) != expected \
+            or receipt.get("version") != CORE_EVIDENCE_VERSION \
+            or receipt.get("assessment_profile") != CORE_PROFILE \
+            or receipt.get("schema_version") != 3 \
+            or receipt.get("finding_encoding") != CORE_FINDING_ENCODING:
+        raise DocumentError("Invalid embedded core assessment receipt")
+    identities = (receipt.get("snapshot_id"), receipt.get("findings_revision"),
+                  receipt.get("receipt_revision"))
+    if any(not isinstance(value, str) or not re.fullmatch(r"[0-9a-f]{64}", value)
+           for value in identities) or not isinstance(receipt.get("captured_at"), str):
+        raise DocumentError("Invalid embedded core assessment identity")
+    selected = receipt.get("assessment_selection")
+    embedded = receipt.get("embedded_selection")
+    history = receipt.get("history_selection")
+    nodes = receipt.get("nodes")
+    subjects = receipt.get("history_subjects")
+    if not isinstance(selected, list) or len(selected) != len(set(selected)) \
+            or not isinstance(embedded, list) or embedded != sorted(set(embedded)) \
+            or not isinstance(history, list) or history != sorted(set(history)) \
+            or not isinstance(nodes, dict) or set(nodes) != set(embedded) \
+            or not isinstance(subjects, dict) or set(subjects) != set(history) \
+            or not set(embedded) <= set(selected) or not set(history) <= set(embedded):
+        raise DocumentError("Invalid embedded core finding subset")
+    referenced = set()
+    for selection in selections.values():
+        selector = selection.get("selector", {}) if isinstance(selection, dict) else {}
+        if selector:
+            nid, _ = _record_pointer({"pointer": selector.get("pointer", "")})
+            referenced.add(nid)
+    if referenced != set(embedded):
+        raise DocumentError("Embedded core findings differ from selected record evidence")
+    decoded_nodes = {}
+    for nid, value in nodes.items():
+        finding = _decode_finding(value)
+        if not isinstance(finding, dict) or not {"body", "state", "computation", "history"} <= set(finding):
+            raise DocumentError("Invalid embedded core node finding")
+        decoded_nodes[nid] = finding
+    for value in subjects.values():
+        finding = _decode_finding(value)
+        if not isinstance(finding, dict) or "acceptance" not in finding:
+            raise DocumentError("Invalid embedded core history finding")
+    for selection in selections.values():
+        selector = selection.get("selector", {})
+        if not selector:
+            continue
+        nid, field = _record_pointer({"pointer": selector.get("pointer", "")})
+        body = decoded_nodes[nid]["body"]
+        if not isinstance(body, dict) or field not in body:
+            raise DocumentError("Core finding does not contain its selected record field")
+        if selection.get("status") == "available":
+            if selection.get("value") != _atom(body[field]):
+                raise DocumentError("Selected record evidence differs from its core finding")
+            citation = selection.get("citation", {})
+            if citation.get("source") != body.get("from") \
+                    or citation.get("at") != str(body.get("at", "Location not recorded")) \
+                    or ("of" in body and citation.get("date") != str(body["of"])):
+                raise DocumentError("Selected record citation differs from its core finding")
+    if _core_receipt_revision(receipt) != receipt["receipt_revision"]:
+        raise DocumentError("Embedded core assessment receipt changed")
 
 
 def _event_binding(path, spec, selections, root):
@@ -402,10 +580,32 @@ def capture_sources(specs, claims, root, now=None, previous=None):
                   "representation": spec.get("representation", "file"), "read_at": None,
                   "attempted_at": now, "reread": True, "sha256": None, "status": "unavailable",
                   "selections": {}, "reason": spec.get("unavailable", "Source unavailable")}
+        if "profile" in spec:
+            source["profile"] = spec["profile"]
         result[sid] = source
         if "unavailable" in spec:
             continue
         path = scoped(root, spec["path"])
+        if spec.get("profile") == CORE_PROFILE:
+            try:
+                record_values, assessment = _core_record_source(path, inputs, now)
+            except (OSError, ValueError, TypeError, RecursionError):
+                source["reason"] = "The source could not be assessed as core/v1"
+                continue
+            source.update(status="available", sha256=assessment["snapshot_id"],
+                          read_at=now, reason=None, assessment=assessment)
+            for key, inp in inputs.items():
+                selector = {k: v for k, v in inp.items() if k != "source"}
+                selection = {"selector": selector, "status": "unavailable"}
+                source["selections"][key] = selection
+                if not selector:
+                    selection.update(status="available",
+                                     note="Source identity captured; no excerpt selected")
+                else:
+                    selection.update(record_values[key])
+            if "event_id" in spec:
+                source["event"] = _event_binding(path, spec, source["selections"], root)
+            continue
         try:
             raw = read_bytes(path)
             text = raw.decode("utf-8-sig")
@@ -680,6 +880,16 @@ def _validate_snapshots(sources, claims):
                     _text(atom.get("value"), "selected value", empty=True)
                 elif atom.get("type") != "boolean" or type(atom.get("value")) is not bool:
                     raise DocumentError("Invalid embedded scalar reading")
+        profile = source.get("profile")
+        assessment = source.get("assessment")
+        if profile is not None and profile != CORE_PROFILE:
+            raise DocumentError("Invalid embedded source profile")
+        if profile == CORE_PROFILE and source["status"] == "available":
+            _validate_core_receipt(assessment, selections)
+            if source.get("sha256") != assessment["snapshot_id"]:
+                raise DocumentError("Core source revision differs from its captured Snapshot")
+        elif assessment is not None:
+            raise DocumentError("Core assessment evidence needs an available core/v1 source")
 
 
 def validate_artifact(data):

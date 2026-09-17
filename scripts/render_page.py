@@ -4,6 +4,7 @@
   python3 render_page.py [file ...] > page.html
   python3 render_page.py --brief .kpopper/view.yaml [file ...] > page.html
   python3 render_page.py --verify [file ...]
+  python3 render_page.py --profile core/v1 [--verify] [file ...]
 
 **Now** is the tab the session writes: an arrangement of the record aimed at what this
 session is for. It is opinionated on purpose - order, sections, emphasis - and it is
@@ -899,7 +900,11 @@ def tree_svg(ids, jud, E, J, flags, words=None, label=None):
     return "".join(o)
 
 
-def build(paths, brief_path=None, page_path=None, *, read_mode=None):
+def build(paths, brief_path=None, page_path=None, *, read_mode=None, profile=None, context=None):
+    if profile == 'core/v1':
+        return core_build(paths, brief_path, page_path, read_mode=read_mode, context=context)
+    if profile is not None:
+        raise ValueError('unsupported page profile: ' + str(profile))
     mode = _read_mode(read_mode)
     paths = record_paths(paths, read_mode=mode)
     doc = P.load(paths, read_mode=mode)
@@ -1836,8 +1841,442 @@ def build(paths, brief_path=None, page_path=None, *, read_mode=None):
                                        "arrangements": arrangements, "earned": earned}
 
 
-def measured_build(paths, brief_path=None, page_path=None):
+# ── explicit core/v1 consumer seam ─────────────────────────────────────────────────
+
+def _core_modules():
+    """Import the captured consumer contracts without changing legacy imports.
+
+    ``render_page.py`` is both an importable module and a directly executed script, so
+    sibling-package imports have to work in both modes.  Keeping this lazy also means an
+    ordinary page never initializes the core runtime or changes its compatibility route.
+    """
+    try:
+        from .reasoning.context import CapturedAssessment
+        from .reasoning import page_assessment, projection
+        from .reasoning.snapshot import Snapshot
+    except ImportError:
+        # The source-tree CLI executes this file by path, while an installed CLI
+        # imports it as ``kpopper.render_page``.  Import the containing package in
+        # the former case so reasoning's parent-relative imports retain one identity.
+        import importlib
+        package = pathlib.Path(__file__).resolve().parent.name
+        parent = str(pathlib.Path(__file__).resolve().parent.parent)
+        if parent not in sys.path:
+            sys.path.insert(0, parent)
+        CapturedAssessment = importlib.import_module(
+            package + '.reasoning.context').CapturedAssessment
+        page_assessment = importlib.import_module(package + '.reasoning.page_assessment')
+        projection = importlib.import_module(package + '.reasoning.projection')
+        Snapshot = importlib.import_module(package + '.reasoning.snapshot').Snapshot
+    return CapturedAssessment, page_assessment, projection, Snapshot
+
+
+def _core_brief(content):
+    """Decode already-captured brief bytes; never reopen the brief from this seam."""
+    if content is None:
+        return {}
+    if isinstance(content, str):
+        content = content.encode('utf-8')
+    if not isinstance(content, bytes):
+        raise ValueError('captured core page brief must be bytes, text, or None')
+    try:
+        value = yaml.safe_load(content.decode('utf-8')) or {}
+    except (UnicodeDecodeError, yaml.YAMLError) as error:
+        raise ValueError('invalid captured core page brief: ' + str(error)) from None
+    if not isinstance(value, dict):
+        raise ValueError('captured core page brief must be a mapping')
+    return value
+
+
+def _core_state_flags(node, view):
+    """Compatibility selectors projected only from canonical v3 dimensions.
+
+    These names exist solely so an old page brief can select a core projection.  They
+    are page inputs, not canonical findings, and deliberately do not call the legacy
+    ``flags`` or predicate evaluator.
+    """
+    result = set()
+    state = node.get('state') if isinstance(node, dict) else {}
+    state = state if isinstance(state, dict) else {}
+    status = view.get('status') if isinstance(view, dict) else {}
+    status = status if isinstance(status, dict) else {}
+    body = node.get('body') if isinstance(node, dict) else {}
+    fields = node.get('fields') if isinstance(node, dict) else {}
+    body = body if isinstance(body, dict) else {}
+    fields = fields if isinstance(fields, dict) else {}
+    judgment = bool(fields.get('deps') and fields['deps'] in body)
+
+    integrity = state.get('integrity') if isinstance(state.get('integrity'), dict) else {}
+    issues = integrity.get('issues') if isinstance(integrity.get('issues'), list) else []
+    issue_codes = {item.get('code') for item in issues if isinstance(item, dict)}
+    if status.get('integrity') not in ('assessed', 'not_available') \
+            or issue_codes.intersection({'missing_dependency', 'invalid_dependencies'}):
+        result.add('broken')
+    falsifier = status.get('falsifier') if isinstance(status.get('falsifier'), dict) else {}
+    if falsifier.get('holds') is True:
+        result.add('falsified')
+    elif judgment and falsifier.get('status') == 'not_declared':
+        result.add('no_predicate')
+    elif falsifier.get('status') in ('unknown', 'error', 'unavailable'):
+        result.add('unknown')
+    basis = status.get('basis')
+    if judgment and (basis not in ('assessed', 'not_applicable')
+                     or issue_codes.intersection({'missing_snapshot', 'invalid_snapshot'})):
+        result.add('unchecked')
+    dependencies = state.get('basis', {}).get('dependencies', {}) \
+        if isinstance(state.get('basis'), dict) else {}
+    if isinstance(dependencies, dict) and any(
+            isinstance(item, dict) and (item.get('comparison') == 'changed'
+                                        or item.get('basis_comparison') == 'changed'
+                                        or item.get('rule_changed') is True)
+            for item in dependencies.values()):
+        result.add('moved')
+    blocked_field = next((name for name in ('blocked_on', 'blocked', 'waiting_for')
+                          if body.get(name)), None)
+    if blocked_field:
+        result.add('blocked')
+    computation = status.get('computation') if isinstance(status.get('computation'), dict) else {}
+    if computation.get('status') in ('unknown', 'error', 'limit', 'unsupported_capability'):
+        result.add('unknown')
+    return result
+
+
+def _core_select(selector, ids, judgments, flags):
+    """Resolve the closed legacy page selector vocabulary over supplied projections."""
+    if isinstance(selector, list):
+        result = set()
+        for item in selector:
+            result.update(_core_select(item, ids, judgments, flags))
+        return result
+    if not isinstance(selector, str):
+        return set()
+    if selector == 'all':
+        return set(ids)
+    if selector == 'judgments':
+        return set(judgments)
+    if selector == 'flagged':
+        return {identifier for identifier, states in flags.items() if states}
+    if selector in STATES:
+        return {identifier for identifier, states in flags.items() if selector in states}
+    if selector in ids:
+        return {selector}
+    prefix = selector[:-1] if selector.endswith('.') else selector
+    return {identifier for identifier in ids if identifier.startswith(prefix + '.')}
+
+
+def _core_unresolved_selectors(selector, ids, judgments, flags):
+    if isinstance(selector, list):
+        return sorted({item for value in selector
+                       for item in _core_unresolved_selectors(value, ids, judgments, flags)})
+    if not isinstance(selector, str) or selector in {'all', 'judgments', 'flagged'} | set(STATES):
+        return []
+    return [] if _core_select(selector, ids, judgments, flags) else [selector]
+
+
+def _core_label(identifier, body, labels):
+    if identifier in labels:
+        return str(labels[identifier])
+    value = named(body) if isinstance(body, dict) else None
+    return str(value) if value else human(identifier)
+
+
+def core_build_from_context(context, brief_content=None, page_path=None, *, record_root=None):
+    """Render one source-free core page from one retained captured assessment.
+
+    This is the reviewed cutover seam for the page consumer.  Canonical truth comes
+    only from ``context.assessment`` and its normalized ``context.view``.  Brief bytes,
+    selection, arrangement and coverage are bound in ``page-secondary/v1`` and can
+    change only that revision.  This function performs no source I/O and no evaluation.
+    """
+    CapturedAssessment, PAGE, PROJECTION, _ = _core_modules()
+    if not isinstance(context, CapturedAssessment):
+        raise ValueError('core page requires a CapturedAssessment')
+    assessment = context.assessment
+    view = context.view
+    snapshot = context.snapshot.to_data()
+    if assessment.get('assessment_profile') != 'core/v1' \
+            or view.get('snapshot_id') != context.snapshot_id \
+            or view.get('findings_revision') != context.findings_revision:
+        raise ValueError('core page requires one matching canonical v3 context')
+    brief = _core_brief(brief_content)
+    brief_identity = PAGE.capture_brief(brief_content,
+                                        operational_limits=assessment.get('operational_limits'))
+    nodes = assessment['nodes']
+    ids = set(nodes)
+    labels = brief.get('labels') if isinstance(brief.get('labels'), dict) else {}
+    document = snapshot['document']
+    meta = document.get('meta') if isinstance(document.get('meta'), dict) else {}
+    lang0, page_dir = language(document), direction(document)
+    lang = lang0 if lang0 in WORDS else 'en'
+    words = WORDS[lang]
+    judgments = {
+        identifier for identifier, node in nodes.items()
+        if isinstance(node.get('body'), dict) and isinstance(node.get('fields'), dict)
+        and node['fields'].get('deps') in node['body']
+    }
+    flags = {identifier: _core_state_flags(nodes[identifier], view['nodes'][identifier])
+             for identifier in sorted(ids)}
+    current_shape = {'entries': len(ids - judgments), 'judgments': len(judgments),
+                     'flagged': sum(bool(states) for states in flags.values()),
+                     'blocked': sum('blocked' in states for states in flags.values())}
+    raw_bodies = {identifier: (node['body'] if isinstance(node.get('body'), dict)
+                               else {'v': node.get('body')})
+                  for identifier, node in nodes.items()}
+
+    display = {}
+    root = pathlib.Path(record_root).resolve() if record_root else None
+    for identifier in sorted(ids):
+        node, projected = nodes[identifier], view['nodes'][identifier]
+        body = node['body'] if isinstance(node.get('body'), dict) else {'v': node.get('body')}
+        value = projected['status']['computation'].get('value_text')
+        rule = body.get('rule')
+        rule_text = None
+        if rule is not None:
+            try:
+                rule_text = PROJECTION.render_expression(rule)
+            except (ValueError, TypeError, SyntaxError, RecursionError):
+                rule_text = 'unsupported expression'
+        href = link_target(body, root, page_path) if root else None
+        body_deps = body.get(node.get('fields', {}).get('deps')) \
+            if isinstance(node.get('fields'), dict) else None
+        dependencies = sorted(set(
+            ([item for item in body_deps if isinstance(item, str)]
+             if isinstance(body_deps, list) else [])
+            + [item['id'] for item in projected.get('dependencies', [])
+               if isinstance(item, dict) and isinstance(item.get('id'), str)]))
+        display[identifier] = {
+            'id': identifier,
+            'kind': 'judgment' if identifier in judgments else 'entry',
+            'label': _core_label(identifier, body, labels),
+            'value': value,
+            'rule': rule_text,
+            'status': projected['status'],
+            'status_text': projected['status_text'],
+            'dependencies': dependencies,
+            'flags': sorted(flags[identifier]),
+            'href': href,
+        }
+
+    tabs = tabs_of(brief) if brief else []
+    arrangements, selected, unresolved_selectors = [], set(), set()
+    renderer_misfits, stale_shapes = [], []
+    for tab in tabs:
+        recorded_shape = tab.get('shape')
+        if recorded_shape:
+            if not isinstance(recorded_shape, dict):
+                stale_shapes.append((tab['title'] or 'Now') + ': invalid recorded shape')
+            else:
+                moved = [key + ': ' + str(recorded_shape[key]) + ' -> ' + str(current_shape[key])
+                         for key in current_shape if key in recorded_shape
+                         and recorded_shape[key] != current_shape[key]]
+                if moved:
+                    stale_shapes.append((tab['title'] or 'Now') + ': ' + '; '.join(moved))
+        sections = []
+        for section in tab['sections']:
+            selector = section.get('pick')
+            chosen = sorted(_core_select(selector, ids, judgments, flags))
+            unresolved_selectors.update(
+                _core_unresolved_selectors(selector, ids, judgments, flags))
+            kind = str(section.get('as') or '').strip()
+            wrong = fits(kind, chosen, judgments, raw_bodies) if kind and chosen else None
+            if wrong:
+                renderer_misfits.append(str(section.get('title') or selector or '?') + ': ' + wrong)
+            selected.update(chosen)
+            sections.append({'title': str(section.get('title') or ''),
+                             'why': str(section.get('why') or ''),
+                             'shape': kind or 'cards',
+                             'ids': chosen})
+        arrangements.append({'key': tab['key'], 'title': tab['title'],
+                             'occasion': tab['occasion'], 'serves': list(tab['serves']),
+                             'sections': sections})
+    flagged = {identifier for identifier, states in flags.items() if states}
+    spill = sorted(flagged - selected) if tabs else []
+    coverage = {'picked': sorted(selected), 'flagged': sorted(flagged),
+                'spill': spill, 'covered_count': len(selected), 'spill_count': len(spill)}
+    coverage['unresolved_selectors'] = sorted(unresolved_selectors)
+    coverage['renderer_misfits'] = sorted(renderer_misfits)
+    coverage['stale_shapes'] = sorted(stale_shapes)
+    page_values = {
+        'consumer_view_version': view['version'],
+        'title': str(brief.get('title') or meta.get('name') or meta.get('scope') or 'record'),
+        'language': lang0, 'direction': page_dir,
+        'nodes': [display[identifier] for identifier in sorted(display)],
+        'arrangements': arrangements, 'coverage': coverage,
+    }
+    bound = PAGE.capture_page_inputs(
+        assessment, page_values, operational_limits=assessment.get('operational_limits'))
+    page_assessment = PAGE.build(
+        assessment, brief_identity, bound,
+        operational_limits=assessment.get('operational_limits'))
+    page_assessment = PAGE.validate(
+        page_assessment, assessment,
+        operational_limits=assessment.get('operational_limits'))
+
+    def state_rows(item):
+        status = item['status']
+        computation = status['computation']['status']
+        return ''.join(
+            f'<li data-state-dimension="{html.escape(key)}"><span>{html.escape(key)}</span> '
+            f'{html.escape(str(value))}</li>'
+            for key, value in (
+                ('acceptance', status['acceptance']), ('computation', computation),
+                ('basis', status['basis']), ('falsifier', status['falsifier']['status']),
+                ('contention', status['contention']), ('integrity', status['integrity']),
+                ('coverage', status['coverage']), ('assurance', status['assurance']),
+                ('support', status['support']['status'] +
+                 ((' [' + ', '.join(status['support']['states']) + ']')
+                  if status['support']['states'] else ''))))
+
+    def card(identifier):
+        item = display[identifier]
+        heading = html.escape(item['label'])
+        if item['href']:
+            heading = f'<a href="{html.escape(item["href"], quote=True)}">{heading}</a>'
+        value = item['value']
+        rendered = (f'<div class="core-value" data-value-kind="typed">{html.escape(value)}</div>'
+                    if value is not None else
+                    f'<div class="core-rule">= {html.escape(item["rule"])}</div>'
+                    if item['rule'] else '<div class="core-value unavailable">unavailable</div>')
+        dependencies = ''.join(
+            f'<code class="core-dependency">{html.escape(dependency)}</code>'
+            for dependency in item['dependencies'])
+        return (f'<article class="core-node {item["kind"]}" data-id="{html.escape(identifier)}">'
+                f'<h3>{heading}</h3>{rendered}<ul class="core-state">{state_rows(item)}</ul>'
+                + (f'<div class="core-dependencies">{dependencies}</div>' if dependencies else '')
+                + '</article>')
+
+    title = page_values['title']
+    output = [
+        '<!doctype html>',
+        f'<html lang="{html.escape(lang)}" dir="{html.escape(page_dir)}"><head><meta charset="utf-8">',
+        '<meta name="viewport" content="width=device-width,initial-scale=1">',
+        '<meta name="kpopper-assessment-profile" content="core/v1">',
+        f'<meta name="kpopper-snapshot-id" content="{context.snapshot_id}">',
+        f'<meta name="kpopper-findings-revision" content="{context.findings_revision}">',
+        f'<meta name="kpopper-page-assessment-revision" content="{page_assessment["page_assessment_revision"]}">',
+        f'<title>{html.escape(title[:60])}</title>',
+        '<style>body{font-family:system-ui,sans-serif;margin:0;background:#f7f7f5;color:#20201e}'
+        '.core-wrap{max-width:960px;margin:auto;padding:32px}.core-meta{font-family:monospace;font-size:12px;overflow-wrap:anywhere}'
+        '.core-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:12px}'
+        '.core-node{background:white;border:1px solid #ddd;border-radius:10px;padding:14px}.core-node h3{margin:0 0 10px}'
+        '.core-value,.core-rule{font-size:1.1rem;overflow-wrap:anywhere}.unavailable{color:#777}.core-state{padding-left:20px;font-size:13px}'
+        '.core-state span{font-weight:600}.core-dependency{display:inline-block;margin:2px;padding:2px 5px;background:#eee;border-radius:4px}'
+        '.core-arrangement{margin:28px 0}.core-section{margin:18px 0}'
+        '@media(prefers-color-scheme:dark){body{background:#181817;color:#eee}.core-node{background:#242422;border-color:#555}'
+        '.core-dependency{background:#383835}a{color:#8fc7ff}}'
+        '@media(prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important;scroll-behavior:auto!important}}</style></head>',
+        f'<body data-profile="core/v1" data-snapshot-id="{context.snapshot_id}" '
+        f'data-findings-revision="{context.findings_revision}" '
+        f'data-page-assessment-revision="{page_assessment["page_assessment_revision"]}">',
+        f'<main class="core-wrap"><h1>{html.escape(title)}</h1>',
+        f'<p class="core-meta">snapshot {context.snapshot_id} · findings {context.findings_revision} '
+        f'· page {page_assessment["page_assessment_revision"]}</p>',
+    ]
+    for tab in arrangements:
+        output.append(f'<section class="core-arrangement" data-page-tab="{html.escape(tab["key"])}">'
+                      f'<h2>{html.escape(tab["title"] or words["tab_now"])}</h2>')
+        if tab['occasion']:
+            output.append(f'<p>{html.escape(tab["occasion"])}</p>')
+        for section in tab['sections']:
+            output.append(f'<section class="core-section"><h3>{html.escape(section["title"])}</h3>')
+            if section['why']:
+                output.append(f'<p>{html.escape(section["why"])}</p>')
+            output.append('<div class="core-grid">' + ''.join(card(identifier)
+                                                               for identifier in section['ids']) + '</div></section>')
+        output.append('</section>')
+    if spill:
+        output.append('<section class="core-arrangement" data-page-spill="true"><h2>Flagged outside the arrangement</h2>'
+                      '<div class="core-grid">' + ''.join(card(identifier) for identifier in spill)
+                      + '</div></section>')
+    output.append(f'<section class="core-record"><h2>{html.escape(words["tab_record"])}</h2>'
+                  '<div class="core-grid">' + ''.join(card(identifier) for identifier in sorted(ids))
+                  + '</div></section>')
+    encoded_assessment = json.dumps(page_assessment, ensure_ascii=False, sort_keys=True,
+                                    separators=(',', ':')).replace('<', '\\u003c')
+    output.append('<script type="application/json" id="kpopper-page-assessment">'
+                  + encoded_assessment + '</script></main></body></html>')
+
+    entries = {identifier: display[identifier] for identifier in sorted(ids - judgments)}
+    decisions = {identifier: display[identifier] for identifier in sorted(judgments)}
+    shape = current_shape
+    info = {'profile': 'core/v1', 'shape': shape, 'brief': bool(brief),
+            'flags': flags, 'coverage': coverage,
+            'page': {'page.covered': len(selected), 'page.spill': len(spill)},
+            'snapshot_id': context.snapshot_id, 'findings_revision': context.findings_revision,
+            'page_assessment_revision': page_assessment['page_assessment_revision'],
+            'page_assessment': page_assessment, 'tabs': arrangements,
+            'notes': ['core/v1 generic page seam: arrangement changes only page-secondary/v1']}
+    return '\n'.join(output), entries, decisions, ids, info
+
+
+def core_build(paths, brief_path=None, page_path=None, *, read_mode=None, context=None):
+    """Capture once, assess v3 once, then hand the retained context to the pure seam."""
+    CapturedAssessment, _, _, Snapshot = _core_modules()
+    selected = list(paths)
+    if context is None:
+        context = (CapturedAssessment.capture(selected, policy='focused-review/v1')
+                   if read_mode is None else CapturedAssessment.from_snapshot(
+                       Snapshot.capture(selected, read_mode=read_mode),
+                       policy='focused-review/v1'))
+    chosen = P.brief_for(selected, brief_path)
+    brief_content = pathlib.Path(chosen).read_bytes() if chosen and os.path.exists(chosen) else None
+    root = pathlib.Path(selected[0]).absolute().parent if selected else None
+    return core_build_from_context(context, brief_content, page_path, record_root=root)
+
+
+def core_verify(paths, brief_path=None, *, read_mode=None, context=None):
+    """Verify the explicit core page and its bound secondary revision without rebuilding truth."""
+    page, entries, judgments, ids, info = core_build(
+        paths, brief_path, read_mode=read_mode, context=context)
+    fail = []
+    dom_ids = set(re.findall(r'data-id="([^"]+)"', page))
+    if dom_ids != set(ids):
+        missing, extra = set(ids) - dom_ids, dom_ids - set(ids)
+        if missing:
+            fail.append('core page omits: ' + ', '.join(sorted(missing)))
+        if extra:
+            fail.append('core page invents: ' + ', '.join(sorted(extra)))
+    for field in ('snapshot_id', 'findings_revision', 'page_assessment_revision'):
+        if str(info[field]) not in page:
+            fail.append('core page omits ' + field)
+    if info['coverage'].get('unresolved_selectors'):
+        fail.append('core page selectors unresolved: '
+                    + ', '.join(info['coverage']['unresolved_selectors']))
+    for item in info['coverage'].get('renderer_misfits', []):
+        fail.append('core page renderer does not fit: ' + item)
+    for item in info['coverage'].get('stale_shapes', []):
+        fail.append('core page shape moved: ' + item)
+    embedded = re.search(
+        r'<script type="application/json" id="kpopper-page-assessment">(.*?)</script>',
+        page, flags=re.S)
+    try:
+        payload = json.loads(embedded.group(1)) if embedded else None
+    except (ValueError, TypeError):
+        payload = None
+    if payload != info['page_assessment']:
+        fail.append('core page does not embed its exact page-secondary/v1 envelope')
+    for dimension in ('acceptance', 'computation', 'basis', 'falsifier',
+                      'contention', 'integrity', 'coverage', 'assurance'):
+        if f'data-state-dimension="{dimension}"' not in page:
+            fail.append('core page omits v3 state dimension ' + dimension)
+    for item in info['notes']:
+        print('NOTE', item)
+    for item in fail:
+        print('FAIL', item)
+    print(f"{len(dom_ids)} elements, {len(entries)} entries, {len(judgments)} judgments, "
+          f"{len(info['tabs']) + 1} tabs, {len(fail)} problems")
+    return 1 if fail else 0
+
+
+def measured_build(paths, brief_path=None, page_path=None, *, profile=None, context=None):
     """Explicit page construction publishes counts for the exact inputs it read."""
+    if profile == 'core/v1':
+        # The core page has a page-secondary/v1 revision over its exact brief and
+        # derived values.  It deliberately does not publish that presentation back
+        # into the legacy page-count cache during the dormant T4 route.
+        return core_build(paths, brief_path, page_path, context=context)
+    if profile is not None:
+        raise ValueError('unsupported page profile: ' + str(profile))
     if LOADED_SOURCE_HASH != MEASUREMENTS.LOADED_CODE['render_page.py']:
         raise ValueError('loaded renderer changed; restart it before measuring')
     selected = list(paths)
@@ -1857,8 +2296,12 @@ def measured_build(paths, brief_path=None, page_path=None):
     return result
 
 
-def verify(paths, brief_path=None):
+def verify(paths, brief_path=None, *, profile=None, context=None):
     """Deterministic, no browser. What only looking can catch is a separate job."""
+    if profile == 'core/v1':
+        return core_verify(paths, brief_path, context=context)
+    if profile is not None:
+        raise ValueError('unsupported page profile: ' + str(profile))
     page, E, J, ids, info = measured_build(paths, brief_path)
     fail, note = lint_output(page, E, J, info)
     # what the page SHOWS is markup, not script - the provenance layer's own source
@@ -1960,12 +2403,28 @@ if __name__ == "__main__":
     if '--frozen' in a:
         a.remove('--frozen')
         os.environ['KPOPPER_READ_MODE'] = 'frozen'
+    profile = None
+    if '--profile' in a:
+        index = a.index('--profile')
+        if index + 1 >= len(a):
+            sys.exit('--profile needs a value')
+        profile = a[index + 1]
+        del a[index:index + 2]
+        if profile != 'core/v1':
+            sys.exit('unsupported page profile: ' + profile)
     brief = a[a.index("--brief") + 1] if "--brief" in a else None
     files = [x for x in a if x.endswith((".yaml", ".yml")) and x != brief] or P.default_paths()
-    if "--verify" in a:
-        sys.exit(verify(files, brief))
-    page, _, _, _, info = measured_build(files, brief, page_path)
-    for t in info["tabs"]:
+    try:
+        if "--verify" in a:
+            sys.exit(verify(files, brief, profile=profile))
+        page, _, _, _, info = measured_build(files, brief, page_path, profile=profile)
+    except Exception as error:
+        failure = getattr(error, 'envelope', None)
+        if profile == 'core/v1' and isinstance(failure, dict):
+            print(json.dumps(failure, ensure_ascii=False, sort_keys=True), file=sys.stderr)
+            sys.exit(2)
+        raise
+    for t in ([] if profile == 'core/v1' else info["tabs"]):
         if t["shape"]:
             continue
         if t["bare"]:

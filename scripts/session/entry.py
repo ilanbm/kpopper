@@ -23,6 +23,9 @@ def parser():
     p.add_argument("--project", help="stable project name; defaults to the record directory name")
     p.add_argument("--state", type=Path, help="pending-proposal state directory")
     p.add_argument("--profile", type=Path, help="declared navigation profile JSON")
+    p.add_argument("--assessment-profile", choices=["checked-reader/v1", "core/v1"],
+                   default="checked-reader/v1",
+                   help="explicit semantic reader profile; default preserves the legacy checked reader")
     p.add_argument("--encoding", choices=["o200k_base", "cl100k_base"], default="o200k_base")
     p.add_argument("--tokens", type=int)
     p.add_argument("--ref")
@@ -94,6 +97,8 @@ def main(argv=None):
             return 0
         if args.operation in {"enable", "disable"}:
             from .settings import write
+            if args.assessment_profile != "checked-reader/v1":
+                raise ValueError("core/v1 session routing is explicit per invocation; default activation is not enabled")
             if args.global_scope and (args.profile or args.project or args.state):
                 raise ValueError("profile, project and state settings require project-scoped enablement")
             value = {"schema": 1, "enabled": args.operation == "enable"}
@@ -124,9 +129,11 @@ def main(argv=None):
                 result["reason"] = str(error)
             print(json.dumps(result, indent=2))
             return 0 if result["ready"] else 1
-        from .view import GroundingService
+        from .view import CoreGroundingService, GroundingService
         project, path, state, reader, profile = resolve(args)
-        service = GroundingService(project, path, state, reader, args.encoding, profile=profile,embedding_dir=args.embedding_dir)
+        service_type = CoreGroundingService if args.assessment_profile == "core/v1" else GroundingService
+        service = service_type(project, path, state, reader, args.encoding, profile=profile,
+                               embedding_dir=args.embedding_dir)
         if args.operation == "serve":
             from .mcp_server import make_server
             make_server(service).run(transport="stdio")
@@ -138,6 +145,8 @@ def main(argv=None):
                        "--state", str(service.state_dir)]
             if args.normalized:
                 command.append("--normalized")
+            if args.assessment_profile != "checked-reader/v1":
+                command += ["--assessment-profile", args.assessment_profile]
             if profile:
                 command += ["--profile", str(Path(profile).resolve())]
             prefix = shlex.join(command)

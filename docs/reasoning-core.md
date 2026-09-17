@@ -5,6 +5,7 @@ readers keep their legacy interpretation until their consumers are integrated.
 
 ```sh
 kpop assess m.total d.order --profile core/v1 --record example.yaml
+kpop assess m.total d.order --profile core/v1 --history --record example.yaml
 ```
 
 ```yaml
@@ -43,6 +44,35 @@ semantics for compatibility documentation; older checked-session responses did
 not carry that identifier. Missing metadata keeps the existing surface's legacy
 interpretation. An assessment's explicit `--profile core/v1` override does not
 rewrite a record.
+
+The optional `--history` route returns combined `schema_version: 3`, defined by
+`scripts/reasoning/history_assessment.schema.json`. It computes schema v2 once from one
+immutable Snapshot, then adds captured history subjects, pins, coverage, assurance and support
+reservations without a second evaluator or source read. `findings_revision` is the semantic
+identity; `envelope_revision` also binds policy and display selection. Existing core v2 and both
+legacy reader profiles remain supported. The same captured context is available explicitly to:
+
+```sh
+kpop open --profile core/v1 example.yaml
+kpop check --profile core/v1 example.yaml
+kpop pull d.order --profile core/v1 example.yaml
+kpop affects m.total --profile core/v1 example.yaml
+kpop export d.order --profile core/v1 --record example.yaml
+kpop search "order" --profile core/v1 --record example.yaml
+kpop page --profile core/v1 --out core.html example.yaml
+kpop session open --assessment-profile core/v1 --input example.yaml
+```
+
+These routes do not activate or migrate a record. They fail closed on unsupported legacy-only
+options and preserve unknown/error independently from false. The core session handle binds the
+project identity, Snapshot, findings and consumer-view version; follow-up reads reuse its retained
+source-free context and recapture only to reject staleness.
+
+`consolidate`, watch compatibility/uncertainty, followups, and `remeasure` remain explicit
+legacy-only operations during the dormant T4 route. A declared core record fails them closed with
+`unsupported_capability: use core/v1 consumer`; they never fall back to the legacy evaluator.
+Use the shared read consumers above for current findings. Activation remains blocked while these
+operation-specific contracts are not migrated.
 
 ## Composable conditions
 

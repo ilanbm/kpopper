@@ -38,6 +38,99 @@ if (!CHROME) { console.log('no Chrome/Chromium found - set CHROME to a browser b
   const gone = async (p, sel, ms = 4000) =>
     p.locator(sel).first().waitFor({ state: 'detached', timeout: ms }).then(() => true, () => false);
 
+  // The explicit core/v1 page is a deliberately generic, source-free projection,
+  // not the legacy interactive tree.  It has its own bound DOM contract while the
+  // 50 legacy checks below remain byte-for-byte in force for ordinary pages.
+  {
+    const ctx = await b.newContext({ viewport: { width: 1100, height: 900 } });
+    const p = await ctx.newPage();
+    await p.goto('file://' + require('path').resolve(FILE));
+    const core = await p.locator('body[data-profile="core/v1"]').count() === 1;
+    await ctx.close();
+    if (core) {
+      for (const theme of ['light', 'dark']) {
+        const T = `[core ${theme}]`;
+        let pageContext;
+        try {
+          pageContext = await b.newContext({ viewport: { width: 1100, height: 900 }, colorScheme: theme });
+          const page = await pageContext.newPage();
+          const errs = []; page.on('pageerror', e => errs.push(String(e)));
+          await page.goto('file://' + require('path').resolve(FILE));
+          await page.locator('.core-node[data-id]').first().waitFor();
+          const state = await page.evaluate(() => {
+            const body = document.body;
+            const assessment = JSON.parse(document.querySelector('#kpopper-page-assessment').textContent);
+            const nodes = [...document.querySelectorAll('.core-node[data-id]')];
+            const ids = nodes.map(node => node.dataset.id);
+            const dimensions = ['acceptance', 'computation', 'basis', 'falsifier',
+              'contention', 'integrity', 'coverage', 'assurance', 'support'];
+            const meta = name => document.querySelector(`meta[name=${name}]`).content;
+            return {
+              snapshot: body.dataset.snapshotId,
+              findings: body.dataset.findingsRevision,
+              page: body.dataset.pageAssessmentRevision,
+              metaSnapshot: meta('kpopper-snapshot-id'),
+              metaFindings: meta('kpopper-findings-revision'),
+              metaPage: meta('kpopper-page-assessment-revision'),
+              assessment,
+              ids, unique: new Set(ids).size,
+              completeDimensions: nodes.every(node => dimensions.every(name =>
+                node.querySelector(`[data-state-dimension=${name}]`))),
+              typed: document.querySelectorAll('[data-value-kind=typed]').length,
+              background: getComputedStyle(body).backgroundColor,
+              animations: document.getAnimations ? document.getAnimations({ subtree: true }).length : 0,
+            };
+          });
+          const hex = value => /^[0-9a-f]{64}$/.test(value || '');
+          chk(`${T} no page errors`, errs.length === 0);
+          chk(`${T} no horizontal overflow`, await page.evaluate(
+            () => document.documentElement.scrollWidth <= window.innerWidth + 1));
+          chk(`${T} revisions are canonical-looking and agree across DOM`,
+            [state.snapshot, state.findings, state.page].every(hex)
+            && state.snapshot === state.metaSnapshot
+            && state.findings === state.metaFindings && state.page === state.metaPage
+            && state.snapshot === state.assessment.snapshot_id
+            && state.findings === state.assessment.findings_revision
+            && state.page === state.assessment.page_assessment_revision);
+          chk(`${T} every captured node is present`, state.unique > 0
+            && state.unique === state.assessment.page_inputs.values.nodes.length);
+          chk(`${T} all independent state and support dimensions are visible`, state.completeDimensions);
+          chk(`${T} generic typed values are rendered`, state.typed > 0);
+          chk(`${T} theme media query is applied`, theme === 'dark'
+            ? state.background === 'rgb(24, 24, 23)' : state.background !== 'rgb(24, 24, 23)');
+          if (errs.length) console.log('      ' + errs.join(' | '));
+        } catch (e) {
+          chk(`${T} harness error: ${e.message}`, false);
+        } finally {
+          if (pageContext) await pageContext.close();
+        }
+      }
+      {
+        const T = '[core reduced motion]';
+        let pageContext;
+        try {
+          pageContext = await b.newContext({ viewport: { width: 1100, height: 900 }, reducedMotion: 'reduce' });
+          const page = await pageContext.newPage();
+          const errs = []; page.on('pageerror', e => errs.push(String(e)));
+          await page.goto('file://' + require('path').resolve(FILE));
+          await page.locator('.core-node[data-id]').first().waitFor();
+          const animations = await page.evaluate(() => document.getAnimations
+            ? document.getAnimations({ subtree: true }).length : 0);
+          chk(`${T} no page errors`, errs.length === 0);
+          chk(`${T} no animation is required to read the page`, animations === 0);
+        } catch (e) {
+          chk(`${T} harness error: ${e.message}`, false);
+          chk(`${T} harness error: ${e.message}`, false);
+        } finally {
+          if (pageContext) await pageContext.close();
+        }
+      }
+      console.log(`\n${pass} passed, ${fail} failed`);
+      await b.close();
+      process.exit(fail ? 1 : 0);
+    }
+  }
+
   for (const theme of ['light', 'dark']) {
     const T = `[${theme}]`;
     let ctx;

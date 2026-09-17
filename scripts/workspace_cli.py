@@ -34,6 +34,8 @@ def open_context(argv):
     parser.add_argument("files", nargs="*", help="explicit record files (uses the legacy reader)")
     parser.add_argument("--chars", type=int, help="character budget for an explicit legacy opening")
     parser.add_argument("--budget", type=int, help="item budget for an explicit legacy opening")
+    parser.add_argument('--profile', choices=('core/v1',),
+                        help='explicit shared assessment profile; omitted keeps the legacy opening')
     args = parser.parse_args(argv)
     try:
         location = W.locate()
@@ -69,6 +71,48 @@ def open_context(argv):
             if data.get("mapping"):
                 text += "\nMapping: " + data["mapping"]["mapping"]
             return _emit({**data, "message": text}, text, args.json)
+        if args.profile == 'core/v1':
+            if args.chars is not None or args.budget is not None:
+                raise ValueError('core_profile_option_unsupported: --chars/--budget')
+            try:
+                from .reasoning.context import CaptureError, CapturedAssessment
+            except ImportError:
+                from reasoning.context import CaptureError, CapturedAssessment
+            try:
+                context = CapturedAssessment.capture(files)
+            except CaptureError as error:
+                failure = error.envelope
+                text = (failure['code'] + ': ' + failure['detail'] + '\n'
+                        'capture failure ' + failure['failure_revision'] + '; no findings')
+                return _emit({**data, **failure, 'error': str(error)}, text, args.json, 2)
+            report, snapshot = context.assessment, context.snapshot.to_data()
+            document = snapshot['document']
+            meta = document.get('meta') if isinstance(document.get('meta'), dict) else {}
+            title = meta.get('name') or meta.get('scope') or Path(files[0]).stem
+            attention = []
+            for identifier, node in sorted(report['nodes'].items()):
+                reasons = sorted({reason['code'] for action in node['attention']
+                                  for reason in action['reasons']})
+                if node['support']['status'] == 'reserved':
+                    reasons += ['support_' + state for state in sorted({
+                        item['state'] for item in node['support']['reservations']})]
+                if reasons:
+                    attention.append({'id': identifier, 'reasons': sorted(set(reasons))})
+            data.update(assessment_profile='core/v1', snapshot_id=context.snapshot_id,
+                        findings_revision=context.findings_revision,
+                        nodes=len(report['nodes']), history_subjects=len(report['history_subjects']),
+                        attention=attention, followups_status='not_projected_for_core/v1')
+            lines = [str(title), 'core/v1 snapshot ' + context.snapshot_id,
+                     'findings ' + context.findings_revision,
+                     str(len(report['nodes'])) + ' computational nodes; '
+                     + str(len(report['history_subjects'])) + ' history subjects']
+            lines += [('  ' + item['id'] + ': ' + ', '.join(item['reasons'])) for item in attention]
+            if not attention:
+                lines.append('  no attention selected by ' + report['attention_policy'])
+            lines.append('Use `kpop assess ID --profile core/v1 --history` for exact findings.')
+            if data.get('mapping'):
+                lines.append('Mapping: ' + data['mapping']['mapping'])
+            return _emit(data, '\n'.join(lines), args.json)
         legacy = None
         if explicit:
             legacy = list(files)

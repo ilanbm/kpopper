@@ -1,0 +1,62 @@
+"""Workspace open has an explicit one-context core route."""
+import contextlib
+import io
+import json
+from pathlib import Path
+import tempfile
+import unittest
+from unittest import mock
+
+from scripts import workspace_cli as W
+
+
+DOCUMENT = '''meta:
+  name: Core workspace
+  reasoning: {version: 2, profile: core/v1, requires: [arithmetic/v1]}
+known:
+  p.input: {v: 1}
+judgments:
+  d.ready:
+    rests_on: [p.input]
+    seen: {p.input: 1}
+    wrong_if: Supplier changes terms
+'''
+
+
+class CoreWorkspaceOpen(unittest.TestCase):
+    def test_explicit_core_open_uses_one_context_and_never_legacy_session(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / 'GROUNDING.yaml'
+            path.write_text(DOCUMENT, encoding='utf-8')
+            output = io.StringIO()
+            with mock.patch.object(W.W, 'locate', return_value={
+                    'workspace': directory, 'record': str(path), 'status': 'found',
+                    'key': 'core-workspace'}), \
+                    mock.patch.object(W.S, 'read_view', side_effect=AssertionError('legacy session')), \
+                    contextlib.redirect_stdout(output):
+                code = W.open_context(['--json', '--profile', 'core/v1', str(path)])
+        self.assertEqual(code, 0)
+        result = json.loads(output.getvalue())
+        self.assertEqual(result['assessment_profile'], 'core/v1')
+        self.assertRegex(result['snapshot_id'], r'^[0-9a-f]{64}$')
+        self.assertRegex(result['findings_revision'], r'^[0-9a-f]{64}$')
+        self.assertEqual(result['followups_status'], 'not_projected_for_core/v1')
+
+    def test_legacy_default_still_calls_the_existing_opening(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / 'GROUNDING.yaml'
+            path.write_text('known:\n  p.input: {v: 1}\n', encoding='utf-8')
+            completed = type('Result', (), {'stdout': 'legacy opening\n', 'stderr': '',
+                                             'returncode': 0})()
+            with mock.patch.object(W.W, 'locate', return_value={
+                    'workspace': directory, 'record': str(path), 'status': 'found',
+                    'key': 'legacy-workspace'}), \
+                    mock.patch.object(W.S, 'read_view', return_value=(completed, False)) as read, \
+                    mock.patch('scripts.followups.summary', return_value=None):
+                code = W.open_context([str(path)])
+        self.assertEqual(code, 0)
+        read.assert_called_once()
+
+
+if __name__ == '__main__':
+    unittest.main()
