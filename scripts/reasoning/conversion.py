@@ -8,12 +8,12 @@ import copy
 import re
 
 from ..pending_grounding import entries, identity, _encode, json_bytes, document_capabilities
-from .contract import PROFILE, capabilities, CapabilityError, operational_bounds, OutputBudget
+from .contract import PROFILE, capabilities, CapabilityError, operational_bounds, OutputBudget, admitted
 from .language import lower, references
 from .snapshot import Snapshot, _fields
 from .assessment import assess, dependency_result
 from .evaluate import Evaluator
-from .authoring import DECLARATION
+from .authoring import DECLARATION, declare_document
 
 
 TRANSFORMATION = 'legacy-to-core/v1'
@@ -177,6 +177,11 @@ def convert_snapshot(snapshot, *, reader, runtime=None, operational_limits=None)
             _block(report, 'coercive_expression', str(error), nid, field)
     # Invalid syntax remains an explicit blocker. Comparison still reports every
     # independent supported result available in the final proposed document.
+    try:
+        candidate = declare_document(candidate)
+        report['document'] = candidate
+    except (ValueError, TypeError, SyntaxError, RecursionError) as error:
+        _block(report, 'invalid_expression', str(error))
     compared = compare_snapshots(snapshot, _candidate(snapshot, candidate), reader=reader,
                                  runtime=runtime, operational_limits=operational_limits)
     for key in ('candidate_snapshot_id', 'comparisons', 'legacy_runtime', 'fired'):
@@ -186,7 +191,20 @@ def convert_snapshot(snapshot, *, reader, runtime=None, operational_limits=None)
     return _finish(report, operational_limits)
 
 
-def _typed(value, reader):
+def _typed(value, reader, *, legacy_numeric=False):
+    if value is None:
+        return {'type': 'null'}
+    if legacy_numeric:
+        number = reader.E.number(value)
+        if number is not None:
+            return {'type': 'number', 'numerator': str(number.numerator),
+                    'denominator': str(number.denominator)}
+    if isinstance(value, list):
+        items = [_typed(item, reader) for item in value]
+        return {'type': 'list', 'items': items} if all(item is not None for item in items) else None
+    if isinstance(value, dict) and all(isinstance(key, str) for key in value):
+        fields = {key: _typed(item, reader) for key, item in value.items()}
+        return {'type': 'record', 'fields': fields} if all(item is not None for item in fields.values()) else None
     if type(value) is bool:
         return {'type': 'boolean', 'value': value}
     if isinstance(value, str):
@@ -200,7 +218,11 @@ def _typed(value, reader):
 def _legacy_observation(reader, raw, ids, nid, body, field, predicate, runtime_report):
     value = reader.evaluate(body.get(field), raw, ids) if predicate else reader.value_of(raw, ids, nid)
     if value is not None:
-        typed = _typed(value, reader)
+        # The legacy scalar evaluator represents exact fractions as a private
+        # ``{rational: [n, d]}`` sentinel. Interpret that shape only when it is
+        # the result of a legacy calculation/predicate. A stored T3 record with
+        # the same keys is an ordinary record and must never be guessed numeric.
+        typed = _typed(value, reader, legacy_numeric=predicate or field == 'rule')
         return {'status': 'known' if typed is not None else 'unrepresentable', 'value': typed}
     explicit = field != 'collection_scope' and isinstance(body, dict) and isinstance(body.get(field), dict)
     dependent = bool(set(reader.predicate_refs(body.get(field))) & {
@@ -225,11 +247,8 @@ def _result(report, nid, field, before, after, *, blocked, required):
         comparison = 'newly_executable' if status == 'ok' else 'unavailable'
     if status == 'operational_error':
         _block(report, 'operational_error', 'packaged core runtime could not validate the candidate', nid, field)
-    elif required and status != 'ok':
-        codes = [item.get('code') for item in after.get('diagnostics', [])]
-        declared_hole = blocked and status == 'unknown' and all(code == 'missing_reference' for code in codes)
-        if not declared_hole:
-            _block(report, 'unavailable_core_result', 'required core result is unavailable without a supported declared hole', nid, field)
+    elif required and not admitted(after, blocked=blocked):
+        _block(report, 'unavailable_core_result', 'required core result is unavailable without a supported declared hole', nid, field)
     report['comparisons'].append({'id': nid, 'field': field, 'status': comparison,
         'before': before, 'after': {'status': status, 'value': copy.deepcopy(after_value),
                                    'diagnostics': copy.deepcopy(after.get('diagnostics', []))}})

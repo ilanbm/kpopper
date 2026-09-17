@@ -62,6 +62,21 @@ jobs:
         run: python -m unittest tests.test_reasoning_distribution -v
       - name: Execute the freshly built archive against the source scalar corpus
         run: python tests/test_reasoning_distribution.py --archive scripts/reasoning/native/${{ matrix.target }}.zip
+      - name: Execute the freshly built archive against composition conformance
+        shell: python
+        run: |
+          import os, pathlib, subprocess, sys
+          sys.path.insert(0, str(pathlib.Path.cwd()))
+          from scripts.reasoning.runtime import Runtime
+          archive = pathlib.Path('scripts/reasoning/native/${{ matrix.target }}.zip').resolve()
+          native = Runtime(archive)
+          env = dict(os.environ,
+                     KPOPPER_REASONING_TEST_BINARY=str(native.binary),
+                     KPOPPER_REQUIRE_REASONING_TESTS='1')
+          subprocess.run([sys.executable, '-m', 'unittest',
+                          'tests.test_reasoning_composition_kernel',
+                          'tests.test_reasoning_composition_review'],
+                         env=env, check=True)
       - name: Upload immutable target candidate
         uses: actions/upload-artifact@v4
         with:
@@ -135,6 +150,8 @@ jobs:
               python = env/('Scripts/python.exe' if sys.platform == 'win32' else 'bin/python')
               subprocess.run([str(python), '-m', 'pip', 'install', str(artifact)], check=True)
               subprocess.run([sys.executable, 'tests/test_reasoning_distribution.py', '--installed-python', str(python)], check=True)
+              subprocess.run([sys.executable, 'tests/test_reasoning_composition_acceptance.py',
+                              '--installed-python', str(python)], check=True)
           # Extract a real plugin tree into a separate directory, with the same
           # native assets. Use only its own source modules for the plugin probe.
           plugin_stage = work/'plugin-stage'
@@ -144,6 +161,8 @@ jobs:
           with zipfile.ZipFile(archive) as zf:
               zf.extractall(plugin)
           subprocess.run([sys.executable, 'tests/test_reasoning_distribution.py', '--installed-python', str(python), str(plugin)], check=True)
+          subprocess.run([sys.executable, 'tests/test_reasoning_composition_acceptance.py',
+                          '--installed-python', str(python), '--plugin-root', str(plugin)], check=True)
           # Make the native oracle/framing suites and schema validation mandatory.
           # The executable comes from the installed, committed package payload.
           subprocess.run([str(python), '-m', 'pip', 'install', 'jsonschema'], check=True)

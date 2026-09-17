@@ -1,14 +1,38 @@
-# Packaged arithmetic runtime
+# Packaged core runtime
 
-`<target>.zip` is generated package data for the experimental `core/v1`
-profile. A normal pip or plugin installation uses it offline: no compiler,
-network download, or checked-session setup is needed. The Python wrapper is
-portable; native computation requires a matching verified archive.
+`<target>.zip` is generated package data for the explicit, default-off
+experimental `core/v1` profile. A normal pip or plugin installation uses it
+offline: no compiler, network download, or checked-session setup is needed. The
+Python wrapper is portable; native computation requires a matching verified
+archive.
 
-The current data-only transport is KP2/KR2. KP2 retains the scalar request fields;
-KR2 adds `preflight_steps` after evaluation `steps`, before node-evaluation counts.
-Both phases independently use the requested step bound. Old KP1/KR1 archives are
+The data-only executable has two closed transports. KP2/KR2 retains the scalar
+arithmetic request, response and `resources/v2` accounting byte-for-byte. A
+request whose potential closure contains a composed node or stored list/record
+uses explicit KP3/KR3 and `resources/v3`; no composition tag is accepted on the
+KP2 wire. KP3 adds `and`, `or`, `not`, conditionals, lists, records and literal-key
+field access, with fixed maxima of 10,000 recursively expanded value nodes,
+depth 128 and 16 MiB of canonical value tokens. KR3 keeps potential and executed
+reads distinct and returns recursive typed values. Old KP1/KR1 archives are
 refused; source/protocol changes require rebuilt archives for every target.
+
+Manifest schema version 2 advertises both protocol and module sets exactly:
+
+```json
+{
+  "version": 2,
+  "protocols": ["KP2", "KP3"],
+  "modules": ["arithmetic/v1", "composition/v1"]
+}
+```
+
+The remaining manifest fields bind the target, minimum OS, Lean version, runtime
+source identity, executable, libraries and every payload digest. The adapter
+checks the requested protocol and required modules before encoding, requires the
+matching KR2 or KR3 response for each request, and preserves KP2 as the reported
+implementation for scalar closures even when the record declares composition.
+A missing capability or mismatched/stale archive is a refusal, never a semantic
+fallback.
 
 Maintainers build each archive on its target host with pinned Lean 4.33.1
 and the exact GMP 6.3.0 source archive:
@@ -75,6 +99,12 @@ interpreter/CPU combination is not claimed as executed. The package's base
 Python requirement remains >=3.9. The workflow uploads candidates and does
 not publish releases. The release completeness gate must require all five
 verified archives and matching runtime source identity before publishing.
+
+Adding KP3 sources and manifest support does not itself establish cross-platform
+or installed validation. Until all five archives are rebuilt from the current
+source identity and the candidate/install jobs pass on their named targets, they
+remain candidates and publication is not ready. Do not infer platform support
+from a manifest, a local native run, or previously verified KP2 archives.
 
 Runner label reference: <https://docs.github.com/en/actions/reference/runners/github-hosted-runners>.
 Pinned toolchain assets: <https://github.com/leanprover/lean4/releases/tag/v4.33.1>.

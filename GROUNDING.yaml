@@ -693,6 +693,14 @@ sources:
       תסתכל בm8t-stack-poc ובריפואים שקשורים אליו אולי שם הטסטים יותר טובים? יודעים לאתר מתי צריך להריץ משהו ומתי לא?
     read: "2026-09-17"
     fidelity: quoted
+  s.2026_09_17_t3_integration:
+    name: "T3 executable integration session"
+    asked: "Continue the merged T2 baseline through T3-T7 verified RC with one integrator and useful
+            DAG parallelism."
+    file: "/Users/ilanbm/.local/state/kpopper/ingestion/59fc71c2582477cc5d4343318c7bf9b372c3e0d2bd4fe34ec620cbe721a1de92/sources/36be8ecda06ff2bd369b8279b87529fc.txt"
+    at: "captured executable findings from task 01a0afd0-4d5f-7083-8025-f1ddca47d953"
+    of: "2026-09-17"
+    read: "2026-09-17"
   s.background_ingestion:
     name: "Background capture and selective delivery contract"
     file: "skills/kpopper/INGESTION.md"
@@ -2024,6 +2032,43 @@ known:
     of: "2026-09-17"
     measure: skill_bytes_largest
 
+  m.t3_blocked_rule_inference_regression:
+    name: "Blocked structured core rule was misclassified as a sparse judgment"
+    v: "After valid missing-data admission, provenance.infer treated blocked_on alone as judgment
+        shape and refused a source/fact-only core record with no dependency field; the narrow fix
+        keeps blocked structured rules value-shaped while real judgments still require dependencies."
+    from: s.2026_09_17_t3_integration
+    at: "second sentence; tests/test_core_infer_blocked_rule.py"
+    of: "2026-09-17"
+    scope:
+      commit: "259dee4 plus uncommitted T3 integration"
+      environment: "Python 3.14 local writer regression"
+      kind: "test and source inspection"
+
+  m.t3_composition_cycle_depth_masked:
+    name: "Long potential composition cycle was masked by the expression depth limit"
+    v: "A 128-node reference cycle in an unselected conditional branch returned limit/depth_limit
+        with zero execution steps instead of preflight error/cyclic_reference on the first linked T3
+        darwin-arm64 candidate."
+    from: s.2026_09_17_t3_integration
+    at: "first sentence; tests/test_reasoning_composition_review.py"
+    of: "2026-09-17"
+    scope:
+      commit: "259dee4 plus uncommitted T3 runtime integration"
+      environment: "macOS arm64; Lean 4.33.1; local candidate archive
+                    7a682ff825990cf173daeac0e10f8966379a07937c7ea03dd553511393b0d517"
+      kind: "executable review"
+
+  m.t3_verified_candidate_e669d9d:
+    name: "T3 composition candidate passed source, distribution, and platform gates"
+    v: "Commit e669d9dfe094ea08f690eb1819cb227f7ef5e58a passed 2454 immutable-source tests locally
+        in 2078.481 seconds; workflow 35250090592 passed all 23 jobs including Python 3.9 and 3.13,
+        five native targets, installed wheel and sdist channels, extracted plugin and ci-required.
+        Local wheel and sdist each passed six composition/history acceptance cases, and the committed
+        bundle audit matched all five target archives."
+    from: s.2026_09_17_t3_integration
+    at: "final candidate verification and GitHub Actions run 35250090592"
+    of: "2026-09-17"
   m.unasked.question_filler:
     v: 0
     unit: entries

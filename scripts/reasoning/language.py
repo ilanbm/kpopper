@@ -1,4 +1,4 @@
-"""Lower the explicit scalar language without evaluating it in Python."""
+"""Lower the explicit finite language without evaluating it in Python."""
 import ast
 import copy
 import math
@@ -21,15 +21,31 @@ def lower(expression):
             raise ValueError('expression nesting exceeds core/v1 bounds or contains a cycle')
         keys = set(item)
         if keys == {'op', 'args'}:
-            if item['op'] not in MODULES['arithmetic/v1']['operators']:
-                raise CapabilityError('unsupported_capability', 'operator is not registered in arithmetic/v1')
-            if not isinstance(item['args'], list) or len(item['args']) != 2:
-                raise ValueError('a scalar operator requires two arguments')
+            if item['op'] not in (*MODULES['arithmetic/v1']['operators'], *MODULES['composition/v1']['operators']):
+                raise CapabilityError('unsupported_capability', 'operator is not registered')
+            if not isinstance(item['args'], list) or len(item['args']) != (1 if item['op'] == 'not' else 2):
+                raise ValueError('invalid operator arity')
             active.add(id(item))
             try:
                 return {'op': item['op'], 'args': [validate(child, depth + 1) for child in item['args']]}
             finally:
                 active.remove(id(item))
+        if keys in ({'if', 'then', 'else'}, {'list'}, {'record'}, {'field', 'key'}):
+            active.add(id(item))
+            try:
+                if keys == {'if', 'then', 'else'}:
+                    return {key: validate(item[key], depth + 1) for key in ('if', 'then', 'else')}
+                if keys == {'list'} and isinstance(item['list'], list):
+                    return {'list': [validate(child, depth + 1) for child in item['list']]}
+                if keys == {'record'} and isinstance(item['record'], dict) and all(
+                        isinstance(key, str) for key in item['record']):
+                    return {'record': {key: validate(item['record'][key], depth + 1)
+                                       for key in sorted(item['record'])}}
+                if keys == {'field', 'key'} and isinstance(item['key'], str):
+                    return {'field': validate(item['field'], depth + 1), 'key': item['key']}
+            finally:
+                active.remove(id(item))
+            raise ValueError('invalid composition expression fields')
         if keys == {'num'} and isinstance(item['num'], str) and len(item['num']) <= 8200 \
                 and NUMBER.fullmatch(item['num']):
             return dict(item)
@@ -41,7 +57,7 @@ def lower(expression):
             return dict(item)
         if keys == {'ref'} and isinstance(item['ref'], str) and 0 < len(item['ref']) <= 500:
             return dict(item)
-        raise ValueError('invalid scalar expression fields')
+        raise ValueError('invalid expression fields')
     return validate(expression)
 
 
@@ -77,6 +93,30 @@ def _parse(source):
                 and len(node.args) == 1 and not node.keywords and isinstance(node.args[0], ast.Constant) \
                 and isinstance(node.args[0].value, str):
             return {'ref': node.args[0].value}
+        if isinstance(node, ast.Call) and isinstance(node.func, ast.Name) and node.func.id == 'field' \
+                and len(node.args) == 2 and not node.keywords and isinstance(node.args[1], ast.Constant) \
+                and isinstance(node.args[1].value, str):
+            return {'field': visit(node.args[0], depth + 1), 'key': node.args[1].value}
+        if isinstance(node, ast.BoolOp) and isinstance(node.op, (ast.And, ast.Or)):
+            values = [visit(child, depth + 1) for child in node.values]
+            result = values[0]
+            for child in values[1:]:
+                result = {'op': 'and' if isinstance(node.op, ast.And) else 'or', 'args': [result, child]}
+            return result
+        if isinstance(node, ast.UnaryOp) and isinstance(node.op, ast.Not):
+            return {'op': 'not', 'args': [visit(node.operand, depth + 1)]}
+        if isinstance(node, ast.IfExp):
+            return {'if': visit(node.test, depth + 1), 'then': visit(node.body, depth + 1),
+                    'else': visit(node.orelse, depth + 1)}
+        if isinstance(node, ast.List):
+            return {'list': [visit(child, depth + 1) for child in node.elts]}
+        if isinstance(node, ast.Dict):
+            if any(not isinstance(key, ast.Constant) or not isinstance(key.value, str) for key in node.keys):
+                raise ValueError('record keys must be literal strings')
+            keys = [key.value for key in node.keys]
+            if len(keys) != len(set(keys)):
+                raise ValueError('duplicate record key')
+            return {'record': {key: visit(child, depth + 1) for key, child in zip(keys, node.values)}}
         if isinstance(node, ast.UnaryOp) and isinstance(node.op, (ast.USub, ast.UAdd)):
             child = visit(node.operand, depth + 1)
             if isinstance(node.op, ast.UAdd):
@@ -92,6 +132,32 @@ def _parse(source):
     return visit(syntax.body)
 
 
+def children(expression):
+    """Ordered complete potential children, independent of runtime branch choice."""
+    if 'args' in expression:
+        return expression['args']
+    if 'if' in expression:
+        return [expression[key] for key in ('if', 'then', 'else')]
+    if 'list' in expression:
+        return expression['list']
+    if 'record' in expression:
+        return [expression['record'][key] for key in sorted(expression['record'])]
+    if 'field' in expression:
+        return [expression['field']]
+    return []
+
+
+def required_modules(*expressions):
+    """Requirements of validated syntax, including all potential branches."""
+    found, pending = {'arithmetic/v1'}, list(expressions)
+    while pending:
+        item = pending.pop()
+        if any(key in item for key in ('if', 'list', 'record', 'field')) or item.get('op') in ('and', 'or', 'not'):
+            found.add('composition/v1')
+        pending.extend(children(item))
+    return sorted(found)
+
+
 def references(expression):
     """All syntactic reads, including missing nodes; quoted names are literals."""
     pending, found = [expression], set()
@@ -99,22 +165,34 @@ def references(expression):
         node = pending.pop()
         if 'ref' in node:
             found.add(node['ref'])
-        pending.extend(node.get('args', []))
+        pending.extend(children(node))
     return sorted(found)
 
 
 def literal(value):
-    if value is None:
-        return {'null': True}
-    if type(value) is bool:
-        return {'bool': value}
-    if type(value) is int:
-        return lower({'num': str(value)})
-    if type(value) is float and math.isfinite(value):
-        return lower({'num': str(value)})
-    if isinstance(value, str):
-        return {'text': value}
-    raise ValueError('input is outside the scalar arithmetic/v1 value types')
+    active = set()
+    def convert(item, depth=0):
+        if depth > 128 or id(item) in active:
+            raise ValueError('literal exceeds core/v1 bounds or contains a cycle')
+        if item is None:
+            return {'null': True}
+        if type(item) is bool:
+            return {'bool': item}
+        if type(item) is int or type(item) is float and math.isfinite(item):
+            return lower({'num': str(item)})
+        if isinstance(item, str):
+            return {'text': item}
+        if isinstance(item, (list, dict)):
+            active.add(id(item))
+            try:
+                if isinstance(item, list):
+                    return {'list': [convert(child, depth + 1) for child in item]}
+                if all(isinstance(key, str) for key in item):
+                    return {'record': {key: convert(item[key], depth + 1) for key in sorted(item)}}
+            finally:
+                active.remove(id(item))
+        raise ValueError('input is outside core/v1 finite value types')
+    return convert(value)
 
 
 def node_expression(node):

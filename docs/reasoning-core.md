@@ -28,11 +28,13 @@ independent integrity/contention findings. An unavailable executor produces an
 operational error, never `false`. Prose remains a declared unknown; it is not
 silently promoted to an executable condition.
 
-This profile currently supports explicit scalar literals, references, exact
-arithmetic and comparisons. Boolean composition, conditional expressions and
-queries are separate planned capabilities. Unknown required modules refuse
-dependent interpretation. No record text can load code or change the installed
-module registry. A read never activates authoring or migrates stored content.
+The profile remains explicit and default-off. Its scalar fragment supports
+literals, references, exact arithmetic and comparisons through `arithmetic/v1`.
+Records may additionally declare `composition/v1` for finite typed values and
+composable conditions. Query or member selection is not part of this extension.
+Unknown required modules refuse dependent interpretation. No record text can
+load code or change the installed module registry. A read never activates
+authoring or migrates stored content.
 
 The new assessment envelope has `schema_version: 2` and the schema at
 `scripts/reasoning/assessment.schema.json`. Existing ordinary assessments retain
@@ -41,6 +43,111 @@ semantics for compatibility documentation; older checked-session responses did
 not carry that identifier. Missing metadata keeps the existing surface's legacy
 interpretation. An assessment's explicit `--profile core/v1` override does not
 rewrite a record.
+
+## Composable conditions
+
+Composition is an additive capability of `core/v1`, not a new profile. A record
+that authors a composed expression or stores a list or record declares the
+sorted capability union:
+
+```yaml
+meta:
+  reasoning:
+    version: 2
+    profile: core/v1
+    requires: [arithmetic/v1, composition/v1]
+known:
+  p.ready: {v: true}
+  p.details: {v: {region: il, tags: [priority, null]}}
+calculations:
+  m.selected:
+    rule: {expr: 'field(p.details, "tags") if p.ready and not false else []'}
+```
+
+The authored syntax accepts `and`, `or`, `not`, `A if C else B`, list and
+string-keyed dictionary literals, and `field(EXPR, "literal key")`. Boolean
+chains lower left-to-right. Empty and heterogeneous containers are valid.
+`p.details` remains an opaque reference ID; attribute syntax is never field
+access. Use `ref("opaque.id")` for IDs that cannot be written as an attribute.
+Dynamic keys, indexing, comprehensions, spreads, calls other than `ref` and
+`field`, assignment and implicit coercion are refused.
+
+The equivalent data-only nodes are:
+
+```text
+{op: "and"|"or", args: [boolean, boolean]}
+{op: "not", args: [boolean]}
+{if: condition, then: expression, else: expression}
+{list: [expression, ...]}
+{record: {"literal key": expression, ...}}
+{field: recordExpression, key: "literal key"}
+```
+
+Static validation covers every child before execution. Potential dependencies
+therefore include both conditional branches and every boolean operand or
+container member. A potential cycle in a composed closure refuses the request
+before evaluation. Executed reads remain separate: a known conditional executes
+only its selected branch; an unknown guard executes neither branch. An
+unselected branch contributes no runtime read or runtime diagnostic.
+
+`and` and `or` evaluate both operands, left then right. They use three-valued
+dominance: `false and unknown` is known false, `true or unknown` is known true,
+and `not unknown` is unknown. The same dominant results can survive an evaluated
+runtime error, but the diagnostic is retained. Without a dominant truth value,
+an error takes precedence over unknown; `not error` and an error guard are
+errors. Resource limits and operational failures are not truth values and cannot
+be dominated.
+
+Lists evaluate in order and records in sorted key order. Any member error makes
+the complete container an error; otherwise any unknown member makes it unknown.
+No partial container value is returned, and all member diagnostics remain.
+`field` requires a complete record value. An executed absent key returns unknown
+with `missing_field`; a statically known non-record target is a type error. An
+unselected missing field emits no runtime diagnostic. Exact equality is typed:
+lists compare in order and records by canonical key/value pairs. Different list
+lengths or record key sets are known unequal; equal shapes require recursively
+comparable members. Ordering remains exact-number only.
+
+The public result keeps potential and executed evidence distinct. For example,
+an abridged successful composed result has this shape:
+
+```yaml
+modules: [arithmetic/v1, composition/v1]
+status: ok
+value:
+  type: list
+  items:
+    - {type: text, value: priority}
+    - {type: null}
+diagnostics: []
+potential_ids: [p.details, p.ready]
+executed_reads:
+  - {kind: node, id: p.details, fingerprint: <input-basis-digest>}
+  - {kind: node, id: p.ready, fingerprint: <input-basis-digest>}
+resource_profile:
+  version: resources/v3
+  steps: 1000000
+  depth: 128
+  digits: 256
+  value_nodes: 10000
+  value_depth: 128
+  value_bytes: 16777216
+implementation: {protocol: KP3}
+```
+
+Diagnostics can accompany a known dominant boolean. Read-only evaluation keeps
+that supported envelope, but normal authoring refuses any diagnostic. An
+explicitly blocked write admits only `missing_reference` and `missing_field`,
+and only when every diagnostic is one of those missing-data codes.
+
+Protocol selection is closure-local. A request whose root or potential closure
+contains a composed node or stored container uses KP3/KR3 and `resources/v3`.
+A scalar closure continues to use the byte-compatible KP2/KR2 and
+`resources/v2`, even inside a record that declares `composition/v1`; unrelated
+composition therefore does not change its basis. A target lacking
+`composition/v1` returns `unsupported_capability` for dependent interpretation
+instead of partially evaluating the tree. Retained declarations are unioned and
+never dropped by a later scalar edit.
 
 ## Explicit authoring and review history
 
@@ -56,8 +163,9 @@ kpopper add m.double 'rule=m.total * 2' --profile core/v1 example.yaml
 kpopper review d.order --as-of 2026-09-17 example.yaml
 ```
 
-New core writes declare record metadata version 2, with the unchanged semantic
-profile `core/v1` and required module `arithmetic/v1`. Metadata version 1 remains
+New core writes declare record metadata version 2 with the unchanged semantic
+profile `core/v1`. Scalar writes require `arithmetic/v1`; composed expressions
+and stored containers retain it and add `composition/v1`. Metadata version 1 remains
 readable. Existing executable legacy fields require explicit migration before
 record-wide promotion; a flag does not reinterpret them. New core history uses
 `seen.<dependency>.computed` with `version: 2`, a canonical typed `value`, the
@@ -180,6 +288,14 @@ Limits are explicit results. These differ from the legacy checked executor's
 64-level expression parser and 1024-digit numeric bound. Selecting a profile can
 therefore change a limit result; installing an executor does not migrate meaning.
 
+Composed closures retain those limits and use `resources/v3`, which additionally
+bounds each recursively expanded value to 10,000 nodes, depth 128 (root depth
+zero), and 16 MiB of canonical KR3 value tokens. Repeated references count once
+per serialized occurrence. Recursive type joins, comparisons and size checks are
+metered; native construction and serialization return `collection_limit` before
+retaining or emitting an oversized value. These fixed public maxima cannot be
+raised by callers.
+
 Operational limits are separate from arithmetic meaning and appear in results
 and assessment reports: 30 seconds per native batch, 1,000 requests (and at most
 1,000 selected assessment entries), 16 MiB aggregate native input and 64 MiB
@@ -242,8 +358,8 @@ Scopes cannot grant the mapped historical snapshot field, `assessment`, or
 `current_assessment`, including when the collection is empty.
 
 First-party module preparation receives a limited snapshot view and normalized
-IR; the compiled registry computes the result. Arithmetic consumes this boundary
-today. Module/version definitions live in `reasoning.contract` and
+IR; the compiled registry computes the result. Arithmetic and composition consume
+this boundary today. Module/version definitions live in `reasoning.contract` and
 `reasoning.modules`. Rendering depends on value/witness types, not operator names.
 This API is experimental until the finite-query extension and consumer gates pass.
 
@@ -251,9 +367,14 @@ This API is experimental until the finite-query extension and consumer gates pas
 
 The package and plugin carry the same platform archives. Extraction is automatic
 and offline; ordinary computation needs no Lean compiler or session setup. The
-maintainer builder compiles pinned sources, checks proofs, audits native linkage
-and builds replaceable GMP shared libraries. Supported target evidence and build
-instructions are in `scripts/reasoning/native/README.md`.
+runtime manifest schema is version 2 and must advertise protocols `[KP2, KP3]`
+and modules `[arithmetic/v1, composition/v1]`. The adapter verifies those pins,
+the source identity and the request/response protocol before interpreting output.
+Old or partially rebuilt archives fail closed. The maintainer builder compiles
+pinned sources, checks proofs, audits native linkage and builds replaceable GMP
+shared libraries. Supported target evidence and build instructions are in
+`scripts/reasoning/native/README.md`. Source support alone is not a claim that
+every target archive or installed distribution has passed its platform gate.
 
 The executable and original archive are hash-bound to runtime sources. GMP can be
 replaced with an ABI-compatible modified library; its actual hash is disclosed in
@@ -270,3 +391,6 @@ These theorems do not prove parsing, references, adapters, snapshots, native cod
 generation, source-world truth or arbitrary prose. Reference-bearing results are
 computed findings, not proof certificates. The Python/native transport and the
 installed executable have behavioral tests in addition to the named proofs.
+Composition reuses the scalar primitives but adds no broader theorem or formal
+assurance claim; composed results keep `assurance.kind: computed` with an empty
+formal scope.

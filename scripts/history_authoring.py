@@ -63,6 +63,21 @@ def _world(document):
     return authoring.World(READER, document) if capabilities(document)['profile'] == 'core/v1' else None
 
 
+def _destination(document):
+    """New writer metadata; unchanged scalar declarations retain exact bytes."""
+    if capabilities(document)['profile'] == 'core/v1':
+        desired = authoring.declaration(document)
+        if set(desired['requires']) - set(capabilities(document)['requires']):
+            document = copy.deepcopy(document)
+            document['meta']['reasoning'] = desired
+    return document
+
+
+def _declare_template(template, document):
+    if capabilities(document)['profile'] == 'core/v1':
+        template.setdefault('meta', {})['reasoning'] = copy.deepcopy(document['meta']['reasoning'])
+
+
 _REPLAY_AUDIT = contextvars.ContextVar('history_retained_adapter_audit', default=None)
 
 
@@ -219,6 +234,7 @@ def prepare(entry, action, *, by=None, operation=None, recorded_at=None, capture
     C._require(len(profiles) <= 1, 'incompatible_authored_profiles')
     cap = capabilities(document, profile=next(iter(profiles), None))
     C._require(action.get('profile') in (None, cap['profile']), 'history_profile_migration_required')
+    authoring.validate_declared(document)
     before_world = _world(document)
     ids, judgments, fields = READER.infer(document)
     fields = P.authored_fields(action, fields)
@@ -271,6 +287,8 @@ def prepare(entry, action, *, by=None, operation=None, recorded_at=None, capture
                 body={'act': 'accept', 'of': claim['id'],
                       'over': sorted(captured.state['subjects'][subject]['heads']) if old is not None else [],
                       'because': str(action.get('why') or 'explicit ' + kind)}))
+    document = _destination(document)
+    cap = capabilities(document, profile=cap['profile'])
     # Updates belong to a new immutable template, not to an old claim body.
     if isinstance(document.get('meta'), dict) and 'updated' in document['meta']:
         document['meta']['updated'] = action['as_of']
@@ -280,6 +298,7 @@ def prepare(entry, action, *, by=None, operation=None, recorded_at=None, capture
             template.setdefault(collection, {})
     if 'updated' in document.get('meta', {}):
         template['meta']['updated'] = document['meta']['updated']
+    _declare_template(template, document)
     after_world = _world(document)
     before = _evidence(before_document, before_world)
     before['authoring'] = {'version': 1, 'action': intent, 'by': by, 'recorded_at': recorded_at,
@@ -369,7 +388,9 @@ def prepare_act(entry, action, *, by=None, operation=None, recorded_at=None, cap
     parents = C.commit_frontier(captured.commits)
     template = store._template(captured.commits)
     # The effect digest excludes the receipt and generated-view hash, so this
-    # provisional envelope can render the exact after projection without a cycle.
+    # provisional envelope can derive the exact accepted projection without a
+    # cycle. Capability declarations follow that projection; a proposal's
+    # hypothetical declaration is not promoted until an explicit act selects it.
     placeholder = T.semantic_receipt(profile=cap['profile'], capabilities=cap, before={}, after={})
     draft = C.make_commit(marker=captured.marker, operation=operation, parents=parents,
         baseline=captured.baseline, objects=pairs, receipt=placeholder, view=b'', view_template=template,
@@ -377,12 +398,22 @@ def prepare_act(entry, action, *, by=None, operation=None, recorded_at=None, cap
     combined = {**captured.commits, operation: C.encode_document(draft)}
     selected = {**captured.objects, obj['id']: obj}
     state = H.reduce(selected, captured.state['rules'])
+    candidate = replace(captured, objects=selected, commits=combined, state=state,
+        object_bytes={**captured.object_bytes, (obj['subject'], obj['id']): raw},
+        baseline=H.baseline(captured.marker, combined, state))
+    projected = _destination(_document(history_adapter.from_store_capture(candidate).document))
+    _declare_template(template, projected)
+    draft = C.make_commit(marker=captured.marker, operation=operation, parents=parents,
+        baseline=captured.baseline, objects=pairs, receipt=placeholder, view=b'', view_template=template,
+        requires=HP.commit_requires([C.EXPLICIT_ROOT_DISPOSITION] if _strict else None))
+    combined = {**captured.commits, operation: C.encode_document(draft)}
     rendered = store.render(captured, objects=selected, commits=combined)
     candidate = replace(captured, entry_bytes=rendered, document=C.decode_document(rendered),
         objects=selected, commits=combined, state=state,
         object_bytes={**captured.object_bytes, (obj['subject'], obj['id']): raw},
         baseline=H.baseline(captured.marker, combined, state))
     after_document = _document(history_adapter.from_store_capture(candidate).document)
+    cap = capabilities(after_document, profile=target['authored']['profile'])
     before = _evidence(before_document, _world(before_document))
     before['authoring'] = {'version': 4, 'kind': 'act', 'action': action, 'by': by,
         'recorded_at': recorded_at, 'archive': frozen_archive, 'baseline': captured.baseline}
@@ -460,13 +491,16 @@ def prepare_proposal(entry, subject, body=None, collection=None, *, because=None
         if name != 'meta':
             hypothetical[name].pop(subject, None)
     hypothetical.setdefault(collection, {})[subject] = body
+    hypothetical = _destination(hypothetical)
     before = _evidence(document, _world(document))
     before['authoring'] = {'version': 5, 'kind': 'proposal', 'subject': subject,
         'body': body, 'collection': collection, 'because': because, 'hypothesis': hypothesis,
         'by': by, 'recorded_at': recorded_at, 'archive': frozen_archive, 'baseline': captured.baseline}
     # The accepted computational view is unchanged. Hypothetical assessment is
     # labelled separately and is never used as a reducer acceptance decision.
-    after = _evidence(document, _world(document))
+    accepted_document = copy.deepcopy(document)
+    cap = capabilities(accepted_document, profile=cap['profile'])
+    after = _evidence(accepted_document, _world(accepted_document))
     after['proposal'] = _evidence(hypothetical, _world(hypothetical))
     after['authoring'] = {'objects': sorted([claim['id'], propose['id']]), 'subject': subject,
                           'proposal': claim['id']}
@@ -474,6 +508,7 @@ def prepare_proposal(entry, subject, body=None, collection=None, *, because=None
     pairs = [(obj, C.encode_document(obj)) for obj in (claim, propose)]
     template = store._template(captured.commits)
     template.setdefault(collection, {})
+    _declare_template(template, accepted_document)
     parents = C.commit_frontier(captured.commits)
     draft = C.make_commit(marker=captured.marker, operation=operation, parents=parents,
         baseline=captured.baseline, objects=pairs, receipt=receipt, view=b'', view_template=template,
@@ -530,17 +565,16 @@ class _BatchAdmissionWorld:
                 self._prior = self.final.engine.evaluate(expression, declared=references(expression))
         return copy.deepcopy(self._prior)
 
+    def same_value(self, nid, candidate):
+        return authoring.World.same_value(self, nid, candidate)
+
     def value(self, nid):
         result = self.result(nid)
         if result['status'] == 'operational_error':
             self.require(result)
         if result['status'] != 'ok':
             return None
-        value = result['value']
-        if value['type'] == 'number':
-            return int(value['numerator']) if value['denominator'] == '1' else {
-                'rational': [value['numerator'], value['denominator']]}
-        return value.get('value')
+        return authoring.authored_value(result['value'])
 
     def validate(self, action, document, ids, judgments, fields):
         return authoring.World.validate(self, action, document, ids, judgments, fields)
@@ -612,7 +646,9 @@ def _prepare_final_batch(entry, actions, *, by=None, operation=None, recorded_at
         C._require(isinstance(action, dict), 'invalid_batch_action')
         action['as_of'] = action.get('as_of') or datetime.date.today().isoformat()
     intent_actions = copy.deepcopy(actions)
+    authoring.validate_declared(before_document)
     staged, raw_steps = _batch_stage(before_document, actions)
+    staged = _destination(staged)
     normalization = _world(staged)
     normalized, notes = [], []
     for step in raw_steps:
@@ -627,6 +663,7 @@ def _prepare_final_batch(entry, actions, *, by=None, operation=None, recorded_at
         normalized.append(action)
         notes.append(observed)
     final_document, steps = _batch_stage(before_document, normalized)
+    final_document = _destination(final_document)
     profiles = {original.objects[state['head']]['authored']['profile']
                 for state in original.state['subjects'].values() if 'head' in state}
     C._require(len(profiles) <= 1, 'incompatible_authored_profiles')
@@ -732,6 +769,7 @@ def _prepare_final_batch(entry, actions, *, by=None, operation=None, recorded_at
             template.setdefault(collection, {})
     if 'updated' in final_document.get('meta', {}):
         template['meta']['updated'] = final_document['meta']['updated']
+    _declare_template(template, final_document)
     args = dict(marker=original.marker, operation=operation, parents=C.commit_frontier(original.commits),
         baseline=original.baseline, objects=pairs, receipt=receipt, view_template=template,
         requires=HP.commit_requires([C.EXPLICIT_ROOT_DISPOSITION]))

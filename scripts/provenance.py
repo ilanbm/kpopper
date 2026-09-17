@@ -1093,10 +1093,14 @@ def _load(paths, *, read_mode=None):
 def collections_of(doc):
     """Any mapping-of-mappings is a candidate collection of entries."""
     out = {}
+    meta = (doc or {}).get('meta', {})
+    reasoning = meta.get('reasoning', {}) if isinstance(meta, dict) else {}
+    core = isinstance(reasoning, dict) and reasoning.get('profile') == 'core/v1'
     for k, v in (doc or {}).items():
         if k in ("meta", "schema", "record", "also") or not isinstance(v, dict) or not v:
             continue
-        if all(isinstance(x, (dict, str, int, float, bool, datetime.date, type(None))) for x in v.values()):
+        if all(isinstance(x, (dict, str, int, float, bool, datetime.date, type(None)))
+               or core and isinstance(x, list) for x in v.values()):
             out[k] = v
     return out
 
@@ -1172,6 +1176,16 @@ def infer(doc):
                         unresolved.setdefault(f, []).append(
                             (nid, [x for x in val if x not in ids]))
     sch = doc.get("schema") or {}
+    reasoning = doc.get("meta", {}).get("reasoning", {}) \
+        if isinstance(doc.get("meta"), dict) else {}
+    core = isinstance(reasoning, dict) and reasoning.get("profile") == "core/v1"
+
+    def judgment_shaped(body, fields):
+        """A blocked structured value is still a value, not a hidden judgment."""
+        matched = fields.intersection(body)
+        if matched == {"blocked_on"} and core and isinstance(body.get("rule"), dict):
+            return False
+        return bool(matched)
 
     def pick(role):
         if sch.get(role):
@@ -1186,7 +1200,7 @@ def infer(doc):
                 if source_collections and set(source_collections) <= {'known', 'sources', 'open', 'questions'} \
                         and all(sch.get(k) for k in ('deps', 'snapshot', 'predicate')) \
                         and not cand['deps'] and set(unresolved) <= {'labels', 'tags', 'v', 'quoted'} \
-                        and not any(judgment_fields.intersection(body)
+                        and not any(judgment_shaped(body, judgment_fields)
                             for group in source_collections.values() for body in group.values()
                             if isinstance(body, dict)):
                     # A portable source/fact closure may retain the explicit parent
@@ -1223,7 +1237,7 @@ def infer(doc):
         newborn = bool(doc) and set(doc) <= {"meta"}
         if (newborn or source_collections and set(source_collections) <= {"known", "sources", "open", "questions"}) \
                 and not unresolved and not any(
-                    judgment_fields.intersection(body) for group in source_collections.values()
+                    judgment_shaped(body, judgment_fields) for group in source_collections.values()
                     for body in group.values() if isinstance(body, dict)):
             return {nid for group in source_collections.values() for nid in group} | (ids & set(COMPUTED)), {}, \
                 {"deps": "rests_on", "snapshot": "seen", "predicate": "wrong_if"}
@@ -3322,7 +3336,18 @@ def _sound_dependencies(a, doc, ids, jud, fields, raw):
             out.append(f"rests on {d}, which is not an entry - add it first, or declare it "
                        f"missing with blocked_on")
     pred = predicate_of(body, fields)
-    for tok in sorted(set(predicate_refs(pred))):
+    if getattr(raw, 'world', None) is not None and isinstance(pred, dict):
+        try:
+            tree = _peer('reasoning.language').lower(pred)
+        except (ValueError, TypeError, SyntaxError, RecursionError) as error:
+            # Refuse here because the core writer constructs a candidate after the shared
+            # checks. Returning a diagnostic would let that construction lower the same
+            # malformed predicate and leak its parser exception past the CLI boundary.
+            raise Refused(f"refused - {fields['predicate']}: {error}") from None
+        refs = _peer('reasoning.language').references(tree)
+    else:
+        refs = predicate_refs(pred)
+    for tok in sorted(set(refs)):
         if (isinstance(pred, dict) or tok in ids or is_builtin(tok)) and tok not in deps:
             out.append(f"wrong_if reads {tok}, which the judgment does not rest on")
     return out
@@ -3813,16 +3838,19 @@ def _disagreement(a, body, raw, ids, jud, fields, page=None):
     if not isinstance(body, dict):
         return None
     old = value_of(raw, ids, k)
-    if (old is None and not (getattr(raw, 'world', None) is not None and raw.world.result(k)['status'] == 'ok')) or isinstance(old, (list, dict)):
+    core_world = getattr(raw, 'world', None)
+    if (old is None and not (core_world is not None and core_world.result(k)['status'] == 'ok')) or (isinstance(old, (list, dict)) and core_world is None):
         return None
     if a["kind"] == "set":
         new = a["value"]
     else:
         b = a["body"] if isinstance(a["body"], dict) else {}
         new = b.get("v") if b.get("v") is not None else b.get("quoted")
-        if new is None or isinstance(new, (list, dict)):
+        if core_world is not None and any(key in b for key in ('v', 'quoted')):
+            new = b['v'] if 'v' in b else b['quoted']
+        elif new is None or isinstance(new, (list, dict)):
             return None
-    if _writer_same(raw, old, new):
+    if (core_world.same_value(k, new) if core_world is not None else _writer_same(raw, old, new)):
         return None
     may, why = may_supersede(k, body, new, raw, ids, jud, fields, a.get("as_of"))
     return "value", old, new, may, why, _read_on(body, raw)
@@ -4200,9 +4228,27 @@ def _citation_field_in(lines, key, field, value):
                        [" " * (ind + 2) + f"{field}: {scalar(value, fold=False)}"], after="of")
 
 
-def _set_in(lines, key, value, stamp, why, source=None, at=None):
+def _set_in(lines, key, value, stamp, why, source=None, at=None, body=None):
     """-> (old value as written, field). The value field of `key` rewritten in place, in
     the style it already had; `of:` stamped; the reason, if any, as a comment beneath."""
+    field = 'v' if isinstance(body, dict) and 'v' in body else \
+        'quoted' if isinstance(body, dict) and 'quoted' in body else None
+    old_value = body.get(field) if field else None
+    if field and (isinstance(old_value, (list, dict)) or isinstance(value, (list, dict))):
+        # Container syntax has no scalar span that can be safely spliced: it may be a block
+        # sequence/mapping or contain commas and braces inside a flow entry. Rebuild the
+        # complete semantic body through the shared set contract so every sibling, citation
+        # and observation date survives while the entry's surrounding style is retained.
+        action = {'kind': 'set', 'id': key, 'value': copy.deepcopy(value), 'as_of': stamp,
+                  'source': source, 'at': at}
+        replacement = _peer('recording').set_body(body, action)
+        _replace_in(lines, key, replacement)
+        if why:
+            _, ind, _, end = _locate(lines, key)
+            lines[end:end] = [" " * (ind + 2) + f"# set {stamp}: {why}"]
+        old = yaml.safe_dump(old_value, default_flow_style=True, allow_unicode=True,
+                             sort_keys=False, width=1000000).strip()
+        return old, field
     if source is not None:
         _citation_field_in(lines, key, "from", source)
         _citation_field_in(lines, key, "at", at)
@@ -4807,7 +4853,7 @@ def _fork(paths, action, diagnostics=None):
             collection, block = got
             out.append("carry " + _insert_block(lines, collection, nid, block) + f" of hypothesis {name}")
         old, field = _set_in(lines, nid, action["value"], stamp, action.get("why"),
-                             action.get("source"), action.get("at"))
+                             action.get("source"), action.get("at"), raw.get(nid))
         out.append(f"set {nid} in hypothesis {name}: {old} -> {scalar(action['value'], fold=False)} "
                    f"(as of {stamp})")
     elif kind == "add":
@@ -5347,7 +5393,7 @@ def _apply_candidate(paths, action, diagnostics=None):
             print(f"{nid} is already {scalar(action['value'], fold=False)}; nothing written")
             return 0
         old, field = _set_in(lines, nid, action["value"], stamp, action.get("why"),
-                             action.get("source"), action.get("at"))
+                             action.get("source"), action.get("at"), raw.get(nid))
         out.append(f"set {nid}: {old} -> {scalar(action['value'], fold=False)} (as of {stamp})")
         if action.get("source") is not None:
             out.append(f"source: {action['source']}, at {action['at']}")

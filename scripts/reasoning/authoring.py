@@ -2,13 +2,57 @@
 import copy
 
 from .contract import (PROFILE, capabilities, CapabilityError, OutputBudget,
-                       operational_bounds, validate_value)
+                       operational_bounds, validate_value, admitted)
 from .evaluate import Evaluator
-from .language import lower, references
+from .language import lower, references, literal, node_expression, required_modules
 from .snapshot import Snapshot, _fields
 
 
 DECLARATION = {'version': 2, 'profile': PROFILE, 'requires': ['arithmetic/v1']}
+
+
+def declaration(document):
+    """Validated destination requirements, unioned with retained capabilities."""
+    from ..pending_grounding import entries
+    meta = document.get('meta')
+    # A first core judgment writes typed history before the line editor inserts
+    # its declaration into the same staged document. Existing undeclared typed
+    # history was already rejected when the original world was prepared; this
+    # writer-only pass must still be able to declare the bytes it just created.
+    declared = isinstance(meta, dict) and 'reasoning' in meta
+    modules = set(capabilities(document)['requires'] if declared else ()) | {'arithmetic/v1'}
+    fields = _fields(document)
+    for _, body in entries(document).values():
+        if isinstance(body, dict) and 'rule' in body and not isinstance(body['rule'], dict):
+            expression = {}  # Retained qualitative rule text is not newly executable.
+        else:
+            try:
+                expression = node_expression({'body': body})
+            except (ValueError, TypeError, SyntaxError, RecursionError):
+                # Capability discovery is not the expression validator. Invalid
+                # structured syntax is still refused by World with the entry/field
+                # location; do not let this earlier metadata pass leak a raw error.
+                expression = {}
+        modules.update(required_modules(expression))
+        if isinstance(body, dict) and isinstance(body.get(fields['predicate']), dict):
+            try:
+                modules.update(required_modules(lower(body[fields['predicate']])))
+            except (ValueError, TypeError, SyntaxError, RecursionError):
+                # World is the fail-closed validator for structured predicates.
+                pass
+    return {**DECLARATION, 'requires': sorted(modules)}
+
+
+def declare_document(document):
+    result = copy.deepcopy(document)
+    result.setdefault('meta', {})['reasoning'] = declaration(document)
+    return result
+
+
+def validate_declared(document):
+    cap = capabilities(document)
+    if cap['profile'] == PROFILE and set(declaration(document)['requires']) - set(cap['requires']):
+        raise CapabilityError('unsupported_capability', 'composition/v1 must be declared for composed inputs')
 
 
 def load(reader, paths, *, read_mode='frozen'):
@@ -53,7 +97,12 @@ def _promotion_blockers(reader, document, context=None):
     for nid, (_, body) in known.items():
         values = [(key, body[key]) for key in ('v', 'quoted') if key in body] if isinstance(body, dict) else [('value', body)]
         for field, value in values:
-            if value is not None and type(value) not in (str, int, float, bool):
+            if isinstance(value, (list, dict)):
+                try:
+                    literal(value)
+                except (ValueError, TypeError, RecursionError):
+                    blockers.append((nid, field, value))
+            elif value is not None and type(value) not in (str, int, float, bool):
                 blockers.append((nid, field, value))
             elif isinstance(value, str) and reader.EXPR.search(value) and any(ref in ids for ref in reader.ID.findall(value)):
                 blockers.append((nid, field, value))
@@ -89,6 +138,7 @@ def prepare(reader, paths, action):
     doc = load(reader, paths)
     try:
         active = selected(doc, action.get('profile'))
+        validate_declared(doc)
         aimed = doc.hypotheses.get(action.get('hypothesis'))
         if aimed is not None and capabilities(aimed['doc'])['profile'] == PROFILE:
             active = True
@@ -109,7 +159,7 @@ def prepare(reader, paths, action):
             # The raw ledger also contains retired evidence. Only the effective
             # overlay constrains the destination's interpretation.
             destination = copy.deepcopy(doc)
-            destination.setdefault('meta', {})['reasoning'] = copy.deepcopy(DECLARATION)
+            destination = declare_document(destination)
             pending_compatible(reader, paths, destination)
         for hyp in doc.hypotheses.values():
             cap = capabilities(hyp['doc'])
@@ -117,10 +167,22 @@ def prepare(reader, paths, action):
                 raise ValueError('requires explicit migration: executable legacy hypothesis')
         original = Snapshot.capture(paths, read_mode='frozen')
         doc = copy.deepcopy(doc)
-        doc.setdefault('meta', {})['reasoning'] = copy.deepcopy(DECLARATION)
+        doc = declare_document(doc)
         return doc, World(reader, doc, original=original)
     except (ValueError, TypeError, SyntaxError) as error:
         raise reader.Refused(getattr(error, 'code', 'refused') + ': ' + str(error)) from None
+
+
+def authored_value(value):
+    """Lossless writer-facing value; this only decodes native typed values."""
+    if value['type'] == 'number':
+        return int(value['numerator']) if value['denominator'] == '1' else {
+            'rational': [value['numerator'], value['denominator']]}
+    if value['type'] == 'list':
+        return [authored_value(item) for item in value['items']]
+    if value['type'] == 'record':
+        return {key: authored_value(item) for key, item in value['fields'].items()}
+    return value.get('value')
 
 
 class Readings(dict):
@@ -177,12 +239,9 @@ class World:
         return copy.deepcopy(self._readings[nid])
 
     def require(self, result, *, blocked=False):
-        if result['status'] == 'ok':
+        if admitted(result, blocked=blocked):
             return result
         reasons = ', '.join(item['code'] for item in result['diagnostics']) or result['status']
-        if blocked and result['status'] == 'unknown' and all(
-                item['code'] == 'missing_reference' for item in result['diagnostics']):
-            return result
         raise self.reader.Refused('cannot compute core/v1 evidence: ' + reasons)
 
     @staticmethod
@@ -205,18 +264,26 @@ class World:
             return a == b
         return digest(left) == digest(right)
 
+    def same_value(self, nid, candidate):
+        """Compare native tagged values without guessing meaning from raw records."""
+        expression = literal(candidate)
+        document = copy.deepcopy(self.document)
+        document.setdefault('meta', {})['reasoning'] = {
+            **declaration(document), 'requires': sorted(set(declaration(document)['requires']) |
+                                                       set(required_modules(expression)))}
+        engine = Evaluator(Snapshot.from_data(document), runtime=self.engine.runtime,
+                           operational_limits=self.bounds)
+        proposed = self.require(engine.evaluate(expression, declared=[]))
+        current = self.require(self.result(nid))
+        return current['value'] == proposed['value']
+
     def value(self, nid):
         result = self.result(nid)
         if result['status'] == 'operational_error':
             self.require(result)
         if result['status'] != 'ok':
             return None
-        value = result['value']
-        if value['type'] == 'number':
-            if value['denominator'] == '1':
-                return int(value['numerator'])
-            return {'rational': [value['numerator'], value['denominator']]}
-        return value.get('value')
+        return authored_value(result['value'])
 
     def predicate(self, expression, declared=None):
         if not isinstance(expression, dict):
@@ -242,7 +309,7 @@ class World:
         elif action['kind'] == 'set' and action['id'] in existing:
             collection, body = existing[action['id']]
             doc[collection][action['id']] = self.reader._peer('recording').set_body(body, action)
-        return World(self.reader, doc, original=self.snapshot, operational_limits=self.bounds)
+        return World(self.reader, declare_document(doc), original=self.snapshot, operational_limits=self.bounds)
 
     def normalize(self, action, *, previous_raw=None):
         if action['kind'] != 'add' or not isinstance(action.get('body'), dict):
@@ -261,9 +328,14 @@ class World:
             return keep('a stored reading and a calculation need distinct fields/entries')
         try:
             comparison = self.reader.CMP.match(source) if predicate else None
-            tree = self.reader.E.convert_authored(source, predicate=predicate,
-                legacy_rhs=comparison.group(3) if comparison else None)
-            tree = lower(tree)
+            try:
+                tree = self.reader.E.convert_authored(source, predicate=predicate,
+                    legacy_rhs=comparison.group(3) if comparison else None)
+                tree = lower(tree)
+            except (ValueError, TypeError, SyntaxError, RecursionError):
+                tree = lower({'expr': source})
+                if 'composition/v1' not in required_modules(tree):
+                    raise ValueError('implicit text is outside the characterized scalar subset')
         except (ValueError, TypeError, SyntaxError, RecursionError) as error:
             return keep(str(error))
         refs = references(tree)
@@ -293,7 +365,7 @@ class World:
                 return 'number'
             return None
         try:
-            if predicate:
+            if predicate and tree.get('op') in ('eq', 'ne', 'lt', 'le', 'gt', 'ge'):
                 kinds = [scalar_type(child) for child in tree['args']]
                 if 'text' in kinds and ('number' in kinds or all('ref' in child for child in tree['args'])):
                     return keep('comparisons between text readings need an explicit choice of typed semantics')
@@ -323,6 +395,14 @@ class World:
         if isinstance(body, dict):
             deps = body.get(fields['deps'], [])
             self._check_builtin(deps if isinstance(deps, list) else [])
+        stored = action['kind'] == 'set' or action['kind'] == 'add' and (
+            not isinstance(body, dict) or any(key in body for key in ('v', 'quoted')))
+        if stored:
+            try:
+                self.require(self.candidate(action).result(action['id']), blocked=bool(
+                    P._blocked_text(body) if isinstance(body, dict) else False))
+            except (ValueError, TypeError, SyntaxError) as error:
+                out.append('value: ' + str(error))
         if action['kind'] == 'add' and isinstance(body, dict):
             if fields['deps'] in body and not P._blocked_text(body):
                 predicate = body.get(fields['predicate'])
@@ -405,28 +485,70 @@ def declare(lines, reader):
     meta = doc.get('meta')
     if meta is not None and not isinstance(meta, dict):
         raise reader.Refused('requires explicit migration: metadata is not a mapping')
-    if isinstance(meta, dict) and meta.get('reasoning') == DECLARATION:
+    desired = declaration(doc)
+    if isinstance(meta, dict) and meta.get('reasoning') == desired:
         return
-    encoded = yaml.safe_dump({'reasoning': DECLARATION}, sort_keys=False).rstrip().splitlines()
+    encoded = yaml.safe_dump({'reasoning': desired}, sort_keys=False).rstrip().splitlines()
     root = yaml.compose(text)
     if meta is None:
         at = root.start_mark.line if root is not None else 0
         lines[at:at] = ['meta:', *['  ' + line for line in encoded], '']
         return
-    # The supported v1/v2 declarations have identical profile/modules. Upgrade
-    # only the scalar format version, in either block or flow style.
+    # Rewrite only generated value nodes. PyYAML's end mark for a block mapping
+    # or sequence includes following comments and blank lines, so replacing the
+    # whole declaration would silently delete hand-authored surrounding text.
     value = next(value for key, value in root.value if key.value == 'meta')
     if 'reasoning' in meta:
-        key, declaration = next((key, child) for key, child in value.value if key.value == 'reasoning')
-        if declaration.start_mark.index < key.end_mark.index:
+        key, declaration_node = next((key, child) for key, child in value.value if key.value == 'reasoning')
+        if declaration_node.start_mark.index < key.end_mark.index:
             raise reader.Refused('requires explicit migration: aliased reasoning declaration')
-        version = next(child for key, child in declaration.value if key.value == 'version')
-        text = text[:version.start_mark.index] + '2' + text[version.end_mark.index:]
+        members = {child_key.value: (child_key, child)
+                   for child_key, child in declaration_node.value}
+        edits = []
+        version_key, version_node = members['version']
+        if meta['reasoning']['version'] != desired['version']:
+            if version_node.start_mark.index < version_key.end_mark.index:
+                raise reader.Refused('requires explicit migration: aliased reasoning declaration')
+            edits.append((version_node.start_mark.index, version_node.end_mark.index,
+                          str(desired['version'])))
+        requires_key, requires_node = members['requires']
+        existing = meta['reasoning']['requires']
+        if existing != desired['requires']:
+            if requires_node.start_mark.index < requires_key.end_mark.index:
+                raise reader.Refused('requires explicit migration: aliased reasoning declaration')
+            if requires_node.flow_style:
+                replacement = yaml.safe_dump(desired['requires'], default_flow_style=True,
+                                             sort_keys=False, width=100000).strip()
+                edits.append((requires_node.start_mark.index, requires_node.end_mark.index,
+                              replacement))
+            else:
+                # Requirements only grow: declarations are validated before this
+                # point and declaration() unions retained modules with inferred
+                # ones. Insert missing block items without spanning their comments.
+                missing = [item for item in desired['requires'] if item not in existing]
+                indent = ' ' * requires_node.start_mark.column
+                for item in missing:
+                    following = next((node for current, node in zip(existing, requires_node.value)
+                                      if current > item), None)
+                    rendered = yaml.safe_dump(item, default_flow_style=True).splitlines()[0]
+                    if following is not None:
+                        at = text.rfind('\n', 0, following.start_mark.index) + 1
+                        edits.append((at, at, indent + '- ' + rendered + '\n'))
+                    else:
+                        last = requires_node.value[-1]
+                        newline = text.find('\n', last.end_mark.index)
+                        if newline < 0:
+                            edits.append((len(text), len(text), '\n' + indent + '- ' + rendered))
+                        else:
+                            at = newline + 1
+                            edits.append((at, at, indent + '- ' + rendered + '\n'))
+        for start, end, replacement in sorted(edits, reverse=True):
+            text = text[:start] + replacement + text[end:]
         lines[:] = text.split('\n')
         return
     if value.flow_style:
         at = value.start_mark.index + 1
-        item = yaml.safe_dump({'reasoning': DECLARATION}, default_flow_style=True, sort_keys=False, width=100000).strip()[1:-1]
+        item = yaml.safe_dump({'reasoning': desired}, default_flow_style=True, sort_keys=False, width=100000).strip()[1:-1]
         text = text[:at] + item + (', ' if meta else '') + text[at:]
         lines[:] = text.split('\n')
     else:
