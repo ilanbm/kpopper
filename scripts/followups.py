@@ -254,6 +254,9 @@ class Store:
                     or item.get("state") not in STATES or not isinstance(item.get("attempts"), list):
                 raise Refused("Invalid followup: " + key)
             self._validate(item["spec"], data, key)
+            for holder in (item, item.get('claim')):
+                if holder is not None and 'core_baseline' in holder:
+                    P._peer('followup_core').restore_baseline(holder)
         return data
 
     def suggested_store(self):
@@ -406,6 +409,8 @@ class Store:
                     "baseline": {key: values[key] for key in spec["related"]}, "next_at": None,
                     "baseline_events": event_values(spec, data),
                     "claim": None, "attempts": [], "generation": 1}
+            if any(T.is_core_reading(value) for value in item['baseline'].values()):
+                P._peer('followup_core').mark_baseline(item)
             data["items"][key] = item
             return item
 
@@ -529,6 +534,8 @@ class Store:
                      "expires_at": stamp(self.now() + dt.timedelta(minutes=30)), "occurrence": occurrence,
                      "baseline": {key: values[key] for key in item["spec"]["related"]}, "daily_token": daily_token}
             claim["baseline_events"] = event_values(item["spec"], data)
+            if any(T.is_core_reading(value) for value in claim['baseline'].values()):
+                P._peer('followup_core').mark_baseline(claim)
             item["claim"] = claim
             return {**row, "claim": claim, "spec": item["spec"], "record": data["config"]["record"]}
 
@@ -578,6 +585,10 @@ class Store:
             item["state"] = effective if effective in STATES else "waiting"
             if effective == "checked":
                 item["baseline"] = claim["baseline"]
+                if 'core_baseline' in claim:
+                    item['core_baseline'] = list(claim['core_baseline'])
+                else:
+                    item.pop('core_baseline', None)
                 item["baseline_events"] = claim["baseline_events"]
                 item["next_at"] = next_at
             return {"id": key, "state": item["state"], "outcome": effective, "inputs_changed": stale}
@@ -617,6 +628,8 @@ class Store:
             item.update(spec=spec, executor=executor, task=ref, task_fingerprint=fp, state="waiting",
                         next_at=None, baseline={key: values[key] for key in spec["related"]},
                         baseline_events=event_values(spec, data), generation=item["generation"] + 1)
+            if 'core_baseline' in item or any(T.is_core_reading(value) for value in item['baseline'].values()):
+                P._peer('followup_core').mark_baseline(item)
             return item
 
     def relocate(self, record, evidence):

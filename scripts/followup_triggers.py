@@ -70,7 +70,7 @@ def normalize(value):
             if not math.isfinite(item):
                 raise ValueError('nonfinite numbers are not supported')
             return item
-        if type(item) not in (dict, list):
+        if type(item) not in (dict, list) and not is_core_reading(item):
             raise ValueError('expected JSON-compatible data')
         identity = id(item)
         if identity in active:
@@ -209,16 +209,24 @@ def _equal(left, right):
     return left == right
 
 
+def _core_module():
+    if __package__:
+        from . import followup_core
+        return followup_core
+    import provenance
+    return provenance._peer('followup_core')
+
+
+def is_core_reading(value):
+    return type(value) is not dict and isinstance(value, dict) \
+        and type(value) is _core_module().CoreReading
+
+
 def _core_envelope(value):
-    if not isinstance(value, dict) or set(value) != {'core'}:
+    if not is_core_reading(value):
         return None
     try:
-        if __package__:
-            from .followup_core import envelope
-        else:
-            import provenance
-            envelope = provenance._peer('followup_core').envelope
-        return envelope(value)
+        return _core_module().envelope(value)
     except (ValueError, TypeError):
         return {'available': False}
 
@@ -286,6 +294,8 @@ def evaluate(trigger, values, baseline, completed, observations, now, zone='UTC'
         else:
             try:
                 result = normalize(raw)
+                if is_core_reading(raw):
+                    result = _core_module().CoreReading(result)
                 state = {'available': True, 'value': result}
             except ValueError:
                 result = _MISSING

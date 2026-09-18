@@ -151,17 +151,36 @@ class CoreFollowups(unittest.TestCase):
         raw = {'core': {'value': 3}}
         self.assertFalse(T.unavailable(raw))
         self.assertEqual(T._condition_scalar(raw), raw)
+        # Even byte-for-byte envelope-shaped authored data remains legacy data.
+        raw = dict(C.project(view())[0]['m.x'])
+        self.assertIsNone(C.envelope(raw))
+        self.assertFalse(T.unavailable(raw))
+        self.assertEqual(T._condition_scalar(raw), raw)
+        self.assertIs(condition({'m.x': raw}, 'm.x', '==', 3), False)
+
+    def test_top_level_reading_is_bound_to_retained_evidence(self):
+        reading = copy.deepcopy(C.project(view())[0]['m.x'])
+        reading['core']['value']['numerator'] = '999'
+        self.assertTrue(T.unavailable(reading))
+        self.assertIsNone(condition({'m.x': reading}, 'm.x', '==', 999))
 
     def test_incomplete_history_and_unaccepted_claims_have_no_reading(self):
         from tests.test_reasoning_history_assessment import claim, captured
         head = claim('m.x', {'v': 3})
-        for projection in (captured(head, complete=False),
-                           captured(head, acceptance={'m.x': 'proposed'})):
+        for projection, incomplete in ((captured(head, complete=False), True),
+                                       (captured(head, acceptance={'m.x': 'proposed'}), False)):
             values, flags, error = C.project(CapturedAssessment.from_snapshot(projection.snapshot()))
-            self.assertIsNone(error)
+            self.assertEqual(error is not None, incomplete)
             self.assertTrue(T.unavailable(values['m.x']))
             self.assertIsNone(condition(values, 'm.x', '==', 3))
             self.assertTrue(flags)
+
+    def test_empty_incomplete_history_is_not_an_empty_success(self):
+        from tests.test_reasoning_history_assessment import captured
+        context = CapturedAssessment.from_snapshot(captured(complete=False).snapshot())
+        values, flags, error = C.project(context)
+        self.assertEqual((values, flags), ({}, []))
+        self.assertIn('history coverage or integrity is incomplete', error)
 
     @unittest.skipIf(os.name == 'nt', 'Persistent followups require POSIX locking')
     def test_store_reopen_and_claim_uses_core_evidence(self):
@@ -194,6 +213,13 @@ class CoreFollowups(unittest.TestCase):
                 self.assertEqual(json.loads(cli.stdout)['items'][0]['state'], 'ready')
                 result = reopened.claim('review', row['occurrence'], 'test')
                 self.assertTrue(result['claim']['token'])
+                later = F.stamp(dt.datetime.now(dt.timezone.utc) + dt.timedelta(hours=1))
+                reopened.finish('review', result['claim']['token'], 'checked', 'Verified the evidence', later)
+                loaded = F.Store(work)
+                item = loaded.load()['items']['review']
+                self.assertEqual(item['core_baseline'], ['m.y'])
+                self.assertIs(type(item['baseline']['m.y']), C.CoreReading)
+                self.assertEqual(loaded.scan()['items'][0]['state'], 'waiting')
 
 
 if __name__ == '__main__':
