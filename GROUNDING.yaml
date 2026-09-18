@@ -735,10 +735,12 @@ sources:
             start working (coordinate with the architect first)"
     fidelity: quoted
     of: "wall clock of python3 scripts/provenance.py against the record as it stood at e888570,
-         three cold runs and three warm, e888570 and this branch run from the same directory against
-         the same file, so only the code differs; the load, overlay and inference counts come from a
-         wrapper that counted calls into the live view from outside the reader and changed nothing
-         else"
+         three cold runs and three warm, e888570 and this branch at 157cbfa run from the same
+         directory against the same file, so only the code differs; the load, overlay and inference
+         counts come from a wrapper that counted calls into the live view from outside the reader
+         and changed nothing else. Taken before the per-document hoist merged in beside it, so the
+         after figures isolate this change alone and are no longer what the tree reads: see
+         m.read_command_record_loads"
     at: "Claude Code desktop session local_759e9307-40bc-4d70-9646-213fcbe3f9da, 2026-09-18, macOS
          arm64, Python 3.13.12"
     read: "2026-09-18"
@@ -2008,7 +2010,16 @@ known:
          median of three warm runs on macOS arm64 under Python 3.13.12, and the three cold runs read
          10.96 before and 5.70 after for open, 10.84 and 5.60 for check. Frozen does not move because
          a frozen overlay returns at once, so the second reading was already nearly free. The counts
-         are m.read_command_loads_before and m.read_command_loads_after"
+         are m.read_command_loads_before and m.read_command_loads_after.
+
+         Every `after` here is this change alone, measured at 157cbfa against e888570 - the branch
+         before the per-document hoist merged into it. They are deliberately not what the tree reads
+         now: with the hoist beside this change a live open measures 0.36s and check 0.35s, and
+         semantic_roles runs twice per open rather than 436 times, because the hoist took the
+         per-entry inference out from under the one reading this change leaves. The load and overlay
+         counts - 2 to 1 - are the part that is this change's own and still hold. What the two
+         changes cost together on main is a measurement neither of them owns; it belongs to whoever
+         re-measures there"
   m.record_scale:
     v: 107
     name: "Largest live record, entries"
@@ -3908,13 +3919,18 @@ judgments:
               instant. Each reading is separately guarded by _record_read_guard, so the old pair
               could draw a page from a newer record than the reader had just described; one guarded
               reading cannot. The reader now hands the document it read to the page build, which took
-              a live open on this record from 10.66 to 5.49 seconds with byte-identical output. The
+              a live open on this record from 10.66 to 5.49 seconds with byte-identical output -
+              measured against e888570 before the per-document hoist merged in beside it, so that
+              pair isolates this change; what the tree reads with both is lower again, and
+              m.read_command_record_loads says so. The
               write path keeps its own readings and must: the page counts taken before a write and
               the read-back after it each have to see the record as it stands at that moment, because
               the write itself changes what the page counts - so _page_side takes no document and
               reads again on every call"
     reopened_by: "a write whose page snapshot holds a count taken before the write rather than after
-                  it"
+                  it, or a document handed to the page build that the build's own reading would have
+                  refused - a reader that only checks what it reads itself has two doors and guards
+                  one"
     seen:
       m.read_command_loads_after: 1
       m.read_command_record_loads:

@@ -906,9 +906,10 @@ def build(paths, brief_path=None, page_path=None, *, read_mode=None, profile=Non
     this mode - what `P.load(record_paths(paths), read_mode=mode)` returns, nothing else: the
     document carries no paths of its own, so the brief and the record root are still derived
     from `paths` and handing over a document read from somewhere else draws that record under
-    this one's brief. Only the stated mode is checked, and the reader's `_page_or_error`
-    catches everything, so the refusal below reaches a read command as a note rather than a
-    traceback."""
+    this one's brief. A supplied document is refused for two things and neither is its paths:
+    a stated mode that disagrees with this one, and a dormant reasoning profile its own reading
+    would have refused. The reader's `_page_or_error` catches everything, so both reach a read
+    command as a note rather than a traceback."""
     if profile == 'core/v1':
         if doc is not None:
             raise ValueError('the core page profile builds from its own reading')

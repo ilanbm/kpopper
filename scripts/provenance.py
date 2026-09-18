@@ -993,9 +993,12 @@ def refuse_dormant_profile(doc):
     proposals retain their own declared semantics as well as the base, so a layer declaring one
     is refused with the base that carries it.
 
-    Every boundary where a document enters a legacy reader runs this: its own reading, and a
-    document handed to it by a caller that read it already. A reader that only checked while
-    reading would let a document loaded under the core permission in through the other door."""
+    Both of the legacy page build's boundaries run this - its own reading, and a document handed
+    to it by a caller that read it already - because a reader that only checked while reading
+    would let a document loaded under the core permission in through the other door. It is not
+    the only such guard in the tree: `_legacy_computation` refuses a declared profile for the
+    computed-name paths, unconditionally and without looking at layers. The two differ on
+    purpose and neither stands in for the other."""
     layers = [hyp['doc'] for hyp in (getattr(doc, 'hypotheses', None) or {}).values()]
     for document in [doc, *layers]:
         meta = document.get('meta')
