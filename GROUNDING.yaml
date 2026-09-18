@@ -754,7 +754,7 @@ sources:
     name: "Core followup captured reading contract"
     file: "scripts/followup_core.py"
     read: "2026-09-18"
-    revision: "250fe73"
+    revision: "1b445298e413af12f24d6c0ab7a67637b5e9df84"
   s.followups_contract:
     name: "Followup task and authority contract"
     file: "skills/kpopper/FOLLOWUPS.md"
