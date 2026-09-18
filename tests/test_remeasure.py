@@ -25,7 +25,9 @@ sys.path.insert(0, str(SCRIPTS))
 import provenance as P  # noqa: E402
 import remeasure as R   # noqa: E402
 
-TODAY = datetime.datetime.now(datetime.timezone.utc).date().isoformat()
+# These tests exercise same-day rules, so their fixtures and the reader share one explicit day.
+MEASUREMENT_DAY = datetime.date(2026, 9, 17)
+MEASURED_ON = MEASUREMENT_DAY.isoformat()
 
 
 def run(*args, cwd=None):
@@ -36,6 +38,12 @@ def run(*args, cwd=None):
 
 def kp(*args, cwd=None):
     return run(SCRIPTS / "kpopper", *args, cwd=cwd)
+
+
+def remeasure_on_fixed_day(rec):
+    """Run the measurement behavior with one day shared by the fixture and the result."""
+    lines, code = R.measure([str(rec)], run=True, today=MEASUREMENT_DAY)
+    return code, "\n".join(lines)
 
 
 def copy_fixture(into, hypothesis=True):
@@ -102,9 +110,9 @@ class TheMeasurementTests(unittest.TestCase):
         # copy: recipes run from the checkout's root, and the fixture sits inside this one
         with tempfile.TemporaryDirectory() as d:
             rec = copy_fixture(pathlib.Path(d))
-            code, out, err = kp("remeasure", "--run", rec)
-        self.assertEqual(code, 0, out + err)
-        self.assertIn(f"measured on {TODAY} (UTC)", out)
+            code, out = remeasure_on_fixed_day(rec)
+        self.assertEqual(code, 0, out)
+        self.assertIn(f"measured on {MEASURED_ON} (UTC)", out)
         self.assertIn("3 entries by 3 recipes", out)
         self.assertIn("  heat.boiler_kw: 24 - as recorded (boiler_kw)\n", out)
         self.assertIn("  heat.loss_kw: 28 - as recorded (loss_kw)\n", out)
@@ -116,17 +124,17 @@ class TheMeasurementTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as d:
             rec = copy_fixture(pathlib.Path(d), hypothesis=False)
             before = rec.read_text(encoding="utf-8")
-            code, out, err = kp("remeasure", "--run", rec)
-            self.assertEqual(code, 0, out + err)
+            code, out = remeasure_on_fixed_day(rec)
+            self.assertEqual(code, 0, out)
             self.assertIn("the base with tree/here laid over it\n"
-                          f"  tree/here (born {TODAY}, today, never folds): what the tree measures\n", out)
+                          f"  tree/here (born {MEASURED_ON}, today, never folds): what the tree measures\n", out)
             self.assertIn("updates (1): what the base holds that a hypothesis replaces, and what rests on each\n"
                           "  heat.loss_kw: 31 -> 28, from tree/here\n"
-                          f"    a reading from {TODAY} that is newer than the base's\n"
+                          f"    a reading from {MEASURED_ON} that is newer than the base's\n"
                           "    worked out from it: heat.deficit_kw\n"
                           "    MUTED     c.boiler_short: heat.loss_kw moved 31 -> 28, inside wrong_if", out)
             self.assertIn("  heat.loss_kw: 31 recorded (2026-09-02, by its own of:) -> 28 measured by loss_kw\n"
-                          f"    refresh: kpop set heat.loss_kw 28 --why 'measured by loss_kw' --as-of {TODAY} "
+                          f"    refresh: kpop set heat.loss_kw 28 --why 'measured by loss_kw' --as-of {MEASURED_ON} "
                           + str(rec) + "\n", out)
             self.assertTrue(out.rstrip().endswith("the tree reads 1 entry differently, none across a line - refresh them"), out)
             # the generic advice of the dry run - fold it, refute it, --as-of it - is not given
@@ -136,7 +144,7 @@ class TheMeasurementTests(unittest.TestCase):
             self.assertEqual(rec.read_text(encoding="utf-8"), before, "the runner wrote the record")
             # the command it printed is one the write path takes
             code, out, err = kp("set", "heat.loss_kw", "28", "--why", "measured by loss_kw",
-                                "--as-of", TODAY, rec)
+                                "--as-of", MEASURED_ON, rec)
             self.assertEqual(code, 0, out + err)
             self.assertIn("set heat.loss_kw: 31 -> 28", out)
             self.assertIn('at: "worked out from the glazing area during the session"', rec.read_text(encoding="utf-8"))
@@ -158,12 +166,13 @@ class TheMeasurementTests(unittest.TestCase):
     def test_a_reading_of_the_same_day_is_contested_through_the_door(self):
         with tempfile.TemporaryDirectory() as d:
             rec = copy_fixture(pathlib.Path(d), hypothesis=False)
-            edit(rec, '    of: "2026-09-02"\n    measure: loss_kw', f'    of: "{TODAY}"\n    measure: loss_kw')
-            code, out, err = kp("remeasure", "--run", rec)
-            self.assertEqual(code, 1, out + err)
+            edit(rec, '    of: "2026-09-02"\n    measure: loss_kw',
+                 f'    of: "{MEASURED_ON}"\n    measure: loss_kw')
+            code, out = remeasure_on_fixed_day(rec)
+            self.assertEqual(code, 1, out)
             self.assertIn("contested (1): the door refuses the reading, so the base keeps what it holds\n"
                           "  heat.loss_kw: a reading of the same day\n", out)
-            self.assertIn(f"  heat.loss_kw: 31 recorded ({TODAY}, by its own of:) -> 28 measured by loss_kw\n"
+            self.assertIn(f"  heat.loss_kw: 31 recorded ({MEASURED_ON}, by its own of:) -> 28 measured by loss_kw\n"
                           "    correct the recorded claim in this pull request, or run the measurement again on a "
                           "later day; do not future-date this result\n", out)
             self.assertNotIn("refresh:", out)

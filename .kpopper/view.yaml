@@ -90,7 +90,8 @@ tabs:
              s.2026_09_15_branch_verdict_conflicts, s.2026_09_15_verdict_conflicts_decided,
              s.2026_09_15_link_spelling, s.2026_09_16_page_address,
              s.2026_09_17_selective_ci, s.2026_09_17_history_reasoning_integration,
-             s.2026_09_17_t3_integration, s.2026_09_18_ci_cost]
+             s.2026_09_17_t3_integration, s.2026_09_18_ci_cost,
+             s.2026_09_18_remeasure_midnight]
     sections:
       - title: How to read what follows
         why: a wall of cards is not an argument until you know what separates them
