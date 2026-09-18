@@ -167,6 +167,8 @@ class ArchiveContractTests(unittest.TestCase):
                 self.assertEqual(tf.extractfile("gmp-6.3.0.tar.xz").read(), upstream.read_bytes())
                 self.assertEqual(tf.extractfile("build_runtime.py").read(), Path(builder.__file__).read_bytes())
                 self.assertIn("reasoning-runtime.yml", tf.getnames())
+                self.assertEqual(tf.extractfile("reasoning-target.yml").read(),
+                                 (ROOT / '.github/workflows/reasoning-target.yml').read_bytes())
                 self.assertIn("COPYING.LESSERv3", tf.getnames())
                 self.assertIn("COPYINGv3", tf.getnames())
                 self.assertIn(b"build_gmp", tf.extractfile("SOURCE-BUILD.md").read())

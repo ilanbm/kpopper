@@ -9,6 +9,7 @@ import os
 from pathlib import Path, PurePosixPath
 import platform
 import re
+import shlex
 import shutil
 import stat
 import subprocess
@@ -66,13 +67,15 @@ def download(url, output, expected):
         raise ValueError("source archive hash mismatch: " + output.name)
 
 
-def prepare_toolchain(target, directory):
+def prepare_toolchain(target, directory, archive_dir=None):
     """Fetch an upstream release only for maintainer builds; verify pinned SHA256."""
     directory = Path(directory).resolve()
     directory.mkdir(parents=True, exist_ok=True)
     suffix, digest = TARGETS[target]
     name = "lean-" + LEAN_VERSION + "-" + suffix
-    archive = directory / (name + ".zip")
+    archives = Path(archive_dir) if archive_dir is not None else directory
+    archives.mkdir(parents=True, exist_ok=True)
+    archive = archives / (name + ".zip")
     download("https://github.com/leanprover/lean4/releases/download/v" + LEAN_VERSION + "/" + archive.name,
              archive, digest)
     if not (directory / name).exists():
@@ -193,6 +196,97 @@ def gmp_tools(target, env):
     return bash, make
 
 
+def gmp_tool_versions(target):
+    env = dict(os.environ)
+    bash, make = gmp_tools(target, env)
+    compiler = 'gcc' if target.startswith('windows') else env.get('CC', 'cc')
+    tools = {'cc': shlex.split(compiler), 'bash': [str(bash)], 'make': [str(make)], 'm4': ['m4']}
+    if target.startswith('windows'):
+        # CreateProcess does not use the supplied child PATH to locate the
+        # executable. Bind these just as explicitly as MSYS2 bash and make.
+        root = Path(env['KPOPPER_MSYS2_ROOT']).resolve()
+        tools['cc'] = [str(root / 'mingw64/bin/gcc.exe')]
+        tools['m4'] = [str(root / 'usr/bin/m4.exe')]
+    versions = {name: subprocess.check_output(argv + ['--version'], env=env,
+                stderr=subprocess.STDOUT, text=True, encoding='utf-8').strip()
+                for name, argv in tools.items()}
+    if target.startswith('darwin'):
+        versions['sdk'] = subprocess.check_output(['xcrun', '--show-sdk-version'], text=True).strip()
+    return versions
+
+
+def gmp_cache_identity(target):
+    return {'version': 1, 'target': target, 'source': GMP_SHA256,
+            'recipe': sha256(__file__), 'lean': [LEAN_VERSION, *TARGETS[target]],
+            'tools': gmp_tool_versions(target),
+            'image': {key: os.environ.get(key, '') for key in ('ImageOS', 'ImageVersion')},
+            'environment': {key: os.environ.get(key, '') for key in
+                ('CC', 'CPP', 'CPPFLAGS', 'LDFLAGS', 'AR', 'AS', 'LD', 'RANLIB', 'SDKROOT')}}
+
+
+def _identity_hash(identity):
+    return hashlib.sha256(json.dumps(identity, sort_keys=True, separators=(',', ':')).encode()).hexdigest()
+
+
+def dependency_cache_key(target):
+    return _identity_hash(gmp_cache_identity(target))
+
+
+def _cache_inventory(prefix):
+    files = {}
+    for path in sorted(prefix.rglob('*')):
+        name = path.relative_to(prefix).as_posix()
+        if name == 'receipt.json':
+            continue
+        if path.is_symlink():
+            target = os.readlink(path)
+            if Path(target).is_absolute() or prefix.resolve() not in path.resolve().parents:
+                raise ValueError('GMP cache link leaves its prefix')
+            files[name] = {'link': target}
+        elif path.is_file():
+            files[name] = {'sha256': sha256(path), 'execute': path.stat().st_mode & 0o111}
+        elif not path.is_dir():
+            raise ValueError('unsupported GMP cache member')
+    if not files:
+        raise ValueError('empty GMP cache prefix')
+    return files
+
+
+def cached_gmp(archive, directory, target, *, cache_dir=None, replacement_probe=False):
+    """Reuse a complete tested prefix; a miss or damaged receipt rebuilds it."""
+    if sha256(archive) != GMP_SHA256:
+        raise ValueError('GMP source hash mismatch')
+    if cache_dir is None:
+        return build_gmp(archive, directory, target, replacement_probe=replacement_probe)
+    identity = dict(gmp_cache_identity(target), replacement_probe=replacement_probe)
+    cache_dir = Path(cache_dir).resolve()
+    cached = cache_dir / _identity_hash(identity)
+    try:
+        receipt_file = cached / 'receipt.json'
+        if cached.is_symlink() or receipt_file.is_symlink():
+            raise ValueError('GMP cache receipt must be a regular file')
+        receipt = json.loads(receipt_file.read_text(encoding='utf-8'))
+        if receipt == {'identity': identity, 'files': _cache_inventory(cached)}:
+            print('Verified GMP cache hit: ' + cached.name, flush=True)
+            return cached
+    except (OSError, ValueError):
+        pass
+    print('GMP cache miss; compiling and running make check', flush=True)
+    prefix = build_gmp(archive, directory, target, replacement_probe=replacement_probe)
+    cache_dir.mkdir(parents=True, exist_ok=True)
+    with tempfile.TemporaryDirectory(prefix='.staging-', dir=cache_dir) as staging:
+        staged = Path(staging) / 'prefix'
+        shutil.copytree(prefix, staged, symlinks=True)
+        receipt = {'identity': identity, 'files': _cache_inventory(staged)}
+        (staged / 'receipt.json').write_text(json.dumps(receipt, sort_keys=True) + '\n', encoding='utf-8')
+        if cached.is_symlink():
+            cached.unlink()
+        elif cached.exists():
+            shutil.rmtree(cached)
+        staged.replace(cached)
+    return cached
+
+
 def build_gmp(archive, directory, target, *, replacement_probe=False):
     """Build exact upstream GMP privately; run its upstream test suite."""
     archive, directory = Path(archive).resolve(), Path(directory).resolve()
@@ -214,6 +308,8 @@ def build_gmp(archive, directory, target, *, replacement_probe=False):
     prefix = directory / "install"
     env = dict(os.environ)
     bash, make = gmp_tools(target, env)
+    if not target.startswith('windows'):
+        env['CC'] = env.get('CC', 'cc')
     # GMP 6.3.0's compiler probes use pre-C23 empty parameter lists. GCC 15+
     # defaults to C23, which changes those declarations to zero-argument types.
     flags = "-O2 -std=gnu17"
@@ -477,7 +573,10 @@ The unchanged source is configured with --enable-shared --disable-static
 -mmacosx-version-min=15.0, Windows --host=x86_64-w64-mingw32 CC=gcc LDFLAGS=-static-libgcc.
 The script contains the exact commands, runs make check, and saves build
 provenance in gmp-build/install/kpopper-gmp-provenance.json. No GMP source
-patches are used. The included workflow records the producer platform setup.
+patches are used. The included workflows record the producer platform setup.
+CI may reuse a tested GMP prefix only when its source, recipe, compiler tools,
+runner image and complete file inventory match its cache receipt. Runtime
+compilation, link audits and replacement-library integration still run.
 
 Use the resulting ABI-compatible library to replace the library in your
 extracted runtime cache: .dylibs/libgmp.10.dylib on macOS,
@@ -500,8 +599,9 @@ It is never applied to production GMP archives.
              "SOURCE.json": (json.dumps({"version": "6.3.0", "sha256": GMP_SHA256,
                  "url": "https://ftp.gnu.org/gnu/gmp/gmp-6.3.0.tar.xz", "patches": [],
                  "targets": sorted(TARGETS)}, sort_keys=True, indent=2) + "\n").encode()}
-    workflow = here.parents[1] / ".github/workflows/reasoning-runtime.yml"
-    files["reasoning-runtime.yml"] = workflow.read_bytes()
+    for name in ("reasoning-runtime.yml", "reasoning-target.yml"):
+        workflow = here.parents[1] / ".github/workflows" / name
+        files[name] = workflow.read_bytes()
     for name in ("COPYING.LESSERv3", "COPYINGv3", "THIRD_PARTY_NOTICES.txt",
                  "GCC-COPYING.RUNTIME", "GCC-runtime-NOTICES.txt", "MinGW-w64-runtime-LICENSE.txt"):
         files[name] = (here / "third_party" / name).read_bytes()
@@ -663,26 +763,39 @@ def main():
     parser.add_argument("--gmp-prefix", type=Path)
     parser.add_argument("--source-bundle", type=Path)
     parser.add_argument("--replacement-library", type=Path)
+    parser.add_argument("--dependency-cache", type=Path)
+    parser.add_argument("--dependency-cache-key", action="store_true")
     args = parser.parse_args()
+    if args.dependency_cache_key:
+        key = dependency_cache_key(args.target)
+        print(key)
+        if os.environ.get('GITHUB_OUTPUT'):
+            with open(os.environ['GITHUB_OUTPUT'], 'a', encoding='utf-8') as stream:
+                stream.write('key=' + key + '\n')
+        return
     if args.check_bundles:
         print(json.dumps(check_bundles(args.bundle_dir, args.source_root), sort_keys=True, indent=2))
         return
     if args.work_dir is None:
         parser.error("--work-dir is required for a maintainer build")
     args.work_dir.mkdir(parents=True, exist_ok=True)
-    lean = args.lean_root or prepare_toolchain(args.target, args.work_dir / "toolchain")
+    downloads = args.dependency_cache / 'downloads' if args.dependency_cache else args.work_dir
+    downloads.mkdir(parents=True, exist_ok=True)
+    gmp_cache = args.dependency_cache / 'gmp' if args.dependency_cache else None
+    lean = args.lean_root or prepare_toolchain(args.target, args.work_dir / "toolchain", downloads)
     if args.gmp_prefix:
         gmp = args.gmp_prefix
     else:
-        archive = args.gmp_source or args.work_dir / "gmp-6.3.0.tar.xz"
+        archive = args.gmp_source or downloads / "gmp-6.3.0.tar.xz"
         download("https://ftp.gnu.org/gnu/gmp/gmp-6.3.0.tar.xz", archive, GMP_SHA256)
-        gmp = build_gmp(archive, args.work_dir / "gmp", args.target)
+        gmp = cached_gmp(archive, args.work_dir / "gmp", args.target, cache_dir=gmp_cache)
     output = args.output or Path(__file__).parent / "native" / (args.target + ".zip")
     print(json.dumps(build_archive(args.source_root, lean, output, args.target, gmp_prefix=gmp), indent=2))
     if args.replacement_library:
-        archive = args.gmp_source or args.work_dir / "gmp-6.3.0.tar.xz"
+        archive = args.gmp_source or downloads / "gmp-6.3.0.tar.xz"
         download("https://ftp.gnu.org/gnu/gmp/gmp-6.3.0.tar.xz", archive, GMP_SHA256)
-        replacement = build_gmp(archive, args.work_dir / "gmp-replacement", args.target, replacement_probe=True)
+        replacement = cached_gmp(archive, args.work_dir / "gmp-replacement", args.target,
+                                 cache_dir=gmp_cache, replacement_probe=True)
         library = ("lib/libgmp.10.dylib" if args.target.startswith("darwin") else
                    "lib/libgmp.so.10" if args.target.startswith("linux") else "bin/libgmp-10.dll")
         args.replacement_library.parent.mkdir(parents=True, exist_ok=True)
@@ -691,7 +804,7 @@ def main():
             run(["install_name_tool", "-id", "@loader_path/.dylibs/libgmp.10.dylib", args.replacement_library])
             run(["codesign", "--force", "--sign", "-", args.replacement_library])
     if args.source_bundle:
-        archive = args.gmp_source or args.work_dir / "gmp-6.3.0.tar.xz"
+        archive = args.gmp_source or downloads / "gmp-6.3.0.tar.xz"
         download("https://ftp.gnu.org/gnu/gmp/gmp-6.3.0.tar.xz", archive, GMP_SHA256)
         print("corresponding-source sha256 " + source_bundle(archive, args.source_bundle))
 

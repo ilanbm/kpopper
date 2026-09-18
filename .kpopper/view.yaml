@@ -91,7 +91,8 @@ tabs:
              s.2026_09_15_link_spelling, s.2026_09_16_page_address,
              s.2026_09_17_selective_ci, s.2026_09_17_history_reasoning_integration,
              s.2026_09_17_t3_integration, s.2026_09_18_ci_cost,
-             s.2026_09_18_continue_reasoning_core, s.2026_09_18_remeasure_midnight]
+             s.2026_09_18_continue_reasoning_core, s.2026_09_18_remeasure_midnight,
+             s.ci_execution_evidence]
     sections:
       - title: How to read what follows
         why: a wall of cards is not an argument until you know what separates them
@@ -141,6 +142,10 @@ tabs:
                m.t3_composition_cycle_depth_masked,
                s.query_candidate_report_2026_09_18, m.t5_verified_candidate_a6897ea]
         as: table
+      - title: Where CI spends time
+        why: the measured execution and dependency waits identify what the CI changes must improve
+        pick: [m.ci_python_serial_baseline, m.ci_native_wait_baseline]
+        as: lines
       - title: The decisions that hold
         why: every one says what would make it wrong - hover any reference in the reasoning to see the value it was decided against
         pick: judgments
