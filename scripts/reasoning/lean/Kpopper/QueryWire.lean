@@ -1,7 +1,6 @@
 import Protocol
 import Kpopper.QueryProtocol
 import Lean.Data.Json.Parser
-import Lean.Data.Json.Printer
 
 /-! Canonical JSON KP4/KR4 adapter. It only translates the closed wire grammar
 to and from `QueryProtocol`; all query meaning remains in the pure kernel. -/

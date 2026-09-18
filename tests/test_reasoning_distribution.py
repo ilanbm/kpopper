@@ -21,6 +21,30 @@ spec.loader.exec_module(builder)
 
 
 class ArchiveContractTests(unittest.TestCase):
+    def test_data_only_bootstrap_preserves_module_initialization(self):
+        generated = ('void lean_initialize();\n'
+                     'int main(int argc, char ** argv) {\n'
+                     '  lean_initialize();\n'
+                     '  res = initialize_Main(1 /* builtin */);\n'
+                     '  lean_io_mark_end_initialization();\n}\n')
+        imports = {'Lean.Data.Json.Parser'}
+        parser_init = 'lean_object* initialize_Lean_Data_Json_Parser(uint8_t builtin);\n'
+        self.assertEqual(builder.data_only_imports(parser_init), imports)
+        with self.assertRaisesRegex(ValueError, 'runtime import'):
+            builder.data_only_imports(parser_init + 'lean_object* initialize_Lean_Meta(uint8_t builtin);\n')
+        actual = builder.data_only_main(generated, imports)
+        self.assertNotIn('lean_initialize();', actual)
+        self.assertIn('  lean_initialize_runtime_module();', actual)
+        self.assertIn('  res = initialize_Main(1 /* builtin */);', actual)
+        for unsupported in ({'Lean'}, {'Lean.Meta'}, {'Lean.Data.Json.Printer'}):
+            with self.subTest(imports=unsupported), self.assertRaisesRegex(ValueError, 'runtime import'):
+                builder.data_only_main(generated, unsupported)
+        for changed in (generated.replace('  lean_initialize();', ''),
+                        generated + '  lean_initialize();\n',
+                        generated.replace('initialize_Main(1 /* builtin */)', 'initialize_Main(0)')):
+            with self.assertRaisesRegex(ValueError, 'bootstrap'):
+                builder.data_only_main(changed, imports)
+
     def test_both_pinned_linux_gmp_flags_select_replaceable_library(self):
         flags = ['--sysroot', '/lean', '-Wl,-Bstatic', '-lgmp', '-lunwind',
                  '-Wl,-Bdynamic', '-lleanrt', '-lgmp', '-luv']

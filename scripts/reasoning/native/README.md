@@ -55,6 +55,12 @@ the distributed runtime ZIP. `--lean-root`, `--gmp-source`, and `--gmp-prefix` p
 of private build inputs. `build_archive(source_root, lean_root, output, target)`
 uses `KPOPPER_GMP_PREFIX` unless passed `gmp_prefix=`. The prefix must contain
 the builder's source/target provenance. No build step runs during installation.
+The pinned compiler normally initializes all of Lean whenever any `Lean.*`
+module is imported. For the data-only JSON parser, the builder selects Lean's
+runtime-only bootstrap in generated `Main.c`, preserving recursive module
+initialization and the normal IO/task setup. It checks the exact generated
+startup and initializer imports; another Lean API requires an explicit build
+review. This keeps compiler and elaborator initialization out of the evaluator.
 On Windows invoke the builder from MSYS2 with
 `KPOPPER_MSYS2_ROOT="$(cygpath -m /)"` so subprocesses use its absolute bash/make
 paths. This avoids Windows selecting the WSL bash shim. Compiler-supplied GMP

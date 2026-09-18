@@ -19,6 +19,7 @@ import urllib.request
 import zipfile
 
 LEAN_VERSION = "4.33.1"
+DATA_ONLY_LEAN_IMPORTS = frozenset({'Lean.Data.Json.Parser'})
 GMP_SHA256 = "a3c2b80201b89e68616f4ad30bc66aee4927c3ce50e33929ca819d5c43538898"
 TARGETS = {
     "darwin-arm64": ("darwin_aarch64", "557e9976f853138716ac82b645aab9d75e2bf9ea893113b5a438e4eeb78ed47d"),
@@ -120,6 +121,36 @@ def validate_axiom_audit(output):
     if required - found:
         raise ValueError('proof audit omitted required declarations: ' + ', '.join(sorted(required - found)))
     return sorted(found)
+
+
+def data_only_imports(source):
+    """Inspect actual generated initializers, including multi-import headers."""
+    imports = {name.replace('_', '.') for name in re.findall(
+        r'^lean_object\* initialize_(Lean(?:_[A-Za-z0-9_]+)?)\(uint8_t builtin\);$', source, re.M)}
+    if imports - DATA_ONLY_LEAN_IMPORTS:
+        raise ValueError('unsupported data-only runtime import: ' + repr(sorted(imports)))
+    return imports
+
+
+def data_only_main(source, lean_imports):
+    """Use the pinned compiler's runtime bootstrap for our pure JSON adapter.
+
+    Lean 4.33.1 selects full compiler initialization for any Lean.* import,
+    even its data-only JSON parser. Keep recursive initialize_Main unchanged;
+    only omit the unrelated compiler-wide bootstrap. New imports or a changed
+    generated startup require review instead of silently applying this rewrite.
+    """
+    unsupported = set(lean_imports) - DATA_ONLY_LEAN_IMPORTS
+    if unsupported:
+        raise ValueError('unsupported data-only runtime import: ' + repr(sorted(unsupported)))
+    declaration, call = 'void lean_initialize();', '  lean_initialize();'
+    if (source.count(declaration) != 1 or source.count(call) != 1
+            or len(re.findall(r'\blean_initialize\s*\(', source)) != 2
+            or source.count('  res = initialize_Main(1 /* builtin */);') != 1
+            or 'lean_initialize_runtime_module' in source):
+        raise ValueError('unexpected pinned compiler main bootstrap')
+    return source.replace(declaration, 'void lean_initialize_runtime_module();').replace(
+        call, '  lean_initialize_runtime_module();')
 
 
 def dynamic_gmp_flags(flags, library):
@@ -262,12 +293,17 @@ def build_archive(source_root, lean_root, output, target, *, gmp_prefix=None):
         env["LEAN_PATH"] = str(work)
         objects = []
         compiled = set()
+        lean_imports = set()
         def compile_module(name, runtime=True):
             if name in compiled:
                 return
             path = sources[name]
             for imported in re.findall(r"^import\s+([A-Za-z0-9_.]+)",
                                        path.read_text(encoding="utf-8"), re.M):
+                if runtime and (imported == 'Lean' or imported.startswith('Lean.')):
+                    if imported not in DATA_ONLY_LEAN_IMPORTS:
+                        raise ValueError('unsupported data-only runtime import: ' + imported)
+                    lean_imports.add(imported)
                 if imported in sources:
                     if runtime and imported.startswith(("Proof", "Audit")):
                         raise ValueError("runtime imports proof-only module")
@@ -286,6 +322,11 @@ def build_archive(source_root, lean_root, output, target, *, gmp_prefix=None):
             if name == 'Audit':
                 validate_axiom_audit(compiled_output)
             if runtime:
+                generated = (work / relative).with_suffix('.c')
+                lean_imports.update(data_only_imports(generated.read_text(encoding='utf-8')))
+                if name == 'Main' and lean_imports:
+                    generated.write_text(data_only_main(generated.read_text(encoding='utf-8'), lean_imports),
+                                         encoding='utf-8')
                 obj = work / (name.replace('.', '_') + ".o")
                 print(run([leanc, "-O3", "-c", "-o", obj,
                            (work / relative).with_suffix('.c')], env=env), flush=True)
@@ -333,6 +374,8 @@ def build_archive(source_root, lean_root, output, target, *, gmp_prefix=None):
         print(run([lean_root / ("bin/clang" + ext), "-O3", "-o", executable] + objects + flags + [mapflag + str(mapfile)], env=env), flush=True)
         if "libgmp.a(" in mapfile.read_text(encoding="utf-8", errors="replace"):
             raise ValueError("static GMP entered linker map")
+        if re.search(r'\b_?initialize_Lean\b', mapfile.read_text(encoding='utf-8', errors='replace')):
+            raise ValueError('full compiler initialization entered data-only runtime')
         audit = audit_linkage(executable, dest, target, lean_root)
         run(["strip", executable])
         if target.startswith("darwin"):
