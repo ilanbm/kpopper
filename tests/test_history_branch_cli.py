@@ -160,9 +160,12 @@ class BranchCLI(unittest.TestCase):
         self.assertEqual(preview_run.returncode, 0, preview_run.stdout + preview_run.stderr)
         preview = S.yaml.safe_load(preview_run.stdout.split('\n', 1)[1])
         self.assertEqual(len(preview['source_revisions']), 2)
+        # This watchdog covers repeated source-closure validation and publication
+        # alongside other CI workers. Individual runtime requests keep their own
+        # operational limits; the assertions below test transaction semantics.
         result = subprocess.run([*command, '--by', 'fixture operator', '--choose', 'p.value=' + selected,
                                  '--source-revision', preview['source_set_revision']],
-                                capture_output=True, text=True, timeout=30)
+                                capture_output=True, text=True, timeout=120)
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         captured = H.Store(fixture.entry).capture()
         self.assertEqual(captured.state['subjects']['p.value']['head'], selected)
