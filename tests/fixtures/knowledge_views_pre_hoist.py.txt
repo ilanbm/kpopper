@@ -83,46 +83,6 @@ def validate_history_evidence(evidence):
     return captured
 
 
-def _meaning_context(document, history=None):
-    """The half of a comparison meaning that belongs to the document rather than to one entry.
-
-    Computed once per document and read by `_meaning_of` for each of its entries. Callers build
-    it lazily, inside the entry loop and after the entry's holder is recorded, which is where
-    the per-entry code ran it. That position is load-bearing twice over: a document holding no
-    entry is never compared, so it is neither validated nor inferred; and when this raises, the
-    first entry's holder is already recorded, which the target loop's caught refusal keeps.
-    """
-    plain = document
-    authority = None
-    if isinstance(document.get('meta'), dict) and 'history' in document['meta']:
-        if history is None:
-            raise P.Refused('missing_history_context: contribution comparison needs captured history')
-        P._peer('history_contract').CapturedHistory(document, history)
-        plain = copy.deepcopy(dict(document))
-        plain['meta'].pop('history')
-        authority = history['authority']
-    capability = G.meaning_capabilities(plain)
-    # Whole-document role inference: the expensive half. `semantic_roles` shields the SystemExit
-    # `infer` raises on an ambiguous schema and maps it to None; other exception types from
-    # `infer` still propagate, so this is not a call that cannot raise.
-    return {'schema': {k: document[k] for k in ('schema',) if k in document},
-            'reasoning': capability, 'authority': authority,
-            'inference': G.semantic_roles(document)}
-
-
-def _meaning_of(context, name):
-    """One entry's comparison meaning, read off its document's context."""
-    inference = context['inference']
-    if inference is not None:
-        judgments, fields = inference
-        roles = {'judgment': name in judgments, 'fields': fields if name in judgments else {}}
-    else:
-        roles = {'unreadable': True}
-    return G.identity({'schema': context['schema'], 'roles': roles,
-                       'reasoning': context['reasoning'],
-                       **({'history_authority': context['authority']} if context['authority'] else {})})
-
-
 def overlay(paths, doc, *, read_mode='live'):
     doc.read_mode = read_mode
     doc.contributions, doc.knowledge_conflicts = [], {}
@@ -155,23 +115,34 @@ def overlay(paths, doc, *, read_mode='live'):
         except contract.CapabilityError as error:
             raise P.Refused(error.code + ': ' + str(error)) from None
 
-    projection = getattr(doc, 'history_projection', None)
-    context = None
+    def meaning(document, name, history=None):
+        plain = document
+        authority = None
+        if isinstance(document.get('meta'), dict) and 'history' in document['meta']:
+            if history is None:
+                raise P.Refused('missing_history_context: contribution comparison needs captured history')
+            P._peer('history_contract').CapturedHistory(document, history)
+            plain = copy.deepcopy(dict(document))
+            plain['meta'].pop('history')
+            authority = history['authority']
+        capability = G.meaning_capabilities(plain)
+        result = G.semantic_roles(document)
+        if result is not None:
+            judgments, fields = result
+            roles = {'judgment': name in judgments, 'fields': fields if name in judgments else {}}
+        else:
+            roles = {'unreadable': True}
+        return G.identity({'schema': {k: document[k] for k in ('schema',) if k in document},
+                           'roles': roles, 'reasoning': capability,
+                           **({'history_authority': authority} if authority else {})})
     for nid, pair in G.entries(doc).items():
         holders.setdefault(nid, []).append(('checkout', pair))
-        if context is None:
-            context = _meaning_context(doc, projection)
-        meanings.setdefault(nid, set()).add(_meaning_of(context, nid))
+        meanings.setdefault(nid, set()).add(meaning(doc, nid, getattr(doc, 'history_projection', None)))
     for name, hyp in doc.hypotheses.items():
         if not hyp['error']:
-            context = None
             for nid, pair in G.entries(hyp['doc']).items():
                 holders.setdefault(nid, []).append(('hypothesis:' + name, pair))
-                if context is None:
-                    # `layered` (provenance.py:745) rebuilds the record per call and cannot
-                    # mutate `doc`, so one layering serves every entry of this hypothesis.
-                    context = _meaning_context(G.P.layered(doc, hyp), projection)
-                meanings.setdefault(nid, set()).add(_meaning_of(context, nid))
+                meanings.setdefault(nid, set()).add(meaning(G.P.layered(doc, hyp), nid, getattr(doc, 'history_projection', None)))
     # Compare a configured target when locally available, without overlaying its code facts.
     publication = project.config().get('publication')
     cache = {}
@@ -224,13 +195,10 @@ def overlay(paths, doc, *, read_mode='live'):
                         layered.setdefault('meta', {})['reasoning'] = copy.deepcopy(meta['reasoning'])
                     target_docs.append(('target:' + ref + ':hypothesis:' + hyp['name'], layered))
                 for label, target_doc in target_docs:
-                    context = None
                     for nid, pair in G.entries(target_doc).items():
                         holders.setdefault(nid, []).append((label, pair))
-                        if context is None:
-                            context = _meaning_context(target_doc,
-                                                       target.get('history', {}).get('projection'))
-                        meanings.setdefault(nid, set()).add(_meaning_of(context, nid))
+                        meanings.setdefault(nid, set()).add(meaning(target_doc, nid,
+                            target.get('history', {}).get('projection')))
             except (ValueError, OSError, SystemExit) as error:
                 doc.target_unavailable = str(error)
         else:
@@ -278,12 +246,9 @@ def overlay(paths, doc, *, read_mode='live'):
                      'folds': 'never', 'scope': manifest['scope'], 'publication': status},
             'doc': body, 'ids': set(entry_map),
             'raw': {nid: pair[1] for nid, pair in entry_map.items()}, 'error': None}
-        context = None
         for nid, pair in entry_map.items():
             holders.setdefault(nid, []).append((name, pair))
-            if context is None:
-                context = _meaning_context(body, history)
-            meanings.setdefault(nid, set()).add(_meaning_of(context, nid))
+            meanings.setdefault(nid, set()).add(meaning(body, nid, history))
     for nid in active_ids:
         variants = holders.get(nid, [])
         if len({G.identity(list(pair)) for _, pair in variants}) > 1 or len(meanings.get(nid, ())) > 1:

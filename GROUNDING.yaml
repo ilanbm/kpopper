@@ -717,6 +717,30 @@ sources:
     at: "User request in task 01a0b42e-d428-79a0-a6f7-03bf6195dde1"
     read: "2026-09-18"
     fidelity: quoted
+  s.2026_09_18_lane_a_hoist:
+    name: "The Lane A session that implemented F1, the per-document hoist in
+           knowledge_views.overlay"
+    asked: "yes start building and coordinate with the architect please"
+    fidelity: quoted
+    of: "implementation of F1 against the overlay-speed lane-a priming, with a differential test
+         whose oracle is the pre-hoist overlay read out of git history at e888570"
+    at: "Claude Code desktop session local_44183971-827e-4438-8c56-23ccc66c0b2b, 2026-09-18, macOS
+         arm64, Python 3.13.12"
+    read: "2026-09-18"
+  s.2026_09_18_overlay_profile:
+    name: "The Architect session that profiled a live open on this record and found the per-entry
+           inference loop"
+    asked: "help me figure out whether or not this is true, whether this is truly a pain point and
+            something worth implementing AND to help me understand whether or not the proposed
+            implementation is a good idea/you would change something"
+    fidelity: quoted
+    of: "cProfile of scripts/provenance.py open on a worktree of e888570, then an experiment that
+         wrapped the reader from outside and memoized pending_grounding.semantic_roles and
+         meaning_capabilities per document object, changing nothing else; its numbers are
+         m.overlay_open_seconds"
+    at: "Claude Code desktop session local_fde22652-a55f-4570-9e96-0b1131d47541, 2026-09-18, macOS
+         arm64, Python 3.13"
+    read: "2026-09-18"
   s.2026_09_18_remeasure_midnight:
     name: "The session that reproduced and fixed the remeasure tests crossing UTC midnight"
     asked: "Fix the three TheMeasurementTests that fail when a long run crosses UTC midnight, audit
@@ -1862,6 +1886,53 @@ known:
     from: doc.host_compatibility
     at: "OpenClaw live exercise / scope, assertions and operator-assisted qualification"
     of: "2026-09-17"
+  m.overlay_open_seconds:
+    name: "Seconds a live open, check and pull cost on this record at e888570, and the same reads
+           frozen"
+    from: s.2026_09_18_overlay_profile
+    v:
+      entries: 429
+      record_lines: 5493
+      open_live: 10.5
+      check_live: 10.3
+      pull_live: 5.2
+      open_frozen: 0.37
+      check_frozen: 0.26
+      pull_frozen: 0.17
+      overlays_per_open: 2
+      semantic_roles_calls_per_open: 872
+      findall_calls_per_open: 2529314
+      open_live_with_per_document_memo: 0.7
+      entries_319_open_live: 6.1
+    at: "wall clock of python3 scripts/cli.py, three runs, warm parse cache; the memo number comes
+         from a wrapper that memoized pending_grounding.semantic_roles and meaning_capabilities per
+         document object and changed nothing else; the 319-entry number is the pre-#84 record copied
+         into a fresh git repository and read with the same code"
+    of: "2026-09-18"
+  m.overlay_open_seconds_after_hoist:
+    name: "Seconds a live open and check cost on this record once the overlay infers once per
+           document, and the same reads frozen"
+    from: s.2026_09_18_lane_a_hoist
+    v:
+      entries: 434
+      open_live_warm: 0.76
+      check_live_warm: 0.61
+      open_live_cold: 1.14
+      check_live_cold: 0.87
+      open_frozen_warm: 0.38
+      check_frozen_warm: 0.25
+      open_live_warm_before: 10.89
+      check_live_warm_before: 10.66
+      semantic_roles_calls_per_open: 4
+      semantic_roles_calls_per_open_before: 882
+    at: "wall clock of python3 scripts/cli.py, three runs each, median reported, on branch
+         claude/overlay-hoist when this record held 434 entries, before #122 merged into it; both the
+         before and after numbers were measured on that same record state, the before by restoring
+         the pre-hoist scripts/knowledge_views.py from e888570 into the same worktree and putting it
+         back, so the two differ only in the overlay; cold is KPOPPER_NO_CACHE=1 and warm is the
+         parse cache as a user gets it; the call counts wrap knowledge_views.overlay from outside and
+         count pending_grounding.semantic_roles"
+    of: "2026-09-18"
   m.prompt_hook_10x_kept:
     v: 0.15
     unit: s
@@ -2760,12 +2831,16 @@ judgments:
     because: "These entrypoints let a new contributor assess the existing checks, install the
               project, report a reproducible problem and submit a focused change. Badges link to
               their actual workflows, release or license; forms preserve a blank-issue route.
-              Reporting policies need a real private contact before publication, and community files
-              alone do not establish release readiness."
+              Feature badges link to capability documentation: reasoning-runtime identifies Lean 4,
+              and Versioned knowledge marks history as experimental. They describe technology and
+              maturity without claiming the expanded reasoning/history epic is complete. Reporting
+              policies need a real private contact before publication, and community files alone do
+              not establish release readiness."
     name: "Make contributing discoverable and show actual project status"
     reopened_by: "A newcomer cannot complete setup or find the right reporting route from these
-                  files, the forms prevent a useful report, or a badge no longer represents the
-                  workflow, release or license it claims."
+                  files, the forms prevent a useful report, a badge no longer represents the
+                  workflow, release, license or capability it claims, or an experimental capability
+                  becomes generally available."
     rests_on: [p.community_guidance]
     verdict: "Keep a small set of truthful badges and lightweight issue forms, with newcomer setup
               and reporting routes in the contribution guide."
@@ -3753,6 +3828,37 @@ judgments:
     blocked_on: "observational: falsified by a watcher whose reconstructed dependencies beat
                  the writer's own declarations on a real record; none has been tried"
     seen: {doc.agent_graph: "read 2026-09-01"}
+  d.overlay_infers_once_per_document:
+    rests_on: [m.overlay_open_seconds, s.2026_09_18_overlay_profile]
+    verdict: "the live overlay infers roles once per document it compares, never once per entry"
+    because: "knowledge_views.overlay ran provenance.infer over the whole document once per entry -
+              872 times per open on a 429-entry record, 8.9 of the 11 seconds a profiled open took
+              inside re.findall - to compute a per-entry meaning whose per-document half is the same
+              for every entry. Memoizing that half alone took a ten-second open to 0.70 seconds with
+              identical output, so the fix is to build it once per document, on first use inside the
+              loop so a document that refuses still leaves the holder the old order left - not an
+              inverted mention index or a cache keyed on the record bytes, which would go stale on
+              hypotheses, the pending ref, the mode and the target"
+    reopened_by: "a live open that runs infer more than once for the same document within one
+                  overlay, or knowledge_conflicts that differ between the old and the new overlay on
+                  any fixture holding a pending bundle, a hypothesis and a target, including a target
+                  whose meaning refuses"
+    seen:
+      m.overlay_open_seconds:
+        entries: 429
+        record_lines: 5493
+        open_live: 10.5
+        check_live: 10.3
+        pull_live: 5.2
+        open_frozen: 0.37
+        check_frozen: 0.26
+        pull_frozen: 0.17
+        overlays_per_open: 2
+        semantic_roles_calls_per_open: 872
+        findall_calls_per_open: 2529314
+        open_live_with_per_document_memo: 0.7
+        entries_319_open_live: 6.1
+      s.2026_09_18_overlay_profile: read 2026-09-18
   d.page_lint_reads_output:
     rests_on: [s.2026_09_04_components, d.author_free_build_guarantees, d.reasoning_in_record]
     verdict: "The output lint checks references and visible keys, judgment and review markers,
