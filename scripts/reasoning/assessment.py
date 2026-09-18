@@ -262,6 +262,12 @@ def assess(snapshot, selection=None, *, policy='focused-review/v1', runtime=None
                                 'witnesses': copy.deepcopy(conflicts.get(nid, [])), 'alternatives': alternatives},
                  'integrity': {'status': 'assessed', 'checks': ['core/v1'], 'issues': issues}}
         attention = legacy_assessment.attention(state, policy)
+        # Legacy gap attention can copy an integrity issue's field location.
+        # Core attention has a closed reason shape; retain locations in the
+        # integrity finding and project only the declared reason fields here.
+        attention = [{'action': action['action'], 'reasons': [
+            {key: reason[key] for key in ('code', 'related_ids')} for reason in action['reasons']]}
+            for action in attention]
         changed_basis = [dep for dep, finding in readings.items() if finding['basis_comparison'] == 'changed']
         if changed_basis and policy == 'focused-review/v1':
             attention.append({'action': 'review', 'reasons': [

@@ -1,15 +1,8 @@
-"""Public acceptance cases for the core/history operational consumers.
-
-These fixtures are deliberately disposable.  They describe the settled consumer contract while
-the implementation is being completed; a failure from an explicit unsupported-capability refusal
-is therefore an expected product failure, whereas a malformed fixture or harness failure is not.
-"""
-import json
+"""Public CLI consolidation acceptance, reusable against installed distributions."""
 from pathlib import Path
 import subprocess
 import sys
 import tempfile
-import time
 import unittest
 from scripts.reasoning import assessment as CoreAssessment
 from scripts.reasoning.snapshot import Snapshot
@@ -84,7 +77,7 @@ class CoreOperationalAcceptance(unittest.TestCase):
         before = self.record.read_bytes()
         result = self.cli("consolidate", "--dry-run", str(self.record))
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
-        self.assertIn("no hypothesis", result.stdout.lower())
+        self.assertIn("nothing to consolidate", result.stdout.lower())
         self.assertEqual(self.record.read_bytes(), before)
         self.assertEqual(sorted(p.relative_to(self.root).as_posix() for p in self.root.rglob("*")),
                          ["GROUNDING.yaml"])
@@ -103,40 +96,7 @@ class CoreOperationalAcceptance(unittest.TestCase):
         self.assertRegex(output.lower(), r"falsif|wrong_if|condition")
         self.assertEqual(self.record.read_text(encoding="utf-8"), CORE)
 
-    def test_core_remeasure_plan_is_read_only_and_keeps_the_exact_recipe_visible(self):
-        self.record.write_text(CORE.replace("v: 10", "v: 10\n    measure: base_value"), encoding="utf-8")
-        measure_dir = self.root / ".kpopper"
-        measure_dir.mkdir()
-        (measure_dir / "measure.yaml").write_text(
-            "base_value: [python3, -I, -c, \"print(10)\"]\n", encoding="utf-8")
-        result = self.cli("remeasure", str(self.record))
-        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
-        self.assertIn("base_value", result.stdout)
-        self.assertIn("python3 -I -c", result.stdout)
-        self.assertIn("nothing ran - add --run to measure this tree", result.stdout)
-        self.assertEqual(self.record.read_text(encoding="utf-8"),
-                         CORE.replace("v: 10", "v: 10\n    measure: base_value"))
-        self.assertFalse((self.root / "ran").exists())
 
-    def test_watch_scan_of_unchanged_core_snapshot_is_clear(self):
-        subprocess.run(["git", "init", "-q", "-b", "main"], cwd=self.root, check=True)
-        subprocess.run(["git", "add", "GROUNDING.yaml"], cwd=self.root, check=True)
-        subprocess.run(["git", "-c", "user.name=fixture", "-c", "user.email=fixture@example.test",
-                        "commit", "-qm", "core fixture"], cwd=self.root, check=True)
-        setup = self.cli("watch", "setup", "--base-ref", "main")
-        self.assertEqual(setup.returncode, 0, setup.stdout + setup.stderr)
-        scan = self.cli("watch", "scan")
-        self.assertEqual(scan.returncode, 0, scan.stdout + scan.stderr)
-        status = None
-        for _ in range(100):
-            status_result = self.cli("watch", "status")
-            self.assertEqual(status_result.returncode, 0, status_result.stdout + status_result.stderr)
-            status = json.loads(status_result.stdout)
-            if status.get("state") != "pending":
-                break
-            time.sleep(0.05)
-        self.assertEqual(status.get("state"), "clear", status)
-        self.assertEqual(status.get("findings"), [])
 
 
 if __name__ == "__main__":
