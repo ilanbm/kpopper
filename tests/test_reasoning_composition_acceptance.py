@@ -241,6 +241,27 @@ class InstalledOperationalCLI(unittest.TestCase):
             self.assertEqual(self.root_files(root), before)
 
     @unittest.skipIf(os.name == 'nt', 'history fixture requires POSIX locks')
+    def test_installed_history_watch_evaluates_never_folding_hypothesis(self):
+        from scripts import history_hypotheses
+        with tempfile.TemporaryDirectory(prefix="installed-history-scenario-") as directory:
+            env = os.environ.copy()
+            fixture = self.history_fixture(measured=1, judgment=True)
+            root = fixture.root
+            env["XDG_STATE_HOME"] = str(Path(directory) / "state")
+            self.commit_fixture(root)
+            mutation = history_hypotheses.prepare(fixture.entry, "future",
+                {"kind": "set", "id": "p.measured", "value": 3},
+                head={"folds": "never"}, operation="future-measurement")
+            history_hypotheses.commit(fixture.entry, mutation, verify=lambda data: None)
+            before = self.root_files(root)
+            status = self.run_watch_until_done(root, env)
+            self.assertEqual(status.get("state"), "attention", status)
+            self.assertTrue(any(item["kind"] == "falsified" and item["id"] == "d.limit"
+                                and item.get("perspective") == "scenario"
+                                for item in status["findings"]), status)
+            self.assertEqual(self.root_files(root), before)
+
+    @unittest.skipIf(os.name == 'nt', 'history fixture requires POSIX locks')
     def test_installed_history_remeasure_equal_reading_plans_then_runs_without_writes(self):
         with tempfile.TemporaryDirectory(prefix="installed-history-remeasure-") as directory:
             fixture = self.history_fixture(measured=1)
@@ -286,6 +307,7 @@ suite = unittest.TestSuite()
 suite.addTests(unittest.defaultTestLoader.loadTestsFromTestCase(InstalledOperationalCLI))
 
 for filename, classname in (("test_core_composition.py", "CoreComposition"),
+                            ("test_computational_scenario.py", "ComputationalScenario"),
                             ("test_core_operational_acceptance.py", "CoreOperationalAcceptance"),
                             ("test_core_consolidate_cli.py", "CoreConsolidateCLI"),
                             ("test_history_direct_integration.py", "DirectHistory.test_public_cli_shows_captured_history_preview"),

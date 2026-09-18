@@ -221,12 +221,20 @@ def _records(root, entry, sha=None, *, include_files=False):
                       digest({name: raw.decode('utf-8') for name, raw in files.items()})}
     if core is not None:
         result['core'] = core
+        result['snapshot'] = observed.to_data()
     if history is not None:
         result['history'] = history
         # Keep the public, already validated observation.  The history-union
         # consumer needs its exact temporal basis (including explicit None),
         # and must not reconstruct that basis from private Store state.
         result['snapshot'] = data
+    if 'snapshot' not in result:
+        # Retain literal legacy shared readings under their original declared
+        # interpretation. The scenario adapter refuses executable promotion.
+        Snapshot = P._peer('reasoning.snapshot').Snapshot
+        result['snapshot'] = Snapshot.from_data(document,
+            hypotheses={item['name']: {'doc': item['doc'], 'head': item['head']} for item in hyps},
+            context={'read_mode': 'supplied', 'watch_capture': {'hash': result['hash']}}).to_data()
     if include_files:
         result['files'] = {name: raw.decode('utf-8') for name, raw in files.items() if name not in raw_names}
     return result
@@ -282,12 +290,6 @@ def compare(snapshot):
         if not all(history_records):
             finding = {'kind': 'uncheckable', 'id': 'record',
                        'reason': 'incompatible captured context: history evidence is missing on one branch'}
-            finding['fingerprint'] = digest(finding)
-            return {'state': 'attention', 'findings': [finding], 'changed': [],
-                    'versions': snapshot.get('versions'), 'identity': snapshot.get('identity')}
-        if snapshot.get('shared'):
-            finding = {'kind': 'uncheckable', 'id': 'record',
-                       'reason': 'incompatible captured context: shared facts cannot yet be represented in an active-history union'}
             finding['fingerprint'] = digest(finding)
             return {'state': 'attention', 'findings': [finding], 'changed': [],
                     'versions': snapshot.get('versions'), 'identity': snapshot.get('identity')}
@@ -551,7 +553,11 @@ class Watch:
         shared = None
         if config.get('shared_record'):
             p = Path(config['shared_record'])
-            shared = _records(p.parent, p.name)
+            token = P._CORE_READS.set(True)
+            try:
+                shared = _records(p.parent, p.name)
+            finally:
+                P._CORE_READS.reset(token)
             try:
                 from . import watch_shared as S
             except ImportError:
@@ -571,6 +577,7 @@ class Watch:
         finally:
             P._CORE_READS.reset(token)
         versions = {'base_ref': config['base_ref'], 'main': main, 'head': head, 'merge_base': ancestor,
+                    'comparison': 'history-scenarios/v1',
                     'working': working['hash'], 'shared': shared['hash'] if shared else None,
                     'inbox': inbox,
                     'config': digest(config), 'freshness': 'local Git objects; remote freshness not verified'}

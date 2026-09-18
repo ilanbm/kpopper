@@ -87,12 +87,24 @@ History fold previews also retain the original pending, target and routing obser
 rebuilding the candidate's committed history and named hypotheses. The preview reports base and
 candidate findings without publishing the candidate or treating pending contributions as accepted.
 
-Watch compatibility/uncertainty and `remeasure` support ordinary declared core records through
-captured assessments. Watch retains the merge-base delta and reports incompatible profile changes;
-remeasure uses only named allowlisted recipes and reports their hypothetical effect without writing
-knowledge. Unknown or failed computations remain explicit. Active-history observer scenarios still
-require prospective history integration and fail closed; they never fall back to the legacy evaluator.
-Default activation remains blocked on complete operational parity.
+Watch compatibility and `remeasure` support declared core and active-history records through
+captured assessments. Watch combines compatible committed histories with the canonical reducer;
+the merge-base delta preserves newer main readings when the local branch did not change them.
+Conflicting claims and incomplete history remain explicit findings.
+
+Hypothetical watch computations use a separate, replay-validated scenario. It retains the complete
+source snapshots and selects only captured hypothesis/shared bodies. New hypothetical values are
+evaluated by the same native core, including `folds: never` layers and already-fired head conditions.
+Standing unchanged hypotheses contribute their head condition without replaying stale values over
+the new base. Scenario findings are labeled with their perspective, source and scenario identity;
+they do not establish history acceptance or permission to fold. Shared literal legacy readings keep
+their original source evidence; executable legacy fields need explicit interpretation first.
+
+Remeasure runs only named allowlisted recipes, prepares admissible named history folds and measured
+values without publishing either, and assesses the final measured world. It verifies the original
+captured source after recipes complete. Existing date, replacement and never-fold rules remain;
+physical hypotheses without an admitted history path are reported as incomplete. Unknown or failed
+computations never become a false condition or a successful measurement.
 
 ## Composable conditions
 

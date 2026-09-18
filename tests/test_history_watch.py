@@ -1,4 +1,6 @@
 import copy
+import datetime
+import json
 import os
 from pathlib import Path
 import shutil
@@ -15,6 +17,7 @@ from scripts import history_store as H
 from scripts import history_watch as W
 from scripts import knowledge_views as V
 from scripts import watch
+from scripts.reasoning.snapshot import Snapshot
 from tests import test_history_store as fixtures
 
 
@@ -57,6 +60,10 @@ class HistoryWatchTests(unittest.TestCase):
                                  **({'kind': item['kind']} if item.get('kind') else {})}
                                 for key, item in data['hypotheses'].items()]
         return record
+
+    def core_layer(self, document):
+        return {**document, 'meta': {'reasoning': copy.deepcopy(
+            self.before.document['meta']['reasoning'])}}
 
     def test_unchanged_history_is_clear(self):
         result = watch.compare(self.snap(self.before, self.before, self.before))
@@ -202,8 +209,105 @@ class HistoryWatchTests(unittest.TestCase):
         store.commit(mutation, verify=lambda data: None)
         result = W.compare(self.snap(self.before, self.before, store.capture()))
         self.assertEqual(result['state'], 'attention')
-        self.assertTrue(any(item['id'] == 'future' and item['kind'] == 'uncheckable'
+        self.assertTrue(any(item['id'] == 'future' and item['kind'] == 'falsified'
                             for item in result['findings']))
+
+    def test_safe_named_what_if_is_assessed_without_folding(self):
+        store = self.branch('safe-condition')
+        mutation = HH.prepare(store.entry, 'future',
+                              {'kind': 'set', 'id': 'p.input', 'value': 2},
+                              head={'claim': 'future', 'folds': 'never',
+                                    'wrong_if': {'expr': 'p.input > 5'}},
+                              operation='safe-condition')
+        store.commit(mutation, verify=lambda data: None)
+        source = store.capture()
+        result = W.compare(self.snap(self.before, self.before, source))
+        self.assertEqual(result['state'], 'clear', result)
+        self.assertEqual(store.capture().baseline, source.baseline)
+
+    def test_safe_physical_what_if_is_assessed_without_acceptance(self):
+        snap = self.snap(self.before, self.before, self.before)
+        snap['working'] = self.physical(snap['working'], 'manual',
+            self.core_layer({'readings': {'p.input': {'v': 2}}}),
+            {'claim': 'manual', 'folds': 'never', 'wrong_if': {'expr': 'p.input > 5'}})
+        result = W.compare(snap)
+        self.assertEqual(result['state'], 'clear', result)
+
+    def test_main_change_rechecks_standing_head_without_stale_alternative(self):
+        mutation = HH.prepare(self.fixture.entry, 'future',
+            {'kind': 'set', 'id': 'p.input', 'value': 0},
+            head={'folds': 'never', 'wrong_if': {'expr': 'p.input > 2'}}, operation='standing')
+        self.fixture.store.commit(mutation, verify=lambda data: None)
+        ancestor = self.fixture.store.capture()
+        main = self.commit(self.branch('standing-main'),
+            {'kind': 'set', 'id': 'p.input', 'value': 3}, 'new-main')
+        result = W.compare(self.snap(ancestor, main, ancestor))
+        self.assertTrue(any(item['id'] == 'future' and item['kind'] == 'falsified'
+                            for item in result['findings']), result)
+        replay = Snapshot.from_json(result['scenarios'][0]['snapshot'])
+        self.assertEqual(replay.to_data()['document']['readings']['p.input']['v'], 3)
+
+    def test_new_main_hypothesis_keeps_its_own_authored_delta(self):
+        store = self.branch('main-hypothesis')
+        mutation = HH.prepare(store.entry, 'future',
+            {'kind': 'set', 'id': 'p.input', 'value': 3},
+            head={'folds': 'never', 'wrong_if': {'expr': 'p.input > 2'}}, operation='main-hypothesis')
+        store.commit(mutation, verify=lambda data: None)
+        result = W.compare(self.snap(self.before, store.capture(), self.before))
+        self.assertTrue(any(item['id'] == 'future' and item['kind'] == 'falsified'
+                            for item in result['findings']), result)
+        self.assertEqual(result['changed'], [])
+
+    def test_hypothetical_reading_can_falsify_a_committed_judgment(self):
+        before = self.commit(self.fixture.store, {'kind': 'add', 'id': 'd.limit',
+            'into': 'judgments', 'body': {'verdict': 'safe', 'rests_on': ['p.input'],
+                'wrong_if': {'expr': 'p.input > 2'}}}, 'base-judgment')
+        store = self.branch('judgment-hypothesis')
+        mutation = HH.prepare(store.entry, 'future',
+            {'kind': 'set', 'id': 'p.input', 'value': 3},
+            head={'folds': 'never'}, operation='hypothetical-reading')
+        store.commit(mutation, verify=lambda data: None)
+        result = W.compare(self.snap(before, before, store.capture()))
+        self.assertTrue(any(item['id'] == 'd.limit' and item['kind'] == 'falsified'
+                            and item.get('perspective') == 'scenario'
+                            for item in result['findings']), result)
+
+    def test_captured_shared_history_is_computed_without_adoption(self):
+        shared_store = self.branch('shared-context')
+        shared = self.commit(shared_store, {'kind': 'add', 'id': 'p.shared',
+            'into': 'readings', 'body': {'v': 3}}, 'shared-reading')
+        snap = self.snap(self.before, self.before, self.before)
+        snap['working'] = self.physical(snap['working'], 'manual',
+            self.core_layer({'readings': {'p.manual': {'v': 1}}}),
+            {'folds': 'never', 'wrong_if': {'expr': 'p.shared > 2'}})
+        snap['shared'] = self.rec(shared)
+        result = watch.compare(snap)
+        self.assertTrue(any(item['id'] == 'manual' and item['kind'] == 'falsified'
+                            for item in result['findings']), result)
+        self.assertEqual(shared_store.capture().baseline, shared.baseline)
+        self.assertNotIn('p.shared', self.fixture.store.capture().state['subjects'])
+
+    def test_real_watch_process_persists_typed_date_scenario(self):
+        root = self.fixture.entry.parent
+        day = datetime.date(2026, 9, 1)
+        self.commit(self.fixture.store, {'kind': 'add', 'id': 'p.dated', 'into': 'readings',
+            'body': {'v': 1, 'sampled_on': day}}, 'dated-source')
+        subprocess.run(['git', 'init', '-b', 'main'], cwd=root, check=True, capture_output=True)
+        subprocess.run(['git', 'add', '.'], cwd=root, check=True, capture_output=True)
+        subprocess.run(['git', '-c', 'user.name=Fixture', '-c', 'user.email=fixture@example.test',
+                        'commit', '-m', 'base'], cwd=root, check=True, capture_output=True)
+        mutation = HH.prepare(self.fixture.entry, 'future',
+            {'kind': 'set', 'id': 'p.input', 'value': 2},
+            head={'folds': 'never', 'wrong_if': {'expr': 'p.input > 5'}}, operation='dated-scenario')
+        self.fixture.store.commit(mutation, verify=lambda data: None)
+        with tempfile.TemporaryDirectory() as state, mock.patch.dict(os.environ, {'XDG_STATE_HOME': state}):
+            observed = watch.Watch(root)
+            observed.setup(base_ref='refs/heads/main')
+            result = observed.process()
+            self.assertEqual(result['state'], 'clear', result)
+            retained = json.loads((observed.state / 'result.json').read_text())
+            replay = Snapshot.from_json(retained['scenarios'][0]['snapshot'])
+            self.assertEqual(replay.to_data()['document']['readings']['p.dated']['sampled_on'], day)
 
     def test_new_executable_error_is_uncheckable(self):
         judgment = fixtures.claim('d.broken', kind='judgment', op='broken', body={
@@ -234,12 +338,10 @@ class HistoryWatchTests(unittest.TestCase):
             observed = watch.Watch(work)
             observed.setup(base_ref='refs/heads/main')
             before = {path.relative_to(work): path.read_bytes() for path in work.rglob('*') if path.is_file()}
-            token = watch.P._CORE_READS.set(True)
-            try:
-                snapshot = observed.snapshot()
-                result = observed.process()
-            finally:
-                watch.P._CORE_READS.reset(token)
+            self.assertFalse(watch.P._CORE_READS.get())
+            snapshot = observed.snapshot()
+            result = observed.process()
+            self.assertFalse(watch.P._CORE_READS.get())
             after = {path.relative_to(work): path.read_bytes() for path in work.rglob('*') if path.is_file()}
         self.assertEqual(result['state'], 'clear')
         self.assertIsNone(snapshot['working']['snapshot']['as_of'])
@@ -253,11 +355,7 @@ class HistoryWatchTests(unittest.TestCase):
         subprocess.run(['git', 'add', '.'], cwd=work, check=True)
         subprocess.run(['git', 'commit', '-m', 'work change'], cwd=work, check=True, capture_output=True)
         with mock.patch.dict(os.environ, {'XDG_STATE_HOME': state.name}):
-            token = watch.P._CORE_READS.set(True)
-            try:
-                conflict = observed.process()
-            finally:
-                watch.P._CORE_READS.reset(token)
+            conflict = observed.process()
         self.assertEqual(conflict['state'], 'attention')
         self.assertTrue(conflict['findings'])
         self.assertTrue(all(item.get('fingerprint') for item in conflict['findings']))

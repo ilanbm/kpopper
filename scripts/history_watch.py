@@ -122,6 +122,8 @@ def merged_snapshot(records):
                  ('ancestor', 'main', 'working')}
     captures = {name: value[0] for name, value in validated.items()}
     observations = {name: value[1] for name, value in validated.items()}
+    if len({observation.to_data()['as_of'] for observation in observations.values()}) != 1:
+        raise ValueError('history inputs have incompatible temporal bases')
     ancestor, main, working = (captures[name] for name in ('ancestor', 'main', 'working'))
     for label, candidate in (('main', main), ('working', working)):
         _same_bytes(candidate.marker, ancestor.marker, label + ' authority')
@@ -169,6 +171,12 @@ def _changed(records):
                    if before_entries.get(name) != after_entries.get(name))
     _, hypothesis_ids = _merge_physical(records)
     changed.update(hypothesis_ids)
+    before_hypotheses = {item['name']: item for item in records['ancestor'].get('hypotheses', [])}
+    after_hypotheses = {item['name']: item for item in records['working'].get('hypotheses', [])}
+    for name in set(before_hypotheses) | set(after_hypotheses):
+        if before_hypotheses.get(name) != after_hypotheses.get(name):
+            changed.update(_entries(before_hypotheses.get(name, {}).get('doc', {})))
+            changed.update(_entries(after_hypotheses.get(name, {}).get('doc', {})))
     return sorted(changed)
 
 
@@ -202,22 +210,71 @@ def _disposition_findings(snapshot, baseline):
     return result
 
 
-def _hypothesis_findings(snapshot, baseline):
-    """Fail closed for newly introduced hypothetical scopes not yet assessed."""
-    current_data, prior_data = snapshot.to_data(), baseline.to_data()
-    current = current_data['hypotheses']
-    prior = prior_data['hypotheses']
-    scope_changed = _identity(current_data['document']) != _identity(prior_data['document'])
+def _shared_snapshot(record):
+    from . import provenance as P
+    if record.get('history'):
+        return _validated_record(record)[1]
+    Snapshot = P._peer('reasoning.snapshot').Snapshot
+    if isinstance(record.get('snapshot'), dict):
+        observed = Snapshot.from_snapshot(record['snapshot'])
+    elif record.get('core', {}).get('snapshot') is not None:
+        observed = Snapshot.from_json(record['core']['snapshot'])
+    else:
+        raise ValueError('shared facts need a captured core/v1 interpretation')
+    data = observed.to_data()
+    if _identity(data['document']) != _identity(record.get('doc')):
+        raise ValueError('shared snapshot document mismatch')
+    if 'watch_capture' in data['context'] and data['context']['watch_capture'] != {'hash': record.get('hash')}:
+        raise ValueError('shared snapshot capture mismatch')
+    return observed
+
+
+def _scenario_findings(snapshot, records):
+    """Assess authored hypothetical deltas, without simulating acceptance acts."""
+    from . import provenance as P
+    scenario = P._peer('reasoning.scenario')
+    current = snapshot.to_data()['hypotheses']
+    shared = records.get('shared')
+    if not current and not shared:
+        return [], []
+    old = {item['name']: item for item in records['ancestor'].get('hypotheses', [])}
+    selection = {}
+    for name in sorted(current):
+        # An unchanged alternative supplies its head, not stale inherited values
+        # that could conceal a newer main reading from that condition.
+        before = _entries(old.get(name, {}).get('doc', {}))
+        after = _entries(current[name]['document'])
+        selection[name] = sorted(identifier for identifier in after
+                                 if before.get(identifier) != after[identifier])
+    observed_shared = _shared_snapshot(shared) if shared else None
+    candidate = scenario.build(snapshot, selection, shared=observed_shared)
+    assessed = scenario.assess(candidate)
+    if any(selection.values()) or shared:
+        baseline = scenario.assess(scenario.build(snapshot, {name: [] for name in selection}))
+    else:
+        baseline = assessed
     findings = []
-    for name, hypothesis in sorted(current.items()):
-        if hypothesis == prior.get(name) and not scope_changed:
-            continue
-        condition = hypothesis['head'].get('wrong_if')
-        detail = ('condition and scope' if condition is not None else 'scope')
-        findings.append(_finding(
-            'uncheckable', name,
-            name + ': retained hypothetical ' + detail + ' was not evaluated by history watch'))
-    return findings
+
+    def finding(kind, identifier, reason, **details):
+        item = _finding(kind, identifier, reason)
+        item.update(perspective='scenario', source_snapshot_id=assessed['source_snapshot_id'],
+                    scenario_id=assessed['scenario_id'], **details)
+        item['fingerprint'] = _identity({key: value for key, value in item.items() if key != 'fingerprint'})
+        findings.append(item)
+
+    for identifier in assessed['collisions']:
+        finding('collision', identifier, identifier + ': captured hypothetical/shared bodies disagree')
+    for kind, key in (('falsified', 'falsified'), ('uncheckable', 'holes'), ('uncheckable', 'moved')):
+        for line in sorted(set(assessed['findings'][key]) - set(baseline['findings'][key])):
+            finding(kind, line.split(':', 1)[0], line)
+    for head in assessed['heads']:
+        if head['truth'] is True:
+            finding('falsified', head['name'], head['name'] + ': hypothetical wrong_if holds under core/v1',
+                    computation=head['computation'])
+        elif head['truth'] is None:
+            finding('uncheckable', head['name'], head['name'] + ': hypothetical condition is unavailable',
+                    computation=head['computation'])
+    return findings, [assessed]
 
 
 def _main_snapshot(records):
@@ -238,8 +295,8 @@ def compare(snapshot):
         main_snapshot = _main_snapshot(snapshot)
         projected = _project(candidate)
         baseline = _project(main_snapshot)
-        findings = (_disposition_findings(candidate, main_snapshot) +
-                    _hypothesis_findings(candidate, main_snapshot))
+        scenario_findings, scenarios = _scenario_findings(candidate, snapshot)
+        findings = _disposition_findings(candidate, main_snapshot) + scenario_findings
         for kind, lines, prior in (('falsified', projected['falsified'], baseline['falsified']),
                                    ('uncheckable', projected['holes'], baseline['holes']),
                                    ('uncheckable', projected['moved'], baseline['moved'])):
@@ -247,7 +304,7 @@ def compare(snapshot):
                 findings.append(_finding(kind, line.split(':', 1)[0], line))
         return {'state': 'attention' if findings else 'clear', 'findings': findings,
                 'changed': _changed(snapshot), 'versions': snapshot.get('versions'),
-                'identity': snapshot.get('identity')}
+                'identity': snapshot.get('identity'), 'scenarios': scenarios}
     except (ValueError, SystemExit) as error:
         finding = {'kind': 'uncheckable', 'id': 'record', 'reason': str(error)}
         finding['fingerprint'] = _identity(finding)
