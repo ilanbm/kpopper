@@ -1,5 +1,5 @@
 # Keep Python 3.9 support while using the same runner on both CI interpreters.
-pytest==8.4.2
+pytest==9.0.3
 pytest-xdist==3.8.0
 pytest-split==0.10.0
 jsonschema>=4,<5
