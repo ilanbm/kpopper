@@ -107,6 +107,71 @@ class InstalledOperationalCLI(unittest.TestCase):
                 "    verdict: okay\n"
                 "    wrong_if: {op: gt, args: [{ref: p.input}, {num: '20'}]}\n")
 
+    def history_fixture(self, *, measured=1, judgment=False):
+        """Use the checked history fixture while importing all product modules from ``scripts``."""
+        from tests.test_history_snapshot_capture import HistorySnapshotCapture
+        from scripts import history_authoring as authoring
+
+        fixture = HistorySnapshotCapture()
+        fixture.setUp()
+        self.addCleanup(fixture.doCleanups)
+        self.addCleanup(fixture.temp.cleanup)
+        action = {
+            "kind": "add", "id": "p.measured", "into": "readings",
+            "body": {"v": measured, "measure": "base_value", "of": "2026-09-16"},
+        }
+        authoring.commit(fixture.entry, authoring.prepare(
+            fixture.entry, action, by="writer", operation="measured-reading"),
+            verify=lambda data: None)
+        if judgment:
+            authoring.commit(fixture.entry, authoring.prepare(
+                fixture.entry, {"kind": "add", "id": "d.limit", "into": "decisions",
+                                 "body": {"verdict": "okay", "rests_on": ["p.measured"],
+                                          "wrong_if": {"op": "gt", "args": [
+                                              {"ref": "p.measured"}, {"num": "2"}]}}},
+                by="writer", operation="bound-judgment"), verify=lambda data: None)
+        return fixture
+
+    @staticmethod
+    def root_files(root):
+        return {path.relative_to(root).as_posix(): path.read_bytes()
+                for path in root.rglob("*") if path.is_file()}
+
+    @staticmethod
+    def commit_fixture(root):
+        subprocess.run(["git", "init", "-q", "-b", "main"], cwd=root, check=True)
+        subprocess.run(["git", "-c", "user.name=fixture", "-c",
+                        "user.email=fixture@example.test", "config", "user.name", "Fixture"],
+                       cwd=root, check=True)
+        subprocess.run(["git", "-c", "user.name=fixture", "-c",
+                        "user.email=fixture@example.test", "config", "user.email",
+                        "fixture@example.test"], cwd=root, check=True)
+        subprocess.run(["git", "add", "."], cwd=root, check=True)
+        subprocess.run(["git", "-c", "user.name=fixture", "-c",
+                        "user.email=fixture@example.test", "commit", "-qm", "history fixture"],
+                       cwd=root, check=True)
+
+    def run_watch_until_done(self, root, env):
+        setup = subprocess.run([sys.executable, str(self.cli_path()), "watch", "setup",
+                                "--base-ref", "main"], cwd=root, env=env, text=True,
+                               capture_output=True, check=False)
+        self.assertEqual(setup.returncode, 0, setup.stdout + setup.stderr)
+        scan = subprocess.run([sys.executable, str(self.cli_path()), "watch", "scan"],
+                              cwd=root, env=env, text=True, capture_output=True, check=False)
+        self.assertEqual(scan.returncode, 0, scan.stdout + scan.stderr)
+        status = None
+        for _ in range(100):
+            current = subprocess.run([sys.executable, str(self.cli_path()), "watch", "status"],
+                                     cwd=root, env=env, text=True, capture_output=True,
+                                     check=False)
+            self.assertEqual(current.returncode, 0, current.stdout + current.stderr)
+            status = json.loads(current.stdout)
+            if status.get("state") != "pending":
+                return status
+            import time
+            time.sleep(0.05)
+        return status
+
     def test_installed_remeasure_plan_is_read_only(self):
         with tempfile.TemporaryDirectory(prefix="installed-core-remeasure-") as directory:
             root = Path(directory)
@@ -160,6 +225,61 @@ class InstalledOperationalCLI(unittest.TestCase):
                 time.sleep(0.05)
             self.assertEqual(status.get("state"), "clear", status)
             self.assertEqual(status.get("findings"), [])
+
+    @unittest.skipIf(os.name == 'nt', 'history fixture requires POSIX locks')
+    def test_installed_history_watch_unchanged_snapshot_is_clear_and_read_only(self):
+        with tempfile.TemporaryDirectory(prefix="installed-history-watch-") as directory:
+            env = os.environ.copy()
+            fixture = self.history_fixture()
+            root = fixture.root
+            env["XDG_STATE_HOME"] = str(Path(directory) / "state")
+            self.commit_fixture(root)
+            before = self.root_files(root)
+            status = self.run_watch_until_done(root, env)
+            self.assertEqual(status.get("state"), "clear", status)
+            self.assertEqual(status.get("findings"), [])
+            self.assertEqual(self.root_files(root), before)
+
+    @unittest.skipIf(os.name == 'nt', 'history fixture requires POSIX locks')
+    def test_installed_history_remeasure_equal_reading_plans_then_runs_without_writes(self):
+        with tempfile.TemporaryDirectory(prefix="installed-history-remeasure-") as directory:
+            fixture = self.history_fixture(measured=1)
+            root = fixture.root
+            measure = root / ".kpopper"
+            measure.mkdir(exist_ok=True)
+            measure.joinpath("measure.yaml").write_text(
+                "base_value: " + json.dumps([sys.executable, "-I", "-c", "print(1)"]) + "\n",
+                encoding="utf-8")
+            before = self.root_files(root)
+            plan = subprocess.run([sys.executable, str(self.cli_path()), "remeasure",
+                                   str(root / "GROUNDING.yaml")], cwd=root, text=True,
+                                  capture_output=True, check=False)
+            self.assertEqual(plan.returncode, 0, plan.stdout + plan.stderr)
+            self.assertIn("base_value", plan.stdout)
+            run = subprocess.run([sys.executable, str(self.cli_path()), "remeasure", "--run",
+                                 str(root / "GROUNDING.yaml")], cwd=root, text=True,
+                                capture_output=True, check=False)
+            self.assertEqual(run.returncode, 0, run.stdout + run.stderr)
+            self.assertIn("p.measured: 1", run.stdout)
+            self.assertEqual(self.root_files(root), before)
+
+    @unittest.skipIf(os.name == 'nt', 'history fixture requires POSIX locks')
+    def test_installed_history_remeasure_falsifier_is_red_without_writes(self):
+        with tempfile.TemporaryDirectory(prefix="installed-history-remeasure-red-") as directory:
+            fixture = self.history_fixture(measured=1, judgment=True)
+            root = fixture.root
+            measure = root / ".kpopper"
+            measure.mkdir(exist_ok=True)
+            measure.joinpath("measure.yaml").write_text(
+                "base_value: " + json.dumps([sys.executable, "-I", "-c", "print(3)"]) + "\n",
+                encoding="utf-8")
+            before = self.root_files(root)
+            run = subprocess.run([sys.executable, str(self.cli_path()), "remeasure", "--run",
+                                 str(root / "GROUNDING.yaml")], cwd=root, text=True,
+                                capture_output=True, check=False)
+            self.assertEqual(run.returncode, 1, run.stdout + run.stderr)
+            self.assertIn("FALSIFIED d.limit", run.stdout)
+            self.assertEqual(self.root_files(root), before)
 
 
 suite = unittest.TestSuite()
