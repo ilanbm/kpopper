@@ -34,6 +34,8 @@ labels:
   s.2026_09_15_branch_verdict_conflicts: "Two branches, one judgment, opposite verdicts"
   s.2026_09_15_verdict_conflicts_decided: "A reversal folds by its own condition or by name"
   s.2026_09_16_versions_core: "One version per claim, a state computed from them all"
+  s.2026_09_18_overlay_profile: "Where the ten seconds of a live open actually went"
+  s.2026_09_18_lane_a_hoist: "Infer once per document, and what that bought"
   prior.gate_by_consequence: "Who decides, by what being wrong costs"
   prior.ts_direction: "TypeScript for all of it, or none"
   prior.strings_lose_tooling: "Browser code in strings loses its tools"
@@ -92,7 +94,8 @@ tabs:
              s.2026_09_17_selective_ci, s.2026_09_17_history_reasoning_integration,
              s.2026_09_17_t3_integration, s.2026_09_18_ci_cost,
              s.2026_09_18_continue_reasoning_core, s.2026_09_18_remeasure_midnight,
-             s.ci_execution_evidence]
+             s.ci_execution_evidence,
+             s.2026_09_18_overlay_profile, s.2026_09_18_lane_a_hoist]
     sections:
       - title: How to read what follows
         why: a wall of cards is not an argument until you know what separates them
@@ -145,6 +148,10 @@ tabs:
       - title: Where CI spends time
         why: the measured execution and dependency waits identify what the CI changes must improve
         pick: [m.ci_python_serial_baseline, m.ci_native_wait_baseline]
+        as: lines
+      - title: What a live open costs
+        why: the opening cost of session N is the method's one promise in numbers - measured before and after each change that touched it
+        pick: [m.overlay_open_seconds, m.overlay_open_seconds_after_hoist]
         as: lines
       - title: The decisions that hold
         why: every one says what would make it wrong - hover any reference in the reasoning to see the value it was decided against
