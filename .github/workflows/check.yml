@@ -136,6 +136,10 @@ jobs:
             python -m unittest discover -s tests -p 'test_document*.py'
           fi
 
+      - name: The scoped-query example works through the installed writer and CLI
+        if: needs.changes.outputs.python == 'true'
+        run: python examples/scoped-query/exercise.py
+
   document-ui:
     timeout-minutes: 15
     needs: changes

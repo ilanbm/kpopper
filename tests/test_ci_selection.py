@@ -47,7 +47,8 @@ class Selection(unittest.TestCase):
 
     def test_shared_reader_and_cli_run_all_consumers_without_recompiling(self):
         for path in ("scripts/provenance.py", "scripts/cli.py", "scripts/session/core.py",
-                     "scripts/reasoning/evaluate.py", "tests/test_session.py", "tests/fixtures/page/PROVENANCE.yaml"):
+                     "scripts/reasoning/evaluate.py", "tests/test_session.py", "tests/fixtures/page/PROVENANCE.yaml",
+                     "examples/scoped-query/exercise.py", "examples/scoped-query/record.yaml"):
             with self.subTest(path=path):
                 selected = CI.select([path])
                 self.assertTrue(all(selected[k] for k in CI.LANES if k != "native"), selected)

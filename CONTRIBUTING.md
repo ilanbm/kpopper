@@ -98,6 +98,16 @@ execution needs no Lean compiler or checked-session setup. For changes to that c
 follow the [runtime build and validation guide](scripts/reasoning/native/README.md),
 including the platform checks and third-party notices required when changing a bundle.
 
+The finite-scope query extension is an additive module (`query/v1`) with KP4/KR4
+transport and `resources/v4`; see [Query operations](docs/query.md). An additive
+module change should preserve KP2/KP3 behavior and register its capability, protocol
+and resource contract. A revision to an existing core module changes its compatibility
+contract and needs the corresponding review. Keep authored facts, computed results,
+proof claims and declared support separate in documentation. For query changes, the
+focused conformance boundary is `python -m unittest tests.test_reasoning_query_runtime`;
+run the relevant native validation from `scripts/reasoning/native/README.md` when the
+packaged runtime changes. These checks do not activate query support on real records.
+
 Then push and open a pull request using GitHub or the optional `gh` CLI:
 
 ```sh
