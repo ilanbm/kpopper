@@ -1,5 +1,6 @@
 """Acceptance for pure prospective operations over captured history context."""
 import copy
+import os
 import shutil
 import unittest
 from pathlib import Path
@@ -13,6 +14,7 @@ from scripts.reasoning.contract import digest
 from tests import test_history_advanced as _history_advanced
 
 
+@unittest.skipIf(os.name == 'nt', 'History fixture publication requires POSIX locking')
 class HistoryOperationContext(unittest.TestCase):
     """The operation candidate keeps one original capture while changing one named group."""
 
@@ -60,9 +62,13 @@ class HistoryOperationContext(unittest.TestCase):
         data = operations.snapshot_for(candidate).to_data()
 
         self.assertIs(candidate._operation_source, original_source)
-        self.assertEqual(context.operation_source["snapshot_id"], base._operation_snapshot.snapshot_id)
-        self.assertEqual(context.context_digest, digest(base._operation_snapshot.to_data()["context"]))
-        self.assertEqual(context.history_view, base._operation_snapshot.to_data()["context"]["history_view"])
+        source_context = data["context"]["operation_source"]
+        self.assertEqual(source_context["snapshot_id"], base._operation_snapshot.snapshot_id)
+        self.assertEqual(source_context["context_digest"], digest(base._operation_snapshot.to_data()["context"]))
+        self.assertEqual(source_context["history_view"], base._operation_snapshot.to_data()["context"]["history_view"])
+        for key, value in base._operation_snapshot.to_data()["context"].items():
+            if key not in ("history", "history_hypotheses", "history_view", "read_mode"):
+                self.assertEqual(data["context"][key], value, key)
         self.assertNotIn("selected", data["hypotheses"])
         self.assertIn("retained", data["hypotheses"])
         self.assertIn("history", data["context"])

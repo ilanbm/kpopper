@@ -309,7 +309,18 @@ def finish_hypotheses(paths, names, *, kind, because, take=(), drops=None, by=No
     with P._locked(str(entry), project=project):
         C._require(project.config() == policy, 'history_routing_changed')
         C._require(not pending.exists(), 'recovery_required')
-        capture = H.Store(entry).capture()
+        source = document = None
+        if dry:
+            from .reasoning.snapshot import capture_source
+            from .reasoning import operations
+            source = capture_source(original_paths)
+            capture = source.history_capture
+            C._require(capture is not None, 'history_authority_changed')
+            document = source.document
+            document._operation_source = source
+            operations.bind(document, source.snapshot)
+        else:
+            capture = H.Store(entry).capture()
         if not names:
             adapted = history_adapter.from_store_capture(capture)
             groups, _ = module.layers(adapted.projection, adapted.document)
@@ -321,8 +332,19 @@ def finish_hypotheses(paths, names, *, kind, because, take=(), drops=None, by=No
             mutation = module.prepare_fold(entry, names, take=take, drops=drops, **options)
         else:
             mutation = module.prepare_refute(entry, names, **options)
+        assessment = {}
+        if document is not None and operations.selected(document):
+            candidate = operations.prepared(document, mutation)
+            before = operations.findings(operations.world(document).context)
+            after = operations.findings(operations.world(candidate).context)
+            assessment = {'source_snapshot': source.snapshot.snapshot_id,
+                          'candidate_snapshot': operations.snapshot_for(candidate).snapshot_id,
+                          'base': before, 'candidate': after}
+        if source is not None:
+            source.verify()
         if dry:
-            return {'state': 'prepared', 'hypotheses': names, 'action': kind}
+            return {'state': 'prepared', 'hypotheses': names, 'action': kind,
+                    **({'assessment': assessment} if assessment else {})}
         routing = _routing(original_paths, paths, project)
         T.publish_immutable(pending.parent / '.gitignore', b'*\n', root=entry.parent)
         T.publish_immutable(pending, C.encode_document(_envelope(mutation, routing)), root=entry.parent)
@@ -331,7 +353,8 @@ def finish_hypotheses(paths, names, *, kind, because, take=(), drops=None, by=No
         T._sync(pending.parent)
         P.forget(entry)
         return {'state': 'folded' if kind == 'fold' else 'refuted', 'hypotheses': names,
-                'operation': mutation.to_data()['operation']}
+                'operation': mutation.to_data()['operation'],
+                **({'assessment': assessment} if assessment else {})}
 
 
 def identity_write(paths, a, b, *, kind, keep=None, because=None, as_of=None):

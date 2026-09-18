@@ -60,6 +60,14 @@ alias.__package__ = "scripts"
 alias.__spec__ = importlib.machinery.ModuleSpec("scripts", loader=None, is_package=True)
 alias.__spec__.submodule_search_locations = alias.__path__
 sys.modules["scripts"] = alias
+# Fixture imports resolve only test helpers; product imports still resolve the
+# installed package through the explicit scripts alias above.
+fixtures = types.ModuleType("tests")
+fixtures.__path__ = [str(target)]
+fixtures.__package__ = "tests"
+fixtures.__spec__ = importlib.machinery.ModuleSpec("tests", loader=None, is_package=True)
+fixtures.__spec__.submodule_search_locations = fixtures.__path__
+sys.modules["tests"] = fixtures
 for name in ("history_authoring", "history_contract", "history_store",
              "history_transaction", "provenance", "reasoning",
              "reasoning.authoring", "reasoning.runtime", "reasoning.evaluate",
@@ -160,6 +168,8 @@ suite.addTests(unittest.defaultTestLoader.loadTestsFromTestCase(InstalledOperati
 for filename, classname in (("test_core_composition.py", "CoreComposition"),
                             ("test_core_operational_acceptance.py", "CoreOperationalAcceptance"),
                             ("test_core_consolidate_cli.py", "CoreConsolidateCLI"),
+                            ("test_history_direct_integration.py", "DirectHistory.test_public_cli_shows_captured_history_preview"),
+                            ("test_history_operation_context.py", "HistoryOperationContext.test_prepared_fold_removes_only_selected_group_and_retains_context"),
                             ("test_reasoning_query_runtime.py", "NativeQueryAcceptance"),
                             ("test_core_query_transfer.py", "CoreQueryTransfer"),
                             ("test_core_followups.py", "CoreFollowups.test_declared_record_routes_to_core_exact_conditions"),
