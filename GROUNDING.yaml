@@ -2742,12 +2742,16 @@ judgments:
     because: "These entrypoints let a new contributor assess the existing checks, install the
               project, report a reproducible problem and submit a focused change. Badges link to
               their actual workflows, release or license; forms preserve a blank-issue route.
-              Reporting policies need a real private contact before publication, and community files
-              alone do not establish release readiness."
+              Feature badges link to capability documentation: reasoning-runtime identifies Lean 4,
+              and Versioned knowledge marks history as experimental. They describe technology and
+              maturity without claiming the expanded reasoning/history epic is complete. Reporting
+              policies need a real private contact before publication, and community files alone do
+              not establish release readiness."
     name: "Make contributing discoverable and show actual project status"
     reopened_by: "A newcomer cannot complete setup or find the right reporting route from these
-                  files, the forms prevent a useful report, or a badge no longer represents the
-                  workflow, release or license it claims."
+                  files, the forms prevent a useful report, a badge no longer represents the
+                  workflow, release, license or capability it claims, or an experimental capability
+                  becomes generally available."
     rests_on: [p.community_guidance]
     verdict: "Keep a small set of truthful badges and lightweight issue forms, with newcomer setup
               and reporting routes in the contribution guide."
