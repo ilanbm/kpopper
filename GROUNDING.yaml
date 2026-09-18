@@ -768,6 +768,15 @@ sources:
     at: "PR #119 run 35285716254 attempt 1 and local forced-date and fixed-day test runs"
     of: "2026-09-18"
     read: "2026-09-18"
+  s.2026_09_19_dependabot_patch:
+    name: "The session that made Dependabot dependency updates count as patch releases without
+           needing a PR body template"
+    asked: "PR 125 failed because Dependabot did not declare Bump: patch; should it still be part of
+            the release, and how should CI treat it?"
+    of: "2026-09-19, given PR 125, its failing record and ci-required jobs,
+         .github/workflows/check.yml, .github/requirements-test.txt, .github/scripts/release.py, and
+         tests.test_ci_execution plus tests.test_release"
+    read: "2026-09-19"
   s.background_ingestion:
     name: "Background capture and selective delivery contract"
     file: "skills/kpopper/INGESTION.md"
@@ -3101,6 +3110,16 @@ judgments:
       m.ci_spend_by_trigger: "108.83 dollars on pull requests against 29.99 on pushes to main; of
                               the 199 Darwin session jobs, 151 came from pull request commits and 48
                               from pushes"
+  d.dependabot_missing_bump_is_patch:
+    verdict: "Dependabot pull requests without a Bump declaration count as patch releases"
+    because: "Dependabot does not populate the repository pull-request template; the release script
+              already assigns patch when no declaration is present, so CI should permit that one
+              author without excluding its change from the release."
+    rests_on: [s.2026_09_19_dependabot_patch]
+    reopened_by: "Dependabot can reliably declare the repository bump protocol, or the release
+                  policy gains a deliberate no-release class for development-only dependency
+                  updates."
+    seen: {s.2026_09_19_dependabot_patch: "read 2026-09-19"}
   d.detached_worker_test_cleanup:
     name: "Wait for detached worker shutdown before deleting its test state"
     rests_on: [s.2026_09_13_worker_cleanup]

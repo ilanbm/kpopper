@@ -85,6 +85,13 @@ class TestPlans(unittest.TestCase):
         native = yaml.safe_load((ROOT / '.github/workflows/reasoning-runtime.yml').read_text())['jobs']
         self.assertEqual(native['target']['needs'], 'preflight')
 
+    def test_dependabot_prs_count_as_patch_without_needing_a_body_template(self):
+        jobs = yaml.safe_load((ROOT / '.github/workflows/check.yml').read_text())['jobs']
+        declaration = next(step for step in jobs['record']['steps']
+                           if step.get('name') == 'The pull request declares its bump')
+        self.assertIn("github.event.pull_request.user.login != 'dependabot[bot]'",
+                      declaration['if'])
+
     def test_candidate_only_skips_integrity_step_but_keeps_the_build_prerequisite(self):
         jobs = yaml.safe_load((ROOT / '.github/workflows/reasoning-runtime.yml').read_text())['jobs']
         self.assertNotIn('if', jobs['preflight'])

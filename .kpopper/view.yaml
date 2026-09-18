@@ -95,7 +95,8 @@ tabs:
              s.2026_09_17_t3_integration, s.2026_09_18_ci_cost,
              s.2026_09_18_continue_reasoning_core, s.2026_09_18_remeasure_midnight,
              s.ci_execution_evidence, s.2026_09_18_lane_b_load_once,
-             s.2026_09_18_overlay_profile, s.2026_09_18_lane_a_hoist]
+             s.2026_09_18_overlay_profile, s.2026_09_18_lane_a_hoist,
+             s.2026_09_19_dependabot_patch]
     sections:
       - title: How to read what follows
         why: a wall of cards is not an argument until you know what separates them
