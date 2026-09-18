@@ -6,6 +6,8 @@
   <a href="https://github.com/ilanbm/kpopper/actions/workflows/check.yml"><img src="https://github.com/ilanbm/kpopper/actions/workflows/check.yml/badge.svg?branch=main" alt="CI tests and record checks"></a>
   <a href="https://github.com/ilanbm/kpopper/releases/latest"><img src="https://img.shields.io/github/v/release/ilanbm/kpopper" alt="Latest release"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue" alt="License: MIT"></a>
+  <a href="docs/reasoning-core.md"><img src="https://img.shields.io/badge/reasoning--runtime-Lean%204-3B82F6" alt="reasoning-runtime: Lean 4"></a>
+  <a href="docs/history-contract.md"><img src="https://img.shields.io/badge/Versioned%20knowledge-experimental-8B5CF6" alt="Versioned knowledge: experimental"></a>
 </p>
 
 <p align="center">
