@@ -113,6 +113,19 @@ class CoreRemeasure(unittest.TestCase):
         operation = operations.snapshot_for(final).to_data()["context"].get("operation", {})
         self.assertEqual(operation.get("selection"), ["alternative", "second"])
 
+    def test_recipe_cannot_leave_a_stale_captured_source(self):
+        root = self.fixture()
+        record = root / "GROUNDING.yaml"
+
+        def mutating_recipe(*args, **kwargs):
+            record.write_text(record.read_text(encoding="utf-8") + "\n", encoding="utf-8")
+            return "10\n", None
+
+        with mock.patch.object(remeasure, "run_recipe", side_effect=mutating_recipe):
+            lines, code = remeasure.measure([str(record)], run=True)
+        self.assertEqual(code, 1)
+        self.assertIn("snapshot_changed", "\n".join(lines))
+
 
 if __name__ == "__main__":
     unittest.main()

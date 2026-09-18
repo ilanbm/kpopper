@@ -464,6 +464,15 @@ def _measure_core(paths, doc, hyps, run=False, timeout=None, cap=None, today=Non
             failed.append(f"  FAIL {n} ({', '.join(sorted(serves[n]))}): {problem}")
         else:
             results[n] = text
+    # Recipes run outside the assessment boundary and may edit an input while they run.  Do
+    # not compare readings or offer refresh advice against a stale captured source.
+    source = getattr(doc, "_operation_source", None)
+    if source is not None:
+        try:
+            source.verify()
+        except Exception as error:
+            code = getattr(error, "code", "snapshot_changed") or "snapshot_changed"
+            return [f"refused - {code}: {error}"], 1
     differing, agreed = {}, []
     for nid, by in sorted(names.items()):
         n = next(iter(by))
