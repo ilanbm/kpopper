@@ -69,7 +69,7 @@ class CoreWatchTests(unittest.TestCase):
         self.assertEqual(W.compare(snapshot)['state'], 'clear')
 
     def test_core_capture_loads_one_operation_snapshot(self):
-        from scripts.reasoning import operations
+        operations = W.P._peer('reasoning.operations')
         with patch.object(operations, 'load', wraps=operations.load) as load:
             W._records(self.work, 'GROUNDING.yaml')
         self.assertEqual(load.call_count, 1)
