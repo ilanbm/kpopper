@@ -63,13 +63,17 @@ def document_state(doc):
     keeps hypotheses and origins as attributes rather than keys, so `dict(doc)` alone sees
     neither - and a hypothesis is compared by the document it carries, not by its name, or a
     layer body could be rewritten under a name that never moved. An attribute the overlay
-    never set is absent rather than None, so injecting one is a difference too - and
-    `attributes` is what keeps that true of *every* attribute rather than only the named
-    ones, so a later overlay field cannot drop out of the bar by not being listed here."""
+    never set is absent rather than None, so injecting one is a difference too.
+
+    `attributes` and each layer's `keys` compare the NAMES a document and a hypothesis carry,
+    so a field appearing or vanishing is caught whether or not anything below lists it. They
+    do not compare its value: a field whose value has to hold across the handover still has
+    to be named in `OVERLAY` or `LAYER`. Adding an overlay field means adding it there."""
     layers = {}
     for name, h in (getattr(doc, "hypotheses", None) or {}).items():
         layers[name] = {k: copy.deepcopy(dict(h[k]) if k == "doc" else h[k])
                         for k in LAYER if k in h}
+        layers[name]["keys"] = sorted(h)
     present = {a: copy.deepcopy(getattr(doc, a)) for a in OVERLAY if hasattr(doc, a)}
     return {"mapping": copy.deepcopy(dict(doc)),
             "origins": copy.deepcopy(getattr(doc, "origins", None)),
