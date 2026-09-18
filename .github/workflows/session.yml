@@ -2,6 +2,11 @@ name: checked-session
 
 on:
   workflow_call:
+    inputs:
+      platforms:
+        description: "Runner images to check, as a JSON array."
+        type: string
+        default: '["ubuntu-latest", "macos-latest", "windows-latest"]'
   workflow_dispatch:
 
 concurrency:
@@ -13,10 +18,11 @@ permissions:
 
 jobs:
   session:
+    timeout-minutes: 20
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, macos-latest, windows-latest]
+        os: ${{ fromJSON(inputs.platforms || '["ubuntu-latest", "macos-latest", "windows-latest"]') }}
     runs-on: ${{ matrix.os }}
     env:
       ELAN_TOOLCHAIN: leanprover/lean4:v4.33.1
