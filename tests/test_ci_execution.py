@@ -21,6 +21,8 @@ def module(name):
 
 
 class TestPlans(unittest.TestCase):
+    @unittest.skipUnless(importlib.util.find_spec('pytest'),
+                         'pytest is installed only in the Python CI jobs')
     def test_pytest_9_subtest_reports_do_not_duplicate_the_collected_parent(self):
         plugin = __import__('tests.ci_pytest', fromlist=['ci_pytest'])
         progress = plugin.Progress(None)
