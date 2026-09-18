@@ -76,6 +76,7 @@ if archive:
 suite = unittest.TestSuite()
 for filename, classname in (("test_core_composition.py", "CoreComposition"),
                             ("test_core_operational_acceptance.py", "CoreOperationalAcceptance"),
+                            ("test_core_consolidate_cli.py", "CoreConsolidateCLI"),
                             ("test_reasoning_query_runtime.py", "NativeQueryAcceptance"),
                             ("test_core_query_transfer.py", "CoreQueryTransfer"),
                             ("test_core_followups.py", "CoreFollowups.test_declared_record_routes_to_core_exact_conditions"),

@@ -4,6 +4,7 @@ The records and repositories are disposable.  Core capture/assessment validation
 each operation so an unsupported consumer remains distinguishable from a malformed fixture.
 """
 from pathlib import Path
+import os
 import subprocess
 import sys
 import tempfile
@@ -43,6 +44,7 @@ judgments:
 """
 
 
+@unittest.skipIf(os.name == 'nt', 'Persistent consolidation requires POSIX locking')
 class CoreConsolidateCLI(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()

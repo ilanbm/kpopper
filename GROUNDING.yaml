@@ -779,6 +779,11 @@ sources:
     file: "scripts/followup_core.py"
     read: "2026-09-18"
     revision: "1b445298e413af12f24d6c0ab7a67637b5e9df84"
+  s.core_operational_contract:
+    name: "Captured core operational assessment contract"
+    file: "scripts/reasoning/operations.py"
+    read: "2026-09-18"
+    revision: ac61f7f
   s.followups_contract:
     name: "Followup task and authority contract"
     file: "skills/kpopper/FOLLOWUPS.md"
@@ -1578,6 +1583,15 @@ known:
     from: doc.session_test_gates
     at: "PredicateLiteralContract.setUpClass and store import; ReadableRuntime.setUpClass; Core.__init__ cache validation"
     of: "2026-09-17"
+  p.core_operational_capture:
+    name: "Core operational checks retain their captured base and prospective evidence"
+    v: "Core consolidation captures the record and hypothesis text together, separates base and
+        prospective findings, and uses captured v3 findings for checks while retaining the existing
+        replacement, date, take and drop policy. History-backed candidates require prospective
+        history evidence; the ordinary-core bridge refuses them."
+    from: s.core_operational_contract
+    at: "World, load, derive and findings; scripts/consolidate.py read, union_of and fold"
+    of: "2026-09-18"
   p.coverage_thresholds:
     v: 0
     name: "Thresholds the coverage report carries in code - a line drawn anywhere but inside a
