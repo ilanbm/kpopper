@@ -2,6 +2,7 @@
 
 pub mod identity;
 pub mod store;
+pub mod value;
 
 use std::fmt;
 

@@ -36,7 +36,10 @@ enum Command {
     /// Consume a SessionStart JSON payload; never installs a hook or runtime.
     SessionStart,
     /// Canonical typed identity for JSON-compatible input on stdin.
-    Identity,
+    Identity {
+        #[arg(long)]
+        typed: bool,
+    },
 }
 #[derive(clap::Args)]
 struct WriteArgs {
@@ -96,8 +99,13 @@ fn session() -> Result<()> {
     Ok(())
 }
 fn run(args: Args) -> Result<Value> {
-    if matches!(args.command, Command::Identity) {
-        return Ok(json!({"identity":identity::identity(&stdin()?)?}));
+    if let Command::Identity { typed } = args.command {
+        let input = stdin()?;
+        if typed {
+            let value = kpop_native::value::TypedValue::from_tagged(&input)?;
+            return Ok(json!({"identity":value.digest()?,"typed":value.to_tagged()?}));
+        }
+        return Ok(json!({"identity":identity::identity(&input)?}));
     }
     let root = args
         .workspace
@@ -130,7 +138,7 @@ fn run(args: Args) -> Result<Value> {
                 write.expected_revision.as_deref(),
             )
         }
-        Command::Identity | Command::SessionStart => unreachable!(),
+        Command::Identity { .. } | Command::SessionStart => unreachable!(),
     }
 }
 fn main() {

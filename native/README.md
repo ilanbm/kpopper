@@ -43,6 +43,25 @@ the host. This command does not register hooks or establish host trust.
 
 ## Supported history boundary
 
+The library also provides an explicit `TypedValue` model and canonical typed JSON
+codec. It preserves integers of arbitrary size, finite IEEE754 floats (including
+signed zero), dates, naive/offset datetimes, Unicode text, lists and ordered maps.
+Validated scalar constructors prevent invalid dates or non-finite floats from
+entering that model. Converting a date/datetime to ordinary JSON refuses instead
+of silently turning it into text.
+
+`kpop-native identity --typed` reads the canonical tagged representation on stdin,
+for example `["date","2026-09-19"]`, and returns its exact typed identity and tagged
+value. Plain `identity` retains its JSON-value interface. This is a read-only codec
+boundary: the history writer still accepts JSON-compatible values only.
+
+Typed decoding accepts canonical encoder output, not noncanonical convenience
+spellings: tags and arity are exact, integer/float/date spellings are canonical,
+and map keys must be unique and sorted. The library bounds logical depth at 128 and
+visited values at 100,000. The CLI additionally retains its 1 MiB input limit and the
+JSON parser's default 128-container nesting limit; deeply nested tagged values can
+therefore refuse earlier at the CLI boundary.
+
 The executable retains `history/v1` authority/manifest envelopes,
 `typed-history/v2` immutable object IDs and `subject-paths/v2` storage names.
 It handles a linear chain of explicit reading/accept operations, preserving
