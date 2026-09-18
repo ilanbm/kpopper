@@ -206,6 +206,8 @@ def _records(root, entry, sha=None, *, include_files=False):
         core = None
         reasoning = document.get('meta', {}).get('reasoning', {}) if isinstance(document, dict) else {}
         if isinstance(reasoning, dict) and reasoning.get('profile') == 'core/v1':
+            if active:
+                raise ValueError('prospective_history_required: use the prepared history operation')
             from .reasoning import assessment as CoreAssessment
             from .reasoning import operations as CoreOperations
             if operation_doc is None:
@@ -269,7 +271,14 @@ def compare(snapshot):
     old = _entries(snapshot['ancestor']['doc'])
     local = _entries(snapshot['working']['doc'])
     main = _entries(snapshot['main']['doc'])
-    core_mode = all(snapshot.get(name, {}).get('core') for name in ('ancestor', 'working', 'main'))
+    core_records = [snapshot.get(name, {}).get('core') for name in ('ancestor', 'working', 'main')]
+    core_mode = all(core_records)
+    if any(core_records) and not core_mode:
+        finding = {'kind': 'uncheckable', 'id': 'record',
+                   'reason': 'incompatible captured context: core/v1 evidence is missing on one branch'}
+        finding['fingerprint'] = digest(finding)
+        return {'state': 'attention', 'findings': [finding], 'changed': [],
+                'versions': snapshot.get('versions'), 'identity': snapshot.get('identity')}
     if core_mode:
         try:
             from .reasoning import operations as CoreOperations

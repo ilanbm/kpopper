@@ -74,6 +74,14 @@ class CoreWatchTests(unittest.TestCase):
             W._records(self.work, 'GROUNDING.yaml')
         self.assertEqual(load.call_count, 1)
 
+    def test_mixed_core_context_fails_closed_without_legacy_fallback(self):
+        snapshot = self.watch.snapshot()
+        snapshot['main']['core'] = None
+        result = W.compare(snapshot)
+        self.assertEqual(result['state'], 'attention')
+        self.assertEqual(result['findings'][0]['kind'], 'uncheckable')
+        self.assertIn('incompatible captured context', result['findings'][0]['reason'])
+
     def test_changed_input_preserves_delta_and_reports_falsifier(self):
         changed = copy.deepcopy(CORE)
         changed['known']['v.flag']['v'] = True
