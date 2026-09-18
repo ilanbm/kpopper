@@ -305,7 +305,9 @@ def prepare(entry, name, action, *, head=None, by=None, operation=None, recorded
 
 
 def _finish(entry, names, because, *, kind, take=(), drops=None, by=None, operation=None,
-            recorded_at=None, capture=None):
+            recorded_at=None, capture=None, _assessment_version=1):
+    C._require(type(_assessment_version) is int and _assessment_version in (0, 1),
+               'unsupported_hypothesis_assessment')
     store, captured, base, groups, index, physical = _capture(entry, capture)
     _guard_names(names, groups, physical)
     C._require(isinstance(because, str) and because.strip(), 'act_reason_required')
@@ -366,13 +368,25 @@ def _finish(entry, names, because, *, kind, take=(), drops=None, by=None, operat
                 over=captured.state['subjects'][subject]['heads'] if kind == 'fold' else []))
     intent = {'version': 1, 'kind': kind, 'names': names, 'because': because, 'take': sorted(take),
               'drops': C.detached(drops or {}), 'operation': operation, 'recorded_at': recorded_at, 'by': by}
-    return _mutation(store, captured, objects, intent, base, after_document)
+    if kind == 'fold' and _assessment_version:
+        intent['assessment_version'] = _assessment_version
+    mutation = _mutation(store, captured, objects, intent, base, after_document)
+    if kind == 'fold' and _assessment_version and capabilities(base)['profile'] == 'core/v1':
+        from . import history_prospective
+        checked = history_prospective.assess(captured, mutation, hypotheses=physical,
+                                             as_of=recorded_at[:10])
+        introduced = checked['introduced']
+        C._require(not introduced['falsified'] and not introduced['holes'],
+                   'hypothesis_candidate_not_clean',
+                   '; '.join(introduced['falsified'] + introduced['holes']))
+    return mutation
 
 
 def prepare_fold(entry, names, *, because, take=(), drops=None, by=None, operation=None,
-                 recorded_at=None, capture=None):
+                 recorded_at=None, capture=None, _assessment_version=1):
     return _finish(entry, names, because, kind='fold', take=take, drops=drops, by=by,
-                   operation=operation, recorded_at=recorded_at, capture=capture)
+                   operation=operation, recorded_at=recorded_at, capture=capture,
+                   _assessment_version=_assessment_version)
 
 
 def prepare_refute(entry, names, *, because, by=None, operation=None, recorded_at=None, capture=None):
@@ -408,7 +422,8 @@ def verify_prepared(entry, mutation):
     if intent['kind'] == 'edit':
         expected = prepare(entry, intent['name'], intent['action'], head=intent['head'], **kwargs)
     elif intent['kind'] == 'fold':
-        expected = prepare_fold(entry, intent['names'], because=intent['because'], take=intent['take'], drops=intent['drops'], **kwargs)
+        expected = prepare_fold(entry, intent['names'], because=intent['because'], take=intent['take'], drops=intent['drops'],
+                                _assessment_version=intent.get('assessment_version', 0), **kwargs)
     elif intent['kind'] == 'refute':
         expected = prepare_refute(entry, intent['names'], because=intent['because'], **kwargs)
     else:

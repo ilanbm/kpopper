@@ -122,3 +122,24 @@ def snapshot_after(captured, mutation, *, context=None, hypotheses=None, as_of=N
         'mutation_operation': mutation.to_data()['operation'],
     }
     return adapted.snapshot(context=supplied, hypotheses=hypotheses, as_of=as_of)
+
+
+def assess(captured, mutation, *, hypotheses=None, as_of=None):
+    """Compare committed authority with its prepared candidate, never a live overlay.
+
+    Physical hypotheses may be supplied from the caller's verified capture. Named
+    history hypotheses are reconstructed independently on each side. Pending
+    contributions and publication policy remain the caller's separate boundary.
+    """
+    from .reasoning.context import CapturedAssessment
+    from .reasoning.operations import findings
+    context = {'read_mode': 'supplied', 'operation_scope': 'committed_history'}
+    before = A.from_store_capture(captured).snapshot(context=context, hypotheses=hypotheses, as_of=as_of)
+    after = snapshot_after(captured, mutation, context=context, hypotheses=hypotheses, as_of=before.to_data()['as_of'])
+    before_context = CapturedAssessment.from_snapshot(before)
+    after_context = CapturedAssessment.from_snapshot(after)
+    old, new = findings(before_context), findings(after_context)
+    introduced = {key: sorted(set(new[key]) - set(old[key]))
+                  for key in ('falsified', 'holes', 'moved', 'notes')}
+    return {'before': before_context, 'after': after_context,
+            'before_findings': old, 'after_findings': new, 'introduced': introduced}

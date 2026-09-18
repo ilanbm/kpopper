@@ -80,6 +80,43 @@ class NamedHypotheses(unittest.TestCase):
         self.assertEqual(captured.objects[original['id']], original)
         self.assertEqual(set(self.groups()[0]), {'other'})
 
+    def test_fold_checks_existing_judgments_in_prepared_history(self):
+        decision = fixture.claim('d.ready', kind='judgment', operation='decision',
+            body={'verdict': 'ready', 'rests_on': ['p.input'],
+                  'wrong_if': {'expr': 'p.input > 5'}},
+            pins={'p.input': self.fixture.source['id']})
+        self.fixture.publish([decision], 'decision')
+        self.commit(self.prepare(action={'value': 9}))
+        before = self.store.capture()
+        with self.assertRaisesRegex(C.HistoryError, 'hypothesis_candidate_not_clean.*d.ready'):
+            HH.prepare_fold(self.entry, ['alternative'], because='candidate must be checked')
+        self.assertEqual(before.inventory, self.store.capture().inventory)
+        self.assertIn('alternative', self.groups()[0])
+        # A previously prepared receipt keeps its original admission semantics
+        # during recovery; new operations always opt in to the stronger check.
+        old = HH.prepare_fold(self.entry, ['alternative'], because='retained old operation',
+                              _assessment_version=0)
+        self.assertNotIn('assessment_version', old.to_data()['receipt']['before']['hypothesis_authoring'])
+        HH.verify_prepared(self.entry, old)
+
+    def test_prepared_assessment_retains_history_and_matches_publication(self):
+        from scripts import history_prospective
+        self.commit(self.prepare())
+        captured = self.store.capture()
+        mutation = HH.prepare_fold(self.entry, ['alternative'], because='verified candidate',
+                                   recorded_at='2026-09-18T00:00:00+00:00')
+        self.assertEqual(mutation.to_data()['receipt']['before']['hypothesis_authoring']['assessment_version'], 1)
+        checked = history_prospective.assess(captured, mutation, as_of='2026-09-18')
+        self.assertEqual(checked['introduced']['holes'], [])
+        self.assertEqual(checked['introduced']['falsified'], [])
+        candidate = checked['after'].snapshot.to_data()
+        self.assertEqual(candidate['context']['operation_scope'], 'committed_history')
+        self.assertNotIn('alternative', candidate['hypotheses'])
+        self.commit(mutation)
+        actual = D.from_store_capture(self.store.capture()).snapshot(as_of='2026-09-18').to_data()
+        self.assertEqual(candidate['document'], actual['document'])
+        self.assertEqual(candidate['context']['history'], actual['context']['history'])
+
     def test_review_keeps_original_seen_and_pins_group_dependency(self):
         self.commit(self.prepare())
         group_input = self.groups()[1]['groups']['alternative']['p.input'][0]

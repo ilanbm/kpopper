@@ -80,13 +80,16 @@ Declared core records support `consolidate --dry-run`, guarded folds, explicit r
 and committed-branch input. Base and prospective findings retain their captured snapshots;
 replacement, date, `--take`, and `--drop` rules still apply. Hypotheses with executable legacy
 fields require explicit migration before entering a core union. History-backed consolidation
-retains its existing guarded history transaction and replay path.
+retains its guarded history transaction and replay path. New history folds also check the complete
+prepared candidate for newly introduced falsified conditions or assessment holes before publication.
+Retained older prepared operations keep their original recovery semantics.
 
-Watch compatibility/uncertainty and `remeasure` remain explicit
-legacy-only operations with this experimental profile. A declared core record fails them closed with
-`unsupported_capability: use core/v1 consumer`; they never fall back to the legacy evaluator.
-Use the shared read consumers above for current findings. Activation remains blocked while these
-operation-specific contracts are not migrated.
+Watch compatibility/uncertainty and `remeasure` support ordinary declared core records through
+captured assessments. Watch retains the merge-base delta and reports incompatible profile changes;
+remeasure uses only named allowlisted recipes and reports their hypothetical effect without writing
+knowledge. Unknown or failed computations remain explicit. Active-history observer scenarios still
+require prospective history integration and fail closed; they never fall back to the legacy evaluator.
+Default activation remains blocked on complete operational parity.
 
 ## Composable conditions
 
