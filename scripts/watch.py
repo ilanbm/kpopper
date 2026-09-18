@@ -202,9 +202,7 @@ def _records(root, entry, sha=None, *, include_files=False):
                 hyps.append({'name': name, 'doc': h['doc'], 'head': h['head']})
         core = None
         reasoning = document.get('meta', {}).get('reasoning', {}) if isinstance(document, dict) else {}
-        if isinstance(reasoning, dict) and reasoning.get('profile') == 'core/v1':
-            if active:
-                raise ValueError('prospective_history_required: use the prepared history operation')
+        if not active and isinstance(reasoning, dict) and reasoning.get('profile') == 'core/v1':
             CoreOperations = P._peer('reasoning.operations')
             if operation_doc is None:
                 operation_doc = CoreOperations.load([str(Path(directory) / entry)])
@@ -270,9 +268,11 @@ def compare(snapshot):
     main = _entries(snapshot['main']['doc'])
     core_records = [snapshot.get(name, {}).get('core') for name in ('ancestor', 'working', 'main')]
     core_mode = all(core_records)
-    if any(core_records) and not core_mode:
+    has_history = any(snapshot.get(name, {}).get('history') for name in ('ancestor', 'working', 'main'))
+    if has_history or any(core_records) and not core_mode:
         finding = {'kind': 'uncheckable', 'id': 'record',
-                   'reason': 'incompatible captured context: core/v1 evidence is missing on one branch'}
+                   'reason': 'prospective_history_required: use the prepared history operation' if has_history else
+                             'incompatible captured context: core/v1 evidence is missing on one branch'}
         finding['fingerprint'] = digest(finding)
         return {'state': 'attention', 'findings': [finding], 'changed': [],
                 'versions': snapshot.get('versions'), 'identity': snapshot.get('identity')}
