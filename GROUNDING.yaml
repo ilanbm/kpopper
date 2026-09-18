@@ -1,5 +1,5 @@
 meta:
-  updated: 2026-09-18
+  updated: 2026-09-19
   name: kpopper
   scope: "What this plugin is for and the decisions that shaped it, kept in its own format -
           the tools eat their own cooking, and every session here opens grounded."
@@ -796,6 +796,11 @@ sources:
     file: "scripts/followup_core.py"
     read: "2026-09-18"
     revision: "1b445298e413af12f24d6c0ab7a67637b5e9df84"
+  s.core_observer_operations:
+    name: "Core observers and prepared history fold checks"
+    file: "scripts/history_prospective.py"
+    read: "2026-09-19"
+    revision: "446321d"
   s.core_operational_contract:
     name: "Captured core operational assessment contract"
     file: "scripts/reasoning/operations.py"
@@ -1600,6 +1605,16 @@ known:
     from: doc.session_test_gates
     at: "PredicateLiteralContract.setUpClass and store import; ReadableRuntime.setUpClass; Core.__init__ cache validation"
     of: "2026-09-17"
+  p.core_observer_boundary:
+    name: "Core observer support and the remaining history boundary"
+    v: "Ordinary core watch and remeasure retain captured context. New history folds check the
+        prepared candidate for introduced falsified conditions or holes; older prepared receipts
+        retain prior recovery semantics. Active-history observers remain refused pending integration,
+        so complete operational parity and default activation are not established."
+    from: s.core_observer_operations
+    at: "assess; history_hypotheses._finish and verify_prepared; watch.compare;
+         remeasure._measure_core"
+    of: "2026-09-19"
   p.core_operational_capture:
     name: "Core operational checks retain their captured base and prospective evidence"
     v: "Core consolidation captures the record and hypothesis text together, separates base and
