@@ -717,6 +717,21 @@ sources:
     at: "User request in task 01a0b42e-d428-79a0-a6f7-03bf6195dde1"
     read: "2026-09-18"
     fidelity: quoted
+  s.2026_09_18_lane_b_load_once:
+    name: "The Lane B session that made a read command read the record once and give that reading to
+           the page build"
+    asked: "please read your priming prompt:
+            /Users/orkeren/Projects/kpopper/docs/shipshape/work/overlay-speed/lane-b-priming.md\n\nand
+            start working (coordinate with the architect first)"
+    fidelity: quoted
+    of: "wall clock of python3 scripts/provenance.py against the record as it stood at e888570,
+         three cold runs and three warm, e888570 and this branch run from the same directory against
+         the same file, so only the code differs; the load, overlay and inference counts come from a
+         wrapper that counted calls into the live view from outside the reader and changed nothing
+         else"
+    at: "Claude Code desktop session local_759e9307-40bc-4d70-9646-213fcbe3f9da, 2026-09-18, macOS
+         arm64, Python 3.13.12"
+    read: "2026-09-18"
   s.background_ingestion:
     name: "Background capture and selective delivery contract"
     file: "skills/kpopper/INGESTION.md"
@@ -1872,6 +1887,47 @@ known:
            readable"
     from: run.claims_by_reach
     at: "of 83 asserted; one answer was left out of the reply"
+  m.read_command_loads_after:
+    name: "Record readings one live read command makes now, on a project with no publication target"
+    from: s.2026_09_18_lane_b_load_once
+    v: 1
+    of: "counted the same way on this branch, and pinned by tests.test_page_document_reuse, which
+         asserts one reading for open and for check on a bare record and on an Advanced project with
+         a contribution pending. Neither carries a configured publication target, which reaches
+         watch and reads the record again from inside the overlay - outside what this counts and
+         outside the change it measures. No recipe recomputes this number: the sign it carries for
+         d.page_build_reads_the_loaded_record is re-read by running that module, and written here
+         by hand"
+  m.read_command_loads_before:
+    name: "Record readings one live read command made before the page was given the reader's own"
+    from: s.2026_09_18_lane_b_load_once
+    v: 2
+    of: "counted at e888570 by a wrapper that counted calls into the live view from outside the
+         reader and changed nothing else; one reading by the command, one by the page build it asked"
+  m.read_command_record_loads:
+    name: "How many times one live read command read this record, and what open and check cost,
+           before and after the page build was given the reading the reader already had"
+    from: s.2026_09_18_lane_b_load_once
+    v:
+      entries_at_e888570: 429
+      record_lines_at_e888570: 5493
+      loads_per_read_command_before: 2
+      loads_per_read_command_after: 1
+      overlays_per_open_before: 2
+      overlays_per_open_after: 1
+      semantic_roles_calls_per_open_before: 872
+      semantic_roles_calls_per_open_after: 436
+      open_live_before: 10.66
+      open_live_after: 5.49
+      check_live_before: 10.67
+      check_live_after: 5.45
+      open_frozen_before: 0.19
+      open_frozen_after: 0.19
+    of: "the record as it stood at e888570, before these entries were added to it; seconds are the
+         median of three warm runs on macOS arm64 under Python 3.13.12, and the three cold runs read
+         10.96 before and 5.70 after for open, 10.84 and 5.60 for check. Frozen does not move because
+         a frozen overlay returns at once, so the second reading was already nearly free. The counts
+         are m.read_command_loads_before and m.read_command_loads_after"
   m.record_scale:
     v: 107
     name: "Largest live record, entries"
@@ -3716,6 +3772,42 @@ judgments:
     blocked_on: "observational: falsified by a watcher whose reconstructed dependencies beat
                  the writer's own declarations on a real record; none has been tried"
     seen: {doc.agent_graph: "read 2026-09-01"}
+  d.page_build_reads_the_loaded_record:
+    rests_on: [m.read_command_loads_after, m.read_command_record_loads, s.2026_09_18_lane_b_load_once]
+    request: s.2026_09_18_lane_b_load_once
+    verdict: "a read command reads the record once, and the page it asks is built from that reading"
+    wrong_if: "m.read_command_loads_after > 1"
+    because: "open and check read the record and then asked the page what it knew, and the page read
+              it again - two readings of the same files in one command, two live overlays, and two
+              chances for the reader view and the page view to differ about one record in one
+              instant. Each reading is separately guarded by _record_read_guard, so the old pair
+              could draw a page from a newer record than the reader had just described; one guarded
+              reading cannot. The reader now hands the document it read to the page build, which took
+              a live open on this record from 10.66 to 5.49 seconds with byte-identical output. The
+              write path keeps its own readings and must: the page counts taken before a write and
+              the read-back after it each have to see the record as it stands at that moment, because
+              the write itself changes what the page counts - so _page_side takes no document and
+              reads again on every call"
+    reopened_by: "a write whose page snapshot holds a count taken before the write rather than after
+                  it"
+    seen:
+      m.read_command_loads_after: 1
+      m.read_command_record_loads:
+        entries_at_e888570: 429
+        record_lines_at_e888570: 5493
+        loads_per_read_command_before: 2
+        loads_per_read_command_after: 1
+        overlays_per_open_before: 2
+        overlays_per_open_after: 1
+        semantic_roles_calls_per_open_before: 872
+        semantic_roles_calls_per_open_after: 436
+        open_live_before: 10.66
+        open_live_after: 5.49
+        check_live_before: 10.67
+        check_live_after: 5.45
+        open_frozen_before: 0.19
+        open_frozen_after: 0.19
+      s.2026_09_18_lane_b_load_once: read 2026-09-18
   d.page_lint_reads_output:
     rests_on: [s.2026_09_04_components, d.author_free_build_guarantees, d.reasoning_in_record]
     verdict: "The output lint checks references and visible keys, judgment and review markers,

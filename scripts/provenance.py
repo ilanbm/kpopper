@@ -2273,7 +2273,7 @@ def check_lines(paths):
     # that never builds the page still hears them. The page decides its own falsifiers; the
     # brief held against the arrangements that stand is the record's own claim, so a brief
     # that no longer carries what an arrangement decided fails here too.
-    info = _page_or_error(paths, read_mode=getattr(doc, 'read_mode', None))
+    info = _page_or_error(paths, read_mode=getattr(doc, 'read_mode', None), doc=doc)
     if info and "error" in info:
         note.append(f"the brief beside the record could not be built: {info['error']}")
     elif info:
@@ -2513,7 +2513,7 @@ def opening(paths, budget=25, chars=None, host=None):
     # already about what to do next: the newest first and how many more, never the list -
     # the slot is for what needs a person, and check names the rest with a hint each. An
     # arrangement whose sign appeared comes first: it is the gap read by a decision.
-    info = _page_or_error(paths, read_mode=getattr(doc, 'read_mode', None))
+    info = _page_or_error(paths, read_mode=getattr(doc, 'read_mode', None), doc=doc)
     facts = (info.get("arrangements") or {}) if info and "error" not in info else {}
     fired = sorted(k for k, f in facts.items() if f["fired"])
     cov = info.get("coverage") if info and "error" not in info else None
@@ -3143,9 +3143,11 @@ def _brief_beside(path):
     return b if os.path.exists(b) else None
 
 
-def _page_info(paths, read_mode=None):
+def _page_info(paths, read_mode=None, *, doc=None):
     """What the page knows when it is built beside this record - its counts, its shape, the
-    coverage report - or None when no brief sits beside the record."""
+    coverage report - or None when no brief sits beside the record. A reader that has just
+    loaded the record passes it as `doc` and the page is built from that reading rather than
+    a second one; a caller that must see the record as it stands now passes none."""
     sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
     import render_page as R
     mode = read_mode or ('frozen' if _RAW_READS.get() else os.environ.get('KPOPPER_READ_MODE', 'live'))
@@ -3153,7 +3155,7 @@ def _page_info(paths, read_mode=None):
     brief = R.find_brief(paths, read_mode=mode)
     if not brief:
         return None
-    return R.build(paths, brief, read_mode=mode)[4]
+    return R.build(paths, brief, read_mode=mode, doc=doc)[4]
 
 
 def _page_side(paths, read_mode=None):
@@ -3168,11 +3170,14 @@ def _page_side(paths, read_mode=None):
             info.get("arrangements") or {})
 
 
-def _page_or_error(paths, read_mode=None):
+def _page_or_error(paths, read_mode=None, *, doc=None):
     """What the page knows, or None without a brief, or {"error": why} when the brief cannot
-    be built - the reader never fails on the page's account, it says so in a line."""
+    be built - the reader never fails on the page's account, it says so in a line. `doc` is
+    the record already read for these paths, passed through to the build; a caller that must
+    see the record as it stands now passes none. Note that the line this returns is where a
+    refused build lands, including one refused for being handed the wrong document."""
     try:
-        return _page_info(paths) if read_mode is None else _page_info(paths, read_mode=read_mode)
+        return _page_info(paths, read_mode=read_mode, doc=doc)
     except (Exception, SystemExit) as e:
         return {"error": str(e)}
 

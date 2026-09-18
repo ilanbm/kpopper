@@ -900,14 +900,32 @@ def tree_svg(ids, jud, E, J, flags, words=None, label=None):
     return "".join(o)
 
 
-def build(paths, brief_path=None, page_path=None, *, read_mode=None, profile=None, context=None):
+def build(paths, brief_path=None, page_path=None, *, read_mode=None, profile=None, context=None,
+          doc=None):
+    """The page, and what it counted. `doc` is the record already read for *these* paths in
+    this mode - what `P.load(record_paths(paths), read_mode=mode)` returns, nothing else: the
+    document carries no paths of its own, so the brief and the record root are still derived
+    from `paths` and handing over a document read from somewhere else draws that record under
+    this one's brief. Only the stated mode is checked, and the reader's `_page_or_error`
+    catches everything, so the refusal below reaches a read command as a note rather than a
+    traceback."""
     if profile == 'core/v1':
+        if doc is not None:
+            raise ValueError('the core page profile builds from its own reading')
         return core_build(paths, brief_path, page_path, read_mode=read_mode, context=context)
     if profile is not None:
         raise ValueError('unsupported page profile: ' + str(profile))
     mode = _read_mode(read_mode)
     paths = record_paths(paths, read_mode=mode)
-    doc = P.load(paths, read_mode=mode)
+    # A caller that has just read this record hands its document over instead of paying for a
+    # second reading of the same files in the same command - and a second reading is a second
+    # chance for the reader's view and the page's to disagree. The write path passes none, so
+    # every count it takes still sees the record as it stands at that moment.
+    if doc is None:
+        doc = P.load(paths, read_mode=mode)
+    elif getattr(doc, 'read_mode', mode) != mode:
+        raise ValueError('the page was given a record read in another mode: '
+                         + str(doc.read_mode) + ', not ' + mode)
     record_root = os.path.dirname(P.layout_of(paths)["entry"])
     ids, jud, fields = P.infer(doc)
     meta = doc.get("meta") or {}
