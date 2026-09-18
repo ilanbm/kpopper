@@ -25,10 +25,10 @@ class RuntimeBoundaryTests(unittest.TestCase):
     def archive(self, *, source=None, extra=None):
         files = {'evaluator': b'original executable', 'library': b'original shared library',
                  'licenses/NOTICE': b'redistribution notices'}
-        manifest = {'version': 2, 'protocols': ['KP2', 'KP3'], 'target': target_name(),
+        manifest = {'version': 3, 'protocols': ['KP2', 'KP3', 'KP4'], 'target': target_name(),
                     'min_os': 'test fixture', 'lean_version': '4.33.1',
                     'source_sha256': source or source_hash(ROOT / 'lean'),
-                    'modules': ['arithmetic/v1', 'composition/v1'],
+                    'modules': ['arithmetic/v1', 'composition/v1', 'query/v1'],
                     'executable': 'evaluator', 'libraries': ['library'],
                     'files': {name: hashlib.sha256(data).hexdigest() for name, data in files.items()}}
         path = self.root / 'runtime.zip'
@@ -61,18 +61,32 @@ class RuntimeBoundaryTests(unittest.TestCase):
         self.assertEqual(implementation['protocol'], 'KP3')
         self.assertEqual({key: value for key, value in implementation.items() if key != 'protocol'},
                          {key: value for key, value in runtime.implementation.items() if key != 'protocol'})
+        query = {'version': 4, 'required_modules': ['query/v1']}
+        self.assertEqual(runtime.implementation_for(query)['protocol'], 'KP4')
 
     def test_requests_and_responses_are_bound_to_their_protocols(self):
+        from scripts.reasoning import query as Q
+        from tests.test_reasoning_query_ir import prepared
+
         runtime = Runtime(self.archive())
         scalar = {'nodes': {}, 'declared': [], 'expression': {'num': '1'}}
         composed = {'protocol': 'KP3', 'nodes': {}, 'declared': [], 'limits': {},
                     'expression': {'list': [{'num': '1'}]}}
         response = lambda protocol: '\t'.join((protocol, 'ok', 'n', '1', '1',
                                                 '0', '0', '0', '1', '1', '0'))
+        query = prepared()['request']
+        query_response = Q.encode_frame({
+            'version': 4, 'request_id': query['request_id'], 'status': 'limit',
+            'value': None, 'diagnostics': [], 'query_counts': None, 'executed_reads': [],
+            'cost': {'steps': 0, 'preflight_steps': 0, 'node_evaluations': {},
+                     'candidates': 0, 'field_reads': 0, 'evaluated_field_reads': 0},
+        }, 'KR4')
         with patch('scripts.reasoning.runtime._run_bounded',
-                   return_value=(response('KR2') + '\n' + response('KR3') + '\n').encode()):
-            results = runtime.request_many([scalar, composed])
-        self.assertEqual([result['value']['numerator'] for result in results], ['1', '1'])
+                   return_value=(response('KR2') + '\n' + response('KR3') + '\n').encode()
+                   + query_response):
+            results = runtime.request_many([scalar, composed, query])
+        self.assertEqual([result['value']['numerator'] for result in results[:2]], ['1', '1'])
+        self.assertEqual(results[2]['status'], 'limit')
         with patch('scripts.reasoning.runtime._run_bounded',
                    return_value=(response('KR3') + '\n').encode()):
             with self.assertRaisesRegex(RuntimeUnavailable, 'protocol does not match'):

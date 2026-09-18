@@ -202,6 +202,9 @@ DIAGNOSTICS_V3 = DIAGNOSTICS | frozenset(('missing_field', 'collection_limit'))
 
 def encode_request(request):
     """Select an explicit grammar; KP2 never silently accepts composed nodes."""
+    if isinstance(request, dict) and request.get('version') == 4:
+        from .query import encode_request as encode_query_request
+        return encode_query_request(request)
     if isinstance(request, dict) and request.get('protocol') == 'KP3':
         return _encode_request_v3(request)
     return _encode_request_v2(request)
@@ -322,6 +325,14 @@ def _encode_request_v3(request):
 
 
 def decode_response(line):
+    if isinstance(line, (bytes, bytearray)) and bytes(line).startswith(b'KR4 '):
+        from .query import decode_frame
+        return decode_frame(bytes(line), 'KR4')
+    if isinstance(line, (bytes, bytearray)):
+        try:
+            line = bytes(line).decode('ascii')
+        except UnicodeError as error:
+            raise ValueError('invalid response framing') from error
     if isinstance(line, str) and line.startswith('KR3\t'):
         return _decode_response_v3(line)
     return _decode_response_v2(line)

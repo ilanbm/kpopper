@@ -84,6 +84,13 @@ class SnapshotTests(unittest.TestCase):
         self.assertNotEqual(history, Snapshot.from_data(document, context={
             'read_mode': 'supplied', 'generation': 1}).snapshot_id)
 
+    def test_scope_definition_projection_is_detached(self):
+        scope = Snapshot.from_data(source()).capture_scope('scope.items')
+        expected = scope.to_data()['definition']
+        changed = scope.definition
+        changed['fields'].append('not-granted')
+        self.assertEqual(scope.definition, expected)
+
     def test_scope_definition_fields_must_be_sorted_and_unique(self):
         for fields in (['v', 'absent'], ['v', 'v']):
             document = source()
@@ -307,6 +314,21 @@ class SnapshotTests(unittest.TestCase):
         after = Snapshot.from_data(document).capture_scope('scope.items').candidates['b']['v']['fingerprint']
         self.assertNotEqual(before, after)
 
+    def test_query_scope_does_not_expand_formula_backing_inputs(self):
+        document = source()
+        document['parameters'] = {'p.a': {'v': 1}}
+        document['items'] = {'formula': {'rule': {'ref': 'p.a'}}}
+        before_snapshot = Snapshot.from_data(document)
+        legacy_before = before_snapshot.capture_scope('scope.items').witness
+        query_before = before_snapshot.capture_query_scope('scope.items')
+        self.assertEqual(query_before.query_rows()[0]['fields']['v'],
+                         {'status': 'unavailable', 'reason': 'formula_value'})
+        document['parameters']['p.a']['v'] = 2
+        after_snapshot = Snapshot.from_data(document)
+        self.assertNotEqual(legacy_before, after_snapshot.capture_scope('scope.items').witness)
+        self.assertEqual(query_before.witness,
+                         after_snapshot.capture_query_scope('scope.items').witness)
+
     def test_config_and_pending_observation_changes_refuse(self):
         from scripts.reasoning import snapshot as S
         with tempfile.TemporaryDirectory() as tmp:
@@ -360,6 +382,56 @@ class SnapshotTests(unittest.TestCase):
         del document['items']
         with self.assertRaisesRegex(SnapshotError, 'scope_unavailable'):
             Snapshot.from_data(document).capture_scope('scope.items')
+
+    def test_query_rows_are_authored_only_typed_and_canonical(self):
+        document = source()
+        document['items'] = {
+            'z': {'amount': 0, 'broken': {'type': 'number', 'numerator': '2', 'denominator': '2'},
+                  'day': datetime.date(2026, 9, 18), 'enabled': False,
+                  'nested': [None, {'x': 'y'}], 'nothing': None},
+            'formula': {'rule': {'expr': '1 + 1'}},
+            'contested': {'amount': 2},
+        }
+        fields = ['amount', 'broken', 'day', 'enabled', 'nested', 'nothing', 'v']
+        document['scopes']['scope.items']['collection_scope']['fields'] = fields
+        snapshot = Snapshot.from_data(document, context={
+            'read_mode': 'supplied',
+            'conflicts': {'contested': [['left', {'amount': 2}], ['right', {'amount': 3}]]},
+        })
+        rows = snapshot.capture_query_scope('scope.items').query_rows()
+        self.assertEqual([row['id'] for row in rows], ['contested', 'formula', 'z'])
+        by_id = {row['id']: row['fields'] for row in rows}
+        self.assertEqual(by_id['contested']['amount'], {'status': 'contested'})
+        self.assertEqual(by_id['formula']['v'],
+                         {'status': 'unavailable', 'reason': 'formula_value'})
+        self.assertEqual(by_id['z']['enabled'],
+                         {'status': 'known', 'value': {'type': 'boolean', 'value': False}})
+        self.assertEqual(by_id['z']['amount']['value']['numerator'], '0')
+        self.assertEqual(by_id['z']['nothing'], {'status': 'known', 'value': {'type': 'null'}})
+        self.assertEqual(by_id['z']['nested']['value'], {'type': 'list', 'items': [
+            {'type': 'null'}, {'type': 'record', 'fields': {
+                'x': {'type': 'text', 'value': 'y'}}}]})
+        self.assertEqual(by_id['z']['day'],
+                         {'status': 'unavailable', 'reason': 'unsupported_type'})
+        self.assertEqual(by_id['z']['broken'],
+                         {'status': 'unavailable', 'reason': 'invalid_value'})
+        self.assertEqual(by_id['z']['v'], {'status': 'missing'})
+
+    def test_query_scope_field_cells_and_forbidden_derived_fields_fail_closed(self):
+        document = source()
+        with self.assertRaisesRegex(SnapshotError, 'limit'):
+            Snapshot.from_data(document).capture_query_scope(
+                'scope.items', limits={'members': 2, 'field_cells': 3})
+        for field in ('rule', 'computed'):
+            with self.subTest(field=field):
+                forbidden = source()
+                forbidden['scopes']['scope.items']['collection_scope']['fields'] = [field]
+                # Existing scope summaries remain backwards-compatible; only
+                # query-row preparation applies the authored-field boundary.
+                forbidden_snapshot = Snapshot.from_data(forbidden)
+                forbidden_snapshot.capture_scope('scope.items')
+                with self.assertRaisesRegex(SnapshotError, 'invalid_scope'):
+                    forbidden_snapshot.capture_query_scope('scope.items')
 
     def test_removed_pointer_source_or_same_yaml_rewrite_refuses(self):
         with tempfile.TemporaryDirectory() as tmp:

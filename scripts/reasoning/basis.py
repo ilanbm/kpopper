@@ -40,6 +40,17 @@ class InputBasis:
 
         def normalize(node):
             try:
+                body = node.get('body')
+                rule = body.get('rule') if isinstance(body, dict) else None
+                if isinstance(rule, dict) and set(rule) == {'query'}:
+                    from . import query
+                    scope_id = rule['query'].get('scope') if isinstance(rule['query'], dict) else None
+                    scope_body = nodes.get(scope_id, {}).get('body')
+                    definition = scope_body.get('collection_scope') \
+                        if isinstance(scope_body, dict) else None
+                    fields = definition.get('fields') if isinstance(definition, dict) else None
+                    expression = query.lower(rule, fields)
+                    return {'status': 'present', 'expression': copy.deepcopy(expression)}, set(), set()
                 expression = node_expression(node)
                 unavailable = expression.get('unavailable')
                 problems = {unavailable} if unavailable else set()
@@ -59,7 +70,12 @@ class InputBasis:
             local_modules = {'arithmetic/v1'}
             if nid in nodes:
                 atom, refs, problems = normalize(nodes[nid])
-                local_modules.update(required_modules(atom.get('expression', {})))
+                expression = atom.get('expression', {})
+                if isinstance(expression, dict) and set(expression) == {'query'}:
+                    from . import query
+                    local_modules = set(query.required_modules(expression))
+                else:
+                    local_modules.update(required_modules(expression))
             else:
                 atom, refs, problems = {'status': 'missing'}, set(), {'missing_reference'}
             if nid in conflicts:
@@ -151,7 +167,7 @@ class InputBasis:
             number = ready.popleft()
             members = components[number]
             cyclic = len(members) > 1 or members[0] in self._edges[members[0]]
-            problems, modules = set(), {'arithmetic/v1'}
+            problems, modules = set(), set()
             for nid in members:
                 modules.update(self._modules[nid])
                 problems.update(self._problems[nid])

@@ -20,7 +20,7 @@ from scripts.pending_grounding import identity
 from scripts.reasoning import assessment as V2
 from scripts.reasoning import history_assessment as V3
 from scripts.reasoning.contract import OperationalLimit, digest
-from scripts.reasoning.snapshot import Snapshot
+from scripts.reasoning.snapshot import Snapshot, SnapshotError
 
 
 FIELDS = {'value': 'v', 'deps': 'rests_on', 'snapshot': 'seen', 'predicate': 'wrong_if'}
@@ -33,10 +33,11 @@ class UnavailableRuntime:
         raise OSError('deliberately unavailable')
 
 
-def claim(subject, body, *, kind='reading', pins=None, operation=None):
+def claim(subject, body, *, kind='reading', pins=None, operation=None, collection=None):
     return HC.make_object(subject=subject, kind=kind, by='writer', on='2026-09-17',
                           operation=operation or 'claim-' + subject, body=body, pins=pins,
-                          authored={'collection': 'decisions' if kind == 'judgment' else 'readings',
+                          authored={'collection': collection or (
+                                        'decisions' if kind == 'judgment' else 'readings'),
                                     'fields': FIELDS, 'profile': 'core/v1'})
 
 
@@ -81,13 +82,64 @@ def v2(snapshot, selection=None, *, policy='focused-review/v1', runtime=None):
     return V2.assess(snapshot, selection, policy=policy, runtime=runtime)
 
 
+def query_result_value(result, counts):
+    fields = {key: {'type': 'number', 'numerator': str(value), 'denominator': '1'}
+              for key, value in counts.items()}
+    fields['result'] = copy.deepcopy(result)
+    return {'type': 'record', 'fields': fields}
+
+
+def promote_query_result(result, snapshot_id, counts, diagnostics=None):
+    raw_result = (copy.deepcopy(result.get('value'))
+                  if isinstance(result.get('value'), dict)
+                  else {'type': 'number', 'numerator': '1', 'denominator': '1'})
+    node = copy.deepcopy(result['potential_dependencies'][0])
+    scope = {'kind': 'scope', 'scope_id': 'scope.items',
+             'definition_digest': '1' * 64, 'membership_digest': '2' * 64,
+             'projected_inputs_digest': '3' * 64}
+    resources = {'version': 'resources/v4', 'steps': 1_000_000,
+                 'depth': 128, 'digits': 256, 'value_nodes': 10_000,
+                 'value_depth': 128, 'value_bytes': 16_777_216,
+                 'candidates': 10_000, 'field_reads': 100_000}
+    scope_basis = {'version': 1, 'recipe': 'scope-inputs/v2', 'profile': 'core/v1',
+                   'modules': ['arithmetic/v1'], 'witness': copy.deepcopy(scope),
+                   'members': ['p.input'], 'fields': ['amount'], 'dependencies': [],
+                   'historical_detail': 'fingerprints_only', 'as_of': None}
+    scope_basis['digest'] = digest(scope_basis)
+    preflight = {'candidates': 1, 'field_reads': 1,
+                 'preflight_steps': 1, 'step_upper_bound': 1}
+    operation = {'query': {'version': 1, 'scope': 'scope.items', 'op': 'count',
+                           'where': {'column': 'amount'}}}
+    basis = {'version': 1, 'recipe': 'query-inputs/v1', 'profile': 'core/v1',
+             'modules': ['arithmetic/v1', 'query/v1'], 'as_of': None,
+             'operation': operation, 'scope': scope_basis,
+             'dependencies': [node, scope], 'resources': resources,
+             'preflight_cost': preflight, 'query_counts': counts}
+    basis['digest'] = digest(basis)
+    result.update(
+        schema_version=2, modules=['arithmetic/v1', 'query/v1'],
+        resource_profile=resources, status='ok',
+        potential_dependencies=[node, scope], executed_reads=copy.deepcopy([node, scope]),
+        potential_ids=['p.input', 'scope.items'], diagnostics=diagnostics or [],
+        value=query_result_value(raw_result, counts), query_counts=copy.deepcopy(counts),
+        basis=basis, computation_id=digest({'snapshot_id': snapshot_id, 'basis': basis,
+                                            'resources': resources}),
+        cost={'steps': 1, 'preflight_steps': 1, 'node_evaluations': {},
+              'candidates': 1, 'field_reads': 1, 'evaluated_field_reads': 1})
+    return node, scope
+
+
 class HistoryAssessmentTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        path = Path(__file__).resolve().parents[1] / 'scripts/reasoning/history_assessment.schema.json'
+        root = Path(__file__).resolve().parents[1]
+        path = root / 'scripts/reasoning/history_assessment.schema.json'
         cls.schema = json.loads(path.read_text())
+        cls.assessment_schema = json.loads(
+            (root / 'scripts/reasoning/assessment.schema.json').read_text())
         if jsonschema is not None:
             jsonschema.Draft202012Validator.check_schema(cls.schema)
+            jsonschema.Draft202012Validator.check_schema(cls.assessment_schema)
 
     def test_rejects_forged_and_attention_only_v2(self):
         snapshot = Snapshot.from_data({**HEADERS, 'readings': {'p.input': {'v': 1}}})
@@ -113,6 +165,98 @@ class HistoryAssessmentTests(unittest.TestCase):
             key: value for key, value in invalid_schema.items() if key != 'assessment_revision'})
         with self.assertRaisesRegex(ValueError, 'invalid computation result'):
             V3.from_v2(snapshot, invalid_schema)
+
+    def test_result_v2_accepts_exact_scope_witnesses_and_rejects_forgery(self):
+        snapshot = Snapshot.from_data({**HEADERS, 'readings': {'p.input': {'v': 1}}})
+        report = v2(snapshot)
+        result = report['nodes']['p.input']['computation']
+        counts = {'input_count': 1, 'definite_match_count': 1,
+                  'unknown_membership_count': 0, 'unknown_value_count': 0, 'error_count': 0}
+        promote_query_result(result, snapshot.snapshot_id, counts)
+        report['assessment_revision'] = digest({
+            key: value for key, value in report.items() if key != 'assessment_revision'})
+        V3.from_v2(snapshot, report)
+        if jsonschema is not None:
+            jsonschema.validate(report, self.assessment_schema)
+
+        mutations = {
+            'order': lambda r: r['potential_dependencies'].reverse(),
+            'duplicate': lambda r: r['potential_dependencies'].append(
+                copy.deepcopy(r['potential_dependencies'][-1])),
+            'actual-outside-potential': lambda r: r['executed_reads'][0].update(
+                projected_inputs_digest='4' * 64),
+            'scope-extra-key': lambda r: r['potential_dependencies'][-1].update(forged=True),
+            'scope-missing-key': lambda r: r['potential_dependencies'][-1].pop(
+                'membership_digest'),
+            'noncanonical-ids': lambda r: r.update(potential_ids=['scope.items', 'p.input']),
+            'witness-id-mismatch': lambda r: r.update(
+                potential_ids=['p.input', 'scope.other']),
+        }
+        for name, mutate in mutations.items():
+            with self.subTest(name=name):
+                forged = copy.deepcopy(report)
+                mutate(forged['nodes']['p.input']['computation'])
+                forged['assessment_revision'] = digest({
+                    key: value for key, value in forged.items() if key != 'assessment_revision'})
+                if jsonschema is not None and name in ('scope-extra-key', 'scope-missing-key'):
+                    with self.assertRaises(jsonschema.ValidationError):
+                        jsonschema.validate(forged, self.assessment_schema)
+                with self.assertRaisesRegex(ValueError, 'witness|dependencies|reads|potential ids'):
+                    V3.from_v2(snapshot, forged)
+
+    def test_result_v2_diagnostics_and_counts_are_closed_and_canonical(self):
+        snapshot = Snapshot.from_data({**HEADERS, 'readings': {'p.input': {'v': 1}}})
+        report = v2(snapshot)
+        result = report['nodes']['p.input']['computation']
+        counts = {'input_count': 1, 'definite_match_count': 1,
+                  'unknown_membership_count': 0, 'unknown_value_count': 0,
+                  'error_count': 0}
+        promote_query_result(result, snapshot.snapshot_id, counts, diagnostics=[{
+            'code': 'missing_column', 'related_ids': ['p.input', 'scope.items'],
+            'locations': [{'candidate': 'p.input', 'column': 'amount', 'phase': 'value'}],
+        }])
+        report['assessment_revision'] = digest({
+            key: value for key, value in report.items() if key != 'assessment_revision'})
+        V3.from_v2(snapshot, report)
+        if jsonschema is not None:
+            jsonschema.validate(report, self.assessment_schema)
+        for mutation in ('location-extra', 'location-order', 'negative-count', 'missing-count',
+                         'null-counts', 'count-mismatch', 'candidate-mismatch',
+                         'basis-count-mismatch', 'basis-dependency-mismatch',
+                         'computation-id-mismatch'):
+            forged = copy.deepcopy(report)
+            computation = forged['nodes']['p.input']['computation']
+            if mutation == 'location-extra':
+                computation['diagnostics'][0]['locations'][0]['extra'] = True
+            elif mutation == 'location-order':
+                computation['diagnostics'][0]['locations'] = [
+                    {'candidate': 'z', 'column': 'v', 'phase': 'value'},
+                    {'candidate': 'a', 'column': 'v', 'phase': 'value'}]
+            elif mutation == 'negative-count':
+                computation['query_counts']['error_count'] = -1
+            elif mutation == 'missing-count':
+                computation['query_counts'].pop('error_count')
+            elif mutation == 'null-counts':
+                computation['query_counts'] = None
+            elif mutation == 'count-mismatch':
+                computation['value']['fields']['input_count']['numerator'] = '2'
+            elif mutation == 'candidate-mismatch':
+                computation['cost']['candidates'] = 2
+            elif mutation == 'basis-count-mismatch':
+                computation['basis']['query_counts']['input_count'] = 2
+            elif mutation == 'basis-dependency-mismatch':
+                computation['basis']['dependencies'] = computation['basis']['dependencies'][:-1]
+            else:
+                computation['computation_id'] = '0' * 64
+            forged['assessment_revision'] = digest({
+                key: value for key, value in forged.items() if key != 'assessment_revision'})
+            if jsonschema is not None and mutation in (
+                    'location-extra', 'negative-count', 'missing-count', 'null-counts'):
+                with self.assertRaises(jsonschema.ValidationError):
+                    jsonschema.validate(forged, self.assessment_schema)
+            with self.subTest(mutation=mutation), self.assertRaisesRegex(
+                    ValueError, 'diagnostic|location|query counts|query result|successful query|finalized|preflight|basis|identity'):
+                V3.from_v2(snapshot, forged)
 
     def test_accepted_unknown_and_error_remain_independent(self):
         cases = [
@@ -154,6 +298,34 @@ class HistoryAssessmentTests(unittest.TestCase):
         self.assertEqual(set(result['nodes']), {'p.current'})
         self.assertEqual(set(result['history_subjects']), {'p.current', 'p.proposal'})
         self.assertEqual(result['history_subjects']['p.proposal']['acceptance'], 'proposed')
+
+    def test_query_scope_requires_complete_all_history_membership(self):
+        item = claim('item.a', {'v': 1}, collection='items')
+        scope = claim('scope.items', {'collection_scope': {
+            'collection': 'items', 'fields': ['v']}}, collection='scopes')
+        snapshot = captured(item, scope).snapshot()
+        rows = snapshot.capture_query_scope('scope.items').query_rows()
+        self.assertEqual(rows, [{'id': 'item.a', 'fields': {'v': {
+            'status': 'known', 'value': {
+                'type': 'number', 'numerator': '1', 'denominator': '1'}}}}])
+
+        # These mutations model independently validated selected, missing and
+        # corrupt history captures at the narrow query-preparation boundary.
+        # Snapshot replay validates their full outer shape separately.
+        mutations = {
+            'selected': lambda h: h['coverage'].update(scope='selected'),
+            'incomplete': lambda h: h['coverage'].update(complete=False),
+            'missing-member': lambda h: h['coverage']['subjects'].remove('item.a'),
+            'corrupt': lambda h: h['integrity'].update(
+                complete=False, findings=[{'code': 'pin_corrupt', 'subject': 'item.a',
+                                           'object_id': '', 'detail': 'fixture'}]),
+        }
+        for name, mutate in mutations.items():
+            with self.subTest(name=name):
+                candidate = captured(item, scope).snapshot()
+                mutate(candidate._Snapshot__data['context']['history'])
+                with self.assertRaisesRegex(SnapshotError, 'incomplete_history_scope'):
+                    candidate.capture_query_scope('scope.items')
 
     def test_seen_pin_and_current_are_separate_evidence(self):
         source = claim('p.input', {'v': 3}, operation='input')

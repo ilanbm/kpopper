@@ -1,7 +1,8 @@
 # Experimental deterministic core
 
 `core/v1` is an explicit assessment and authoring profile. Existing ordinary
-readers keep their legacy interpretation until their consumers are integrated.
+records keep their legacy interpretation. Select the profile explicitly for
+the core readers described below.
 
 ```sh
 kpop assess m.total d.order --profile core/v1 --record example.yaml
@@ -32,7 +33,8 @@ silently promoted to an executable condition.
 The profile remains explicit and default-off. Its scalar fragment supports
 literals, references, exact arithmetic and comparisons through `arithmetic/v1`.
 Records may additionally declare `composition/v1` for finite typed values and
-composable conditions. Query or member selection is not part of this extension.
+composable conditions. Finite-scope query and member selection are provided by
+the additive `query/v1` extension described in [Query operations](query.md).
 Unknown required modules refuse dependent interpretation. No record text can
 load code or change the installed module registry. A read never activates
 authoring or migrates stored content.
@@ -69,7 +71,7 @@ project identity, Snapshot, findings and consumer-view version; follow-up reads 
 source-free context and recapture only to reject staleness.
 
 `consolidate`, watch compatibility/uncertainty, followups, and `remeasure` remain explicit
-legacy-only operations during the dormant T4 route. A declared core record fails them closed with
+legacy-only operations with this experimental profile. A declared core record fails them closed with
 `unsupported_capability: use core/v1 consumer`; they never fall back to the legacy evaluator.
 Use the shared read consumers above for current findings. Activation remains blocked while these
 operation-specific contracts are not migrated.
@@ -388,17 +390,34 @@ Scopes cannot grant the mapped historical snapshot field, `assessment`, or
 `current_assessment`, including when the collection is empty.
 
 First-party module preparation receives a limited snapshot view and normalized
-IR; the compiled registry computes the result. Arithmetic and composition consume
-this boundary today. Module/version definitions live in `reasoning.contract` and
-`reasoning.modules`. Rendering depends on value/witness types, not operator names.
-This API is experimental until the finite-query extension and consumer gates pass.
+IR; the compiled registry computes the result. Arithmetic, composition and the
+finite-query adapter consume this boundary. Module/version definitions live in
+`reasoning.contract` and `reasoning.modules`. Rendering depends on value/witness
+types, not operator names. The compiled registry is the installed set of reviewed
+modules and exposes a real extension interface: a module prepares a bounded
+request, validates the native response and finalizes its evidence basis. Adding a
+module is additive; revising a core module is a compatibility change. Record text
+cannot load code or widen the captured view.
+
+## Query operations
+
+The optional `query/v1` module evaluates finite captured scopes through KP4/KR4
+and `resources/v4`. A completed scan retains five row counts and the scope
+witness in its `query-inputs/v1` basis. Member changes invalidate that basis even
+when the aggregate value stays equal. Row expressions read only declared authored
+fields; they do not evaluate member formulas or read another scope.
+
+See [the query specification](query.md) for syntax, empty/unknown/error behavior,
+resource limits and the contributor boundary. The [revisit exercise](../examples/scoped-query/README.md)
+uses an installed package to change two assumptions, add a scope member, retain
+an unknown forecast and replay an earlier snapshot.
 
 ## Runtime, licensing and assurance
 
 The package and plugin carry the same platform archives. Extraction is automatic
 and offline; ordinary computation needs no Lean compiler or session setup. The
-runtime manifest schema is version 2 and must advertise protocols `[KP2, KP3]`
-and modules `[arithmetic/v1, composition/v1]`. The adapter verifies those pins,
+runtime manifest schema is version 3 and must advertise protocols `[KP2, KP3, KP4]`
+and modules `[arithmetic/v1, composition/v1, query/v1]`. The adapter verifies those pins,
 the source identity and the request/response protocol before interpreting output.
 Old or partially rebuilt archives fail closed. The maintainer builder compiles
 pinned sources, checks proofs, audits native linkage and builds replaceable GMP

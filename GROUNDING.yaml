@@ -711,6 +711,12 @@ sources:
          per-minute rates with each job rounded up to the minute"
     of: "2026-09-18"
     read: "2026-09-18"
+  s.2026_09_18_continue_reasoning_core:
+    name: "The request to continue the reasoning-core task"
+    asked: "תוכל להמשיך את המשימה של&#x20;\ncodex://threads/01a0afd0-4d5f-7083-8025-f1ddca47d953\n?"
+    at: "User request in task 01a0b42e-d428-79a0-a6f7-03bf6195dde1"
+    read: "2026-09-18"
+    fidelity: quoted
   s.2026_09_18_remeasure_midnight:
     name: "The session that reproduced and fixed the remeasure tests crossing UTC midnight"
     asked: "Fix the three TheMeasurementTests that fail when a long run crosses UTC midnight, audit
@@ -768,6 +774,15 @@ sources:
     read: "2026-09-16"
     recorded_for: "Update p.reasoning_core_contract, m.scope_basis_collision_cases from this
                    captured report."
+  s.query_candidate_report_2026_09_18:
+    name: "Finite-query candidate verification packet"
+    from: s.2026_09_18_continue_reasoning_core
+    file: "/Users/ilanbm/.local/state/kpopper/ingestion/49582f5ea7bfe17bb7f2179a2ccb2cdffc782e5587bdede1ac990333505fe56e/sources/1ee2f7be0e85a58b92a0d7aae12cec11.txt"
+    url: "https://github.com/ilanbm/kpopper/actions/runs/35343804914"
+    at: "CI and merge API observations plus retained local acceptance and timing receipts"
+    of: "2026-09-18"
+    read: "2026-09-18"
+    fidelity: quoted
   s.watch_command:
     name: "Watch plugin command"
     file: "skills/watch/SKILL.md"
@@ -2156,6 +2171,46 @@ known:
         search, and page routes."
     from: s.2026_09_17_t3_integration
     at: "T4 final candidate verification and GitHub Actions run 35273116667"
+    of: "2026-09-18"
+  m.t5_verified_candidate_a6897ea:
+    name: "Finite-query candidate passed platform and installed acceptance gates"
+    v:
+      candidate_commit: a6897eaabd91d316120e119e4522c0e80ea18737
+      merged_commit: d7b1340c66bbe7d712746dac84f04525f764460a
+      tree: d1d7c882728df610128d256cc806f108c32125d5
+      ci_run: 35343804914
+      ci_conclusion: success
+      successful_jobs: 22
+      native_targets: 5
+      installed_os_python_combinations: 9
+      python_suites:
+        '3.9':
+          tests: 2525
+          skipped: 105
+        '3.13':
+          tests: 2525
+          skipped: 105
+      local_installed_acceptance:
+        wheel: 17
+        sdist: 17
+        plugin: 17
+      functional_fixture_cases_passed: 4
+      query_median_seconds:
+        query-1000: 0.20217729220166802
+        query-9998: 1.8410563739016652
+      timing_method: fresh process; warmed native cache; Snapshot capture plus Evaluator time; three serial
+        repetitions; excludes Python import startup
+      live_activation: not performed; activation and inverse exercised only on disposable fixtures
+      publication: not performed
+      temporal_policy: not selected
+      real_activation_targets: not selected
+      uncoached_agent_usability: not measured
+    scope:
+      kind: code
+      commit: a6897eaabd91d316120e119e4522c0e80ea18737
+      environment: "explicit core/v1 candidate; GitHub CI and local macOS acceptance"
+    from: s.query_candidate_report_2026_09_18
+    at: "observed in the verification packet; source commit a6897ea, merged as d7b1340"
     of: "2026-09-18"
   m.unasked.question_filler:
     v: 0
