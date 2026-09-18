@@ -185,7 +185,8 @@ def _records(root, entry, sha=None, *, include_files=False):
                 H.P._CAPTURE_READS.reset(token)
             data = snapshot.to_data()
             document = data['document']
-            hyps = [{'name': name, 'doc': hyp['document'], 'head': hyp['head']}
+            hyps = [{'name': name, 'doc': hyp['document'], 'head': hyp['head'],
+                     **({'kind': hyp['kind']} if hyp.get('kind') else {})}
                     for name, hyp in data['hypotheses'].items() if not hyp['error']]
             if any(hyp['error'] for hyp in data['hypotheses'].values()):
                 raise ValueError('unreadable target hypothesis')
@@ -222,6 +223,10 @@ def _records(root, entry, sha=None, *, include_files=False):
         result['core'] = core
     if history is not None:
         result['history'] = history
+        # Keep the public, already validated observation.  The history-union
+        # consumer needs its exact temporal basis (including explicit None),
+        # and must not reconstruct that basis from private Store state.
+        result['snapshot'] = data
     if include_files:
         result['files'] = {name: raw.decode('utf-8') for name, raw in files.items() if name not in raw_names}
     return result
@@ -280,8 +285,13 @@ def compare(snapshot):
             finding['fingerprint'] = digest(finding)
             return {'state': 'attention', 'findings': [finding], 'changed': [],
                     'versions': snapshot.get('versions'), 'identity': snapshot.get('identity')}
-        from . import history_watch
-        return history_watch.compare(snapshot)
+        if snapshot.get('shared'):
+            finding = {'kind': 'uncheckable', 'id': 'record',
+                       'reason': 'incompatible captured context: shared facts cannot yet be represented in an active-history union'}
+            finding['fingerprint'] = digest(finding)
+            return {'state': 'attention', 'findings': [finding], 'changed': [],
+                    'versions': snapshot.get('versions'), 'identity': snapshot.get('identity')}
+        return P._peer('history_watch').compare(snapshot)
     if any(core_records) and not core_mode:
         finding = {'kind': 'uncheckable', 'id': 'record',
                    'reason': 'incompatible captured context: core/v1 evidence is missing on one branch'}
