@@ -163,7 +163,15 @@ def _core_declared(doc, hyps):
     for h in hyps:
         worlds.append((h["name"], h, h["raw"]))
     for holder, world, own in worlds:
-        ids, jud, fields, raw = C._view(world if holder is None else P.layered(doc, world))
+        if holder is None:
+            view_world = doc
+        else:
+            # Keep the source capture, routing and pending/target identity bound to the
+            # prospective candidate.  Layering the raw mapping directly would make
+            # operations.view rebuild a context-less Snapshot.
+            operations = _operations()
+            view_world = operations.derive(P.layered(doc, world), doc, [holder], proposals=[world])
+        ids, jud, fields, raw = C._view(view_world)
         for nid, body in sorted(own.items()):
             if not isinstance(body, dict) or P.MEASURE not in body:
                 continue

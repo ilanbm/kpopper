@@ -5,6 +5,8 @@ import subprocess
 import sys
 import tempfile
 import unittest
+from scripts import consolidate, remeasure
+from scripts.provenance import _peer
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -67,6 +69,22 @@ class CoreRemeasure(unittest.TestCase):
         output = "\n".join(lines)
         self.assertEqual(code, 0, output)
         self.assertIn("measured on 2026-09-17 (UTC)", output)
+
+    def test_hypothesis_view_keeps_the_captured_operation_snapshot(self):
+        root = self.fixture()
+        hypothesis_dir = root / ".kpopper" / "hypotheses"
+        hypothesis_dir.mkdir()
+        (hypothesis_dir / "alternative.yaml").write_text(
+            "hypothesis: {claim: alternative reading, folds: never}\n"
+            "known:\n  p.input: {v: 11, measure: base_value}\n", encoding="utf-8")
+        operations = _peer("reasoning.operations")
+        doc, hypotheses = consolidate.read([str(root / "GROUNDING.yaml")])
+        base_snapshot = operations.snapshot_for(doc).snapshot_id
+        candidate = operations.derive(consolidate.P.layered(doc, hypotheses[0]), doc,
+                                      [hypotheses[0]["name"]], proposals=hypotheses[:1])
+        candidate_snapshot = operations.snapshot_for(candidate)
+        self.assertIs(candidate._operation_source, doc._operation_source)
+        self.assertEqual(candidate_snapshot.to_data()["context"]["operation"]["base_snapshot"], base_snapshot)
 
 
 if __name__ == "__main__":
