@@ -732,6 +732,16 @@ sources:
     at: "Claude Code desktop session local_759e9307-40bc-4d70-9646-213fcbe3f9da, 2026-09-18, macOS
          arm64, Python 3.13.12"
     read: "2026-09-18"
+  s.2026_09_18_remeasure_midnight:
+    name: "The session that reproduced and fixed the remeasure tests crossing UTC midnight"
+    asked: "Fix the three TheMeasurementTests that fail when a long run crosses UTC midnight, audit
+            similar tests, run focused and full validation, record the finding, and open an unmerged
+            pull request."
+    fidelity: paraphrase
+    file: "/Users/ilanbm/.local/state/kpopper/ingestion/228a1ddd08346ee05e16ceac98974b84e2395e8e9fb6ec6e78e47bedf021d3f0/sources/30d93f80cdb17983b37d760562bcdc7b.txt"
+    at: "PR #119 run 35285716254 attempt 1 and local forced-date and fixed-day test runs"
+    of: "2026-09-18"
+    read: "2026-09-18"
   s.background_ingestion:
     name: "Background capture and selective delivery contract"
     file: "skills/kpopper/INGESTION.md"
@@ -2136,6 +2146,15 @@ known:
     name: "Entry ids that two sessions chose for different things"
     from: run.multisession_survey
     at: "the namespaces the four writers added that day, compared by hand"
+
+  m.remeasure.midnight_failures:
+    v: 3
+    name: "Remeasure tests that failed when their expected UTC day preceded the day read by the
+           command"
+    from: s.2026_09_18_remeasure_midnight
+    at: "PR #119 Actions run 35285716254 attempt 1 and the local forced-date reproduction on branch
+         codex/fix-remeasure-midnight"
+    of: "2026-09-18"
 
   m.remeasure.stale_green:
     v: 1
@@ -4391,6 +4410,18 @@ judgments:
     blocked_on: "observational: falsified by a reading task that genuinely needs the record
                  changed from the page; none has appeared"
     seen: {doc.fact_moves: "read 2026-09-01"}
+  d.remeasure_tests_share_one_day:
+    name: "Date-sensitive remeasure tests use one explicit day"
+    request: s.2026_09_18_remeasure_midnight
+    rests_on: [s.2026_09_18_remeasure_midnight, m.remeasure.midnight_failures]
+    verdict: "Inject one fixed day into the remeasure behavior and use that same day in each fixture
+              and assertion."
+    because: "The three tests cached UTC today when the module loaded, while the subprocess read UTC
+              today when it eventually ran; a suite crossing midnight therefore changed the rule
+              under test between setup and assertion."
+    reopened_by: "A date-sensitive remeasure test obtains its fixture day and the day used by
+                  remeasure from separate clock reads, or a forced cross-day run fails."
+    seen: {s.2026_09_18_remeasure_midnight: "read 2026-09-18", m.remeasure.midnight_failures: 3}
   d.reopened_by_is_not_blocked_on:
     rests_on: [prior.field_name_reads_as_gate, m.blocked_on_reopeners, m.older_records_changed,
                d.declared_hole_is_a_note]
