@@ -84,6 +84,13 @@ class SnapshotTests(unittest.TestCase):
         self.assertNotEqual(history, Snapshot.from_data(document, context={
             'read_mode': 'supplied', 'generation': 1}).snapshot_id)
 
+    def test_scope_definition_projection_is_detached(self):
+        scope = Snapshot.from_data(source()).capture_scope('scope.items')
+        expected = scope.to_data()['definition']
+        changed = scope.definition
+        changed['fields'].append('not-granted')
+        self.assertEqual(scope.definition, expected)
+
     def test_scope_definition_fields_must_be_sorted_and_unique(self):
         for fields in (['v', 'absent'], ['v', 'v']):
             document = source()

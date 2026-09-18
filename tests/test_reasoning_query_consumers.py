@@ -21,7 +21,9 @@ from scripts.reasoning import history_assessment as V3
 from scripts.reasoning.contract import digest
 from scripts.reasoning.context import CapturedAssessment
 from scripts.reasoning.snapshot import Snapshot
-from scripts.session import view as SESSION
+SESSION = None
+if importlib.util.find_spec('tiktoken') is not None:
+    from scripts.session import view as SESSION
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -154,15 +156,12 @@ class QueryConsumerConformance(unittest.TestCase):
             (edge["from"], edge["to"], edge["classification"]) for edge in impacts
         })
 
-    def test_export_search_session_page_and_document_keep_one_identity(self):
+    def test_export_search_page_and_document_keep_one_identity(self):
         with mock.patch.object(CapturedAssessment, "capture", return_value=self.context):
             exported = E.project([str(self.record)], ["m.enabled"], depth=1,
                                  profile="core/v1")
             searched = S.search("enabled", record=str(self.record), profile="core/v1")
 
-        revision = self.context.session_revision({"project": "fixture"})
-        session = SESSION._core_graph_data(
-            self.context, revision, {"project": "fixture"})
         _, _, _, _, page = R.core_build_from_context(
             self.context,
             b"title: Query\nsections:\n- title: Query\n  pick: all\n",
@@ -177,8 +176,6 @@ class QueryConsumerConformance(unittest.TestCase):
         identities = [
             (exported["snapshot_id"], exported["findings_revision"]),
             (searched["snapshot_id"], searched["findings_revision"]),
-            (session["core_session"]["snapshot_id"],
-             session["core_session"]["findings_revision"]),
             (page["snapshot_id"], page["findings_revision"]),
             (document_receipt["snapshot_id"], document_receipt["findings_revision"]),
         ]
@@ -189,6 +186,13 @@ class QueryConsumerConformance(unittest.TestCase):
         self.assertIn(("m.enabled", "impact", "scope.items"), exported["edges"])
         search_hit = next(row for row in searched["results"] if row["id"] == "m.enabled")
         self.assertIn("scope.items", search_hit["rule_dependencies"])
+    @unittest.skipUnless(SESSION is not None, 'session projection needs the optional tiktoken dependency')
+    def test_session_keeps_the_shared_identity_and_scope_edge(self):
+        revision = self.context.session_revision({"project": "fixture"})
+        session = SESSION._core_graph_data(self.context, revision, {"project": "fixture"})
+        self.assertEqual((session['core_session']['snapshot_id'],
+                          session['core_session']['findings_revision']),
+                         (self.context.snapshot_id, self.context.findings_revision))
         self.assertIn({"from": "m.enabled", "rel": "rests_on", "to": "scope.items"},
                       session["edges"])
 

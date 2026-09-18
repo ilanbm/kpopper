@@ -176,7 +176,8 @@ jobs:
                           '--installed-python', str(python), '--plugin-root', str(plugin)], check=True)
           # Make the native oracle/framing suites and schema validation mandatory.
           # The executable comes from the installed, committed package payload.
-          subprocess.run([str(python), '-m', 'pip', 'install', 'jsonschema'], check=True)
+          subprocess.run([str(python), '-m', 'pip', 'install', 'jsonschema',
+                          'tiktoken>=0.14,<1'], check=True)
           suite_env = dict(os.environ, XDG_CACHE_HOME=str(work/'native-suite-cache'),
                            KPOPPER_REQUIRE_REASONING_TESTS='1', KPOPPER_REQUIRE_CORE_TESTS='1')
           binary = subprocess.check_output([str(python), '-c', 'from kpopper.reasoning.runtime import Runtime; print(Runtime().binary)'],

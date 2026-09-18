@@ -836,7 +836,13 @@ def prepare(capture, authored_operation, *, request_id, declared_capabilities,
     """Construct the detached public prepared-request envelope from captured data."""
     if not isinstance(request_id, str) or not HEX64.fullmatch(request_id):
         raise ValueError('request_id must be 64 lowercase hexadecimal characters')
-    capture_data = capture.to_data() if hasattr(capture, 'to_data') else capture
+    from .snapshot import ScopeCapture
+    # Preparation needs only the definition and basis here; scope_rows still
+    # validates the complete detached capture. Avoid copying every candidate
+    # twice just to read these two projections.
+    capture_data = {'definition': capture.definition, 'basis': capture.basis} \
+        if isinstance(capture, ScopeCapture) else \
+        capture.to_data() if hasattr(capture, 'to_data') else capture
     fields = capture_data.get('definition', {}).get('fields') if isinstance(capture_data, dict) else None
     normalized = lower(authored_operation, fields)
     scope = scope_rows(capture)
@@ -872,8 +878,8 @@ def prepare(capture, authored_operation, *, request_id, declared_capabilities,
             'potential_ids': potential_ids, 'basis_template': basis, 'request': request}
 
 
-def validate_request(request):
-    """Validate a detached KP4 request without executing its operation."""
+def _validate_request(request):
+    """Validate a KP4 request in place and return its deterministic preflight cost."""
     if not isinstance(request, dict) or set(request) != {
             'version', 'request_id', 'resources', 'required_modules', 'operation',
             'root_witness', 'scope'} or request.get('version') != 4:
@@ -926,7 +932,12 @@ def validate_request(request):
         raise ValueError('noncanonical closure-local module list')
     if request['root_witness'] is not None:
         _witness(request['root_witness'], 'node')
-    preflight_counts(normalized, scope, resources)
+    return preflight_counts(normalized, scope, resources)
+
+
+def validate_request(request):
+    """Validate and detach a KP4 request without executing its operation."""
+    _validate_request(request)
     return copy.deepcopy(request)
 
 
@@ -938,8 +949,8 @@ def decode_request(frame):
     return validate_request(decode_frame(frame, PROTOCOL))
 
 
-def validate_prepared(prepared):
-    """Verify every cross-field binding in the public prepared envelope."""
+def _validate_prepared(prepared):
+    """Verify every cross-field binding in an evaluator-owned prepared envelope."""
     if not isinstance(prepared, dict) or set(prepared) != {
             'version', 'module', 'protocol', 'resources', 'normalized_operation',
             'required_modules', 'potential_dependencies', 'potential_ids',
@@ -947,7 +958,8 @@ def validate_prepared(prepared):
             or prepared.get('version') != 1 or prepared.get('module') != MODULE \
             or prepared.get('protocol') != PROTOCOL or prepared.get('resources') != RESOURCE_VERSION:
         raise ValueError('invalid prepared query envelope')
-    request = validate_request(prepared['request'])
+    request = prepared['request']
+    expected_cost = _validate_request(request)
     root = request['root_witness']
     dependencies = ([] if root is None else [root]) + [request['scope']['witness']]
     ids = sorted(([] if root is None else [root['id']]) + [request['scope']['id']])
@@ -978,10 +990,14 @@ def validate_prepared(prepared):
         raise ValueError('query scope basis disagrees with request')
     if basis.get('as_of') != scope_basis.get('as_of'):
         raise ValueError('query basis time disagrees with scope basis')
-    expected_cost = preflight_counts(request['operation'], request['scope'], request['resources'])
     if basis['preflight_cost'] != expected_cost:
         raise ValueError('query preflight cost disagrees with request')
-    return copy.deepcopy(prepared)
+    return prepared
+
+
+def validate_prepared(prepared):
+    """Verify and detach every cross-field binding in a public prepared envelope."""
+    return copy.deepcopy(_validate_prepared(prepared))
 
 
 def _diagnostic(value, scope_id=None, member_ids=None):
@@ -1033,9 +1049,8 @@ def _counter(value, key):
     return int(field['numerator'])
 
 
-def validate_response(response, prepared):
-    """Validate KR4 structure/bindings only; never reproduce query semantics."""
-    prepared = validate_prepared(prepared)
+def _validate_response(response, prepared):
+    """Validate a response against an already validated prepared envelope."""
     if not isinstance(response, dict) or set(response) != {
             'version', 'request_id', 'status', 'value', 'diagnostics',
             'query_counts', 'executed_reads', 'cost'} or response.get('version') != 4:
@@ -1104,13 +1119,24 @@ def validate_response(response, prepared):
     return copy.deepcopy(response)
 
 
+def validate_response(response, prepared):
+    """Validate KR4 structure/bindings only; never reproduce query semantics."""
+    return _validate_response(response, validate_prepared(prepared))
+
+
 def decode_response(frame, prepared):
     return validate_response(decode_frame(frame, 'KR4'), prepared)
 
 
 def finalize_basis(prepared, response):
     """Add validated row-scan counts to a fresh basis and bind its digest."""
-    response = validate_response(response, prepared)
+    prepared = validate_prepared(prepared)
+    response = _validate_response(response, prepared)
+    return _finalize_basis(prepared, response)
+
+
+def _finalize_basis(prepared, response):
+    """Finalize a basis from already validated, detached inputs."""
     if response['query_counts'] is None:
         return None
     basis = copy.deepcopy(prepared['basis_template'])
@@ -1118,3 +1144,9 @@ def finalize_basis(prepared, response):
     basis['query_counts'] = copy.deepcopy(response['query_counts'])
     basis['digest'] = digest(basis)
     return basis
+
+
+def _validated_response_and_basis(response, prepared):
+    """Validate a response against an envelope already validated by the evaluator."""
+    response = _validate_response(response, prepared)
+    return response, _finalize_basis(prepared, response)

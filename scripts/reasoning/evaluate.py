@@ -116,8 +116,7 @@ class Evaluator:
                 + [capture.witness]
             result.update(potential_dependencies=captured_dependencies,
                           potential_ids=sorted(([] if root_id is None else [root_id]) + [scope_id]))
-            capture_data = capture.to_data()
-            normalized = query.lower(authored, capture_data['definition']['fields'])
+            normalized = query.lower(authored, capture.definition['fields'])
             closure_modules = query.required_modules(normalized)
             result['modules'] = closure_modules
             missing_modules = set(closure_modules) - set(cap['requires'])
@@ -132,7 +131,7 @@ class Evaluator:
             prepared = module('query/v1').prepare(
                 capture, authored, request_id=request_id, root_witness=root_witness,
                 declared_capabilities=cap['requires'], limits=resources)
-            prepared = module('query/v1').validate(prepared)
+            prepared = module('query/v1')._validate_prepared(prepared)
             result.update(modules=prepared['required_modules'],
                           resource_profile=copy.deepcopy(prepared['request']['resources']),
                           potential_dependencies=copy.deepcopy(prepared['potential_dependencies']),
@@ -259,15 +258,20 @@ class Evaluator:
             try:
                 if self.runtime is None:
                     self.runtime = Runtime(operational_limits=self.operational_limits)
-                wire_requests = [request['request'] if request.get('protocol') == 'KP4' else request
+                # The runtime receives its own copy so it cannot mutate the
+                # validated envelope used to bind and accept the response.
+                wire_requests = [copy.deepcopy(request['request'])
+                                 if request.get('protocol') == 'KP4' else request
                                  for request, _ in active]
                 responses = self.runtime.request_many(wire_requests, operational_limits=self.operational_limits) \
                     if isinstance(self.runtime, Runtime) else self.runtime.request_many(wire_requests)
                 if len(responses) != len(active):
                     raise RuntimeUnavailable('native response count mismatch')
+                accepted_queries = {}
                 for (request, result), response in zip(active, responses):
                     if request.get('protocol') == 'KP4':
-                        module('query/v1').decode_response(response, request)
+                        accepted_queries[id(request)] = module(
+                            'query/v1')._validated_response_and_basis(response, request)
                     elif not set(response['executed_reads']) <= set(request['declared']) \
                             or not set(response['potential_reads']) <= set(result['potential_ids']):
                         raise RuntimeUnavailable('native dependency witness disagrees with captured closure')
@@ -275,8 +279,7 @@ class Evaluator:
                     implementation = self.runtime.implementation_for(request) if callable(
                         getattr(self.runtime, 'implementation_for', None)) else self.runtime.implementation
                     if request.get('protocol') == 'KP4':
-                        response = module('query/v1').decode_response(response, request)
-                        basis = module('query/v1').finalize_basis(request, response)
+                        response, basis = accepted_queries[id(request)]
                         result.update(
                             status=response['status'], value=copy.deepcopy(response['value']),
                             diagnostics=copy.deepcopy(response['diagnostics']),

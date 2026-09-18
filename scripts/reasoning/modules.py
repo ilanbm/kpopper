@@ -64,6 +64,11 @@ class QueryModule:
         return query.validate_prepared(prepared)
 
     @staticmethod
+    def _validate_prepared(prepared):
+        from . import query
+        return query._validate_prepared(prepared)
+
+    @staticmethod
     def decode_response(response, prepared):
         from . import query
         return query.validate_response(response, prepared)
@@ -72,6 +77,11 @@ class QueryModule:
     def finalize_basis(prepared, response):
         from . import query
         return query.finalize_basis(prepared, response)
+
+    @staticmethod
+    def _validated_response_and_basis(response, prepared):
+        from . import query
+        return query._validated_response_and_basis(response, prepared)
 
 
 REGISTRY = {

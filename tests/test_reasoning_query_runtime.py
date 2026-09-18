@@ -1,4 +1,5 @@
 """Installed native KP4 acceptance, including mixed KP2/KP3/KP4 batches."""
+import copy
 import os
 from pathlib import Path
 import unittest
@@ -47,6 +48,24 @@ def authored(value):
     if value['type'] == 'record':
         return {key: authored(item) for key, item in value['fields'].items()}
     raise AssertionError(value)
+
+
+class RetainingRuntime:
+    def __init__(self, inner, *, corrupt_last=False):
+        self.inner = inner
+        self.corrupt_last = corrupt_last
+        self.requests = None
+        self.responses = None
+
+    def request_many(self, requests):
+        self.requests = requests
+        self.responses = self.inner.request_many(requests)
+        if self.corrupt_last:
+            self.responses[-1]['request_id'] = '0' * 64
+        return self.responses
+
+    def implementation_for(self, request):
+        return self.inner.implementation_for(request)
 
 
 class NativeQueryAcceptance(unittest.TestCase):
@@ -108,6 +127,25 @@ class NativeQueryAcceptance(unittest.TestCase):
         self.assertEqual([item['implementation']['protocol'] for item in results],
                          ['KP2', 'KP3', 'KP4'])
         self.assertEqual([item['status'] for item in results], ['ok', 'ok', 'ok'])
+
+    def test_batch_validates_every_response_before_acceptance_and_detaches_outputs(self):
+        operations = [
+            (query('count', where={'column': 'enabled'}), ['scope.items']),
+            (query('sum', value={'column': 'amount'}), ['scope.items']),
+        ]
+        retaining = RetainingRuntime(self.runtime)
+        accepted = Evaluator(self.snapshot, runtime=retaining).evaluate_many(operations)
+        stable = copy.deepcopy(accepted)
+        retaining.responses[0]['value']['fields']['result']['numerator'] = '999'
+        retaining.responses[0]['query_counts']['input_count'] = 999
+        retaining.requests[0]['scope']['members'][0]['fields']['amount']['value']['numerator'] = '999'
+        self.assertEqual(accepted, stable)
+
+        corrupting = RetainingRuntime(self.runtime, corrupt_last=True)
+        refused = Evaluator(self.snapshot, runtime=corrupting).evaluate_many(operations)
+        self.assertEqual([item['status'] for item in refused],
+                         ['operational_error', 'operational_error'])
+        self.assertTrue(all(item['value'] is None and item['basis'] is None for item in refused))
 
     def test_semantic_growth_refuses_before_native_scan(self):
         operation = query('project', value={'op': 'mul', 'args': [

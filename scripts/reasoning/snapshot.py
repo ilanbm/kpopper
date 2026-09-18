@@ -582,6 +582,10 @@ class ScopeCapture:
         return copy.deepcopy(self.__data)
 
     @property
+    def definition(self):
+        return copy.deepcopy(self.__data['definition'])
+
+    @property
     def value(self):
         return copy.deepcopy(self.__data['value'])
 
