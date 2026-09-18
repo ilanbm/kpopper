@@ -1,5 +1,6 @@
 # Keep Python 3.9 support while using the same runner on both CI interpreters.
 pytest==8.4.2
 pytest-xdist==3.8.0
+pytest-split==0.10.0
 jsonschema>=4,<5
 tiktoken>=0.14,<1

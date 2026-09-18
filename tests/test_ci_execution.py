@@ -1,6 +1,7 @@
 """CI execution keeps every selected test and rejects empty or unknown plans."""
 import importlib.util
 import pathlib
+import shutil
 import tempfile
 import unittest
 from unittest.mock import patch
@@ -100,6 +101,8 @@ class TestPlans(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             root = pathlib.Path(directory)
             (root / 'tests').mkdir()
+            (root / 'tests/__init__.py').write_text('')
+            shutil.copyfile(ROOT / 'tests/ci_pytest.py', root / 'tests/ci_pytest.py')
             (root / 'isolated').mkdir()
             (root / 'pyproject.toml').write_text('[tool.pytest.ini_options]\n')
             (root / 'tests/test_child.py').write_text('''import json, pathlib, subprocess, sys, unittest
@@ -116,6 +119,11 @@ class ChildPath(unittest.TestCase):
                         '--workers', '1', '--junitxml', str(root / 'result.xml')]), \
                     patch.dict(runner.os.environ, {'PYTHONPATH': ''}):
                 self.assertEqual(runner.main(), 0)
+            import json
+            manifest = json.loads((root / 'result.manifest.json').read_text())
+            self.assertTrue(manifest['consistent'])
+            self.assertEqual(manifest['collected'], manifest['executed'])
+            self.assertEqual(len(manifest['executed']), 1)
 
 
 if __name__ == '__main__':

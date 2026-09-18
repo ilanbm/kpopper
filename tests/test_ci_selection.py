@@ -143,7 +143,8 @@ class RequiredResults(unittest.TestCase):
     def results(self, selected):
         return {"changes": {"result": "success", "outputs": {
                     **{k: str(v).lower() for k, v in selected.items()},
-                    "test_suites": json.dumps(CI.test_suites(selected))}},
+                    "test_suites": json.dumps(CI.test_suites(selected)),
+                    "test_matrix": json.dumps(CI.test_matrix(selected))}},
                 "record": {"result": "success"},
                 **{job: {"result": "success" if any(selected[lane] for lane in lanes) else "skipped"}
                    for job, lanes in CI.JOB_LANES.items()}}
@@ -178,13 +179,40 @@ class RequiredResults(unittest.TestCase):
             needs["changes"]["outputs"]["test_suites"] = plan
             self.assertTrue(CI.required_failures(needs))
 
+    def test_a_missing_shard_cannot_pass(self):
+        needs = self.results(CI.select(["scripts/cli.py"]))
+        matrix = json.loads(needs['changes']['outputs']['test_matrix'])
+        matrix['include'].pop()
+        needs['changes']['outputs']['test_matrix'] = json.dumps(matrix)
+        self.assertTrue(CI.required_failures(needs))
+
 
 class WorkflowCoverage(unittest.TestCase):
     def test_summary_covers_every_job_and_every_optional_family(self):
         jobs = yaml.safe_load((ROOT / ".github/workflows/check.yml").read_text())["jobs"]
         self.assertEqual(set(jobs["ci-required"]["needs"]), set(jobs) - {"ci-required"})
         self.assertEqual(set(CI.JOB_LANES), set(jobs) - {"ci-required", "changes", "record"})
-        self.assertEqual(set(jobs["changes"]["outputs"]), set(CI.LANES) | {"test_suites"})
+        self.assertEqual(set(jobs["changes"]["outputs"]), set(CI.LANES) | {"test_suites", "test_matrix"})
+
+    def test_shards_cover_supported_interpreters_and_docs_avoid_extra_machines(self):
+        rows = CI.test_matrix(CI.select(['scripts/cli.py']))['include']
+        self.assertEqual({r['group'] for r in rows if r['python'] == '3.9'}, set(range(1, 9)))
+        self.assertEqual({r['group'] for r in rows if r['python'] == '3.13'}, set(range(1, 5)))
+        self.assertEqual({r['workers'] for r in rows if r['python'] == '3.9'}, {2})
+        docs = CI.test_matrix(CI.select(['scripts/documents.py']))['include']
+        self.assertEqual(len(docs), 2)
+        self.assertTrue(all(r['splits'] == 1 for r in docs))
+        main = CI.test_matrix(CI.select(['scripts/cli.py']), pull_request=False)['include']
+        self.assertEqual({r['python'] for r in main}, {'3.13'})
+        self.assertEqual(len(main), 4)
+
+    def test_workflow_executes_the_declared_matrix_and_verifies_its_manifests(self):
+        jobs = yaml.safe_load((ROOT / '.github/workflows/check.yml').read_text())['jobs']
+        self.assertEqual(jobs['check']['strategy']['matrix'],
+                         '${{ fromJSON(needs.changes.outputs.test_matrix) }}')
+        commands = '\n'.join(s.get('run', '') for s in jobs['ci-required']['steps'])
+        self.assertIn('--verify-results', commands)
+        self.assertIn('--matrix', commands)
 
     def test_content_only_pr_keeps_existing_skill_and_release_contracts(self):
         jobs = yaml.safe_load((ROOT / ".github/workflows/check.yml").read_text())["jobs"]

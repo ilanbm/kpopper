@@ -11,10 +11,29 @@ The selector emits an explicit list of Python suites: core, documents, reasoning
 session and other. Shared runtime changes retain all suites; document-only changes
 select documents. New tests enter the other suite until classified. The execution
 helper discovers importable test files, rejects an empty or unknown selection,
-and runs the existing unittest cases with pytest-xdist on up to four CPU-matched processes in one
-runner. Tests from a file stay together. JUnit artifacts preserve individual test
-outcomes and timings, and the log lists the slowest tests. Dependencies are pinned
-to versions supporting Python 3.9; they are CI dependencies, not package dependencies.
+and splits individual unittest cases by measured duration with pytest-split.
+Full PRs use eight Linux machines with two processes each for Python 3.9, and four
+machines with four processes each for Python 3.13. A push to main checks 3.13 only.
+Document-only selections use one machine per interpreter. At most twelve Python
+jobs run concurrently, leaving capacity for the native and session checks.
+pytest-xdist uses work stealing inside each machine so a slow file cannot hold an
+entire group on one process. Dependencies are pinned to versions supporting Python
+3.9; they are CI dependencies, not package dependencies.
+
+`.github/test-durations.json` contains the maximum observed per-test durations
+across both interpreters from [run 35345933376](https://github.com/ilanbm/kpopper/actions/runs/35345933376).
+The 3.9 sample includes two CLI timeout failures; these are scheduling weights,
+not claims of successful execution. New tests receive the average duration and
+are still selected. Refresh weights from complete JUnit reports when the suite
+changes materially; weights never decide whether a test is required.
+
+JUnit artifacts preserve outcomes and timings. The log names individual tests
+and reports active tests with elapsed time every 30 seconds. Each worker reports
+its full and selected collection, and each machine retains an execution manifest.
+After all jobs succeed, `ci-required` checks that workers agreed, every expected
+group exists, and the groups executed the complete collection exactly once for
+each interpreter. Missing manifests, inconsistent discovery, duplicates and
+unexecuted tests fail the gate.
 
 Before provisioning expensive jobs, `changes` validates the committed native
 bundles, their source identity and the corresponding-source archive. All expensive

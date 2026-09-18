@@ -26,6 +26,7 @@ jobs:
       installed: ${{ steps.select.outputs.installed }}
       native: ${{ steps.select.outputs.native }}
       test_suites: ${{ steps.select.outputs.test_suites }}
+      test_matrix: ${{ steps.select.outputs.test_matrix }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -76,7 +77,7 @@ jobs:
       - name: Install the package the way a user gets it
         run: pip install .
       - name: Check skill/release contracts and CI selection
-        run: python -m unittest tests.test_skills tests.test_release tests.test_ci_selection tests.test_ci_execution -v
+        run: python -m unittest tests.test_skills tests.test_release tests.test_ci_selection tests.test_ci_execution tests.test_ci_sharding -v
 
       - name: The record holds together
         run: kpop --frozen check
@@ -107,6 +108,7 @@ jobs:
         run: git diff --exit-code
 
   check:
+    name: check (${{ matrix.python }}, ${{ matrix.group }}/${{ matrix.splits }})
     # Keep the existing cap until completed parallel runs establish a new bound.
     timeout-minutes: 90
     needs: [changes, record]
@@ -114,11 +116,8 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
-      matrix:
-        # A pull request answers for both ends of the supported range. The push
-        # that lands it re-reads the merged tree once, on the version the
-        # package is built against.
-        python: ${{ github.event_name == 'pull_request' && fromJSON('["3.9", "3.13"]') || fromJSON('["3.13"]') }}
+      max-parallel: 12
+      matrix: ${{ fromJSON(needs.changes.outputs.test_matrix) }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -131,13 +130,15 @@ jobs:
       - name: The reader and the page keep their contract
         env:
           TEST_SUITES: ${{ needs.changes.outputs.test_suites }}
-        run: python .github/scripts/ci_execution.py --suites "$TEST_SUITES"
+        run: >-
+          python .github/scripts/ci_execution.py --suites "$TEST_SUITES"
+          --splits ${{ matrix.splits }} --group ${{ matrix.group }} --workers ${{ matrix.workers }}
       - name: Keep test outcomes and per-test timings
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: python-tests-${{ matrix.python }}
-          path: test-results/*.xml
+          name: python-tests-${{ matrix.python }}-${{ matrix.group }}
+          path: test-results/
           if-no-files-found: ignore
 
   document-ui:
@@ -199,3 +200,14 @@ jobs:
         env:
           CI_NEEDS: ${{ toJSON(needs) }}
         run: python .github/scripts/ci_selection.py --required
+      - name: Download per-shard execution manifests
+        if: needs.changes.outputs.python == 'true' || needs.changes.outputs.documents == 'true'
+        uses: actions/download-artifact@v4
+        with:
+          pattern: python-tests-*
+          path: test-results
+      - name: Require each selected test exactly once per interpreter
+        if: needs.changes.outputs.python == 'true' || needs.changes.outputs.documents == 'true'
+        env:
+          TEST_MATRIX: ${{ needs.changes.outputs.test_matrix }}
+        run: python .github/scripts/ci_execution.py --verify-results test-results --matrix "$TEST_MATRIX"

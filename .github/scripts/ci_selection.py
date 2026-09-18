@@ -28,6 +28,7 @@ def families(path):
     # all consumers; the native workflow itself takes the full audit.
     if path in {".github/workflows/check.yml", ".github/workflows/session.yml",
                 ".github/scripts/ci_execution.py", ".github/requirements-test.txt",
+                ".github/test-durations.json",
                 "tests/test_ci_execution.py",
                 "skills/watch/agents/openai.yaml"}:
         return RUNTIME
@@ -76,6 +77,20 @@ def test_suites(selected):
     return ["documents"] if selected["documents"] else []
 
 
+def test_matrix(selected, pull_request=True):
+    if not (selected["python"] or selected["documents"]):
+        return {"include": []}
+    rows = []
+    for python in (("3.9", "3.13") if pull_request else ("3.13",)):
+        # The slower interpreter gets more machines and CPU headroom for the
+        # subprocess-heavy history tests. Document-only changes need one group.
+        splits = (8 if python == "3.9" else 4) if selected["python"] else 1
+        workers = 2 if python == "3.9" else 4
+        rows.extend({"python": python, "group": group, "splits": splits, "workers": workers}
+                    for group in range(1, splits + 1))
+    return {"include": rows}
+
+
 def changed_files(base, head, cwd=None, merge_base=True):
     try:
         if merge_base:
@@ -90,7 +105,7 @@ def changed_files(base, head, cwd=None, merge_base=True):
         return []
 
 
-def required_failures(needs):
+def required_failures(needs, pull_request=True):
     failures = []
     for job in ("changes", "record"):
         if needs.get(job, {}).get("result") != "success":
@@ -106,6 +121,13 @@ def required_failures(needs):
             failures.append("test plan does not cover the selected CI families")
     except (TypeError, ValueError):
         failures.append("missing or invalid test plan")
+    try:
+        matrix = json.loads(outputs.get("test_matrix", "null"))
+        selected = {lane: outputs.get(lane) == "true" for lane in LANES}
+        if matrix != test_matrix(selected, pull_request):
+            failures.append("test matrix omits a required Python version or shard")
+    except (TypeError, ValueError):
+        failures.append("missing or invalid test matrix")
     if outputs.get("native") == "true" and outputs.get("installed") != "true":
         failures.append("native audit requires installed checks")
     for job, lanes in JOB_LANES.items():
@@ -125,19 +147,23 @@ def main():
     parser.add_argument("--required", action="store_true")
     args = parser.parse_args()
     if args.required:
-        failures = required_failures(json.loads(os.environ["CI_NEEDS"]))
+        failures = required_failures(json.loads(os.environ["CI_NEEDS"]),
+                                     os.environ.get("GITHUB_EVENT_NAME") == "pull_request")
         for failure in failures:
             print(failure)
         return 1 if failures else 0
     paths = [] if args.full else changed_files(args.base, args.head, merge_base=not args.push)
     selected = select(paths, full=args.full, push=args.push)
     suites = test_suites(selected)
-    print(json.dumps({"changed_files": paths, "selected": selected, "test_suites": suites}, indent=2))
+    matrix = test_matrix(selected, pull_request=not (args.push or args.full))
+    print(json.dumps({"changed_files": paths, "selected": selected,
+                      "test_suites": suites, "test_matrix": matrix}, indent=2))
     if os.environ.get("GITHUB_OUTPUT"):
         with Path(os.environ["GITHUB_OUTPUT"]).open("a", encoding="utf-8") as stream:
             for lane, enabled in selected.items():
                 stream.write("%s=%s\n" % (lane, str(enabled).lower()))
             stream.write("test_suites=" + json.dumps(suites) + "\n")
+            stream.write("test_matrix=" + json.dumps(matrix) + "\n")
     if os.environ.get("GITHUB_STEP_SUMMARY"):
         with Path(os.environ["GITHUB_STEP_SUMMARY"]).open("a", encoding="utf-8") as stream:
             stream.write("| CI family | Selected |\n|---|---|\n")
@@ -145,6 +171,7 @@ def main():
                 stream.write("| %s | %s |\n" % (lane, "yes" if enabled else "no"))
             stream.write("\nRecord, skill/release contracts and CI selection tests always run.\n")
             stream.write("\nPython test suites: " + (", ".join(suites) or "none") + ".\n")
+            stream.write("Python test jobs: " + str(len(matrix["include"])) + ".\n")
     return 0
 
 
