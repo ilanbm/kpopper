@@ -1,5 +1,6 @@
 """CI selects work from the entire PR, including deletions and renames."""
 import importlib.util
+import json
 import pathlib
 import subprocess
 import tempfile
@@ -140,7 +141,9 @@ class GitRange(unittest.TestCase):
 
 class RequiredResults(unittest.TestCase):
     def results(self, selected):
-        return {"changes": {"result": "success", "outputs": {k: str(v).lower() for k, v in selected.items()}},
+        return {"changes": {"result": "success", "outputs": {
+                    **{k: str(v).lower() for k, v in selected.items()},
+                    "test_suites": json.dumps(CI.test_suites(selected))}},
                 "record": {"result": "success"},
                 **{job: {"result": "success" if any(selected[lane] for lane in lanes) else "skipped"}
                    for job, lanes in CI.JOB_LANES.items()}}
@@ -169,13 +172,19 @@ class RequiredResults(unittest.TestCase):
         del needs["changes"]["outputs"]["session"]
         self.assertTrue(CI.required_failures(needs))
 
+    def test_a_truncated_or_missing_test_plan_cannot_pass(self):
+        for plan in ('["documents"]', '[]', 'null', 'invalid'):
+            needs = self.results(CI.select(["scripts/cli.py"]))
+            needs["changes"]["outputs"]["test_suites"] = plan
+            self.assertTrue(CI.required_failures(needs))
+
 
 class WorkflowCoverage(unittest.TestCase):
     def test_summary_covers_every_job_and_every_optional_family(self):
         jobs = yaml.safe_load((ROOT / ".github/workflows/check.yml").read_text())["jobs"]
         self.assertEqual(set(jobs["ci-required"]["needs"]), set(jobs) - {"ci-required"})
         self.assertEqual(set(CI.JOB_LANES), set(jobs) - {"ci-required", "changes", "record"})
-        self.assertEqual(set(jobs["changes"]["outputs"]), set(CI.LANES))
+        self.assertEqual(set(jobs["changes"]["outputs"]), set(CI.LANES) | {"test_suites"})
 
     def test_content_only_pr_keeps_existing_skill_and_release_contracts(self):
         jobs = yaml.safe_load((ROOT / ".github/workflows/check.yml").read_text())["jobs"]

@@ -6,6 +6,7 @@ from pathlib import Path
 import subprocess
 
 LANES = ("python", "documents", "session", "installed", "native")
+TEST_SUITES = ("core", "documents", "reasoning", "session", "other")
 JOB_LANES = {"check": ("python", "documents"), "document-ui": ("documents",),
              "session": ("session",), "reasoning-runtime": ("installed",)}
 RUNTIME = set(LANES) - {"native"}
@@ -26,6 +27,8 @@ def families(path):
     # These workflows never compile the reasoning runtime. Changes still exercise
     # all consumers; the native workflow itself takes the full audit.
     if path in {".github/workflows/check.yml", ".github/workflows/session.yml",
+                ".github/scripts/ci_execution.py", ".github/requirements-test.txt",
+                "tests/test_ci_execution.py",
                 "skills/watch/agents/openai.yaml"}:
         return RUNTIME
     # These inputs can change compilation, its audit, or modified GMP loading.
@@ -65,6 +68,14 @@ def select(paths, full=False, push=False):
     return {lane: lane in chosen for lane in LANES}
 
 
+def test_suites(selected):
+    # Shared readers can reach every consumer. Keep their full coverage while
+    # giving the runner concrete, disjoint suites to execute and report.
+    if selected["python"]:
+        return list(TEST_SUITES)
+    return ["documents"] if selected["documents"] else []
+
+
 def changed_files(base, head, cwd=None, merge_base=True):
     try:
         if merge_base:
@@ -88,6 +99,13 @@ def required_failures(needs):
     for lane in LANES:
         if outputs.get(lane) not in ("true", "false"):
             failures.append("missing or invalid selection: " + lane)
+    try:
+        suites = json.loads(outputs.get("test_suites", "null"))
+        expected = test_suites({lane: outputs.get(lane) == "true" for lane in LANES})
+        if suites != expected:
+            failures.append("test plan does not cover the selected CI families")
+    except (TypeError, ValueError):
+        failures.append("missing or invalid test plan")
     if outputs.get("native") == "true" and outputs.get("installed") != "true":
         failures.append("native audit requires installed checks")
     for job, lanes in JOB_LANES.items():
@@ -113,17 +131,20 @@ def main():
         return 1 if failures else 0
     paths = [] if args.full else changed_files(args.base, args.head, merge_base=not args.push)
     selected = select(paths, full=args.full, push=args.push)
-    print(json.dumps({"changed_files": paths, "selected": selected}, indent=2))
+    suites = test_suites(selected)
+    print(json.dumps({"changed_files": paths, "selected": selected, "test_suites": suites}, indent=2))
     if os.environ.get("GITHUB_OUTPUT"):
         with Path(os.environ["GITHUB_OUTPUT"]).open("a", encoding="utf-8") as stream:
             for lane, enabled in selected.items():
                 stream.write("%s=%s\n" % (lane, str(enabled).lower()))
+            stream.write("test_suites=" + json.dumps(suites) + "\n")
     if os.environ.get("GITHUB_STEP_SUMMARY"):
         with Path(os.environ["GITHUB_STEP_SUMMARY"]).open("a", encoding="utf-8") as stream:
             stream.write("| CI family | Selected |\n|---|---|\n")
             for lane, enabled in selected.items():
                 stream.write("| %s | %s |\n" % (lane, "yes" if enabled else "no"))
             stream.write("\nRecord, skill/release contracts and CI selection tests always run.\n")
+            stream.write("\nPython test suites: " + (", ".join(suites) or "none") + ".\n")
     return 0
 
 

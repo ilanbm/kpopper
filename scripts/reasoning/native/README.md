@@ -109,3 +109,9 @@ from a manifest, a local native run, or previously verified KP2 archives.
 Runner label reference: <https://docs.github.com/en/actions/reference/runners/github-hosted-runners>.
 Pinned toolchain assets: <https://github.com/leanprover/lean4/releases/tag/v4.33.1>.
 GMP source: <https://ftp.gnu.org/gnu/gmp/gmp-6.3.0.tar.xz>.
+
+CI validates committed bundle integrity before provisioning the platform matrix.
+Each target waits only for its matching build; verified GMP dependencies can be
+reused without skipping runtime or installed replacement checks. See
+[CI selection and execution](../../../docs/ci.md) for the cache contract, test
+suites and the explicit `candidate-only` workflow dispatch used to refresh bundles.

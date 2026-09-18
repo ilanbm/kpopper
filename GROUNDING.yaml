@@ -722,6 +722,13 @@ sources:
     file: "scripts/consolidate.py"
     read: "2026-09-10"
     revision: d17225095c856b147d03522981f2c639e57f73e1
+  s.ci_execution_evidence:
+    name: "CI execution measurements and agreed optimization scope"
+    url: "https://github.com/ilanbm/kpopper/actions/runs/35320374247"
+    asked: "Reduce CI latency with early integrity checks, parallel tests, per-target dependencies,
+            verified build caching and explicit suite selection while retaining coverage."
+    fidelity: paraphrase
+    read: "2026-09-18"
   s.ci_selection:
     name: "CI family selection and required-results policy"
     file: ".github/scripts/ci_selection.py"
@@ -1201,6 +1208,19 @@ known:
     from: run.history_record_measurement_a0e5e9b
     at: "blocked_on_reopeners recipe against GROUNDING.yaml at a0e5e9bbca859db59ccc607de2c3c1fd20fcc886, after adding explicit history authority"
     measure: blocked_on_reopeners
+  m.ci_native_wait_baseline:
+    name: "Late integrity feedback behind all native builds"
+    v: "PR 120 run 35288867621 delayed a one-second committed-bundle integrity failure until all
+        five native builds finished, about 24 minutes after builds began."
+    from: s.ci_execution_evidence
+    at: "https://github.com/ilanbm/kpopper/actions/runs/35288867621 ; installed job 105432604343 and
+         Windows build 105427309644."
+  m.ci_python_serial_baseline:
+    name: "Measured serial Python suite before execution changes"
+    v: 2280.21
+    from: s.ci_execution_evidence
+    at: "Run 35320374247, job 105521369793 at main 8758ed3: seconds for 2468 tests, 103 skipped;
+         total job 2299 seconds."
   m.ci_rounding_waste:
     name: "What the checks pay for minutes they do not use"
     v: "25.33 dollars of 142.03 - 18 percent - is the gap between a job's real duration and the
@@ -2601,6 +2621,26 @@ judgments:
       s.2026_09_04_components: "read 2026-09-04"
       d.author_free_build_guarantees: "the session composes freely and the build enforces the
                                        element rules on the output"
+  d.ci_execution_reuses_verified_work:
+    name: "Preserve selected coverage while shortening CI execution"
+    verdict: "Gate expensive work with bundle integrity, run explicit Python suites in parallel,
+              wait only for matching native targets, and reuse intact GMP builds with identical
+              inputs."
+    rests_on: [m.ci_python_serial_baseline, m.ci_native_wait_baseline, p.ci_native_build_inputs]
+    because: "The measured delay is test execution and repeated dependency compilation; the platform
+              and installed-payload contracts still require their existing checks."
+    reopened_by: "A selected unittest case is omitted; any existing Python/platform combination
+                  loses coverage; a changed source, recipe, toolchain or cached file is accepted
+                  without rebuilding GMP; or a failed native target allows ci-required to pass."
+    seen:
+      m.ci_python_serial_baseline: 2280.21
+      m.ci_native_wait_baseline: "PR 120 run 35288867621 delayed a one-second committed-bundle
+                                  integrity failure until all five native builds finished, about 24
+                                  minutes after builds began."
+      p.ci_native_build_inputs: "Native sources, builder, bundled runtime, native loader and
+                                 replacement probe, notices, and CI selection/native-workflow
+                                 changes; unknown paths select all checks. Packaging metadata alone
+                                 tests installation without recompiling native source."
   d.ci_selects_families:
     name: "Select PR checks by declared input families and require selected work to succeed"
     from: s.2026_09_17_selective_ci
