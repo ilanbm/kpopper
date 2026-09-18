@@ -2315,7 +2315,8 @@ known:
     of: "2026-09-10"
 
   m.skill_bytes_largest:
-    v: 22189
+    v: 22414
+    # set 2026-09-18: measured by skill_bytes_largest at 177e78c with the working tree changed
     # set 2026-09-17: Measured after the recording example changed src to canonical from; largest skill is skills/record/SKILL.md on branch 89f46e8
     # set 2026-09-16: measured by skill_bytes_largest at a566286 with the working tree changed
     # Measured on the integrated source at 2218aa3; earlier same-day values describe its parents.
@@ -2327,7 +2328,7 @@ known:
     name: "The largest skill body a session can be handed now, bytes"
     from: "skills/*/SKILL.md"
     at: "bytes of the largest body"
-    of: "2026-09-17"
+    of: "2026-09-18"
     measure: skill_bytes_largest
 
   m.t3_blocked_rule_inference_regression:

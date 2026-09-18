@@ -7,6 +7,8 @@ description: "Render, arrange or verify the knowledge record's page: the two-tab
 
 The page is how a person meets the record: hover anything for where it came from, click to walk to a dependency. Build it with the shipped renderer and never by hand. The command line is `kpop` where it is on PATH; otherwise the `command` in the `KPOPPER_AGENT_CONTEXT` line the session opener printed (`python3 <plugin>/scripts/cli.py`) runs the same code. Do not guess a path and do not write a second reader - [the method's reference](../kpopper/references/method.md#finding-the-reader) says how to find the installed copy when neither is at hand.
 
+When mentioning this skill to the user, include the plugin name: `kpopper:page` or "page from the kpopper plugin". Use the user's language and fold it into the explanation of the action; no extra announcement is needed.
+
 `render_page.py` turns any record into one self-contained HTML file, in two tabs: **Record**,
 which nobody writes, and **Now**, the arrangement this session chose. What makes it worth
 opening is the provenance layer - hover anything for where it came from, click to walk to a

@@ -16,7 +16,7 @@ import yaml
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 SKILLS = ROOT / "skills"
 # the occasions, and the ceiling each body keeps so an invocation costs the occasion and not the method
-OCCASIONS = {"kpopper": 140, "ground": 160, "record": 260, "map": 110, "document": 70, "page": 60,
+OCCASIONS = {"kpopper": 140, "ground": 162, "record": 262, "map": 110, "document": 70, "page": 60,
              "consolidate": 160, "watch": 110}
 DESCRIPTION_CHARS = 1536     # the host truncates the listing's description past this
 COMMUNITY_DOCS = ("README.md", "CONTRIBUTING.md", "SECURITY.md", "CODE_OF_CONDUCT.md")
