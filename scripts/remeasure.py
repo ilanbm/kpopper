@@ -433,6 +433,12 @@ def _measure_core(paths, doc, hyps, run=False, timeout=None, cap=None, today=Non
     udoc = doc
     for h in hyps:
         udoc = P.layered(udoc, h)
+    if hyps:
+        # The layered mapping is only the authored candidate.  Bind it back to the one
+        # captured source before asking for its view; otherwise the final comparison would
+        # rebuild a context-less snapshot and discard operation identity.
+        operations = _operations()
+        udoc = operations.derive(udoc, doc, [h["name"] for h in hyps], proposals=hyps)
     _, _, _, uraw = C._view(udoc)
     serves = {}
     for nid, by in names.items():

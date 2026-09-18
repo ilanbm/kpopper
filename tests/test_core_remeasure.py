@@ -5,6 +5,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
+from unittest import mock
 from scripts import consolidate, remeasure
 from scripts.provenance import _peer
 
@@ -85,6 +86,32 @@ class CoreRemeasure(unittest.TestCase):
         candidate_snapshot = operations.snapshot_for(candidate)
         self.assertIs(candidate._operation_source, doc._operation_source)
         self.assertEqual(candidate_snapshot.to_data()["context"]["operation"]["base_snapshot"], base_snapshot)
+
+    def test_final_union_view_keeps_capture_across_hypotheses(self):
+        root = self.fixture()
+        hypothesis_dir = root / ".kpopper" / "hypotheses"
+        hypothesis_dir.mkdir()
+        for name, value in (("alternative", 10), ("second", 10)):
+            (hypothesis_dir / (name + ".yaml")).write_text(
+                "hypothesis: {claim: " + name + ", folds: never}\n"
+                "known:\n  p.input: {v: " + str(value) + "}\n", encoding="utf-8")
+        captured = []
+        original_view = remeasure.C._view
+
+        def view(candidate):
+            captured.append(candidate)
+            return original_view(candidate)
+
+        with mock.patch.object(remeasure.C, "_view", side_effect=view):
+            lines, code = remeasure.measure([str(root / "GROUNDING.yaml")])
+        self.assertEqual(code, 0, "\n".join(lines))
+        retained = [candidate for candidate in captured
+                    if getattr(candidate, "_operation_source", None) is not None]
+        self.assertTrue(retained)
+        operations = _peer("reasoning.operations")
+        final = retained[-1]
+        operation = operations.snapshot_for(final).to_data()["context"].get("operation", {})
+        self.assertEqual(operation.get("selection"), ["alternative", "second"])
 
 
 if __name__ == "__main__":
