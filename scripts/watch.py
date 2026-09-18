@@ -161,6 +161,7 @@ def _records(root, entry, sha=None, *, include_files=False):
             for pointer in C._pointers(body):
                 queue.append(_safe_path(posixpath.normpath(posixpath.join(posixpath.dirname(name), pointer))))
     history = None
+    operation_doc = None
     with tempfile.TemporaryDirectory() as directory:
         for name, raw in files.items():
             path = Path(directory) / name
@@ -185,6 +186,7 @@ def _records(root, entry, sha=None, *, include_files=False):
             if any(hyp['error'] for hyp in data['hypotheses'].values()):
                 raise ValueError('unreadable target hypothesis')
         else:
+            operation_doc = None
             try:
                 doc = P.load([str(Path(directory) / entry)])
             except P.Refused as error:
@@ -194,7 +196,8 @@ def _records(root, entry, sha=None, *, include_files=False):
                     from reasoning import operations as CoreOperations
                 if str(error) != CoreOperations.READER_REFUSAL:
                     raise
-                doc = CoreOperations.load([str(Path(directory) / entry)])
+                operation_doc = CoreOperations.load([str(Path(directory) / entry)])
+                doc = operation_doc
             document, hyps = dict(doc), []
             for name, h in doc.hypotheses.items():
                 if h['error']:
@@ -205,7 +208,8 @@ def _records(root, entry, sha=None, *, include_files=False):
         if isinstance(reasoning, dict) and reasoning.get('profile') == 'core/v1':
             from .reasoning import assessment as CoreAssessment
             from .reasoning import operations as CoreOperations
-            operation_doc = CoreOperations.load([str(Path(directory) / entry)])
+            if operation_doc is None:
+                operation_doc = CoreOperations.load([str(Path(directory) / entry)])
             observed = CoreOperations.snapshot_for(operation_doc)
             report = CoreAssessment.assess(observed)
             core = {'snapshot': observed.to_json(), 'assessment': report,

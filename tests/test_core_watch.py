@@ -68,6 +68,12 @@ class CoreWatchTests(unittest.TestCase):
         self.assertEqual(snapshot['working']['core']['assessment']['assessment_profile'], 'core/v1')
         self.assertEqual(W.compare(snapshot)['state'], 'clear')
 
+    def test_core_capture_loads_one_operation_snapshot(self):
+        from scripts.reasoning import operations
+        with patch.object(operations, 'load', wraps=operations.load) as load:
+            W._records(self.work, 'GROUNDING.yaml')
+        self.assertEqual(load.call_count, 1)
+
     def test_changed_input_preserves_delta_and_reports_falsifier(self):
         changed = copy.deepcopy(CORE)
         changed['known']['v.flag']['v'] = True
