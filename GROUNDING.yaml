@@ -1477,11 +1477,13 @@ known:
     also: [p.sameness_reasons]
   p.ci_native_build_inputs:
     name: "Inputs requiring the five-target native build and modified-GMP audit"
-    v: "Native sources, builder, bundled runtime, native loader and replacement probe, notices, and
-        CI selection/native-workflow changes; unknown paths select all checks. Packaging metadata
-        alone tests installation without recompiling native source."
-    from: s.2026_09_17_selective_ci
-    at: "families(path) and select(paths), branch codex/selective-ci"
+    v: "Native sources, builder, bundled runtime, native loader and replacement probes, notices, and
+        native-workflow changes select native builds; unknown paths select all checks. Selector-only
+        changes use mandatory contracts. Packaging metadata alone tests consumers and installation
+        without recompiling native source."
+    of: "2026-09-18"
+    from: s.ci_selection
+    at: "families(path) at commit 18145ac: native-sensitive inputs and the explicit selector-only exemption."
     as_of: "2026-09-17"
   p.community_guidance:
     name: "Public contribution guidance and truthful workflow status"
@@ -2638,9 +2640,10 @@ judgments:
                                   integrity failure until all five native builds finished, about 24
                                   minutes after builds began."
       p.ci_native_build_inputs: "Native sources, builder, bundled runtime, native loader and
-                                 replacement probe, notices, and CI selection/native-workflow
-                                 changes; unknown paths select all checks. Packaging metadata alone
-                                 tests installation without recompiling native source."
+                                 replacement probes, notices, and native-workflow changes select
+                                 native builds; unknown paths select all checks. Selector-only
+                                 changes use mandatory contracts. Packaging metadata alone tests
+                                 consumers and installation without recompiling native source."
   d.ci_selects_families:
     name: "Select PR checks by declared input families and require selected work to succeed"
     from: s.2026_09_17_selective_ci
@@ -2657,9 +2660,10 @@ judgments:
                   ci-required passes; or main no longer exercises all consumer families."
     seen:
       p.ci_native_build_inputs: "Native sources, builder, bundled runtime, native loader and
-                                 replacement probe, notices, and CI selection/native-workflow
-                                 changes; unknown paths select all checks. Packaging metadata alone
-                                 tests installation without recompiling native source."
+                                 replacement probes, notices, and native-workflow changes select
+                                 native builds; unknown paths select all checks. Selector-only
+                                 changes use mandatory contracts. Packaging metadata alone tests
+                                 consumers and installation without recompiling native source."
   d.community_entrypoints:
     because: "These entrypoints let a new contributor assess the existing checks, install the
               project, report a reproducible problem and submit a focused change. Badges link to
