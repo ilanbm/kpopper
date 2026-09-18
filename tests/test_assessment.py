@@ -63,7 +63,8 @@ class Assessment(unittest.TestCase):
         j = self.doc['judgments']['d.work']; j['seen']['p.load'] = 61; j['wrong_if'] = 'p.load > 60'
         node = self.report()['nodes']['d.work']
         self.assertEqual(node['state']['basis']['dependencies']['p.load']['comparison'], 'same')
-        self.assertEqual(node['attention'], [{'action': 'review', 'reasons': [{'code': 'falsifier_holds'}]}])
+        self.assertEqual(node['attention'], [{'action': 'review', 'reasons': [
+            {'code': 'falsifier_holds', 'related_ids': ['p.load']}]}])
 
     def test_no_condition_and_unknown_condition_are_distinct(self):
         j = self.doc['judgments']['d.work']; j.pop('wrong_if'); j['reopened_by'] = 'Organizer withdraws approval'

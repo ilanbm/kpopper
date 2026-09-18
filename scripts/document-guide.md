@@ -134,6 +134,18 @@ values, not an optional Lean proof or an independent read of the cited original.
 Multi-file/pointer/hypothesis records, judgments and computed entries are not projected
 as scalar evidence; extract the relevant authorized reading explicitly when appropriate.
 
+For an explicit core record source, add `profile: "core/v1"`:
+
+```json
+{"name":"Current record","path":"GROUNDING.yaml","format":"record","profile":"core/v1"}
+```
+
+The builder captures one frozen Snapshot and one history-aware assessment, then embeds only the
+selected node/history findings with their `snapshot_id` and `findings_revision`. Offline replay
+does not read the record, Git or an evaluator. Refresh rereads only sources named in the refresh
+request; retained sources are marked `reread: false`. This source profile does not activate or
+migrate the record, and document-local decimal checks keep their existing contract.
+
 A record source can include the canonical 32-character `event_id` returned by capture
 (and an optional source-root-relative `state_dir`)
 to require a matching durably applied ingestion event. Use the existing ingestion tools
