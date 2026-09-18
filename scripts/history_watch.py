@@ -14,6 +14,34 @@ def _capture(evidence):
     return knowledge_views.validate_history_evidence(copy.deepcopy(evidence))
 
 
+def _validated_record(record):
+    """Bind one public Snapshot to its separately transported history evidence."""
+    from . import provenance as P
+    Snapshot = P._peer('reasoning.snapshot').Snapshot
+    captured = _capture(record['history'])
+    raw = record.get('snapshot')
+    if not isinstance(raw, dict):
+        raise ValueError('history snapshot evidence is missing')
+    observed = Snapshot.from_snapshot(copy.deepcopy(raw))
+    data = observed.to_data()
+    adapted = _modules()[1].from_store_capture(captured)
+    if _identity(data['document']) != _identity(adapted.document) \
+            or _identity(record.get('doc')) != _identity(data['document']):
+        raise ValueError('history snapshot document mismatch')
+    if _identity(data['context'].get('history')) != _identity(adapted.projection):
+        raise ValueError('history snapshot closure mismatch')
+    hypothesis_items = record.get('hypotheses', [])
+    hypotheses = {item['name']: {
+        'document': copy.deepcopy(item['doc']), 'head': copy.deepcopy(item['head']), 'error': None,
+        **({'kind': item['kind']} if item.get('kind') else {})}
+        for item in hypothesis_items}
+    if len(hypotheses) != len(hypothesis_items):
+        raise ValueError('history snapshot contains duplicate hypothesis names')
+    if _identity(hypotheses) != _identity(data['hypotheses']):
+        raise ValueError('history snapshot hypotheses mismatch')
+    return captured, observed
+
+
 def _same_bytes(left, right, label):
     if left != right:
         raise ValueError('history collision: ' + label)
@@ -68,37 +96,32 @@ def _entry_ids(document):
     return set(P._peer('pending_grounding').entries(document))
 
 
-def _as_of(record):
-    observed = record.get('snapshot')
-    return observed.get('as_of') if isinstance(observed, dict) else None
-
-
-def _context(records, captures, kind):
+def _context(records, captures, observations, kind):
     inputs = {}
     for name in ('ancestor', 'main', 'working'):
         inputs[name] = {
             'identity': _identity(records[name]['history']['sha256']),
             'baseline': copy.deepcopy(captures[name].baseline),
-            **({'snapshot_id': records[name]['snapshot']['snapshot_id']}
-               if isinstance(records[name].get('snapshot'), dict) else {})}
+            'snapshot_id': observations[name].snapshot_id}
     return {'read_mode': 'supplied',
             'operation': {'version': 1, 'phase': 'prospective',
                           'kind': kind, 'inputs': inputs}}
 
 
-def _snapshot(captured, record, hypotheses, *, context):
+def _snapshot(captured, hypotheses, *, context, as_of):
     _, A, _, _ = _modules()
     adapted = A.from_store_capture(captured)
-    return adapted.snapshot(context=context, hypotheses=hypotheses,
-                            as_of=_as_of(record))
+    return adapted.snapshot(context=context, hypotheses=hypotheses, as_of=as_of)
 
 
 def merged_snapshot(records):
     """Build a supplied Snapshot from the union of existing immutable history."""
     C, _, H, _ = _modules()
 
-    captures = {name: _capture(records[name]['history']) for name in
-                ('ancestor', 'main', 'working')}
+    validated = {name: _validated_record(records[name]) for name in
+                 ('ancestor', 'main', 'working')}
+    captures = {name: value[0] for name, value in validated.items()}
+    observations = {name: value[1] for name, value in validated.items()}
     ancestor, main, working = (captures[name] for name in ('ancestor', 'main', 'working'))
     for label, candidate in (('main', main), ('working', working)):
         _same_bytes(candidate.marker, ancestor.marker, label + ' authority')
@@ -131,8 +154,9 @@ def merged_snapshot(records):
     rendered = store.render(virtual, objects=selected, commits=commits)
     virtual = replace(virtual, entry_bytes=rendered, document=C.decode_document(rendered))
     hypotheses, _ = _merge_physical(records)
-    return _snapshot(virtual, records['main'], hypotheses,
-                     context=_context(records, captures, 'history_union'))
+    return _snapshot(virtual, hypotheses,
+                     context=_context(records, captures, observations, 'history_union'),
+                     as_of=observations['main'].to_data()['as_of'])
 
 
 def _changed(records):
@@ -160,6 +184,12 @@ def _project(snapshot):
     return operations.findings(CapturedAssessment.from_snapshot(snapshot))
 
 
+def _finding(kind, subject, reason):
+    value = {'kind': kind, 'id': subject, 'reason': reason}
+    value['fingerprint'] = _identity(value)
+    return value
+
+
 def _disposition_findings(snapshot, baseline):
     """Expose newly contested immutable subjects omitted from the scalar view."""
     current = snapshot.to_data()['context']['history']['subjects']
@@ -167,19 +197,38 @@ def _disposition_findings(snapshot, baseline):
     result = []
     for subject, state in sorted(current.items()):
         if state['acceptance'] == 'contested' and prior.get(subject, {}).get('acceptance') != 'contested':
-            result.append({'kind': 'collision', 'id': subject,
-                           'reason': subject + ': contested immutable history heads'})
+            result.append(_finding('collision', subject,
+                                   subject + ': contested immutable history heads'))
     return result
 
 
+def _hypothesis_findings(snapshot, baseline):
+    """Fail closed for newly introduced hypothetical scopes not yet assessed."""
+    current_data, prior_data = snapshot.to_data(), baseline.to_data()
+    current = current_data['hypotheses']
+    prior = prior_data['hypotheses']
+    scope_changed = _identity(current_data['document']) != _identity(prior_data['document'])
+    findings = []
+    for name, hypothesis in sorted(current.items()):
+        if hypothesis == prior.get(name) and not scope_changed:
+            continue
+        condition = hypothesis['head'].get('wrong_if')
+        detail = ('condition and scope' if condition is not None else 'scope')
+        findings.append(_finding(
+            'uncheckable', name,
+            name + ': retained hypothetical ' + detail + ' was not evaluated by history watch'))
+    return findings
+
+
 def _main_snapshot(records):
-    capture = _capture(records['main']['history'])
-    return _snapshot(capture, records['main'], _physical(records['main']),
+    capture, observed = _validated_record(records['main'])
+    return _snapshot(capture, _physical(records['main']),
                      context={'read_mode': 'supplied',
                               'operation': {'version': 1, 'phase': 'observed',
                                             'kind': 'history_watch_main',
                                             'identity': _identity(records['main']['history']['sha256']),
-                                            'baseline': copy.deepcopy(capture.baseline)}})
+                                            'baseline': copy.deepcopy(capture.baseline)}},
+                     as_of=observed.to_data()['as_of'])
 
 
 def compare(snapshot):
@@ -189,14 +238,13 @@ def compare(snapshot):
         main_snapshot = _main_snapshot(snapshot)
         projected = _project(candidate)
         baseline = _project(main_snapshot)
-        findings = _disposition_findings(candidate, main_snapshot)
+        findings = (_disposition_findings(candidate, main_snapshot) +
+                    _hypothesis_findings(candidate, main_snapshot))
         for kind, lines, prior in (('falsified', projected['falsified'], baseline['falsified']),
                                    ('uncheckable', projected['holes'], baseline['holes']),
                                    ('uncheckable', projected['moved'], baseline['moved'])):
             for line in sorted(set(lines) - set(prior)):
-                finding = {'kind': kind, 'id': line.split(':', 1)[0], 'reason': line}
-                finding['fingerprint'] = _identity(finding)
-                findings.append(finding)
+                findings.append(_finding(kind, line.split(':', 1)[0], line))
         return {'state': 'attention' if findings else 'clear', 'findings': findings,
                 'changed': _changed(snapshot), 'versions': snapshot.get('versions'),
                 'identity': snapshot.get('identity')}

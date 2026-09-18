@@ -42,6 +42,22 @@ class HistoryWatchTests(unittest.TestCase):
         return {'ancestor': self.rec(ancestor), 'main': self.rec(main), 'working': self.rec(working),
                 'versions': {}, 'identity': 'fixture'}
 
+    def physical(self, record, name, document, head):
+        record = copy.deepcopy(record)
+        captured = W._capture(record['history'])
+        hypotheses = {item['name']: {'doc': item['doc'], 'head': item['head'],
+                                      **({'kind': item['kind']} if item.get('kind') else {})}
+                      for item in record['hypotheses']}
+        hypotheses[name] = {'doc': document, 'head': head}
+        data = history_adapter.from_store_capture(captured).snapshot(
+            hypotheses=hypotheses, as_of=record['snapshot']['as_of']).to_data()
+        record['doc'] = data['document']
+        record['snapshot'] = data
+        record['hypotheses'] = [{'name': key, 'doc': item['document'], 'head': item['head'],
+                                 **({'kind': item['kind']} if item.get('kind') else {})}
+                                for key, item in data['hypotheses'].items()]
+        return record
+
     def test_unchanged_history_is_clear(self):
         result = watch.compare(self.snap(self.before, self.before, self.before))
         self.assertEqual(result['state'], 'clear')
@@ -124,7 +140,8 @@ class HistoryWatchTests(unittest.TestCase):
 
         physical = {'name': 'manual', 'doc': {'readings': {'p.manual': {'v': 9}}},
                     'head': {'claim': 'manual', 'folds': 'never'}}
-        snap['working']['hypotheses'].append(physical)
+        snap['working'] = self.physical(snap['working'], physical['name'], physical['doc'],
+                                        physical['head'])
         merged = W.merged_snapshot(snap).to_data()
         self.assertEqual(merged['hypotheses']['manual']['document']['readings']['p.manual']['v'], 9)
         self.assertIn('p.manual', W.compare(snap)['changed'])
@@ -169,6 +186,25 @@ class HistoryWatchTests(unittest.TestCase):
         self.assertEqual(result['state'], 'attention')
         self.assertIn('missing on one branch', result['findings'][0]['reason'])
 
+    def test_tampered_public_snapshot_as_of_is_rejected(self):
+        snap = self.snap(self.before, self.before, self.before)
+        snap['main']['snapshot']['as_of'] = '2026-01-01'
+        result = W.compare(snap)
+        self.assertEqual(result['state'], 'attention')
+        self.assertIn('snapshot', result['findings'][0]['reason'])
+
+    def test_new_named_hypothesis_condition_is_never_silently_clear(self):
+        store = self.branch('condition')
+        mutation = HH.prepare(store.entry, 'future',
+                              {'kind': 'set', 'id': 'p.input', 'value': 2},
+                              head={'claim': 'future', 'wrong_if': {'expr': 'p.input > 0'}},
+                              operation='condition')
+        store.commit(mutation, verify=lambda data: None)
+        result = W.compare(self.snap(self.before, self.before, store.capture()))
+        self.assertEqual(result['state'], 'attention')
+        self.assertTrue(any(item['id'] == 'future' and item['kind'] == 'uncheckable'
+                            for item in result['findings']))
+
     def test_new_executable_error_is_uncheckable(self):
         judgment = fixtures.claim('d.broken', kind='judgment', op='broken', body={
             'verdict': 'bad', 'rests_on': [], 'wrong_if': {'expr': '1 / 0 > 0'}})
@@ -208,6 +244,23 @@ class HistoryWatchTests(unittest.TestCase):
         self.assertEqual(result['state'], 'clear')
         self.assertIsNone(snapshot['working']['snapshot']['as_of'])
         self.assertEqual(before, after)
+
+        main_store, work_store = H.Store(self.fixture.entry), H.Store(work / self.fixture.entry.name)
+        self.commit(main_store, {'kind': 'set', 'id': 'p.input', 'value': 2}, 'git-main-set')
+        subprocess.run(['git', 'add', '.'], cwd=root, check=True)
+        subprocess.run(['git', 'commit', '-m', 'main change'], cwd=root, check=True, capture_output=True)
+        self.commit(work_store, {'kind': 'set', 'id': 'p.input', 'value': 3}, 'git-work-set')
+        subprocess.run(['git', 'add', '.'], cwd=work, check=True)
+        subprocess.run(['git', 'commit', '-m', 'work change'], cwd=work, check=True, capture_output=True)
+        with mock.patch.dict(os.environ, {'XDG_STATE_HOME': state.name}):
+            token = watch.P._CORE_READS.set(True)
+            try:
+                conflict = observed.process()
+            finally:
+                watch.P._CORE_READS.reset(token)
+        self.assertEqual(conflict['state'], 'attention')
+        self.assertTrue(conflict['findings'])
+        self.assertTrue(all(item.get('fingerprint') for item in conflict['findings']))
 
 
 if __name__ == '__main__':
