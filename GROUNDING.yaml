@@ -2003,6 +2003,13 @@ known:
     from: s.2026_09_11_read_once
     at: "best of five runs of scripts/ground_hook.py against a synthetic 2.26 MB record - this
          record's collections nine times over under other names - on one laptop, Python 3.14"
+  m.pytest_9_support_boundary:
+    name: "The supported-Python boundary for pytest 9 and pytest-split"
+    v: "pytest 9.0.3 requires Python >=3.10; pytest-split 0.10.0 requires pytest <9; pytest-split
+        0.11.0 supports pytest <10 and requires Python >=3.10"
+    from: s.2026_09_19_dependabot_patch
+    at: "PR 125 run 35402005539 job 105783807778 and PyPI release metadata, read 2026-09-19"
+    as_of: "2026-09-19"
   m.reach.assumed_at_high_confidence:
     v: 0
     name: "Unchecked claims about the project that were asserted at a confidence of 0.8 or above"
@@ -5017,6 +5024,20 @@ judgments:
                                       its neighbours - the entries whose ids share its head - and a
                                       write to an entry goes into the file that holds it; a record in
                                       one file answers that file to all of it"
+  d.test_runner_versions_follow_python_support:
+    verdict: "CI uses pytest 8 with pytest-split 0.10 on Python 3.9, and pytest 9 with pytest-split
+              0.11 on Python 3.10 and newer"
+    because: "The project still tests Python 3.9, which neither pytest 9 nor pytest-split 0.11
+              supports; conditional pins exercise pytest 9 where compatible without dropping the
+              supported interpreter."
+    rests_on: [m.pytest_9_support_boundary, s.2026_09_19_dependabot_patch]
+    reopened_by: "The project drops Python 3.9, or either package changes its declared Python or
+                  pytest compatibility."
+    seen:
+      m.pytest_9_support_boundary: "pytest 9.0.3 requires Python >=3.10; pytest-split 0.10.0
+                                    requires pytest <9; pytest-split 0.11.0 supports pytest <10 and
+                                    requires Python >=3.10"
+      s.2026_09_19_dependabot_patch: "read 2026-09-19"
   d.text_holds_the_prose_it_places:
     rests_on: [s.2026_09_04_signals, d.reasoning_in_record, d.moved_is_a_flag]
     verdict: "a section's text is held to the sentence it draws - a judgment placed for its

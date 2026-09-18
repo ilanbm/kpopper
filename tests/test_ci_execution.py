@@ -20,6 +20,13 @@ def module(name):
 
 
 class TestPlans(unittest.TestCase):
+    def test_test_runner_versions_preserve_python_39_support(self):
+        requirements = (ROOT / '.github/requirements-test.txt').read_text()
+        self.assertIn('pytest==8.4.2; python_version < "3.10"', requirements)
+        self.assertIn('pytest==9.0.3; python_version >= "3.10"', requirements)
+        self.assertIn('pytest-split==0.10.0; python_version < "3.10"', requirements)
+        self.assertIn('pytest-split==0.11.0; python_version >= "3.10"', requirements)
+
     def test_shared_changes_keep_all_suites_and_documents_select_only_their_suite(self):
         ci = module('ci_selection')
         self.assertEqual(ci.test_suites(ci.select(['scripts/cli.py'])),
