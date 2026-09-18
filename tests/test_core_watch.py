@@ -91,6 +91,14 @@ class CoreWatchTests(unittest.TestCase):
         self.assertEqual(result['state'], 'attention')
         self.assertTrue(any(f['kind'] == 'uncheckable' for f in result['findings']))
 
+    def test_deleting_core_dependency_keeps_captured_main_baseline(self):
+        changed = copy.deepcopy(CORE)
+        del changed['known']['v.base']
+        self.save(self.work, changed)
+        result = W.compare(self.watch.snapshot())
+        self.assertEqual(result['state'], 'attention')
+        self.assertTrue(any(f['id'] == 'd.bound' for f in result['findings']))
+
 
 if __name__ == '__main__':
     unittest.main()

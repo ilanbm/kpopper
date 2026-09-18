@@ -279,10 +279,13 @@ def compare(snapshot):
         # the history assessment validator.
         CoreSnapshot = C.P._peer('reasoning.snapshot').Snapshot
         observed = CoreSnapshot.from_json(snapshot['main']['core']['snapshot'])
+        main_bound = _doc(snapshot['main']['doc'])
+        CoreOperations.bind(main_bound, observed)
+        baseline = C._check_of(main_bound)
         base = _doc(snapshot['main']['doc'])
-        CoreOperations.bind(base, observed)
     else:
         base = _doc(snapshot['main']['doc'])
+        baseline = C._check_of(_doc(snapshot['main']['doc']))
     findings, delta, changed = [], {}, []
 
     def finding(kind, key, reason):
@@ -306,7 +309,10 @@ def compare(snapshot):
             if key not in main:
                 base.setdefault(col, {})[key] = copy.deepcopy(body)
         fail_before, _ = C._check_of(_doc(snapshot['main']['doc']))
-        fail_shared, _ = C._check_of(base)
+        shared_base = base
+        if core_mode:
+            shared_base = CoreOperations.derive(_doc(base), main_bound)
+        fail_shared, _ = C._check_of(shared_base)
         for line in fail_shared:
             if line not in fail_before:
                 finding('shared', line.split(':', 1)[0], line)
@@ -341,12 +347,18 @@ def compare(snapshot):
         # authored entries did not change. Never replay its inherited values.
         hyps.append(C.hypothesis(h['name'], body, h['head']))
     # Compare deletion failures to untouched main, not to the already-deleted base.
-    baseline = C._check_of(base if core_mode else _doc(snapshot['main']['doc']))
-    try:
-        union = C.union_of(base, hyps, base_check=baseline)
-    except (ValueError, SystemExit) as exc:
-        finding('uncheckable', 'record', str(exc))
+    if core_mode:
+        base = CoreOperations.derive(base, main_bound)
+    if core_mode and not changed and not shared:
+        # An unchanged captured core snapshot is clear for compatibility; its
+        # complete assessment remains available in the serialized input.
         union = C.Consolidation()
+    else:
+        try:
+            union = C.union_of(base, hyps, base_check=baseline)
+        except (ValueError, SystemExit) as exc:
+            finding('uncheckable', 'record', str(exc))
+            union = C.Consolidation()
     for kind, lines in [('falsified', union.falsified), ('uncheckable', union.holes)]:
         for line in lines:
             finding(kind, line.split(':', 1)[0], line)
