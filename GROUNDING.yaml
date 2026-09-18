@@ -723,7 +723,7 @@ sources:
     asked: "yes start building and coordinate with the architect please"
     fidelity: quoted
     of: "implementation of F1 against the overlay-speed lane-a priming, with a differential test
-         whose oracle is the pre-hoist meaning() transcribed verbatim from e888570"
+         whose oracle is the pre-hoist overlay read out of git history at e888570"
     at: "Claude Code desktop session local_44183971-827e-4438-8c56-23ccc66c0b2b, 2026-09-18, macOS
          arm64, Python 3.13.12"
     read: "2026-09-18"
@@ -1876,10 +1876,11 @@ known:
       findall_calls_per_open: 2529314
       open_live_with_per_document_memo: 0.7
       entries_319_open_live: 6.1
-    of: "wall clock of python3 scripts/cli.py, three runs, warm parse cache; the memo number comes
+    at: "wall clock of python3 scripts/cli.py, three runs, warm parse cache; the memo number comes
          from a wrapper that memoized pending_grounding.semantic_roles and meaning_capabilities per
          document object and changed nothing else; the 319-entry number is the pre-#84 record copied
          into a fresh git repository and read with the same code"
+    of: "2026-09-18"
   m.overlay_open_seconds_after_hoist:
     name: "Seconds a live open and check cost on this record once the overlay infers once per
            document, and the same reads frozen"
@@ -1896,12 +1897,13 @@ known:
       check_live_warm_before: 10.66
       semantic_roles_calls_per_open: 4
       semantic_roles_calls_per_open_before: 882
-    of: "wall clock of python3 scripts/cli.py, three runs each, median reported, on this branch at
-         434 entries; both the before and after numbers were measured on that same record state, the
-         before by restoring the pre-hoist scripts/knowledge_views.py from e888570 into the worktree
-         and putting it back, so the two differ only in the overlay; cold is KPOPPER_NO_CACHE=1 and
-         warm is the parse cache as a user gets it; the call counts wrap knowledge_views.overlay from
-         outside and count pending_grounding.semantic_roles"
+    at: "wall clock of python3 scripts/cli.py, three runs each, median reported, on branch
+         claude/overlay-hoist at 434 entries; both the before and after numbers were measured on that
+         same record state, the before by restoring the pre-hoist scripts/knowledge_views.py from
+         e888570 into the same worktree and putting it back, so the two differ only in the overlay;
+         cold is KPOPPER_NO_CACHE=1 and warm is the parse cache as a user gets it; the call counts
+         wrap knowledge_views.overlay from outside and count pending_grounding.semantic_roles"
+    of: "2026-09-18"
   m.prompt_hook_10x_kept:
     v: 0.15
     unit: s
@@ -3788,13 +3790,13 @@ judgments:
     rests_on: [m.overlay_open_seconds, s.2026_09_18_overlay_profile]
     verdict: "the live overlay infers roles once per document it compares, never once per entry"
     because: "knowledge_views.overlay ran provenance.infer over the whole document once per entry -
-              872 times per open on a 429-entry record, 8.9 of 11 seconds inside re.findall - to
-              compute a per-entry meaning whose per-document half is the same for every entry.
-              Memoizing that half alone took open from 10.2 to 0.70 seconds with identical output, so
-              the fix is to build it once per document, on first use inside the loop so a document
-              that refuses still leaves the holder the old order left - not an inverted mention index
-              or a cache keyed on the record bytes, which would go stale on hypotheses, the pending
-              ref, the mode and the target"
+              872 times per open on a 429-entry record, 8.9 of the 11 seconds a profiled open took
+              inside re.findall - to compute a per-entry meaning whose per-document half is the same
+              for every entry. Memoizing that half alone took a ten-second open to 0.70 seconds with
+              identical output, so the fix is to build it once per document, on first use inside the
+              loop so a document that refuses still leaves the holder the old order left - not an
+              inverted mention index or a cache keyed on the record bytes, which would go stale on
+              hypotheses, the pending ref, the mode and the target"
     reopened_by: "a live open that runs infer more than once for the same document within one
                   overlay, or knowledge_conflicts that differ between the old and the new overlay on
                   any fixture holding a pending bundle, a hypothesis and a target, including a target

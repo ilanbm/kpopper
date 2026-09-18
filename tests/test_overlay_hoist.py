@@ -11,6 +11,8 @@ the new helpers: a control computed from its subject cannot disagree with it.
 import copy
 import json
 from pathlib import Path
+import subprocess
+import types
 import unittest
 from unittest.mock import patch
 
@@ -51,6 +53,50 @@ def old_meaning(document, name, history=None):
     return G.identity({'schema': {k: document[k] for k in ('schema',) if k in document},
                        'roles': roles, 'reasoning': capability,
                        **({'history_authority': authority} if authority else {})})
+
+
+BASE_COMMIT = 'e888570'
+
+# Every output EPIC decision 1 requires to be unchanged in content for every input.
+OVERLAY_OUTPUTS = ('read_mode', 'knowledge_conflicts', 'contributions', 'pending_ref',
+                   'pending_snapshot', 'publication', 'knowledge_target', 'target_unavailable',
+                   'private_drafts', 'history_contributions', 'hypotheses')
+
+
+def pre_hoist_overlay():
+    """`overlay` as it stood at BASE_COMMIT, loaded from git rather than transcribed.
+
+    Reading it out of history rather than copying it into this file means the oracle cannot
+    drift toward its subject as the subject is edited: there is nothing here to edit.
+    """
+    root = Path(__file__).resolve().parents[1]
+    shown = subprocess.run(['git', 'show', BASE_COMMIT + ':scripts/knowledge_views.py'],
+                           cwd=str(root), capture_output=True)
+    if shown.returncode != 0:
+        raise unittest.SkipTest('history for ' + BASE_COMMIT + ' is unavailable here')
+    module = types.ModuleType('scripts.knowledge_views_pre_hoist')
+    module.__package__ = 'scripts'
+    module.__file__ = str(root / 'scripts' / 'knowledge_views_pre_hoist.py')
+    exec(compile(shown.stdout, BASE_COMMIT + ':scripts/knowledge_views.py', 'exec'),
+         module.__dict__)
+    return module.overlay
+
+
+def normalize(value):
+    """A deterministic, total shape for comparing two overlay outputs.
+
+    Total on purpose: anything this does not understand becomes its repr rather than being
+    skipped, so a difference cannot slip through a type the comparison forgot to handle.
+    """
+    if isinstance(value, dict):
+        return {str(k): normalize(v) for k, v in sorted(value.items(), key=lambda kv: str(kv[0]))}
+    if isinstance(value, (list, tuple)):
+        return [normalize(item) for item in value]
+    if isinstance(value, (set, frozenset)):
+        return sorted(repr(normalize(item)) for item in value)
+    if value is None or isinstance(value, (str, int, float, bool)):
+        return value
+    return repr(value)
 
 
 class Counter:
@@ -228,6 +274,64 @@ class EntrylessDocumentsAreLeftAlone(OverlayFixture):
         self.assertTrue(capabilities.calls, 'nothing was counted; the patch missed the reader')
         for args in capabilities.calls:
             self.assertTrue(G.entries(args[0]), 'capability read for a document with no entries')
+
+
+class EveryOverlayOutputIsUnchanged(OverlayFixture):
+    """The proof EPIC decision 1 asks for: the old overlay and the new one, same input, every
+    named output equal.
+
+    `MeansWhatItMeant` beside this compares the meanings that get computed, and is by
+    construction blind to a change in *which* documents reach the computation at all - which is
+    how the refused-target defect got past it. This one reads the outputs, so it sees both.
+    """
+
+    def outputs(self, target=None):
+        """Load the same fixture twice: once through the pre-hoist overlay, once through this one."""
+        old_overlay = pre_hoist_overlay()
+        with patch.object(V, 'overlay', old_overlay):
+            before = self.load(target)
+        after = self.load(target)
+        return ({field: normalize(getattr(before, field, None)) for field in OVERLAY_OUTPUTS},
+                {field: normalize(getattr(after, field, None)) for field in OVERLAY_OUTPUTS})
+
+    def assertSameOutputs(self, target=None):
+        before, after = self.outputs(target)
+        for field in OVERLAY_OUTPUTS:
+            self.assertEqual(before[field], after[field], field + ' changed')
+        return before
+
+    def test_the_oracle_is_really_the_old_code(self):
+        """Guard the control itself: a vendored overlay that had been hoisted would prove nothing."""
+        source = subprocess.run(['git', 'show', BASE_COMMIT + ':scripts/knowledge_views.py'],
+                                cwd=str(Path(__file__).resolve().parents[1]), capture_output=True)
+        self.assertEqual(source.returncode, 0)
+        text = source.stdout.decode()
+        self.assertIn('def meaning(document, name, history=None):', text)
+        self.assertNotIn('_meaning_context', text)
+
+    def test_with_a_hypothesis_a_pending_bundle_and_a_target(self):
+        self.hypothesis('alternate', {'known': {'api.limit': {'v': 9, 'from': 's.vendor'}}})
+        target = self.target(hypotheses=[{'name': 'core', 'doc': copy.deepcopy(self.document),
+                                          'head': {}}])
+        outputs = self.assertSameOutputs(target)
+        self.assertTrue(outputs['contributions'], 'fixture lost its pending contribution')
+        self.assertIn('api.limit', outputs['knowledge_conflicts'],
+                      'fixture stopped producing the conflict it exists to compare')
+
+    def test_with_nothing_configured_beyond_the_checkout(self):
+        self.assertSameOutputs()
+
+    def test_when_a_target_document_refuses(self):
+        """The case that caught the eager build: a refused target leaves partial holders behind."""
+        document = copy.deepcopy(self.document)
+        document['known']['api.limit']['v'] = 99
+        document['meta'] = {'history': {'authority': 'fixture'}}
+        outputs = self.assertSameOutputs(self.target(document))
+        self.assertIn('api.limit', outputs['knowledge_conflicts'])
+
+    def test_when_documents_carry_no_entries(self):
+        self.hypothesis('empty', {'known': {}})
+        self.assertSameOutputs(self.target({'meta': {'history': {'authority': 'fixture'}}}))
 
 
 class TheHistoryAuthoritySurvivesTheSplit(unittest.TestCase):
