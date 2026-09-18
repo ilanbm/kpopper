@@ -66,9 +66,17 @@ for name in ("history_authoring", "history_contract", "history_store",
     if "." not in name:
         setattr(alias, name, module)
 
+if archive:
+    runtime_module = importlib.import_module("scripts.reasoning.runtime")
+    initialize_runtime = runtime_module.Runtime.__init__
+    def selected_runtime(instance, supplied=None, **kwargs):
+        return initialize_runtime(instance, supplied or archive, **kwargs)
+    runtime_module.Runtime.__init__ = selected_runtime
+
 suite = unittest.TestSuite()
 for filename, classname in (("test_core_composition.py", "CoreComposition"),
-                            ("test_reasoning_query_runtime.py", "NativeQueryAcceptance")):
+                            ("test_reasoning_query_runtime.py", "NativeQueryAcceptance"),
+                            ("test_core_query_transfer.py", "CoreQueryTransfer")):
     spec = importlib.util.spec_from_file_location("installed_acceptance_target", target / filename)
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)

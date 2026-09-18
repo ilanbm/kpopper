@@ -155,6 +155,13 @@ def _reasoning_modules():
                  for name in ('contract', 'language', 'snapshot', 'assessment'))
 
 
+def _query_module():
+    if __package__:
+        from .reasoning import query
+        return query
+    return P._peer('reasoning.query')
+
+
 def _declared_capabilities(document):
     """Read a declaration without authorizing its interpretation."""
     C, _, _, _ = _reasoning_modules()
@@ -216,7 +223,8 @@ def document_capabilities(document):
         for field in ('rule', fields['predicate']):
             value = body.get(field)
             if isinstance(value, dict):
-                _expression_capabilities(value, nid, C, L)
+                _expression_capabilities(value, nid, C, L, document=document,
+                                         declared=cap['requires'])
         deps = body.get(fields['deps'], [])
         if isinstance(deps, list) and any(isinstance(dep, str) and P.is_builtin(dep) for dep in deps):
             raise C.CapabilityError('unsupported_core_builtin', nid + ': computed builtin dependency')
@@ -225,6 +233,9 @@ def document_capabilities(document):
 
 def _historical_rule_capabilities(computed, dependency, nid, contract, language):
     rule = computed['rule']
+    if set(rule) == {'query'}:
+        _historical_query_capabilities(rule, computed.get('basis'), nid, contract)
+        return
     if set(rule) != {'collection', 'fields'}:
         _expression_capabilities(rule, nid, contract, language)
         return
@@ -251,7 +262,58 @@ def _historical_rule_capabilities(computed, dependency, nid, contract, language)
         raise contract.CapabilityError('invalid_history', nid + ': historical scope needs its typed summary')
 
 
-def _expression_capabilities(value, nid, contract, language):
+def _historical_query_capabilities(rule, basis, nid, contract):
+    """Validate a retained query from its immutable basis, never today's scope."""
+    try:
+        query = _query_module()
+        if not isinstance(basis, dict) or basis.get('recipe') != 'query-inputs/v1':
+            raise ValueError('historical query needs its query basis')
+        scope = basis.get('scope')
+        if not isinstance(scope, dict) or scope.get('recipe') != 'scope-inputs/v2':
+            raise ValueError('historical query needs its retained scope basis')
+        fields, members, witness = scope.get('fields'), scope.get('members'), scope.get('witness')
+        if not isinstance(fields, list) or fields != sorted(set(fields)) \
+                or any(not isinstance(field, str) or not field for field in fields) \
+                or not isinstance(members, list) or members != sorted(set(members)) \
+                or any(not isinstance(member, str) or not member for member in members) \
+                or not isinstance(witness, dict):
+            raise ValueError('invalid retained query scope')
+        expression = query.lower(rule, fields)
+        scope_id = expression['query']['scope']
+        if witness.get('kind') != 'scope' or witness.get('scope_id') != scope_id \
+                or basis.get('operation') != expression \
+                or basis.get('modules') != query.required_modules(expression):
+            raise ValueError('historical query disagrees with its retained scope basis')
+    except contract.CapabilityError:
+        raise
+    except (ValueError, TypeError, SyntaxError, RecursionError) as error:
+        raise contract.CapabilityError('invalid_history', nid + ': ' + str(error)) from None
+
+
+def _query_capabilities(value, nid, contract, document, declared):
+    try:
+        query = _query_module()
+        query_body = value.get('query') if isinstance(value, dict) else None
+        scope_id = query_body.get('scope') if isinstance(query_body, dict) else None
+        _, _, snapshot, _ = _reasoning_modules()
+        capture = snapshot.Snapshot.from_data(document).capture_query_scope(scope_id)
+        expression = query.lower(value, capture.to_data()['definition']['fields'])
+        missing = set(query.required_modules(expression)) - set(declared)
+        if missing:
+            raise contract.CapabilityError(
+                'invalid_capability', nid + ': undeclared modules: ' + ', '.join(sorted(missing)))
+        return expression
+    except contract.CapabilityError:
+        raise
+    except (ValueError, TypeError, SyntaxError, RecursionError) as error:
+        raise contract.CapabilityError('invalid_expression', nid + ': ' + str(error)) from None
+
+
+def _expression_capabilities(value, nid, contract, language, *, document=None, declared=()):
+    if isinstance(value, dict) and set(value) == {'query'}:
+        if document is None:
+            raise contract.CapabilityError('invalid_expression', nid + ': query scope is unavailable')
+        return _query_capabilities(value, nid, contract, document, declared)
     try:
         expression = language.lower(value)
         if any(P.is_builtin(ref) for ref in language.references(expression)):
@@ -276,7 +338,7 @@ def closure(doc, roots):
     if cap['profile'] == C.PROFILE:
         fields = S._fields(doc)
         all_entries = entries(doc)
-        scopes, processed = set(), set()
+        scopes, query_scopes, processed = set(), set(), set()
         # The snapshot captures authority and validates scopes without evaluation.
         snapshot = None
         while set(entries(selected)) - processed:
@@ -288,11 +350,20 @@ def closure(doc, roots):
                 dependencies = []
                 for field in ('rule', fields['predicate']):
                     if isinstance(body.get(field), dict):
-                        dependencies.extend(L.references(L.lower(body[field])))
+                        expression = body[field]
+                        if set(expression) == {'query'}:
+                            normalized = _query_capabilities(
+                                expression, nid, C, doc, cap['requires'])
+                            scope_id = normalized['query']['scope']
+                            query_scopes.add(scope_id)
+                            dependencies.append(scope_id)
+                        else:
+                            dependencies.extend(L.references(L.lower(expression)))
                 if 'collection_scope' in body:
                     if snapshot is None:
                         snapshot = S.Snapshot.from_data(doc)
-                    captured = snapshot.capture_scope(nid).to_data()
+                    captured = (snapshot.capture_query_scope(nid) if nid in query_scopes
+                                else snapshot.capture_scope(nid)).to_data()
                     collection = captured['definition']['collection']
                     scopes.add(collection)
                     dependencies.extend(doc[collection])
