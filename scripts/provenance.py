@@ -3175,7 +3175,9 @@ def _page_or_error(paths, read_mode=None, *, doc=None):
     be built - the reader never fails on the page's account, it says so in a line. `doc` is
     the record already read for these paths, passed through to the build; a caller that must
     see the record as it stands now passes none. Note that the line this returns is where a
-    refused build lands, including one refused for being handed the wrong document."""
+    refused build lands, including one refused for being given a record read in another
+    mode - a document read from *other* paths is drawn, not refused, so the caller owns
+    that."""
     try:
         return _page_info(paths, read_mode=read_mode, doc=doc)
     except (Exception, SystemExit) as e:
