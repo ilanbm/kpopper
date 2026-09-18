@@ -112,8 +112,14 @@ fn mapping(value: &Value, keys: &[&str]) -> Result<()> {
 }
 
 pub fn bytes(value: &Value) -> Result<Vec<u8>> {
+    let typed = crate::value::TypedValue::from_json(value)?;
     let mut raw = serde_json::to_vec_pretty(value)?;
     raw.push(b'\n');
+    // Retain existing byte identities wherever JSON also has the same YAML meaning.
+    // YAML 1.1 reads e.g. 1e+20 as text; explicit tags preserve such floats.
+    if crate::history_yaml::decode_document(&raw).ok().as_ref() != Some(&typed) {
+        raw = crate::history_yaml::encode_document(&typed)?;
+    }
     require(raw.len() <= MAX_BYTES, "byte_limit")?;
     Ok(raw)
 }
@@ -181,20 +187,8 @@ pub fn json_input(raw: &[u8]) -> Result<Value> {
 
 fn parse(raw: &[u8]) -> Result<Value> {
     require(raw.len() <= MAX_BYTES, "byte_limit")?;
-    if serde_json::from_slice::<Value>(raw).is_ok() {
-        return json_input(raw);
-    }
-    let options = serde_saphyr::options! {
-        reject_unsupported_tags: true,
-        duplicate_keys: serde_saphyr::DuplicateKeyPolicy::Error,
-        merge_keys: serde_saphyr::MergeKeyPolicy::Error,
-        budget: serde_saphyr::budget! { max_depth:100,max_nodes:100_000,max_events:200_000,
-            max_aliases:0,max_anchors:0,max_merge_keys:0,max_documents:1,max_total_scalar_bytes:MAX_BYTES },
-    };
-    let value: Value = serde_saphyr::from_slice_with_options(raw, options)
-        .map_err(|e| Error(format!("invalid_yaml: {e}")))?;
-    identity(&value)?;
-    Ok(value)
+    // Storage is still the JSON-compatible subset. A date cannot become text here.
+    crate::history_yaml::decode_document(raw)?.to_json()
 }
 
 pub struct Store {

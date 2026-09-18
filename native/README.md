@@ -55,6 +55,28 @@ for example `["date","2026-09-19"]`, and returns its exact typed identity and ta
 value. Plain `identity` retains its JSON-value interface. This is a read-only codec
 boundary: the history writer still accepts JSON-compatible values only.
 
+`identity --yaml` reads a strict history YAML mapping. Add `--object` to either
+identity input mode to dispatch by the object's declared scheme: absent means the
+legacy 40-hex identity; `typed-history/v2` means the typed 64-hex identity. Unknown
+declarations refuse. Legacy datetime strings retain their original space separator,
+and only the top-level `id` is excluded. Computing an ID does not validate an object
+schema, its references, or its acceptance in history.
+
+`history-codec` reads a YAML mapping and returns its typed value, digest and a YAML
+serialization that preserves types. `history-codec --typed` accepts the canonical
+tagged map instead. This codec supports dates and naive/minute-offset datetimes;
+sub-minute timezone offsets refuse serialization, as they do in the Python history
+writer. These commands do not publish objects or enable legacy storage operations.
+
+History YAML resolution follows the pinned Python reader, including YAML 1.1 boolean,
+octal, sexagesimal and timestamp spellings. Direct merge mappings are flattened before
+checking unique text keys. Aliases, reused anchors, nonfinite values and unsupported
+tags refuse. The parser retains mapping entries until this validation; ordinary
+Serde map deserialization is not the history contract. Source conformance fixtures
+name the Python revision and source hashes, and cover both accepted and refused input.
+Exotic scalar tags applied to collections (for example `!!str {=: value}`), and
+`!!omap`/`!!pairs` collections remain unsupported, including their empty forms.
+
 Typed decoding accepts canonical encoder output, not noncanonical convenience
 spellings: tags and arity are exact, integer/float/date spellings are canonical,
 and map keys must be unique and sorted. The library bounds logical depth at 128 and
@@ -78,15 +100,24 @@ Cross-language authoring interoperability remains unverified. The opt-in marker
 prevents accidental use, not malicious modification by another local process.
 Symlinks, missing/corrupt committed evidence, unknown authority/capabilities,
 incomplete or branching commit graphs, duplicate mapping keys and oversized data
-refuse. Parsing has explicit depth, node and byte limits; YAML aliases, merge keys
-and unsupported tags are not accepted. Writes use JSON, which is valid YAML.
+refuse. Parsing has explicit depth, node and byte limits. Storage preserves its
+previous JSON bytes when the strict YAML reader confirms the same value. Otherwise
+it writes explicit YAML types, preventing scientific-notation floats or YAML-sensitive
+text from changing meaning. Retained committed source bytes are never rewritten.
+
+The YAML library bounds source nesting at 129 and source nodes at 200,000, followed
+by the typed model's depth 128 / 100,000 value bounds and a 16 MiB compact ASCII JSON
+budget. Source bytes are also limited to 16 MiB. Numeric YAML constructors cap integers
+at 4,300 decimal digits and recognize Unicode 16 decimal digits, matching the pinned
+Python runtime. The CLI and experimental store retain their smaller 1 MiB file/input
+limit. These are bounded input contracts, not a claim to accept every PyYAML source.
 
 ## Deliberate limits
 
 - No judgments, dependency pins, formulas, competing histories, review/refutation,
   temporal semantics, Lean evaluation, MCP, UI, migration or production activation.
-- No authority v2 cancellation metadata, legacy 40-hex objects or typed YAML
-  date/datetime support. This is not full PyYAML compatibility.
+- No authority v2 cancellation metadata, legacy 40-hex storage operations or typed
+  date/datetime storage operations. The standalone codec does not expand those limits.
 - Receipts explicitly say `semantic_assessment: not_performed`; accepted history
   is not a claim that a condition was checked or that source content is true.
 - Python's history contract/store and explicit Snapshot capture can validate this

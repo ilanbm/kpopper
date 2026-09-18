@@ -37,6 +37,16 @@ enum Command {
     SessionStart,
     /// Canonical typed identity for JSON-compatible input on stdin.
     Identity {
+        #[arg(long, conflicts_with = "yaml")]
+        typed: bool,
+        #[arg(long)]
+        yaml: bool,
+        /// Compute an object ID using its declared scheme, including legacy IDs.
+        #[arg(long)]
+        object: bool,
+    },
+    /// Read a strict YAML mapping (or tagged map) and return lossless YAML and types.
+    HistoryCodec {
         #[arg(long)]
         typed: bool,
     },
@@ -56,11 +66,15 @@ struct WriteArgs {
     expected_revision: Option<String>,
 }
 fn stdin() -> Result<Value> {
+    json_input(&stdin_bytes()?)
+}
+fn stdin_bytes() -> Result<Vec<u8>> {
     let mut raw = Vec::new();
     io::stdin()
         .take((MAX_BYTES + 1) as u64)
         .read_to_end(&mut raw)?;
-    json_input(&raw)
+    require(raw.len() <= MAX_BYTES, "byte_limit")?;
+    Ok(raw)
 }
 fn session() -> Result<()> {
     let payload = stdin()?;
@@ -99,13 +113,40 @@ fn session() -> Result<()> {
     Ok(())
 }
 fn run(args: Args) -> Result<Value> {
-    if let Command::Identity { typed } = args.command {
-        let input = stdin()?;
-        if typed {
-            let value = kpop_native::value::TypedValue::from_tagged(&input)?;
-            return Ok(json!({"identity":value.digest()?,"typed":value.to_tagged()?}));
-        }
-        return Ok(json!({"identity":identity::identity(&input)?}));
+    if let Command::Identity {
+        typed,
+        yaml,
+        object,
+    } = args.command
+    {
+        let value = if yaml {
+            kpop_native::history_yaml::decode_document(&stdin_bytes()?)?
+        } else if typed {
+            kpop_native::value::TypedValue::from_tagged(&stdin()?)?
+        } else {
+            kpop_native::value::TypedValue::from_json(&stdin()?)?
+        };
+        let id = if object {
+            identity::typed_object_identity(&value)?
+        } else {
+            value.digest()?
+        };
+        return if typed || yaml {
+            Ok(json!({"identity":id,"typed":value.to_tagged()?}))
+        } else {
+            Ok(json!({"identity":id}))
+        };
+    }
+    if let Command::HistoryCodec { typed } = args.command {
+        let value = if typed {
+            kpop_native::value::TypedValue::from_tagged(&stdin()?)?
+        } else {
+            kpop_native::history_yaml::decode_document(&stdin_bytes()?)?
+        };
+        let yaml = kpop_native::history_yaml::encode_document(&value)?;
+        return Ok(
+            json!({"identity":value.digest()?,"typed":value.to_tagged()?,"yaml":String::from_utf8(yaml).unwrap()}),
+        );
     }
     let root = args
         .workspace
@@ -138,7 +179,9 @@ fn run(args: Args) -> Result<Value> {
                 write.expected_revision.as_deref(),
             )
         }
-        Command::Identity { .. } | Command::SessionStart => unreachable!(),
+        Command::Identity { .. } | Command::HistoryCodec { .. } | Command::SessionStart => {
+            unreachable!()
+        }
     }
 }
 fn main() {

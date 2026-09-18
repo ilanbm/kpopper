@@ -9,7 +9,10 @@ clap = { version = "4.5", features = ["derive"] }
 fs2 = "0.4"
 serde = { version = "1", features = ["derive"] }
 serde_json = { version = "1", features = ["arbitrary_precision"] }
-serde-saphyr = { version = "1", default-features = false, features = ["deserialize"] }
+libyaml-safer = "0.3"
+num-bigint = "0.4"
+regex = "1"
+ryu = "1"
 sha2 = "0.10"
 
 [dev-dependencies]

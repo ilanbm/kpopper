@@ -410,3 +410,22 @@ fn concurrent_commands_serialize_or_refuse_without_losing_a_commit() {
     }
     assert_eq!(ok(run(&root, &["open"]))["commits"], 2);
 }
+
+#[test]
+fn yaml_storage_preserves_exponents_and_yaml_sensitive_text() {
+    let (_temp, root) = fixture();
+    let cases = [
+        ("p.large", "1e+20"),
+        ("p.small", "1e-20"),
+        ("p.control", r#""\u007f\u0085\u2028\ufeff""#),
+    ];
+    for (i, (subject, value)) in cases.iter().enumerate() {
+        ok(write(&root, "add", subject, value, &format!("source-{i}")));
+        let result = ok(run(&root, &["open"]));
+        let expected = kpop_native::store::json_input(value.as_bytes()).unwrap();
+        assert_eq!(
+            kpop_native::identity::identity(&result["document"]["readings"][subject]["v"]).unwrap(),
+            kpop_native::identity::identity(&expected).unwrap()
+        );
+    }
+}

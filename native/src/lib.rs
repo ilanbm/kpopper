@@ -1,5 +1,6 @@
 #![forbid(unsafe_code)]
 
+pub mod history_yaml;
 pub mod identity;
 pub mod store;
 pub mod value;
