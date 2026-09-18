@@ -4,6 +4,7 @@ import pathlib
 import shutil
 import tempfile
 import unittest
+from types import SimpleNamespace
 from unittest.mock import patch
 
 import yaml
@@ -20,6 +21,17 @@ def module(name):
 
 
 class TestPlans(unittest.TestCase):
+    def test_pytest_9_subtest_reports_do_not_duplicate_the_collected_parent(self):
+        plugin = __import__('tests.ci_pytest', fromlist=['ci_pytest'])
+        progress = plugin.Progress(None)
+        progress.pytest_runtest_logreport(SimpleNamespace(
+            nodeid='tests/test_example.py::Example::test_parent', when='call',
+            skipped=False, failed=False, context=object()))
+        progress.pytest_runtest_logreport(SimpleNamespace(
+            nodeid='tests/test_example.py::Example::test_parent', when='call',
+            skipped=False, failed=False))
+        self.assertEqual(progress.executed, ['tests/test_example.py::Example::test_parent'])
+
     def test_test_runner_versions_preserve_python_39_support(self):
         requirements = (ROOT / '.github/requirements-test.txt').read_text()
         self.assertIn('pytest==8.4.2; python_version < "3.10"', requirements)

@@ -2003,6 +2003,13 @@ known:
     from: s.2026_09_11_read_once
     at: "best of five runs of scripts/ground_hook.py against a synthetic 2.26 MB record - this
          record's collections nine times over under other names - on one laptop, Python 3.14"
+  m.pytest_9_subtest_reporting:
+    name: "How pytest 9 reports unittest subtests to the CI manifest hook"
+    v: "pytest 9 emits one call-phase report per unittest subTest plus the collected parent report,
+        all with the parent nodeid"
+    from: s.2026_09_19_dependabot_patch
+    at: "PR 125 run 35402269406 job 105784823613 and local pytest 9.0.3 reproduction, 2026-09-19"
+    as_of: "2026-09-19"
   m.pytest_9_support_boundary:
     name: "The supported-Python boundary for pytest 9 and pytest-split"
     v: "pytest 9.0.3 requires Python >=3.10; pytest-split 0.10.0 requires pytest <9; pytest-split
@@ -2010,6 +2017,8 @@ known:
     from: s.2026_09_19_dependabot_patch
     at: "PR 125 run 35402005539 job 105783807778 and PyPI release metadata, read 2026-09-19"
     as_of: "2026-09-19"
+    distinct_from: m.pytest_9_subtest_reporting
+    # distinct 2026-09-19: One is the package and interpreter compatibility boundary; the other is pytest 9 runtime report behavior in the CI manifest hook.
   m.reach.assumed_at_high_confidence:
     v: 0
     name: "Unchecked claims about the project that were asserted at a confidence of 0.8 or above"
@@ -2920,6 +2929,20 @@ judgments:
                                  native builds; unknown paths select all checks. Selector-only
                                  changes use mandatory contracts. Packaging metadata alone tests
                                  consumers and installation without recompiling native source."
+  d.ci_manifest_counts_collected_tests:
+    verdict: "The CI execution manifest counts the collected parent test and not pytest subtest
+              reports"
+    because: "The manifest proves every selected collection node executed exactly once. Pytest 9
+              reports unittest subtests with the same node id as the parent, so counting those
+              reports creates false duplicates even though the parent executed once; failed subtests
+              still fail the parent report."
+    rests_on: [m.pytest_9_subtest_reporting, s.2026_09_19_dependabot_patch]
+    reopened_by: "Pytest stops emitting a parent report for failed subtests, or subtests become
+                  separately collected nodes in the shard plan."
+    seen:
+      m.pytest_9_subtest_reporting: "pytest 9 emits one call-phase report per unittest subTest plus
+                                     the collected parent report, all with the parent nodeid"
+      s.2026_09_19_dependabot_patch: "read 2026-09-19"
   d.ci_selects_families:
     name: "Select PR checks by declared input families and require selected work to succeed"
     from: s.2026_09_17_selective_ci

@@ -50,6 +50,11 @@ class Progress:
 
     def pytest_runtest_logreport(self, report):
         with self.lock:
+            # pytest 9 emits a call-phase report for every unittest subTest as well as
+            # one for the collected parent test.  Only the parent is an execution in
+            # the shard plan; failed subtests still fail that parent report.
+            if hasattr(report, 'context'):
+                return
             if report.when == 'call' or (report.when == 'setup' and (report.skipped or report.failed)):
                 self.executed.append(report.nodeid)
             if report.when == 'teardown':
