@@ -988,6 +988,27 @@ def _record_read_guard(paths):
         _READ_PARSES.reset(token)
 
 
+def refuse_dormant_profile(doc):
+    """A dormant profile must not be interpreted by legacy check/page/session paths. Attached
+    proposals retain their own declared semantics as well as the base, so a layer declaring one
+    is refused with the base that carries it.
+
+    Every boundary where a document enters a legacy reader runs this: its own reading, and a
+    document handed to it by a caller that read it already. A reader that only checked while
+    reading would let a document loaded under the core permission in through the other door."""
+    layers = [hyp['doc'] for hyp in (getattr(doc, 'hypotheses', None) or {}).values()]
+    for document in [doc, *layers]:
+        meta = document.get('meta')
+        if isinstance(meta, dict) and 'reasoning' in meta:
+            contract = _peer('reasoning.contract')
+            try:
+                contract.capabilities(document)
+            except contract.CapabilityError as error:
+                raise Refused(error.code + ': ' + str(error)) from None
+            if not _CORE_READS.get():
+                raise Refused('unsupported_capability: use core/v1 consumer')
+
+
 def _load(paths, *, read_mode=None):
     mode = read_mode or ('frozen' if _RAW_READS.get() else os.environ.get('KPOPPER_READ_MODE', 'live'))
     if mode == 'live':
@@ -1075,18 +1096,7 @@ def _load(paths, *, read_mode=None):
     doc.hypotheses = load_hypotheses(paths)
     mode = read_mode or ('frozen' if _RAW_READS.get() else os.environ.get('KPOPPER_READ_MODE', 'live'))
     doc = _peer('knowledge_views').overlay(paths, doc, read_mode=mode)
-    # A dormant profile must not be interpreted by legacy check/page/session paths.
-    # Attached proposals retain their own declared semantics as well as the base.
-    for document in [doc, *(hyp['doc'] for hyp in doc.hypotheses.values())]:
-        meta = document.get('meta')
-        if isinstance(meta, dict) and 'reasoning' in meta:
-            contract = _peer('reasoning.contract')
-            try:
-                contract.capabilities(document)
-            except contract.CapabilityError as error:
-                raise Refused(error.code + ': ' + str(error)) from None
-            if not _CORE_READS.get():
-                raise Refused('unsupported_capability: use core/v1 consumer')
+    refuse_dormant_profile(doc)
     return doc
 
 

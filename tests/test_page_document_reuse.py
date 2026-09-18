@@ -379,6 +379,100 @@ class AnAdvancedRecordWithSomethingPending(HandoverMixin, unittest.TestCase):
                     doc=P.load(self.paths, read_mode="frozen"))
 
 
+CORE_FIXTURE = ROOT / "tests" / "fixtures" / "core-page" / "GROUNDING.yaml"
+
+LEGACY_BASE = """\
+meta:
+  name: a record that declares no profile of its own
+known:
+  v.zero: {v: 0}
+"""
+
+CORE_LAYER = """\
+meta:
+  reasoning:
+    version: 2
+    profile: core/v1
+    requires: [arithmetic/v1]
+known:
+  v.one: {v: 1}
+"""
+
+
+class TheCoreProfileIsNotDrawnByTheLegacyPage(unittest.TestCase):
+    """A document declaring the core reasoning profile is refused by `load`, so the page build
+    used to reach that refusal for free by doing its own reading. Given a document it does not
+    read, it has to make the same refusal itself - otherwise a core record loaded by the core
+    snapshot path, which holds the permission while it reads, can be handed to the legacy
+    renderer and drawn with no core assessment at all.
+
+    Neither fixture below references a `graph.*` or `page.*` builtin, on purpose. A builtin
+    reference sends `build` through `P.builtins` -> `counts` -> `_legacy_computation`, which
+    refuses for its own reasons - so a fixture carrying one would go red whether or not this
+    boundary check existed, and would prove nothing.
+    """
+
+    def core_document(self, paths):
+        """What the core snapshot path holds while it reads: the permission, and the record."""
+        token = P._CORE_READS.set(True)
+        try:
+            return P.load(paths, read_mode="frozen")
+        finally:
+            P._CORE_READS.reset(token)
+
+    def layered_record(self):
+        """A legacy base whose attached hypothesis is the one declaring the profile."""
+        directory = tempfile.TemporaryDirectory()
+        self.addCleanup(directory.cleanup)
+        root = pathlib.Path(directory.name)
+        (root / "GROUNDING.yaml").write_text(LEGACY_BASE, encoding="utf-8")
+        (root / ".kpopper" / "hypotheses").mkdir(parents=True)
+        (root / ".kpopper" / "hypotheses" / "proposal.yaml").write_text(CORE_LAYER, encoding="utf-8")
+        return [str(root / "GROUNDING.yaml")]
+
+    def assert_no_builtin_reference(self, paths):
+        # the fixtures only mean what they are meant to mean while this holds
+        ids = P.infer(self.core_document(paths))[0]
+        self.assertEqual([k for k in ids if P.is_builtin(k)], [])
+
+    def test_the_fixtures_do_not_lean_on_the_builtin_guard(self):
+        self.assert_no_builtin_reference([str(CORE_FIXTURE)])
+        self.assert_no_builtin_reference(self.layered_record())
+
+    def test_a_reading_of_its_own_refuses_a_core_record(self):
+        # the control: the refusal the supplied-document path has to reproduce
+        with self.assertRaises(SystemExit) as refused:
+            R.build([str(CORE_FIXTURE)], read_mode="frozen")
+        self.assertIn("unsupported_capability", str(refused.exception))
+
+    def test_a_supplied_core_document_is_refused_as_its_own_reading_would_be(self):
+        doc = self.core_document([str(CORE_FIXTURE)])
+        with self.assertRaises(SystemExit) as refused:
+            R.build([str(CORE_FIXTURE)], read_mode="frozen", doc=doc)
+        self.assertIn("unsupported_capability", str(refused.exception))
+
+    def test_a_profile_declared_only_by_an_attached_hypothesis_is_refused_too(self):
+        paths = self.layered_record()
+        with self.assertRaises(SystemExit) as fresh:
+            R.build(paths, read_mode="frozen")
+        self.assertIn("unsupported_capability", str(fresh.exception))
+        doc = self.core_document(paths)
+        self.assertIn("proposal", doc.hypotheses)
+        with self.assertRaises(SystemExit) as supplied:
+            R.build(paths, read_mode="frozen", doc=doc)
+        self.assertIn("unsupported_capability", str(supplied.exception))
+
+    def test_a_record_declaring_no_profile_is_still_drawn(self):
+        # the refusal has to be about the declaration, not about being handed a document
+        directory = tempfile.TemporaryDirectory()
+        self.addCleanup(directory.cleanup)
+        root = pathlib.Path(directory.name)
+        (root / "GROUNDING.yaml").write_text(LEGACY_BASE, encoding="utf-8")
+        paths = [str(root / "GROUNDING.yaml")]
+        self.assertEqual(R.build(paths, read_mode="frozen", doc=P.load(paths, read_mode="frozen"))[0],
+                         R.build(paths, read_mode="frozen")[0])
+
+
 class TheWritePathReadsTheRecordItIsWriting(WithTheFixture):
     def test_page_side_takes_no_document_and_so_cannot_be_handed_a_stale_one(self):
         self.assertNotIn("doc", inspect.signature(P._page_side).parameters)

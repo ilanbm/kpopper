@@ -923,9 +923,14 @@ def build(paths, brief_path=None, page_path=None, *, read_mode=None, profile=Non
     # every count it takes still sees the record as it stands at that moment.
     if doc is None:
         doc = P.load(paths, read_mode=mode)
-    elif getattr(doc, 'read_mode', mode) != mode:
-        raise ValueError('the page was given a record read in another mode: '
-                         + str(doc.read_mode) + ', not ' + mode)
+    else:
+        if getattr(doc, 'read_mode', mode) != mode:
+            raise ValueError('the page was given a record read in another mode: '
+                             + str(doc.read_mode) + ', not ' + mode)
+        # what `P.load` would have refused on the way in, refused here instead: a document
+        # read under the core permission must not be drawn by this renderer just because
+        # somebody else did the reading
+        P.refuse_dormant_profile(doc)
     record_root = os.path.dirname(P.layout_of(paths)["entry"])
     ids, jud, fields = P.infer(doc)
     meta = doc.get("meta") or {}
