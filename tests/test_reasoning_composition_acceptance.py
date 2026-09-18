@@ -27,6 +27,8 @@ from pathlib import Path
 import sys
 import types
 import unittest
+import subprocess
+import tempfile
 
 target = Path(sys.argv[1]).resolve()
 checkout_package = Path(sys.argv[2]).resolve()
@@ -71,7 +73,7 @@ if archive:
     initialize_runtime = runtime_module.Runtime.__init__
     def selected_runtime(instance, supplied=None, **kwargs):
         return initialize_runtime(instance, supplied or archive, **kwargs)
-        runtime_module.Runtime.__init__ = selected_runtime
+    runtime_module.Runtime.__init__ = selected_runtime
 
 
 class InstalledOperationalCLI(unittest.TestCase):
@@ -105,7 +107,7 @@ class InstalledOperationalCLI(unittest.TestCase):
             measure = root / ".kpopper"
             measure.mkdir()
             measure.joinpath("measure.yaml").write_text(
-                "base_value: [" + sys.executable + ", -I, -c, \"print(10)\"]\n",
+                "base_value: " + json.dumps([sys.executable, "-I", "-c", "print(10)"]) + "\n",
                 encoding="utf-8")
             before = record.read_bytes()
             result = subprocess.run([sys.executable, str(self.cli_path()), "remeasure", str(record)],
@@ -116,6 +118,7 @@ class InstalledOperationalCLI(unittest.TestCase):
             self.assertIn("nothing ran - add --run", result.stdout)
             self.assertEqual(record.read_bytes(), before)
 
+    @unittest.skipIf(os.name == 'nt', 'watch requires POSIX file locking')
     def test_installed_watch_unchanged_core_snapshot_is_clear(self):
         with tempfile.TemporaryDirectory(prefix="installed-core-watch-") as directory:
             root = Path(directory)

@@ -190,10 +190,7 @@ def _records(root, entry, sha=None, *, include_files=False):
             try:
                 doc = P.load([str(Path(directory) / entry)])
             except P.Refused as error:
-                try:
-                    from .reasoning import operations as CoreOperations
-                except ImportError:
-                    from reasoning import operations as CoreOperations
+                CoreOperations = P._peer('reasoning.operations')
                 if str(error) != CoreOperations.READER_REFUSAL:
                     raise
                 operation_doc = CoreOperations.load([str(Path(directory) / entry)])
@@ -208,14 +205,14 @@ def _records(root, entry, sha=None, *, include_files=False):
         if isinstance(reasoning, dict) and reasoning.get('profile') == 'core/v1':
             if active:
                 raise ValueError('prospective_history_required: use the prepared history operation')
-            from .reasoning import assessment as CoreAssessment
-            from .reasoning import operations as CoreOperations
+            CoreOperations = P._peer('reasoning.operations')
             if operation_doc is None:
                 operation_doc = CoreOperations.load([str(Path(directory) / entry)])
             observed = CoreOperations.snapshot_for(operation_doc)
-            report = CoreAssessment.assess(observed)
+            context = CoreOperations.world(operation_doc).context
+            report = context.base_assessment
             core = {'snapshot': observed.to_json(), 'assessment': report,
-                    'findings': CoreOperations.findings(CoreOperations.world(operation_doc).context)}
+                    'findings': CoreOperations.findings(context)}
     result = {'doc': document, 'hypotheses': hyps,
               'hash': digest({name: HC.sha256(raw) for name, raw in files.items()}) if active else
                       digest({name: raw.decode('utf-8') for name, raw in files.items()})}
@@ -280,10 +277,7 @@ def compare(snapshot):
         return {'state': 'attention', 'findings': [finding], 'changed': [],
                 'versions': snapshot.get('versions'), 'identity': snapshot.get('identity')}
     if core_mode:
-        try:
-            from .reasoning import operations as CoreOperations
-        except ImportError:
-            from reasoning import operations as CoreOperations
+        CoreOperations = P._peer('reasoning.operations')
         # provenance's peer loader owns the canonical module identity used by
         # the history assessment validator.
         CoreSnapshot = C.P._peer('reasoning.snapshot').Snapshot
