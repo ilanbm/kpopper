@@ -185,15 +185,36 @@ def _records(root, entry, sha=None, *, include_files=False):
             if any(hyp['error'] for hyp in data['hypotheses'].values()):
                 raise ValueError('unreadable target hypothesis')
         else:
-            doc = P.load([str(Path(directory) / entry)])
+            try:
+                doc = P.load([str(Path(directory) / entry)])
+            except P.Refused as error:
+                try:
+                    from .reasoning import operations as CoreOperations
+                except ImportError:
+                    from reasoning import operations as CoreOperations
+                if str(error) != CoreOperations.READER_REFUSAL:
+                    raise
+                doc = CoreOperations.load([str(Path(directory) / entry)])
             document, hyps = dict(doc), []
             for name, h in doc.hypotheses.items():
                 if h['error']:
                     raise ValueError('unreadable hypothesis ' + name + ': ' + h['error'])
                 hyps.append({'name': name, 'doc': h['doc'], 'head': h['head']})
+        core = None
+        reasoning = document.get('meta', {}).get('reasoning', {}) if isinstance(document, dict) else {}
+        if isinstance(reasoning, dict) and reasoning.get('profile') == 'core/v1':
+            from .reasoning import assessment as CoreAssessment
+            from .reasoning import operations as CoreOperations
+            operation_doc = CoreOperations.load([str(Path(directory) / entry)])
+            observed = CoreOperations.snapshot_for(operation_doc)
+            report = CoreAssessment.assess(observed)
+            core = {'snapshot': observed.to_json(), 'assessment': report,
+                    'findings': CoreOperations.findings(CoreOperations.world(operation_doc).context)}
     result = {'doc': document, 'hypotheses': hyps,
               'hash': digest({name: HC.sha256(raw) for name, raw in files.items()}) if active else
                       digest({name: raw.decode('utf-8') for name, raw in files.items()})}
+    if core is not None:
+        result['core'] = core
     if history is not None:
         result['history'] = history
     if include_files:
@@ -244,7 +265,20 @@ def compare(snapshot):
     old = _entries(snapshot['ancestor']['doc'])
     local = _entries(snapshot['working']['doc'])
     main = _entries(snapshot['main']['doc'])
-    base = _doc(snapshot['main']['doc'])
+    core_mode = all(snapshot.get(name, {}).get('core') for name in ('ancestor', 'working', 'main'))
+    if core_mode:
+        try:
+            from .reasoning import operations as CoreOperations
+        except ImportError:
+            from reasoning import operations as CoreOperations
+        # provenance's peer loader owns the canonical module identity used by
+        # the history assessment validator.
+        CoreSnapshot = C.P._peer('reasoning.snapshot').Snapshot
+        observed = CoreSnapshot.from_json(snapshot['main']['core']['snapshot'])
+        base = _doc(snapshot['main']['doc'])
+        CoreOperations.bind(base, observed)
+    else:
+        base = _doc(snapshot['main']['doc'])
     findings, delta, changed = [], {}, []
 
     def finding(kind, key, reason):
@@ -303,7 +337,7 @@ def compare(snapshot):
         # authored entries did not change. Never replay its inherited values.
         hyps.append(C.hypothesis(h['name'], body, h['head']))
     # Compare deletion failures to untouched main, not to the already-deleted base.
-    baseline = C._check_of(_doc(snapshot['main']['doc']))
+    baseline = C._check_of(base if core_mode else _doc(snapshot['main']['doc']))
     try:
         union = C.union_of(base, hyps, base_check=baseline)
     except (ValueError, SystemExit) as exc:
@@ -319,10 +353,22 @@ def compare(snapshot):
     for h, predicate in union.head_falsified:
         finding('falsified', h['name'], h['name'] + ': ' + predicate)
     if union.doc is not None:
-        prior_uncertain = uncertain(_doc(snapshot['main']['doc']))
-        for key, reasons in uncertain(union.doc).items():
+        if core_mode:
+            prior_uncertain = snapshot['main']['core']['findings'].get('uncertain', {})
+            current_uncertain = CoreOperations.findings(CoreOperations.world(union.doc).context).get('uncertain', {})
+        else:
+            prior_uncertain = uncertain(_doc(snapshot['main']['doc']))
+            current_uncertain = uncertain(union.doc)
+        for key, reasons in current_uncertain.items():
             if prior_uncertain.get(key) != reasons:
                 finding('uncheckable', key, key + ': ' + '; '.join(reasons))
+    if core_mode and snapshot['working']['core']['snapshot'] != snapshot['ancestor']['core']['snapshot']:
+        projected = snapshot['working']['core']['findings']
+        for kind, lines in (('falsified', projected.get('falsified', [])),
+                            ('uncheckable', projected.get('holes', [])),
+                            ('uncheckable', projected.get('moved', []))):
+            for line in lines:
+                finding(kind, line.split(':', 1)[0], line)
     unique = {digest(f): dict(f, fingerprint=digest(f)) for f in findings}
     return {'state': 'attention' if unique else 'clear', 'findings': list(unique.values()),
             'changed': changed, 'versions': snapshot['versions'], 'identity': snapshot['identity']}
