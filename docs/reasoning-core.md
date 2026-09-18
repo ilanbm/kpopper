@@ -70,7 +70,13 @@ options and preserve unknown/error independently from false. The core session ha
 project identity, Snapshot, findings and consumer-view version; follow-up reads reuse its retained
 source-free context and recapture only to reject staleness.
 
-`consolidate`, watch compatibility/uncertainty, followups, and `remeasure` remain explicit
+Followups read declared core and history-backed records through the same captured assessment.
+Conditions compare exact scalar readings; `changed` also observes their computational basis and
+history evidence. A judgment supplies its authored verdict, with acceptance, falsifier, support
+and integrity reported separately. An unavailable reading stays unknown for conditions that need
+it; a scheduled diagnostic can still become due. Scanning does not change the record or execute work.
+
+`consolidate`, watch compatibility/uncertainty, and `remeasure` remain explicit
 legacy-only operations with this experimental profile. A declared core record fails them closed with
 `unsupported_capability: use core/v1 consumer`; they never fall back to the legacy evaluator.
 Use the shared read consumers above for current findings. Activation remains blocked while these
