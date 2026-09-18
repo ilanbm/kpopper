@@ -4,9 +4,18 @@ F1 hoists the per-document half of `knowledge_views.overlay`'s nested `meaning()
 per-entry loops. The win is a call count; the obligation is that every meaning, and every
 document a meaning is computed for, is what the per-entry code produced.
 
-The oracle below (`old_meaning`) is a verbatim transcription of that nested function as it
-stood at e888570, before this lane touched it. It is deliberately NOT expressed in terms of
-the new helpers: a control computed from its subject cannot disagree with it.
+There are two oracles here, with different reach and different blind spots, and neither is
+expressed in terms of the new helpers - a control computed from its subject cannot disagree
+with it.
+
+`old_meaning` is the nested `meaning()` transcribed verbatim from e888570. It compares one
+meaning at a time, which is how `MeansWhatItMeant` can walk every (document, entry) pair the
+overlay visits - and why it is blind to a change in *which* pairs get visited at all.
+
+`pre_hoist_overlay()` is the whole pre-hoist `overlay`, loaded from a committed fixture of that
+same commit. It compares the outputs, so it sees the holder set and the shape of everything
+`overlay` writes, but it reaches a meaning only through `knowledge_conflicts` - which is why
+one of its fixtures is built so that the conflict exists for no other reason.
 """
 import copy
 import json
@@ -57,28 +66,42 @@ def old_meaning(document, name, history=None):
 
 BASE_COMMIT = 'e888570'
 
+# A reasoning profile the checkout does not declare: identical bodies, different meanings.
+CORE = {'version': 1, 'profile': 'core/v1', 'requires': ['arithmetic/v1']}
+
 # Every output EPIC decision 1 requires to be unchanged in content for every input.
 OVERLAY_OUTPUTS = ('read_mode', 'knowledge_conflicts', 'contributions', 'pending_ref',
                    'pending_snapshot', 'publication', 'knowledge_target', 'target_unavailable',
                    'private_drafts', 'history_contributions', 'hypotheses')
 
 
-def pre_hoist_overlay():
-    """`overlay` as it stood at BASE_COMMIT, loaded from git rather than transcribed.
+ORACLE = Path(__file__).resolve().parent / 'fixtures' / 'knowledge_views_pre_hoist.py.txt'
 
-    Reading it out of history rather than copying it into this file means the oracle cannot
-    drift toward its subject as the subject is edited: there is nothing here to edit.
+
+def git_show_pre_hoist():
+    """The pre-hoist module as git has it, or None where history is unavailable.
+
+    CI checks out shallow (`.github/workflows/check.yml`, the `check` job), so BASE_COMMIT is
+    not reachable there. That is why the oracle is a committed fixture and this is only the
+    drift check on it.
     """
-    root = Path(__file__).resolve().parents[1]
     shown = subprocess.run(['git', 'show', BASE_COMMIT + ':scripts/knowledge_views.py'],
-                           cwd=str(root), capture_output=True)
-    if shown.returncode != 0:
-        raise unittest.SkipTest('history for ' + BASE_COMMIT + ' is unavailable here')
+                           cwd=str(Path(__file__).resolve().parents[1]), capture_output=True)
+    return shown.stdout if shown.returncode == 0 else None
+
+
+def pre_hoist_overlay():
+    """`overlay` as it stood at BASE_COMMIT, from the committed fixture beside this file.
+
+    The fixture is the pre-hoist source verbatim, never edited by hand;
+    `test_the_fixture_is_what_git_has` is what keeps that true wherever history is reachable.
+    Loading it here rather than under `scripts/` keeps it out of the shipped package and out of
+    `sys.modules`, so nothing else in the suite can pick it up by accident.
+    """
     module = types.ModuleType('scripts.knowledge_views_pre_hoist')
     module.__package__ = 'scripts'
-    module.__file__ = str(root / 'scripts' / 'knowledge_views_pre_hoist.py')
-    exec(compile(shown.stdout, BASE_COMMIT + ':scripts/knowledge_views.py', 'exec'),
-         module.__dict__)
+    module.__file__ = str(ORACLE)
+    exec(compile(ORACLE.read_bytes(), str(ORACLE), 'exec'), module.__dict__)
     return module.overlay
 
 
@@ -300,14 +323,25 @@ class EveryOverlayOutputIsUnchanged(OverlayFixture):
             self.assertEqual(before[field], after[field], field + ' changed')
         return before
 
-    def test_the_oracle_is_really_the_old_code(self):
-        """Guard the control itself: a vendored overlay that had been hoisted would prove nothing."""
-        source = subprocess.run(['git', 'show', BASE_COMMIT + ':scripts/knowledge_views.py'],
-                                cwd=str(Path(__file__).resolve().parents[1]), capture_output=True)
-        self.assertEqual(source.returncode, 0)
-        text = source.stdout.decode()
-        self.assertIn('def meaning(document, name, history=None):', text)
-        self.assertNotIn('_meaning_context', text)
+    def test_the_oracle_is_not_the_code_under_test(self):
+        """Guard the control by what it *is*, not by re-reading the text it was built from.
+
+        An oracle that had quietly become `V.overlay` would compare the new overlay against
+        itself and pass everything, so these assert on the object the comparison actually uses.
+        """
+        old = pre_hoist_overlay()
+        self.assertIsNot(old, V.overlay)
+        self.assertIsNot(old.__globals__, V.overlay.__globals__)
+        self.assertNotIn('_meaning_context', old.__globals__)
+        self.assertEqual(old.__code__.co_filename, str(ORACLE))
+
+    def test_the_fixture_is_what_git_has(self):
+        """The fixture is the anti-drift claim; this is what checks it, where history allows."""
+        shown = git_show_pre_hoist()
+        if shown is None:
+            self.skipTest('history for ' + BASE_COMMIT + ' is unavailable (shallow checkout)')
+        self.assertEqual(ORACLE.read_bytes(), shown,
+                         'the oracle fixture no longer matches ' + BASE_COMMIT)
 
     def test_with_a_hypothesis_a_pending_bundle_and_a_target(self):
         self.hypothesis('alternate', {'known': {'api.limit': {'v': 9, 'from': 's.vendor'}}})
@@ -332,6 +366,20 @@ class EveryOverlayOutputIsUnchanged(OverlayFixture):
     def test_when_documents_carry_no_entries(self):
         self.hypothesis('empty', {'known': {}})
         self.assertSameOutputs(self.target({'meta': {'history': {'authority': 'fixture'}}}))
+
+    def test_when_the_conflict_exists_only_because_the_meanings_differ(self):
+        """Without this the class cannot see the half of overlay() this branch rewrote.
+
+        Every other fixture here conflicts on the entry *bodies*, and `knowledge_conflicts`
+        reaches a meaning only through `len(meanings[nid]) > 1`. A target declaring a reasoning
+        profile the checkout does not gives byte-identical bodies and different meanings, so
+        this row of the comparison is carried by `_meaning_context`/`_meaning_of` alone.
+        """
+        document = copy.deepcopy(self.document)
+        document['meta'] = {'reasoning': CORE}
+        outputs = self.assertSameOutputs(self.target(document))
+        self.assertIn('api.limit', outputs['knowledge_conflicts'],
+                      'the fixture stopped being meaning-driven; the comparison below is blind')
 
 
 class TheHistoryAuthoritySurvivesTheSplit(unittest.TestCase):
