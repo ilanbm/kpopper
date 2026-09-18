@@ -15,7 +15,11 @@ import yaml
 from scripts import followups as F, followup_core as C, followup_triggers as T
 from scripts.reasoning.context import CapturedAssessment
 from scripts.reasoning.snapshot import Snapshot
-from tests.test_reasoning_history_assessment import claim, captured, UnavailableRuntime
+
+
+class UnavailableRuntime:
+    def request_many(self, requests):
+        raise OSError('deliberately unavailable')
 
 
 def document():
@@ -80,6 +84,7 @@ class CoreFollowups(unittest.TestCase):
             self.assertEqual(C.project(context), C.project(replay))
 
     def test_accepted_fired_condition_remains_accepted(self):
+        from tests.test_reasoning_history_assessment import claim, captured
         head = claim('d.ok', {'verdict': 'Ready', 'rests_on': [],
                              'wrong_if': {'bool': True}}, kind='judgment')
         context = CapturedAssessment.from_snapshot(captured(head).snapshot())
@@ -134,6 +139,7 @@ class CoreFollowups(unittest.TestCase):
         self.assertEqual(T._condition_scalar(raw), raw)
 
     def test_incomplete_history_and_unaccepted_claims_have_no_reading(self):
+        from tests.test_reasoning_history_assessment import claim, captured
         head = claim('m.x', {'v': 3})
         for projection in (captured(head, complete=False),
                            captured(head, acceptance={'m.x': 'proposed'})):
@@ -166,8 +172,8 @@ class CoreFollowups(unittest.TestCase):
                 reopened = F.Store(work)
                 row = reopened.scan()['items'][0]
                 self.assertEqual(row['state'], 'ready')
-                cli = subprocess.run([sys.executable, str(Path(__file__).resolve().parents[1]
-                                                          / 'scripts/cli.py'),
+                cli = subprocess.run([sys.executable, str(Path(F.__file__).resolve().parent
+                                                          / 'cli.py'),
                                       '--workspace', str(work), 'followups', 'scan', '--json'],
                                      capture_output=True, text=True)
                 self.assertEqual(cli.returncode, 0, cli.stderr + cli.stdout)
