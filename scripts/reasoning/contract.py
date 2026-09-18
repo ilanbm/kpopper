@@ -16,9 +16,22 @@ MODULES = MappingProxyType({
         'discovery': 'transitive-node-closure/v1',
         'executor': 'KP2',
     }),
+    'composition/v1': MappingProxyType({
+        'operators': ('and', 'or', 'not'),
+        'inputs': ('number', 'boolean', 'text', 'null', 'list', 'record'),
+        'discovery': 'transitive-node-closure/v1', 'executor': 'KP3',
+    }),
+    'query/v1': MappingProxyType({
+        'operators': ('filter', 'project', 'select', 'count', 'sum', 'all', 'any'),
+        'inputs': ('number', 'boolean', 'text', 'null', 'list', 'record'),
+        'discovery': 'finite-scope/v1', 'executor': 'KP4',
+    }),
 })
+COMPOSITION_LIMITS = MappingProxyType({'value_nodes': 10000, 'value_depth': 128, 'value_bytes': 16777216})
+QUERY_LIMITS = MappingProxyType({'candidates': 10000, 'field_reads': 100000})
 DEFAULT_LIMITS = MappingProxyType({'steps': 1000000, 'depth': 128, 'digits': 256})
 MAX_LIMITS = MappingProxyType({'steps': 10000000, 'depth': 4096, 'digits': 4096})
+MAX_QUERY_LIMITS = MappingProxyType({'candidates': 10000, 'field_reads': 100000})
 MAX_NODES = 20000
 MAX_EDGES = 100000
 MAX_COLLECTION = 10000
@@ -167,7 +180,7 @@ def capabilities(document, *, profile=None):
                 or any(not isinstance(item, str) for item in value['requires']) \
                 or value['requires'] != sorted(set(value['requires'])):
             raise CapabilityError('invalid_capability', 'invalid meta.reasoning capability declaration')
-        if value['version'] != 1 or value['profile'] != PROFILE:
+        if value['version'] not in (1, 2) or value['profile'] != PROFILE:
             raise CapabilityError('unsupported_capability', 'unsupported reasoning profile or metadata version')
         unknown = set(value['requires']) - set(MODULES)
         if unknown:
@@ -175,6 +188,33 @@ def capabilities(document, *, profile=None):
         if 'arithmetic/v1' not in value['requires']:
             raise CapabilityError('invalid_capability', 'core/v1 requires arithmetic/v1')
         result = {**value, 'requires': list(value['requires'])}
+    # Typed review envelopes require their declared record format. Inspect only
+    # the actual mapped historical field, never arbitrary user mappings.
+    # Ordinary declarations must not become a second legacy-schema validator.
+    # Infer the historical role only when a versioned envelope could be present.
+    possible_history = any(
+        isinstance(old, dict) and isinstance(old.get('computed'), dict)
+        and old['computed'].get('version') == 2
+        for collection, members in document.items()
+        if collection not in ('meta', 'schema', 'record', 'also') and isinstance(members, dict)
+        for body in members.values() if isinstance(body, dict)
+        for seen in body.values() if isinstance(seen, dict)
+        for old in seen.values())
+    if result['version'] != 2 and possible_history:
+        from .snapshot import _fields
+        history_field = _fields(document)['snapshot']
+        for collection, members in document.items():
+            if collection in ('meta', 'schema', 'record', 'also') or not isinstance(members, dict):
+                continue
+            for body in members.values():
+                seen = body.get(history_field) if isinstance(body, dict) else None
+                if not isinstance(seen, dict):
+                    continue
+                for old in seen.values():
+                    computed = old.get('computed') if isinstance(old, dict) else None
+                    if isinstance(computed, dict) and computed.get('version') == 2:
+                        raise CapabilityError('invalid_capability',
+                                              'typed core history requires record metadata version 2')
     if profile is not None:
         if profile not in (*LEGACY_PROFILES, PROFILE):
             raise CapabilityError('unsupported_capability', 'unsupported requested profile')
@@ -197,6 +237,20 @@ def resource_limits(limits=None):
         if type(value) is not int or value <= 0 or value > MAX_LIMITS[key]:
             raise ValueError('invalid resource limit: ' + key)
         result[key] = value
+    return result
+
+
+def query_resource_limits(limits=None):
+    """Resources/v4 keeps v3 limits and adds complete finite-scope charging."""
+    result = {**resource_limits(), **COMPOSITION_LIMITS, **QUERY_LIMITS}
+    if limits is not None:
+        if not isinstance(limits, dict) or set(limits) - set(result):
+            raise ValueError('unknown query resource limits')
+        for key, value in limits.items():
+            maximum = MAX_LIMITS.get(key, COMPOSITION_LIMITS.get(key, MAX_QUERY_LIMITS.get(key)))
+            if type(value) is not int or value <= 0 or maximum is None or value > maximum:
+                raise ValueError('invalid query resource limit: ' + key)
+            result[key] = value
     return result
 
 
@@ -254,3 +308,12 @@ def node_basis(snapshot_data, node_id):
     """Generate one complete basis; repeated reads should share InputBasis."""
     from .basis import InputBasis
     return InputBasis(snapshot_data).basis(node_id)
+
+
+def admitted(result, *, blocked=False):
+    """Admission is stricter than a dominated boolean computational result."""
+    diagnostics = result.get('diagnostics', [])
+    if result['status'] == 'ok' and not diagnostics:
+        return True
+    return bool(blocked and result['status'] in ('ok', 'unknown') and diagnostics and all(
+        item['code'] in ('missing_reference', 'missing_field') for item in diagnostics))

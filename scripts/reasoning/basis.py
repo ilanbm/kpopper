@@ -16,12 +16,12 @@ class InputBasis:
     def __init__(self, snapshot_data):
         # Local imports keep contract.node_basis free to delegate to this index.
         from .contract import PROFILE, MAX_NODES, MAX_EDGES, capabilities, digest
-        from .language import node_expression, references
+        from .language import node_expression, references, required_modules
 
         self._digest = digest
         cap = capabilities(snapshot_data['document'], profile=PROFILE)
         self._identity = {'version': 1, 'recipe': RECIPE, 'profile': PROFILE,
-                          'modules': list(cap['requires']),
+                          'modules': ['arithmetic/v1'],
                           'as_of': copy.deepcopy(snapshot_data.get('as_of'))}
         nodes = snapshot_data['nodes']
         if len(nodes) > MAX_NODES:
@@ -31,6 +31,7 @@ class InputBasis:
         conflicts = snapshot_data.get('context', {}).get('conflicts', {})
         if not isinstance(conflicts, dict) or any(not isinstance(nid, str) for nid in conflicts):
             raise ValueError('invalid conflicts')
+        self._modules = {}
         self._atoms = {}
         self._edges = {}
         self._fingerprints = {}
@@ -39,6 +40,17 @@ class InputBasis:
 
         def normalize(node):
             try:
+                body = node.get('body')
+                rule = body.get('rule') if isinstance(body, dict) else None
+                if isinstance(rule, dict) and set(rule) == {'query'}:
+                    from . import query
+                    scope_id = rule['query'].get('scope') if isinstance(rule['query'], dict) else None
+                    scope_body = nodes.get(scope_id, {}).get('body')
+                    definition = scope_body.get('collection_scope') \
+                        if isinstance(scope_body, dict) else None
+                    fields = definition.get('fields') if isinstance(definition, dict) else None
+                    expression = query.lower(rule, fields)
+                    return {'status': 'present', 'expression': copy.deepcopy(expression)}, set(), set()
                 expression = node_expression(node)
                 unavailable = expression.get('unavailable')
                 problems = {unavailable} if unavailable else set()
@@ -55,8 +67,15 @@ class InputBasis:
                 return {'status': 'invalid', 'input': raw}, set(), {'invalid_expression'}
 
         for nid in sorted(set(nodes) | set(conflicts)):
+            local_modules = {'arithmetic/v1'}
             if nid in nodes:
                 atom, refs, problems = normalize(nodes[nid])
+                expression = atom.get('expression', {})
+                if isinstance(expression, dict) and set(expression) == {'query'}:
+                    from . import query
+                    local_modules = set(query.required_modules(expression))
+                else:
+                    local_modules.update(required_modules(expression))
             else:
                 atom, refs, problems = {'status': 'missing'}, set(), {'missing_reference'}
             if nid in conflicts:
@@ -70,12 +89,14 @@ class InputBasis:
                     holder, body = variant
                     other, other_refs, other_problems = normalize({
                         'body': body, 'fields': nodes.get(nid, {}).get('fields', {})})
+                    local_modules.update(required_modules(other.get('expression', {})))
                     refs.update(other_refs)
                     problems.update(other_problems)
                     variants.append({'holder': holder, 'input': other})
                 atom = {'status': 'contested', 'base': atom,
                         'variants': sorted(variants, key=digest)}
                 problems.add('contested')
+            self._modules[nid] = local_modules
             self._atoms[nid] = atom
             self._edges[nid] = tuple(sorted(refs))
             self._problems[nid] = frozenset(problems)
@@ -86,7 +107,9 @@ class InputBasis:
         # Missing targets remain explicit nodes in the identity graph.
         missing = {target for targets in self._edges.values() for target in targets} - set(self._edges)
         for nid in sorted(missing):
+            self._modules[nid] = {'arithmetic/v1'}
             self._atoms[nid] = {'status': 'missing'}
+            self._modules[nid] = frozenset({'arithmetic/v1'})
             self._edges[nid] = ()
             self._problems[nid] = frozenset({'missing_reference'})
         self._index_components()
@@ -144,29 +167,33 @@ class InputBasis:
             number = ready.popleft()
             members = components[number]
             cyclic = len(members) > 1 or members[0] in self._edges[members[0]]
-            problems = set()
+            problems, modules = set(), set()
             for nid in members:
+                modules.update(self._modules[nid])
                 problems.update(self._problems[nid])
                 for target in self._edges[nid]:
                     if owner[target] != number:
+                        modules.update(self._modules[target])
                         problems.update(self._problems[target])
+            identity = {**self._identity, 'modules': sorted(modules)}
             if cyclic:
                 problems.add('cyclic_reference')
-                component_hash = self._digest({**self._identity, 'kind': 'cycle',
+                component_hash = self._digest({**identity, 'kind': 'cycle',
                     'members': [{'id': nid, 'input': self._atoms[nid],
                                  'references': list(self._edges[nid])} for nid in members],
                     'external_dependencies': [
                         {'from': nid, 'id': target, 'fingerprint': self._fingerprints[target]}
                         for nid in members for target in self._edges[nid] if owner[target] != number]})
                 for nid in members:
-                    self._fingerprints[nid] = self._digest({**self._identity,
+                    self._fingerprints[nid] = self._digest({**identity,
                         'kind': 'cycle-member', 'id': nid, 'component': component_hash})
             else:
                 nid = members[0]
-                self._fingerprints[nid] = self._digest({**self._identity, 'kind': 'node',
+                self._fingerprints[nid] = self._digest({**identity, 'kind': 'node',
                     'id': nid, 'input': self._atoms[nid],
                     'dependencies': [self._witness(target) for target in self._edges[nid]]})
             for nid in members:
+                self._modules[nid] = frozenset(modules)
                 self._problems[nid] = frozenset(problems)
             for dependant in dependants[number]:
                 remaining[dependant] -= 1
@@ -181,6 +208,7 @@ class InputBasis:
         if not isinstance(nid, str):
             raise ValueError('node ID must be a string')
         if nid not in self._fingerprints:
+            self._modules[nid] = frozenset({'arithmetic/v1'})
             self._edges[nid] = ()
             self._problems[nid] = frozenset({'missing_reference'})
             self._fingerprints[nid] = self._digest({**self._identity, 'kind': 'node',
@@ -192,6 +220,13 @@ class InputBasis:
     def fingerprint(self, nid):
         self._ensure_node(nid)
         return self._fingerprints[nid]
+
+    def modules(self, root_ids):
+        required = {'arithmetic/v1'}
+        for nid in root_ids:
+            self._ensure_node(nid)
+            required.update(self._modules[nid])
+        return sorted(required)
 
     def dependencies(self, root_ids):
         """Sorted complete closure with transitive fingerprints, including roots."""
@@ -210,7 +245,8 @@ class InputBasis:
     def basis(self, nid):
         self._ensure_node(nid)
         dependencies = self.dependencies([nid])
-        envelope = {**copy.deepcopy(self._identity), 'dependencies': dependencies}
+        envelope = {**copy.deepcopy(self._identity), 'modules': sorted(self._modules[nid]),
+                    'dependencies': dependencies}
         envelope['digest'] = self._digest(envelope)
         return {'status': 'unavailable' if self._problems[nid] else 'available',
                 'diagnostics': sorted(self._problems[nid]),

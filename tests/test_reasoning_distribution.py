@@ -21,6 +21,30 @@ spec.loader.exec_module(builder)
 
 
 class ArchiveContractTests(unittest.TestCase):
+    def test_data_only_bootstrap_preserves_module_initialization(self):
+        generated = ('void lean_initialize();\n'
+                     'int main(int argc, char ** argv) {\n'
+                     '  lean_initialize();\n'
+                     '  res = initialize_Main(1 /* builtin */);\n'
+                     '  lean_io_mark_end_initialization();\n}\n')
+        imports = {'Lean.Data.Json.Parser'}
+        parser_init = 'lean_object* initialize_Lean_Data_Json_Parser(uint8_t builtin);\n'
+        self.assertEqual(builder.data_only_imports(parser_init), imports)
+        with self.assertRaisesRegex(ValueError, 'runtime import'):
+            builder.data_only_imports(parser_init + 'lean_object* initialize_Lean_Meta(uint8_t builtin);\n')
+        actual = builder.data_only_main(generated, imports)
+        self.assertNotIn('lean_initialize();', actual)
+        self.assertIn('  lean_initialize_runtime_module();', actual)
+        self.assertIn('  res = initialize_Main(1 /* builtin */);', actual)
+        for unsupported in ({'Lean'}, {'Lean.Meta'}, {'Lean.Data.Json.Printer'}):
+            with self.subTest(imports=unsupported), self.assertRaisesRegex(ValueError, 'runtime import'):
+                builder.data_only_main(generated, unsupported)
+        for changed in (generated.replace('  lean_initialize();', ''),
+                        generated + '  lean_initialize();\n',
+                        generated.replace('initialize_Main(1 /* builtin */)', 'initialize_Main(0)')):
+            with self.assertRaisesRegex(ValueError, 'bootstrap'):
+                builder.data_only_main(changed, imports)
+
     def test_both_pinned_linux_gmp_flags_select_replaceable_library(self):
         flags = ['--sysroot', '/lean', '-Wl,-Bstatic', '-lgmp', '-lunwind',
                  '-Wl,-Bdynamic', '-lleanrt', '-lgmp', '-luv']
@@ -54,7 +78,8 @@ class ArchiveContractTests(unittest.TestCase):
 
     def test_named_proof_audit_rejects_admissions_and_missing_targets(self):
         names = ['Kpopper.evaluate', 'Kpopper.arithmetic', 'Kpopper.Proof.binary_sound',
-                 'Kpopper.Proof.evaluate_closedRat_sound', 'Kpopper.Proof.evaluate_literal_success']
+                 'Kpopper.Proof.evaluate_closedRat_sound', 'Kpopper.Proof.evaluate_literal_success',
+                 'Kpopper.Query.prepare', 'Kpopper.Query.execute', 'Kpopper.Query.responseFor']
         clean = '\n'.join("'" + name + "' depends on axioms: [propext, Classical.choice, Quot.sound]" for name in names)
         self.assertEqual(builder.validate_axiom_audit(clean), sorted(names))
         for invalid in (clean.replace('propext', 'sorryAx'), clean.replace('propext', 'custom_unproved_axiom'),
@@ -142,6 +167,8 @@ class ArchiveContractTests(unittest.TestCase):
                 self.assertEqual(tf.extractfile("gmp-6.3.0.tar.xz").read(), upstream.read_bytes())
                 self.assertEqual(tf.extractfile("build_runtime.py").read(), Path(builder.__file__).read_bytes())
                 self.assertIn("reasoning-runtime.yml", tf.getnames())
+                self.assertEqual(tf.extractfile("reasoning-target.yml").read(),
+                                 (ROOT / '.github/workflows/reasoning-target.yml').read_bytes())
                 self.assertIn("COPYING.LESSERv3", tf.getnames())
                 self.assertIn("COPYINGv3", tf.getnames())
                 self.assertIn(b"build_gmp", tf.extractfile("SOURCE-BUILD.md").read())
@@ -209,9 +236,10 @@ class CommittedBundleTests(unittest.TestCase):
             shutil.copytree(ROOT / "scripts/reasoning/third_party", payload / "licenses")
             shutil.copyfile(payload / "licenses/THIRD_PARTY_NOTICES.txt", payload / "THIRD_PARTY_NOTICES.txt")
             builder.archive_payload(payload, self.native / (target + ".zip"), {
-                "version": 1, "protocol": "KP2", "target": target, "min_os": "test fixture",
+                "version": 3, "protocols": ["KP2", "KP3", "KP4"], "target": target, "min_os": "test fixture",
                 "lean_version": builder.LEAN_VERSION, "source_sha256": builder.source_hash(self.source),
-                "files": {}, "executable": "evaluator", "libraries": ["libgmp"], "modules": ["arithmetic/v1"]})
+                "files": {}, "executable": "evaluator", "libraries": ["libgmp"],
+                "modules": ["arithmetic/v1", "composition/v1", "query/v1"]})
         builder.source_bundle(self.upstream, self.native / "gmp-source-and-build.tar.gz")
 
     def check(self):
@@ -261,6 +289,21 @@ class CommittedBundleTests(unittest.TestCase):
         self.rewrite_zip(lambda members: [(entry, b"{broken" if entry.filename == "manifest.json" else data)
                                          for entry, data in members])
         with self.assertRaisesRegex(ValueError, "invalid runtime archive"):
+            self.check()
+
+    def test_scalar_only_manifest_cannot_claim_the_composition_build(self):
+        def downgrade(members):
+            changed = []
+            for entry, data in members:
+                if entry.filename == "manifest.json":
+                    manifest = json.loads(data)
+                    manifest["protocols"] = ["KP2"]
+                    manifest["modules"] = ["arithmetic/v1"]
+                    data = json.dumps(manifest).encode()
+                changed.append((entry, data))
+            return changed
+        self.rewrite_zip(downgrade)
+        with self.assertRaisesRegex(ValueError, "malformed runtime manifest"):
             self.check()
 
     def test_mismatched_payload_refuses(self):
@@ -316,9 +359,11 @@ else:
 def make_runtime():
     return Runtime(os.environ.get("KPOPPER_TEST_ARCHIVE"))
 runtime = make_runtime()
+assert runtime.implementation["protocol"] == "KP2", runtime.implementation
 result = runtime.request({"nodes": {}, "declared": [], "expression": {"op": "div", "args": [{"num": "1"}, {"num": "3"}]}})
 assert result["status"] == "ok", result
 assert result["value"] == {"type": "number", "numerator": "1", "denominator": "3"}, result
+assert runtime.implementation_for({"protocol": "KP3", "nodes": {}, "declared": [], "limits": {}, "expression": {"list": []}})["protocol"] == "KP3"
 print(json.dumps({"result": result, "implementation": runtime.implementation}, sort_keys=True))
 corpus = json.loads(pathlib.Path(os.environ["KPOPPER_TEST_CORPUS"]).read_text(encoding="utf-8"))
 responses = runtime.request_many([case["request"] for case in corpus["cases"]])

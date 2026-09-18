@@ -80,6 +80,14 @@ class Integration(unittest.TestCase):
         self.assertIsNone(self.store.load()["items"]["read"]["claim"])
         self.assertEqual(H.handle({**payload, "agent_id": "child"}), "")
 
+    def test_named_main_agent_gets_followup_and_child_does_not_consume_it(self):
+        self.store.add(self.spec)
+        payload = {"session_id": "named-main", "cwd": str(self.work), "agent_type": "planner"}
+        self.assertEqual(H.handle({**payload, "agent_id": "child"}), "")
+        self.assertIn("KPOPPER_FOLLOWUPS", H.handle(payload))
+        self.assertEqual(H.handle(payload), "")
+        self.assertIsNone(self.store.load()["items"]["read"]["claim"])
+
     def test_opening_counts_only_and_event_context_bounded(self):
         self.store.add({**self.spec, "title": "private title " * 400, "scope": "scope " * 1000})
         opening = F.summary(self.store.location, counts_only=True)

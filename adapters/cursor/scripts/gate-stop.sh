@@ -1,11 +1,8 @@
 #!/bin/sh
-# cursor's stop translated to the plugin's own protocol. mirrors scripts/session_gate.sh
-# exactly, except: keyed by conversation_id (cursor sends no session_id), and cursor's
-# stop hook has no block/deny field to return - the only lever is "followup_message",
-# which cursor resubmits as the next turn. loop_count is cursor's analogue of
-# stop_hook_active: 0 on the first stop, incremented each time a hook's followup_message
-# triggers another turn - so a bounce is only offered once per conversation, same as the
-# plugin's own gate yields after one bounce rather than imprisoning the session.
+# cursor's native stop response requests a follow-up rather than blocking completion.
+# This adapter compares FAIL counts against the conversation's opening baseline;
+# it does not implement the shared gate's other checks. loop_count records earlier
+# automatic follow-ups, so offer one only while it is zero, then yield.
 # no `set -e`, to match session_open.sh/session_gate.sh: `check` returning 1 because it
 # found problems is the normal case this script exists to handle, not a crash to abort on.
 

@@ -65,7 +65,7 @@ on — a `prior.*` claim whose value is the confidence; see *An agent's prior as
   date.rate_lock:
     name: Rate lock expiry in the pre-approval
     v: 2026-09-18
-    src: ...
+    from: ...
 ```
 
 `name` (or `title`/`label`/`what`) is the only field this method asks for by name rather

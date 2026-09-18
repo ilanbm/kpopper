@@ -259,7 +259,8 @@ def start(payload, path):
 
 
 def handle(payload, host, mode):
-    if not isinstance(payload, dict) or payload.get("agent_id") or payload.get("agent_type"):
+    # agent_type also names a main session started with --agent.
+    if not isinstance(payload, dict) or payload.get("agent_id"):
         return ""
     path = state_path(payload.get("session_id"))
     if path is None:

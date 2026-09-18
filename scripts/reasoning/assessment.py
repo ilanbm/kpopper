@@ -3,9 +3,11 @@ import copy
 
 from .. import assessment as legacy_assessment
 from .. import expressions as E
-from .contract import PROFILE, digest, operational_bounds, OperationalLimit, OutputBudget
+from .contract import (PROFILE, CapabilityError, capabilities, digest, operational_bounds,
+                       OperationalLimit, OutputBudget, validate_value)
 from .evaluate import Evaluator, compare_basis
-from .language import literal, lower
+from .language import lower
+from .snapshot import SnapshotError
 
 
 def _historical_value(value):
@@ -19,6 +21,96 @@ def _historical_value(value):
     if isinstance(value, str):
         return {'type': 'text', 'value': value}
     return None
+
+
+def _history(old, document):
+    """Decode only explicitly versioned typed values; preserve legacy mappings."""
+    historical = old.get('computed') if isinstance(old, dict) else None
+    if not isinstance(historical, dict):
+        if isinstance(old, dict) and 'computed' in old:
+            return None, None, 'invalid_history'
+        return _historical_value(old), None, None
+    if 'version' not in historical:
+        if 'value' not in historical:
+            return None, historical, 'invalid_history'
+        return _historical_value(historical['value']), historical, None
+    if type(historical['version']) is not int or historical['version'] != 2:
+        return None, historical, 'unsupported_history'
+    declaration = document.get('meta', {})
+    declaration = declaration.get('reasoning', {}) if isinstance(declaration, dict) else {}
+    if not isinstance(declaration, dict) or declaration.get('version') != 2 \
+            or declaration.get('profile') != PROFILE:
+        return None, historical, 'invalid_capability'
+    try:
+        if set(historical) - {'version', 'value', 'basis', 'rule'} \
+                or not {'version', 'value', 'basis'} <= set(historical):
+            raise ValueError('invalid history envelope')
+        value = validate_value(historical['value'])
+        if compare_basis(historical['basis'], historical['basis']) != 'same':
+            raise ValueError('invalid historical basis')
+    except (ValueError, TypeError, RecursionError):
+        return None, historical, 'invalid_history'
+    return value, historical, None
+
+
+def _is_scope(data, dependency):
+    body = data['nodes'].get(dependency, {}).get('body')
+    return isinstance(body, dict) and 'collection_scope' in body
+
+
+def dependency_result(snapshot, dependency, evaluator=None):
+    """Return the shared scalar-or-scope review result over this exact snapshot.
+
+    Scopes are captured input summaries, never arithmetic references. The scope
+    witness lives in potential_dependencies and in the complete basis; no native
+    executed node read or proof claim is manufactured for this Python capture.
+    """
+    engine = evaluator if evaluator is not None else Evaluator(snapshot)
+    if engine.snapshot.snapshot_id != snapshot.snapshot_id:
+        raise ValueError('dependency evaluator belongs to a different snapshot')
+    if not _is_scope(engine.data, dependency):
+        return engine.evaluate({'ref': dependency}, declared=[dependency])
+    result = {'schema_version': 1, 'profile': PROFILE, 'modules': [],
+              'snapshot_id': snapshot.snapshot_id, 'computation_id': None,
+              'implementation': None, 'resource_profile': {'version': 'resources/v2', **engine.limits},
+              'operational_limits': dict(engine.operational_limits),
+              'status': 'unknown', 'value': None, 'diagnostics': [], 'executed_reads': [],
+              'potential_dependencies': [], 'potential_ids': [dependency], 'basis': None,
+              'assurance': {'kind': 'computed', 'formal_scope': []},
+              'cost': {'steps': 0, 'preflight_steps': 0, 'node_evaluations': {}}}
+    try:
+        cap = capabilities(engine.data['document'], profile=PROFILE)
+        result['modules'] = cap['requires']
+        if cap.get('experimental_override'):
+            result['interpretation'] = {'declared_profile': cap['declared_profile'], 'explicit_override': PROFILE}
+        capture = snapshot.capture_scope(dependency)
+        result['modules'] = list(capture.basis['modules'])
+        result.update(status='ok', value=capture.value, basis=capture.basis,
+                      potential_dependencies=[capture.witness],
+                      potential_ids=sorted({dependency, *capture.candidates}))
+        result['computation_id'] = digest({'snapshot_id': snapshot.snapshot_id,
+                                          'scope_basis': result['basis'],
+                                          'resources': result['resource_profile']})
+    except (SnapshotError, CapabilityError) as error:
+        result.update(status='limit' if error.code == 'limit' else
+                      'unsupported_capability' if error.code == 'unsupported_capability' else 'error',
+                      diagnostics=[{'code': error.code, 'related_ids': [dependency]}])
+    OutputBudget(engine.operational_limits['output_bytes']).add(result)
+    return result
+
+
+def _rule_changed(old, current):
+    if old is None or current is None:
+        return old != current
+    old_query = isinstance(old, dict) and set(old) == {'query'}
+    current_query = isinstance(current, dict) and set(current) == {'query'}
+    if old_query or current_query:
+        return digest(old) != digest(current) if old_query and current_query else True
+    try:
+        return lower(old) != lower(current)
+    except (ValueError, TypeError, RecursionError, SyntaxError):
+        # An unsupported historical rule is not evidence of semantic equality.
+        return None
 
 
 def _scope_projection(data, visible, budget):
@@ -89,7 +181,12 @@ def assess(snapshot, selection=None, *, policy='focused-review/v1', runtime=None
             task(('predicate', nid), (body[fields['predicate']], deps if isinstance(deps, list) else []))
         if not isinstance(body, dict) or fields['deps'] not in body or 'rule' in body:
             task(('value', nid), ({'ref': nid}, [nid]))
-    computed = dict(zip(tasks, engine.evaluate_many(list(tasks.values()))))
+    scalar_tasks = {key: value for key, value in tasks.items()
+                    if key[0] != 'value' or not _is_scope(data, key[1])}
+    computed = dict(zip(scalar_tasks, engine.evaluate_many(list(scalar_tasks.values()))))
+    for key in tasks:
+        if key not in computed:
+            computed[key] = dependency_result(snapshot, key[1], engine)
     visible = set(selected)
     for result in computed.values():
         visible.update(result['potential_ids'])
@@ -112,21 +209,23 @@ def assess(snapshot, selection=None, *, policy='focused-review/v1', runtime=None
         for dep in dict.fromkeys(deps if valid_deps else []):
             now = computed[('value', dep)]
             old = seen.get(dep)
-            historical = old.get('computed') if isinstance(old, dict) else None
-            historical = historical if isinstance(historical, dict) else None
-            old_value = historical.get('value') if historical else old
-            old_typed = _historical_value(old_value) if dep in seen else None
+            old_typed, historical, history_error = _history(old, data['document']) \
+                if dep in seen else (None, None, None)
             same = now['status'] == 'ok' and old_typed is not None
             comparison = ('same' if old_typed == now['value'] else 'changed') if same else 'unknown'
             rule = data['nodes'].get(dep, {}).get('body', {})
             rule = rule.get('rule') if isinstance(rule, dict) else None
             rule_changed = None
-            if historical is not None and 'rule' in historical:
-                rule_changed = not E.same(historical['rule'], rule)
-            basis_comparison = compare_basis(now['basis'], historical.get('basis') if historical else None)
+            if historical is not None and 'rule' in historical and not history_error:
+                rule_changed = _rule_changed(historical['rule'], rule)
+            basis_comparison = 'unavailable' if history_error else \
+                compare_basis(now['basis'], historical.get('basis') if historical else None)
+            if history_error:
+                issues.append({'code': history_error, 'field': fields['snapshot'], 'related_ids': [dep]})
             readings[dep] = {
                 'current': {'status': now['status'], 'value': now['value']},
-                'at_review': {'status': 'recorded' if dep in seen else 'missing', 'value': copy.deepcopy(old)},
+                'at_review': {'status': 'unavailable' if history_error else
+                              'recorded' if dep in seen else 'missing', 'value': copy.deepcopy(old)},
                 'comparison': comparison, 'rule_changed': rule_changed,
                 'basis_comparison': basis_comparison, 'computation': now,
             }
@@ -163,6 +262,12 @@ def assess(snapshot, selection=None, *, policy='focused-review/v1', runtime=None
                                 'witnesses': copy.deepcopy(conflicts.get(nid, [])), 'alternatives': alternatives},
                  'integrity': {'status': 'assessed', 'checks': ['core/v1'], 'issues': issues}}
         attention = legacy_assessment.attention(state, policy)
+        # Legacy gap attention can copy an integrity issue's field location.
+        # Core attention has a closed reason shape; retain locations in the
+        # integrity finding and project only the declared reason fields here.
+        attention = [{'action': action['action'], 'reasons': [
+            {key: reason[key] for key in ('code', 'related_ids')} for reason in action['reasons']]}
+            for action in attention]
         changed_basis = [dep for dep, finding in readings.items() if finding['basis_comparison'] == 'changed']
         if changed_basis and policy == 'focused-review/v1':
             attention.append({'action': 'review', 'reasons': [

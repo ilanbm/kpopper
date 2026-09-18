@@ -6,8 +6,9 @@ import json
 from pathlib import Path
 from .core import Core
 from .model import MapTree, BudgetTooSmall
-from .reader import CheckedSessionService, pointer_value
+from .reader import CheckedSessionService, CoreSessionReader, pointer_value
 from .store import RULES, TextEncoder, encode, digest
+from ..pending_grounding import _encode as typed_encode
 
 META_REFS = {'orientation', 'assessment', 'pending', 'native'}
 
@@ -262,6 +263,39 @@ class View:
         return chosen
 
 
+class CoreView(View):
+    """Navigation over already-computed core findings."""
+    def render_open(self, packet, events_expanded):
+        identity = self.data['core_session']
+        counts = packet['counts']
+        purpose = packet['orientation'].get('text', self.data.get('scope', ''))
+        lines = [RULES, '',
+                 'project=' + self.project + ' revision=' + self.revision,
+                 'assessment_profile=core/v1 snapshot_id=' + identity['snapshot_id']
+                 + ' findings_revision=' + identity['findings_revision']
+                 + ' consumer_view=' + identity['consumer_view_version'],
+                 'purpose=' + encode(purpose) + ' @orientation',
+                 'record: ' + str(counts['nodes']) + ' ids; '
+                 + str(counts['findings']) + ' captured findings; errors='
+                 + str(counts['errors']) + '; unknown=' + str(counts['unknown']),
+                 'history_subjects=' + str(len(self.data['core_history_subjects']))
+                 + '; pending=' + str(self.pending) + '; stale_pending=' + str(self.stale),
+                 'Findings are retained from one immutable capture. Follow-up reads only '
+                 'recapture inputs to reject a stale handle.',
+                 'MAP / — declared navigation; names do not establish claims:']
+        lines.extend(self.map_lines(packet['cells']))
+        if packet.get('link_map'):
+            lines.append('LINK MAP — folded endpoints; exact links at links:/')
+            lines.extend(row['from'] + ' ' + row['rel'] + ' ' + row['to']
+                         + ' [' + str(len(row['edge_indices'])) + ']'
+                         for row in packet['link_map'])
+        lines.append('Read node:ID for body plus projected status, finding:ID for the '
+                     'canonical v3 finding, history or history:ID for captured history, '
+                     'or /topic. '
+                     'Pass this revision.')
+        return '\n'.join(lines) + '\n'
+
+
 class GroundingService(CheckedSessionService):
     def __init__(self,*args,profile=None,**kwargs):
         super().__init__(*args,**kwargs)
@@ -340,3 +374,189 @@ class GroundingService(CheckedSessionService):
                     raise ValueError(str(error)+'; read / with this revision to list valid handles') from error
                 raise
         return pointer_value(value,pointer) if separator and pointer else value
+
+
+def _core_graph_data(context, revision, project_identity, navigation_profile=None):
+    snapshot = context.snapshot.to_data()
+    assessment = context.assessment
+    projection = context.view
+    projected_nodes = projection['nodes']
+    if set(projected_nodes) != set(snapshot['nodes']):
+        raise ValueError('core session requires complete captured node findings')
+    nodes = {}
+    topics = {}
+    for identifier, captured in sorted(snapshot['nodes'].items()):
+        projected = projected_nodes[identifier]
+        status = projected['status']
+        states = []
+        if status['contention'] == 'detected':
+            states.append('contested')
+        if status['computation']['status'] in {
+                'error', 'limit', 'unsupported_capability', 'operational_error'}:
+            states.append('error')
+        if status['computation']['status'] == 'unknown':
+            states.append('unknown')
+        if status['falsifier']['holds'] is True:
+            states.append('falsifier_triggered')
+        if status['support']['status'] == 'reserved':
+            states.append('support_reserved')
+        nodes[identifier] = {
+            'kind': captured['collection'], 'states': sorted(states),
+            'body': {'encoding': 'typed-json/v1', 'value': typed_encode(captured['body'])},
+            'body_encoding': 'typed-json/v1',
+            'core_status': copy.deepcopy(status),
+            'core_status_text': projected['status_text'],
+            'core_dependencies': copy.deepcopy(projected['dependencies']),
+        }
+        topics[identifier] = [captured['collection']] + identifier.split('.')[:-1]
+    edges = [{'from': edge['to'],
+              'rel': 'rests_on' if edge['classification'] == 'executed' else 'rule_reads',
+              'to': edge['from']} for edge in projection['impacts']]
+    document = snapshot['document']
+    scope = (document.get('meta') or {}).get('scope', 'Captured core/v1 record.') \
+        if isinstance(document.get('meta'), dict) else 'Captured core/v1 record.'
+    data = {
+        'nodes': nodes, 'topics': topics, 'edges': edges, 'scope': scope,
+        'sources': {}, 'native_hypotheses': copy.deepcopy(snapshot['hypotheses']),
+        'contributions': copy.deepcopy(snapshot['context'].get('pending', {}).get(
+            'contributions', [])),
+        'read_mode': snapshot['context'].get('read_mode', 'frozen'),
+        'core_findings': {identifier: typed_encode(value)
+                          for identifier, value in assessment['nodes'].items()},
+        'core_history_subjects': {identifier: typed_encode(value)
+                                  for identifier, value in assessment['history_subjects'].items()},
+        'core_assessment': {
+            'schema_version': assessment['schema_version'],
+            'assessment_profile': assessment['assessment_profile'],
+            'snapshot_id': context.snapshot_id,
+            'findings_revision': context.findings_revision,
+            'history': copy.deepcopy(assessment['history']),
+        },
+        'core_session': {
+            'version': 1, 'profile': 'core/v1', 'revision': revision,
+            'snapshot_id': context.snapshot_id,
+            'findings_revision': context.findings_revision,
+            'consumer_view_version': projection['version'],
+            'project_identity': copy.deepcopy(project_identity),
+        },
+    }
+    data = apply_profile(data, navigation_profile)
+    routes = MapTree(data)
+    data['navigation_routes'] = {path: sorted(members)
+                                 for path, members in routes.groups.items()}
+    data['navigation_leaf_routes'] = routes.leaves
+    return data
+
+
+def _core_scan(data):
+    projected = [node['core_status'] for node in data['nodes'].values()]
+    return {
+        'events': {},
+        'conditions': {identifier: copy.deepcopy(node['core_status'])
+                       for identifier, node in data['nodes'].items()},
+        'errors': {identifier: node['core_status']['computation']['status']
+                   for identifier, node in data['nodes'].items()
+                   if node['core_status']['computation']['status'] in {
+                       'error', 'limit', 'unsupported_capability', 'operational_error'}},
+        'counts': {
+            'nodes': len(projected), 'findings': len(projected),
+            'errors': sum(item['computation']['status'] in {
+                'error', 'limit', 'unsupported_capability', 'operational_error'}
+                          for item in projected),
+            'unknown': sum(item['computation']['status'] == 'unknown'
+                           for item in projected),
+        },
+    }
+
+
+class _CoreAssertionBoundary:
+    def assess(self, graph, judgment, assertions=None):
+        raise ValueError('unsupported_capability: kpopper_verify_claims belongs to '
+                         'checked-reader/v1; read the bound core finding instead')
+
+
+class CoreGroundingService(CoreSessionReader):
+    """Explicit core/v1 route backed by one retained CapturedAssessment."""
+    def __init__(self, *args, profile=None, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.profile = Path(profile) if profile else None
+        self._profile_data = json.loads(
+            self.profile.read_text(encoding='utf-8')) if self.profile else None
+        # MCP retains its legacy assertion tool for compatibility.  The core
+        # route fails that grammar closed instead of instantiating its evaluator.
+        self.core = _CoreAssertionBoundary()
+
+    @property
+    def project_identity(self):
+        identity = super().project_identity
+        identity['navigation_profile_sha256'] = digest(
+            self._navigation_profile()) if self.profile else None
+        return identity
+
+    def _navigation_profile(self):
+        return copy.deepcopy(self._profile_data)
+
+    def _graph_from_context(self, context, revision):
+        return MapTree(_core_graph_data(
+            context, revision, self.project_identity, self._navigation_profile()))
+
+    def graph(self):
+        context, revision = self.capture_context()
+        return self._graph_from_context(context, revision), revision
+
+    def expect(self, revision):
+        context, current = self.expect_context(revision)
+        return self._graph_from_context(context, current), current
+
+    def view(self, graph, revision):
+        pending = self.proposals()
+        return CoreView(graph.data, _core_scan(graph.data), revision, self.project,
+                        self.encoder, len(pending),
+                        sum(item['base_revision'] != revision for item in pending.values()))
+
+    def opening_packet(self, tokens=700):
+        self.budget(tokens)
+        graph, revision = self.graph()
+        return self.view(graph, revision).opening(tokens)
+
+    def opening(self, tokens=700):
+        return self.opening_packet(tokens)['text']
+
+    def reading(self, ref, revision, tokens=1600, offset=None):
+        self.budget(tokens)
+        if ref.startswith('/') or (ref.startswith('links:') and '#' not in ref):
+            if offset is not None:
+                raise ValueError('offset applies only to exact text fields')
+            graph, _ = self.expect(revision)
+            view = self.view(graph, revision)
+            return view.branch(ref, tokens) if ref.startswith('/') \
+                else view.link_view(ref[6:], tokens)
+        return super().reading(ref, revision, tokens, offset)
+
+    def read_value(self, graph, ref):
+        base, separator, pointer = ref.partition('#')
+        revision = self.current_revision(graph)
+        if base in graph.nodes and base not in META_REFS:
+            return self.read_value(graph, 'node:' + ref)
+        if base == 'assessment':
+            value = copy.deepcopy(graph.data['core_assessment'])
+        elif base.startswith(('conditions:', 'links:')):
+            view = self.view(graph, revision)
+            if base.startswith('conditions:'):
+                members = view.members(base[11:])
+                value = {identifier: copy.deepcopy(graph.nodes[identifier]['core_status'])
+                         for identifier in sorted(members)}
+            else:
+                value = view.links(base[6:])
+        elif base == 'orientation':
+            value = graph.data.get('orientation') or {
+                'text': graph.data.get('scope', ''), 'basis': ['record scope']}
+        else:
+            try:
+                return super().read_value(graph, ref)
+            except ValueError as error:
+                if str(error) in {'unknown reference', 'unlisted operation or identifier'}:
+                    raise ValueError(str(error)
+                                     + '; read / with this revision to list valid handles') from error
+                raise
+        return pointer_value(value, pointer) if separator and pointer else value

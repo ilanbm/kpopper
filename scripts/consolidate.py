@@ -25,6 +25,7 @@ it over this base as hypotheses named after the ref - a pull, never a push.
 """
 import contextlib, datetime, glob, io, os, posixpath, re, shlex, subprocess, sys, tempfile
 import yaml
+from pathlib import Path
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import provenance as P  # noqa: E402
@@ -50,30 +51,52 @@ def hypothesis(name, doc, head=None, path=None, text=None):
 
 
 def _view(doc):
+    operations = P._peer('reasoning.operations')
+    if operations.selected(doc):
+        return operations.view(doc)
     ids, jud, fields = P.infer(doc)
     return ids, jud, fields, P.with_builtins(doc, ids, jud, fields)
 
 
-def read(paths, names=(), refs=()):
+def read(paths, names=(), refs=(), *, as_of=None):
     """What consolidate reads -> (doc, hyps): the record as the reader loads it, and the
     hypotheses to lay over it in name order - those named, else every one beside the record
     and every one a ref brings. A name nothing holds, or a hypothesis the reader could not
     read, is refused before anything is tested."""
-    doc = P.load(paths)
+    try:
+        doc = P.load(paths)
+    except P.Refused as error:
+        operations = P._peer('reasoning.operations')
+        if str(error) != operations.READER_REFUSAL:
+            raise
+        doc = operations.load(paths, as_of=as_of)
+    core = P._peer('reasoning.operations').selected(doc)
     pool = {}
     for n, h in doc.hypotheses.items():
         if h.get('kind') == 'contribution':
             continue  # publication acceptance/materialization is a separate explicit step
         if h["error"]:
             raise P.Refused(f"refused - hypothesis {n} could not be read: {h['error']}")
-        got, why = P._layer_view(doc, h)
+        if core:
+            authoring = P._peer('reasoning.authoring')
+            if not P._peer('reasoning.operations').selected(h['doc']) \
+                    and (authoring._promotion_blockers(P, h['doc'], doc) or h['head'].get('wrong_if')):
+                raise P.Refused('requires explicit migration: executable legacy hypothesis ' + n)
+            candidate = P._peer('reasoning.operations').derive(P.layered(doc, h), doc, [n], proposals=[h])
+            got, why = _view(candidate), None
+        else:
+            got, why = P._layer_view(doc, h)
         if got is None:
             raise P.Refused(f"refused - hypothesis {n} cannot be read over the base: {why}")
         if h['path'].startswith('git:'):
             h['text'] = P.yaml.safe_dump(h['doc'], allow_unicode=True, sort_keys=False).split('\n')
+        elif core:
+            raw_text = doc._operation_source.files.get(os.path.abspath(h['path']))
+            if raw_text is None:
+                raise P.Refused('hypothesis_source_unavailable: ' + n)
+            h['text'] = raw_text.decode('utf-8').split('\n')
         else:
-            with io.open(h["path"], encoding="utf-8") as fh:
-                h["text"] = fh.read().split("\n")
+            h["text"] = P._text_of_or_none(h["path"]).split("\n")
         pool[n] = h
     for ref in list(dict.fromkeys(refs)):
         for h in from_ref(paths, ref, doc):
@@ -152,12 +175,21 @@ def _meta_keys(doc):
 def _check_of(udoc):
     """The reader's check, run on a document held in memory -> (fail, moved): the union is
     written where nothing else sits - no brief, no hypotheses - and checked as a base is."""
+    operations = P._peer('reasoning.operations')
+    if operations.selected(udoc):
+        return operations.check(udoc)
     body = {k: v for k, v in udoc.items() if k not in ("record", "also")}
     with tempfile.TemporaryDirectory() as d:
         p = os.path.join(d, P.ENTRY)
         with io.open(p, "w", encoding="utf-8") as f:
             yaml.safe_dump(body, f, sort_keys=False, allow_unicode=True, width=1000)
-        fail, _, moved, _, _ = P.check_lines([p])
+        # This disposable reduction world is derived from already captured input.
+        # Its short-lived files must not become live publication preconditions.
+        token = P._DIRECT_STAGE.set(P._DirectStage())
+        try:
+            fail, _, moved, _, _ = P.check_lines([p])
+        finally:
+            P._DIRECT_STAGE.reset(token)
     return fail, moved
 
 
@@ -165,6 +197,13 @@ def _read_day(body, raw):
     """The day a hypothesis read a value - its own, else its source's, in the world the
     hypothesis makes."""
     return P._read_on(body, raw)
+
+
+def _base_check(paths, document):
+    if P._peer('reasoning.operations').selected(document):
+        return _check_of(document)
+    fail, _, moved, _, _ = P.check_lines(paths)
+    return fail, moved
 
 
 def page_of(paths):
@@ -202,6 +241,10 @@ def union_of(doc, hyps, base_check=None, as_of=None, page=None, take=(), drops=N
     for h in c.hyps:
         udoc = P.layered(udoc, h)
     udoc.hypotheses = {}
+    operations = P._peer('reasoning.operations')
+    core = operations.selected(doc)
+    if core:
+        udoc = operations.derive(udoc, doc, [h['name'] for h in c.hyps], proposals=c.hyps)
     c.doc = udoc
     c.ids, c.jud, c.fields, c.raw = _view(udoc)
     # what arrives, and what replaces what the base holds - each id's last holder in order
@@ -308,7 +351,13 @@ def union_of(doc, hyps, base_check=None, as_of=None, page=None, take=(), drops=N
     # the reader's own check on the union, beyond what it says of the base alone
     fail_b, moved_b = base_check if base_check is not None else _check_of(doc)
     fail_u, moved_u = _check_of(udoc)
-    fl = P.flags(c.ids, c.jud, c.fields, c.raw)
+    if core:
+        c.assessment = operations.world(udoc).context
+        c.head_findings = {}
+        found = operations.findings(c.assessment)
+        fl = {line.split(':', 1)[0]: {'falsified'} for line in found['falsified']}
+    else:
+        fl = P.flags(c.ids, c.jud, c.fields, c.raw)
     for line in fail_u:
         if line in fail_b:
             continue
@@ -326,10 +375,15 @@ def union_of(doc, hyps, base_check=None, as_of=None, page=None, take=(), drops=N
     c.moved = [l for l in moved_u if l not in moved_b]
     # a hypothesis's own falsifier, in its head, evaluated against the union
     for h in c.hyps:
-        pred = str(h["head"].get("wrong_if") or "")
+        pred = h['head'].get('wrong_if') if core else str(h["head"].get("wrong_if") or "")
         if not pred:
             continue
-        got = P.evaluate(pred, c.raw, c.ids)
+        if core:
+            got, result = operations.condition(udoc, pred)
+            c.head_findings[h['name']] = {'expression': pred, 'computation': result,
+                                         'snapshot_id': c.assessment.snapshot_id}
+        else:
+            got = P.evaluate(pred, c.raw, c.ids)
         if got is True:
             c.head_falsified.append((h, pred))
         elif got is None:
@@ -340,7 +394,8 @@ def union_of(doc, hyps, base_check=None, as_of=None, page=None, take=(), drops=N
     c.new_subjects = sorted({k.split(".")[0] for k, _ in c.arrived if "." in k} - have)
     # the pairs a person judges: what arrives, held against the base and against each other
     # by declared fields alone; a pair a distinct_from declared is not named
-    c.candidates = sameness.candidate_lines(doc, c.hyps)[0]
+    c.candidates = (sameness.candidate_lines(doc, c.hyps, inference=(bids, bjud, bfields))[0]
+                    if core else sameness.candidate_lines(doc, c.hyps)[0])
     return c
 
 
@@ -349,7 +404,7 @@ def _cut(line, n=110):
     return line if len(line) < n else line[:n] + " ..."
 
 
-def _describe(k, body, raw, ids, fields, suffix=""):
+def _describe(k, body, raw, ids, fields, suffix="", *, authored=False):
     """An entry as `pull` would say it - its value, name, source and day - or a judgment's
     verdict; `body` is the reading described, `raw` the world it is read in."""
     width = 110 - len(suffix)
@@ -357,7 +412,7 @@ def _describe(k, body, raw, ids, fields, suffix=""):
         return _cut(f"+ {k}: {P._verdict_of(body) or k}", width) + suffix
     if not isinstance(body, dict):
         return _cut(f"{k}: {body}", width) + suffix
-    v = P.value_of(raw, ids, k)
+    v = body.get('v', body.get('quoted')) if authored else P.value_of(raw, ids, k)
     if v is not None:
         shown = str(v)
     elif body.get("rule") or (isinstance(body.get("v"), str) and P.EXPR.search(body["v"])):
@@ -410,7 +465,8 @@ def _sources_of(k, h, doc, bids, fields):
     """One holder's reading of k, with its source, read in the world that holder makes: what
     a person compares side by side."""
     hraw = P.bodies(P.layered(doc, h))
-    return _describe(k, h["raw"].get(k), hraw, set(bids) | h["ids"], fields)
+    return _describe(k, h["raw"].get(k), hraw, set(bids) | h["ids"], fields,
+                     authored=P._peer('reasoning.operations').selected(doc))
 
 
 def report(c, today=None):
@@ -421,6 +477,9 @@ def report(c, today=None):
     names = [h["name"] for h in c.hyps]
     out = [f"the base with {', '.join(names)} laid over it"
            + (", in name order" if len(names) > 1 else "")]
+    if hasattr(c, 'assessment'):
+        out.insert(0, 'core/v1 prospective snapshot ' + c.assessment.snapshot_id
+                   + '; findings ' + c.assessment.findings_revision)
     out += [_head_line(h, today) for h in c.hyps]
     out.append("")
     if c.contested:
@@ -628,8 +687,7 @@ def _rel(paths, p):
 
 
 def _text_of(f):
-    with io.open(f, encoding="utf-8") as fh:
-        return fh.read()
+    return P._text_of_or_none(f)
 
 
 def _guard_private_hypotheses(paths, doc, hyps, action, extra_roots=()):
@@ -739,7 +797,25 @@ def _next_command(paths, files, refs):
     return out
 
 
-def fold(paths, names=(), refs=(), stamp=None, take=(), drops=None):
+def fold(paths, names=(), refs=(), stamp=None, take=(), drops=None, *, by=None, choices=None,
+         expected_source_revision=None):
+    original_paths = list(paths)
+    project = P._peer('knowledge_views').project_for(paths)
+    paths = P._peer('knowledge_views').write_paths(paths)
+    if P._peer('history_direct').active(paths):
+        if refs:
+            return _history_adopt_from(original_paths, refs, names=names, take=take, drops=drops,
+                by=by, choices=choices, as_of=stamp, expected_source_revision=expected_source_revision)
+        result = P._peer('history_direct').finish_hypotheses(paths, names, kind='fold',
+            because='explicit consolidation', take=take, drops=drops)
+        print(result['state'] + ': ' + ', '.join(result['hypotheses']))
+        return 0
+    with P._locked(paths[0], project=project):
+        return P._mutate_legacy(paths, {'kind': 'consolidate', 'as_of': stamp},
+            lambda: _fold_candidate(paths, names, refs, stamp, take, drops))
+
+
+def _fold_candidate(paths, names=(), refs=(), stamp=None, take=(), drops=None):
     """The union written into the base, under one lock from the reading to the deletion:
     the record and its hypotheses read, the union tested and its report printed, then -
     only when the test is clean - every id that arrived or was replaced carried over whole
@@ -747,11 +823,12 @@ def fold(paths, names=(), refs=(), stamp=None, take=(), drops=None):
     so each door is asked with the values already in place; the files read back and checked,
     and restored whole if the check says anything it did not say before; the folded files
     deleted. Refused when the dry run is not clean, or when what is named never folds."""
+    requested_as_of = stamp
     stamp = stamp or datetime.date.today().isoformat()
     project = P._peer('knowledge_views').project_for(paths)
     paths = P._peer('knowledge_views').write_paths(paths)
-    with P._locked(paths[0], project=project):
-        doc, hyps = read(paths, names, refs)
+    with contextlib.nullcontext():
+        doc, hyps = read(paths, names, refs, as_of=requested_as_of)
         _guard_private_hypotheses(paths, doc, hyps, {'kind': 'consolidate'})
         if not hyps:
             print("no hypotheses beside the record - nothing to consolidate")
@@ -764,7 +841,7 @@ def fold(paths, names=(), refs=(), stamp=None, take=(), drops=None):
                                 f"uncommitted changes: a branch's record folds onto a committed base, "
                                 f"so the fold is a commit of its own - commit first, then consolidate "
                                 f"again")
-        fail_b, _, moved_b, _, _ = P.check_lines(paths)
+        fail_b, moved_b = _base_check(paths, doc)
         page = page_of(paths)
         c = union_of(doc, hyps, (fail_b, moved_b), stamp, page, take, drops)
         for l in report(c):
@@ -826,20 +903,34 @@ def fold(paths, names=(), refs=(), stamp=None, take=(), drops=None):
             for f in files:                     # meta lives in one of the files, not always the first
                 if P._bump_updated(texts[f], stamp):
                     break
+        core = P._peer('reasoning.operations').selected(doc)
+        if core:
+            authoring = P._peer('reasoning.authoring')
+            desired = authoring.declaration(c.doc)
+            declared = [f for f in files if 'reasoning' in (P.parse(text='\n'.join(texts[f])) or {}).get('meta', {})]
+            for f in declared or files[:1]:
+                authoring.declare(texts[f], P, desired=desired)
+            doc._operation_source.verify()
         changed = [f for f in files if "\n".join(texts[f]) != originals[f]]
         for f in changed:
             P._write_text(f, "\n".join(texts[f]))
         try:
-            doc2 = P.load(paths)
-            ids2, jud2, fields2 = P.infer(doc2)
-            raw2 = P.with_builtins(doc2, ids2, jud2, fields2)
+            if core:
+                doc2 = authoring.load(P, paths)
+                authoring.validate_declared(doc2)
+                doc2 = P._peer('reasoning.operations').derive(doc2, doc, [h['name'] for h in hyps])
+                ids2, jud2, fields2, raw2 = _view(doc2)
+            else:
+                doc2 = P.load(paths)
+                ids2, jud2, fields2 = P.infer(doc2)
+                raw2 = P.with_builtins(doc2, ids2, jud2, fields2)
             for k, h, _ in writes:
                 if k not in ids2:
                     raise ValueError(f"{k} is not in the record after the fold")
                 want, got = P.claim_of(h["raw"].get(k)), P.claim_of(raw2.get(k))
                 if not P._same_claim(want, got):
                     raise ValueError(f"{k} reads back as {P.short(got)!r}")
-            fail_a, _, _, _, _ = P.check_lines(paths)
+            fail_a, _ = _base_check(paths, doc2)
             worse = [l for l in fail_a if l not in fail_b]
             if worse:
                 raise ValueError("check fails on what was folded: " + "; ".join(worse[:3]))
@@ -851,7 +942,7 @@ def fold(paths, names=(), refs=(), stamp=None, take=(), drops=None):
         # safely written; a keeping that fails undoes the record too, so the trail on a
         # judgment and the version beside the record never disagree
         kept, side = [], P.replaced_path(paths)
-        side_before = _text_of(side) if os.path.isfile(side) else None
+        side_before = _text_of(side) if P._exists(side) else None
         try:
             for k, h, replace in writes:
                 if replace and k in trailed and isinstance(h["raw"].get(k), dict):
@@ -864,19 +955,19 @@ def fold(paths, names=(), refs=(), stamp=None, take=(), drops=None):
             for f in changed:
                 P._write_text(f, originals[f])
             if side_before is None:
-                if os.path.isfile(side):
-                    os.remove(side)
+                if P._exists(side):
+                    P._remove_file(side)
             else:
                 P._write_text(side, side_before)
             raise P.Refused(f"the fold could not keep what it replaced and was undone: {e}")
         deleted = []
         for h in c.hyps:
-            if h.get("path") and os.path.isfile(h["path"]):
-                os.remove(h["path"])
+            if h.get("path") and P._exists(h["path"]):
+                P._remove_file(h["path"])
                 P.forget(h["path"])
                 deleted.append(h["path"])
         d = P.hypothesis_dir(paths)
-        if os.path.isdir(d) and not os.listdir(d):
+        if P._DIRECT_STAGE.get() is None and os.path.isdir(d) and not os.listdir(d):
             os.rmdir(d)
     names_ = ", ".join(h["name"] for h in c.hyps)
     if not writes:
@@ -896,7 +987,9 @@ def fold(paths, names=(), refs=(), stamp=None, take=(), drops=None):
             out.append(f"  nothing to delete for {h['name']}: another branch keeps its own record")
     out += _next_command(paths, [_rel(paths, f) for f in changed] + [_rel(paths, f) for f in kept]
                          + [_rel(paths, p) for p in deleted], refs)
-    n = P.counts(doc2, ids2, jud2, fields2, raw2)["graph.flagged"]
+    n = (sum(bool(node['attention']) for node in
+             P._peer('reasoning.operations').world(doc2).context.assessment['nodes'].values())
+         if core else P.counts(doc2, ids2, jud2, fields2, raw2)["graph.flagged"])
     out.append("")
     out.append(f"the record needs a person on {n} judgment{'s' if n != 1 else ''} - check says the rest")
     for l in out:
@@ -923,6 +1016,17 @@ def _session_source(doc, ids, raw, given=None):
 
 
 def refute(paths, name, why, source=None, stamp=None):
+    project = P._peer('knowledge_views').project_for(paths)
+    paths = P._peer('knowledge_views').write_paths(paths)
+    if P._peer('history_direct').active(paths):
+        result = P._peer('history_direct').finish_hypotheses(paths, [name], kind='refute', because=why, by=source)
+        return [result['state'] + ': ' + name]
+    with P._locked(paths[0], project=project):
+        return P._mutate_legacy(paths, {'kind': 'refute', 'as_of': stamp},
+            lambda: _refute_candidate(paths, name, why, source, stamp))
+
+
+def _refute_candidate(paths, name, why, source=None, stamp=None):
     """The hypothesis's claim written into the base as a negative finding - `hyp.<name>`,
     `v: refuted`, its claim as the name, the why as `at:`, from a session source, dated - and
     its file deleted, under one lock and undone together: a finding without the deletion, or
@@ -931,15 +1035,20 @@ def refute(paths, name, why, source=None, stamp=None):
     if not why or not why.strip():
         raise P.Refused("refused - a refutation says why: consolidate --refute <hypothesis> \"<why>\"")
     stamp = stamp or datetime.date.today().isoformat()
-    with P._locked(paths[0]):
-        doc = P.load(paths)
+    with contextlib.nullcontext():
+        try:
+            doc = P.load(paths)
+        except P.Refused as error:
+            operations = P._peer('reasoning.operations')
+            if str(error) != operations.READER_REFUSAL:
+                raise
+            doc = operations.load(paths)
         h = doc.hypotheses.get(name)
         if h is None:
             raise P.Refused(f"refused - no hypothesis named {name} beside the record")
         if h["error"]:
             raise P.Refused(f"refused - hypothesis {name} could not be read: {h['error']}")
-        ids, jud, fields = P.infer(doc)
-        raw = P.with_builtins(doc, ids, jud, fields)
+        ids, jud, fields, raw = _view(doc)
         src = _session_source(doc, ids, raw, source)
         _guard_private_hypotheses(paths, doc, [h],
             {'kind': 'refute', 'why': why, 'source': src}, extra_roots=[src])
@@ -962,9 +1071,11 @@ def refute(paths, name, why, source=None, stamp=None):
         originals = {f: _text_of(f) for f in files}
         buf = io.StringIO()
         with contextlib.redirect_stdout(buf):
+            if hasattr(doc, '_operation_source'):
+                doc._operation_source.verify()
             P._apply(paths, action)              # the write path, inside the lock already held
         try:
-            os.remove(h["path"])
+            P._remove_file(h["path"])
             P.forget(h["path"])
         except OSError as e:
             for f in files:
@@ -973,7 +1084,7 @@ def refute(paths, name, why, source=None, stamp=None):
             raise P.Refused(f"refused - {h['path']} could not be deleted, so the finding was not "
                             f"written either: {e}")
         d = P.hypothesis_dir(paths)
-        if os.path.isdir(d) and not os.listdir(d):
+        if P._DIRECT_STAGE.get() is None and os.path.isdir(d) and not os.listdir(d):
             os.rmdir(d)
         written = [f for f in files if _text_of(f) != originals[f]]
     out = [l for l in buf.getvalue().split("\n") if l.strip()]
@@ -1077,7 +1188,21 @@ def from_ref(paths, ref, doc=None):
             with io.open(local, "w", encoding="utf-8") as f:
                 f.write(text)
             htexts[re.sub(r"\.ya?ml$", "", posixpath.basename(path))] = text.split("\n")
-        rdoc = P.load([os.path.join(t, *rel.split("/"))])
+        token = P._DIRECT_STAGE.set(P._DirectStage())
+        try:
+            if P._peer('reasoning.operations').selected(doc):
+                rdoc = P._peer('reasoning.authoring').load(P, [os.path.join(t, *rel.split("/"))])
+                if not P._peer('reasoning.operations').selected(rdoc) \
+                        and P._peer('reasoning.authoring')._promotion_blockers(P, rdoc, doc):
+                    raise P.Refused('requires explicit migration: executable legacy branch record')
+                if P._peer('reasoning.snapshot')._fields(rdoc) != P._peer('reasoning.snapshot')._fields(doc):
+                    raise P.Refused('branch_interpretation_mismatch: reconcile declared field roles before folding')
+                if isinstance(rdoc.get('meta'), dict) and 'history' in rdoc['meta']:
+                    raise P.Refused('prospective_history_required: use the captured history branch operation')
+            else:
+                rdoc = P.load([os.path.join(t, *rel.split("/"))])
+        finally:
+            P._DIRECT_STAGE.reset(token)
     bids, bjud, bfields, braw = _view(doc)
     rraw = P.bodies(rdoc)
     pruned = {}
@@ -1100,6 +1225,8 @@ def from_ref(paths, ref, doc=None):
             if keep:
                 pruned.setdefault(col, {})[k] = b
     head = {"claim": f"what {ref} committed ({sha[:7]}), read as a hypothesis", "born": day}
+    if P._peer('reasoning.operations').selected(doc):
+        head['source_commit'] = sha
     out = [hypothesis(ref, pruned, head, None, texts)]
     out[0]['privacy_context'] = rdoc
     out[0]['privacy_head'] = {key: rdoc[key] for key in ('meta', 'hypothesis') if key in rdoc}
@@ -1116,10 +1243,169 @@ def from_ref(paths, ref, doc=None):
     return out
 
 
+
+
+def _history_adopt_from(paths, refs, *, names=(), take=(), drops=None, by=None, choices=None,
+                        as_of=None, expected_source_revision=None, preview=False):
+    if not refs:
+        raise P.Refused('--from needs a committed source')
+    if names or take or drops:
+        raise P.Refused('history_branch_choices_required: --from cannot mix named hypotheses, --take or --drop; use --choose')
+    if not preview and (not isinstance(by, str) or not by.strip()):
+        raise P.Refused('--by ACTOR is required for explicit history branch adoption')
+    try:
+        result = P._peer('history_direct').adopt_branches(paths, refs, choices=choices or {}, by=by,
+            preview=preview, as_of=as_of, expected_source_revision=expected_source_revision)
+    except ValueError as error:
+        raise P.Refused(str(error)) from None
+    print('BRANCH ADOPTION PREVIEW — no target acceptance' if preview else 'BRANCH ADOPTED')
+    print(P._peer('history_contract').encode_document(result).decode('utf-8'), end='')
+    return 0
+
+
+def _history_read_current(entry):
+    """Capture standing history and physical/named proposals without parser caches."""
+    H, T, C, A, HH = (P._peer(name) for name in
+                     ('history_store', 'history_transaction', 'history_contract', 'history_adapter', 'history_hypotheses'))
+    store = H.Store(entry)
+    with T.reader_guard(store.root, T.journal_for(store.entry)):
+        captured = store.capture()
+        rendered = store.render(captured)
+        C._require(captured.entry_bytes == rendered or store._known_view(captured), 'unresolved_view_edit')
+        adapted = A.from_store_capture(captured)
+        physical, observed, total = {}, {}, 0
+        directory = Path(store.layout['hypotheses'])
+        listing = sorted(str(path) for suffix in ('*.yaml', '*.yml') for path in directory.glob(suffix))
+        C._require(len(listing) <= C.MAX_OBJECTS, 'history_limit')
+        for name in listing:
+            path = store._path(name)
+            C._require(path.is_file() and path.stat().st_size <= C.MAX_REQUEST_BYTES, 'history_limit')
+            raw = path.read_bytes()
+            total += len(raw)
+            C._require(total <= C.MAX_REQUEST_BYTES, 'history_limit')
+            observed[name] = raw
+            subject = C.hypothesis_name(path.stem)
+            C._require(subject not in physical, 'ambiguous_branch_hypothesis', subject)
+            document = C.decode_document(raw)
+            head = document.pop('hypothesis', {})
+            C._require(isinstance(head, dict), 'invalid_branch_hypothesis')
+            P._peer('reasoning.contract').capabilities(document)
+            physical[subject] = {'name': subject, 'path': str(path), 'doc': document,
+                                 'head': head, 'error': None}
+        physical = HH.active_physical(adapted.document, store.entry, physical)
+        named, _ = HH.layers(adapted.projection, adapted.document)
+        C._require(not set(named) & set(physical), 'hypothesis_authority_collision')
+        snapshot = adapted.snapshot(context={'read_mode': 'frozen'}, hypotheses={**physical, **named})
+        C._require(store.capture().inventory == captured.inventory, 'snapshot_changed')
+        C._require(listing == sorted(str(path) for suffix in ('*.yaml', '*.yml') for path in directory.glob(suffix)),
+                   'snapshot_changed')
+        C._require(all(Path(path).read_bytes() == raw for path, raw in observed.items()), 'snapshot_changed')
+        return captured, snapshot
+
+
+def _history_branch_context(paths, ref):
+    V, C, B = (P._peer(name) for name in ('knowledge_views', 'history_contract', 'history_branch'))
+    routed = V.write_paths(paths)
+    C._require(len(routed) == 1, 'history_branch_single_entry_required')
+    entry = Path(routed[0]).expanduser().resolve()
+    project = V.project_for(routed)
+    policy = project.config()
+    C._require(project.git, 'history_branch_git_required')
+    try:
+        relative = entry.relative_to(project.root).as_posix()
+    except ValueError:
+        raise P.Refused('history_branch_entry_outside_project: --from needs a record in the selected Git checkout') from None
+    envelope = B.capture(project.root, ref, entry=relative)
+    branch = B.validate(envelope)
+    branch_snapshot = B.snapshot(envelope)
+    current, current_snapshot = _history_read_current(entry)
+    C._require(project.config() == policy and list(map(os.path.realpath, V.write_paths(paths))) ==
+               list(map(os.path.realpath, routed)), 'history_routing_changed')
+    return entry, project, envelope, branch, branch_snapshot, current, current_snapshot
+
+
+def _history_pull_from(paths, ref, seeds, budget):
+    C, G = P._peer('history_contract'), P._peer('pending_grounding')
+    C._require(type(budget) is int and 1 <= budget <= 1000, 'invalid_pull_budget')
+    entry, project, envelope, branch, branch_snapshot, current, current_snapshot = _history_branch_context(paths, ref)
+    snapshots = {'current': current_snapshot.to_data(), 'branch': branch_snapshot.to_data()}
+    captures = {'current': current, 'branch': branch}
+    candidates = set(current.state['subjects']) | set(branch.state['subjects'])
+    for data in snapshots.values():
+        for hypothesis in data['hypotheses'].values():
+            candidates.update(G.entries(hypothesis['document']))
+    selected, unmatched = set(), []
+    for seed in seeds:
+        found = {subject for subject in candidates if subject == seed or subject.startswith(seed.rstrip('.') + '.')}
+        if not found:
+            unmatched.append(seed)
+        selected.update(found)
+    ordered = sorted(selected)
+    visible = ordered[:budget]
+    source = envelope['manifest']['source']
+    lines = ['BRANCH OBSERVATION — no target acceptance or adoption',
+             'source ref: ' + ref, 'source commit: ' + source['commit'],
+             'source entry: ' + source['entry'],
+             'branch authority: ' + branch.marker['record_id'] + ' / generation ' + str(branch.marker['generation']),
+             'branch committed set: ' + branch.baseline['committed_set_digest'], 'current record: ' + str(entry),
+             'current authority: ' + current.marker['record_id'] + ' / generation ' + str(current.marker['generation']),
+             'current committed set: ' + current.baseline['committed_set_digest'],
+             'subjects shown: ' + str(len(visible)) + '; omitted by budget: ' + str(len(ordered) - len(visible))]
+    if unmatched:
+        lines.append('unmatched seeds: ' + ', '.join(unmatched))
+    output_size = sum(len(line.encode('utf-8')) + 1 for line in lines)
+    def append_yaml(value):
+        nonlocal output_size
+        raw = C.encode_document(value)
+        output_size += len(raw) + 3 * (raw.count(b'\n') + 1)
+        C._require(output_size <= 1024 * 1024, 'branch_pull_output_limit')
+        lines.extend('  ' + line for line in raw.decode('utf-8').rstrip().splitlines())
+    for side, data in snapshots.items():
+        metadata = {key: value for key, value in data['document'].get('meta', {}).items() if key != 'history'}
+        if metadata:
+            lines.append(side + ' record metadata (generated baseline identified above):')
+            append_yaml(metadata)
+    for subject in visible:
+        lines.append('')
+        lines.append('SUBJECT ' + subject)
+        for side in ('current', 'branch'):
+            captured, data = captures[side], snapshots[side]
+            state = captured.state['subjects'].get(subject)
+            finding = {'standing': state['acceptance'] if state else 'absent',
+                       'heads': list(state['heads']) if state else [], 'original_claims': []}
+            if state:
+                for version in sorted(set(state['heads']) | set(state['proposals'])):
+                    obj = captured.objects[version]
+                    finding['original_claims'].append({'version': version,
+                        'disposition': 'head' if version in state['heads'] else 'proposal',
+                        'kind': obj['kind'], 'by': obj['by'], 'on': obj['on'], 'operation': obj['op'],
+                        'authored': obj.get('authored'), 'pins': obj.get('pins', {}),
+                        'pin_gaps': obj.get('pin_gaps', {}), 'body': obj['body']})
+            proposals = {}
+            for name, hypothesis in sorted(data['hypotheses'].items()):
+                pair = G.entries(hypothesis['document']).get(subject)
+                if pair is not None:
+                    proposals[name] = {'standing': 'proposal', 'head': hypothesis['head'],
+                        'collection': pair[0], 'body': pair[1], 'error': hypothesis.get('error')}
+            finding['named_proposals'] = proposals
+            lines.append(side + ':')
+            append_yaml(finding)
+    output = '\n'.join(lines)
+    C._require(len(output.encode('utf-8')) <= 1024 * 1024, 'branch_pull_output_limit')
+    print(output)
+    return 0
+
+
 def pull_from(paths, ref, seeds, budget=40):
     """`pull`, with another branch's committed record laid beside this one: what it proposes
     for the seed, said the way a hypothesis file's proposal is - the record loaded once, the
     branch's hypotheses laid over it, and handed to the reader's own pull."""
+    routed = P._peer('knowledge_views').write_paths(paths)
+    if P._peer('history_direct').active(routed):
+        try:
+            return _history_pull_from(paths, ref, seeds, budget)
+        except ValueError as error:
+            raise P.Refused(str(error)) from None
     hyps = from_ref(paths, ref)
     doc = P.load(paths)
     doc.hypotheses = dict(doc.hypotheses, **{h["name"]: h for h in hyps})
@@ -1130,6 +1416,15 @@ def pull_from(paths, ref, seeds, budget=40):
 HELP = """  consolidate [--dry-run] [<hypothesis> ...] [--from <ref>] [--take <id>] [--drop "<id>: <why>"] [--as-of YYYY-MM-DD] [file]
   consolidate --refute <hypothesis> "<why>" [--as s.<source>] [--as-of YYYY-MM-DD] [file]
   pull <seed> [...] --from <ref> [--budget N] [file]
+  history branch choices: --by ACTOR --choose SUBJECT=VERSION (repeat for each subject)
+  history branch binding: --source-revision REVISION (from the dry-run result)
+
+For active history, --from names a pinned committed branch observation. Repeat --from
+to adopt a bounded source set in one target commit. An actual adoption requires --by
+and exact --choose versions for target/source and source/source overlaps.
+--source-revision binds the previewed capture or source set; a single source may also
+be pinned by commit SHA. Mixing branch choices with named hypotheses/--take/--drop
+refuses before publication.
 
 Consolidation is a test. The dry run lays the hypotheses named - every one beside the
 record, when none is - over the base by id, in name order, and runs the reader's own check
@@ -1204,11 +1499,17 @@ def main(argv=None):
             if rest[i] == "--from":
                 if i + 1 >= len(rest):
                     raise P.Refused("--from needs a ref")
+                if ref is not None:
+                    raise P.Refused('pull accepts one --from ref; multiple sources need an explicit combined observation')
                 ref = rest[i + 1]; i += 2; continue
             if rest[i] == "--budget":
                 if i + 1 >= len(rest):
                     raise P.Refused("--budget needs a number")
-                budget = int(rest[i + 1]); i += 2; continue
+                try:
+                    budget = int(rest[i + 1])
+                except ValueError:
+                    raise P.Refused('--budget needs a number') from None
+                i += 2; continue
             (files if rest[i].endswith((".yaml", ".yml")) else seeds).append(rest[i])
             i += 1
         if not ref:
@@ -1218,13 +1519,13 @@ def main(argv=None):
             raise P.Refused("pull needs a seed: an entry, or a prefix")
         return pull_from(files or P.default_paths(), ref, seeds, budget)
     dry, refs, refute_, source, as_of, names, files, why = False, [], None, None, None, [], [], None
-    take, drops = [], {}
+    take, drops, by, choose, source_revision = [], {}, None, {}, None
     i = 0
     while i < len(argv):
         a = argv[i]
         if a == "--dry-run":
             dry = True; i += 1
-        elif a in ("--from", "--refute", "--as", "--as-of", "--take", "--drop"):
+        elif a in ("--from", "--refute", "--as", "--as-of", "--take", "--drop", "--by", "--choose", "--source-revision"):
             if i + 1 >= len(argv):
                 raise P.Refused(f"{a} needs a value")
             v = argv[i + 1]
@@ -1234,6 +1535,23 @@ def main(argv=None):
                 refute_ = v
             elif a == "--as":
                 source = v
+            elif a == "--source-revision":
+                if source_revision is not None or not re.fullmatch(r"[0-9a-f]{64}", v):
+                    raise P.Refused("--source-revision needs one exact captured revision")
+                source_revision = v
+            elif a == "--by":
+                if by is not None or not v.strip():
+                    raise P.Refused('--by needs one nonempty actor')
+                by = v
+            elif a == "--choose":
+                if '=' not in v:
+                    raise P.Refused('--choose takes SUBJECT=VERSION')
+                subject, version = v.rsplit('=', 1)
+                if not subject.strip() or not re.fullmatch(r'(?:[0-9a-f]{40}|[0-9a-f]{64})', version):
+                    raise P.Refused('--choose takes SUBJECT=VERSION with an exact history version id')
+                if subject in choose:
+                    raise P.Refused('duplicate --choose subject: ' + subject)
+                choose[subject] = version
             elif a == "--take":
                 take.append(v)
             elif a == "--drop":
@@ -1259,6 +1577,11 @@ def main(argv=None):
         raise P.Refused(f"--as-of {as_of} is after today ({P.latest_today().isoformat()}) - a day "
                         f"is the record's clock, and a fold is not dated ahead")
     paths = files or P.default_paths()
+    routed = P._peer('knowledge_views').write_paths(paths)
+    active_history = P._peer('history_direct').active(routed)
+    if by is not None or choose or source_revision is not None:
+        if not active_history or not refs or refute_:
+            raise P.Refused('--by, --choose and --source-revision require active-history --from')
     if refute_:
         if refs or names or dry:
             raise P.Refused("--refute takes one hypothesis and its why, and nothing else")
@@ -1268,12 +1591,22 @@ def main(argv=None):
     if source:
         raise P.Refused("--as names the session source of a refutation: it goes with --refute")
     if not dry:
-        return fold(paths, names, refs, as_of, take, drops)
-    doc, hyps = read(paths, names, refs)
+        return fold(paths, names, refs, as_of, take, drops, by=by, choices=choose,
+                    expected_source_revision=source_revision)
+    routed = P._peer('knowledge_views').write_paths(paths)
+    if P._peer('history_direct').active(routed):
+        if refs:
+            return _history_adopt_from(paths, refs, names=names, take=take, drops=drops, by=by,
+                choices=choose, as_of=as_of, expected_source_revision=source_revision, preview=True)
+        result = P._peer('history_direct').finish_hypotheses(routed, names, kind='fold',
+            because='consolidation preview', take=take, drops=drops, dry=True)
+        print(result['state'] + ': ' + ', '.join(result['hypotheses']))
+        return 0
+    doc, hyps = read(paths, names, refs, as_of=as_of)
     if not hyps:
         print("no hypotheses beside the record - nothing to consolidate")
         return 0
-    fail_b, _, moved_b, _, _ = P.check_lines(paths)
+    fail_b, moved_b = _base_check(paths, doc)
     c = union_of(doc, hyps, (fail_b, moved_b), as_of, page_of(paths), take, drops)
     for l in report(c):
         print(l)

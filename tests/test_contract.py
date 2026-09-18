@@ -1032,9 +1032,12 @@ class TheWritePath(unittest.TestCase):
     def test_add_inserts_in_id_order_and_touches_nothing_else(self):
         with tempfile.TemporaryDirectory() as d:
             rec = pathlib.Path(d) / "PROVENANCE.yaml"
-            shutil.copy(ROOT / "GROUNDING.yaml", rec)
-            before = rec.read_text(encoding="utf-8")
-            updated = re.search(r"^  updated: (\S+)", before, re.M).group(1)
+            # This tests insertion, not the clock: the source record can have been
+            # updated in a timezone whose calendar day is still ahead of CI's.
+            updated = "2026-09-01"
+            before = re.sub(r"^  updated: \S+", "  updated: " + updated,
+                            (ROOT / "GROUNDING.yaml").read_text(encoding="utf-8"), count=1, flags=re.M)
+            rec.write_text(before, encoding="utf-8")
             code, out, err = run(SCRIPTS / "provenance.py", "add", "p.reference_test", "v=1",
                                  "name=a value added in id order", "from=scripts/provenance.py",
                                  "--as-of", updated, rec)

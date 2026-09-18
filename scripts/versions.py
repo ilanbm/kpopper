@@ -145,10 +145,25 @@ class Store(object):
         return v["id"]
 
     def _load(self, subject, name):
+        data = self._contents(subject, name)
+        return self._parse(subject, name, data) if data is not None else None
+
+    def _contents(self, subject, name):
         p = os.path.join(self.dir, subject, name)
-        with io.open(p, encoding="utf-8") as f:
-            v = yaml.safe_load(f)
+        try:
+            with io.open(p, "rb") as f:
+                return f.read()
+        except OSError as error:
+            self.problems.append(subject + "/" + name + ": cannot read history file: " + str(error))
+            return None
+
+    def _parse(self, subject, name, data):
         Store.parsed += 1
+        try:
+            v = yaml.safe_load(data.decode("utf-8"))
+        except (yaml.YAMLError, UnicodeError) as error:
+            self.problems.append(subject + "/" + name + ": cannot parse history file: " + str(error))
+            return None
         if not isinstance(v, dict) or v.get("subject") != subject or v.get("id") != name[:-5] \
                 or v.get("id") != ident(v):
             self.problems.append(subject + "/" + name + ": the file does not say what its name says")
@@ -191,9 +206,18 @@ class Store(object):
 
     def union_from(self, other):
         """Every version the other store holds and this one does not, copied in - and one
-        the two hold under one name with other content refused."""
+        the two hold under one name with other content refused. Validate the complete
+        source listing before copying anything; an unreadable or invalid source is not
+        a successful partial union."""
+        source = Store(other)
+        try:
+            held = source.read()
+        except OSError as error:
+            raise IntegrityError("cannot read union source: " + str(error)) from error
+        if source.problems:
+            raise IntegrityError("cannot union incomplete source: " + "; ".join(source.problems))
         added = 0
-        for subject, versions in Store(other).read().items():
+        for subject, versions in held.items():
             for v in versions.values():
                 if not os.path.isfile(self._path(subject, v["id"])):
                     self.keep(v)
@@ -207,9 +231,10 @@ class Store(object):
         return os.path.join(self.dir, ".index.json")
 
     def state(self, rules=None, ancestry=None, fresh=False):
-        """The state, from the index for every subject whose files are the ones its entry was
-        computed from - the same ids, by listing - and from the files for the rest; `fresh`
-        reads every file. The index is this checkout's cache, never the source."""
+        """Reuse a subject's computed entry only when its ids and byte hashes still match.
+        Every call reads and hashes every history file, even a warm call with no YAML
+        parsing. Stale subjects are parsed from those same bytes; `fresh` parses all.
+        The index is this checkout's cache, never the source."""
         rules = dict(RULES, **(rules or {}))
         listing = self.ids()
         index = {}
@@ -218,24 +243,28 @@ class Store(object):
                 index = json.load(f)
         if index.get("rules") != rules or index.get("ancestry") != bool(ancestry):
             index = {}
-        entries, stale, problems = {}, [], {}
+        entries, stale, problems, fingerprints = {}, [], {}, {}
         for subject, ids in listing.items():
+            before = len(self.problems)
+            contents = {vid: self._contents(subject, vid + ".yaml") for vid in ids}
+            fingerprints[subject] = {vid: hashlib.sha256(data).hexdigest()
+                                     for vid, data in contents.items() if data is not None}
             cached = (index.get("subjects") or {}).get(subject)
-            if cached and cached.get("ids") == ids:
+            if (cached and cached.get("ids") == ids and len(fingerprints[subject]) == len(ids)
+                    and cached.get("bytes") == fingerprints[subject]):
                 if "entry" in cached:
                     entries[subject] = cached["entry"]
                 problems[subject] = list(cached.get("problems") or [])
             else:
                 stale.append(subject)
-        if stale:
-            before = len(self.problems)
-            held = self.read(stale)
-            for m in self.problems[before:]:
-                problems.setdefault(m.split("/", 1)[0], []).append(m)
-            for subject in stale:
-                problems.setdefault(subject, [])
-                if subject in held:
-                    e = _subject_entry(subject, held[subject], rules, ancestry)
+                held = {}
+                for vid, data in contents.items():
+                    v = self._parse(subject, vid + ".yaml", data) if data is not None else None
+                    if v is not None:
+                        held[vid] = v
+                problems[subject] = self.problems[before:]
+                if held:
+                    e = _subject_entry(subject, held, rules, ancestry)
                     if e is not None:
                         entries[subject] = e
         entries = {s: entries[s] for s in sorted(entries)}
@@ -249,7 +278,7 @@ class Store(object):
                     f.write(".index.json\n")
             kept = {}
             for s in listing:
-                kept[s] = {"ids": listing[s], "problems": problems.get(s, [])}
+                kept[s] = {"ids": listing[s], "bytes": fingerprints[s], "problems": problems.get(s, [])}
                 if s in entries:
                     kept[s]["entry"] = entries[s]
             with io.open(self.index_path, "w", encoding="utf-8") as f:
@@ -387,7 +416,7 @@ def state(versions, rules=None, ancestry=None):
     return _cross(entries, rules)
 
 
-def _subject_entry(subject, held, rules, ancestry):
+def _subject_entry(subject, held, rules, ancestry, *, claim_key=None):
     """What a subject's own files say -> its entry: heads, status, marks, proposals, the body
     that stands, the reviews on its heads - and the ids it holds, so the cross-subject pass
     never reads a file."""
@@ -416,6 +445,8 @@ def _subject_entry(subject, held, rules, ancestry):
                                                     + b["of"]))
         elif b["act"] == "refute" and b["of"] in claims:
             words.setdefault(b["of"], []).append((a, "out"))
+        elif b["act"] in ("propose", "retire") and b["of"] in claims:
+            words.setdefault(b["of"], []).append((a, "proposed" if b["act"] == "propose" else "retired"))
         elif b["act"] == "review" and b["of"] in claims:
             reviews.append({"of": b["of"], "by": a["by"], "read": b.get("read") or {}})
     standing, proposals, disputed, mark, accepted_by, open_acts = [], [], set(), {}, {}, {}
@@ -435,8 +466,11 @@ def _subject_entry(subject, held, rules, ancestry):
         if kinds == {"stands"}:
             standing.append(c)
             accepted_by[c] = open_words[-1][0]["by"]
+        elif kinds == {"proposed"}:
+            proposals.append(c)
         elif "stands" not in kinds:
-            mark[c] = "corrected" if "corrected" in kinds else "refuted" if "out" in kinds else "replaced"
+            mark[c] = ("corrected" if "corrected" in kinds else "refuted" if "out" in kinds
+                       else "retired" if "retired" in kinds else "replaced")
         else:
             standing.append(c)
             disputed.add(c)
@@ -453,7 +487,8 @@ def _subject_entry(subject, held, rules, ancestry):
         groups = {}
         for v in frontier:
             at = v.get("at")
-            k = (str(v["body"].get("from")), list(at)[0] if isinstance(at, dict) and len(at) == 1 else None)
+            source = v["body"].get("from") if isinstance(v["body"], dict) else None
+            k = (str(source), list(at)[0] if isinstance(at, dict) and len(at) == 1 else None)
             groups.setdefault(k, []).append(v)
         keep = set(v["id"] for v in frontier)
         for (src, ck), vs in groups.items():
@@ -494,7 +529,7 @@ def _subject_entry(subject, held, rules, ancestry):
     # heads that say the same are one claim held by several - agreement, not a dispute
     by_claim = {}
     for v in frontier:
-        by_claim.setdefault(_claim(v), []).append(v["id"])
+        by_claim.setdefault((claim_key or _claim)(v), []).append(v["id"])
     if len(by_claim) == 1 and heads and not (disputed & set(heads)):
         h = sorted(heads)[0]
         entry.update({"head": h, "body": claims[h]["body"], "agreed": len(heads),

@@ -1,0 +1,28 @@
+name: Feature request
+description: Suggest an improvement based on a real use case.
+labels: [enhancement]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Search existing requests first. Describe the work you are trying to do;
+        a proposed implementation is optional. Keep examples free of private data.
+  - type: textarea
+    id: problem
+    attributes:
+      label: What are you trying to do?
+      description: Describe the task, the host you use and where the current behavior gets in the way.
+    validations:
+      required: true
+  - type: textarea
+    id: outcome
+    attributes:
+      label: What would a useful result look like?
+      description: Give a concrete before-and-after example, if possible.
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Workarounds or alternatives (optional)
+      description: What have you tried, and what is missing?

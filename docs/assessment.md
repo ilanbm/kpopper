@@ -19,6 +19,26 @@ returned entries; assessment uses the full supplied base record. `--record` can 
 assessment was read successfully, including when a condition holds or attention is present.
 Use `check` when its validation exit status is needed.
 
+For the explicit shared core assessment, add `--profile core/v1 --history`:
+
+```sh
+kpop assess launch.announcement --profile core/v1 --history --record GROUNDING.yaml
+```
+
+This returns the history-aware schema-v3 envelope. The ordinary report and the standalone
+`core/v1` report without `--history` retain schemas 1 and 2. Schema v3 validates the complete
+schema-v2 nodes report, then adds captured acceptance, immutable pin evidence, coverage,
+assurance and necessary-support reservations without evaluating again. Computational `nodes`
+remain separate from `history_subjects`; proposals and contested/retired claims never become
+accepted scalar inputs. `findings_revision` excludes attention and display clipping, while
+`envelope_revision` identifies the exact emitted selection and policy. An inactive history
+authority is explicit and makes no acceptance claim.
+
+`--attention-only` is intentionally unavailable with `--history` until that projection has its
+own versioned envelope. Core consumer routes are explicit and dormant: `open`, `check`, `pull`,
+`affects`, `export`, `search`, `page`, and `session --assessment-profile core/v1` consume one
+captured context. Omitting the profile preserves legacy behavior.
+
 ## Findings
 
 The [JSON Schema](../scripts/assessment.schema.json) ships with the package. `schema_version: 1`

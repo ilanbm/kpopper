@@ -1,5 +1,6 @@
 """CI selects work from the entire PR, including deletions and renames."""
 import importlib.util
+import json
 import pathlib
 import subprocess
 import tempfile
@@ -18,6 +19,26 @@ class Selection(unittest.TestCase):
         selected = CI.select(["skills/ground/SKILL.md", "GROUNDING.yaml", "tests/test_skills.py"])
         self.assertFalse(any(selected.values()), selected)
 
+    def test_community_pr_keeps_only_mandatory_checks(self):
+        paths = [".github/ISSUE_TEMPLATE/bug_report.yml", ".github/ISSUE_TEMPLATE/config.yml",
+                 ".github/ISSUE_TEMPLATE/feature_request.yml", ".github/ISSUE_TEMPLATE/question.yml",
+                 ".github/pull_request_template.md", ".gitignore", "CODE_OF_CONDUCT.md",
+                 "CONTRIBUTING.md", "GROUNDING.yaml", "README.md", "SECURITY.md"]
+        for path in paths:
+            with self.subTest(path=path):
+                self.assertFalse(any(CI.select([path]).values()))
+        self.assertFalse(any(CI.select(paths).values()))
+
+    def test_selector_and_its_tests_use_the_mandatory_contract_job(self):
+        self.assertFalse(any(CI.select([".github/scripts/ci_selection.py",
+                                       "tests/test_ci_selection.py"]).values()))
+
+    def test_community_paths_do_not_hide_mixed_runtime_changes(self):
+        selected = CI.select(["SECURITY.md", ".github/ISSUE_TEMPLATE/bug_report.yml",
+                              "scripts/document/layer.js"])
+        self.assertEqual(selected, dict.fromkeys(CI.LANES, False) | {"documents": True})
+        self.assertTrue(all(CI.select(["SECURITY.md", "scripts/reasoning/lean/Kernel.lean"]).values()))
+
     def test_documents_run_python_and_dom_document_tests(self):
         for path in ("scripts/documents.py", "scripts/document/layer.js", "scripts/document-guide.md",
                      "tests/test_document_cli.py", "tests/test_documents.py", "tests/document_ui_fixture.py",
@@ -27,7 +48,8 @@ class Selection(unittest.TestCase):
 
     def test_shared_reader_and_cli_run_all_consumers_without_recompiling(self):
         for path in ("scripts/provenance.py", "scripts/cli.py", "scripts/session/core.py",
-                     "scripts/reasoning/evaluate.py", "tests/test_session.py", "tests/fixtures/page/PROVENANCE.yaml"):
+                     "scripts/reasoning/evaluate.py", "tests/test_session.py", "tests/fixtures/page/PROVENANCE.yaml",
+                     "examples/scoped-query/exercise.py", "examples/scoped-query/record.yaml"):
             with self.subTest(path=path):
                 selected = CI.select([path])
                 self.assertTrue(all(selected[k] for k in CI.LANES if k != "native"), selected)
@@ -56,14 +78,17 @@ class Selection(unittest.TestCase):
                      "scripts/reasoning/build_runtime.py", "scripts/reasoning/native/linux-x86_64.zip",
                      "scripts/reasoning/runtime.py", "tests/test_reasoning_runtime.py",
                      "scripts/reasoning/native/gmp-source-and-build.tar.gz",
-                     "scripts/reasoning/third_party/COPYING.LESSERv3", "tests/test_reasoning_distribution.py"):
+                     "scripts/reasoning/third_party/COPYING.LESSERv3", "tests/test_reasoning_distribution.py",
+                     "tests/test_reasoning_composition_kernel.py", "tests/test_reasoning_composition_review.py",
+                     "tests/test_reasoning_composition_acceptance.py", "tests/test_core_composition.py"):
             with self.subTest(path=path):
                 self.assertTrue(all(CI.select([path]).values()))
 
     def test_unknown_files_and_ci_changes_fail_open_to_full_checks(self):
         for path in ("new-component/config.toml", "new-file.md", "skills/ground/helper.py",
                      "docs/check.py", ".kpopper/new-hook.sh", ".github/workflows/reasoning-runtime.yml",
-                     ".github/scripts/ci_selection.py", "tests/test_ci_selection.py"):
+                     ".github/scripts/new-helper.py", ".github/ISSUE_TEMPLATE/helper.py",
+                     ".github/ISSUE_TEMPLATE/nested/config.yml", ".github/workflows/new.yml"):
             with self.subTest(path=path):
                 self.assertTrue(all(CI.select([path]).values()))
 
@@ -117,7 +142,10 @@ class GitRange(unittest.TestCase):
 
 class RequiredResults(unittest.TestCase):
     def results(self, selected):
-        return {"changes": {"result": "success", "outputs": {k: str(v).lower() for k, v in selected.items()}},
+        return {"changes": {"result": "success", "outputs": {
+                    **{k: str(v).lower() for k, v in selected.items()},
+                    "test_suites": json.dumps(CI.test_suites(selected)),
+                    "test_matrix": json.dumps(CI.test_matrix(selected))}},
                 "record": {"result": "success"},
                 **{job: {"result": "success" if any(selected[lane] for lane in lanes) else "skipped"}
                    for job, lanes in CI.JOB_LANES.items()}}
@@ -146,13 +174,46 @@ class RequiredResults(unittest.TestCase):
         del needs["changes"]["outputs"]["session"]
         self.assertTrue(CI.required_failures(needs))
 
+    def test_a_truncated_or_missing_test_plan_cannot_pass(self):
+        for plan in ('["documents"]', '[]', 'null', 'invalid'):
+            needs = self.results(CI.select(["scripts/cli.py"]))
+            needs["changes"]["outputs"]["test_suites"] = plan
+            self.assertTrue(CI.required_failures(needs))
+
+    def test_a_missing_shard_cannot_pass(self):
+        needs = self.results(CI.select(["scripts/cli.py"]))
+        matrix = json.loads(needs['changes']['outputs']['test_matrix'])
+        matrix['include'].pop()
+        needs['changes']['outputs']['test_matrix'] = json.dumps(matrix)
+        self.assertTrue(CI.required_failures(needs))
+
 
 class WorkflowCoverage(unittest.TestCase):
     def test_summary_covers_every_job_and_every_optional_family(self):
         jobs = yaml.safe_load((ROOT / ".github/workflows/check.yml").read_text())["jobs"]
         self.assertEqual(set(jobs["ci-required"]["needs"]), set(jobs) - {"ci-required"})
         self.assertEqual(set(CI.JOB_LANES), set(jobs) - {"ci-required", "changes", "record"})
-        self.assertEqual(set(jobs["changes"]["outputs"]), set(CI.LANES))
+        self.assertEqual(set(jobs["changes"]["outputs"]), set(CI.LANES) | {"test_suites", "test_matrix"})
+
+    def test_shards_cover_supported_interpreters_and_docs_avoid_extra_machines(self):
+        rows = CI.test_matrix(CI.select(['scripts/cli.py']))['include']
+        self.assertEqual({r['group'] for r in rows if r['python'] == '3.9'}, set(range(1, 9)))
+        self.assertEqual({r['group'] for r in rows if r['python'] == '3.13'}, set(range(1, 5)))
+        self.assertEqual({r['workers'] for r in rows if r['python'] == '3.9'}, {2})
+        docs = CI.test_matrix(CI.select(['scripts/documents.py']))['include']
+        self.assertEqual(len(docs), 2)
+        self.assertTrue(all(r['splits'] == 1 for r in docs))
+        main = CI.test_matrix(CI.select(['scripts/cli.py']), pull_request=False)['include']
+        self.assertEqual({r['python'] for r in main}, {'3.13'})
+        self.assertEqual(len(main), 4)
+
+    def test_workflow_executes_the_declared_matrix_and_verifies_its_manifests(self):
+        jobs = yaml.safe_load((ROOT / '.github/workflows/check.yml').read_text())['jobs']
+        self.assertEqual(jobs['check']['strategy']['matrix'],
+                         '${{ fromJSON(needs.changes.outputs.test_matrix) }}')
+        commands = '\n'.join(s.get('run', '') for s in jobs['ci-required']['steps'])
+        self.assertIn('--verify-results', commands)
+        self.assertIn('--matrix', commands)
 
     def test_content_only_pr_keeps_existing_skill_and_release_contracts(self):
         jobs = yaml.safe_load((ROOT / ".github/workflows/check.yml").read_text())["jobs"]

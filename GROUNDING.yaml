@@ -1,5 +1,5 @@
 meta:
-  updated: 2026-09-17
+  updated: 2026-09-18
   name: kpopper
   scope: "What this plugin is for and the decisions that shaped it, kept in its own format -
           the tools eat their own cooking, and every session here opens grounded."
@@ -666,6 +666,108 @@ sources:
            conflicts under git where one file per version merges clean, acts can conflict, the two
            times need exact meaning, the merged entry file is rebuilt and never read as an edit - and
            hardened by two review rounds of the module itself"
+  s.2026_09_17_history_reasoning_integration:
+    name: "History-backed records with the packaged exact reasoning core"
+    asked: "Integrate history-backed records with the packaged exact reasoning core, preserve
+            historical evidence and recoverable writes, and continue autonomously through a verified
+            release candidate"
+    file: "docs/history-contract.md"
+    at: "History store; Capture and replay; Prepared legacy publication and recovery; Integrated
+         write scope at d9857cdb184d1daf4df37c09e71be804e1c46c37"
+    scope:
+      kind: code
+      commit: d9857cdb184d1daf4df37c09e71be804e1c46c37
+      environment: "kpopper source at d9857cdb184d1daf4df37c09e71be804e1c46c37"
+    of: "2026-09-17"
+  s.2026_09_17_host_compatibility:
+    asked: "Check how kpopper works in OpenClaw, add usage instructions, and identify and test other
+            environments worth supporting before launch; run bounded compatibility checks in
+            parallel."
+    name: "The session that verified host loading and hook protocols, added OpenClaw and OpenCode
+           guides, and corrected Gemini, Copilot, Cursor and Cowork compatibility claims"
+    of: "2026-09-17"
+  s.2026_09_17_selective_ci:
+    name: "The request to make PR checks selective while retaining the needed coverage"
+    asked: |-
+      נראה לי שהריצות של הchecks שיש לנו כרגע בgithub הן לא יעילות, בעיקר אלה שרצות על כל PR
+      תסתכל בm8t-stack-poc ובריפואים שקשורים אליו אולי שם הטסטים יותר טובים? יודעים לאתר מתי צריך להריץ משהו ומתי לא?
+    read: "2026-09-17"
+    fidelity: quoted
+  s.2026_09_17_t3_integration:
+    name: "T3 executable integration session"
+    asked: "Continue the merged T2 baseline through T3-T7 verified RC with one integrator and useful
+            DAG parallelism."
+    file: "/Users/ilanbm/.local/state/kpopper/ingestion/59fc71c2582477cc5d4343318c7bf9b372c3e0d2bd4fe34ec620cbe721a1de92/sources/36be8ecda06ff2bd369b8279b87529fc.txt"
+    at: "captured executable findings from task 01a0afd0-4d5f-7083-8025-f1ddca47d953"
+    of: "2026-09-17"
+    read: "2026-09-17"
+  s.2026_09_18_ci_cost:
+    name: "The session that measured what the repository's own checks cost to run"
+    asked: "הMetered usage בפרויקט בגיטהב מוגזם, זה כבר על 110$ ואני כל הזמן מעלה\nבטוח אפשר לצמצם
+            עלויות"
+    fidelity: quoted
+    at: "GitHub Actions runs and jobs API for this repository, 1-17 September 2026: 2,342 jobs,
+         durations taken from each job's own start and finish, billed at the private-repository
+         per-minute rates with each job rounded up to the minute"
+    of: "2026-09-18"
+    read: "2026-09-18"
+  s.2026_09_18_continue_reasoning_core:
+    name: "The request to continue the reasoning-core task"
+    asked: "תוכל להמשיך את המשימה של&#x20;\ncodex://threads/01a0afd0-4d5f-7083-8025-f1ddca47d953\n?"
+    at: "User request in task 01a0b42e-d428-79a0-a6f7-03bf6195dde1"
+    read: "2026-09-18"
+    fidelity: quoted
+  s.2026_09_18_lane_a_hoist:
+    name: "The Lane A session that implemented F1, the per-document hoist in
+           knowledge_views.overlay"
+    asked: "yes start building and coordinate with the architect please"
+    fidelity: quoted
+    of: "implementation of F1 against the overlay-speed lane-a priming, with a differential test
+         whose oracle is the pre-hoist overlay read out of git history at e888570"
+    at: "Claude Code desktop session local_44183971-827e-4438-8c56-23ccc66c0b2b, 2026-09-18, macOS
+         arm64, Python 3.13.12"
+    read: "2026-09-18"
+  s.2026_09_18_lane_b_load_once:
+    name: "The Lane B session that made a read command read the record once and give that reading to
+           the page build"
+    asked: "please read your priming prompt:
+            /Users/orkeren/Projects/kpopper/docs/shipshape/work/overlay-speed/lane-b-priming.md\n\nand
+            start working (coordinate with the architect first)"
+    fidelity: quoted
+    of: "wall clock of python3 scripts/provenance.py against the record as it stood at e888570,
+         three cold runs and three warm, e888570 and this branch at 157cbfa run from the same
+         directory against the same file, so only the code differs; the load, overlay and inference
+         counts come from a wrapper that counted calls into the live view from outside the reader
+         and changed nothing else. Taken before the per-document hoist merged in beside it, so the
+         after figures isolate this change alone and are no longer what the tree reads: see
+         m.read_command_record_loads"
+    at: "Claude Code desktop session local_759e9307-40bc-4d70-9646-213fcbe3f9da, 2026-09-18, macOS
+         arm64, Python 3.13.12"
+    read: "2026-09-18"
+  s.2026_09_18_overlay_profile:
+    name: "The Architect session that profiled a live open on this record and found the per-entry
+           inference loop"
+    asked: "help me figure out whether or not this is true, whether this is truly a pain point and
+            something worth implementing AND to help me understand whether or not the proposed
+            implementation is a good idea/you would change something"
+    fidelity: quoted
+    of: "cProfile of scripts/provenance.py open on a worktree of e888570, then an experiment that
+         wrapped the reader from outside and memoized pending_grounding.semantic_roles and
+         meaning_capabilities per document object, changing nothing else; its numbers are
+         m.overlay_open_seconds"
+    at: "Claude Code desktop session local_fde22652-a55f-4570-9e96-0b1131d47541, 2026-09-18, macOS
+         arm64, Python 3.13"
+    read: "2026-09-18"
+  s.2026_09_18_remeasure_midnight:
+    name: "The session that reproduced and fixed the remeasure tests crossing UTC midnight"
+    asked: "Fix the three TheMeasurementTests that fail when a long run crosses UTC midnight, audit
+            similar tests, run focused and full validation, record the finding, and open an unmerged
+            pull request."
+    fidelity: paraphrase
+    file: "/Users/ilanbm/.local/state/kpopper/ingestion/228a1ddd08346ee05e16ceac98974b84e2395e8e9fb6ec6e78e47bedf021d3f0/sources/30d93f80cdb17983b37d760562bcdc7b.txt"
+    at: "PR #119 run 35285716254 attempt 1 and local forced-date and fixed-day test runs"
+    of: "2026-09-18"
+    read: "2026-09-18"
   s.background_ingestion:
     name: "Background capture and selective delivery contract"
     file: "skills/kpopper/INGESTION.md"
@@ -677,10 +779,28 @@ sources:
     file: "scripts/consolidate.py"
     read: "2026-09-10"
     revision: d17225095c856b147d03522981f2c639e57f73e1
+  s.ci_execution_evidence:
+    name: "CI execution measurements and agreed optimization scope"
+    url: "https://github.com/ilanbm/kpopper/actions/runs/35320374247"
+    asked: "Reduce CI latency with early integrity checks, parallel tests, per-target dependencies,
+            verified build caching and explicit suite selection while retaining coverage."
+    fidelity: paraphrase
+    read: "2026-09-18"
   s.ci_selection:
     name: "CI family selection and required-results policy"
     file: ".github/scripts/ci_selection.py"
     read: "2026-09-17"
+    from: s.2026_09_17_selective_ci
+  s.core_followups_contract:
+    name: "Core followup captured reading contract"
+    file: "scripts/followup_core.py"
+    read: "2026-09-18"
+    revision: "1b445298e413af12f24d6c0ab7a67637b5e9df84"
+  s.core_operational_contract:
+    name: "Captured core operational assessment contract"
+    file: "scripts/reasoning/operations.py"
+    read: "2026-09-18"
+    revision: ac61f7f
   s.followups_contract:
     name: "Followup task and authority contract"
     file: "skills/kpopper/FOLLOWUPS.md"
@@ -706,6 +826,21 @@ sources:
            gaze can enhance advertising effectiveness"
     url: "https://pmc.ncbi.nlm.nih.gov/articles/PMC3941030/"
     read: "2026-09-13"
+  s.ingest_64eac369f0d3ca58463f27679fa42bb0:
+    name: "Captured report"
+    file: "/Users/ilanbm/.local/state/kpopper/ingestion/d38be57d78902508217b8f6b3d18d9c39fcf1b9fd9a67b76790e4473e1fe5b68/sources/64eac369f0d3ca58463f27679fa42bb0.txt"
+    read: "2026-09-16"
+    recorded_for: "Update p.reasoning_core_contract, m.scope_basis_collision_cases from this
+                   captured report."
+  s.query_candidate_report_2026_09_18:
+    name: "Finite-query candidate verification packet"
+    from: s.2026_09_18_continue_reasoning_core
+    file: "/Users/ilanbm/.local/state/kpopper/ingestion/49582f5ea7bfe17bb7f2179a2ccb2cdffc782e5587bdede1ac990333505fe56e/sources/1ee2f7be0e85a58b92a0d7aae12cec11.txt"
+    url: "https://github.com/ilanbm/kpopper/actions/runs/35343804914"
+    at: "CI and merge API observations plus retained local acceptance and timing receipts"
+    of: "2026-09-18"
+    read: "2026-09-18"
+    fidelity: quoted
   s.watch_command:
     name: "Watch plugin command"
     file: "skills/watch/SKILL.md"
@@ -721,6 +856,10 @@ sources:
     at: "How it works / Two working modes; assets/diagrams/two-working-modes.png and
          two-working-modes-mobile.png"
     read: "2026-09-14"
+  doc.contributing:
+    name: "Contribution and developer setup guide"
+    file: CONTRIBUTING.md
+    read: "2026-09-16"
   doc.fact_moves:
     url: "https://claude.ai/code/artifact/ca99e558-60ae-4b22-9221-e3b29d7d7e2b"
     name: "מה קורה כשעובדה זזה - the unified node model"
@@ -809,6 +948,14 @@ sources:
          (39 entries, Hebrew and English names), the hook run per prompt and its line placed in the
          developer instructions of one arm, the same opener in both"
     read: "2026-09-11"
+  run.history_record_measurement_a0e5e9b:
+    name: "History authority record measurement"
+    file: ".kpopper/measure.yaml"
+    at: "blocked_on_reopeners recipe evaluated against GROUNDING.yaml at
+         a0e5e9bbca859db59ccc607de2c3c1fd20fcc886; observed 64"
+    read: "2026-09-17"
+    scope: "Repository text count only; it does not review the adequacy of each observational
+            falsifier"
   run.hub_vs_now:
     name: "A hand-written page and this plugin's Now tab, rendered from the same record and
            read side by side"
@@ -819,6 +966,26 @@ sources:
     name: "Focused graph export contract"
     file: "docs/graph-export.md"
     read: "2026-09-14"
+  doc.history_writer_contract_c5cc6a3:
+    name: "History writer, replay and branch adoption contract at c5cc6a3"
+    file: "docs/history-contract.md"
+    at: "Implementation and regression evidence at c5cc6a3b873628d08f338e457f09153962d406f8"
+    read: "2026-09-17"
+    scope:
+      kind: code
+      commit: c5cc6a3b873628d08f338e457f09153962d406f8
+      environment: "source protocol and disposable regression fixtures"
+  doc.host_compatibility:
+    name: "Host compatibility verification and release acceptance"
+    file: "docs/compatibility.md"
+    read: "2026-09-17"
+    from: s.2026_09_17_host_compatibility
+  doc.github_community_guidance:
+    name: "GitHub community profiles and workflow status badges"
+    url: "https://docs.github.com/en/communities/setting-up-your-project-for-healthy-contributions/about-community-profiles-for-public-repositories"
+    of: "Community-profile checklist; badge behavior is documented separately at
+         https://docs.github.com/en/actions/how-tos/monitor-workflows/add-a-status-badge"
+    read: "2026-09-15"
   doc.hub_seam:
     name: "The lab's own decision on why its page stays hand-written - the argument is manual,
            the agenda is derived, and a block becomes a query once its content is anchored"
@@ -828,6 +995,17 @@ sources:
     name: "The source update and recording gate regression contract"
     file: "tests/test_ingestion.py"
     read: "2026-09-07"
+  doc.plugin_runtime:
+    name: "Explicit Python setup and runtime selection for plugin hooks"
+    file: "docs/plugin-runtime.md"
+    read: "2026-09-17"
+  doc.session_test_gates:
+    name: "Checked-session integration test readiness gates"
+    file: "tests/test_predicate_literals.py"
+    of: "PredicateLiteralContract.setUpClass; also ReadableRuntime.setUpClass in
+         tests/test_readable_expressions.py and cache validation in scripts/session/core.py
+         Core.__init__"
+    read: "2026-09-17"
   doc.standalone_html:
     name: "Standalone authored HTML contract"
     from: s.2026_09_10_standalone_html
@@ -854,6 +1032,18 @@ sources:
     of: "session 'provenance-yaml-review', 2026-09-01: the day's transcripts, every branch, and
          dry-run merges of each pair"
     read: "2026-09-01"
+
+  run.native_bundle_holds_the_workflow:
+    name: "What the committed GMP corresponding-source archive turned out to contain"
+    v: "_source_bundle_files reads .github/workflows/reasoning-runtime.yml and stores its bytes in
+        gmp-source-and-build.tar.gz beside the GMP tarball, its own source and the licence texts.
+        Adding two timeout-minutes lines to that workflow made --check-bundles raise 'GMP
+        corresponding-source recipe or inventory mismatch' on every one of the nine installed legs,
+        while the parent commit passed"
+    from: s.2026_09_18_ci_cost
+    at: "scripts/reasoning/build_runtime.py, _source_bundle_files and check_bundles; reproduced on a
+         fresh checkout of the commit and of its parent"
+    of: "2026-09-18"
 
   run.page_move_three_states:
     name: "The move of the page's code out of Python strings, run through check in three states of
@@ -1030,6 +1220,16 @@ known:
     from: s.watch_command
     at: "name and invocation; the current scheduled cadence remains daily"
     of: "2026-09-10"
+  followups.core_readings:
+    name: "Core followup readings retain evidence independently"
+    v: "Declared core and active-history followups use one captured assessment. Scalar conditions
+        read exact typed values or authored judgment verdicts; changed triggers also retain
+        computational basis and history evidence. Acceptance, falsifier, support and integrity remain
+        independent. Unavailable readings are unknown only to triggers that require them; scanning
+        does not execute work or change the record."
+    from: s.core_followups_contract
+    at: "project and capture; tests/test_core_followups.py"
+    of: "2026-09-18"
   followups.execution:
     name: "Who performs a ready followup"
     v: "The scheduled host agent performs authorized work in its own review run. The coordinator
@@ -1046,11 +1246,14 @@ known:
     of: "2026-09-10"
   followups.maintenance_scope:
     name: "What graph maintenance currently selects"
-    v: "The packet returns at most one flagged judgment. Source refresh and open-question work are
-        permitted by the agent prompt, without a general source-age or worktree-graph sweep."
-    from: s.followups_state
-    at: "graph and Store.scan; maintenance instruction in scripts/followup_daily.py::plan"
-    of: "2026-09-10"
+    v: "The packet returns at most one flagged item: legacy judgments, or core nodes and history
+        subjects with attention, reserved support or unavailable readings. Source refresh and
+        open-question work remain permitted by the agent prompt, without a general source-age or
+        worktree-graph sweep."
+    # set 2026-09-18: Core followup scans now project independent captured findings.
+    from: s.core_followups_contract
+    at: "project; scripts/followups.py Store.scan; scripts/followup_daily.py plan"
+    of: "2026-09-18"
   followups.outcome_retention:
     name: "What completion preserves"
     v: "Attempt outcomes and evidence remain in the private followup ledger. Finishing a task does
@@ -1081,20 +1284,57 @@ known:
          half drifts while the total holds"
     measure: blocked_on_implementation
   m.blocked_on_reopeners:
-    v: 63
+    v: 64
+    # set 2026-09-17: remeasured after the explicit history authority decision
     # set 2026-09-14: this branch added two judgments that declare an observational hole
     # set 2026-09-11: measured by blocked_on_reopeners at a51bc75 with the working tree changed
     # reconciled 2026-09-05 after the same-day write rule refused a second reading: this tree adds
     # five observational declarations to the 55 measured earlier that day
-    of: "2026-09-14"
+    of: "2026-09-17"
     name: "Judgments that declare a hole with blocked_on - the count. Whether each names a sign
            that would re-open the decision, or an input the record lacks, is read by hand and said
            beside it"
-    from: run.blocked_on_reread
-    at: "of 61 declared holes - 57 say observational and 4 implementation, the second half
-         measured beside this one; none is written as what the record is missing, and the one
-         that names an entry names one the record holds"
+    from: run.history_record_measurement_a0e5e9b
+    at: "blocked_on_reopeners recipe against GROUNDING.yaml at a0e5e9bbca859db59ccc607de2c3c1fd20fcc886, after adding explicit history authority"
     measure: blocked_on_reopeners
+  m.ci_native_wait_baseline:
+    name: "Late integrity feedback behind all native builds"
+    v: "PR 120 run 35288867621 delayed a one-second committed-bundle integrity failure until all
+        five native builds finished, about 24 minutes after builds began."
+    from: s.ci_execution_evidence
+    at: "https://github.com/ilanbm/kpopper/actions/runs/35288867621 ; installed job 105432604343 and
+         Windows build 105427309644."
+  m.ci_python_serial_baseline:
+    name: "Measured serial Python suite before execution changes"
+    v: 2280.21
+    from: s.ci_execution_evidence
+    at: "Run 35320374247, job 105521369793 at main 8758ed3: seconds for 2468 tests, 103 skipped;
+         total job 2299 seconds."
+  m.ci_rounding_waste:
+    name: "What the checks pay for minutes they do not use"
+    v: "25.33 dollars of 142.03 - 18 percent - is the gap between a job's real duration and the
+        whole minute it bills, concentrated on the ten-times Darwin rate where several matrix legs
+        finish inside a minute"
+    from: s.2026_09_18_ci_cost
+    at: "summed per job over 2,342 jobs; the leg testing the installed runtime on Darwin billed 29
+         minutes for 29 runs"
+    as_of: "2026-09-18"
+  m.ci_spend_by_platform:
+    name: "Share of the checks' bill each runner platform takes, against its share of the jobs"
+    v: "Darwin 81.92 dollars on 397 jobs; Linux 36.29 on 1,612; Windows 23.82 on 333 - Darwin is 58
+        percent of the cost on 17 percent of the jobs, because a Darwin minute bills at ten times a
+        Linux one"
+    from: s.2026_09_18_ci_cost
+    at: "2,342 jobs, 1-17 September 2026; the session job on Darwin runs 1.4 minutes at the median
+         and still costs 29.52 dollars"
+    as_of: "2026-09-18"
+  m.ci_spend_by_trigger:
+    name: "Where the checks' bill falls between a pull request and the push that lands it"
+    v: "108.83 dollars on pull requests against 29.99 on pushes to main; of the 199 Darwin session
+        jobs, 151 came from pull request commits and 48 from pushes"
+    from: s.2026_09_18_ci_cost
+    at: "1-17 September 2026, by triggering event"
+    as_of: "2026-09-18"
   m.claims.general_held:
     v: 3
     name: "Claims about how things usually work that held when scored"
@@ -1110,6 +1350,12 @@ known:
     name: "Claims about this project that held - checked with a run before they were asserted"
     from: run.claims_scored
     at: "of 6"
+  m.copilot_live_core_verified:
+    v: true
+    name: "Copilot live core sequence passes with explicitly retained source-fidelity gaps"
+    from: doc.host_compatibility
+    at: "Copilot live exercise / core behavior and provenance gaps"
+    of: "2026-09-17"
   m.core.bytes_per_version:
     v: 367
     unit: bytes
@@ -1320,12 +1566,21 @@ known:
     also: [p.sameness_reasons]
   p.ci_native_build_inputs:
     name: "Inputs requiring the five-target native build and modified-GMP audit"
-    v: "Native sources, builder, bundled runtime, native loader and replacement probe, notices, and
-        CI selection/native-workflow changes; unknown paths select all checks. Packaging metadata
-        alone tests installation without recompiling native source."
+    v: "Native sources, builder, bundled runtime, native loader and replacement probes, notices, and
+        native-workflow changes select native builds; unknown paths select all checks. Selector-only
+        changes use mandatory contracts. Packaging metadata alone tests consumers and installation
+        without recompiling native source."
+    of: "2026-09-18"
     from: s.ci_selection
-    at: "families(path) and select(paths), branch codex/selective-ci"
+    at: "families(path) at commit 18145ac: native-sensitive inputs and the explicit selector-only exemption."
     as_of: "2026-09-17"
+  p.community_guidance:
+    name: "Public contribution guidance and truthful workflow status"
+    v: "GitHub recommends discoverable community files and issue templates; workflow status badges
+        report actual workflow results."
+    from: doc.github_community_guidance
+    at: "GitHub Docs: community-profile checklist and workflow status badge guidance; paraphrase"
+    of: "2026-09-15"
   p.contested_meanings:
     v: 1
     name: "Meanings the reader gives the word contested - a rival claim laid against what the record
@@ -1334,6 +1589,26 @@ known:
     at: "contested, and the opener's standing line; the dry run's report and the page's arrangement
          note say the word of the door's refusal and of a question - the same rival claim"
     of: "2026-09-04"
+  p.contributor_session_test_setup:
+    name: "Cached kernel and optional dependencies for checked-session tests"
+    v: "A matching cached kernel from session setup enables kernel-backed integration tests; Lean on
+        PATH alone does not. Some enabled tests import the session extra, so a base-only environment
+        can fail on missing tiktoken. The separate core/v1 packaged runtime needs neither the Lean
+        compiler nor checked-session setup for normal execution."
+    # set 2026-09-17: Correct the activation condition against the test gates and cached-core loader.
+    # set 2026-09-16: Distinguish the legacy checked-session test requirements from the packaged runtime introduced on main.
+    from: doc.session_test_gates
+    at: "PredicateLiteralContract.setUpClass and store import; ReadableRuntime.setUpClass; Core.__init__ cache validation"
+    of: "2026-09-17"
+  p.core_operational_capture:
+    name: "Core operational checks retain their captured base and prospective evidence"
+    v: "Core consolidation captures the record and hypothesis text together, separates base and
+        prospective findings, and uses captured v3 findings for checks while retaining the existing
+        replacement, date, take and drop policy. History-backed candidates require prospective
+        history evidence; the ordinary-core bridge refuses them."
+    from: s.core_operational_contract
+    at: "World, load, derive and findings; scripts/consolidate.py read, union_of and fold"
+    of: "2026-09-18"
   p.coverage_thresholds:
     v: 0
     name: "Thresholds the coverage report carries in code - a line drawn anywhere but inside a
@@ -1372,6 +1647,63 @@ known:
     of: "2026-09-13"
     distinct_from: lit.github_registries
     # distinct 2026-09-14: one reading of the same table, two jobs: the list is what a person reads to see which ecosystems are served, the count is the one number a falsifier can compare against
+  p.history_activation_cancellation:
+    name: "Activation cancellation and guarded group recovery"
+    v: "Guarded activation cancellation retains the complete candidate as inactive immutable audit,
+        restores authored bytes, advances the legacy authority epoch, and binds cancellation receipts
+        to the authority and later commits. Group recovery validates every member before clearing
+        reader guards."
+    of: "2026-09-17"
+    from: doc.history_writer_contract_c5cc6a3
+    at: "docs/history-contract.md, Explicit proposals, groups and generation changes; scripts/history_activation.py; scripts/history_group_activation.py; tests/test_history_generations.py"
+    scope: "Source protocol and disposable regression fixtures; not a live-record cutover or
+            installed release-readiness claim"
+  p.history_branch_adoption:
+    name: "Pinned branch capture and adoption"
+    v: "Local branch history is captured at pinned Git commits and adopted through one prepared
+        mutation with explicit overlap choices. Captured source envelopes are retained as immutable
+        audit evidence; prior capsule coverage is explicit rather than recursively copied. Ordinary
+        target evidence must match exact source bytes, and recovery never rereads moved source refs."
+    of: "2026-09-17"
+    from: doc.history_writer_contract_c5cc6a3
+    at: "docs/history-contract.md; scripts/history_branch.py; scripts/history_direct.py; tests/test_history_branch.py; tests/test_history_branch_direct.py"
+    scope: "Single and bounded multiple local Git sources, no remote publication authority or live
+            record activation"
+  p.history_capture_contract:
+    name: "Committed history capture contract"
+    fidelity: paraphrase
+    v: "typed-history/v2 immutable claims and acts use marker-selected authority; complete committed
+        closure feeds bounded Snapshot history evidence for single-entry frozen or Simple live reads;
+        Advanced live, composite history and public assessment-v3 remain unsupported"
+    scope:
+      kind: code
+      commit: d9857cdb184d1daf4df37c09e71be804e1c46c37
+      environment: "kpopper source at d9857cdb184d1daf4df37c09e71be804e1c46c37"
+    from: "s.2026_09_17_history_reasoning_integration"
+    at: "docs/history-contract.md, History store and Capture and replay; scripts/history_contract.py and scripts/reasoning/snapshot.py at d9857cdb184d1daf4df37c09e71be804e1c46c37"
+    of: "2026-09-17"
+  p.history_replay_audit_evidence:
+    name: "Adapter audit replay witness"
+    v: "Adapter audit replay accepts only the current adapter identity or an exact full audit in
+        validated causal parent receipts. A pending operation cannot witness its own audit. An
+        unknown old adapter requires the original verified runtime; semantic and native audit changes
+        still refuse."
+    of: "2026-09-17"
+    from: doc.history_writer_contract_c5cc6a3
+    at: "docs/history-contract.md; scripts/history_authoring.py; tests/test_history_batch_final_world.py"
+    scope: "Source replay admission contract; recorded provenance is not proof of external source
+            truth"
+  p.history_writer_compatibility:
+    name: "History writer compatibility"
+    v: "History batch receipt v6 validates the final staged world while retaining per-action
+        admission and original seen. Retained v2/v3 operations replay exact bytes. Unicode subjects
+        retain exact logical identities through versioned hashed physical paths; older raw paths
+        remain readable. Identity changes and brief references publish under one reader guard."
+    of: "2026-09-17"
+    from: doc.history_writer_contract_c5cc6a3
+    at: "docs/history-contract.md; scripts/history_authoring.py; scripts/history_paths.py; scripts/history_identity.py; tests/test_history_batch_final_world.py; tests/test_history_direct_auxiliary.py"
+    scope: "Source implementation with focused disposable regression evidence; full combined and
+            installed gates remain separate"
   p.hypothesis_homes:
     v: 1
     name: "Places the reader reads hypothesis files from"
@@ -1419,6 +1751,16 @@ known:
     from: "skills/kpopper/references/shape.md"
     at: "Where the record lives"
     name: "The cost of a second copy"
+  m.full_suite_runtime:
+    name: "How long the whole suite takes, and why the checks' own median is so much shorter"
+    v: "2,454 tests in 2,775 seconds - 46 minutes - run locally on 2026-09-18. The check job's
+        median is 2.4 minutes because most of its runs are the document-only selection; of 598
+        successful runs, 8 took between 37 and 67 minutes, and those are the full suite doing its
+        work rather than a job hanging"
+    from: s.2026_09_18_ci_cost
+    at: "python -m unittest discover -s tests on this tree, against the 598 successful check jobs of
+         1-17 September 2026"
+    as_of: "2026-09-18"
   m.grounding_line_prefix_guesses:
     v: 182
     unit: trials
@@ -1428,6 +1770,12 @@ known:
     at: "the first command of each trial - pull heat, pull pump water; the 13 wrong answers were all
          dates under when., a prefix no question suggests"
     of: "2026-09-11"
+  m.host_compatibility_model_sessions:
+    v: 0
+    name: "Real-model conversations in the initial compatibility pass, before live exercises"
+    from: doc.host_compatibility
+    at: "Verification matrix / initial loader-protocol phase before live exercises"
+    of: "2026-09-17"
   m.letter_prefix_ids:
     v: 214
     unit: entries
@@ -1452,6 +1800,18 @@ known:
     from: run.prefix_survey
     at: "the judgment collection of each record, and the two letters both live records hold"
     of: "2026-09-11"
+  m.named_main_delivery_corrected:
+    v: true
+    name: "Named-main delivery and true-subagent suppression pass all five fixed-hook regressions"
+    from: doc.host_compatibility
+    at: "Scope before launch / guard correction and five passing regression cases"
+    of: "2026-09-17"
+  m.named_main_hooks_suppressed:
+    v: true
+    name: "Named-main suppression reproduced on baseline 5c2062b before the guard correction"
+    from: doc.host_compatibility
+    at: "Scope before launch / initial pre-fix observation on baseline 5c2062b"
+    of: "2026-09-17"
   m.older_records_changed:
     v: 0
     name: "Records written before the field whose reading changed once the reader learned it"
@@ -1530,6 +1890,80 @@ known:
     at: "tool.setuptools.package-data"
     measure: checks_in_the_wheel
     of: "2026-09-03"
+  m.openclaw_bundle_hooks:
+    v: 0
+    name: "Runnable kpopper hooks registered by the existing bundle in OpenClaw 2026.9.4"
+    from: doc.host_compatibility
+    at: "Verification matrix / OpenClaw 2026.9.4: hook inventory confirms no kpopper hook pack"
+    of: "2026-09-17"
+  m.openclaw_bundle_skills:
+    v: 8
+    name: "Eligible model-visible kpopper skills in isolated OpenClaw 2026.9.4 on macOS"
+    from: doc.host_compatibility
+    at: "Verification matrix / OpenClaw 2026.9.4: all eight skills eligible and model-visible"
+    of: "2026-09-17"
+  m.openclaw_isolated_bundle_verified:
+    v: true
+    name: "OpenClaw isolated customization test uses only fresh bundle skills and passes independent
+           recall and change assertions"
+    from: doc.host_compatibility
+    at: "OpenClaw customization-isolated follow-up / negative control, five native inventories and
+         independent assertions"
+    of: "2026-09-17"
+  m.openclaw_live_core_verified:
+    v: true
+    name: "OpenClaw Claude CLI backend passes assisted creation, two-project random recall and
+           preserved-snapshot change checks"
+    from: doc.host_compatibility
+    at: "OpenClaw live exercise / scope, assertions and operator-assisted qualification"
+    of: "2026-09-17"
+  m.overlay_open_seconds:
+    name: "Seconds a live open, check and pull cost on this record at e888570, and the same reads
+           frozen"
+    from: s.2026_09_18_overlay_profile
+    v:
+      entries: 429
+      record_lines: 5493
+      open_live: 10.5
+      check_live: 10.3
+      pull_live: 5.2
+      open_frozen: 0.37
+      check_frozen: 0.26
+      pull_frozen: 0.17
+      overlays_per_open: 2
+      semantic_roles_calls_per_open: 872
+      findall_calls_per_open: 2529314
+      open_live_with_per_document_memo: 0.7
+      entries_319_open_live: 6.1
+    at: "wall clock of python3 scripts/cli.py, three runs, warm parse cache; the memo number comes
+         from a wrapper that memoized pending_grounding.semantic_roles and meaning_capabilities per
+         document object and changed nothing else; the 319-entry number is the pre-#84 record copied
+         into a fresh git repository and read with the same code"
+    of: "2026-09-18"
+  m.overlay_open_seconds_after_hoist:
+    name: "Seconds a live open and check cost on this record once the overlay infers once per
+           document, and the same reads frozen"
+    from: s.2026_09_18_lane_a_hoist
+    v:
+      entries: 434
+      open_live_warm: 0.76
+      check_live_warm: 0.61
+      open_live_cold: 1.14
+      check_live_cold: 0.87
+      open_frozen_warm: 0.38
+      check_frozen_warm: 0.25
+      open_live_warm_before: 10.89
+      check_live_warm_before: 10.66
+      semantic_roles_calls_per_open: 4
+      semantic_roles_calls_per_open_before: 882
+    at: "wall clock of python3 scripts/cli.py, three runs each, median reported, on branch
+         claude/overlay-hoist when this record held 434 entries, before #122 merged into it; both the
+         before and after numbers were measured on that same record state, the before by restoring
+         the pre-hoist scripts/knowledge_views.py from e888570 into the same worktree and putting it
+         back, so the two differ only in the overlay; cold is KPOPPER_NO_CACHE=1 and warm is the
+         parse cache as a user gets it; the call counts wrap knowledge_views.overlay from outside and
+         count pending_grounding.semantic_roles"
+    of: "2026-09-18"
   m.prompt_hook_10x_kept:
     v: 0.15
     unit: s
@@ -1568,6 +2002,56 @@ known:
            readable"
     from: run.claims_by_reach
     at: "of 83 asserted; one answer was left out of the reply"
+  m.read_command_loads_after:
+    name: "Record readings one live read command makes now, on a project with no publication target"
+    from: s.2026_09_18_lane_b_load_once
+    v: 1
+    of: "counted the same way on this branch, and pinned by tests.test_page_document_reuse, which
+         asserts one reading for open and for check on a bare record and on an Advanced project with
+         a contribution pending. Neither carries a configured publication target, which reaches
+         watch and reads the record again from inside the overlay - outside what this counts and
+         outside the change it measures. No recipe recomputes this number: the sign it carries for
+         d.page_build_reads_the_loaded_record is re-read by running that module, and written here
+         by hand"
+  m.read_command_loads_before:
+    name: "Record readings one live read command made before the page was given the reader's own"
+    from: s.2026_09_18_lane_b_load_once
+    v: 2
+    of: "counted at e888570 by a wrapper that counted calls into the live view from outside the
+         reader and changed nothing else; one reading by the command, one by the page build it asked"
+  m.read_command_record_loads:
+    name: "How many times one live read command read this record, and what open and check cost,
+           before and after the page build was given the reading the reader already had"
+    from: s.2026_09_18_lane_b_load_once
+    v:
+      entries_at_e888570: 429
+      record_lines_at_e888570: 5493
+      loads_per_read_command_before: 2
+      loads_per_read_command_after: 1
+      overlays_per_open_before: 2
+      overlays_per_open_after: 1
+      semantic_roles_calls_per_open_before: 872
+      semantic_roles_calls_per_open_after: 436
+      open_live_before: 10.66
+      open_live_after: 5.49
+      check_live_before: 10.67
+      check_live_after: 5.45
+      open_frozen_before: 0.19
+      open_frozen_after: 0.19
+    of: "the record as it stood at e888570, before these entries were added to it; seconds are the
+         median of three warm runs on macOS arm64 under Python 3.13.12, and the three cold runs read
+         10.96 before and 5.70 after for open, 10.84 and 5.60 for check. Frozen does not move because
+         a frozen overlay returns at once, so the second reading was already nearly free. The counts
+         are m.read_command_loads_before and m.read_command_loads_after.
+
+         Every `after` here is this change alone, measured at 157cbfa against e888570 - the branch
+         before the per-document hoist merged into it. They are deliberately not what the tree reads
+         now: with the hoist beside this change a live open measures 0.36s and check 0.35s, and
+         semantic_roles runs twice per open rather than 436 times, because the hoist took the
+         per-entry inference out from under the one reading this change leaves. The load and overlay
+         counts - 2 to 1 - are the part that is this change's own and still hold. What the two
+         changes cost together on main is a measurement neither of them owns; it belongs to whoever
+         re-measures there"
   m.record_scale:
     v: 107
     name: "Largest live record, entries"
@@ -1598,6 +2082,19 @@ known:
          they report a judgment, and by an arrangement's sign when it is written - every surface
          reads that one answer"
     measure: predicate_shapes
+  p.prepared_legacy_recovery:
+    name: "Prepared legacy write and recovery boundary"
+    fidelity: paraphrase
+    v: "Existing-record direct writes and report ingestion retain exact record/archive/view images
+        in a journal; recover routes to the configured record and refuses changed evidence. Matching
+        after images alone does not establish completed operation identity."
+    scope:
+      kind: code
+      commit: d9857cdb184d1daf4df37c09e71be804e1c46c37
+      environment: "kpopper source at d9857cdb184d1daf4df37c09e71be804e1c46c37"
+    from: "s.2026_09_17_history_reasoning_integration"
+    at: "docs/history-contract.md, Prepared legacy publication and recovery and Integrated write scope; scripts/history_transaction.py and scripts/history_recovery_cli.py at d9857cdb184d1daf4df37c09e71be804e1c46c37"
+    of: "2026-09-17"
   p.prior_count_thresholds:
     v: 1
     name: "Lines the count of what rests on priors draws in code - a confidence past which it counts
@@ -1607,6 +2104,18 @@ known:
          count prints"
     of: "2026-09-04"
     measure: prior_count_thresholds
+  p.reasoning_core_contract:
+    fidelity: paraphrase
+    name: "Experimental portable core contract"
+    v: "core/v1 is an explicit read-only profile backed by a packaged exact Lean scalar runtime;
+        default authoring remains legacy"
+    scope:
+      commit: faed0f2432c025a0b6bcb5aa7fa51c0cc5538cf1
+      environment: "kpopper source at merged faed0f2"
+      kind: code
+    from: s.ingest_64eac369f0d3ca58463f27679fa42bb0
+    at: "docs/reasoning-core.md:1-35 at faed0f2432c025a0b6bcb5aa7fa51c0cc5538cf1; PR86"
+    of: "2026-09-16"
   p.recipe_runners:
     v: 1
     name: "Places a measurement recipe is executed - files under scripts/ that name the allowlist
@@ -1752,12 +2261,36 @@ known:
     from: run.multisession_survey
     at: "the namespaces the four writers added that day, compared by hand"
 
+  m.remeasure.midnight_failures:
+    v: 3
+    name: "Remeasure tests that failed when their expected UTC day preceded the day read by the
+           command"
+    from: s.2026_09_18_remeasure_midnight
+    at: "PR #119 Actions run 35285716254 attempt 1 and the local forced-date reproduction on branch
+         codex/fix-remeasure-midnight"
+    of: "2026-09-18"
+
   m.remeasure.stale_green:
     v: 1
     name: "Times check passed while a measurement it read was stale, of the three states run"
     from: run.page_move_three_states
     at: "m.page_string_lines written as 431 with seen at 431 after the move had already made it 0: 0
          problems; MOVED only once a hand set the value to 0"
+
+  m.scope_basis_collision_cases:
+    cases: ["same-count member replacement", "different empty collection definition"]
+    limits: "Two synthetic cases with fields=[] on the cited source commit."
+    name: "Reproduced scope basis collisions with no selected fields"
+    observed: "Scope witnesses differ, but compare_basis returns same."
+    v: 2
+    scope:
+      commit: faed0f2432c025a0b6bcb5aa7fa51c0cc5538cf1
+      environment: "kpopper source at merged faed0f2"
+      kind: code
+    from: s.ingest_64eac369f0d3ca58463f27679fa42bb0
+    at: "ScopeCapture probe at faed0f2432c025a0b6bcb5aa7fa51c0cc5538cf1;
+         scripts/reasoning/snapshot.py:316-398 and scripts/reasoning/evaluate.py:157-167"
+    of: "2026-09-16"
 
   m.skill_bytes_before:
     v: 64011
@@ -1767,10 +2300,12 @@ known:
     of: "2026-09-10"
 
   m.skill_bytes_largest:
-    v: 22413
-    # Merge resolution 2026-09-16: remeasured combined skill sources at 1e753503c68909ff2097efc98fdcbfb6ab279a78; parent measurements describe different trees.
-    # set 2026-09-16: measured by skill_bytes_largest at d474ce46bdab9a4f26f6d5122c3e4a96f5c66ffe after adding plugin attribution guidance
-    scope: {kind: code, environment: kpopper skill sources, commit: 1e753503c68909ff2097efc98fdcbfb6ab279a78}
+    v: 22414
+    # set 2026-09-18: measured by skill_bytes_largest at 177e78c with the working tree changed
+    # set 2026-09-17: Measured after the recording example changed src to canonical from; largest skill is skills/record/SKILL.md on branch 89f46e8
+    # set 2026-09-16: measured by skill_bytes_largest at a566286 with the working tree changed
+    # Measured on the integrated source at 2218aa3; earlier same-day values describe its parents.
+    scope: {kind: code, environment: kpopper skill sources, commit: 2218aa345c292eef51c4205c5437dd1fa93d56c3}
     # set 2026-09-14: Measured by skill_bytes_largest after the recording guidance update
     # set 2026-09-14: measured by skill_bytes_largest after updating the project-mode guidance
     # set 2026-09-12: measured by skill_bytes_largest after the skills learned the entry file and the directory beside it
@@ -1778,9 +2313,98 @@ known:
     name: "The largest skill body a session can be handed now, bytes"
     from: "skills/*/SKILL.md"
     at: "bytes of the largest body"
-    of: "2026-09-16"
+    of: "2026-09-18"
     measure: skill_bytes_largest
 
+  m.t3_blocked_rule_inference_regression:
+    name: "Blocked structured core rule was misclassified as a sparse judgment"
+    v: "After valid missing-data admission, provenance.infer treated blocked_on alone as judgment
+        shape and refused a source/fact-only core record with no dependency field; the narrow fix
+        keeps blocked structured rules value-shaped while real judgments still require dependencies."
+    from: s.2026_09_17_t3_integration
+    at: "second sentence; tests/test_core_infer_blocked_rule.py"
+    of: "2026-09-17"
+    scope:
+      commit: "259dee4 plus uncommitted T3 integration"
+      environment: "Python 3.14 local writer regression"
+      kind: "test and source inspection"
+
+  m.t3_composition_cycle_depth_masked:
+    name: "Long potential composition cycle was masked by the expression depth limit"
+    v: "A 128-node reference cycle in an unselected conditional branch returned limit/depth_limit
+        with zero execution steps instead of preflight error/cyclic_reference on the first linked T3
+        darwin-arm64 candidate."
+    from: s.2026_09_17_t3_integration
+    at: "first sentence; tests/test_reasoning_composition_review.py"
+    of: "2026-09-17"
+    scope:
+      commit: "259dee4 plus uncommitted T3 runtime integration"
+      environment: "macOS arm64; Lean 4.33.1; local candidate archive
+                    7a682ff825990cf173daeac0e10f8966379a07937c7ea03dd553511393b0d517"
+      kind: "executable review"
+
+  m.t3_verified_candidate_e669d9d:
+    name: "T3 composition candidate passed source, distribution, and platform gates"
+    v: "Commit e669d9dfe094ea08f690eb1819cb227f7ef5e58a passed 2454 immutable-source tests locally
+        in 2078.481 seconds; workflow 35250090592 passed all 23 jobs including Python 3.9 and 3.13,
+        five native targets, installed wheel and sdist channels, extracted plugin and ci-required.
+        Local wheel and sdist each passed six composition/history acceptance cases, and the committed
+        bundle audit matched all five target archives."
+    from: s.2026_09_17_t3_integration
+    at: "final candidate verification and GitHub Actions run 35250090592"
+    of: "2026-09-17"
+  m.t4_verified_candidate_4a6dab2:
+    name: "T4 shared assessment candidate passed review, source, distribution, and platform gates"
+    v: "Commit 4a6dab215168686c01404a1f97a12da3e6e22971 passed 2543 immutable-source tests locally
+        in 2243.882 seconds with 20 declared skips; workflow 35273116667 passed all 19 selected jobs.
+        Independent implementation review reproduced nine boundary defects and three follow-up
+        defects; all were fixed with regression tests, and the final narrow review found no remaining
+        blockers. Core browser checks passed 16 of 16 and the unchanged legacy browser checks passed
+        50 of 50. A fresh installed wheel passed explicit core assess, check, pull, affects, export,
+        search, and page routes."
+    from: s.2026_09_17_t3_integration
+    at: "T4 final candidate verification and GitHub Actions run 35273116667"
+    of: "2026-09-18"
+  m.t5_verified_candidate_a6897ea:
+    name: "Finite-query candidate passed platform and installed acceptance gates"
+    v:
+      candidate_commit: a6897eaabd91d316120e119e4522c0e80ea18737
+      merged_commit: d7b1340c66bbe7d712746dac84f04525f764460a
+      tree: d1d7c882728df610128d256cc806f108c32125d5
+      ci_run: 35343804914
+      ci_conclusion: success
+      successful_jobs: 22
+      native_targets: 5
+      installed_os_python_combinations: 9
+      python_suites:
+        '3.9':
+          tests: 2525
+          skipped: 105
+        '3.13':
+          tests: 2525
+          skipped: 105
+      local_installed_acceptance:
+        wheel: 17
+        sdist: 17
+        plugin: 17
+      functional_fixture_cases_passed: 4
+      query_median_seconds:
+        query-1000: 0.20217729220166802
+        query-9998: 1.8410563739016652
+      timing_method: fresh process; warmed native cache; Snapshot capture plus Evaluator time; three serial
+        repetitions; excludes Python import startup
+      live_activation: not performed; activation and inverse exercised only on disposable fixtures
+      publication: not performed
+      temporal_policy: not selected
+      real_activation_targets: not selected
+      uncoached_agent_usability: not measured
+    scope:
+      kind: code
+      commit: a6897eaabd91d316120e119e4522c0e80ea18737
+      environment: "explicit core/v1 candidate; GitHub CI and local macOS acceptance"
+    from: s.query_candidate_report_2026_09_18
+    at: "observed in the verification packet; source commit a6897ea, merged as d7b1340"
+    of: "2026-09-18"
   m.unasked.question_filler:
     v: 0
     unit: entries
@@ -2244,8 +2868,30 @@ judgments:
       s.2026_09_04_components: "read 2026-09-04"
       d.author_free_build_guarantees: "the session composes freely and the build enforces the
                                        element rules on the output"
+  d.ci_execution_reuses_verified_work:
+    name: "Preserve selected coverage while shortening CI execution"
+    verdict: "Gate expensive work with bundle integrity, run explicit Python suites in parallel,
+              wait only for matching native targets, and reuse intact GMP builds with identical
+              inputs."
+    rests_on: [m.ci_python_serial_baseline, m.ci_native_wait_baseline, p.ci_native_build_inputs]
+    because: "The measured delay is test execution and repeated dependency compilation; the platform
+              and installed-payload contracts still require their existing checks."
+    reopened_by: "A selected unittest case is omitted; any existing Python/platform combination
+                  loses coverage; a changed source, recipe, toolchain or cached file is accepted
+                  without rebuilding GMP; or a failed native target allows ci-required to pass."
+    seen:
+      m.ci_python_serial_baseline: 2280.21
+      m.ci_native_wait_baseline: "PR 120 run 35288867621 delayed a one-second committed-bundle
+                                  integrity failure until all five native builds finished, about 24
+                                  minutes after builds began."
+      p.ci_native_build_inputs: "Native sources, builder, bundled runtime, native loader and
+                                 replacement probes, notices, and native-workflow changes select
+                                 native builds; unknown paths select all checks. Selector-only
+                                 changes use mandatory contracts. Packaging metadata alone tests
+                                 consumers and installation without recompiling native source."
   d.ci_selects_families:
     name: "Select PR checks by declared input families and require selected work to succeed"
+    from: s.2026_09_17_selective_ci
     rests_on: [p.ci_native_build_inputs]
     verdict: "Keep record and cheap contracts unconditional; select expensive families
               conservatively from the full PR diff, cancel superseded runs, and retain broad consumer
@@ -2259,9 +2905,30 @@ judgments:
                   ci-required passes; or main no longer exercises all consumer families."
     seen:
       p.ci_native_build_inputs: "Native sources, builder, bundled runtime, native loader and
-                                 replacement probe, notices, and CI selection/native-workflow
-                                 changes; unknown paths select all checks. Packaging metadata alone
-                                 tests installation without recompiling native source."
+                                 replacement probes, notices, and native-workflow changes select
+                                 native builds; unknown paths select all checks. Selector-only
+                                 changes use mandatory contracts. Packaging metadata alone tests
+                                 consumers and installation without recompiling native source."
+  d.community_entrypoints:
+    because: "These entrypoints let a new contributor assess the existing checks, install the
+              project, report a reproducible problem and submit a focused change. Badges link to
+              their actual workflows, release or license; forms preserve a blank-issue route.
+              Feature badges link to capability documentation: reasoning-runtime identifies Lean 4,
+              and Versioned knowledge marks history as experimental. They describe technology and
+              maturity without claiming the expanded reasoning/history epic is complete. Reporting
+              policies need a real private contact before publication, and community files alone do
+              not establish release readiness."
+    name: "Make contributing discoverable and show actual project status"
+    reopened_by: "A newcomer cannot complete setup or find the right reporting route from these
+                  files, the forms prevent a useful report, a badge no longer represents the
+                  workflow, release, license or capability it claims, or an experimental capability
+                  becomes generally available."
+    rests_on: [p.community_guidance]
+    verdict: "Keep a small set of truthful badges and lightweight issue forms, with newcomer setup
+              and reporting routes in the contribution guide."
+    seen:
+      p.community_guidance: "GitHub recommends discoverable community files and issue templates;
+                             workflow status badges report actual workflow results."
   d.components_follow_shape:
     rests_on: [s.2026_09_04_components, d.groupings_declared, doc.hub_seam]
     verdict: "The existing shapes carry the hub components; an axis is reviewed text with signed
@@ -2403,6 +3070,22 @@ judgments:
                                   - counts and shares, never stored, thresholds only inside
                                   falsifiers"
       p.coverage_thresholds: 0
+  d.darwin_checked_where_it_lands:
+    name: "Where in the life of a change the Darwin check belongs"
+    verdict: "Darwin runs on the push to main and at release, not on every pull request commit"
+    rests_on: [m.ci_spend_by_platform, m.ci_spend_by_trigger]
+    reopened_by: "A Darwin-only failure turns up on the push to main, or in a release, that the pull
+                  request which landed it would have caught - or the people writing here stop working
+                  on Darwin machines, so nobody exercises that platform between merges."
+    from: s.2026_09_18_ci_cost
+    as_of: "2026-09-18"
+    seen:
+      m.ci_spend_by_platform: "Darwin 81.92 dollars on 397 jobs; Linux 36.29 on 1,612; Windows 23.82
+                               on 333 - Darwin is 58 percent of the cost on 17 percent of the jobs,
+                               because a Darwin minute bills at ten times a Linux one"
+      m.ci_spend_by_trigger: "108.83 dollars on pull requests against 29.99 on pushes to main; of
+                              the 199 Darwin session jobs, 151 came from pull request commits and 48
+                              from pushes"
   d.detached_worker_test_cleanup:
     name: "Wait for detached worker shutdown before deleting its test state"
     rests_on: [s.2026_09_13_worker_cleanup]
@@ -2760,6 +3443,46 @@ judgments:
                               it"
       d.npm_holds_the_name: "the npm name is held against the day this becomes a Node tool, and it
                              is held by the browser checks rather than by a placeholder"
+  d.history_authority_is_explicit:
+    name: "Explicit history authority and preserved evidence"
+    rests_on: [p.history_activation_cancellation, p.history_branch_adoption, p.history_replay_audit_evidence, p.history_writer_compatibility]
+    verdict: "Activated records select authority through a validated generation marker and explicit
+              acts. Retaining or importing an immutable claim does not accept it; cancellation
+              preserves later evidence as inactive history."
+    because: "Interrupted writes and merged branches can retain several valid versions at once.
+              Choosing the newest file or treating presence as acceptance would change the record
+              without an attributable decision. Binding each publication to a checked baseline and
+              keeping cancelled generations lets recovery preserve both the current decision and the
+              evidence needed to examine it."
+    blocked_on: "observational: falsified by a reproducible interrupted-write or
+                 branch-reconciliation case in which the same validated marker and retained evidence
+                 admit different accepted states, or recovery requires deleting an original claim or
+                 inventing a prior acceptance. Reproduce from retained copies independently of
+                 generated-view checks."
+    seen:
+      p.history_activation_cancellation: "Guarded activation cancellation retains the complete
+                                          candidate as inactive immutable audit, restores authored
+                                          bytes, advances the legacy authority epoch, and binds
+                                          cancellation receipts to the authority and later commits.
+                                          Group recovery validates every member before clearing
+                                          reader guards."
+      p.history_branch_adoption: "Local branch history is captured at pinned Git commits and adopted
+                                  through one prepared mutation with explicit overlap choices.
+                                  Captured source envelopes are retained as immutable audit evidence;
+                                  prior capsule coverage is explicit rather than recursively copied.
+                                  Ordinary target evidence must match exact source bytes, and
+                                  recovery never rereads moved source refs."
+      p.history_replay_audit_evidence: "Adapter audit replay accepts only the current adapter
+                                        identity or an exact full audit in validated causal parent
+                                        receipts. A pending operation cannot witness its own audit.
+                                        An unknown old adapter requires the original verified
+                                        runtime; semantic and native audit changes still refuse."
+      p.history_writer_compatibility: "History batch receipt v6 validates the final staged world
+                                       while retaining per-action admission and original seen.
+                                       Retained v2/v3 operations replay exact bytes. Unicode subjects
+                                       retain exact logical identities through versioned hashed
+                                       physical paths; older raw paths remain readable. Identity
+                                       changes and brief references publish under one reader guard."
   d.home_beside_the_entry:
     verdict: "everything a record keeps beside itself lives in one directory, .kpopper, beside the
               file the reader opens first - hypotheses/, view.yaml, measure.yaml, session.json,
@@ -3115,6 +3838,17 @@ judgments:
                   pending; an uncertain send causes another automatic offer in the same epoch; or a
                   quiet native worker completion starts a new primary turn."
     seen: {s.background_ingestion: "read 2026-09-09"}
+  d.native_workflow_is_corresponding_source:
+    name: "Why the native workflow file cannot be edited on its own"
+    verdict: "An edit to .github/workflows/reasoning-runtime.yml is an edit to the shipped
+              corresponding-source archive, and the archive has to be rebuilt in the same change"
+    rests_on: [s.2026_09_18_ci_cost]
+    reopened_by: "The corresponding-source bundle stops carrying the workflow file - the recipe
+                  names the producer platform setup some other way, or the licence obligation is met
+                  by a different artifact."
+    from: s.2026_09_18_ci_cost
+    as_of: "2026-09-18"
+    seen: {s.2026_09_18_ci_cost: "read 2026-09-18"}
   d.no_record_opener_is_two_lines:
     rests_on: [s.2026_09_10_skills_split, d.workspace_operations]
     verdict: "with no record the opener says so in two lines and names the skills; the starting
@@ -3176,6 +3910,78 @@ judgments:
     blocked_on: "observational: falsified by a watcher whose reconstructed dependencies beat
                  the writer's own declarations on a real record; none has been tried"
     seen: {doc.agent_graph: "read 2026-09-01"}
+  d.overlay_infers_once_per_document:
+    rests_on: [m.overlay_open_seconds, s.2026_09_18_overlay_profile]
+    verdict: "the live overlay infers roles once per document it compares, never once per entry"
+    because: "knowledge_views.overlay ran provenance.infer over the whole document once per entry -
+              872 times per open on a 429-entry record, 8.9 of the 11 seconds a profiled open took
+              inside re.findall - to compute a per-entry meaning whose per-document half is the same
+              for every entry. Memoizing that half alone took a ten-second open to 0.70 seconds with
+              identical output, so the fix is to build it once per document, on first use inside the
+              loop so a document that refuses still leaves the holder the old order left - not an
+              inverted mention index or a cache keyed on the record bytes, which would go stale on
+              hypotheses, the pending ref, the mode and the target"
+    reopened_by: "a live open that runs infer more than once for the same document within one
+                  overlay, or knowledge_conflicts that differ between the old and the new overlay on
+                  any fixture holding a pending bundle, a hypothesis and a target, including a target
+                  whose meaning refuses"
+    seen:
+      m.overlay_open_seconds:
+        entries: 429
+        record_lines: 5493
+        open_live: 10.5
+        check_live: 10.3
+        pull_live: 5.2
+        open_frozen: 0.37
+        check_frozen: 0.26
+        pull_frozen: 0.17
+        overlays_per_open: 2
+        semantic_roles_calls_per_open: 872
+        findall_calls_per_open: 2529314
+        open_live_with_per_document_memo: 0.7
+        entries_319_open_live: 6.1
+      s.2026_09_18_overlay_profile: read 2026-09-18
+  d.page_build_reads_the_loaded_record:
+    rests_on: [m.read_command_loads_after, m.read_command_record_loads, s.2026_09_18_lane_b_load_once]
+    request: s.2026_09_18_lane_b_load_once
+    verdict: "a read command reads the record once, and the page it asks is built from that reading"
+    wrong_if: "m.read_command_loads_after > 1"
+    because: "open and check read the record and then asked the page what it knew, and the page read
+              it again - two readings of the same files in one command, two live overlays, and two
+              chances for the reader view and the page view to differ about one record in one
+              instant. Each reading is separately guarded by _record_read_guard, so the old pair
+              could draw a page from a newer record than the reader had just described; one guarded
+              reading cannot. The reader now hands the document it read to the page build, which took
+              a live open on this record from 10.66 to 5.49 seconds with byte-identical output -
+              measured against e888570 before the per-document hoist merged in beside it, so that
+              pair isolates this change; what the tree reads with both is lower again, and
+              m.read_command_record_loads says so. The
+              write path keeps its own readings and must: the page counts taken before a write and
+              the read-back after it each have to see the record as it stands at that moment, because
+              the write itself changes what the page counts - so _page_side takes no document and
+              reads again on every call"
+    reopened_by: "a write whose page snapshot holds a count taken before the write rather than after
+                  it, or a document handed to the page build that the build's own reading would have
+                  refused - a reader that only checks what it reads itself has two doors and guards
+                  one"
+    seen:
+      m.read_command_loads_after: 1
+      m.read_command_record_loads:
+        entries_at_e888570: 429
+        record_lines_at_e888570: 5493
+        loads_per_read_command_before: 2
+        loads_per_read_command_after: 1
+        overlays_per_open_before: 2
+        overlays_per_open_after: 1
+        semantic_roles_calls_per_open_before: 872
+        semantic_roles_calls_per_open_after: 436
+        open_live_before: 10.66
+        open_live_after: 5.49
+        check_live_before: 10.67
+        check_live_after: 5.45
+        open_frozen_before: 0.19
+        open_frozen_after: 0.19
+      s.2026_09_18_lane_b_load_once: read 2026-09-18
   d.page_lint_reads_output:
     rests_on: [s.2026_09_04_components, d.author_free_build_guarantees, d.reasoning_in_record]
     verdict: "The output lint checks references and visible keys, judgment and review markers,
@@ -3220,6 +4026,19 @@ judgments:
       p.record_parsers: 1
       m.prompt_hook_10x_parsing: 1.3
       m.prompt_hook_10x_kept: 0.15
+  d.plugin_runtime_is_explicit:
+    rests_on: [goal.portable, doc.plugin_runtime]
+    verdict: "Prepare hook dependencies through an explicit private-virtualenv setup; Claude Code
+              and Codex hooks select it while executing code from their active plugin."
+    because: "Plugin installation copies files without supplying Python packages. A dependency
+              environment outside the plugin cache avoids system pip restrictions and interpreter
+              guessing, survives cache replacement, and keeps network installation outside hooks."
+    reopened_by: "A supported hook uses a different interpreter from the repaired runtime, a failed
+                  setup appears ready, plugin versions need incompatible dependency sets in one
+                  environment, or a hook installs packages without an explicit setup command."
+    seen:
+      goal.portable: "usable by any session, in any project, with no author present"
+      doc.plugin_runtime: "read 2026-09-17"
   d.predicate_shape_is_one_reading:
     rests_on: [s.2026_09_04_falsifier_shape, p.predicate_shapes, d.arrangement_sign_is_one_comparison]
     verdict: "what shape a predicate must have to be decided is one reading, asked wherever a
@@ -3746,6 +4565,18 @@ judgments:
     blocked_on: "observational: falsified by a reading task that genuinely needs the record
                  changed from the page; none has appeared"
     seen: {doc.fact_moves: "read 2026-09-01"}
+  d.remeasure_tests_share_one_day:
+    name: "Date-sensitive remeasure tests use one explicit day"
+    request: s.2026_09_18_remeasure_midnight
+    rests_on: [s.2026_09_18_remeasure_midnight, m.remeasure.midnight_failures]
+    verdict: "Inject one fixed day into the remeasure behavior and use that same day in each fixture
+              and assertion."
+    because: "The three tests cached UTC today when the module loaded, while the subprocess read UTC
+              today when it eventually ran; a suite crossing midnight therefore changed the rule
+              under test between setup and assertion."
+    reopened_by: "A date-sensitive remeasure test obtains its fixture day and the day used by
+                  remeasure from separate clock reads, or a forced cross-day run fails."
+    seen: {s.2026_09_18_remeasure_midnight: "read 2026-09-18", m.remeasure.midnight_failures: 3}
   d.reopened_by_is_not_blocked_on:
     rests_on: [prior.field_name_reads_as_gate, m.blocked_on_reopeners, m.older_records_changed,
                d.declared_hole_is_a_note]

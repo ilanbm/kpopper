@@ -5,4 +5,7 @@ build/
 dist/
 *.egg-info/
 node_modules/
+.venv/
+.pytest_cache/
+test-results/
 record.html

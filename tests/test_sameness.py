@@ -629,8 +629,7 @@ class WhatTheReviewFound(unittest.TestCase):
             finally:
                 os.chmod(hyp_dir, 0o755)
             self.assertEqual(code, 1, out + err)
-            self.assertIn("could not be written", out + err)
-            self.assertIn("so nothing was changed", out + err)
+            self.assertIn("recovery_required", out + err)
             self.assertEqual(texts_under(d), before)
 
     def test_open_questions_are_not_folded(self):

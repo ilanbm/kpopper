@@ -9,6 +9,18 @@ name = "Kernel"
 name = "Protocol"
 
 [[lean_lib]]
+name = "CompositionTypes"
+
+[[lean_lib]]
+name = "Composition"
+
+[[lean_lib]]
+name = "CompositionProtocol"
+
+[[lean_lib]]
+name = "Kpopper"
+
+[[lean_lib]]
 name = "Proof"
 
 [[lean_exe]]

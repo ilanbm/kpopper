@@ -4,8 +4,10 @@ The checkout remains the code-world. Pending bodies are named proposals; reading
 never adopts them, chooses a newest revision, or updates a review snapshot.
 """
 import copy
+import ctypes
 import os
 from pathlib import Path
+import sys
 import tempfile
 
 try:
@@ -43,9 +45,88 @@ def has_pending(paths):
     return project.git and project.config()['mode'] == 'advanced' and Path(paths[0]).resolve() == project.record() and G.Store(project).head() is not None
 
 
+def history_evidence(captured):
+    """Complete committed observation, independent of contribution sharing scope."""
+    B = P._peer('history_bundle')
+    C = B.C
+    files = B.captured_files(captured)
+    retained = {generation: value['digest'] for generation, value in captured.inactive_generations.items()}
+    result = {'version': 2 if retained else 1,
+              **({'inactive_generations': retained} if retained else {}), 'files': files, 'sha256': {path: C.sha256(raw) for path, raw in files.items()},
+              'rules': copy.deepcopy(captured.state['rules']), 'baseline': copy.deepcopy(captured.baseline),
+              'projection': B.A.from_store_capture(captured).projection}
+    validate_history_evidence(result)
+    return result
+
+
+def validate_history_evidence(evidence):
+    """Pure captured target/member replay, without sharing or acceptance inference."""
+    B = P._peer('history_bundle')
+    C = B.C
+    C._mapping(evidence, ('version', 'files', 'sha256', 'rules', 'baseline', 'projection'), ('inactive_generations',))
+    C._require(type(evidence['version']) is int and evidence['version'] in (1, 2),
+               'unsupported_history_observation')
+    files = evidence['files']
+    B._files(files)
+    C._require(set(files) == set(evidence['sha256']) and {'entry.yaml', 'authority.yaml'} <= set(files),
+               'history_bundle_membership')
+    C._require(all(C.sha256(raw) == evidence['sha256'][path] for path, raw in files.items()),
+               'history_bundle_checksum')
+    captured = B._capture(files, evidence['rules'])
+    retained = {generation: value['digest'] for generation, value in captured.inactive_generations.items()}
+    C._require((evidence['version'] == 2 and retained and evidence.get('inactive_generations') == retained) or
+               (evidence['version'] == 1 and not retained and 'inactive_generations' not in evidence),
+               'history_generation_capability_required')
+    C._require(G.identity(captured.baseline) == G.identity(evidence['baseline']), 'baseline_mismatch')
+    adapted = B.A.from_store_capture(captured)
+    C._require(G.identity(adapted.projection) == G.identity(evidence['projection']), 'projection_mismatch')
+    return captured
+
+
+def _meaning_context(document, history=None):
+    """The half of a comparison meaning that belongs to the document rather than to one entry.
+
+    Computed once per document and read by `_meaning_of` for each of its entries. Callers build
+    it lazily, inside the entry loop and after the entry's holder is recorded, which is where
+    the per-entry code ran it. That position is load-bearing twice over: a document holding no
+    entry is never compared, so it is neither validated nor inferred; and when this raises, the
+    first entry's holder is already recorded, which the target loop's caught refusal keeps.
+    """
+    plain = document
+    authority = None
+    if isinstance(document.get('meta'), dict) and 'history' in document['meta']:
+        if history is None:
+            raise P.Refused('missing_history_context: contribution comparison needs captured history')
+        P._peer('history_contract').CapturedHistory(document, history)
+        plain = copy.deepcopy(dict(document))
+        plain['meta'].pop('history')
+        authority = history['authority']
+    capability = G.meaning_capabilities(plain)
+    # Whole-document role inference: the expensive half. `semantic_roles` shields the SystemExit
+    # `infer` raises on an ambiguous schema and maps it to None; other exception types from
+    # `infer` still propagate, so this is not a call that cannot raise.
+    return {'schema': {k: document[k] for k in ('schema',) if k in document},
+            'reasoning': capability, 'authority': authority,
+            'inference': G.semantic_roles(document)}
+
+
+def _meaning_of(context, name):
+    """One entry's comparison meaning, read off its document's context."""
+    inference = context['inference']
+    if inference is not None:
+        judgments, fields = inference
+        roles = {'judgment': name in judgments, 'fields': fields if name in judgments else {}}
+    else:
+        roles = {'unreadable': True}
+    return G.identity({'schema': context['schema'], 'roles': roles,
+                       'reasoning': context['reasoning'],
+                       **({'history_authority': context['authority']} if context['authority'] else {})})
+
+
 def overlay(paths, doc, *, read_mode='live'):
     doc.read_mode = read_mode
     doc.contributions, doc.knowledge_conflicts = [], {}
+    doc.history_contributions = {}
     if read_mode == 'frozen':
         return doc
     if read_mode != 'live':
@@ -63,8 +144,6 @@ def overlay(paths, doc, *, read_mode='live'):
     doc.pending_ref = snap['ref']
     # Preserve immutable evidence for portable strict capture.
     doc.pending_snapshot = copy.deepcopy(snap)
-    if not snap['bundles']:
-        return doc
     holders = {}
     meanings = {}
     active_ids = set()
@@ -76,24 +155,23 @@ def overlay(paths, doc, *, read_mode='live'):
         except contract.CapabilityError as error:
             raise P.Refused(error.code + ': ' + str(error)) from None
 
-    def meaning(document, name):
-        capability = capability_of(document)
-        result = G.semantic_roles(document)
-        if result is not None:
-            judgments, fields = result
-            roles = {'judgment': name in judgments, 'fields': fields if name in judgments else {}}
-        else:
-            roles = {'unreadable': True}
-        return G.identity({'schema': {k: document[k] for k in ('schema',) if k in document},
-                           'roles': roles, 'reasoning': capability})
+    projection = getattr(doc, 'history_projection', None)
+    context = None
     for nid, pair in G.entries(doc).items():
         holders.setdefault(nid, []).append(('checkout', pair))
-        meanings.setdefault(nid, set()).add(meaning(doc, nid))
+        if context is None:
+            context = _meaning_context(doc, projection)
+        meanings.setdefault(nid, set()).add(_meaning_of(context, nid))
     for name, hyp in doc.hypotheses.items():
         if not hyp['error']:
+            context = None
             for nid, pair in G.entries(hyp['doc']).items():
                 holders.setdefault(nid, []).append(('hypothesis:' + name, pair))
-                meanings.setdefault(nid, set()).add(meaning(G.P.layered(doc, hyp), nid))
+                if context is None:
+                    # `layered` (provenance.py:745) rebuilds the record per call and cannot
+                    # mutate `doc`, so one layering serves every entry of this hypothesis.
+                    context = _meaning_context(G.P.layered(doc, hyp), projection)
+                meanings.setdefault(nid, set()).add(_meaning_of(context, nid))
     # Compare a configured target when locally available, without overlaying its code facts.
     publication = project.config().get('publication')
     cache = {}
@@ -121,7 +199,7 @@ def overlay(paths, doc, *, read_mode='live'):
                 # reading; committed target bytes are pinned by the Git revision.
                 core_token = W.P._CORE_READS.set(P._CORE_READS.get())
                 try:
-                    target = W._records(project.root, project.config()['record'], resolved.stdout.decode().strip())
+                    target = W._records(project.root, project.config()['record'], resolved.stdout.decode().strip(), include_files=True)
                 finally:
                     W.P._CORE_READS.reset(core_token)
                 # Validate the complete target before interpreting any of its entries.
@@ -131,6 +209,7 @@ def overlay(paths, doc, *, read_mode='live'):
                     capability = capability_of(document)
                     if capability['profile'] == contract.PROFILE and not P._CORE_READS.get():
                         raise P.Refused('unsupported_capability: use core/v1 consumer')
+                doc.knowledge_target_snapshot = copy.deepcopy(target)
                 target_docs = [('target:' + ref, target['doc'])]
                 for hyp in target['hypotheses']:
                     layered = copy.deepcopy(target['doc'])
@@ -138,11 +217,20 @@ def overlay(paths, doc, *, read_mode='live'):
                         layered.setdefault(collection, {}).update(copy.deepcopy(members))
                     if 'schema' in hyp['doc']:
                         layered['schema'] = copy.deepcopy(hyp['doc']['schema'])
+                    # Collections deliberately exclude metadata. A hypothesis's
+                    # declared profile still defines its comparison meaning.
+                    meta = hyp['doc'].get('meta')
+                    if isinstance(meta, dict) and 'reasoning' in meta:
+                        layered.setdefault('meta', {})['reasoning'] = copy.deepcopy(meta['reasoning'])
                     target_docs.append(('target:' + ref + ':hypothesis:' + hyp['name'], layered))
                 for label, target_doc in target_docs:
+                    context = None
                     for nid, pair in G.entries(target_doc).items():
                         holders.setdefault(nid, []).append((label, pair))
-                        meanings.setdefault(nid, set()).add(meaning(target_doc, nid))
+                        if context is None:
+                            context = _meaning_context(target_doc,
+                                                       target.get('history', {}).get('projection'))
+                        meanings.setdefault(nid, set()).add(_meaning_of(context, nid))
             except (ValueError, OSError, SystemExit) as error:
                 doc.target_unavailable = str(error)
         else:
@@ -151,6 +239,16 @@ def overlay(paths, doc, *, read_mode='live'):
         manifest = bundle['manifest']
         name = 'pending-' + revision
         body = copy.deepcopy(manifest['document'])
+        history = None
+        if manifest['version'] == 3:
+            B = P._peer('history_bundle')
+            G.validate_bundle(bundle)
+            artifact = B.from_contribution(bundle)
+            adapted = B.adapt(artifact)
+            body, history = adapted.document, adapted.projection
+            doc.history_contributions[revision] = {
+                'artifact_revision': artifact['revision'], 'projection': history,
+                'scope': copy.deepcopy(manifest['scope']), 'roots': list(manifest['roots']), 'status': 'active'}
         entry_map = G.entries(body)
         events = [dict(e) for e in snap['events'] if e['revision'] == revision]
         status = {'revision': revision, 'state': 'captured locally', 'scope': manifest['scope'],
@@ -163,9 +261,15 @@ def overlay(paths, doc, *, read_mode='live'):
         doc.contributions.append(status)
         decision = cache.get('decisions', {}).get(revision, {})
         if decision.get('state') in ('withdrawn', 'rejected', 'superseded'):
+            if history is not None:
+                doc.history_contributions[revision]['status'] = 'retired'
             # Explicit decisions retire an active proposal, not its immutable
             # evidence or publication history. Sequence alone never retires it.
             continue
+        try:
+            G.validate_bundle(bundle)
+        except ValueError as error:
+            raise P.Refused(getattr(error, 'code', 'invalid_contribution') + ': ' + str(error)) from None
         active_ids.update(entry_map)
         doc.hypotheses[name] = {
             'kind': 'contribution',
@@ -174,9 +278,12 @@ def overlay(paths, doc, *, read_mode='live'):
                      'folds': 'never', 'scope': manifest['scope'], 'publication': status},
             'doc': body, 'ids': set(entry_map),
             'raw': {nid: pair[1] for nid, pair in entry_map.items()}, 'error': None}
+        context = None
         for nid, pair in entry_map.items():
             holders.setdefault(nid, []).append((name, pair))
-            meanings.setdefault(nid, set()).add(meaning(body, nid))
+            if context is None:
+                context = _meaning_context(body, history)
+            meanings.setdefault(nid, set()).add(_meaning_of(context, nid))
     for nid in active_ids:
         variants = holders.get(nid, [])
         if len({G.identity(list(pair)) for _, pair in variants}) > 1 or len(meanings.get(nid, ())) > 1:
@@ -198,6 +305,43 @@ def lines(doc):
     return result
 
 
+def _rename_absent(source, destination):
+    """One filesystem operation, refusing even an empty destination created late."""
+    if os.name == 'nt':
+        os.rename(source, destination)  # Windows rename never replaces an existing path.
+        return
+    library = ctypes.CDLL(None, use_errno=True)
+    if sys.platform == 'darwin':
+        rename = library.renamex_np
+        rename.argtypes = (ctypes.c_char_p, ctypes.c_char_p, ctypes.c_uint)
+        result = rename(os.fsencode(source), os.fsencode(destination), 0x00000004)  # RENAME_EXCL
+    elif sys.platform.startswith('linux') and hasattr(library, 'renameat2'):
+        rename = library.renameat2
+        rename.argtypes = (ctypes.c_int, ctypes.c_char_p, ctypes.c_int, ctypes.c_char_p, ctypes.c_uint)
+        result = rename(-100, os.fsencode(source), -100, os.fsencode(destination), 1)  # NOREPLACE
+    else:
+        raise ValueError('atomic absent-destination publication is unavailable on this platform')
+    if result:
+        error = ctypes.get_errno()
+        raise OSError(error, os.strerror(error), str(destination))
+
+
+def publish_tree(destination, populate, validate=None):
+    """Build on the destination filesystem, validate, and publish into absence."""
+    destination = Path(destination).expanduser().absolute()
+    if os.path.lexists(destination):
+        raise FileExistsError('snapshot destination already exists; select a new directory')
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    with tempfile.TemporaryDirectory(prefix='.knowledge-', dir=destination.parent) as temporary:
+        staging = Path(temporary) / 'snapshot'
+        staging.mkdir()
+        populate(staging)
+        if validate is not None:
+            validate(staging)
+        _rename_absent(staging, destination)
+    return destination
+
+
 def materialize(project, revision, destination, *, ref=None):
     """Export complete immutable closure/evidence to a new directory, ready for review/CI.
 
@@ -208,13 +352,9 @@ def materialize(project, revision, destination, *, ref=None):
     store = G.Store(project)
     pinned = ref or store.head()
     bundle = store.read_bundle(revision, pinned)
+    G.validate_bundle(bundle)
     destination = Path(destination).expanduser().resolve()
-    if destination.exists():
-        raise ValueError('snapshot destination already exists; select a new directory')
-    destination.parent.mkdir(parents=True, exist_ok=True)
-    with tempfile.TemporaryDirectory(prefix='.knowledge-', dir=destination.parent) as temporary:
-        root = Path(temporary) / 'snapshot'
-        root.mkdir()
+    def populate(root):
         document = copy.deepcopy(bundle['manifest']['document'])
         for path, data in bundle['files'].items():
             M.relative_path(path)
@@ -223,10 +363,46 @@ def materialize(project, revision, destination, *, ref=None):
             target = root / path
             target.parent.mkdir(parents=True, exist_ok=True)
             target.write_bytes(data)
-        (root / 'GROUNDING.yaml').write_text(G.P.yaml.safe_dump(document, allow_unicode=True, sort_keys=False), encoding='utf-8')
-        (root / 'snapshot.json').write_bytes(G.json_bytes({'version': 1, 'revision': revision,
-                                                        'ledger_ref': pinned, 'read_mode': 'frozen'}))
-        # rename cannot replace a populated directory; no checkout content is changed.
-        root.rename(destination)
+        if bundle['manifest']['version'] == 3:
+            B = P._peer('history_bundle')
+            captured = B.validate(B.from_contribution(bundle))
+            layout = P.layout(root / 'GROUNDING.yaml')
+            images = {Path(layout['history_authority']): captured.authority_bytes}
+            images.update({Path(layout['history_cancellations']) / name: raw
+                           for name, raw in captured.cancellation_bytes.items()})
+            images.update({Path(layout['history_commits']) / (op + '.yaml'): raw
+                           for group in [{'commits': captured.commits}, *captured.inactive_generations.values()]
+                           for op, raw in group['commits'].items()})
+            # The portable capture has validated exact committed membership.
+            # Preserve observed raw/hashed paths rather than inventing aliases.
+            images.update({Path(layout['history']) / relative: raw
+                           for relative, raw in captured.storage_bytes.items()})
+            images[root / 'GROUNDING.yaml'] = object.__new__(B.H.Store).render(captured)
+            for path, raw in images.items():
+                if path.exists():
+                    if not path.is_file() or path.read_bytes() != raw:
+                        raise ValueError('evidence conflicts with history snapshot authority')
+                    continue  # An explicitly retained immutable original is byte-identical.
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_bytes(raw)
+        else:
+            (root / 'GROUNDING.yaml').write_text(G.P.yaml.safe_dump(document, allow_unicode=True, sort_keys=False), encoding='utf-8')
+        metadata = {'version': 1, 'revision': revision, 'ledger_ref': pinned, 'read_mode': 'frozen'}
+        if bundle['manifest']['version'] == 3:
+            metadata.update(version=3, contribution=G._encode(bundle['manifest']))
+        (root / 'snapshot.json').write_bytes(G.json_bytes(metadata))
+    def validate(root):
+        if bundle['manifest']['version'] == 3:
+            B = P._peer('history_bundle')
+            captured = B.H.Store(root / 'GROUNDING.yaml').capture()
+            expected = B.adapt(B.from_contribution(bundle))
+            actual = B.A.from_store_capture(captured)
+            P._peer('reasoning.snapshot').Snapshot.capture(root / 'GROUNDING.yaml', read_mode='frozen')
+            if G.identity(actual.document) != G.identity(expected.document) or G.identity(actual.projection) != G.identity(expected.projection):
+                raise ValueError('materialized history does not reproduce captured contribution')
+    try:
+        publish_tree(destination, populate, validate=validate)
+    except FileExistsError as error:
+        raise ValueError('snapshot destination already exists; select a new directory') from error
     return {'state': 'materialized', 'revision': revision, 'record': str(destination / 'GROUNDING.yaml'),
             'read_mode': 'frozen', 'ledger_ref': pinned}

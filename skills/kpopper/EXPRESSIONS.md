@@ -194,3 +194,18 @@ apply a clean result. Existing readable formulas and historical snapshots stay u
 The conversion must round-trip to the same parsed structure; reserved or opaque reference
 names use `ref("...")`. Existing source-value types and decidable conditions keep their
 meaning. An unrelated write never migrates existing formulas.
+
+## Finite-scope queries
+
+An explicit `core/v1` record may declare `query/v1` for `filter`, `project`,
+`select`, `count`, `sum`, `all` and `any`. Follow the [query specification](../../docs/query.md)
+and [runnable revisit example](../../examples/scoped-query/README.md). This
+packaged profile needs no separate Lean installation or checked-session setup.
+
+Name a scope with an explicit collection and sorted authored-field list. A row
+expression can use only those fields; it cannot compute a member's formula or
+read an undeclared field. Missing membership is uncertainty, not an omitted row.
+Keep the result status, row counts and scope basis together. A missing reading
+remains unknown; a qualitative judgment can carry a prose `reopened_by` without
+inventing an executable falsifier. Later evidence or a new scope member calls for
+fresh assessment, while a retained Snapshot replays its original inputs.

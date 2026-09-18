@@ -18,7 +18,8 @@ def text(notice):
 
 
 def handle(payload, host, mode, wait_seconds=110):
-    if not isinstance(payload, dict) or payload.get('agent_id') or payload.get('agent_type'):
+    # agent_type also names a main session started with --agent.
+    if not isinstance(payload, dict) or payload.get('agent_id'):
         return '', '', 0
     session = payload.get('session_id')
     if not isinstance(session, str) or not session or len(session) > 200:

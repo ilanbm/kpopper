@@ -13,7 +13,8 @@ except ImportError:
     import knowledge_views as V
     import pending_grounding as G
 
-ROUTING = {'shareability', 'scope', 'environment', 'commit', 'event_id', 'contribution_id', 'evidence', 'evidence_root'}
+ROUTING = {'shareability', 'scope', 'environment', 'commit', 'event_id', 'contribution_id', 'evidence', 'evidence_root',
+           'disclosed_locators'}
 
 
 def private_drafts(project):
@@ -86,8 +87,8 @@ def draft(project, action, doc, reason):
     return {'state': 'private draft', 'path': str(path), 'reason': reason}
 
 
-def private_route(paths, action, reader, project=None):
-    doc = reader.load(paths, read_mode='frozen')
+def private_route(paths, action, reader, project=None, *, document=None):
+    doc = document if document is not None else reader._peer('reasoning.authoring').load(reader, paths)
     # This locked check is conservative: entry/source privacy cannot be weakened by
     # an edit while a routed local writer waits to acquire the directory.
     value = copy.deepcopy(action.get('body', {}))
@@ -129,7 +130,7 @@ def set_body(old, action):
     return body
 
 
-def route(paths, action, reader, project=None, expected_policy=None):
+def route(paths, action, reader, project=None, expected_policy=None, *, document=None):
     """Return a durable receipt or None for an intentional local-file mutation.
 
     Legacy unannotated writes retain local semantics, never implicit publication.
@@ -147,11 +148,12 @@ def route(paths, action, reader, project=None, expected_policy=None):
                      for path in G.P._files_of(paths)}
     if not Path(paths[0]).exists():
         source_hashes[str(paths[0])] = None
-    doc = reader.load(paths, read_mode='frozen') if Path(paths[0]).exists() else reader.Record()
+    doc = document if document is not None else (reader._peer('reasoning.authoring').load(reader, paths)
+                                                if Path(paths[0]).exists() else reader.Record())
     if any((hashlib.sha256(Path(path).read_bytes()).hexdigest() if Path(path).is_file() else None) != digest
            for path, digest in source_hashes.items()):
         raise ValueError('record changed while preparing the write; retry')
-    existing_private = private_route(paths, action, reader, project) if Path(paths[0]).exists() else None
+    existing_private = private_route(paths, action, reader, project, document=doc) if Path(paths[0]).exists() else None
     if existing_private is not None:
         return existing_private
     scope = action.get('scope', 'unclear')
@@ -231,17 +233,33 @@ def route(paths, action, reader, project=None, expected_policy=None):
         raise ValueError('named hypotheses stay in the local record; use feature scope')
     if action['kind'] not in ('add', 'set'):
         raise ValueError('a project contribution requires a complete add or set, not a review refresh')
+    authoring = reader._peer('reasoning.authoring')
+    world = None
+    if authoring.selected(doc, action.get('profile')):
+        if Path(paths[0]).exists():
+            doc, world = authoring.prepare(reader, paths, action)
+        else:
+            doc = reader.Record()
+            doc['meta'] = {'reasoning': copy.deepcopy(authoring.DECLARATION)}
+            authoring.pending_compatible(reader, paths, doc)
+            world = authoring.World(reader, doc)
     # Capture the authored representation, just as the file writer does. In
     # particular readable formulas must be lowered/validated before identity is
     # assigned, and a new judgment needs its initial dependency snapshot.
     base = doc or {'meta': {}}
     ids, judgments, fields = G.P.infer(base)
     fields = G.P.authored_fields(action, fields)
-    raw = G.P.with_builtins(base, ids, judgments, fields)
+    if world is not None:
+        fields = {**fields, **world.fields}
+        raw = world.raw
+    else:
+        raw = G.P.with_builtins(base, ids, judgments, fields)
     authored, notes = G.P.normalize_authored(action, ids, fields, raw)
     refusals = G.P.validate(authored, base, ids, judgments, fields, raw)
     if refusals:
         raise ValueError('; '.join(refusals))
+    if world is not None:
+        candidate = copy.deepcopy(world.candidate(authored).document)
     if action['kind'] == 'add':
         body = copy.deepcopy(authored['body'])
         snapshot_field = fields['snapshot'] or 'seen'
@@ -252,6 +270,9 @@ def route(paths, action, reader, project=None, expected_policy=None):
         for members in G.P.collections_of(candidate).values():
             members.pop(nid, None)
         candidate.setdefault(collection, {})[nid] = body
+    elif action['kind'] == 'set':
+        collection, old = G.entries(base)[nid]
+        candidate[collection][nid] = set_body(old, authored)
     bundle = G.prepare(candidate, [nid], scope=scope, shareability='project', evidence=action.get('evidence'))
     receipt = G.Store(project).capture(bundle, event_id=action.get('event_id') or uuid.uuid4().hex,
                                    contribution_id=action.get('contribution_id') or nid,

@@ -1,4 +1,5 @@
 """Offline, versioned native runtime supplied as ordinary package data."""
+import copy
 import hashlib
 import json
 import os
@@ -19,6 +20,16 @@ from . import adapter_identity
 
 class RuntimeUnavailable(ValueError):
     pass
+
+
+PROTOCOL_MODULES = {
+    'KP2': frozenset(('arithmetic/v1',)),
+    'KP3': frozenset(('arithmetic/v1', 'composition/v1')),
+    'KP4': frozenset(('query/v1',)),
+}
+RESPONSE_PROTOCOLS = {'KP2': 'KR2', 'KP3': 'KR3', 'KP4': 'KR4'}
+RUNTIME_PROTOCOLS = ['KP2', 'KP3', 'KP4']
+RUNTIME_MODULES = ['arithmetic/v1', 'composition/v1', 'query/v1']
 
 
 def _run_bounded(command, payload, *, timeout, output_bytes):
@@ -123,7 +134,7 @@ def _run_bounded(command, payload, *, timeout, output_bytes):
 def source_hash(lean_dir):
     root = Path(lean_dir)
     files = {p.relative_to(root).as_posix(): hashlib.sha256(p.read_bytes()).hexdigest()
-             for p in sorted(root.glob('*.lean'))
+             for p in sorted(root.rglob('*.lean'))
              if not p.name.startswith(('Proof', 'Audit'))}
     if not files:
         raise RuntimeUnavailable('runtime source identity is unavailable')
@@ -214,9 +225,13 @@ class Runtime:
 
     def _validate_manifest(self, target, source):
         data = self.manifest
-        if not isinstance(data, dict) or type(data.get('version')) is not int or data['version'] != 1 \
-                or data.get('protocol') != 'KP2' or data.get('target') != target \
-                or data.get('lean_version') != '4.33.1' or data.get('modules') != ['arithmetic/v1'] \
+        required = {'version', 'protocols', 'target', 'min_os', 'lean_version', 'source_sha256',
+                    'files', 'executable', 'libraries', 'modules'}
+        if not isinstance(data, dict) or set(data) != required \
+                or type(data.get('version')) is not int or data['version'] != 3 \
+                or data.get('protocols') != RUNTIME_PROTOCOLS or data.get('target') != target \
+                or not isinstance(data.get('min_os'), str) or not data['min_os'].strip() \
+                or data.get('lean_version') != '4.33.1' or data.get('modules') != RUNTIME_MODULES \
                 or not isinstance(data.get('files'), dict) or not isinstance(data.get('libraries'), list):
             raise RuntimeUnavailable('unsupported runtime manifest')
         if data.get('source_sha256') != source_hash(source / 'lean'):
@@ -244,6 +259,31 @@ class Runtime:
             observed[name] = actual
         return observed
 
+    def implementation_for(self, request):
+        """Return the existing audit shape, bound to one supported request grammar."""
+        if not isinstance(request, dict):
+            raise RuntimeUnavailable('invalid reasoning request')
+        protocol = request.get('protocol')
+        if protocol is None:
+            protocol = 'KP4' if request.get('version') == 4 else 'KP2'
+        # KP2 has no protocol field on the wire. An explicit value other than
+        # KP3 would otherwise silently select the legacy encoder.
+        if protocol == 'KP2' and 'protocol' in request:
+            raise RuntimeUnavailable('invalid explicit reasoning protocol')
+        required = PROTOCOL_MODULES.get(protocol)
+        if protocol == 'KP4':
+            raw = request.get('request', request)
+            modules = raw.get('required_modules')
+            if not isinstance(modules, list) or modules != sorted(set(modules)) \
+                    or not required <= set(modules) or not set(modules) <= set(self.manifest['modules']):
+                raise RuntimeUnavailable('runtime does not support request protocol or modules')
+        if required is None or protocol not in self.manifest['protocols'] \
+                or not required <= set(self.manifest['modules']):
+            raise RuntimeUnavailable('runtime does not support request protocol or modules')
+        implementation = copy.deepcopy(self.implementation)
+        implementation['protocol'] = protocol
+        return implementation
+
     def request(self, request):
         return self.request_many([request])[0]
 
@@ -258,11 +298,16 @@ class Runtime:
             raise RuntimeUnavailable('runtime changed; reopen before evaluating')
         payload = bytearray()
         count = 0
+        response_protocols = []
         for request in requests:
             count += 1
             if count > bounds['batch_requests']:
                 raise OperationalLimit('batch_request_limit')
-            line = encode_request(request).rstrip('\n').encode('utf-8') + b'\n'
+            implementation = self.implementation_for(request)
+            response_protocols.append(RESPONSE_PROTOCOLS[implementation['protocol']])
+            encoded = encode_request(request)
+            line = bytes(encoded) if isinstance(encoded, (bytes, bytearray)) \
+                else encoded.rstrip('\n').encode('utf-8') + b'\n'
             if len(line) > MAX_REQUEST_BYTES or len(payload) + len(line) > bounds['input_bytes']:
                 raise OperationalLimit('batch_input_limit')
             payload.extend(line)
@@ -272,10 +317,32 @@ class Runtime:
         adapter_identity()
         if self._verify_files() != self._observed:
             raise RuntimeUnavailable('runtime changed during evaluation')
-        output = output.decode('utf-8').splitlines()
-        if len(output) != count:
+        frames, position = [], 0
+        for protocol in response_protocols:
+            end = output.find(b'\n', position)
+            if end < 0:
+                raise RuntimeUnavailable('native response count does not match requests')
+            header = output[position:end]
+            if protocol == 'KR4':
+                if not header.startswith(b'KR4 '):
+                    raise RuntimeUnavailable('native response protocol does not match request')
+                length = header[4:]
+                if not length or not length.isdigit() or length.startswith(b'0') and length != b'0':
+                    raise RuntimeUnavailable('invalid native KR4 frame length')
+                size = int(length)
+                body_end = end + 1 + size
+                if body_end >= len(output) or output[body_end:body_end + 1] != b'\n':
+                    raise RuntimeUnavailable('truncated native KR4 frame')
+                frames.append(output[position:body_end + 1])
+                position = body_end + 1
+            else:
+                if header.split(b'\t', 1)[0] != protocol.encode('ascii'):
+                    raise RuntimeUnavailable('native response protocol does not match request')
+                frames.append(header)
+                position = end + 1
+        if position != len(output) or len(frames) != count:
             raise RuntimeUnavailable('native response count does not match requests')
-        decoded = [decode_response(line) for line in output]
+        decoded = [decode_response(frame) for frame in frames]
         for value in decoded:
             if value['status'] == 'ok':
                 validate_value(value['value'])

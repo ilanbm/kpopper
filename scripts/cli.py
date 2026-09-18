@@ -48,17 +48,19 @@ READ = ("open", "check", "affects", "pull", "where", "set", "add", "review", "sa
 COMMANDS = {
     "expressions": ('convert TEXT [--predicate] | migrate [--record FILE] [--apply]', "Convert explicit formulas to structured data; preview checked record migration."),
     "search": ('"QUERY" [--record FILE] [--limit N] [--chars N]', "Find local source evidence; read a hit with --read REF --revision REV."),
-    "open": ("[FILE ...] [--chars N] [--budget N]", "Open the current knowledge context."),
+    "open": ("[FILE ...] [--chars N] [--budget N] [--profile core/v1]", "Open the current knowledge context."),
     "map": ("[--deep]", "Map the work through an available host agent."),
     "config": ("[--mode simple|advanced] [--record PATH] [--check] [--guidance on|off]", "Inspect the project mode or change local preferences."),
-    "check": ("[FILE ...]", "Check the record's consistency and declared conditions."),
+    "check": ("[FILE ...] [--profile core/v1]", "Check the record's consistency and declared conditions."),
     "assess": ("ID [ID ...] [--attention-only]", "Read versioned assessment findings and scoped attention as JSON."),
-    "pull": ("SUBJECT [SUBJECT ...] [--from REF] [--history]", "Read a subject and the evidence behind it."),
-    "affects": ("SUBJECT [SUBJECT ...]", "Trace what a change reaches."),
+    "pull": ("SUBJECT [SUBJECT ...] [--from REF] [--history] [--profile core/v1]", "Read a subject and the evidence behind it."),
+    "affects": ("SUBJECT [SUBJECT ...] [--profile core/v1]", "Trace what a change reaches."),
     "add": ("ID FIELD=VALUE ...", "Add a grounded entry or judgment."),
     "set": ("ID VALUE [--why TEXT] [--as-of DATE]", "Update a reading and see what it affects."),
     "update": ("--file JSON|- [--record FILE] [--state-dir PATH]", "Record one or many changes from a source report now; return applied or retained status."),
     "review": ("ID [--as-of DATE]", "Record a judgment's review against current readings."),
+    "recover": ("[--record FILE] [--rollback]", "Complete an interrupted direct write or restore its exact before images."),
+    "history": ("status|reconcile|rebuild|accept|refute|correct|adopt|migrate|capabilities [OPTIONS]", "Inspect, explicitly resolve or adopt history, rebuild a view, or prepare a verified copy."),
     "document": ("OPERATION [OPTIONS]", "Create or refresh a standalone authored HTML document with evidence."),
     "page": ("[--open] [--out PATH] [--verify]", "Render or verify the knowledge page."),
     "export": ("ID [ID ...] [--format FORMAT]", "Export a focused readable excerpt with optional Mermaid."),
@@ -232,6 +234,18 @@ def main():
         except ImportError:
             from knowledge_cli import main as knowledge_main
         sys.exit(knowledge_main([a for a in rest if a != '--json']))
+    if cmd == 'recover':
+        try:
+            from .history_recovery_cli import main as recover_main
+        except ImportError:
+            from history_recovery_cli import main as recover_main
+        sys.exit(recover_main((["--json"] if options.json else []) + rest))
+    if cmd == 'history':
+        try:
+            from .history_cli import main as history_main
+        except ImportError:
+            from history_cli import main as history_main
+        sys.exit(history_main((["--json"] if options.json else []) + rest))
     if cmd == "watch":
         try:
             from .watch import main as watch_main

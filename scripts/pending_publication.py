@@ -151,17 +151,153 @@ class Publisher:
             raise Attention('record or evidence path is not a regular file: ' + path)
         return self.store.blob(oid)
 
+    def _history(self, files):
+        """Validate the pinned target's complete committed history without Git checkout reads."""
+        B = G.P._peer('history_bundle')
+        layout = G.P.layout(self.project.record())
+        paths = {role: Path(layout[role]).relative_to(self.project.root).as_posix()
+                 for role in ('history_authority', 'history', 'history_commits', 'history_cancellations')}
+        total = 0
+        def read(path, maximum=B.C.MAX_REQUEST_BYTES):
+            nonlocal total
+            if path not in files:
+                return None
+            size = int(M.git(self.project.root, 'cat-file', '-s', files[path][2]).stdout)
+            total += size
+            if size > maximum or total > B.MAX_BYTES:
+                raise Attention('history target exceeds captured byte limit')
+            return self._blob_at(files, path)
+        marker_raw = read(paths['history_authority'], B.C.MAX_OBJECT_BYTES)
+        if marker_raw is None:
+            return None
+        marker = B.C.validate_authority(B.C.decode_document(marker_raw))
+        if marker['authority'] != 'history':
+            return None
+        commits, storage, cancellations = {}, {}, {}
+        for path in files:
+            if path.startswith(paths['history_commits'] + '/'):
+                name = path[len(paths['history_commits']) + 1:]
+                if '/' in name or not name.endswith('.yaml'):
+                    raise Attention('invalid target history commit membership')
+                commits[name[:-5]] = read(path)
+            elif path.startswith(paths['history_cancellations'] + '/'):
+                name = path[len(paths['history_cancellations']) + 1:]
+                if '/' in name or not name.endswith('.yaml'):
+                    raise Attention('invalid cancellation membership')
+                cancellations[name] = read(path)
+            elif path.startswith(paths['history'] + '/'):
+                parts = path[len(paths['history']) + 1:].split('/')
+                if len(parts) != 2 or not parts[1].endswith('.yaml'):
+                    raise Attention('invalid target history object membership')
+                storage['/'.join(parts)] = read(path, B.C.MAX_OBJECT_BYTES)
+        objects, object_paths = B.C.objects_from_storage(commits, storage)
+        groups = B.C.committed_generations(marker, commits, objects, cancellations)
+        selected = {version: obj for group in groups.values() for version, obj in group['objects'].items()}
+        raw = {'authority.yaml': marker_raw,
+               'entry.yaml': read(self.project.config()['record'])}
+        raw.update({'cancellations/' + name: data for name, data in cancellations.items()})
+        raw.update({'commits/' + operation + '.yaml': data for operation, data in commits.items()})
+        raw.update({'objects/' + object_paths[(obj['subject'], version)]: objects[(obj['subject'], version)]
+                    for version, obj in selected.items()})
+        B._files(raw)
+        captured = B._capture(raw, None)
+        # Imported source bytes remain audit evidence, never active graph inputs.
+        imported = B.A.from_store_capture(captured).document.get('meta', {}).get('history_import')
+        if imported is not None:
+            parent = PurePosixPath(self.project.config()['record']).parent
+            for item in imported['members']:
+                name = B.C.relative_path(item['path'])
+                content = read(str(parent / name))
+                if content is None or B.C.sha256(content) != item['sha256']:
+                    raise Attention('retained target history evidence is unavailable or changed: ' + name)
+        return captured
+
+    def _equivalent(self, bundle, doc, files):
+        if bundle['manifest']['version'] != 3:
+            if isinstance(doc.get('meta'), dict) and 'history' in doc['meta']:
+                captured = self._history(files)
+                if captured is None:
+                    return False
+                doc = G.P._peer('history_adapter').from_store_capture(captured).document
+                doc['meta'].pop('history')
+            return G.equivalent(bundle, doc, self._evidence(files, bundle))
+        captured = self._history(files)
+        if captured is None:
+            return False
+        observation = G.P._peer('knowledge_views').history_evidence(captured)
+        return G.equivalent(bundle, doc, self._evidence(files, bundle), history=observation)
+
     def _graph(self, files):
         record = M.relative_path(self.project.config()['record'])
         raw = self._blob_at(files, record, b'{}')
         doc = G.P.yaml.safe_load(raw) or {}
         if not isinstance(doc, dict):
             raise Attention('target record is not a mapping')
+        captured = self._history(files)
+        if captured is not None:
+            doc = G.P._peer('history_adapter').from_store_capture(captured).document
+            self._validate_graph(files, doc)
+            return doc
         # Publication is deliberately fail-closed for split records. Reading only
         # one part would incorrectly acknowledge acceptance or overwrite another.
         if doc.get('record') or doc.get('also'):
             raise Attention('split target record requires explicit publication reconciliation')
+        self._validate_graph(files, doc)
         return doc
+
+    def _target_layers(self, files):
+        record = self.project.config()['record']
+        directory = PurePosixPath(record).parent / G.P.hypotheses_rel(record)
+        for path in sorted(files):
+            if PurePosixPath(path).parent != directory or not path.endswith(('.yaml', '.yml')):
+                continue
+            layer = G.P.parse(text=self._blob_at(files, path).decode('utf-8')) or {}
+            if not isinstance(layer, dict):
+                raise Attention('target hypothesis is not a mapping: ' + path)
+            layer.pop('hypothesis', None)
+            if layer.get('record') or layer.get('also'):
+                raise Attention('split target hypothesis requires explicit publication reconciliation')
+            yield layer
+
+    def _validate_graph(self, files, document):
+        if isinstance(document.get('meta'), dict) and 'history' in document['meta']:
+            captured = self._history(files)
+            if captured is None or not G.P._peer('history_bundle').matches_document(captured, document):
+                raise Attention('target history document lacks matching immutable evidence')
+            document = copy.deepcopy(document)
+            document['meta'].pop('history')
+        G.document_capabilities(document)
+        for layer in self._target_layers(files):
+            G.document_capabilities(layer)
+            base = G.P.Record()
+            base.update(copy.deepcopy(document))
+            G.document_capabilities(G.P.layered(base, {'doc': layer}))
+
+    def _merge_capabilities(self, graph, incoming, files, snapshot, decisions):
+        current = G.document_capabilities(graph)
+        added = G.document_capabilities(incoming)
+        if current['profile'] != added['profile']:
+            if added['profile'] != 'core/v1':
+                raise Attention('pending_profile_reconciliation_required: legacy content cannot inherit the target profile')
+            authoring = G.P._peer('reasoning.authoring')
+            if any(authoring._promotion_blockers(G.P, layer, graph)
+                   for layer in [graph, *self._target_layers(files)]
+                   if G.document_capabilities(layer)['profile'] != 'core/v1'):
+                raise Attention('requires explicit target migration: existing executable legacy fields')
+            for revision, bundle in snapshot['bundles'].items():
+                if decisions.get(revision, {}).get('state') in TERMINAL:
+                    continue
+                if G.meaning_capabilities(bundle['manifest']['document']) != G.meaning_capabilities(incoming):
+                    raise Attention('pending_profile_reconciliation_required: ' + revision)
+        if added['profile'] == 'core/v1':
+            declaration = copy.deepcopy(added)
+            if current['profile'] == 'core/v1':
+                declaration['version'] = max(current['version'], added['version'])
+                declaration['requires'] = sorted(set(current['requires']) | set(added['requires']))
+            meta = graph.get('meta')
+            if meta is not None and not isinstance(meta, dict):
+                raise Attention('requires explicit target migration: metadata is not a mapping')
+            graph.setdefault('meta', {})['reasoning'] = declaration
 
     def _evidence(self, files, bundle):
         parent = PurePosixPath(self.project.config()['record']).parent
@@ -169,8 +305,10 @@ class Publisher:
                 if (data := self._blob_at(files, str(parent / name))) is not None}
 
     def _accepted(self, snapshot, files, doc):
+        decisions = self._load()['decisions']
         return {revision for revision, bundle in snapshot['bundles'].items()
-                if G.equivalent(bundle, doc, self._evidence(files, bundle))}
+                if decisions.get(revision, {}).get('state') not in TERMINAL
+                if self._equivalent(bundle, doc, files)}
 
     @staticmethod
     def _marker(scope):
@@ -254,7 +392,118 @@ class Publisher:
         self._save(state, 'reconciled', **state['verified'])
         return target, head, files, doc, active, accepted
 
+    def _commit_history(self, target, files, doc, snapshot, revisions):
+        """Propose an exact union within one authority, without inventing acts."""
+        from dataclasses import replace
+        B = G.P._peer('history_bundle')
+        captured = self._history(files)
+        if captured is None:
+            raise Attention('history contribution requires explicit target history migration')
+        commits, objects = dict(captured.commits), dict(captured.object_bytes)
+        storage, object_paths = dict(captured.storage_bytes), dict(captured.object_paths)
+        parent = PurePosixPath(self.project.config()['record']).parent
+        layout = G.P.layout(self.project.record())
+        additions = {}
+
+        def add(path, raw):
+            path = str(path)
+            existing = additions.get(path, self._blob_at(files, path))
+            if existing is not None and existing != raw:
+                raise Attention('immutable history or evidence collision: ' + path)
+            additions[path] = raw
+
+        for revision in revisions:
+            bundle = snapshot['bundles'][revision]
+            G.validate_bundle(bundle)
+            if bundle['manifest']['version'] != 3:
+                raise Attention('history publication requires versioned history contributions')
+            artifact = B.from_contribution(bundle)
+            if artifact['manifest']['version'] == 2:
+                raise Attention('scoped history contribution requires explicit adoption choices')
+            incoming = B.validate(artifact)
+            if any(generation not in captured.inactive_generations or
+                   captured.inactive_generations[generation]['digest'] != evidence['digest']
+                   for generation, evidence in incoming.inactive_generations.items()):
+                raise Attention('retained generation evidence requires explicit target reconciliation')
+            if G.identity(incoming.marker) != G.identity(captured.marker):
+                raise Attention('different history authority requires explicit adoption')
+            if G.identity(incoming.state['rules']) != G.identity(captured.state['rules']):
+                raise Attention('history contribution rules disagree with target')
+            for operation, raw in incoming.commits.items():
+                if operation in commits and commits[operation] != raw:
+                    raise Attention('immutable history operation collision: ' + operation)
+                commits[operation] = raw
+            for key, raw in incoming.object_bytes.items():
+                if key in objects and objects[key] != raw:
+                    raise Attention('immutable history object collision: ' + key[1])
+                path = incoming.object_paths.get(key)
+                if path is None or path not in incoming.storage_bytes or incoming.storage_bytes[path] != raw:
+                    raise Attention('invalid incoming history object path: ' + key[1])
+                if key in object_paths and object_paths[key] != path:
+                    raise Attention('incompatible immutable history object representation: ' + key[1])
+                for existing_key, existing_path in object_paths.items():
+                    if existing_path == path and existing_key != key:
+                        raise Attention('incompatible immutable history storage path: ' + path)
+                if path in storage and storage[path] != incoming.storage_bytes[path]:
+                    raise Attention('immutable history storage collision: ' + path)
+                objects[key] = raw
+                storage[path] = incoming.storage_bytes[path]
+                object_paths[key] = path
+            archive = parent / '.kpopper-contributions' / revision
+            add(archive / 'manifest.json', G.json_bytes(G._encode(bundle['manifest'])))
+            for name, raw in bundle['files'].items():
+                add(archive / 'evidence' / name, raw)
+                if not name.startswith(B.PREFIX):
+                    add(parent / name, raw)
+        selected = B.C.committed_objects(captured.marker, commits, objects)
+        state = B.H.reduce(selected, rules=captured.state['rules'])
+        merged = replace(captured, commits=commits, object_bytes=objects, objects=selected,
+                         state=state, baseline=B.H.baseline(captured.marker, commits, state),
+                         storage_bytes=storage, object_paths=object_paths)
+        rendered = object.__new__(B.H.Store).render(merged)
+        generated = B.C.decode_document(rendered)
+        merged = replace(merged, entry_bytes=rendered, document=generated)
+        observation = G.P._peer('knowledge_views').history_evidence(merged)
+        for operation, raw in commits.items():
+            add(Path(layout['history_commits']).relative_to(self.project.root) / (operation + '.yaml'), raw)
+        for key, raw in objects.items():
+            path = object_paths.get(key)
+            if path is None or storage.get(path) != raw:
+                raise Attention('invalid merged history object path: ' + key[1])
+            add(Path(layout['history']).relative_to(self.project.root) / path, raw)
+        record = self.project.config()['record']
+        if record in additions:
+            raise Attention('evidence collides with history target entry')
+        additions[record] = rendered
+        adapted = B.A.from_store_capture(merged).document
+        for revision in revisions:
+            bundle = snapshot['bundles'][revision]
+            evidence = {name: additions.get(str(parent / name), self._blob_at(files, str(parent / name)))
+                        for name in bundle['manifest']['evidence'] if not name.startswith(B.PREFIX)}
+            if not G.equivalent(bundle, adapted, evidence, history=observation):
+                raise Attention('combined history does not retain a complete contribution')
+        decisions = self._load()['decisions']
+        for revision, prior in snapshot['bundles'].items():
+            if revision in revisions or decisions.get(revision, {}).get('state') in TERMINAL:
+                continue
+            if self._equivalent(prior, doc, files):
+                evidence = {name: additions.get(str(parent / name), self._blob_at(files, str(parent / name)))
+                            for name in prior['manifest']['evidence'] if not name.startswith(B.PREFIX)}
+                if prior['manifest']['version'] == 3:
+                    retained = G.equivalent(prior, adapted, evidence, history=observation)
+                else:
+                    plain = copy.deepcopy(adapted)
+                    plain['meta'].pop('history')
+                    retained = G.equivalent(prior, plain, evidence)
+                if not retained:
+                    raise Attention('history union changes an accepted contribution')
+        return self._write_commit(target, additions)
+
     def _commit(self, target, files, doc, snapshot, revisions):
+        if any(snapshot['bundles'][revision]['manifest']['version'] == 3 for revision in revisions) or \
+                isinstance(doc.get('meta'), dict) and 'history' in doc['meta']:
+            return self._commit_history(target, files, doc, snapshot, revisions)
+        self._validate_graph(files, doc)
         graph = copy.deepcopy(doc)
         current = G.entries(graph)
         additions = {}
@@ -270,7 +519,14 @@ class Publisher:
         # Conflicting revisions are obligations, not a sequence-based election.
         for revision in revisions:
             bundle = snapshot['bundles'][revision]
+            G.validate_bundle(bundle)
             incoming = bundle['manifest']['document']
+            self._merge_capabilities(graph, incoming, files, snapshot, decisions)
+            # Empty collections are captured scope authority too. They have no
+            # entries to reach the body merge, but must remain present in a target.
+            for collection, members in incoming.items():
+                if members == {} and collection not in ('meta', 'schema', 'record', 'also'):
+                    graph.setdefault(collection, {})
             if 'schema' in incoming:
                 if 'schema' in graph and G.identity(graph['schema']) != G.identity(incoming['schema']):
                     raise Attention('pending contribution conflicts with target schema')
@@ -293,6 +549,7 @@ class Publisher:
                     if not any(prior['files'].get(name) == existing for prior in replaceable.get(revision, [])):
                         raise Attention('pending evidence conflicts with target file: ' + path)
                 additions[path] = data
+        self._validate_graph(files, graph)
         record = self.project.config()['record']
         additions[record] = G.P.yaml.safe_dump(graph, allow_unicode=True, sort_keys=False).encode()
         for revision in revisions:
@@ -300,14 +557,17 @@ class Publisher:
             if not G.equivalent(bundle, graph, {name: additions[str(parent / name)] for name in bundle['files']}):
                 raise Attention('combined graph changes a contribution meaning; reconcile before publishing')
         for old, prior in snapshot['bundles'].items():
-            if old in revisions or not G.equivalent(prior, doc, self._evidence(files, prior)):
+            if old in revisions or decisions.get(old, {}).get('state') in TERMINAL:
                 continue
-            if decisions.get(old, {}).get('state') == 'superseded' and decisions[old].get('replacement') in revisions:
+            if not G.equivalent(prior, doc, self._evidence(files, prior)):
                 continue
             evidence = {name: additions.get(str(parent / name), self._blob_at(files, str(parent / name)))
                         for name in prior['files']}
             if not G.equivalent(prior, graph, evidence):
                 raise Attention('replacement would change another accepted contribution; reconcile its revision explicitly')
+        return self._write_commit(target, additions)
+
+    def _write_commit(self, target, additions):
         # A temporary index preserves modes, symlinks and submodules of the target;
         # no source checkout files or feature code enter the publication commit.
         index = self.project.state / ('publication-index-' + uuid.uuid4().hex)
@@ -440,7 +700,7 @@ class Publisher:
         """Explicit local decisions. No remote PR is closed/deleted by this API."""
         if action not in ('pause', 'resume', 'withdraw', 'reject', 'supersede', 'retry'):
             raise ValueError('unknown publication action')
-        with self.lock():
+        with self.lock(), self.project.lock():
             state = self._load()
             snapshot = self.store.snapshot()
             chosen = list(revisions or [])
@@ -460,6 +720,11 @@ class Publisher:
                 state['paused'] = True
             elif action == 'resume':
                 if chosen:
+                    authoring = G.P._peer('reasoning.authoring')
+                    paths = [str(self.project.record())]
+                    document = authoring.load(G.P, paths) if self.project.record().exists() else {}
+                    authoring.pending_compatible(G.P, paths, document, snapshot=snapshot,
+                                                 decisions=state['decisions'], resume=chosen)
                     for revision in chosen:
                         state['decisions'].pop(revision, None)
                         state['states'][revision] = 'captured'

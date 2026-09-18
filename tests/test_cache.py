@@ -18,6 +18,9 @@ import subprocess
 import sys
 import tempfile
 import unittest
+from unittest import mock
+import contextlib
+import threading
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 SCRIPTS = ROOT / "scripts"
@@ -263,6 +266,125 @@ class TheParseIsKept(unittest.TestCase):
             self.read()
         self.assertEqual(c.n, 2)
         self.assertFalse(self.entry().exists(), "nothing is kept while the switch is on")
+
+    def test_no_cache_parses_each_recursive_member_once_per_logical_read(self):
+        os.environ[P.NO_CACHE] = "1"
+        part = self.root / 'part.yaml'
+        leaf = self.root / 'leaf.yaml'
+        self.record.write_text('record: part.yaml\n', encoding='utf-8')
+        part.write_text('also: leaf.yaml\nknown: {part.value: {v: 1}}\n', encoding='utf-8')
+        leaf.write_text('known: {leaf.value: {v: 2}}\n', encoding='utf-8')
+        observations = []
+        token = P._CAPTURE_READS.set(lambda kind, path, value: observations.append((kind, path)))
+        try:
+            with Counted() as counted:
+                first = self.read()
+                self.assertEqual(counted.n, 3)
+                first['known']['leaf.value']['v'] = 99
+                second = self.read()
+                self.assertEqual(counted.n, 6)
+        finally:
+            P._CAPTURE_READS.reset(token)
+        self.assertEqual(second['known']['leaf.value']['v'], 2)
+        # The membership probes and content read still observe actual bytes.
+        for path in (self.record, part, leaf):
+            self.assertGreaterEqual(observations.count(('bytes', str(path))), 6)
+            self.assertFalse(self.entry(path).exists())
+        self.assertFalse(P._PARSED)
+        self.assertIsNone(P._READ_PARSES.get())
+
+    def test_no_cache_membership_race_reparses_changed_bytes_even_with_same_timestamp(self):
+        os.environ[P.NO_CACHE] = "1"
+        old = self.root / 'old.yaml'
+        new = self.root / 'new.yaml'
+        old.write_text('known: {old.value: {v: 1}}\n', encoding='utf-8')
+        new.write_text('known: {new.value: {v: 2}}\n', encoding='utf-8')
+        self.record.write_text('record: old.yaml\n', encoding='utf-8')
+        stamp = self.record.stat().st_mtime_ns
+        transaction = P._peer('history_transaction')
+        guard = transaction.directory_guards
+        requested, written = threading.Event(), threading.Event()
+        errors = []
+        def writer():
+            try:
+                if not requested.wait(5):
+                    raise AssertionError('reader never reached the lock boundary')
+                self.record.write_text('record: new.yaml\n', encoding='utf-8')
+                os.utime(self.record, ns=(stamp, stamp))
+            except BaseException as error:
+                errors.append(error)
+            finally:
+                written.set()
+        worker = threading.Thread(target=writer)
+        worker.start()
+        @contextlib.contextmanager
+        def changed(roots, *, exclusive):
+            requested.set()
+            self.assertTrue(written.wait(5), 'concurrent rewrite did not finish')
+            self.assertFalse(errors)
+            with guard(roots, exclusive=exclusive):
+                yield
+        try:
+            with mock.patch.object(transaction, 'directory_guards', side_effect=changed):
+                with Counted() as counted:
+                    with self.assertRaisesRegex(P.Refused, 'reader-resolved record membership changed'):
+                        self.read()
+                    self.assertEqual(counted.n, 4)  # Two entry images and their two distinct members.
+        finally:
+            requested.set()
+            worker.join(5)
+            self.assertFalse(worker.is_alive())
+        self.assertIsNone(P._READ_PARSES.get())
+        self.assertFalse(P._PARSED)
+
+    def test_no_cache_reparses_value_changes_with_unchanged_membership(self):
+        os.environ[P.NO_CACHE] = "1"
+        stamp = self.record.stat().st_mtime_ns
+        transaction = P._peer('history_transaction')
+        guard = transaction.directory_guards
+        @contextlib.contextmanager
+        def changed(roots, *, exclusive):
+            self.record.write_text(RECORD.replace('v: 12', 'v: 21'), encoding='utf-8')
+            os.utime(self.record, ns=(stamp, stamp))
+            with guard(roots, exclusive=exclusive):
+                yield
+        with mock.patch.object(transaction, 'directory_guards', side_effect=changed):
+            with Counted() as counted:
+                doc = self.read()
+                self.assertEqual(counted.n, 2)
+        self.assertEqual(doc['known']['room.seats']['v'], 21)
+        with Counted() as counted:
+            P.parse(str(self.record))
+            P.parse(str(self.record))
+            self.assertEqual(counted.n, 2, 'standalone no-cache parse calls remain fresh')
+        self.assertIsNone(P._READ_PARSES.get())
+        self.assertFalse(self.entry().exists())
+
+    def test_no_cache_nested_read_scopes_detach_parses_and_restore_capture_observer(self):
+        os.environ[P.NO_CACHE] = "1"
+        outside, inside = [], []
+        outer_token = P._CAPTURE_READS.set(lambda kind, path, value: outside.append((kind, path)))
+        try:
+            with Counted() as counted:
+                with P._record_read_guard([str(self.record)]):
+                    first = P.parse(str(self.record))
+                    inner_token = P._CAPTURE_READS.set(lambda kind, path, value: inside.append((kind, path)))
+                    try:
+                        with P._record_read_guard([str(self.record)]):
+                            nested = P.parse(str(self.record))
+                            nested['known']['room.seats']['v'] = 99
+                    finally:
+                        P._CAPTURE_READS.reset(inner_token)
+                    again = P.parse(str(self.record))
+                self.assertEqual(counted.n, 2)
+        finally:
+            P._CAPTURE_READS.reset(outer_token)
+        self.assertEqual(first['known']['room.seats']['v'], 12)
+        self.assertEqual(again['known']['room.seats']['v'], 12)
+        self.assertGreaterEqual(outside.count(('bytes', str(self.record))), 4)
+        self.assertGreaterEqual(inside.count(('bytes', str(self.record))), 3)
+        self.assertIsNone(P._READ_PARSES.get())
+        self.assertFalse(self.entry().exists())
 
     def test_more_entries_than_the_directory_holds_leave_the_newest(self):
         """A record that was thrown away leaves an entry nobody will ask for again - a

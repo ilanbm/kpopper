@@ -439,7 +439,8 @@ class TheFold(unittest.TestCase):
             os.remove(pathlib.Path(d) / "PROVENANCE.d" / "bigger_boiler.yaml")
             code, out, err = kp("consolidate", rec)
             self.assertEqual(code, 0, out + err)
-            self.assertFalse((pathlib.Path(d) / "PROVENANCE.d").exists())
+            self.assertEqual(list((pathlib.Path(d) / "PROVENANCE.d").glob("*.yaml")), [])
+            self.assertTrue((pathlib.Path(d) / "PROVENANCE.d" / ".history-local" / ".gitignore").exists())
             self.assertEqual(kp("consolidate", "--dry-run", rec)[1],
                              "no hypotheses beside the record - nothing to consolidate\n")
 
@@ -593,7 +594,7 @@ class TheRefutation(unittest.TestCase):
             finally:
                 os.chmod(hdir, 0o755)
             self.assertEqual(code, 1, out + err)
-            self.assertIn("could not be deleted, so the finding was not written either", out + err)
+            self.assertIn("recovery_required", out + err)
             self.assertEqual(rec.read_text(encoding="utf-8"), before)
             self.assertTrue((hdir / "glazing_redo.yaml").exists())
 
