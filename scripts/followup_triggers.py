@@ -70,7 +70,7 @@ def normalize(value):
             if not math.isfinite(item):
                 raise ValueError('nonfinite numbers are not supported')
             return item
-        if type(item) not in (dict, list):
+        if type(item) not in (dict, list) and not is_core_reading(item):
             raise ValueError('expected JSON-compatible data')
         identity = id(item)
         if identity in active:
@@ -209,8 +209,44 @@ def _equal(left, right):
     return left == right
 
 
+def _core_module():
+    if __package__:
+        from . import followup_core
+        return followup_core
+    import provenance
+    return provenance._peer('followup_core')
+
+
+def is_core_reading(value):
+    return type(value) is not dict and isinstance(value, dict) \
+        and type(value) is _core_module().CoreReading
+
+
+def _core_envelope(value):
+    if not is_core_reading(value):
+        return None
+    try:
+        return _core_module().envelope(value)
+    except (ValueError, TypeError):
+        return {'available': False}
+
+
 def _condition_scalar(value):
     """Conditions read the result; changed triggers retain the full historical basis."""
+    core = _core_envelope(value)
+    if core is not None:
+        if not core['available']:
+            return _MISSING
+        typed = core['value']
+        if typed['type'] == 'number':
+            return {'rational': [typed['numerator'], typed['denominator']]}
+        if typed['type'] in ('text', 'boolean'):
+            return typed['value']
+        if typed['type'] == 'null':
+            return None
+        # Conditions accept scalar expectations only. Keep collections typed so
+        # a record resembling a rational cannot masquerade as a number.
+        return typed
     if isinstance(value, dict) and set(value) == {'computed'}:
         calculated = value['computed']
         if not isinstance(calculated, dict) or not {'value', 'rule'} <= set(calculated):
@@ -227,6 +263,9 @@ def unavailable(value):
     """A failed read is distinct from a recorded null, for conditions and changes."""
     if not isinstance(value, dict):
         return False
+    core = _core_envelope(value)
+    if core is not None:
+        return not core['available']
     if set(value) == {'unavailable'} and isinstance(value['unavailable'], str):
         return True
     if set(value) == {'computed'}:
@@ -255,6 +294,8 @@ def evaluate(trigger, values, baseline, completed, observations, now, zone='UTC'
         else:
             try:
                 result = normalize(raw)
+                if is_core_reading(raw):
+                    result = _core_module().CoreReading(result)
                 state = {'available': True, 'value': result}
             except ValueError:
                 result = _MISSING

@@ -34,6 +34,11 @@ TREE = "tree"                           # the hypothesis the tree's readings mak
                                         # a slash, so no file beside the record can share the name
 
 
+def _operations():
+    """Load the package peer through provenance's compatibility loader."""
+    return P._peer('reasoning.operations')
+
+
 # ── the allowlist ────────────────────────────────────────────────────────────
 def allowlist_path(paths):
     """Where the recipes live: beside the first record file, and nowhere else - no pointer,
@@ -144,6 +149,42 @@ def declared(doc, hyps):
                                 f"carries the block over whole, so the recipe would be dropped and "
                                 f"nothing would take this reading again; carry measure: {mine} into "
                                 f"{h['name']}, or drop it from the base first")
+    return names, problems
+
+
+def _core_declared(doc, hyps):
+    """The measurement declaration for an ordinary core record.
+
+    Core has no legacy inference payload to interpret: the captured source's authored bodies
+    are the authority, while the operational assessment supplies the value used for comparison.
+    """
+    names, problems = {}, []
+    worlds = [(None, doc, P.bodies(doc))]
+    for h in hyps:
+        worlds.append((h["name"], h, h["raw"]))
+    for holder, world, own in worlds:
+        if holder is None:
+            view_world = doc
+        else:
+            # Keep the source capture, routing and pending/target identity bound to the
+            # prospective candidate.  Layering the raw mapping directly would make
+            # operations.view rebuild a context-less Snapshot.
+            operations = _operations()
+            view_world = operations.derive(P.layered(doc, world), doc, [holder], proposals=[world])
+        ids, jud, fields, raw = C._view(view_world)
+        for nid, body in sorted(own.items()):
+            if not isinstance(body, dict) or P.MEASURE not in body:
+                continue
+            name = body.get(P.MEASURE)
+            bad = P.measure_problem(nid, body, ids, jud, fields, raw)
+            if bad:
+                problems.append(f"{nid}" + (f" (in hypothesis {holder})" if holder else "") + f": {bad}")
+                continue
+            names.setdefault(nid, {}).setdefault(str(name), []).append(holder)
+    for nid, by in sorted(names.items()):
+        if len(by) > 1:
+            said = "; ".join(f"{n} by {', '.join(h or 'the base' for h in hs)}" for n, hs in sorted(by.items()))
+            problems.append(f"{nid}: two recipes named for one entry - {said} - a contested recipe; one of them, or neither")
     return names, problems
 
 
@@ -355,11 +396,151 @@ GENERIC = ("re-read against the merged tree: pull each id to see every reading b
            "refute the hypothesis")
 
 
+def _measure_core(paths, doc, hyps, run=False, timeout=None, cap=None, today=None):
+    """Remeasure an ordinary core record from one captured source.
+
+    ``operations.load`` (called by ``consolidate.read``) owns the source capture.  Every
+    prospective union is derived from that source and is assessed through the same context;
+    this adapter never evaluates a core record through the legacy flag machinery.
+    """
+    today = today or datetime.datetime.now(datetime.timezone.utc).date()
+    names, problems = _core_declared(doc, hyps)
+    apath = allowlist_path(paths)
+    allow = read_allowlist(apath) if os.path.isfile(apath) else None
+    out = []
+    if problems:
+        return ["refused - the record names recipes it cannot: "] + ["  " + p for p in problems], 1
+    if not names:
+        if allow:
+            n = len(allow)
+            out.append(f"{allowlist_name(paths)} holds {n} recipe{'s' if n != 1 else ''}, and no entry names one - nothing to re-measure")
+        else:
+            out.append("no measures beside the record - nothing to re-measure")
+        return out, 0
+    cited = sorted({n for by in names.values() for n in by})
+    if allow is None:
+        out.append(f"refused - {len(cited)} recipe{'s' if len(cited) != 1 else ''} named and no {allowlist_name(paths)} beside the record to hold "
+                   f"{'them' if len(cited) != 1 else 'it'}: " + ", ".join(cited))
+        return out, 1
+    missing = [n for n in cited if n not in allow]
+    if missing:
+        out.append(f"refused - the record names recipe{'s' if len(missing) != 1 else ''} {allowlist_name(paths)} does not hold: "
+                   + ", ".join(missing) + " - a measurement nothing takes is a hole, and a falsifier reading it tests nothing")
+        return out, 1
+    unused = [n for n in sorted(allow) if n not in cited]
+    root = _root_of(paths)
+    commit, said = _commit_of(root)
+    udoc = doc
+    for h in hyps:
+        udoc = P.layered(udoc, h)
+    if hyps:
+        # The layered mapping is only the authored candidate.  Bind it back to the one
+        # captured source before asking for its view; otherwise the final comparison would
+        # rebuild a context-less snapshot and discard operation identity.
+        operations = _operations()
+        udoc = operations.derive(udoc, doc, [h["name"] for h in hyps], proposals=hyps)
+    _, _, _, uraw = C._view(udoc)
+    serves = {}
+    for nid, by in names.items():
+        for n in by:
+            serves.setdefault(n, []).append(nid)
+    out.append(f"{len(cited)} recipe{'s' if len(cited) != 1 else ''} named by {len(names)} entr{'ies' if len(names) != 1 else 'y'}, "
+               f"from {allowlist_name(paths)}, run from {root}:")
+    for n in cited:
+        exe = resolve(allow[n], root)
+        shown = " ".join(shlex.quote(" ".join(a.split())) for a in allow[n][1:])
+        out.append(f"  {', '.join(sorted(serves[n]))} <- {n}: {exe or allow[n][0] + ' (not found)'} "
+                   + (shown if len(shown) < 90 else shown[:90] + " ..."))
+    if unused:
+        out.append(f"  named by no entry, never run: {', '.join(unused)}")
+    if not run:
+        out += ["", "nothing ran - add --run to measure this tree"]
+        return out, 0
+    out.append("")
+    results, failed = {}, []
+    for n in cited:
+        text, problem = run_recipe(allow[n], root, timeout, cap)
+        if problem:
+            failed.append(f"  FAIL {n} ({', '.join(sorted(serves[n]))}): {problem}")
+        else:
+            results[n] = text
+    # Recipes run outside the assessment boundary and may edit an input while they run.  Do
+    # not compare readings or offer refresh advice against a stale captured source.
+    source = getattr(doc, "_operation_source", None)
+    if source is not None:
+        try:
+            source.verify()
+        except Exception as error:
+            code = getattr(error, "code", "snapshot_changed") or "snapshot_changed"
+            return [f"refused - {code}: {error}"], 1
+    differing, agreed = {}, []
+    for nid, by in sorted(names.items()):
+        n = next(iter(by))
+        if n not in results:
+            continue
+        body = uraw.get(nid)
+        if not isinstance(body, dict):
+            failed.append(f"  FAIL {n} ({nid}): what holds this id now is not an entry with a reading of its own, so there is nothing to measure against")
+            continue
+        recorded = body.get(_value_field(body))
+        value, problem = reading(results[n], recorded)
+        if problem:
+            failed.append(f"  FAIL {n} ({nid}): {problem}")
+        elif agrees(recorded, value):
+            agreed.append(f"  {nid}: {P.scalar(value, fold=False)} - as recorded ({n})")
+        else:
+            differing[nid] = (n, body, value)
+    # A captured operational assessment with an unknown/error is a hole, never a clean read.
+    operations = _operations()
+    base_findings = operations.findings(operations.world(doc).context)
+    for line in base_findings.get('holes', []):
+        failed.append("  FAIL core assessment: " + line)
+    out.append(f"measured on {today.isoformat()} (UTC){', at ' + said if said else ''}: {len(names)} entr{'ies' if len(names) != 1 else 'y'} by {len(cited)} recipe{'s' if len(cited) != 1 else ''}")
+    out += agreed + failed
+    if not differing:
+        out.append("")
+        if failed:
+            out.append(f"not clean: a hole - {len(failed)} recipe{'s' if len(failed) != 1 else ''} failed, and a measurement nothing takes is a hole")
+            return out, 1
+        out.append("the record holds what this tree measures")
+        return out, 0
+    tree = tree_hypothesis(udoc, differing, commit, said, today)
+    if tree["name"] in doc.hypotheses:
+        raise P.Refused(f"refused - a hypothesis beside the record is named {tree['name']}, which is the tree's own; rename it")
+    base_check = operations.check(doc)
+    laid = sorted(hyps + [tree], key=lambda h: h["name"])
+    c = C.union_of(doc, laid, base_check, today.isoformat(), None)
+    report = [l for l in C.report(c, today) if l not in GENERIC]
+    while report and not report[-1]:
+        report.pop()
+    out += [""] + report
+    out.append("")
+    base_ids = c.base[1]
+    refused = {k: why for k, _, why in c.refused}
+    for nid, (n, body, value) in sorted(differing.items()):
+        was, now = P.scalar(body.get(_value_field(body)), fold=False), P.scalar(value, fold=False)
+        day, dated = P._read_on(body, uraw), _dated_by(body, uraw)
+        out.append(f"  {nid}: {was} recorded" + (f" ({day}, by {dated})" if day else " (undated)") + f" -> {now} {_by(n, said)}")
+        holder = None if nid in base_ids else next((h["name"] for h in hyps if nid in h["ids"]), None)
+        if nid in refused or nid in c.contested:
+            out.append("    correct the recorded claim in this pull request, or run the measurement again on a later day; do not future-date this result")
+        else:
+            out.append("    " + refresh_command(nid, value, n, said, holder, paths, today))
+    out.append("")
+    if c.red or failed:
+        out.append("not clean: a falsifier that holds on what the tree measures - red until the record and the tree agree")
+        return out, 1
+    out.append(f"the tree reads {len(differing)} entr{'ies' if len(differing) != 1 else 'y'} differently, none across a line - refresh them")
+    return out, 0
+
+
 def measure(paths, run=False, timeout=None, cap=None, today=None):
     """What `remeasure` prints -> (lines, exit code). The plan, always; the measurements and the
     union's report only with `run`."""
     today = today or datetime.datetime.now(datetime.timezone.utc).date()
     doc, hyps = C.read(paths)
+    if _operations().selected(doc):
+        return _measure_core(paths, doc, hyps, run=run, timeout=timeout, cap=cap, today=today)
     names, problems = declared(doc, hyps)
     apath = allowlist_path(paths)
     allow = read_allowlist(apath) if os.path.isfile(apath) else None

@@ -988,6 +988,30 @@ def _record_read_guard(paths):
         _READ_PARSES.reset(token)
 
 
+def refuse_dormant_profile(doc):
+    """A dormant profile must not be interpreted by legacy check/page/session paths. Attached
+    proposals retain their own declared semantics as well as the base, so a layer declaring one
+    is refused with the base that carries it.
+
+    Both of the legacy page build's boundaries run this - its own reading, and a document handed
+    to it by a caller that read it already - because a reader that only checked while reading
+    would let a document loaded under the core permission in through the other door. It is not
+    the only such guard in the tree: `_legacy_computation` refuses a declared profile for the
+    computed-name paths, unconditionally and without looking at layers. The two differ on
+    purpose and neither stands in for the other."""
+    layers = [hyp['doc'] for hyp in (getattr(doc, 'hypotheses', None) or {}).values()]
+    for document in [doc, *layers]:
+        meta = document.get('meta')
+        if isinstance(meta, dict) and 'reasoning' in meta:
+            contract = _peer('reasoning.contract')
+            try:
+                contract.capabilities(document)
+            except contract.CapabilityError as error:
+                raise Refused(error.code + ': ' + str(error)) from None
+            if not _CORE_READS.get():
+                raise Refused('unsupported_capability: use core/v1 consumer')
+
+
 def _load(paths, *, read_mode=None):
     mode = read_mode or ('frozen' if _RAW_READS.get() else os.environ.get('KPOPPER_READ_MODE', 'live'))
     if mode == 'live':
@@ -1075,18 +1099,7 @@ def _load(paths, *, read_mode=None):
     doc.hypotheses = load_hypotheses(paths)
     mode = read_mode or ('frozen' if _RAW_READS.get() else os.environ.get('KPOPPER_READ_MODE', 'live'))
     doc = _peer('knowledge_views').overlay(paths, doc, read_mode=mode)
-    # A dormant profile must not be interpreted by legacy check/page/session paths.
-    # Attached proposals retain their own declared semantics as well as the base.
-    for document in [doc, *(hyp['doc'] for hyp in doc.hypotheses.values())]:
-        meta = document.get('meta')
-        if isinstance(meta, dict) and 'reasoning' in meta:
-            contract = _peer('reasoning.contract')
-            try:
-                contract.capabilities(document)
-            except contract.CapabilityError as error:
-                raise Refused(error.code + ': ' + str(error)) from None
-            if not _CORE_READS.get():
-                raise Refused('unsupported_capability: use core/v1 consumer')
+    refuse_dormant_profile(doc)
     return doc
 
 
@@ -2273,7 +2286,7 @@ def check_lines(paths):
     # that never builds the page still hears them. The page decides its own falsifiers; the
     # brief held against the arrangements that stand is the record's own claim, so a brief
     # that no longer carries what an arrangement decided fails here too.
-    info = _page_or_error(paths, read_mode=getattr(doc, 'read_mode', None))
+    info = _page_or_error(paths, read_mode=getattr(doc, 'read_mode', None), doc=doc)
     if info and "error" in info:
         note.append(f"the brief beside the record could not be built: {info['error']}")
     elif info:
@@ -2513,7 +2526,7 @@ def opening(paths, budget=25, chars=None, host=None):
     # already about what to do next: the newest first and how many more, never the list -
     # the slot is for what needs a person, and check names the rest with a hint each. An
     # arrangement whose sign appeared comes first: it is the gap read by a decision.
-    info = _page_or_error(paths, read_mode=getattr(doc, 'read_mode', None))
+    info = _page_or_error(paths, read_mode=getattr(doc, 'read_mode', None), doc=doc)
     facts = (info.get("arrangements") or {}) if info and "error" not in info else {}
     fired = sorted(k for k, f in facts.items() if f["fired"])
     cov = info.get("coverage") if info and "error" not in info else None
@@ -3143,9 +3156,11 @@ def _brief_beside(path):
     return b if os.path.exists(b) else None
 
 
-def _page_info(paths, read_mode=None):
+def _page_info(paths, read_mode=None, *, doc=None):
     """What the page knows when it is built beside this record - its counts, its shape, the
-    coverage report - or None when no brief sits beside the record."""
+    coverage report - or None when no brief sits beside the record. A reader that has just
+    loaded the record passes it as `doc` and the page is built from that reading rather than
+    a second one; a caller that must see the record as it stands now passes none."""
     sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
     import render_page as R
     mode = read_mode or ('frozen' if _RAW_READS.get() else os.environ.get('KPOPPER_READ_MODE', 'live'))
@@ -3153,7 +3168,7 @@ def _page_info(paths, read_mode=None):
     brief = R.find_brief(paths, read_mode=mode)
     if not brief:
         return None
-    return R.build(paths, brief, read_mode=mode)[4]
+    return R.build(paths, brief, read_mode=mode, doc=doc)[4]
 
 
 def _page_side(paths, read_mode=None):
@@ -3168,11 +3183,16 @@ def _page_side(paths, read_mode=None):
             info.get("arrangements") or {})
 
 
-def _page_or_error(paths, read_mode=None):
+def _page_or_error(paths, read_mode=None, *, doc=None):
     """What the page knows, or None without a brief, or {"error": why} when the brief cannot
-    be built - the reader never fails on the page's account, it says so in a line."""
+    be built - the reader never fails on the page's account, it says so in a line. `doc` is
+    the record already read for these paths, passed through to the build; a caller that must
+    see the record as it stands now passes none. Note that the line this returns is where a
+    refused build lands, including one refused for being given a record read in another
+    mode - a document read from *other* paths is drawn, not refused, so the caller owns
+    that."""
     try:
-        return _page_info(paths) if read_mode is None else _page_info(paths, read_mode=read_mode)
+        return _page_info(paths, read_mode=read_mode, doc=doc)
     except (Exception, SystemExit) as e:
         return {"error": str(e)}
 
@@ -3911,7 +3931,9 @@ def may_supersede(nid, existing, new, raw, ids, jud, fields, as_of=None, page=No
             if facts["fired"]:
                 return True, (f"its sign holds ({short(jud[nid]['pred'], 60)}) with its tab intact"
                               + (f" - {facts['reading']}" if facts.get("reading") else ""))
-        if evaluate(jud[nid]["pred"], raw, ids) is True:
+        world = getattr(raw, 'world', None)
+        fired = world.predicate_for(nid) if hasattr(world, 'predicate_for') else evaluate(jud[nid]["pred"], raw, ids)
+        if fired is True:
             return True, f"its wrong_if holds ({short(jud[nid]['pred'], 60)})"
         if by_hand:
             return True, "the standing judgment holds, and a person takes this over it by name"

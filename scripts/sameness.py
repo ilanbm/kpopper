@@ -263,7 +263,7 @@ def nearest_existing(a, doc, ids, jud, fields, raw):
 
 
 # ── the candidates a merger walks ────────────────────────────────────────────
-def candidates(doc, hypotheses=None, limit=5):
+def candidates(doc, hypotheses=None, limit=5, *, inference=None):
     """The pairs a merger judges when hypotheses consolidate, from declared fields alone
     -> (pairs, new_subjects). `doc` is the loaded record; `hypotheses` the ones being
     consolidated - names of hypotheses beside the record, or the dicts the reader builds for
@@ -274,7 +274,7 @@ def candidates(doc, hypotheses=None, limit=5):
     "rank", "reasons", "score"}, ...]}}, at most `limit` per subject. new_subjects: {prefix:
     [(hypothesis, id), ...]} for every prefix the base does not hold. Pairs a distinct_from
     declared are left out."""
-    ids, jud, fields = P.infer(doc)
+    ids, jud, fields = P.infer(doc) if inference is None else inference
     base, beside, live = _every_raw(doc)
     chosen = []
     for x in (sorted(beside) if hypotheses is None else hypotheses):
@@ -312,11 +312,11 @@ def candidates(doc, hypotheses=None, limit=5):
     return pairs, new_subjects
 
 
-def candidate_lines(doc, hypotheses=None, limit=5):
+def candidate_lines(doc, hypotheses=None, limit=5, *, inference=None):
     """`candidates` as the lines the dry run prints under its two headings ->
     (candidates, new_subjects): one line per pair, grouped by the arriving id - "a (h) and b:
     why" - and one per prefix the base does not hold; empty lists when there is nothing."""
-    pairs, subjects = candidates(doc, hypotheses, limit)
+    pairs, subjects = candidates(doc, hypotheses, limit, inference=inference)
     lines = []
     for k, got in sorted(pairs.items(), key=lambda kv: (kv[1]["hypothesis"], kv[0])):
         for c in got["near"]:

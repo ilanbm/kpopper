@@ -81,6 +81,7 @@ class CapturedAssessment:
                 or view['findings_revision'] != report['findings_revision']:
             raise ValueError('consumer view belongs to a different assessment')
         self._snapshot = snapshot
+        self._base_assessment = base
         self._assessment = report
         self._view = view
 
@@ -118,6 +119,11 @@ class CapturedAssessment:
     @property
     def findings_revision(self):
         return self._assessment['findings_revision']
+
+    @property
+    def base_assessment(self):
+        """The validated v2 computational findings underlying this v3 context."""
+        return copy.deepcopy(self._base_assessment)
 
     @property
     def assessment(self):

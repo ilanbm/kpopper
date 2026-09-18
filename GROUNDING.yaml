@@ -1,5 +1,5 @@
 meta:
-  updated: 2026-09-18
+  updated: 2026-09-19
   name: kpopper
   scope: "What this plugin is for and the decisions that shaped it, kept in its own format -
           the tools eat their own cooking, and every session here opens grounded."
@@ -717,6 +717,57 @@ sources:
     at: "User request in task 01a0b42e-d428-79a0-a6f7-03bf6195dde1"
     read: "2026-09-18"
     fidelity: quoted
+  s.2026_09_18_lane_a_hoist:
+    name: "The Lane A session that implemented F1, the per-document hoist in
+           knowledge_views.overlay"
+    asked: "yes start building and coordinate with the architect please"
+    fidelity: quoted
+    of: "implementation of F1 against the overlay-speed lane-a priming, with a differential test
+         whose oracle is the pre-hoist overlay read out of git history at e888570"
+    at: "Claude Code desktop session local_44183971-827e-4438-8c56-23ccc66c0b2b, 2026-09-18, macOS
+         arm64, Python 3.13.12"
+    read: "2026-09-18"
+  s.2026_09_18_lane_b_load_once:
+    name: "The Lane B session that made a read command read the record once and give that reading to
+           the page build"
+    asked: "please read your priming prompt:
+            /Users/orkeren/Projects/kpopper/docs/shipshape/work/overlay-speed/lane-b-priming.md\n\nand
+            start working (coordinate with the architect first)"
+    fidelity: quoted
+    of: "wall clock of python3 scripts/provenance.py against the record as it stood at e888570,
+         three cold runs and three warm, e888570 and this branch at 157cbfa run from the same
+         directory against the same file, so only the code differs; the load, overlay and inference
+         counts come from a wrapper that counted calls into the live view from outside the reader
+         and changed nothing else. Taken before the per-document hoist merged in beside it, so the
+         after figures isolate this change alone and are no longer what the tree reads: see
+         m.read_command_record_loads"
+    at: "Claude Code desktop session local_759e9307-40bc-4d70-9646-213fcbe3f9da, 2026-09-18, macOS
+         arm64, Python 3.13.12"
+    read: "2026-09-18"
+  s.2026_09_18_overlay_profile:
+    name: "The Architect session that profiled a live open on this record and found the per-entry
+           inference loop"
+    asked: "help me figure out whether or not this is true, whether this is truly a pain point and
+            something worth implementing AND to help me understand whether or not the proposed
+            implementation is a good idea/you would change something"
+    fidelity: quoted
+    of: "cProfile of scripts/provenance.py open on a worktree of e888570, then an experiment that
+         wrapped the reader from outside and memoized pending_grounding.semantic_roles and
+         meaning_capabilities per document object, changing nothing else; its numbers are
+         m.overlay_open_seconds"
+    at: "Claude Code desktop session local_fde22652-a55f-4570-9e96-0b1131d47541, 2026-09-18, macOS
+         arm64, Python 3.13"
+    read: "2026-09-18"
+  s.2026_09_18_remeasure_midnight:
+    name: "The session that reproduced and fixed the remeasure tests crossing UTC midnight"
+    asked: "Fix the three TheMeasurementTests that fail when a long run crosses UTC midnight, audit
+            similar tests, run focused and full validation, record the finding, and open an unmerged
+            pull request."
+    fidelity: paraphrase
+    file: "/Users/ilanbm/.local/state/kpopper/ingestion/228a1ddd08346ee05e16ceac98974b84e2395e8e9fb6ec6e78e47bedf021d3f0/sources/30d93f80cdb17983b37d760562bcdc7b.txt"
+    at: "PR #119 run 35285716254 attempt 1 and local forced-date and fixed-day test runs"
+    of: "2026-09-18"
+    read: "2026-09-18"
   s.background_ingestion:
     name: "Background capture and selective delivery contract"
     file: "skills/kpopper/INGESTION.md"
@@ -740,6 +791,21 @@ sources:
     file: ".github/scripts/ci_selection.py"
     read: "2026-09-17"
     from: s.2026_09_17_selective_ci
+  s.core_followups_contract:
+    name: "Core followup captured reading contract"
+    file: "scripts/followup_core.py"
+    read: "2026-09-18"
+    revision: "1b445298e413af12f24d6c0ab7a67637b5e9df84"
+  s.core_observer_operations:
+    name: "Core observers and prepared history fold checks"
+    file: "scripts/history_prospective.py"
+    read: "2026-09-19"
+    revision: "446321d"
+  s.core_operational_contract:
+    name: "Captured core operational assessment contract"
+    file: "scripts/reasoning/operations.py"
+    read: "2026-09-18"
+    revision: ac61f7f
   s.followups_contract:
     name: "Followup task and authority contract"
     file: "skills/kpopper/FOLLOWUPS.md"
@@ -1159,6 +1225,16 @@ known:
     from: s.watch_command
     at: "name and invocation; the current scheduled cadence remains daily"
     of: "2026-09-10"
+  followups.core_readings:
+    name: "Core followup readings retain evidence independently"
+    v: "Declared core and active-history followups use one captured assessment. Scalar conditions
+        read exact typed values or authored judgment verdicts; changed triggers also retain
+        computational basis and history evidence. Acceptance, falsifier, support and integrity remain
+        independent. Unavailable readings are unknown only to triggers that require them; scanning
+        does not execute work or change the record."
+    from: s.core_followups_contract
+    at: "project and capture; tests/test_core_followups.py"
+    of: "2026-09-18"
   followups.execution:
     name: "Who performs a ready followup"
     v: "The scheduled host agent performs authorized work in its own review run. The coordinator
@@ -1175,11 +1251,14 @@ known:
     of: "2026-09-10"
   followups.maintenance_scope:
     name: "What graph maintenance currently selects"
-    v: "The packet returns at most one flagged judgment. Source refresh and open-question work are
-        permitted by the agent prompt, without a general source-age or worktree-graph sweep."
-    from: s.followups_state
-    at: "graph and Store.scan; maintenance instruction in scripts/followup_daily.py::plan"
-    of: "2026-09-10"
+    v: "The packet returns at most one flagged item: legacy judgments, or core nodes and history
+        subjects with attention, reserved support or unavailable readings. Source refresh and
+        open-question work remain permitted by the agent prompt, without a general source-age or
+        worktree-graph sweep."
+    # set 2026-09-18: Core followup scans now project independent captured findings.
+    from: s.core_followups_contract
+    at: "project; scripts/followups.py Store.scan; scripts/followup_daily.py plan"
+    of: "2026-09-18"
   followups.outcome_retention:
     name: "What completion preserves"
     v: "Attempt outcomes and evidence remain in the private followup ledger. Finishing a task does
@@ -1526,6 +1605,25 @@ known:
     from: doc.session_test_gates
     at: "PredicateLiteralContract.setUpClass and store import; ReadableRuntime.setUpClass; Core.__init__ cache validation"
     of: "2026-09-17"
+  p.core_observer_boundary:
+    name: "Core observer support and the remaining history boundary"
+    v: "Ordinary core watch and remeasure retain captured context. New history folds check the
+        prepared candidate for introduced falsified conditions or holes; older prepared receipts
+        retain prior recovery semantics. Active-history observers remain refused pending integration,
+        so complete operational parity and default activation are not established."
+    from: s.core_observer_operations
+    at: "assess; history_hypotheses._finish and verify_prepared; watch.compare;
+         remeasure._measure_core"
+    of: "2026-09-19"
+  p.core_operational_capture:
+    name: "Core operational checks retain their captured base and prospective evidence"
+    v: "Core consolidation captures the record and hypothesis text together, separates base and
+        prospective findings, and uses captured v3 findings for checks while retaining the existing
+        replacement, date, take and drop policy. History-backed candidates require prospective
+        history evidence; the ordinary-core bridge refuses them."
+    from: s.core_operational_contract
+    at: "World, load, derive and findings; scripts/consolidate.py read, union_of and fold"
+    of: "2026-09-18"
   p.coverage_thresholds:
     v: 0
     name: "Thresholds the coverage report carries in code - a line drawn anywhere but inside a
@@ -1834,6 +1932,53 @@ known:
     from: doc.host_compatibility
     at: "OpenClaw live exercise / scope, assertions and operator-assisted qualification"
     of: "2026-09-17"
+  m.overlay_open_seconds:
+    name: "Seconds a live open, check and pull cost on this record at e888570, and the same reads
+           frozen"
+    from: s.2026_09_18_overlay_profile
+    v:
+      entries: 429
+      record_lines: 5493
+      open_live: 10.5
+      check_live: 10.3
+      pull_live: 5.2
+      open_frozen: 0.37
+      check_frozen: 0.26
+      pull_frozen: 0.17
+      overlays_per_open: 2
+      semantic_roles_calls_per_open: 872
+      findall_calls_per_open: 2529314
+      open_live_with_per_document_memo: 0.7
+      entries_319_open_live: 6.1
+    at: "wall clock of python3 scripts/cli.py, three runs, warm parse cache; the memo number comes
+         from a wrapper that memoized pending_grounding.semantic_roles and meaning_capabilities per
+         document object and changed nothing else; the 319-entry number is the pre-#84 record copied
+         into a fresh git repository and read with the same code"
+    of: "2026-09-18"
+  m.overlay_open_seconds_after_hoist:
+    name: "Seconds a live open and check cost on this record once the overlay infers once per
+           document, and the same reads frozen"
+    from: s.2026_09_18_lane_a_hoist
+    v:
+      entries: 434
+      open_live_warm: 0.76
+      check_live_warm: 0.61
+      open_live_cold: 1.14
+      check_live_cold: 0.87
+      open_frozen_warm: 0.38
+      check_frozen_warm: 0.25
+      open_live_warm_before: 10.89
+      check_live_warm_before: 10.66
+      semantic_roles_calls_per_open: 4
+      semantic_roles_calls_per_open_before: 882
+    at: "wall clock of python3 scripts/cli.py, three runs each, median reported, on branch
+         claude/overlay-hoist when this record held 434 entries, before #122 merged into it; both the
+         before and after numbers were measured on that same record state, the before by restoring
+         the pre-hoist scripts/knowledge_views.py from e888570 into the same worktree and putting it
+         back, so the two differ only in the overlay; cold is KPOPPER_NO_CACHE=1 and warm is the
+         parse cache as a user gets it; the call counts wrap knowledge_views.overlay from outside and
+         count pending_grounding.semantic_roles"
+    of: "2026-09-18"
   m.prompt_hook_10x_kept:
     v: 0.15
     unit: s
@@ -1872,6 +2017,56 @@ known:
            readable"
     from: run.claims_by_reach
     at: "of 83 asserted; one answer was left out of the reply"
+  m.read_command_loads_after:
+    name: "Record readings one live read command makes now, on a project with no publication target"
+    from: s.2026_09_18_lane_b_load_once
+    v: 1
+    of: "counted the same way on this branch, and pinned by tests.test_page_document_reuse, which
+         asserts one reading for open and for check on a bare record and on an Advanced project with
+         a contribution pending. Neither carries a configured publication target, which reaches
+         watch and reads the record again from inside the overlay - outside what this counts and
+         outside the change it measures. No recipe recomputes this number: the sign it carries for
+         d.page_build_reads_the_loaded_record is re-read by running that module, and written here
+         by hand"
+  m.read_command_loads_before:
+    name: "Record readings one live read command made before the page was given the reader's own"
+    from: s.2026_09_18_lane_b_load_once
+    v: 2
+    of: "counted at e888570 by a wrapper that counted calls into the live view from outside the
+         reader and changed nothing else; one reading by the command, one by the page build it asked"
+  m.read_command_record_loads:
+    name: "How many times one live read command read this record, and what open and check cost,
+           before and after the page build was given the reading the reader already had"
+    from: s.2026_09_18_lane_b_load_once
+    v:
+      entries_at_e888570: 429
+      record_lines_at_e888570: 5493
+      loads_per_read_command_before: 2
+      loads_per_read_command_after: 1
+      overlays_per_open_before: 2
+      overlays_per_open_after: 1
+      semantic_roles_calls_per_open_before: 872
+      semantic_roles_calls_per_open_after: 436
+      open_live_before: 10.66
+      open_live_after: 5.49
+      check_live_before: 10.67
+      check_live_after: 5.45
+      open_frozen_before: 0.19
+      open_frozen_after: 0.19
+    of: "the record as it stood at e888570, before these entries were added to it; seconds are the
+         median of three warm runs on macOS arm64 under Python 3.13.12, and the three cold runs read
+         10.96 before and 5.70 after for open, 10.84 and 5.60 for check. Frozen does not move because
+         a frozen overlay returns at once, so the second reading was already nearly free. The counts
+         are m.read_command_loads_before and m.read_command_loads_after.
+
+         Every `after` here is this change alone, measured at 157cbfa against e888570 - the branch
+         before the per-document hoist merged into it. They are deliberately not what the tree reads
+         now: with the hoist beside this change a live open measures 0.36s and check 0.35s, and
+         semantic_roles runs twice per open rather than 436 times, because the hoist took the
+         per-entry inference out from under the one reading this change leaves. The load and overlay
+         counts - 2 to 1 - are the part that is this change's own and still hold. What the two
+         changes cost together on main is a measurement neither of them owns; it belongs to whoever
+         re-measures there"
   m.record_scale:
     v: 107
     name: "Largest live record, entries"
@@ -2081,6 +2276,15 @@ known:
     from: run.multisession_survey
     at: "the namespaces the four writers added that day, compared by hand"
 
+  m.remeasure.midnight_failures:
+    v: 3
+    name: "Remeasure tests that failed when their expected UTC day preceded the day read by the
+           command"
+    from: s.2026_09_18_remeasure_midnight
+    at: "PR #119 Actions run 35285716254 attempt 1 and the local forced-date reproduction on branch
+         codex/fix-remeasure-midnight"
+    of: "2026-09-18"
+
   m.remeasure.stale_green:
     v: 1
     name: "Times check passed while a measurement it read was stale, of the three states run"
@@ -2111,7 +2315,8 @@ known:
     of: "2026-09-10"
 
   m.skill_bytes_largest:
-    v: 22189
+    v: 22414
+    # set 2026-09-18: measured by skill_bytes_largest at 177e78c with the working tree changed
     # set 2026-09-17: Measured after the recording example changed src to canonical from; largest skill is skills/record/SKILL.md on branch 89f46e8
     # set 2026-09-16: measured by skill_bytes_largest at a566286 with the working tree changed
     # Measured on the integrated source at 2218aa3; earlier same-day values describe its parents.
@@ -2123,7 +2328,7 @@ known:
     name: "The largest skill body a session can be handed now, bytes"
     from: "skills/*/SKILL.md"
     at: "bytes of the largest body"
-    of: "2026-09-17"
+    of: "2026-09-18"
     measure: skill_bytes_largest
 
   m.t3_blocked_rule_inference_regression:
@@ -2723,12 +2928,16 @@ judgments:
     because: "These entrypoints let a new contributor assess the existing checks, install the
               project, report a reproducible problem and submit a focused change. Badges link to
               their actual workflows, release or license; forms preserve a blank-issue route.
-              Reporting policies need a real private contact before publication, and community files
-              alone do not establish release readiness."
+              Feature badges link to capability documentation: reasoning-runtime identifies Lean 4,
+              and Versioned knowledge marks history as experimental. They describe technology and
+              maturity without claiming the expanded reasoning/history epic is complete. Reporting
+              policies need a real private contact before publication, and community files alone do
+              not establish release readiness."
     name: "Make contributing discoverable and show actual project status"
     reopened_by: "A newcomer cannot complete setup or find the right reporting route from these
-                  files, the forms prevent a useful report, or a badge no longer represents the
-                  workflow, release or license it claims."
+                  files, the forms prevent a useful report, a badge no longer represents the
+                  workflow, release, license or capability it claims, or an experimental capability
+                  becomes generally available."
     rests_on: [p.community_guidance]
     verdict: "Keep a small set of truthful badges and lightweight issue forms, with newcomer setup
               and reporting routes in the contribution guide."
@@ -3716,6 +3925,78 @@ judgments:
     blocked_on: "observational: falsified by a watcher whose reconstructed dependencies beat
                  the writer's own declarations on a real record; none has been tried"
     seen: {doc.agent_graph: "read 2026-09-01"}
+  d.overlay_infers_once_per_document:
+    rests_on: [m.overlay_open_seconds, s.2026_09_18_overlay_profile]
+    verdict: "the live overlay infers roles once per document it compares, never once per entry"
+    because: "knowledge_views.overlay ran provenance.infer over the whole document once per entry -
+              872 times per open on a 429-entry record, 8.9 of the 11 seconds a profiled open took
+              inside re.findall - to compute a per-entry meaning whose per-document half is the same
+              for every entry. Memoizing that half alone took a ten-second open to 0.70 seconds with
+              identical output, so the fix is to build it once per document, on first use inside the
+              loop so a document that refuses still leaves the holder the old order left - not an
+              inverted mention index or a cache keyed on the record bytes, which would go stale on
+              hypotheses, the pending ref, the mode and the target"
+    reopened_by: "a live open that runs infer more than once for the same document within one
+                  overlay, or knowledge_conflicts that differ between the old and the new overlay on
+                  any fixture holding a pending bundle, a hypothesis and a target, including a target
+                  whose meaning refuses"
+    seen:
+      m.overlay_open_seconds:
+        entries: 429
+        record_lines: 5493
+        open_live: 10.5
+        check_live: 10.3
+        pull_live: 5.2
+        open_frozen: 0.37
+        check_frozen: 0.26
+        pull_frozen: 0.17
+        overlays_per_open: 2
+        semantic_roles_calls_per_open: 872
+        findall_calls_per_open: 2529314
+        open_live_with_per_document_memo: 0.7
+        entries_319_open_live: 6.1
+      s.2026_09_18_overlay_profile: read 2026-09-18
+  d.page_build_reads_the_loaded_record:
+    rests_on: [m.read_command_loads_after, m.read_command_record_loads, s.2026_09_18_lane_b_load_once]
+    request: s.2026_09_18_lane_b_load_once
+    verdict: "a read command reads the record once, and the page it asks is built from that reading"
+    wrong_if: "m.read_command_loads_after > 1"
+    because: "open and check read the record and then asked the page what it knew, and the page read
+              it again - two readings of the same files in one command, two live overlays, and two
+              chances for the reader view and the page view to differ about one record in one
+              instant. Each reading is separately guarded by _record_read_guard, so the old pair
+              could draw a page from a newer record than the reader had just described; one guarded
+              reading cannot. The reader now hands the document it read to the page build, which took
+              a live open on this record from 10.66 to 5.49 seconds with byte-identical output -
+              measured against e888570 before the per-document hoist merged in beside it, so that
+              pair isolates this change; what the tree reads with both is lower again, and
+              m.read_command_record_loads says so. The
+              write path keeps its own readings and must: the page counts taken before a write and
+              the read-back after it each have to see the record as it stands at that moment, because
+              the write itself changes what the page counts - so _page_side takes no document and
+              reads again on every call"
+    reopened_by: "a write whose page snapshot holds a count taken before the write rather than after
+                  it, or a document handed to the page build that the build's own reading would have
+                  refused - a reader that only checks what it reads itself has two doors and guards
+                  one"
+    seen:
+      m.read_command_loads_after: 1
+      m.read_command_record_loads:
+        entries_at_e888570: 429
+        record_lines_at_e888570: 5493
+        loads_per_read_command_before: 2
+        loads_per_read_command_after: 1
+        overlays_per_open_before: 2
+        overlays_per_open_after: 1
+        semantic_roles_calls_per_open_before: 872
+        semantic_roles_calls_per_open_after: 436
+        open_live_before: 10.66
+        open_live_after: 5.49
+        check_live_before: 10.67
+        check_live_after: 5.45
+        open_frozen_before: 0.19
+        open_frozen_after: 0.19
+      s.2026_09_18_lane_b_load_once: read 2026-09-18
   d.page_lint_reads_output:
     rests_on: [s.2026_09_04_components, d.author_free_build_guarantees, d.reasoning_in_record]
     verdict: "The output lint checks references and visible keys, judgment and review markers,
@@ -4299,6 +4580,18 @@ judgments:
     blocked_on: "observational: falsified by a reading task that genuinely needs the record
                  changed from the page; none has appeared"
     seen: {doc.fact_moves: "read 2026-09-01"}
+  d.remeasure_tests_share_one_day:
+    name: "Date-sensitive remeasure tests use one explicit day"
+    request: s.2026_09_18_remeasure_midnight
+    rests_on: [s.2026_09_18_remeasure_midnight, m.remeasure.midnight_failures]
+    verdict: "Inject one fixed day into the remeasure behavior and use that same day in each fixture
+              and assertion."
+    because: "The three tests cached UTC today when the module loaded, while the subprocess read UTC
+              today when it eventually ran; a suite crossing midnight therefore changed the rule
+              under test between setup and assertion."
+    reopened_by: "A date-sensitive remeasure test obtains its fixture day and the day used by
+                  remeasure from separate clock reads, or a forced cross-day run fails."
+    seen: {s.2026_09_18_remeasure_midnight: "read 2026-09-18", m.remeasure.midnight_failures: 3}
   d.reopened_by_is_not_blocked_on:
     rests_on: [prior.field_name_reads_as_gate, m.blocked_on_reopeners, m.older_records_changed,
                d.declared_hole_is_a_note]

@@ -14,6 +14,8 @@ author guide before authoring, use actual available sources, and keep missing ev
 and inferred prose explicit. A one-off document does not require a new GROUNDING.yaml,
 a workspace map, or unrelated record setup. Requests for the record's own page use the [page skill](../page/SKILL.md).
 
+When mentioning this skill to the user, include the plugin name: `kpopper:document` or "document from the kpopper plugin". Use the user's language and fold it into the explanation of the action; no extra announcement is needed.
+
 ## Author the requested HTML document with its evidence
 
 Read [the packaged author guide](../../scripts/document-guide.md), also available as
