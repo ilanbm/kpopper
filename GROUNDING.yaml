@@ -701,6 +701,16 @@ sources:
     at: "captured executable findings from task 01a0afd0-4d5f-7083-8025-f1ddca47d953"
     of: "2026-09-17"
     read: "2026-09-17"
+  s.2026_09_18_ci_cost:
+    name: "The session that measured what the repository's own checks cost to run"
+    asked: "הMetered usage בפרויקט בגיטהב מוגזם, זה כבר על 110$ ואני כל הזמן מעלה\nבטוח אפשר לצמצם
+            עלויות"
+    fidelity: quoted
+    at: "GitHub Actions runs and jobs API for this repository, 1-17 September 2026: 2,342 jobs,
+         durations taken from each job's own start and finish, billed at the private-repository
+         per-minute rates with each job rounded up to the minute"
+    of: "2026-09-18"
+    read: "2026-09-18"
   s.background_ingestion:
     name: "Background capture and selective delivery contract"
     file: "skills/kpopper/INGESTION.md"
@@ -939,6 +949,18 @@ sources:
     of: "session 'provenance-yaml-review', 2026-09-01: the day's transcripts, every branch, and
          dry-run merges of each pair"
     read: "2026-09-01"
+
+  run.native_bundle_holds_the_workflow:
+    name: "What the committed GMP corresponding-source archive turned out to contain"
+    v: "_source_bundle_files reads .github/workflows/reasoning-runtime.yml and stores its bytes in
+        gmp-source-and-build.tar.gz beside the GMP tarball, its own source and the licence texts.
+        Adding two timeout-minutes lines to that workflow made --check-bundles raise 'GMP
+        corresponding-source recipe or inventory mismatch' on every one of the nine installed legs,
+        while the parent commit passed"
+    from: s.2026_09_18_ci_cost
+    at: "scripts/reasoning/build_runtime.py, _source_bundle_files and check_bundles; reproduced on a
+         fresh checkout of the commit and of its parent"
+    of: "2026-09-18"
 
   run.page_move_three_states:
     name: "The move of the page's code out of Python strings, run through check in three states of
@@ -1179,6 +1201,31 @@ known:
     from: run.history_record_measurement_a0e5e9b
     at: "blocked_on_reopeners recipe against GROUNDING.yaml at a0e5e9bbca859db59ccc607de2c3c1fd20fcc886, after adding explicit history authority"
     measure: blocked_on_reopeners
+  m.ci_rounding_waste:
+    name: "What the checks pay for minutes they do not use"
+    v: "25.33 dollars of 142.03 - 18 percent - is the gap between a job's real duration and the
+        whole minute it bills, concentrated on the ten-times Darwin rate where several matrix legs
+        finish inside a minute"
+    from: s.2026_09_18_ci_cost
+    at: "summed per job over 2,342 jobs; the leg testing the installed runtime on Darwin billed 29
+         minutes for 29 runs"
+    as_of: "2026-09-18"
+  m.ci_spend_by_platform:
+    name: "Share of the checks' bill each runner platform takes, against its share of the jobs"
+    v: "Darwin 81.92 dollars on 397 jobs; Linux 36.29 on 1,612; Windows 23.82 on 333 - Darwin is 58
+        percent of the cost on 17 percent of the jobs, because a Darwin minute bills at ten times a
+        Linux one"
+    from: s.2026_09_18_ci_cost
+    at: "2,342 jobs, 1-17 September 2026; the session job on Darwin runs 1.4 minutes at the median
+         and still costs 29.52 dollars"
+    as_of: "2026-09-18"
+  m.ci_spend_by_trigger:
+    name: "Where the checks' bill falls between a pull request and the push that lands it"
+    v: "108.83 dollars on pull requests against 29.99 on pushes to main; of the 199 Darwin session
+        jobs, 151 came from pull request commits and 48 from pushes"
+    from: s.2026_09_18_ci_cost
+    at: "1-17 September 2026, by triggering event"
+    as_of: "2026-09-18"
   m.claims.general_held:
     v: 3
     name: "Claims about how things usually work that held when scored"
@@ -1584,6 +1631,16 @@ known:
     from: "skills/kpopper/references/shape.md"
     at: "Where the record lives"
     name: "The cost of a second copy"
+  m.full_suite_runtime:
+    name: "How long the whole suite takes, and why the checks' own median is so much shorter"
+    v: "2,454 tests in 2,775 seconds - 46 minutes - run locally on 2026-09-18. The check job's
+        median is 2.4 minutes because most of its runs are the document-only selection; of 598
+        successful runs, 8 took between 37 and 67 minutes, and those are the full suite doing its
+        work rather than a job hanging"
+    from: s.2026_09_18_ci_cost
+    at: "python -m unittest discover -s tests on this tree, against the 598 successful check jobs of
+         1-17 September 2026"
+    as_of: "2026-09-18"
   m.grounding_line_prefix_guesses:
     v: 182
     unit: trials
@@ -2720,6 +2777,22 @@ judgments:
                                   - counts and shares, never stored, thresholds only inside
                                   falsifiers"
       p.coverage_thresholds: 0
+  d.darwin_checked_where_it_lands:
+    name: "Where in the life of a change the Darwin check belongs"
+    verdict: "Darwin runs on the push to main and at release, not on every pull request commit"
+    rests_on: [m.ci_spend_by_platform, m.ci_spend_by_trigger]
+    reopened_by: "A Darwin-only failure turns up on the push to main, or in a release, that the pull
+                  request which landed it would have caught - or the people writing here stop working
+                  on Darwin machines, so nobody exercises that platform between merges."
+    from: s.2026_09_18_ci_cost
+    as_of: "2026-09-18"
+    seen:
+      m.ci_spend_by_platform: "Darwin 81.92 dollars on 397 jobs; Linux 36.29 on 1,612; Windows 23.82
+                               on 333 - Darwin is 58 percent of the cost on 17 percent of the jobs,
+                               because a Darwin minute bills at ten times a Linux one"
+      m.ci_spend_by_trigger: "108.83 dollars on pull requests against 29.99 on pushes to main; of
+                              the 199 Darwin session jobs, 151 came from pull request commits and 48
+                              from pushes"
   d.detached_worker_test_cleanup:
     name: "Wait for detached worker shutdown before deleting its test state"
     rests_on: [s.2026_09_13_worker_cleanup]
@@ -3472,6 +3545,17 @@ judgments:
                   pending; an uncertain send causes another automatic offer in the same epoch; or a
                   quiet native worker completion starts a new primary turn."
     seen: {s.background_ingestion: "read 2026-09-09"}
+  d.native_workflow_is_corresponding_source:
+    name: "Why the native workflow file cannot be edited on its own"
+    verdict: "An edit to .github/workflows/reasoning-runtime.yml is an edit to the shipped
+              corresponding-source archive, and the archive has to be rebuilt in the same change"
+    rests_on: [s.2026_09_18_ci_cost]
+    reopened_by: "The corresponding-source bundle stops carrying the workflow file - the recipe
+                  names the producer platform setup some other way, or the licence obligation is met
+                  by a different artifact."
+    from: s.2026_09_18_ci_cost
+    as_of: "2026-09-18"
+    seen: {s.2026_09_18_ci_cost: "read 2026-09-18"}
   d.no_record_opener_is_two_lines:
     rests_on: [s.2026_09_10_skills_split, d.workspace_operations]
     verdict: "with no record the opener says so in two lines and names the skills; the starting
