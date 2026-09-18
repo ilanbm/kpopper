@@ -272,11 +272,19 @@ def compare(snapshot):
     main = _entries(snapshot['main']['doc'])
     core_records = [snapshot.get(name, {}).get('core') for name in ('ancestor', 'working', 'main')]
     core_mode = all(core_records)
-    has_history = any(snapshot.get(name, {}).get('history') for name in ('ancestor', 'working', 'main'))
-    if has_history or any(core_records) and not core_mode:
+    history_records = [snapshot.get(name, {}).get('history') for name in ('ancestor', 'working', 'main')]
+    if any(history_records):
+        if not all(history_records):
+            finding = {'kind': 'uncheckable', 'id': 'record',
+                       'reason': 'incompatible captured context: history evidence is missing on one branch'}
+            finding['fingerprint'] = digest(finding)
+            return {'state': 'attention', 'findings': [finding], 'changed': [],
+                    'versions': snapshot.get('versions'), 'identity': snapshot.get('identity')}
+        from . import history_watch
+        return history_watch.compare(snapshot)
+    if any(core_records) and not core_mode:
         finding = {'kind': 'uncheckable', 'id': 'record',
-                   'reason': 'prospective_history_required: use the prepared history operation' if has_history else
-                             'incompatible captured context: core/v1 evidence is missing on one branch'}
+                   'reason': 'incompatible captured context: core/v1 evidence is missing on one branch'}
         finding['fingerprint'] = digest(finding)
         return {'state': 'attention', 'findings': [finding], 'changed': [],
                 'versions': snapshot.get('versions'), 'identity': snapshot.get('identity')}
