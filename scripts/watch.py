@@ -548,7 +548,6 @@ class Watch:
         main = git(self.tree, 'rev-parse', '--verify', config['base_ref'] + '^{commit}')
         head = git(self.tree, 'rev-parse', '--verify', 'HEAD^{commit}')
         ancestor = git(self.tree, 'merge-base', head, main)
-        working = _records(self.tree, self.entry)
         shared = None
         if config.get('shared_record'):
             p = Path(config['shared_record'])
@@ -560,12 +559,23 @@ class Watch:
             inbox = digest(S.receipts(self))
         else:
             inbox = None
+        # `watch` is the public captured-history consumer.  Its comparison
+        # path validates and retains each revision before giving the pure
+        # history-union adapter any input; ordinary readers still receive the
+        # history refusal in `_records`.
+        token = P._CORE_READS.set(True)
+        try:
+            working = _records(self.tree, self.entry)
+            ancestor_record = _records(self.tree, self.entry, ancestor)
+            main_record = _records(self.tree, self.entry, main)
+        finally:
+            P._CORE_READS.reset(token)
         versions = {'base_ref': config['base_ref'], 'main': main, 'head': head, 'merge_base': ancestor,
                     'working': working['hash'], 'shared': shared['hash'] if shared else None,
                     'inbox': inbox,
                     'config': digest(config), 'freshness': 'local Git objects; remote freshness not verified'}
-        return {'working': working, 'ancestor': _records(self.tree, self.entry, ancestor),
-                'main': _records(self.tree, self.entry, main), 'shared': shared,
+        return {'working': working, 'ancestor': ancestor_record,
+                'main': main_record, 'shared': shared,
                 'versions': versions, 'identity': digest(versions)}
 
     def request(self):

@@ -135,7 +135,7 @@ class InstalledOperationalCLI(unittest.TestCase):
     @staticmethod
     def root_files(root):
         return {path.relative_to(root).as_posix(): path.read_bytes()
-                for path in root.rglob("*") if path.is_file()}
+                for path in root.rglob("*") if path.is_file() and ".git" not in path.parts}
 
     @staticmethod
     def commit_fixture(root):
