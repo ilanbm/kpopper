@@ -83,6 +83,17 @@ class CoreFollowups(unittest.TestCase):
         with mock.patch.object(Snapshot, 'capture', side_effect=AssertionError('live read')):
             self.assertEqual(C.project(context), C.project(replay))
 
+    def test_baseline_retains_typed_evidence_not_only_its_hash(self):
+        from scripts.pending_grounding import _decode
+        doc = document()
+        doc['readings']['m.x']['of'] = dt.date(2026, 9, 18)
+        reading = C.project(view(doc))[0]['m.y']['core']
+        evidence = _decode(reading['evidence']['payload'])
+        self.assertEqual(evidence['computation']['basis']['profile'], 'core/v1')
+        self.assertEqual(evidence['computation']['basis']['dependencies'][0]['id'], 'm.x')
+        direct = C.project(view(doc))[0]['m.x']['core']
+        self.assertEqual(_decode(direct['evidence']['payload'])['body']['of'], dt.date(2026, 9, 18))
+
     def test_accepted_fired_condition_remains_accepted(self):
         from tests.test_reasoning_history_assessment import claim, captured
         head = claim('d.ok', {'verdict': 'Ready', 'rests_on': [],
@@ -112,6 +123,9 @@ class CoreFollowups(unittest.TestCase):
     def test_invalid_persisted_core_envelope_is_unknown(self):
         value = copy.deepcopy(C.project(view())[0]['m.x'])
         value['core']['version'] = 2
+        self.assertIsNone(condition({'m.x': value}, 'm.x', '==', 3))
+        value = copy.deepcopy(C.project(view())[0]['m.x'])
+        value['core']['evidence']['digest'] = '0' * 64
         self.assertIsNone(condition({'m.x': value}, 'm.x', '==', 3))
 
     @unittest.skipIf(os.name == 'nt', 'History fixture publication requires POSIX locking')

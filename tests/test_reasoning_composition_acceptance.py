@@ -80,6 +80,7 @@ for filename, classname in (("test_core_composition.py", "CoreComposition"),
                             ("test_core_followups.py", "CoreFollowups.test_declared_record_routes_to_core_exact_conditions"),
                             ("test_core_followups.py", "CoreFollowups.test_runtime_unavailable_is_unknown_not_null_or_false"),
                             ("test_core_followups.py", "CoreFollowups.test_same_value_changed_basis_and_unrelated_changes"),
+                            ("test_core_followups.py", "CoreFollowups.test_baseline_retains_typed_evidence_not_only_its_hash"),
                             ("test_core_followups.py", "CoreFollowups.test_store_reopen_and_claim_uses_core_evidence")):
     spec = importlib.util.spec_from_file_location("installed_acceptance_target", target / filename)
     module = importlib.util.module_from_spec(spec)

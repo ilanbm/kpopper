@@ -3,6 +3,7 @@ import copy
 
 from .reasoning.contract import digest, validate_value
 from .reasoning.projection import project_node_status
+from .pending_grounding import _encode, _decode
 
 
 READER_REFUSALS = frozenset({
@@ -26,9 +27,13 @@ def _evidence(node):
             dependency['computation'] = _computation(dependency['computation'])
     if 'computation' in state['falsifier']:
         state['falsifier']['computation'] = _computation(state['falsifier']['computation'])
-    return digest({**{key: node[key] for key in
-                      ('body', 'fields', 'acceptance', 'history', 'support', 'coverage')},
-                   'state': state, 'computation': _computation(node['computation'])})
+    return _retained({**{key: node[key] for key in
+                        ('body', 'fields', 'acceptance', 'history', 'support', 'coverage')},
+                     'state': state, 'computation': _computation(node['computation'])})
+
+
+def _retained(evidence):
+    return {'encoding': 'typed-json/v1', 'payload': _encode(evidence), 'digest': digest(evidence)}
 
 
 def project(context):
@@ -73,7 +78,7 @@ def project(context):
         if identifier not in values:
             values[identifier] = {'core': {
                 'version': 1, 'available': False, 'value': None,
-                'evidence': digest(subject), 'findings': copy.deepcopy(subject),
+                'evidence': _retained(subject), 'findings': copy.deepcopy(subject),
             }}
             maintenance.append({'id': identifier, 'reasons': ['reading_unavailable'],
                                 'findings': copy.deepcopy(subject),
@@ -102,9 +107,18 @@ def envelope(value):
         return None
     if type(item['version']) is not int or item['version'] != 1 \
             or type(item['available']) is not bool \
-            or not isinstance(item['evidence'], str) or len(item['evidence']) != 64 \
             or not isinstance(item['findings'], dict):
         raise ValueError('invalid core followup reading')
+    evidence = item['evidence']
+    if not isinstance(evidence, dict) or set(evidence) != {'encoding', 'payload', 'digest'} \
+            or evidence['encoding'] != 'typed-json/v1':
+        raise ValueError('invalid core followup evidence')
+    try:
+        decoded = _decode(evidence['payload'])
+        if _encode(decoded) != evidence['payload'] or digest(decoded) != evidence['digest']:
+            raise ValueError('noncanonical core followup evidence')
+    except (TypeError, IndexError, KeyError, RecursionError) as error:
+        raise ValueError('invalid core followup evidence') from error
     if item['available']:
         validate_value(item['value'])
     return item
