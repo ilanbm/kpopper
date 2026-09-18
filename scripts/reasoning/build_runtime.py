@@ -169,6 +169,12 @@ def gmp_tool_versions(target):
     bash, make = gmp_tools(target, env)
     compiler = 'gcc' if target.startswith('windows') else env.get('CC', 'cc')
     tools = {'cc': shlex.split(compiler), 'bash': [str(bash)], 'make': [str(make)], 'm4': ['m4']}
+    if target.startswith('windows'):
+        # CreateProcess does not use the supplied child PATH to locate the
+        # executable. Bind these just as explicitly as MSYS2 bash and make.
+        root = Path(env['KPOPPER_MSYS2_ROOT']).resolve()
+        tools['cc'] = [str(root / 'mingw64/bin/gcc.exe')]
+        tools['m4'] = [str(root / 'usr/bin/m4.exe')]
     versions = {name: subprocess.check_output(argv + ['--version'], env=env,
                 stderr=subprocess.STDOUT, text=True, encoding='utf-8').strip()
                 for name, argv in tools.items()}

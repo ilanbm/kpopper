@@ -69,6 +69,27 @@ class GmpCache(unittest.TestCase):
                                    cache_dir=self.root / 'cache')
             build.assert_not_called()
 
+    def test_windows_tool_identity_does_not_depend_on_the_parent_process_path(self):
+        msys = self.root / 'msys'
+        for name in ('usr/bin/bash.exe', 'usr/bin/make.exe', 'usr/bin/m4.exe', 'mingw64/bin/gcc.exe'):
+            path = msys / name
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_bytes(b'tool fixture')
+
+        def create_process(argv, **kwargs):
+            # Windows resolves an unqualified executable before applying the
+            # supplied child environment's PATH. PowerShell has no MSYS2 tools.
+            executable = pathlib.Path(argv[0])
+            if not executable.is_absolute() or not executable.is_file():
+                raise FileNotFoundError(argv[0])
+            return executable.name + ' fixture version'
+
+        with patch.dict(builder.os.environ, {'KPOPPER_MSYS2_ROOT': str(msys), 'PATH': ''}), \
+                patch.object(builder.subprocess, 'check_output', side_effect=create_process):
+            versions = builder.gmp_tool_versions('windows-x86_64')
+        self.assertEqual(versions['cc'], 'gcc.exe fixture version')
+        self.assertEqual(versions['m4'], 'm4.exe fixture version')
+
 
 if __name__ == '__main__':
     unittest.main()
