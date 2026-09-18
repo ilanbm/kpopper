@@ -71,9 +71,89 @@ if archive:
     initialize_runtime = runtime_module.Runtime.__init__
     def selected_runtime(instance, supplied=None, **kwargs):
         return initialize_runtime(instance, supplied or archive, **kwargs)
-    runtime_module.Runtime.__init__ = selected_runtime
+        runtime_module.Runtime.__init__ = selected_runtime
+
+
+class InstalledOperationalCLI(unittest.TestCase):
+    """Small public-CLI checks whose dispatcher is the installed package itself."""
+
+    @staticmethod
+    def cli_path():
+        path = package_roots[0] / "cli.py"
+        if not path.is_file():
+            raise RuntimeError("installed public CLI is unavailable: " + str(path))
+        return path
+
+    @staticmethod
+    def core_record():
+        return ("meta:\n"
+                "  reasoning: {version: 2, profile: core/v1, requires: [arithmetic/v1]}\n"
+                "known:\n"
+                "  p.input: {v: 10, measure: base_value}\n"
+                "judgments:\n"
+                "  d.limit:\n"
+                "    rests_on: [p.input]\n"
+                "    seen: {p.input: 10}\n"
+                "    verdict: okay\n"
+                "    wrong_if: {op: gt, args: [{ref: p.input}, {num: '20'}]}\n")
+
+    def test_installed_remeasure_plan_is_read_only(self):
+        with tempfile.TemporaryDirectory(prefix="installed-core-remeasure-") as directory:
+            root = Path(directory)
+            record = root / "GROUNDING.yaml"
+            record.write_text(self.core_record(), encoding="utf-8")
+            measure = root / ".kpopper"
+            measure.mkdir()
+            measure.joinpath("measure.yaml").write_text(
+                "base_value: [" + sys.executable + ", -I, -c, \"print(10)\"]\n",
+                encoding="utf-8")
+            before = record.read_bytes()
+            result = subprocess.run([sys.executable, str(self.cli_path()), "remeasure", str(record)],
+                                    cwd=root, env=os.environ.copy(), text=True,
+                                    capture_output=True, check=False)
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+            self.assertIn("base_value", result.stdout)
+            self.assertIn("nothing ran - add --run", result.stdout)
+            self.assertEqual(record.read_bytes(), before)
+
+    def test_installed_watch_unchanged_core_snapshot_is_clear(self):
+        with tempfile.TemporaryDirectory(prefix="installed-core-watch-") as directory:
+            root = Path(directory)
+            env = os.environ.copy()
+            env["XDG_STATE_HOME"] = str(root / "state")
+            record = root / "GROUNDING.yaml"
+            record.write_text(self.core_record(), encoding="utf-8")
+            subprocess.run(["git", "init", "-q", "-b", "main"], cwd=root,
+                           env=env, check=True)
+            subprocess.run(["git", "add", "GROUNDING.yaml"], cwd=root, env=env, check=True)
+            subprocess.run(["git", "-c", "user.name=fixture", "-c",
+                            "user.email=fixture@example.test", "commit", "-qm", "core fixture"],
+                           cwd=root, env=env, check=True)
+            setup = subprocess.run([sys.executable, str(self.cli_path()), "watch", "setup",
+                                    "--base-ref", "main"], cwd=root, env=env, text=True,
+                                   capture_output=True, check=False)
+            self.assertEqual(setup.returncode, 0, setup.stdout + setup.stderr)
+            scan = subprocess.run([sys.executable, str(self.cli_path()), "watch", "scan"],
+                                  cwd=root, env=env, text=True, capture_output=True, check=False)
+            self.assertEqual(scan.returncode, 0, scan.stdout + scan.stderr)
+            status = None
+            for _ in range(100):
+                current = subprocess.run([sys.executable, str(self.cli_path()), "watch", "status"],
+                                         cwd=root, env=env, text=True, capture_output=True,
+                                         check=False)
+                self.assertEqual(current.returncode, 0, current.stdout + current.stderr)
+                status = json.loads(current.stdout)
+                if status.get("state") != "pending":
+                    break
+                import time
+                time.sleep(0.05)
+            self.assertEqual(status.get("state"), "clear", status)
+            self.assertEqual(status.get("findings"), [])
+
 
 suite = unittest.TestSuite()
+suite.addTests(unittest.defaultTestLoader.loadTestsFromTestCase(InstalledOperationalCLI))
+
 for filename, classname in (("test_core_composition.py", "CoreComposition"),
                             ("test_core_operational_acceptance.py", "CoreOperationalAcceptance"),
                             ("test_core_consolidate_cli.py", "CoreConsolidateCLI"),
