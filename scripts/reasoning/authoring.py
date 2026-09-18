@@ -11,6 +11,21 @@ from .snapshot import Snapshot, _fields
 DECLARATION = {'version': 2, 'profile': PROFILE, 'requires': ['arithmetic/v1']}
 
 
+def _query_expression(document, rule):
+    """Validate a stored query against its authored scope definition."""
+    if not isinstance(rule, dict) or set(rule) != {'query'}:
+        return None
+    from ..pending_grounding import entries
+    from . import query
+    query_body = rule['query'] if isinstance(rule['query'], dict) else {}
+    scope_id = query_body.get('scope')
+    scope = entries(document).get(scope_id)
+    body = scope[1] if scope is not None else None
+    definition = body.get('collection_scope') if isinstance(body, dict) else None
+    fields = definition.get('fields') if isinstance(definition, dict) else None
+    return query.lower(rule, fields)
+
+
 def declaration(document):
     """Validated destination requirements, unioned with retained capabilities."""
     from ..pending_grounding import entries
@@ -27,13 +42,20 @@ def declaration(document):
             expression = {}  # Retained qualitative rule text is not newly executable.
         else:
             try:
-                expression = node_expression({'body': body})
+                query_expression = _query_expression(document, body.get('rule')) \
+                    if isinstance(body, dict) else None
+                expression = query_expression if query_expression is not None \
+                    else node_expression({'body': body})
             except (ValueError, TypeError, SyntaxError, RecursionError):
                 # Capability discovery is not the expression validator. Invalid
                 # structured syntax is still refused by World with the entry/field
                 # location; do not let this earlier metadata pass leak a raw error.
                 expression = {}
-        modules.update(required_modules(expression))
+        if isinstance(expression, dict) and set(expression) == {'query'}:
+            from . import query
+            modules.update(query.required_modules(expression))
+        else:
+            modules.update(required_modules(expression))
         if isinstance(body, dict) and isinstance(body.get(fields['predicate']), dict):
             try:
                 modules.update(required_modules(lower(body[fields['predicate']])))
@@ -52,7 +74,8 @@ def declare_document(document):
 def validate_declared(document):
     cap = capabilities(document)
     if cap['profile'] == PROFILE and set(declaration(document)['requires']) - set(cap['requires']):
-        raise CapabilityError('unsupported_capability', 'composition/v1 must be declared for composed inputs')
+        missing = sorted(set(declaration(document)['requires']) - set(cap['requires']))
+        raise CapabilityError('unsupported_capability', 'modules must be declared: ' + ', '.join(missing))
 
 
 def load(reader, paths, *, read_mode='frozen'):
@@ -222,7 +245,9 @@ class World:
         for nid, field, value in _executables(document):
             if isinstance(value, dict):
                 try:
-                    self._check_builtin(references(lower(value)))
+                    query_expression = _query_expression(document, value)
+                    self._check_builtin([] if query_expression is not None
+                                        else references(lower(value)))
                 except (ValueError, TypeError, SyntaxError) as error:
                     raise reader.Refused(f'{nid}.{field}: {error}') from None
 
@@ -414,8 +439,9 @@ class World:
                 if not isinstance(expression, dict):
                     continue
                 try:
-                    tree = lower(expression)
-                    refs = references(tree)
+                    query_tree = _query_expression(candidate.document, expression)
+                    tree = query_tree if query_tree is not None else lower(expression)
+                    refs = [] if query_tree is not None else references(tree)
                     self._check_builtin(refs)
                     if not predicate and any(key in body for key in ('v', 'quoted')):
                         out.append('a structured rule cannot also store v or quoted')

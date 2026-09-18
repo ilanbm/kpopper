@@ -94,6 +94,16 @@ class TestPlans(unittest.TestCase):
         self.assertIn("github.event_name == 'workflow_dispatch'", jobs['target']['with']['rebuild'])
         self.assertIn('!inputs.candidate-only', jobs['target']['with']['validate-installed'])
 
+    def test_query_checks_follow_the_fresh_target_and_example_runs_once_per_interpreter(self):
+        native = yaml.safe_load((ROOT / '.github/workflows/reasoning-target.yml').read_text())['jobs']
+        query = next(s for s in native['build']['steps']
+                     if 'tests.test_reasoning_query_runtime' in s.get('run', ''))
+        self.assertIn('KPOPPER_QUERY_ARCHIVE', query['run'])
+        self.assertIn('${{ inputs.target }}.zip', query['run'])
+        jobs = yaml.safe_load((ROOT / '.github/workflows/check.yml').read_text())['jobs']
+        example = next(s for s in jobs['check']['steps'] if 'examples/scoped-query/exercise.py' in s.get('run', ''))
+        self.assertIn('matrix.group == 1', example['if'])
+
     @unittest.skipUnless(importlib.util.find_spec('pytest') and importlib.util.find_spec('xdist'),
                          'the parallel runner is installed in the Python CI job')
     def test_sibling_import_support_does_not_leak_into_child_processes(self):

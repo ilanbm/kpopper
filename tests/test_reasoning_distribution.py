@@ -21,6 +21,30 @@ spec.loader.exec_module(builder)
 
 
 class ArchiveContractTests(unittest.TestCase):
+    def test_data_only_bootstrap_preserves_module_initialization(self):
+        generated = ('void lean_initialize();\n'
+                     'int main(int argc, char ** argv) {\n'
+                     '  lean_initialize();\n'
+                     '  res = initialize_Main(1 /* builtin */);\n'
+                     '  lean_io_mark_end_initialization();\n}\n')
+        imports = {'Lean.Data.Json.Parser'}
+        parser_init = 'lean_object* initialize_Lean_Data_Json_Parser(uint8_t builtin);\n'
+        self.assertEqual(builder.data_only_imports(parser_init), imports)
+        with self.assertRaisesRegex(ValueError, 'runtime import'):
+            builder.data_only_imports(parser_init + 'lean_object* initialize_Lean_Meta(uint8_t builtin);\n')
+        actual = builder.data_only_main(generated, imports)
+        self.assertNotIn('lean_initialize();', actual)
+        self.assertIn('  lean_initialize_runtime_module();', actual)
+        self.assertIn('  res = initialize_Main(1 /* builtin */);', actual)
+        for unsupported in ({'Lean'}, {'Lean.Meta'}, {'Lean.Data.Json.Printer'}):
+            with self.subTest(imports=unsupported), self.assertRaisesRegex(ValueError, 'runtime import'):
+                builder.data_only_main(generated, unsupported)
+        for changed in (generated.replace('  lean_initialize();', ''),
+                        generated + '  lean_initialize();\n',
+                        generated.replace('initialize_Main(1 /* builtin */)', 'initialize_Main(0)')):
+            with self.assertRaisesRegex(ValueError, 'bootstrap'):
+                builder.data_only_main(changed, imports)
+
     def test_both_pinned_linux_gmp_flags_select_replaceable_library(self):
         flags = ['--sysroot', '/lean', '-Wl,-Bstatic', '-lgmp', '-lunwind',
                  '-Wl,-Bdynamic', '-lleanrt', '-lgmp', '-luv']
@@ -54,7 +78,8 @@ class ArchiveContractTests(unittest.TestCase):
 
     def test_named_proof_audit_rejects_admissions_and_missing_targets(self):
         names = ['Kpopper.evaluate', 'Kpopper.arithmetic', 'Kpopper.Proof.binary_sound',
-                 'Kpopper.Proof.evaluate_closedRat_sound', 'Kpopper.Proof.evaluate_literal_success']
+                 'Kpopper.Proof.evaluate_closedRat_sound', 'Kpopper.Proof.evaluate_literal_success',
+                 'Kpopper.Query.prepare', 'Kpopper.Query.execute', 'Kpopper.Query.responseFor']
         clean = '\n'.join("'" + name + "' depends on axioms: [propext, Classical.choice, Quot.sound]" for name in names)
         self.assertEqual(builder.validate_axiom_audit(clean), sorted(names))
         for invalid in (clean.replace('propext', 'sorryAx'), clean.replace('propext', 'custom_unproved_axiom'),
@@ -211,10 +236,10 @@ class CommittedBundleTests(unittest.TestCase):
             shutil.copytree(ROOT / "scripts/reasoning/third_party", payload / "licenses")
             shutil.copyfile(payload / "licenses/THIRD_PARTY_NOTICES.txt", payload / "THIRD_PARTY_NOTICES.txt")
             builder.archive_payload(payload, self.native / (target + ".zip"), {
-                "version": 2, "protocols": ["KP2", "KP3"], "target": target, "min_os": "test fixture",
+                "version": 3, "protocols": ["KP2", "KP3", "KP4"], "target": target, "min_os": "test fixture",
                 "lean_version": builder.LEAN_VERSION, "source_sha256": builder.source_hash(self.source),
                 "files": {}, "executable": "evaluator", "libraries": ["libgmp"],
-                "modules": ["arithmetic/v1", "composition/v1"]})
+                "modules": ["arithmetic/v1", "composition/v1", "query/v1"]})
         builder.source_bundle(self.upstream, self.native / "gmp-source-and-build.tar.gz")
 
     def check(self):

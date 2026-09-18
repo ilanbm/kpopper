@@ -20,6 +20,7 @@ import urllib.request
 import zipfile
 
 LEAN_VERSION = "4.33.1"
+DATA_ONLY_LEAN_IMPORTS = frozenset({'Lean.Data.Json.Parser'})
 GMP_SHA256 = "a3c2b80201b89e68616f4ad30bc66aee4927c3ce50e33929ca819d5c43538898"
 TARGETS = {
     "darwin-arm64": ("darwin_aarch64", "557e9976f853138716ac82b645aab9d75e2bf9ea893113b5a438e4eeb78ed47d"),
@@ -37,7 +38,7 @@ def sha256(path):
 def source_hash(lean_dir):
     lean_dir = Path(lean_dir)
     files = {p.relative_to(lean_dir).as_posix(): sha256(p)
-             for p in lean_dir.glob("*.lean")
+             for p in lean_dir.rglob("*.lean")
              if not p.name.startswith(("Proof", "Audit"))}
     # lakefile.lean is build configuration, if present; current package uses TOML.
     return hashlib.sha256(json.dumps(files, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
@@ -111,7 +112,8 @@ __attribute__((constructor)) static void kpopper_gmp_replacement_probe(void) {
 def validate_axiom_audit(output):
     """Compiling a proof is insufficient: Lean also accepts admitted axioms."""
     required = {'Kpopper.evaluate', 'Kpopper.arithmetic', 'Kpopper.Proof.binary_sound',
-                'Kpopper.Proof.evaluate_closedRat_sound', 'Kpopper.Proof.evaluate_literal_success'}
+                'Kpopper.Proof.evaluate_closedRat_sound', 'Kpopper.Proof.evaluate_literal_success',
+                'Kpopper.Query.prepare', 'Kpopper.Query.execute', 'Kpopper.Query.responseFor'}
     allowed = {'propext', 'Classical.choice', 'Quot.sound'}
     found = set()
     for name, names in re.findall(r"'([^']+)'\s+depends on axioms:\s*\[([^\]]*)\]", output):
@@ -122,6 +124,36 @@ def validate_axiom_audit(output):
     if required - found:
         raise ValueError('proof audit omitted required declarations: ' + ', '.join(sorted(required - found)))
     return sorted(found)
+
+
+def data_only_imports(source):
+    """Inspect actual generated initializers, including multi-import headers."""
+    imports = {name.replace('_', '.') for name in re.findall(
+        r'^lean_object\* initialize_(Lean(?:_[A-Za-z0-9_]+)?)\(uint8_t builtin\);$', source, re.M)}
+    if imports - DATA_ONLY_LEAN_IMPORTS:
+        raise ValueError('unsupported data-only runtime import: ' + repr(sorted(imports)))
+    return imports
+
+
+def data_only_main(source, lean_imports):
+    """Use the pinned compiler's runtime bootstrap for our pure JSON adapter.
+
+    Lean 4.33.1 selects full compiler initialization for any Lean.* import,
+    even its data-only JSON parser. Keep recursive initialize_Main unchanged;
+    only omit the unrelated compiler-wide bootstrap. New imports or a changed
+    generated startup require review instead of silently applying this rewrite.
+    """
+    unsupported = set(lean_imports) - DATA_ONLY_LEAN_IMPORTS
+    if unsupported:
+        raise ValueError('unsupported data-only runtime import: ' + repr(sorted(unsupported)))
+    declaration, call = 'void lean_initialize();', '  lean_initialize();'
+    if (source.count(declaration) != 1 or source.count(call) != 1
+            or len(re.findall(r'\blean_initialize\s*\(', source)) != 2
+            or source.count('  res = initialize_Main(1 /* builtin */);') != 1
+            or 'lean_initialize_runtime_module' in source):
+        raise ValueError('unexpected pinned compiler main bootstrap')
+    return source.replace(declaration, 'void lean_initialize_runtime_module();').replace(
+        call, '  lean_initialize_runtime_module();')
 
 
 def dynamic_gmp_flags(flags, library):
@@ -347,33 +379,53 @@ def build_archive(source_root, lean_root, output, target, *, gmp_prefix=None):
         bundle.mkdir()
         snapshot = work / "source"
         snapshot.mkdir()
-        for path in source_root.glob("*.lean"):
-            shutil.copyfile(path, snapshot / path.name)
+        for path in source_root.rglob("*.lean"):
+            relative = path.relative_to(source_root)
+            (snapshot / relative).parent.mkdir(parents=True, exist_ok=True)
+            shutil.copyfile(path, snapshot / relative)
         source_digest = source_hash(snapshot)
-        sources = {p.stem: p for p in snapshot.glob("*.lean")}
+        sources = {p.relative_to(snapshot).with_suffix('').as_posix().replace('/', '.'): p
+                   for p in snapshot.rglob("*.lean")}
         env["LEAN_PATH"] = str(work)
         objects = []
         compiled = set()
+        lean_imports = set()
         def compile_module(name, runtime=True):
             if name in compiled:
                 return
             path = sources[name]
-            for imported in re.findall(r"^import\s+(\w+)", path.read_text(encoding="utf-8"), re.M):
+            for imported in re.findall(r"^import\s+([A-Za-z0-9_.]+)",
+                                       path.read_text(encoding="utf-8"), re.M):
+                if runtime and (imported == 'Lean' or imported.startswith('Lean.')):
+                    if imported not in DATA_ONLY_LEAN_IMPORTS:
+                        raise ValueError('unsupported data-only runtime import: ' + imported)
+                    lean_imports.add(imported)
                 if imported in sources:
                     if runtime and imported.startswith(("Proof", "Audit")):
                         raise ValueError("runtime imports proof-only module")
                     compile_module(imported, runtime)
-            shutil.copyfile(path, work / path.name)
-            argv = [lean, "-o", work / (name + ".olean")]
+            relative = Path(*name.split('.'))
+            source_path = (work / relative).with_suffix('.lean')
+            source_path.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copyfile(path, source_path)
+            olean = (work / relative).with_suffix('.olean')
+            olean.parent.mkdir(parents=True, exist_ok=True)
+            argv = [lean, "-o", olean]
             if runtime:
-                argv += ["-c", work / (name + ".c")]
-            compiled_output = run(argv + [work / path.name], cwd=work, env=env)
+                argv += ["-c", (work / relative).with_suffix('.c')]
+            compiled_output = run(argv + [source_path], cwd=work, env=env)
             print(compiled_output, flush=True)
             if name == 'Audit':
                 validate_axiom_audit(compiled_output)
             if runtime:
-                obj = work / (name + ".o")
-                print(run([leanc, "-O3", "-c", "-o", obj, work / (name + ".c")], env=env), flush=True)
+                generated = (work / relative).with_suffix('.c')
+                lean_imports.update(data_only_imports(generated.read_text(encoding='utf-8')))
+                if name == 'Main' and lean_imports:
+                    generated.write_text(data_only_main(generated.read_text(encoding='utf-8'), lean_imports),
+                                         encoding='utf-8')
+                obj = work / (name.replace('.', '_') + ".o")
+                print(run([leanc, "-O3", "-c", "-o", obj,
+                           (work / relative).with_suffix('.c')], env=env), flush=True)
                 objects.append(obj)
             compiled.add(name)
         compile_module("Main")
@@ -418,6 +470,8 @@ def build_archive(source_root, lean_root, output, target, *, gmp_prefix=None):
         print(run([lean_root / ("bin/clang" + ext), "-O3", "-o", executable] + objects + flags + [mapflag + str(mapfile)], env=env), flush=True)
         if "libgmp.a(" in mapfile.read_text(encoding="utf-8", errors="replace"):
             raise ValueError("static GMP entered linker map")
+        if re.search(r'\b_?initialize_Lean\b', mapfile.read_text(encoding='utf-8', errors='replace')):
+            raise ValueError('full compiler initialization entered data-only runtime')
         audit = audit_linkage(executable, dest, target, lean_root)
         run(["strip", executable])
         if target.startswith("darwin"):
@@ -428,10 +482,10 @@ def build_archive(source_root, lean_root, output, target, *, gmp_prefix=None):
         (bundle / "linkage.json").write_bytes((json.dumps(audit, indent=2, sort_keys=True) + "\n").encode())
         if source_hash(source_root) != source_digest:
             raise ValueError("runtime sources changed during build")
-        return archive_payload(bundle, output, {"version": 2, "protocols": ["KP2", "KP3"], "target": target,
+        return archive_payload(bundle, output, {"version": 3, "protocols": ["KP2", "KP3", "KP4"], "target": target,
             "min_os": audit["min_os"], "lean_version": LEAN_VERSION,
             "source_sha256": source_digest, "executable": executable.name,
-            "libraries": [library], "modules": ["arithmetic/v1", "composition/v1"]})
+            "libraries": [library], "modules": ["arithmetic/v1", "composition/v1", "query/v1"]})
 
 
 def audit_linkage(executable, library, target, lean_root):
@@ -633,10 +687,10 @@ def check_bundles(native_dir=None, source_root=None):
                 required = {"version", "protocols", "target", "min_os", "lean_version", "source_sha256",
                             "files", "executable", "libraries", "modules"}
                 if not isinstance(manifest, dict) or set(manifest) != required \
-                        or type(manifest["version"]) is not int or manifest["version"] != 2 \
-                        or manifest["protocols"] != ["KP2", "KP3"] or manifest["target"] != target \
+                        or type(manifest["version"]) is not int or manifest["version"] != 3 \
+                        or manifest["protocols"] != ["KP2", "KP3", "KP4"] or manifest["target"] != target \
                         or manifest["lean_version"] != LEAN_VERSION \
-                        or manifest["modules"] != ["arithmetic/v1", "composition/v1"] \
+                        or manifest["modules"] != ["arithmetic/v1", "composition/v1", "query/v1"] \
                         or not isinstance(manifest["min_os"], str) or not manifest["min_os"].strip() \
                         or not isinstance(manifest["files"], dict):
                     raise ValueError("malformed runtime manifest: " + target)

@@ -141,6 +141,10 @@ jobs:
           path: test-results/
           if-no-files-found: ignore
 
+      - name: The scoped-query example works through the installed writer and CLI
+        if: needs.changes.outputs.python == 'true' && matrix.group == 1
+        run: python examples/scoped-query/exercise.py
+
   document-ui:
     timeout-minutes: 15
     needs: [changes, record]

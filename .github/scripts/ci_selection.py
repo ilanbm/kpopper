@@ -42,6 +42,9 @@ def families(path):
                         "tests/test_reasoning_composition_acceptance.py",
                         "tests/test_core_composition.py"}):
         return set(LANES)
+    # The public query exercise runs against the installed package, not the compiler.
+    if path.startswith('examples/scoped-query/') and not path.endswith('.md'):
+        return RUNTIME
     # The record and skill contracts run on every PR, independent of these flags.
     if (path in {"GROUNDING.yaml", "README.md", "CONTRIBUTING.md", "CHANGELOG.md", "tests/test_skills.py"}
             or (path.startswith(("skills/", "docs/", "examples/")) and path.endswith(".md"))
