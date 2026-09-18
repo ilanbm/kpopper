@@ -711,6 +711,12 @@ sources:
          per-minute rates with each job rounded up to the minute"
     of: "2026-09-18"
     read: "2026-09-18"
+  s.2026_09_18_continue_reasoning_core:
+    name: "The request to continue the reasoning-core task"
+    asked: "תוכל להמשיך את המשימה של&#x20;\ncodex://threads/01a0afd0-4d5f-7083-8025-f1ddca47d953\n?"
+    at: "User request in task 01a0b42e-d428-79a0-a6f7-03bf6195dde1"
+    read: "2026-09-18"
+    fidelity: quoted
   s.background_ingestion:
     name: "Background capture and selective delivery contract"
     file: "skills/kpopper/INGESTION.md"
@@ -767,6 +773,7 @@ sources:
                    captured report."
   s.query_candidate_report_2026_09_18:
     name: "Finite-query candidate verification packet"
+    from: s.2026_09_18_continue_reasoning_core
     file: "/Users/ilanbm/.local/state/kpopper/ingestion/49582f5ea7bfe17bb7f2179a2ccb2cdffc782e5587bdede1ac990333505fe56e/sources/1ee2f7be0e85a58b92a0d7aae12cec11.txt"
     url: "https://github.com/ilanbm/kpopper/actions/runs/35343804914"
     at: "CI and merge API observations plus retained local acceptance and timing receipts"
