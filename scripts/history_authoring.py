@@ -558,11 +558,16 @@ class _BatchAdmissionWorld:
             return self.final.result(nid)
         if self._prior is None:
             from .reasoning.language import node_expression, references
-            expression = node_expression({'body': self.raw.get(nid)})
+            body = self.raw.get(nid)
+            rule = body.get('rule') if isinstance(body, dict) else None
+            expression = authoring._query_expression(self.document, rule)
+            query_scope = expression['query']['scope'] if expression is not None else None
+            expression = expression if expression is not None else node_expression({'body': body})
             if 'unavailable' in expression:
                 self._prior = {'status': 'unknown', 'diagnostics': [{'code': expression['unavailable']}]}
             else:
-                self._prior = self.final.engine.evaluate(expression, declared=references(expression))
+                self._prior = self.final.engine.evaluate(
+                    expression, declared=[query_scope] if query_scope is not None else references(expression))
         return copy.deepcopy(self._prior)
 
     def same_value(self, nid, candidate):

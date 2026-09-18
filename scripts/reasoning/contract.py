@@ -21,10 +21,17 @@ MODULES = MappingProxyType({
         'inputs': ('number', 'boolean', 'text', 'null', 'list', 'record'),
         'discovery': 'transitive-node-closure/v1', 'executor': 'KP3',
     }),
+    'query/v1': MappingProxyType({
+        'operators': ('filter', 'project', 'select', 'count', 'sum', 'all', 'any'),
+        'inputs': ('number', 'boolean', 'text', 'null', 'list', 'record'),
+        'discovery': 'finite-scope/v1', 'executor': 'KP4',
+    }),
 })
 COMPOSITION_LIMITS = MappingProxyType({'value_nodes': 10000, 'value_depth': 128, 'value_bytes': 16777216})
+QUERY_LIMITS = MappingProxyType({'candidates': 10000, 'field_reads': 100000})
 DEFAULT_LIMITS = MappingProxyType({'steps': 1000000, 'depth': 128, 'digits': 256})
 MAX_LIMITS = MappingProxyType({'steps': 10000000, 'depth': 4096, 'digits': 4096})
+MAX_QUERY_LIMITS = MappingProxyType({'candidates': 10000, 'field_reads': 100000})
 MAX_NODES = 20000
 MAX_EDGES = 100000
 MAX_COLLECTION = 10000
@@ -230,6 +237,20 @@ def resource_limits(limits=None):
         if type(value) is not int or value <= 0 or value > MAX_LIMITS[key]:
             raise ValueError('invalid resource limit: ' + key)
         result[key] = value
+    return result
+
+
+def query_resource_limits(limits=None):
+    """Resources/v4 keeps v3 limits and adds complete finite-scope charging."""
+    result = {**resource_limits(), **COMPOSITION_LIMITS, **QUERY_LIMITS}
+    if limits is not None:
+        if not isinstance(limits, dict) or set(limits) - set(result):
+            raise ValueError('unknown query resource limits')
+        for key, value in limits.items():
+            maximum = MAX_LIMITS.get(key, COMPOSITION_LIMITS.get(key, MAX_QUERY_LIMITS.get(key)))
+            if type(value) is not int or value <= 0 or maximum is None or value > maximum:
+                raise ValueError('invalid query resource limit: ' + key)
+            result[key] = value
     return result
 
 

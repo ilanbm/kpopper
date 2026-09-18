@@ -102,6 +102,10 @@ def dependency_result(snapshot, dependency, evaluator=None):
 def _rule_changed(old, current):
     if old is None or current is None:
         return old != current
+    old_query = isinstance(old, dict) and set(old) == {'query'}
+    current_query = isinstance(current, dict) and set(current) == {'query'}
+    if old_query or current_query:
+        return digest(old) != digest(current) if old_query and current_query else True
     try:
         return lower(old) != lower(current)
     except (ValueError, TypeError, RecursionError, SyntaxError):

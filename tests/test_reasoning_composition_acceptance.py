@@ -1,7 +1,7 @@
-"""Run the real composition/history cases against an installed distribution.
+"""Run composition, history and query cases against an installed distribution.
 
-The semantic cases live in test_core_composition.py.  This harness deliberately
-loads that same test class under the installed ``kpopper`` package namespace,
+The semantic cases live in test_core_composition.py and the native query suite.
+This harness loads those same test classes under the installed ``kpopper`` namespace,
 from a temporary working directory with no checkout or compiler on PATH.  It is
 an explicit packaging gate, not another copy of the acceptance expectations.
 """
@@ -14,7 +14,7 @@ import tempfile
 
 
 ROOT = Path(__file__).resolve().parents[1]
-TARGET = Path(__file__).with_name("test_core_composition.py")
+TARGET = Path(__file__).parent
 
 
 CHILD = r'''
@@ -34,6 +34,7 @@ archive = sys.argv[3] or None
 plugin_root = Path(sys.argv[4]).resolve() if sys.argv[4] else None
 if archive:
     os.environ["KPOPPER_COMPOSITION_TEST_ARCHIVE"] = archive
+    os.environ["KPOPPER_QUERY_ARCHIVE"] = archive
 if plugin_root:
     package_roots = [(plugin_root / "scripts").resolve()]
     channel = "extracted-plugin"
@@ -65,10 +66,21 @@ for name in ("history_authoring", "history_contract", "history_store",
     if "." not in name:
         setattr(alias, name, module)
 
-spec = importlib.util.spec_from_file_location("composition_acceptance_target", target)
-module = importlib.util.module_from_spec(spec)
-spec.loader.exec_module(module)
-suite = unittest.defaultTestLoader.loadTestsFromTestCase(module.CoreComposition)
+if archive:
+    runtime_module = importlib.import_module("scripts.reasoning.runtime")
+    initialize_runtime = runtime_module.Runtime.__init__
+    def selected_runtime(instance, supplied=None, **kwargs):
+        return initialize_runtime(instance, supplied or archive, **kwargs)
+    runtime_module.Runtime.__init__ = selected_runtime
+
+suite = unittest.TestSuite()
+for filename, classname in (("test_core_composition.py", "CoreComposition"),
+                            ("test_reasoning_query_runtime.py", "NativeQueryAcceptance"),
+                            ("test_core_query_transfer.py", "CoreQueryTransfer")):
+    spec = importlib.util.spec_from_file_location("installed_acceptance_target", target / filename)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    suite.addTests(unittest.defaultTestLoader.loadTestsFromTestCase(getattr(module, classname)))
 result = unittest.TextTestRunner(verbosity=2).run(suite)
 if not result.wasSuccessful():
     raise SystemExit(1)
@@ -119,7 +131,7 @@ def run_installed(python, archive=None, plugin_root=None):
         env = dict(os.environ)
         for name in ("PYTHONPATH", "PYTHONHOME", "LEAN_PATH", "LEAN_SYSROOT", "LEAN_CC",
                      "KPOPPER_LEAN_ROOT", "KPOPPER_RUNTIME_ARCHIVE",
-                     "KPOPPER_TEST_ARCHIVE", "KPOPPER_COMPOSITION_TEST_ARCHIVE",
+                     "KPOPPER_TEST_ARCHIVE", "KPOPPER_COMPOSITION_TEST_ARCHIVE", "KPOPPER_QUERY_ARCHIVE",
                      "LD_LIBRARY_PATH", "DYLD_LIBRARY_PATH"):
             env.pop(name, None)
         env.update(PATH=runtime_path, XDG_CACHE_HOME=str(root / "cache"),

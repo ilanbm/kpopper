@@ -41,6 +41,28 @@ def render_expression(expression):
     whitespace); validation only proves that it belongs to the finite core
     language.  Structured ASTs use a fully explicit, deterministic spelling.
     """
+    if isinstance(expression, dict) and set(expression) == {'query'}:
+        from . import query
+        body = expression['query']
+        pending = [body[key] for key in ('where', 'value')
+                   if isinstance(body, dict) and key in body]
+        columns = set()
+        while pending:
+            item = pending.pop()
+            if not isinstance(item, dict):
+                continue
+            if isinstance(item.get('column'), str):
+                columns.add(item['column'])
+            if isinstance(item.get('args'), list):
+                pending.extend(item['args'])
+            pending.extend(item[key] for key in ('if', 'then', 'else', 'field') if key in item)
+            if isinstance(item.get('list'), list):
+                pending.extend(item['list'])
+            if isinstance(item.get('record'), dict):
+                pending.extend(item['record'].values())
+        normalized = query.lower(expression, sorted(columns))
+        return json.dumps(normalized, ensure_ascii=False, sort_keys=True,
+                          separators=(',', ':'))
     authored = isinstance(expression, dict) and set(expression) == {'expr'}
     tree = lower(expression)
     if authored:
