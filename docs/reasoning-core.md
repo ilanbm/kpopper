@@ -83,6 +83,9 @@ fields require explicit migration before entering a core union. History-backed c
 retains its guarded history transaction and replay path. New history folds also check the complete
 prepared candidate for newly introduced falsified conditions or assessment holes before publication.
 Retained older prepared operations keep their original recovery semantics.
+History fold previews also retain the original pending, target and routing observations while
+rebuilding the candidate's committed history and named hypotheses. The preview reports base and
+candidate findings without publishing the candidate or treating pending contributions as accepted.
 
 Watch compatibility/uncertainty and `remeasure` support ordinary declared core records through
 captured assessments. Watch retains the merge-base delta and reports incompatible profile changes;

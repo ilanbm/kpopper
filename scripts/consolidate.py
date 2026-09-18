@@ -1601,6 +1601,18 @@ def main(argv=None):
         result = P._peer('history_direct').finish_hypotheses(routed, names, kind='fold',
             because='consolidation preview', take=take, drops=drops, dry=True)
         print(result['state'] + ': ' + ', '.join(result['hypotheses']))
+        assessment = result.get('assessment')
+        if assessment:
+            print('captured history preview:')
+            for stage in ('base', 'candidate'):
+                findings = assessment[stage]
+                print('  ' + stage + ': ' + ', '.join(
+                    str(len(findings[kind])) + ' ' + kind
+                    for kind in ('falsified', 'holes', 'moved', 'notes')))
+            for kind in ('falsified', 'holes', 'moved', 'notes'):
+                for line in assessment['candidate'][kind]:
+                    if line not in assessment['base'][kind]:
+                        print('  candidate ' + kind + ': ' + line)
         return 0
     doc, hyps = read(paths, names, refs, as_of=as_of)
     if not hyps:

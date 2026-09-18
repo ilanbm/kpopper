@@ -795,7 +795,8 @@ def _publication_context(status):
 
 class CapturedSource:
     """Private exact reader inventory for checked copying; not publication authority."""
-    def __init__(self, snapshot, inventory, observation, paths, mode, *, document):
+    def __init__(self, snapshot, inventory, observation, paths, mode, *, document,
+                 history_capture=None):
         self.snapshot = snapshot
         self.inventory = inventory
         self.observation = copy.deepcopy(observation)
@@ -804,6 +805,10 @@ class CapturedSource:
         # Keep reader-only routing and hypothesis metadata from the very same
         # final bracketed load. This never enters the portable Snapshot schema.
         self._document = copy.deepcopy(document)
+        # A private detached Store.capture from the same final bracketed load.
+        # It is intentionally absent from ordinary Snapshot.capture and never
+        # participates in portable serialization.
+        self._history_capture = copy.deepcopy(history_capture) if history_capture is not None else None
 
     @property
     def document(self):
@@ -812,6 +817,10 @@ class CapturedSource:
     @property
     def files(self):
         return dict(self.inventory.contents)
+
+    @property
+    def history_capture(self):
+        return copy.deepcopy(self._history_capture)
 
     def verify(self):
         self.inventory.verify()
@@ -865,7 +874,7 @@ def _retained_history_members(document, entry):
     return members
 
 
-def _capture_load(paths, mode, initial):
+def _capture_load(paths, mode, initial, *, retain_source=False):
     """Select explicit history authority before the ordinary loader sees a view."""
     from .. import provenance as P, knowledge_views as V, history_contract as C
     routed = V.write_paths(paths) if mode == 'live' else paths
@@ -923,7 +932,10 @@ def _capture_load(paths, mode, initial):
                         'baseline_digest': digest(captured.document['meta']['history'])}
     doc.history_private_roots = [os.path.abspath(store.layout[name])
                                  for name in ('history', 'history_commits')]
-    return V.overlay(routed, doc, read_mode=mode)
+    loaded = V.overlay(routed, doc, read_mode=mode)
+    if retain_source:
+        loaded.history_capture = copy.deepcopy(captured)
+    return loaded
 
 
 def capture_source(paths, *, read_mode=None, as_of=None):
@@ -951,7 +963,7 @@ def capture(paths, *, read_mode=None, as_of=None, _retain_source=False):
         core_token = P._CORE_READS.set(True)
         try:
             try:
-                documents.append(_capture_load(paths, mode, initial))
+                documents.append(_capture_load(paths, mode, initial, retain_source=_retain_source))
             except P._peer('history_contract').HistoryError as error:
                 raise SnapshotError(error.code, str(error)) from error
         finally:
@@ -1024,5 +1036,6 @@ def capture(paths, *, read_mode=None, as_of=None, _retain_source=False):
     snapshot = Snapshot.from_data(doc, context=context, hypotheses=_portable(hypotheses, origin),
                                   as_of=as_of, authored_revision=revision)
     if _retain_source:
-        return CapturedSource(snapshot, inventories[-1], initial, paths, mode, document=doc)
+        return CapturedSource(snapshot, inventories[-1], initial, paths, mode, document=doc,
+                              history_capture=getattr(doc, 'history_capture', None))
     return snapshot

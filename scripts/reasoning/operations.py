@@ -29,7 +29,6 @@ def _ordinary(snapshot):
 
 class World(authoring.World):
     def __init__(self, document, snapshot):
-        _ordinary(snapshot)
         super().__init__(history_authoring.READER, document, original=snapshot)
         if self.snapshot.snapshot_id != snapshot.snapshot_id:
             raise ValueError('operation_snapshot_mismatch')
@@ -51,14 +50,52 @@ def bind(document, snapshot):
     return document
 
 
-def load(paths, *, as_of=None):
+def load(paths, *, as_of=None, allow_history=False):
     source = capture_source(paths, as_of=as_of)
     document = source.document
     if not selected(document):
         raise ValueError('record_profile_changed: retry the operational read')
-    _ordinary(source.snapshot)
+    if not allow_history:
+        _ordinary(source.snapshot)
     document._operation_source = source
     return bind(document, source.snapshot)
+
+
+def prepared(base, mutation):
+    """Bind one prepared history candidate without rereading or editing its source.
+
+    Retained pending/target observations remain source observations. Only the
+    committed history and its named layers advance to the candidate generation.
+    This projection grants no publication authority; the caller verifies the
+    original source and uses the existing prepared-operation publication gate.
+    """
+    from .. import history_adapter, history_hypotheses, history_prospective
+    prior = snapshot_for(base)
+    source = getattr(base, '_operation_source', None)
+    captured = source.history_capture if source is not None else None
+    if captured is None:
+        raise ValueError('prepared_history_capture_required')
+    data = prior.to_data()
+    if digest(history_adapter.from_store_capture(captured).document) != digest(data['document']):
+        raise ValueError('operation_capture_mismatch')
+    context = copy.deepcopy(data['context'])
+    original_view = context.get('history_view')
+    for key in ('history', 'history_hypotheses', 'history_view', 'operation'):
+        context.pop(key, None)
+    context['operation_source'] = {'snapshot_id': prior.snapshot_id,
+        'context_digest': digest(data['context']), 'history_view': original_view}
+    remaining = {name: value for name, value in data['hypotheses'].items()
+                 if value.get('kind') != history_hypotheses.KIND}
+    snapshot = history_prospective.snapshot_after(captured, mutation, context=context,
+                                                   hypotheses=remaining, as_of=data['as_of'])
+    candidate = snapshot.to_data()
+    document = P.Record(candidate['document'])
+    document.hypotheses = {name: copy.deepcopy(value) for name, value in base.hypotheses.items()
+                          if value.get('kind') != history_hypotheses.KIND}
+    named, _ = history_hypotheses.layers(candidate['context']['history'], document)
+    document.hypotheses.update(named)
+    document._operation_source = source
+    return bind(document, snapshot)
 
 
 def derive(document, base, selection=(), *, proposals=()):

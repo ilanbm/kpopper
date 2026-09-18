@@ -831,6 +831,11 @@ sources:
            gaze can enhance advertising effectiveness"
     url: "https://pmc.ncbi.nlm.nih.gov/articles/PMC3941030/"
     read: "2026-09-13"
+  s.history_operation_context:
+    name: "Captured context for prepared history previews"
+    file: "scripts/reasoning/operations.py"
+    read: "2026-09-19"
+    revision: "34ce81a"
   s.ingest_64eac369f0d3ca58463f27679fa42bb0:
     name: "Captured report"
     file: "/Users/ilanbm/.local/state/kpopper/ingestion/d38be57d78902508217b8f6b3d18d9c39fcf1b9fd9a67b76790e4473e1fe5b68/sources/64eac369f0d3ca58463f27679fa42bb0.txt"
@@ -1697,6 +1702,17 @@ known:
     from: "s.2026_09_17_history_reasoning_integration"
     at: "docs/history-contract.md, History store and Capture and replay; scripts/history_contract.py and scripts/reasoning/snapshot.py at d9857cdb184d1daf4df37c09e71be804e1c46c37"
     of: "2026-09-17"
+  p.history_operation_context:
+    name: "History previews retain independent pending and target observations"
+    v: "A prepared history preview uses the private Store Capture retained from the same bracketed
+        source read, preserves pending, target and routing context, and regenerates named history
+        hypotheses. The projection is source-free and does not grant publication authority. Direct
+        fold previews verify the original source before returning; ordinary document-only history
+        derivation still refuses."
+    from: s.history_operation_context
+    at: "load, prepared and World; history_direct.finish_hypotheses dry path; consolidate.main
+         preview output"
+    of: "2026-09-19"
   p.history_replay_audit_evidence:
     name: "Adapter audit replay witness"
     v: "Adapter audit replay accepts only the current adapter identity or an exact full audit in
