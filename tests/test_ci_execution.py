@@ -4,6 +4,7 @@ import pathlib
 import shutil
 import tempfile
 import unittest
+from types import SimpleNamespace
 from unittest.mock import patch
 
 import yaml
@@ -20,6 +21,26 @@ def module(name):
 
 
 class TestPlans(unittest.TestCase):
+    @unittest.skipUnless(importlib.util.find_spec('pytest'),
+                         'pytest is installed only in the Python CI jobs')
+    def test_pytest_9_subtest_reports_do_not_duplicate_the_collected_parent(self):
+        plugin = __import__('tests.ci_pytest', fromlist=['ci_pytest'])
+        progress = plugin.Progress(None)
+        progress.pytest_runtest_logreport(SimpleNamespace(
+            nodeid='tests/test_example.py::Example::test_parent', when='call',
+            skipped=False, failed=False, context=object()))
+        progress.pytest_runtest_logreport(SimpleNamespace(
+            nodeid='tests/test_example.py::Example::test_parent', when='call',
+            skipped=False, failed=False))
+        self.assertEqual(progress.executed, ['tests/test_example.py::Example::test_parent'])
+
+    def test_test_runner_versions_preserve_python_39_support(self):
+        requirements = (ROOT / '.github/requirements-test.txt').read_text()
+        self.assertIn('pytest==8.4.2; python_version < "3.10"', requirements)
+        self.assertIn('pytest==9.0.3; python_version >= "3.10"', requirements)
+        self.assertIn('pytest-split==0.10.0; python_version < "3.10"', requirements)
+        self.assertIn('pytest-split==0.11.0; python_version >= "3.10"', requirements)
+
     def test_shared_changes_keep_all_suites_and_documents_select_only_their_suite(self):
         ci = module('ci_selection')
         self.assertEqual(ci.test_suites(ci.select(['scripts/cli.py'])),
@@ -84,6 +105,13 @@ class TestPlans(unittest.TestCase):
             self.assertEqual(set(jobs[name]['needs']), {'changes', 'record'})
         native = yaml.safe_load((ROOT / '.github/workflows/reasoning-runtime.yml').read_text())['jobs']
         self.assertEqual(native['target']['needs'], 'preflight')
+
+    def test_dependabot_prs_count_as_patch_without_needing_a_body_template(self):
+        jobs = yaml.safe_load((ROOT / '.github/workflows/check.yml').read_text())['jobs']
+        declaration = next(step for step in jobs['record']['steps']
+                           if step.get('name') == 'The pull request declares its bump')
+        self.assertIn("github.event.pull_request.user.login != 'dependabot[bot]'",
+                      declaration['if'])
 
     def test_candidate_only_skips_integrity_step_but_keeps_the_build_prerequisite(self):
         jobs = yaml.safe_load((ROOT / '.github/workflows/reasoning-runtime.yml').read_text())['jobs']

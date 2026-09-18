@@ -63,7 +63,7 @@ jobs:
         with:
           python-version: "3.13"
       - name: The pull request declares its bump
-        if: github.event_name == 'pull_request' && !startsWith(github.event.pull_request.title, 'Release ')
+        if: github.event_name == 'pull_request' && !startsWith(github.event.pull_request.title, 'Release ') && github.event.pull_request.user.login != 'dependabot[bot]'
         env:
           BODY: ${{ github.event.pull_request.body }}
         run: |
