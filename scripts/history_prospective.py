@@ -64,7 +64,11 @@ def _prospective_capture(captured, mutation):
         obj = C.validate_object(C.decode_document(item['after']))
         _fail(item['path'].endswith('.yaml'), 'role_path_mismatch', item['path'])
         key = (obj['subject'], obj['id'])
-        _fail(key not in raw_objects, 'object_rewrite', obj['id'])
+        # Adoption receipts repeat immutable objects already held by the target
+        # to prove the adopted inventory. Identical bytes are not a rewrite.
+        _fail(key not in raw_objects or key in captured.object_bytes
+              and captured.object_bytes[key] == item['after'],
+              'object_rewrite', obj['id'])
         raw_objects[key] = item['after']
         objects[obj['id']] = obj
 

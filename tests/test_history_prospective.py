@@ -49,6 +49,17 @@ class ProspectiveHistory(unittest.TestCase):
             with self.subTest(key=key), self.assertRaisesRegex(C.HistoryError, 'duplicate_prospective_context'):
                 P.snapshot_after(self.capture, mutation, context={key: {}})
 
+    def test_adoption_can_repeat_identical_target_objects(self):
+        from scripts import history_bundle as B
+        target = self.capture
+        head = target.state['subjects']['p.input']['heads'][0]
+        mutation = B._prepare_capture_adoption(self.fixture.entry, target, 'a' * 64,
+            choices={'p.input': head}, by='reviewer', operation='adopt-retained',
+            recorded_at='2026-09-18T00:00:00+00:00', capture=target)
+        candidate = P.snapshot_after(target, mutation)
+        self.assertEqual(candidate.to_data()['document']['readings']['p.input']['v'], 1)
+        self.assertEqual(candidate.to_data()['context']['history']['subjects']['p.input']['heads'], [head])
+
     def test_named_hypothesis_fold_matches_published_semantics(self):
         proposal = HH.prepare(self.fixture.entry, 'alternative',
                               {'kind': 'set', 'id': 'p.input', 'value': 2,
