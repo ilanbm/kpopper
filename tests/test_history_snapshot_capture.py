@@ -133,6 +133,14 @@ class HistorySnapshotCapture(unittest.TestCase):
 
     def test_public_revision_omits_history_inventory_but_private_capture_retains_bytes(self):
         source = capture_source(self.entry, read_mode='frozen')
+        private = source.history_capture
+        self.assertIsNotNone(private)
+        self.assertEqual(private.entry_bytes, self.entry.read_bytes())
+        self.assertEqual(private.commits, self.store.capture().commits)
+        detached = source.history_capture
+        detached.commits.clear()
+        self.assertTrue(source.history_capture.commits)
+        self.assertIsNone(getattr(self.snapshot(), 'history_capture', None))
         files = source.files
         object_path = str(Path(self.store.layout['history']) / self.source['subject'] / (self.source['id'] + '.yaml'))
         commit_path = str(Path(self.store.layout['history_commits']) / 'initial.yaml')
