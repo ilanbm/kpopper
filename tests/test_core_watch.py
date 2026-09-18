@@ -74,6 +74,12 @@ class CoreWatchTests(unittest.TestCase):
             W._records(self.work, 'GROUNDING.yaml')
         self.assertEqual(load.call_count, 1)
 
+    def test_repeated_core_capture_has_no_scratch_path_identity(self):
+        first = W._records(self.work, 'GROUNDING.yaml')
+        second = W._records(self.work, 'GROUNDING.yaml')
+        self.assertEqual(first['core']['snapshot'], second['core']['snapshot'])
+        self.assertEqual(first['core']['assessment'], second['core']['assessment'])
+
     def test_mixed_core_context_fails_closed_without_legacy_fallback(self):
         snapshot = self.watch.snapshot()
         snapshot['main']['core'] = None

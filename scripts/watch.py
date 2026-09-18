@@ -168,14 +168,18 @@ def _records(root, entry, sha=None, *, include_files=False):
             path.resolve().relative_to(Path(directory).resolve())
             path.parent.mkdir(parents=True, exist_ok=True)
             path.write_bytes(raw)
+        # The scratch directory may use a symlinked temp root (notably on
+        # macOS). Use its canonical location consistently with project routing
+        # so temporary path aliases never enter the portable capture identity.
+        captured_entry = (Path(directory) / entry).resolve()
         if active:
             S = P._peer('reasoning.snapshot')
             # Temporary target files are not observations of the checkout. Their
             # complete bytes are already pinned by this immutable Git tree.
             token = H.P._CAPTURE_READS.set(None)
             try:
-                snapshot = S.Snapshot.capture(Path(directory) / entry, read_mode='frozen')
-                captured = H.Store(Path(directory) / entry).capture()
+                snapshot = S.Snapshot.capture(captured_entry, read_mode='frozen')
+                captured = H.Store(captured_entry).capture()
                 history = P._peer('knowledge_views').history_evidence(captured)
             finally:
                 H.P._CAPTURE_READS.reset(token)
@@ -188,12 +192,12 @@ def _records(root, entry, sha=None, *, include_files=False):
         else:
             operation_doc = None
             try:
-                doc = P.load([str(Path(directory) / entry)])
+                doc = P.load([str(captured_entry)])
             except P.Refused as error:
                 CoreOperations = P._peer('reasoning.operations')
                 if str(error) != CoreOperations.READER_REFUSAL:
                     raise
-                operation_doc = CoreOperations.load([str(Path(directory) / entry)])
+                operation_doc = CoreOperations.load([str(captured_entry)])
                 doc = operation_doc
             document, hyps = dict(doc), []
             for name, h in doc.hypotheses.items():
@@ -205,7 +209,7 @@ def _records(root, entry, sha=None, *, include_files=False):
         if not active and isinstance(reasoning, dict) and reasoning.get('profile') == 'core/v1':
             CoreOperations = P._peer('reasoning.operations')
             if operation_doc is None:
-                operation_doc = CoreOperations.load([str(Path(directory) / entry)])
+                operation_doc = CoreOperations.load([str(captured_entry)])
             observed = CoreOperations.snapshot_for(operation_doc)
             context = CoreOperations.world(operation_doc).context
             report = context.base_assessment
