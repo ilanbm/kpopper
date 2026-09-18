@@ -77,7 +77,9 @@ class CoreWatchTests(unittest.TestCase):
     def test_mixed_core_context_fails_closed_without_legacy_fallback(self):
         snapshot = self.watch.snapshot()
         snapshot['main']['core'] = None
-        result = W.compare(snapshot)
+        with patch.object(W.P, 'flags', side_effect=AssertionError('legacy flags')), \
+             patch.object(W.P, 'evaluate', side_effect=AssertionError('legacy evaluator')):
+            result = W.compare(snapshot)
         self.assertEqual(result['state'], 'attention')
         self.assertEqual(result['findings'][0]['kind'], 'uncheckable')
         self.assertIn('incompatible captured context', result['findings'][0]['reason'])
