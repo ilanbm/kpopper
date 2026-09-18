@@ -225,7 +225,7 @@ class World:
         self.snapshot = Snapshot.from_data(document,
             context=source['context'] if source else None,
             hypotheses=source['hypotheses'] if source else getattr(document, 'hypotheses', None),
-            as_of=None)
+            as_of=source['as_of'] if source else None)
         self.engine = Evaluator(self.snapshot, operational_limits=self.bounds)
         self.raw = Readings(self, reader.bodies(document))
         self.ids = set(self.snapshot.to_data()['nodes'])
@@ -296,7 +296,10 @@ class World:
         document.setdefault('meta', {})['reasoning'] = {
             **declaration(document), 'requires': sorted(set(declaration(document)['requires']) |
                                                        set(required_modules(expression)))}
-        engine = Evaluator(Snapshot.from_data(document), runtime=self.engine.runtime,
+        source = self.snapshot.to_data()
+        candidate_snapshot = Snapshot.from_data(document, context=source['context'],
+            hypotheses=source['hypotheses'], as_of=source['as_of'])
+        engine = Evaluator(candidate_snapshot, runtime=self.engine.runtime,
                            operational_limits=self.bounds)
         proposed = self.require(engine.evaluate(expression, declared=[]))
         current = self.require(self.result(nid))
@@ -503,7 +506,7 @@ class World:
         return 'HOLDS', 'core/v1 assessment has no review finding'
 
 
-def declare(lines, reader):
+def declare(lines, reader, *, desired=None):
     """Change only the generated capability member, preserving surrounding text."""
     text = '\n'.join(lines)
     import yaml
@@ -511,7 +514,8 @@ def declare(lines, reader):
     meta = doc.get('meta')
     if meta is not None and not isinstance(meta, dict):
         raise reader.Refused('requires explicit migration: metadata is not a mapping')
-    desired = declaration(doc)
+    desired = declaration(doc) if desired is None else copy.deepcopy(desired)
+    capabilities({'meta': {'reasoning': desired}})
     if isinstance(meta, dict) and meta.get('reasoning') == desired:
         return
     encoded = yaml.safe_dump({'reasoning': desired}, sort_keys=False).rstrip().splitlines()

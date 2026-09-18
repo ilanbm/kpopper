@@ -76,7 +76,13 @@ history evidence. A judgment supplies its authored verdict, with acceptance, fal
 and integrity reported separately. An unavailable reading stays unknown for conditions that need
 it; a scheduled diagnostic can still become due. Scanning does not change the record or execute work.
 
-`consolidate`, watch compatibility/uncertainty, and `remeasure` remain explicit
+Declared core records support `consolidate --dry-run`, guarded folds, explicit refutation,
+and committed-branch input. Base and prospective findings retain their captured snapshots;
+replacement, date, `--take`, and `--drop` rules still apply. Hypotheses with executable legacy
+fields require explicit migration before entering a core union. History-backed consolidation
+retains its existing guarded history transaction and replay path.
+
+Watch compatibility/uncertainty and `remeasure` remain explicit
 legacy-only operations with this experimental profile. A declared core record fails them closed with
 `unsupported_capability: use core/v1 consumer`; they never fall back to the legacy evaluator.
 Use the shared read consumers above for current findings. Activation remains blocked while these

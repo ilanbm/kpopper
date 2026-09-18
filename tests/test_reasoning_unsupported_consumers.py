@@ -16,14 +16,12 @@ known:
 
 
 class UnsupportedCoreConsumers(unittest.TestCase):
-    def test_consolidate_and_remeasure_name_the_core_consumer_boundary(self):
+    def test_remeasure_names_the_remaining_core_consumer_boundary(self):
         root = Path(__file__).resolve().parents[1]
         with tempfile.TemporaryDirectory() as directory:
             record = Path(directory) / 'GROUNDING.yaml'
             record.write_text(CORE, encoding='utf-8')
             commands = [
-                [sys.executable, str(root / 'scripts/cli.py'), 'consolidate',
-                 '--dry-run', str(record)],
                 [sys.executable, str(root / 'scripts/cli.py'), 'remeasure', str(record)],
             ]
             for command in commands:

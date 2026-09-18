@@ -3931,7 +3931,9 @@ def may_supersede(nid, existing, new, raw, ids, jud, fields, as_of=None, page=No
             if facts["fired"]:
                 return True, (f"its sign holds ({short(jud[nid]['pred'], 60)}) with its tab intact"
                               + (f" - {facts['reading']}" if facts.get("reading") else ""))
-        if evaluate(jud[nid]["pred"], raw, ids) is True:
+        world = getattr(raw, 'world', None)
+        fired = world.predicate_for(nid) if hasattr(world, 'predicate_for') else evaluate(jud[nid]["pred"], raw, ids)
+        if fired is True:
             return True, f"its wrong_if holds ({short(jud[nid]['pred'], 60)})"
         if by_hand:
             return True, "the standing judgment holds, and a person takes this over it by name"

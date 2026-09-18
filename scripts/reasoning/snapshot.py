@@ -795,12 +795,19 @@ def _publication_context(status):
 
 class CapturedSource:
     """Private exact reader inventory for checked copying; not publication authority."""
-    def __init__(self, snapshot, inventory, observation, paths, mode):
+    def __init__(self, snapshot, inventory, observation, paths, mode, *, document):
         self.snapshot = snapshot
         self.inventory = inventory
         self.observation = copy.deepcopy(observation)
         self.paths = list(paths)
         self.mode = mode
+        # Keep reader-only routing and hypothesis metadata from the very same
+        # final bracketed load. This never enters the portable Snapshot schema.
+        self._document = copy.deepcopy(document)
+
+    @property
+    def document(self):
+        return copy.deepcopy(self._document)
 
     @property
     def files(self):
@@ -1017,5 +1024,5 @@ def capture(paths, *, read_mode=None, as_of=None, _retain_source=False):
     snapshot = Snapshot.from_data(doc, context=context, hypotheses=_portable(hypotheses, origin),
                                   as_of=as_of, authored_revision=revision)
     if _retain_source:
-        return CapturedSource(snapshot, inventories[-1], initial, paths, mode)
+        return CapturedSource(snapshot, inventories[-1], initial, paths, mode, document=doc)
     return snapshot

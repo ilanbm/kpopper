@@ -240,8 +240,8 @@ class CoreAuthoring(unittest.TestCase):
         with self.assertRaisesRegex(P.Refused, 'core/v1 consumer'):
             P.counts(doc, ids, judgments, fields, P.bodies(doc))
 
-    def test_specialized_legacy_mutations_refuse_before_touching_core_record(self):
-        from scripts import sameness, consolidate
+    def test_legacy_identity_mutations_refuse_before_touching_core_record(self):
+        from scripts import sameness
         self.write('add', 'p.total', body={'rule': 'p.price * p.quantity'}, profile='core/v1')
         paths = [str(self.path)]
         hypothesis = Path(P.hypothesis_path(paths, 'alternative'))
@@ -249,11 +249,9 @@ class CoreAuthoring(unittest.TestCase):
         hypothesis.write_text(yaml.safe_dump({'known': {'p.price': {'v': 19, 'from': 's.report'}}}))
         before = {path: path.read_bytes() for path in (self.path, hypothesis)}
         operations = [lambda: sameness.same(paths, 'p.price', 'p.quantity'),
-                      lambda: sameness.distinct(paths, 'p.price', 'p.quantity', 'Different units'),
-                      lambda: consolidate.fold(paths, names=['alternative']),
-                      lambda: consolidate.refute(paths, 'alternative', 'Checked', source='s.report')]
+                      lambda: sameness.distinct(paths, 'p.price', 'p.quantity', 'Different units')]
         for operation in operations:
-            with self.assertRaisesRegex((sameness.P.Refused, consolidate.P.Refused), 'unsupported_capability'):
+            with self.assertRaisesRegex(sameness.P.Refused, 'unsupported_capability'):
                 operation()
             self.assertEqual(before, {path: path.read_bytes() for path in before})
 
