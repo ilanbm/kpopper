@@ -209,8 +209,36 @@ def _equal(left, right):
     return left == right
 
 
+def _core_envelope(value):
+    if not isinstance(value, dict) or set(value) != {'core'}:
+        return None
+    try:
+        if __package__:
+            from .followup_core import envelope
+        else:
+            import provenance
+            envelope = provenance._peer('followup_core').envelope
+        return envelope(value)
+    except (ValueError, TypeError):
+        return {'available': False}
+
+
 def _condition_scalar(value):
     """Conditions read the result; changed triggers retain the full historical basis."""
+    core = _core_envelope(value)
+    if core is not None:
+        if not core['available']:
+            return _MISSING
+        typed = core['value']
+        if typed['type'] == 'number':
+            return {'rational': [typed['numerator'], typed['denominator']]}
+        if typed['type'] in ('text', 'boolean'):
+            return typed['value']
+        if typed['type'] == 'null':
+            return None
+        # Conditions accept scalar expectations only. Keep collections typed so
+        # a record resembling a rational cannot masquerade as a number.
+        return typed
     if isinstance(value, dict) and set(value) == {'computed'}:
         calculated = value['computed']
         if not isinstance(calculated, dict) or not {'value', 'rule'} <= set(calculated):
@@ -227,6 +255,9 @@ def unavailable(value):
     """A failed read is distinct from a recorded null, for conditions and changes."""
     if not isinstance(value, dict):
         return False
+    core = _core_envelope(value)
+    if core is not None:
+        return not core['available']
     if set(value) == {'unavailable'} and isinstance(value['unavailable'], str):
         return True
     if set(value) == {'computed'}:

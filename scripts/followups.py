@@ -113,7 +113,15 @@ def _record_view(record):
 def graph(record):
     """Only recorded semantic values; an unreadable graph cannot become an empty success."""
     try:
-        doc, ids, judgments, fields = _record_view(record)
+        try:
+            doc, ids, judgments, fields = _record_view(record)
+        except P.Refused as error:
+            core = P._peer('followup_core')
+            if str(error) not in core.READER_REFUSALS:
+                raise
+            # The failed attempt supplies no values. The complete captured
+            # assessment is the sole authority for this route.
+            return core.capture(record)
         before, page, page_reason = None, {}, ''
         # Ordinary followups do not pay for page/engine cache validation. For page
         # references, reload the record inside the captured measurement boundary.
