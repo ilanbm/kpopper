@@ -163,6 +163,12 @@ pub(crate) fn capture(files: &Files, rules: Option<&V>) -> Result<Capture> {
 /// Validates complete portable target/member evidence independently of sharing.
 /// `files` are already decoded checksummed bytes from the Snapshot transport.
 pub fn validate_observation(evidence: &V, files: &Files) -> Result<CapturedHistory> {
+    Ok(validate_observation_capture(evidence, files)?.1)
+}
+pub(crate) fn validate_observation_capture(
+    evidence: &V,
+    files: &Files,
+) -> Result<(Capture, CapturedHistory)> {
     let e = schema(
         evidence,
         &[
@@ -216,7 +222,7 @@ pub fn validate_observation(evidence: &V, files: &Files) -> Result<CapturedHisto
         adapted.projection().digest()? == e["projection"].digest()?,
         "projection_mismatch",
     )?;
-    Ok(adapted)
+    Ok((captured, adapted))
 }
 
 const CAPABILITY: &str = "history-closure/v1";

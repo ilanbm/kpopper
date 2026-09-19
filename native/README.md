@@ -52,8 +52,21 @@ incomplete coverage. Temporal assessment replays through an explicitly supplied
 runtime, preserves current/anchored/general applicability, and verifies frozen
 contexts without evaluating or reopening sources. Rehashed temporal results must
 still match their immutable predicate, anchors, Snapshot inputs and computation
-witnesses. Temporal authoring remains unsupported; the public CLI remains the
-subset described above.
+witnesses. Temporal authoring binds accepted claim versions to the before/after
+writer Snapshots, preserving computational time independently from recording time.
+Direct writes, acts, proposals and batches independently replay before publication.
+Fresh sequential judgments capture typed `seen`; old envelopes retain their original
+semantics only when the complete replayed mutation matches. The public CLI remains
+the subset described above.
+
+Computational scenarios select captured hypothesis bodies and shared observations.
+Their Snapshots retain and revalidate the original source, canonical selection,
+field roles, collisions and complete derived document. Frozen reconstruction reads
+no sources and runs no evaluator. Scenario assessment uses the supplied Lean runtime
+and reports computational consequences without granting history acceptance.
+`history_watch` independently validates captured record/Snapshot pairs, merges their
+committed closures and physical hypothesis changes, and compares those consequences.
+Incomplete observations and conflicting closures produce explicit attention findings.
 
 The library also provides an explicit `TypedValue` model and canonical typed JSON
 codec. It preserves integers of arbitrary size, finite IEEE754 floats (including
@@ -194,9 +207,10 @@ effective until a terminal decision retires them. `reasoning_declaration_text` c
 generated YAML capability fields while retaining surrounding source text. These APIs
 do not collect live project policy or establish a filesystem route for the caller.
 
-These library interfaces remain separate from the experimental CLI. Temporal authoring and ordinary-profile authoring
-are not yet exposed through this preparation layer. The newer receipt contracts are
-checked against a Python 1.7 candidate; final release binding remains pending.
+These library interfaces remain separate from the experimental CLI. Ordinary-profile authoring
+is not yet exposed through this preparation layer. The temporal and scenario
+contracts are checked against the final Python 1.7 release; full product migration
+and platform acceptance remain pending.
 
 ## Deliberate limits
 

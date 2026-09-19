@@ -981,6 +981,18 @@ sources:
     read: "2026-09-19"
     at: "Native hypothesis fold and prospective regression tests and history-fold fixtures"
     from: s.2026_09_19_native_hypothesis_edit_continuation
+  s.native_scenario_watch:
+    name: "Native captured scenarios and pure history watch conformance"
+    from: s.2026_09_19_native_temporal_authoring
+    file: "native/tests/support/history_watch.rs"
+    at: "Final Python 1.7.0 reference 5acfd0f: 20 scenario build/refusal cases with 9 accepted exact
+         Snapshots, 12 rehashed forgeries, 9 actual Lean scenarios; 17 watch records with 14 exact
+         captured unions and 16 exact comparisons plus 5 independent Snapshot binding refusals.
+         Scenario reconstruction rederives captured source overlays without source reads or
+         evaluation; watch retains original committed bytes, physical/named distinction and
+         computational-only scenarios. Six focused tests and all-target Clippy pass. Full native
+         regression suite is running; public CLI and final migration remain incomplete."
+    read: "2026-09-19"
   s.native_snapshot_verification:
     name: "Native snapshot and evaluator conformance"
     from: s.2026_09_19_native_snapshot_continuation

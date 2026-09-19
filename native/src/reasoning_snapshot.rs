@@ -561,6 +561,13 @@ impl Snapshot {
             }
         }
         validate_history(document, &context, &hypotheses)?;
+        crate::reasoning_scenario::validate(
+            document,
+            &context,
+            &hypotheses,
+            &normalize_as_of(&options.as_of.clone().unwrap_or(V::Null))?,
+            None,
+        )?;
         validate_mode(&context)?;
         let revision = options.authored_revision.unwrap_or(V::Null);
         validate_authored_revision(&revision)?;
@@ -585,6 +592,16 @@ impl Snapshot {
             ("authored_revision".into(), revision),
         ]);
         data.insert("snapshot_id".into(), s(&digest(&preimage(&data))?));
+        if map(&data["context"])?.contains_key("scenario") {
+            let complete = V::Map(data.clone());
+            crate::reasoning_scenario::validate(
+                &data["document"],
+                &data["context"],
+                &data["hypotheses"],
+                &data["as_of"],
+                Some(&complete),
+            )?;
+        }
         Ok(Self { data: V::Map(data) })
     }
     pub fn from_snapshot(data: &V) -> Result<Self> {
@@ -606,6 +623,13 @@ impl Snapshot {
         require(is_int(&m["schema_version"], "1"), "invalid_snapshot")?;
         code(&m["document"], "invalid_snapshot")?;
         validate_history(&m["document"], &m["context"], &m["hypotheses"])?;
+        crate::reasoning_scenario::validate(
+            &m["document"],
+            &m["context"],
+            &m["hypotheses"],
+            &m["as_of"],
+            Some(data),
+        )?;
         validate_authored_revision(&m["authored_revision"])?;
         require(
             m["snapshot_id"] == s(&digest(&preimage(m))?),
