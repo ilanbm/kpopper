@@ -312,5 +312,69 @@
     "stdout": "add p.gamma into known, after p.alpha\n\nthe record needs a person on 0 judgments - check says the rest\n",
     "stderr": "",
     "status": 0
+  },
+  {
+    "name": "order-fields",
+    "before": "meta:\n  updated: 2026-09-01\nknown:\n  p.zeta: {v: 1}\n  p.alpha: {v: 2}\njudgments:\n  d.keep:\n    verdict: continue\n    rests_on: [p.zeta, p.alpha]\n    seen: {p.zeta: 0, p.alpha: 2}\n    wrong_if: p.alpha > 9\n",
+    "args": [
+      "add",
+      "p.new",
+      "zulu=1",
+      "quebec=2",
+      "v=3",
+      "--as-of",
+      "2026-09-19",
+      "GROUNDING.yaml"
+    ],
+    "after": "meta:\n  updated: 2026-09-19\nknown:\n  p.new: {zulu: 1, quebec: 2, v: 3}\n  p.zeta: {v: 1}\n  p.alpha: {v: 2}\njudgments:\n  d.keep:\n    verdict: continue\n    rests_on: [p.zeta, p.alpha]\n    seen: {p.zeta: 0, p.alpha: 2}\n    wrong_if: p.alpha > 9\n",
+    "stdout": "add p.new into known, before p.zeta\n\nthe record needs a person on 1 judgment (1 moved, 0 falsified) - check says the rest\n",
+    "stderr": "",
+    "status": 0
+  },
+  {
+    "name": "order-map",
+    "before": "meta:\n  updated: 2026-09-01\nknown:\n  p.zeta: {v: 1}\n  p.alpha: {v: 2}\njudgments:\n  d.keep:\n    verdict: continue\n    rests_on: [p.zeta, p.alpha]\n    seen: {p.zeta: 0, p.alpha: 2}\n    wrong_if: p.alpha > 9\n",
+    "args": [
+      "add",
+      "p.new",
+      "{zulu: 1, quebec: 2, v: 3, detail: {z: one, a: two}}",
+      "--as-of",
+      "2026-09-19",
+      "GROUNDING.yaml"
+    ],
+    "after": "meta:\n  updated: 2026-09-19\nknown:\n  p.new:\n    zulu: 1\n    quebec: 2\n    v: 3\n    detail: {z: one, a: two}\n  p.zeta: {v: 1}\n  p.alpha: {v: 2}\njudgments:\n  d.keep:\n    verdict: continue\n    rests_on: [p.zeta, p.alpha]\n    seen: {p.zeta: 0, p.alpha: 2}\n    wrong_if: p.alpha > 9\n",
+    "stdout": "add p.new into known, before p.zeta\n\nthe record needs a person on 1 judgment (1 moved, 0 falsified) - check says the rest\n",
+    "stderr": "",
+    "status": 0
+  },
+  {
+    "name": "order-snapshot",
+    "before": "meta:\n  updated: 2026-09-01\nknown:\n  p.zeta: {v: 1}\n  p.alpha: {v: 2}\njudgments:\n  d.keep:\n    verdict: continue\n    rests_on: [p.zeta, p.alpha]\n    seen: {p.zeta: 0, p.alpha: 2}\n    wrong_if: p.alpha > 9\n",
+    "args": [
+      "review",
+      "d.keep",
+      "--as-of",
+      "2026-09-19",
+      "GROUNDING.yaml"
+    ],
+    "after": "meta:\n  updated: 2026-09-19\nknown:\n  p.zeta: {v: 1}\n  p.alpha: {v: 2}\njudgments:\n  d.keep:\n    verdict: continue\n    rests_on: [p.zeta, p.alpha]\n    seen: {p.zeta: 1, p.alpha: 2}\n    wrong_if: p.alpha > 9\n",
+    "stdout": "review d.keep: seen rewritten from what the record holds (2026-09-19)\n  p.zeta: 0 -> 1\n  d.keep holds: wrong_if does not hold (p.alpha > 9)\n",
+    "stderr": "",
+    "status": 0
+  },
+  {
+    "name": "order-snapshot-values",
+    "before": "meta:\n  updated: 2026-09-01\nknown:\n  p.zeta: {v: {z: one, a: two}}\n  p.alpha: {v: 2}\njudgments:\n  d.keep:\n    verdict: continue\n    rests_on: [p.zeta, p.alpha]\n    seen: {p.zeta: 0, p.alpha: 2}\n    wrong_if: p.alpha > 9\n",
+    "args": [
+      "review",
+      "d.keep",
+      "--as-of",
+      "2026-09-19",
+      "GROUNDING.yaml"
+    ],
+    "after": "meta:\n  updated: 2026-09-19\nknown:\n  p.zeta: {v: {z: one, a: two}}\n  p.alpha: {v: 2}\njudgments:\n  d.keep:\n    verdict: continue\n    rests_on: [p.zeta, p.alpha]\n    seen:\n      p.zeta:\n        z: one\n        a: two\n      p.alpha: 2\n    wrong_if: p.alpha > 9\n",
+    "stdout": "review d.keep: seen rewritten from what the record holds (2026-09-19)\n  p.zeta: 0 -> {'z': 'one', 'a': 'two'}\n  d.keep holds: wrong_if does not hold (p.alpha > 9)\n",
+    "stderr": "",
+    "status": 0
   }
 ]

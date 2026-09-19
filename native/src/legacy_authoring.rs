@@ -5,6 +5,7 @@ use crate::{
     history_transaction::{self as T, FileImage, Layout, PreparedMutation},
     history_transaction_fs as F,
     history_view::map_mut,
+    history_yaml::SourceValue as Source,
     ordinary_reader::{Reader, same_legacy},
     project_modes::WriteRoute,
     recording_privacy as Privacy, require, source_document,
@@ -313,14 +314,6 @@ fn python_whitespace(c: char) -> bool {
     c.is_whitespace() || ('\u{1c}'..='\u{1f}').contains(&c)
 }
 
-fn field_lines(field: &str, value: &V, ind: usize) -> Result<Vec<String>> {
-    field_lines_ordered(
-        field,
-        &crate::history_yaml::SourceValue::from_typed(value),
-        ind,
-    )
-}
-
 /// Preserve source order through the existing SafeDumper emitter.
 pub(crate) fn dump_ordered_yaml(
     value: &crate::history_yaml::SourceValue,
@@ -391,31 +384,6 @@ fn field_lines_ordered(
     }
 }
 
-fn entry_lines(
-    id: &str,
-    body: &V,
-    ind: usize,
-    field_indent: usize,
-    flow: bool,
-) -> Result<Vec<String>> {
-    let fields = if let V::Map(fields) = body {
-        crate::history_yaml::SourceValue::Map(
-            ordered_fields(fields)
-                .into_iter()
-                .map(|(key, value)| {
-                    (
-                        key.clone(),
-                        crate::history_yaml::SourceValue::from_typed(value),
-                    )
-                })
-                .collect(),
-        )
-    } else {
-        crate::history_yaml::SourceValue::from_typed(body)
-    };
-    entry_lines_ordered(id, &fields, ind, field_indent, flow)
-}
-
 pub(crate) fn entry_lines_ordered(
     id: &str,
     body: &crate::history_yaml::SourceValue,
@@ -451,23 +419,6 @@ pub(crate) fn entry_lines_ordered(
     Ok(lines)
 }
 
-fn ordered_fields(fields: &Map) -> Vec<(&String, &V)> {
-    fn rank(key: &str) -> usize {
-        match key {
-            "v" | "quoted" | "rule" | "verdict" => 0,
-            "because" => 1,
-            "request" => 2,
-            "rests_on" => 3,
-            "wrong_if" => 4,
-            "seen" => 100,
-            _ => 10,
-        }
-    }
-    let mut values = fields.iter().collect::<Vec<_>>();
-    values.sort_by(|(left, _), (right, _)| rank(left).cmp(&rank(right)).then(left.cmp(right)));
-    values
-}
-
 fn common_prefix(left: &str, right: &str) -> usize {
     left.split('.')
         .zip(right.split('.'))
@@ -479,7 +430,7 @@ fn insert_entry(
     lines: &mut Vec<String>,
     collection_name: &str,
     id: &str,
-    body: &V,
+    body: &Source,
 ) -> Result<String> {
     let collection = collections(lines)
         .into_iter()
@@ -487,7 +438,7 @@ fn insert_entry(
         .ok_or_else(|| error(&format!("no collection {collection_name} in this file")))?;
     let existing = members(lines, &collection);
     if existing.is_empty() {
-        let new = entry_lines(id, body, 2, 4, false)?;
+        let new = entry_lines_ordered(id, body, 2, 4, false)?;
         lines.splice(collection.start + 1..collection.start + 1, new);
         return Ok(format!("{id} into {collection_name}, its first entry"));
     }
@@ -509,7 +460,7 @@ fn insert_entry(
         .or_else(|| field_span(lines, anchor, "quoted"))
         .map_or(anchor.indent + 2, |field| field.indent);
     let flow = inline(&lines[anchor.start]).starts_with('{');
-    let mut new = entry_lines(id, body, anchor.indent, field_indent, flow)?;
+    let mut new = entry_lines_ordered(id, body, anchor.indent, field_indent, flow)?;
     let position = if before {
         if anchor.start > collection.start + 1
             && separator_blank(&lines[anchor.start - 1])
@@ -557,13 +508,22 @@ fn replace_field(
     field: &str,
     value: &V,
 ) -> Result<usize> {
+    replace_field_ordered(lines, member, field, &Source::from_typed(value))
+}
+
+fn replace_field_ordered(
+    lines: &mut Vec<String>,
+    member: &Member,
+    field: &str,
+    value: &Source,
+) -> Result<usize> {
     if let Some(span) = field_span(lines, member, field) {
-        let replacement = field_lines(field, value, span.indent)?;
+        let replacement = field_lines_ordered(field, value, span.indent)?;
         let new_end = member.end + replacement.len() - (span.end - span.start);
         lines.splice(span.start..span.end, replacement);
         Ok(new_end)
     } else {
-        let replacement = field_lines(field, value, member.indent + 2)?;
+        let replacement = field_lines_ordered(field, value, member.indent + 2)?;
         let len = replacement.len();
         let mut insertion = member.start + 1;
         for candidate in ["v", "quoted", "of", "from", "at"] {
@@ -946,6 +906,91 @@ fn dependency_snapshot(reader: &Reader<'_>, body: &Map) -> Result<Map> {
         .collect()
 }
 
+pub(crate) fn preserve_order(value: &V, source: Option<&Source>) -> Source {
+    match value {
+        V::Map(values) => {
+            let mut ordered = Vec::new();
+            if let Some(Source::Map(template)) = source {
+                for (key, prior) in template {
+                    if let Some(value) = values.get(key) {
+                        ordered.push((key.clone(), preserve_order(value, Some(prior))));
+                    }
+                }
+            }
+            for (key, value) in values {
+                if !ordered.iter().any(|(old, _)| old == key) {
+                    ordered.push((key.clone(), preserve_order(value, None)));
+                }
+            }
+            Source::Map(ordered)
+        }
+        V::List(values) => Source::List(
+            values
+                .iter()
+                .enumerate()
+                .map(|(i, value)| {
+                    let prior = match source {
+                        Some(Source::List(a)) => a.get(i),
+                        _ => None,
+                    };
+                    preserve_order(value, prior)
+                })
+                .collect(),
+        ),
+        _ => Source::Scalar(value.clone()),
+    }
+}
+
+fn ordinary_template(value: &crate::history_yaml::OrdinaryValue) -> Option<Source> {
+    use crate::history_yaml::OrdinaryValue as O;
+    Some(match value {
+        O::Scalar(value) => Source::Scalar(value.clone()),
+        O::List(values) => Source::List(
+            values
+                .iter()
+                .map(ordinary_template)
+                .collect::<Option<_>>()?,
+        ),
+        O::Map(values) => Source::Map(
+            values
+                .iter()
+                .map(|(key, value)| Some((key.text()?.into(), ordinary_template(value)?)))
+                .collect::<Option<_>>()?,
+        ),
+    })
+}
+
+fn ordered_snapshot(
+    reader: &Reader<'_>,
+    body: &Map,
+    seen: &Map,
+    source: &crate::history_yaml::OrdinaryValue,
+) -> Result<Source> {
+    let deps = text(&reader.fields()["deps"])?;
+    let V::List(dependencies) = &body[deps] else {
+        return Err(error("invalid_dependencies"));
+    };
+    let mut ordered = Vec::new();
+    for dependency in dependencies {
+        let id = text(dependency)?;
+        let value = field(seen, id)?;
+        let prior = if let crate::history_yaml::OrdinaryValue::Map(collections) = source {
+            collections
+                .iter()
+                .find_map(|(_, entries)| entries.get(id))
+                .and_then(|body| body.get("v").or_else(|| body.get("quoted")))
+                .filter(|prior| authored_equal(&prior.projected(), value))
+                .and_then(ordinary_template)
+        } else {
+            None
+        };
+        if !ordered.iter().any(|(old, _)| old == id) {
+            ordered.push((id.to_owned(), preserve_order(value, prior.as_ref())));
+        }
+    }
+    Ok(Source::Map(ordered))
+}
+
 fn display(value: &V) -> Result<String> {
     Ok(match value {
         V::Text(value) => value.clone(),
@@ -1177,7 +1222,7 @@ enum Preparation {
     Mutation(Prepared),
 }
 
-fn prepare(action: &V, route: &WriteRoute) -> Result<Preparation> {
+fn prepare(action: &V, route: &WriteRoute, source_body: Option<&Source>) -> Result<Preparation> {
     let a = map(action)?;
     require(
         a.get("hypothesis").is_none_or(|value| *value == V::Null),
@@ -1229,12 +1274,14 @@ fn prepare(action: &V, route: &WriteRoute) -> Result<Preparation> {
     )?;
     let mut collection = entries.get(&id).map(|(collection, _)| collection.clone());
     let mut seen = Map::new();
+    let mut seen_order = Source::Map(Vec::new());
     if kind == "add" {
         collection = Some(collection_for(&reader, &action)?);
         if let Ok(body) = map(field(&action, "body")?) {
             let deps = text(&reader.fields()["deps"])?;
             if body.contains_key(deps) {
                 seen = dependency_snapshot(&reader, body)?;
+                seen_order = ordered_snapshot(&reader, body, &seen, &document.source)?;
                 let snapshot = text(&reader.fields()["snapshot"])?;
                 map_mut(action.get_mut("body").unwrap())?
                     .insert(snapshot.into(), V::Map(seen.clone()));
@@ -1253,6 +1300,7 @@ fn prepare(action: &V, route: &WriteRoute) -> Result<Preparation> {
             &format!("refused - {id} is not a judgment"),
         )?;
         seen = dependency_snapshot(&reader, body)?;
+        seen_order = ordered_snapshot(&reader, body, &seen, &document.source)?;
     }
     let collection =
         collection.ok_or_else(|| error(&format!("refused - no file of the record holds {id}")))?;
@@ -1317,9 +1365,18 @@ fn prepare(action: &V, route: &WriteRoute) -> Result<Preparation> {
     match kind.as_str() {
         "add" => {
             add_collection_if_needed(&mut lines, &collection);
+            let mut body = preserve_order(field(&action, "body")?, source_body);
+            if !seen.is_empty()
+                && let Source::Map(fields) = &mut body
+            {
+                let snapshot = text(&reader.fields()["snapshot"])?;
+                if let Some((_, value)) = fields.iter_mut().find(|(key, _)| key == snapshot) {
+                    *value = seen_order.clone();
+                }
+            }
             output.push(format!(
                 "add {}",
-                insert_entry(&mut lines, &collection, &id, field(&action, "body")?)?
+                insert_entry(&mut lines, &collection, &id, &body)?
             ));
         }
         "set" => {
@@ -1356,7 +1413,7 @@ fn prepare(action: &V, route: &WriteRoute) -> Result<Preparation> {
                     .iter()
                     .any(|(key, value)| seen.get(key).is_none_or(|now| !same_legacy(value, now)));
             if changed {
-                replace_field(&mut lines, &member, snapshot, &V::Map(seen.clone()))?;
+                replace_field_ordered(&mut lines, &member, snapshot, &seen_order)?;
             }
             let (_, member) = locate(&lines, &id).unwrap();
             if stamp_review {
@@ -1384,15 +1441,31 @@ fn prepare(action: &V, route: &WriteRoute) -> Result<Preparation> {
                 .into_list()?
             {
                 let dependency = text(&dependency)?;
+                let old_source = document
+                    .source
+                    .get(&collection)
+                    .and_then(|entries| entries.get(&id))
+                    .and_then(|body| body.get(snapshot))
+                    .and_then(|snapshot| snapshot.get(dependency))
+                    .and_then(ordinary_template);
+                let old_text = |value: &V| {
+                    crate::source_text::python_str(&preserve_order(value, old_source.as_ref()))
+                };
+                let new_text = |value: &V| {
+                    crate::source_text::python_str(&preserve_order(
+                        value,
+                        seen_order.get(dependency),
+                    ))
+                };
                 match (old_seen.get(dependency), seen.get(dependency)) {
                     (Some(old), Some(now)) if !same_legacy(old, now) => output.push(format!(
                         "  {dependency}: {} -> {}",
-                        display(old)?,
-                        display(now)?
+                        old_text(old),
+                        new_text(now)
                     )),
                     (None, Some(now)) => output.push(format!(
                         "  {dependency}: {} (never checked against it before)",
-                        display(now)?
+                        new_text(now)
                     )),
                     _ => {}
                 }
@@ -1782,8 +1855,12 @@ pub fn recover(original: &[PathBuf], cwd: &Path, before: bool) -> Result<V> {
     ]))
 }
 
-pub(crate) fn write(action: &V, route: &WriteRoute) -> Result<String> {
-    match prepare(action, route)? {
+pub(crate) fn write(
+    action: &V,
+    route: &WriteRoute,
+    source_body: Option<&Source>,
+) -> Result<String> {
+    match prepare(action, route, source_body)? {
         Preparation::Draft(output) => Ok(output),
         Preparation::Mutation(prepared) => publish(prepared, route),
     }
@@ -1829,7 +1906,7 @@ mod tests {
             ("source", V::Null),
             ("at", V::Null),
         ]);
-        let Preparation::Mutation(prepared) = prepare(&action, &route).unwrap() else {
+        let Preparation::Mutation(prepared) = prepare(&action, &route, None).unwrap() else {
             panic!("expected mutation")
         };
         fs::write(&entry, "known:\n  p.a: {v: 7}\n").unwrap();
@@ -1858,7 +1935,7 @@ mod tests {
                 ("source", V::Null),
                 ("at", V::Null),
             ]);
-            let Preparation::Mutation(prepared) = prepare(&action, &route).unwrap() else {
+            let Preparation::Mutation(prepared) = prepare(&action, &route, None).unwrap() else {
                 panic!("expected mutation")
             };
             let mut verify = |_: &V| {

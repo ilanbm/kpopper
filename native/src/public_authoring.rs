@@ -6,6 +6,7 @@ use crate::{
     history_contract::*,
     history_transaction_fs as F,
     history_view::map_mut,
+    history_yaml::SourceValue,
     project_modes::WriteRoute,
     public_history::fresh_id,
     public_workspace, recording_privacy as Privacy, require,
@@ -90,10 +91,10 @@ fn typed(text: &str) -> Result<V> {
         _ => s(text),
     })
 }
-fn yaml(text: &str) -> Result<V> {
-    Ok(crate::history_yaml::decode_source_value(text.as_bytes())?.typed())
+fn yaml(text: &str) -> Result<SourceValue> {
+    crate::history_yaml::decode_source_value(text.as_bytes())
 }
-fn action(kind: &str, options: &Options) -> Result<(V, Vec<PathBuf>)> {
+fn action(kind: &str, options: &Options) -> Result<(V, Vec<PathBuf>, Option<SourceValue>)> {
     require(
         options.value.is_none()
             && options.operation.is_none()
@@ -152,6 +153,7 @@ fn action(kind: &str, options: &Options) -> Result<(V, Vec<PathBuf>)> {
     }
     let is_file = |s: &&String| (s.ends_with(".yaml") || s.ends_with(".yml")) && !s.contains('=');
     let paths;
+    let mut source_body = None;
     if kind == "set" {
         let first = options
             .values
@@ -177,12 +179,17 @@ fn action(kind: &str, options: &Options) -> Result<(V, Vec<PathBuf>)> {
             .collect::<Vec<_>>();
         let body = if given.len() == 1 && given[0].trim_start().starts_with('{') {
             let value = yaml(given[0])?;
-            require(matches!(value, V::Map(_)), "the fields must be a mapping")?;
-            value
+            require(
+                matches!(value, SourceValue::Map(_)),
+                "the fields must be a mapping",
+            )?;
+            source_body = Some(value.clone());
+            value.typed()
         } else if given.len() == 1 && !given[0].contains('=') {
             s(given[0])
         } else {
             let mut fields = Map::new();
+            let mut source_fields: Vec<(String, SourceValue)> = Vec::new();
             for value in given {
                 let (field, value) = value
                     .split_once('=')
@@ -192,14 +199,21 @@ fn action(kind: &str, options: &Options) -> Result<(V, Vec<PathBuf>)> {
                 {
                     yaml(value)?
                 } else {
-                    typed(value)?
+                    SourceValue::Scalar(typed(value)?)
                 };
-                fields.insert(field.trim().into(), value);
+                let field = field.trim();
+                fields.insert(field.into(), value.typed());
+                if let Some((_, current)) = source_fields.iter_mut().find(|(key, _)| key == field) {
+                    *current = value;
+                } else {
+                    source_fields.push((field.into(), value));
+                }
             }
             require(
                 !fields.is_empty(),
                 "add needs fields: add <id> v=... from=...",
             )?;
+            source_body = Some(SourceValue::Map(source_fields));
             V::Map(fields)
         };
         map_mut(&mut a)?.insert("body".into(), body);
@@ -211,11 +225,11 @@ fn action(kind: &str, options: &Options) -> Result<(V, Vec<PathBuf>)> {
             .map(PathBuf::from)
             .collect();
     }
-    Ok((a, paths))
+    Ok((a, paths, source_body))
 }
 pub fn run(kind: &str, options: &Options, cwd: &Path) -> Result<String> {
     let cwd = cwd.canonicalize()?;
-    let (action, files) = action(kind, options)?;
+    let (action, files, source_body) = action(kind, options)?;
     let implicit = files.is_empty();
     let original = if implicit {
         public_workspace::records(&cwd)?
@@ -231,7 +245,7 @@ pub fn run(kind: &str, options: &Options, cwd: &Path) -> Result<String> {
         && crate::legacy_authoring::route(entry, route.config())?
             == crate::legacy_authoring::AuthorityRoute::Legacy
     {
-        return crate::legacy_authoring::write(&action, &route);
+        return crate::legacy_authoring::write(&action, &route, source_body.as_ref());
     }
     if entry.exists() {
         drop(_lock);
@@ -331,7 +345,7 @@ mod tests {
             typed("-0.0").unwrap(),
             V::Float(FiniteFloat::new(-0.0).unwrap())
         );
-        let (parsed, files) = action(
+        let (parsed, files, _) = action(
             "add",
             &Options {
                 subject: "p.x".into(),
