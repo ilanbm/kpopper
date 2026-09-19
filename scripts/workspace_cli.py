@@ -14,6 +14,8 @@ except ImportError:
     import workspace as W
     import session_start as S
 
+CORE_OPEN_CHARS = 2000
+
 
 def _parser(command, description):
     parser = argparse.ArgumentParser(prog="kpop " + command, description=description)
@@ -34,6 +36,7 @@ def open_context(argv):
     parser.add_argument("files", nargs="*", help="explicit record files (uses the legacy reader)")
     parser.add_argument("--chars", type=int, help="character budget for an explicit legacy opening")
     parser.add_argument("--budget", type=int, help="item budget for an explicit legacy opening")
+    parser.add_argument('--host', choices=('claude', 'codex'), help=argparse.SUPPRESS)
     parser.add_argument('--profile', choices=('core/v1',),
                         help='explicit shared assessment profile; omitted keeps the legacy opening')
     args = parser.parse_args(argv)
@@ -76,8 +79,11 @@ def open_context(argv):
         except ImportError:
             import provenance as P
         if args.profile == 'core/v1' or P.core_reader_selected(files):
-            if args.chars is not None or args.budget is not None:
-                raise ValueError('core_profile_option_unsupported: --chars/--budget')
+            unsupported = [flag for flag, value in
+                           (('--chars', args.chars), ('--budget', args.budget), ('--host', args.host))
+                           if value is not None]
+            if unsupported:
+                raise ValueError('core_profile_option_unsupported: ' + ', '.join(unsupported))
             context_module = P._peer('reasoning.context')
             CaptureError, CapturedAssessment = context_module.CaptureError, context_module.CapturedAssessment
             try:
@@ -104,16 +110,31 @@ def open_context(argv):
                         findings_revision=context.findings_revision,
                         nodes=len(report['nodes']), history_subjects=len(report['history_subjects']),
                         attention=attention, followups_status='not_projected_for_core/v1')
-            lines = [str(title), 'core/v1 snapshot ' + context.snapshot_id,
+            lines = [str(title)[:300], 'core/v1 snapshot ' + context.snapshot_id,
                      'findings ' + context.findings_revision,
                      str(len(report['nodes'])) + ' computational nodes; '
                      + str(len(report['history_subjects'])) + ' history subjects']
-            lines += [('  ' + item['id'] + ': ' + ', '.join(item['reasons'])) for item in attention]
+            attention_lines = [('  ' + item['id'] + ': ' + ', '.join(item['reasons']))
+                               for item in attention]
             if not attention:
                 lines.append('  no attention selected by ' + report['attention_policy'])
-            lines.append('Use `kpop assess ID --profile core/v1 --history` for exact findings.')
+            footer = ['Use `kpop assess ID --profile core/v1 --history` for exact findings.']
             if data.get('mapping'):
-                lines.append('Mapping: ' + data['mapping']['mapping'])
+                footer.append(('Mapping: ' + data['mapping']['mapping'])[:300])
+            kept = []
+            for line in attention_lines:
+                omitted = len(attention_lines) - len(kept) - 1
+                suffix = ([f'  ... {omitted} more attention items omitted'] if omitted else []) + footer
+                if len('\n'.join([*lines, *kept, line, *suffix])) > CORE_OPEN_CHARS:
+                    break
+                kept.append(line)
+            omitted = len(attention_lines) - len(kept)
+            if omitted:
+                lines.extend(kept + [f'  ... {omitted} more attention items omitted'])
+                data['text_omitted_attention'] = omitted
+            else:
+                lines.extend(kept)
+            lines.extend(footer)
             return _emit(data, '\n'.join(lines), args.json)
         legacy = None
         if explicit:
@@ -126,7 +147,8 @@ def open_context(argv):
                     legacy += ["--" + flag, str(value)]
         record_path = Path(files[0]) if args.json and len(files) == 1 else None
         before_hash = hashlib.sha256(record_path.read_bytes()).hexdigest() if record_path else None
-        result, checked = S.read_view(location, legacy)
+        result, checked = (S.read_view(location, legacy) if args.host is None
+                           else S.read_view(location, legacy, host=args.host))
         if record_path:
             if hashlib.sha256(record_path.read_bytes()).hexdigest() != before_hash:
                 raise ValueError("record changed while opening it; retry")

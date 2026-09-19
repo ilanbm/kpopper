@@ -103,6 +103,22 @@ class NewRecordHistoryDefault(unittest.TestCase):
             capture_output=True, text=True)
         self.assertEqual(gate.returncode, 0, gate.stderr + gate.stdout)
 
+    def test_expected_history_refusal_is_a_clean_cli_error(self):
+        self.add_first()
+        refused = self.cli("add", "p.other", "v=2", "--profile", "ordinary-reader/v1")
+        self.assertNotEqual(refused.returncode, 0)
+        self.assertNotIn("Traceback", refused.stderr)
+        self.assertIn("history_profile_migration_required", refused.stderr)
+
+    def test_core_open_does_not_silently_drop_legacy_options(self):
+        self.add_first()
+        for option in (("--chars", "10"), ("--budget", "2"), ("--host", "codex")):
+            with self.subTest(option=option):
+                result = self.cli("open", *option)
+                self.assertNotEqual(result.returncode, 0)
+                self.assertIn("core_profile_option_unsupported: " + option[0],
+                              result.stderr + result.stdout)
+
     def test_existing_undeclared_legacy_name_stays_legacy(self):
         record = self.workspace / "PROVENANCE.yaml"
         record.write_text("known:\n  p.value: {v: 1}\n", encoding="utf-8")

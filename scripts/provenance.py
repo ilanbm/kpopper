@@ -1107,28 +1107,34 @@ def core_reader_selected(paths):
     """Route only explicitly declared core/history documents to captured readers."""
     mode = 'frozen' if _RAW_READS.get() else os.environ.get('KPOPPER_READ_MODE', 'live')
     selected = _peer('knowledge_views').write_paths(paths) if mode == 'live' else paths
-    for pattern in selected:
-        for path in sorted(glob.glob(pattern)) or [pattern]:
-            marker_path = layout(path)['history_authority']
-            if os.path.lexists(marker_path):
-                try:
-                    with io.open(marker_path, 'rb') as stream:
-                        marker_raw = stream.read()
-                    marker = _peer('history_contract').validate_authority(
-                        _peer('history_contract').decode_document(marker_raw))
-                except (OSError, ValueError):
-                    return True  # CapturedAssessment reports the exact authority failure.
-                if marker['authority'] == 'history':
-                    return True
-            if not os.path.isfile(path):
-                continue
+    initial = [path for pattern in selected for path in (sorted(glob.glob(pattern)) or [pattern])]
+    try:
+        closure = _files_of(selected)
+    except (OSError, ValueError, yaml.YAMLError):
+        closure = []  # Initial malformed entries still route by marker/declaration below.
+    for path in dict.fromkeys([*initial, *closure]):
+        marker_path = layout(path)['history_authority']
+        if os.path.lexists(marker_path):
             try:
-                document = parse(path) or {}
-            except (OSError, ValueError, yaml.YAMLError):
-                continue
-            meta = document.get('meta') if isinstance(document, dict) else None
-            if isinstance(meta, dict) and ('history' in meta or 'reasoning' in meta):
+                contract = _peer('history_contract')
+                with io.open(marker_path, 'rb') as stream:
+                    marker_raw = stream.read(contract.MAX_OBJECT_BYTES + 1)
+                if len(marker_raw) > contract.MAX_OBJECT_BYTES:
+                    return True  # CapturedAssessment reports the exact authority failure.
+                marker = contract.validate_authority(contract.decode_document(marker_raw))
+            except (OSError, ValueError):
+                return True  # CapturedAssessment reports the exact authority failure.
+            if marker['authority'] == 'history':
                 return True
+        if not os.path.isfile(path):
+            continue
+        try:
+            document = parse(path) or {}
+        except (OSError, ValueError, yaml.YAMLError):
+            continue
+        meta = document.get('meta') if isinstance(document, dict) else None
+        if isinstance(meta, dict) and ('history' in meta or 'reasoning' in meta):
+            return True
     return False
 
 
@@ -2082,6 +2088,12 @@ def _core_check_findings(paths, context):
                 failures.append(line)
             else:
                 notes.append(line + ' (declared prose)')
+        temporal = node.get('temporal')
+        if isinstance(temporal, dict):
+            if temporal.get('status') == 'counterexample' and falsifier['status'] != 'holds':
+                failures.append(nid + ': historical counterexample')
+            elif temporal.get('status') == 'unknown':
+                failures.append(nid + ': historical evidence unknown')
         if node['support']['status'] == 'reserved':
             states = sorted({item['state'] for item in node['support']['reservations']})
             notes.append(nid + ': support reserved (' + ', '.join(states) + ')')
@@ -5900,6 +5912,42 @@ def untouched(base, paths, turns, host=None, nudged_at=None, workspace=None):
             f"out of this session, {record} keeps it now; if nothing will be revisited, finish.")
 
 
+def _persist_nudge(state_path, turns):
+    try:
+        raw_state = json.loads(io.open(state_path, encoding='utf-8').read())
+        if isinstance(raw_state, dict):
+            raw_state['nudged'], raw_state['nudged_turn'] = True, turns
+            with io.open(state_path, 'w', encoding='utf-8') as stream:
+                json.dump(raw_state, stream)
+    except (OSError, ValueError):
+        pass
+
+
+def _core_gate_judgments(report):
+    """Retain immutable shape and exact v3 dependency readings for stop-gate comparison."""
+    judgments = {}
+    judgment_ids = {identifier for identifier, node in report['nodes'].items()
+                    if isinstance(node.get('body'), dict)
+                    and node.get('fields', {}).get('deps') in node['body']}
+    identity = _peer('pending_grounding').identity
+    for identifier, node in report['nodes'].items():
+        body, fields = node.get('body'), node.get('fields', {})
+        deps_field, predicate_field = fields.get('deps'), fields.get('predicate')
+        if not isinstance(body, dict) or deps_field not in body or predicate_field not in body:
+            continue
+        dependencies = node['state']['basis'].get('dependencies', {})
+        inputs = {dependency: identity(evidence.get('current'))
+                  for dependency, evidence in dependencies.items()
+                  if dependency not in judgment_ids and isinstance(evidence, dict)}
+        judgments[identifier] = {
+            'shape': identity({'body': body, 'fields': fields}),
+            'predicate': node['state']['falsifier'].get('status') == 'holds',
+            'arrangement': 'born' in body,
+            'inputs': inputs,
+        }
+    return judgments
+
+
 def mark(state_path, paths):
     """Written at session start: how many problems check finds, which intents no tab of the
     page serves, the ids the record holds, and the record and tree as the session found
@@ -5912,7 +5960,7 @@ def mark(state_path, paths):
                  'findings_revision': context.findings_revision,
                  'fails': len(fail), 'failures': fail, 'unserved': [],
                  'ids': sorted(set(report['nodes']) | set(report['history_subjects'])),
-                 'judgments': {}, 'nudged': False, **tree_state(paths)}
+                 'judgments': _core_gate_judgments(report), 'nudged': False, **tree_state(paths)}
         with io.open(state_path, 'w', encoding='utf-8') as f:
             json.dump(state, f)
         return 0
@@ -5960,8 +6008,20 @@ def gate(state_path, paths, turns=0, host=None, nudged_at=None, *, _recording_co
             return 2
         fail, _ = _core_check_findings(paths, context)
         previous = set(base['failures'] or []) if base['profile'] == 'core/v1' else set()
+        current_judgments = _core_gate_judgments(context.assessment)
+        allowed = {}
+        for name, old in base['judgments'].items():
+            current = current_judgments.get(name)
+            if not current or old.get('shape') != current['shape'] \
+                    or old.get('arrangement') or current['arrangement'] \
+                    or not isinstance(old.get('inputs'), dict) \
+                    or old.get('predicate') is True or current['predicate'] is not True:
+                continue
+            if any(dependency not in old['inputs'] or value != old['inputs'][dependency]
+                   for dependency, value in current['inputs'].items()):
+                allowed[name + ': falsifier holds'] = name
         out = []
-        added = [item for item in fail if item not in previous]
+        added = [item for item in fail if item not in previous and item not in allowed]
         if added:
             out.append(f"{paths[0]} fails core check with {len(fail)} problems "
                        f"({base['fails']} at session start).")
@@ -5971,8 +6031,8 @@ def gate(state_path, paths, turns=0, host=None, nudged_at=None, *, _recording_co
             new = sorted(now_ids - set(base['ids']))
             nodes = context.assessment['nodes']
             intents = {identifier for identifier, node in nodes.items()
-                       if isinstance(node.get('body'), dict) and
-                       (node['body'].get('asked') or node['body'].get('recorded_for'))}
+                       if identifier not in current_judgments and isinstance(node.get('body'), dict)
+                       and node['body'].get('asked')}
             attributed = {identifier for identifier, node in nodes.items()
                           if isinstance(node.get('body'), dict) and
                           (node['body'].get('from') in intents or
@@ -5985,8 +6045,13 @@ def gate(state_path, paths, turns=0, host=None, nudged_at=None, *, _recording_co
             nudge = untouched(base, paths, turns, host, nudged_at)
             if nudge:
                 out.append(nudge)
+                _persist_nudge(state_path, turns)
         for line in out:
             print(line)
+        if allowed:
+            print('Updated readings falsified unchanged judgments: ' +
+                  ', '.join(sorted(allowed.values())) +
+                  '. They remain flagged for review; check still reports their failed conditions.')
         return 2 if out else 0
     fail, _, _, _, _ = check_lines(paths)
     doc = load(paths)
@@ -6066,15 +6131,7 @@ def gate(state_path, paths, turns=0, host=None, nudged_at=None, *, _recording_co
         nudge = untouched(base, paths, turns, host, nudged_at)
         if nudge:
             out.append(nudge)
-            # once: the mark remembers that the question was asked, and at which prompt
-            try:
-                raw_state = json.loads(io.open(state_path, encoding="utf-8").read())
-                if isinstance(raw_state, dict):
-                    raw_state["nudged"], raw_state["nudged_turn"] = True, turns
-                    with io.open(state_path, "w", encoding="utf-8") as f:
-                        json.dump(raw_state, f)
-            except (OSError, ValueError):
-                pass
+            _persist_nudge(state_path, turns)
     for l in out:
         print(l)
     if allowed:
@@ -6267,6 +6324,15 @@ def write_command(cmd, rest):
     return code
 
 
+def write_command_cli(cmd, rest):
+    """Translate expected history contract refusals without hiding programming errors."""
+    try:
+        return write_command(cmd, rest)
+    except _peer('history_contract').HistoryError as error:
+        print(str(error), file=sys.stderr)
+        return 1
+
+
 HEAD_LINE = "# Kept with kpopper: read it with `kpop open`, write it with `kpop add`.\n"
 
 
@@ -6414,7 +6480,7 @@ if __name__ == "__main__":
         at = int(rest[rest.index("--nudged-at") + 1]) if "--nudged-at" in rest else None
         sys.exit(gate(rest[0], files, turns, host, at))
     if cmd in ("set", "add", "review"):
-        sys.exit(write_command(cmd, rest))
+        sys.exit(write_command_cli(cmd, rest))
     if cmd in ("same", "distinct"):
         sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
         import sameness
@@ -6450,6 +6516,9 @@ if __name__ == "__main__":
     files = [x for x in rest if x.lower().endswith((".yaml", ".yml"))] or default_paths()
     if cmd == "open":
         if profile or core_reader_selected(files):
+            unsupported = [flag for flag in ('--chars', '--budget', '--host') if flag in rest]
+            if unsupported:
+                sys.exit('core_profile_option_unsupported: ' + ', '.join(unsupported))
             args = ['--profile', 'core/v1', *files]
             if '--json' in rest:
                 args.insert(0, '--json')
