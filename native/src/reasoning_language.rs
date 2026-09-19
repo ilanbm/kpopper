@@ -684,3 +684,75 @@ fn parser_source(source: &str) -> Result<String> {
     }
     Ok(String::from_utf8(output).expect("whole scalars replaced with ASCII"))
 }
+
+/// Conservative conversion of implicitly authored text. Explicit expressions
+/// use `lower`; legacy ambiguity and coercion must not silently become typed.
+pub(crate) fn convert_authored(source: &str, predicate: bool) -> Result<J> {
+    let source = trim(source);
+    require(
+        source.chars().count() <= 4000,
+        "expression must be text within 4000 characters",
+    )?;
+    if !predicate {
+        let date = regex::Regex::new(r"^\d{4}-\d{2}-\d{2}$").unwrap();
+        require(
+            !date.is_match(source),
+            "date-like text is not implicitly arithmetic",
+        )?;
+    }
+    let ast = ast::Expr::parse(&parser_source(source)?, "<expression>")
+        .map_err(|_| err("invalid expression syntax"))?;
+    if predicate {
+        if let ast::Expr::Compare(c) = &ast
+            && c.comparators.len() == 1
+        {
+            match &c.comparators[0] {
+                ast::Expr::Name(n)
+                    if !["true", "false"].contains(&n.id.to_string().to_lowercase().as_str()) =>
+                {
+                    return Err(err(
+                        "ambiguous bare right operand; choose a ref or text explicitly",
+                    ));
+                }
+                ast::Expr::Constant(c) if matches!(&c.value, ast::Constant::Str(_)) => {
+                    if let ast::Constant::Str(v) = &c.value {
+                        let comparison=regex::Regex::new(r"^\s*([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z0-9_]+)+)\s*(<=|>=|==|!=|<|>)\s*(.+?)\s*$").unwrap();
+                        if let Some(c) = comparison.captures(source) {
+                            require(
+                                c[3].trim().trim_matches(['\"', '\'']) == v,
+                                "literal quoting changes the legacy reading; choose typed text explicitly",
+                            )?;
+                        }
+                        require(
+                            v.trim().replace(',', "").parse::<f64>().is_err(),
+                            "numeric-looking text has legacy coercion; choose explicit typed operands",
+                        )?;
+                    }
+                }
+                _ => {}
+            }
+        }
+        // Escapes in string literals require explicit review under the old reader.
+        fn escaped(source: &str, node: &ast::Expr) -> bool {
+            match node {
+                ast::Expr::Constant(c) if matches!(&c.value, ast::Constant::Str(_)) => {
+                    segment(source, node).is_ok_and(|s| s.contains('\\'))
+                }
+                ast::Expr::UnaryOp(n) => escaped(source, &n.operand),
+                ast::Expr::BinOp(n) => escaped(source, &n.left) || escaped(source, &n.right),
+                ast::Expr::Compare(n) => {
+                    escaped(source, &n.left) || n.comparators.iter().any(|n| escaped(source, n))
+                }
+                ast::Expr::Call(n) => n.args.iter().any(|n| escaped(source, n)),
+                _ => false,
+            }
+        }
+        require(
+            !escaped(source, &ast),
+            "legacy escaped literal needs explicit review",
+        )?;
+    }
+    let value = V::Map(Map::from([("expr".into(), V::Text(source.into()))]));
+    let legacy = legacy_expression(&value, predicate)?;
+    lower(&legacy)
+}

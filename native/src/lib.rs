@@ -21,6 +21,8 @@ pub mod history_yaml;
 pub mod identity;
 mod python_identifiers;
 pub mod reasoning_assessment;
+pub mod reasoning_authoring;
+mod reasoning_authoring_guards;
 pub mod reasoning_basis;
 pub mod reasoning_capabilities;
 pub mod reasoning_evaluate;

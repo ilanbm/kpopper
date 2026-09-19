@@ -859,6 +859,13 @@ sources:
     of: "2026-09-19 local macOS arm64 verification of Snapshot replay, scope grants, input identity
          and actual Lean evaluation envelopes"
     read: "2026-09-19"
+  s.native_writer_verification:
+    name: "Native writer conformance"
+    from: s.2026_09_19_native_snapshot_continuation
+    file: "native/tests/fixtures/reasoning-authoring.json"
+    at: "230 pinned Python writer scenarios; scalar identity corpus is
+         reasoning-authoring-identities.json beside this file"
+    read: "2026-09-19"
   s.query_candidate_report_2026_09_18:
     name: "Finite-query candidate verification packet"
     from: s.2026_09_18_continue_reasoning_core
@@ -1814,6 +1821,13 @@ known:
         exact source-file inventory digest."
     from: s.native_snapshot_verification
     at: "native/tests/reasoning_snapshot.rs; byte-only revision and stale revision cases"
+  p.native_writer_observation_boundary:
+    name: "Captured writer admission boundary"
+    v: "World computes through Lean and preserves structural, citation, identity and hypothesis
+        guards over an immutable snapshot. Prospective set requires a captured day; live source
+        capture, routing and history commit authorization remain separate integration work."
+    from: s.native_writer_verification
+    at: "native/src/reasoning_authoring.rs and native/src/reasoning_authoring_guards.rs"
   p.pointer_home:
     v: "<git common dir>/kpopper-record"
     name: "Where a record the tree cannot hold registers its path"
@@ -1898,6 +1912,11 @@ known:
     from: doc.host_compatibility
     at: "Scope before launch / initial pre-fix observation on baseline 5c2062b"
     of: "2026-09-17"
+  m.native_writer_conformance_cases:
+    name: "Writer conformance scenarios"
+    v: 230
+    from: s.native_writer_verification
+    at: "reasoning-authoring.json cases; computations use the packaged Lean runtime on macOS arm64"
   m.older_records_changed:
     v: 0
     name: "Records written before the field whose reading changed once the reader learned it"
