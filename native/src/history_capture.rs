@@ -70,6 +70,7 @@ pub struct Capture {
     pub layout: Layout,
     pub entry_bytes: Vec<u8>,
     pub document: V,
+    pub view_alternatives: Vec<crate::history_view::Alternative>,
     pub authority_bytes: Vec<u8>,
     pub marker: V,
     pub commits: Files,
@@ -320,6 +321,17 @@ pub fn capture(
     rules: Option<&Map>,
     ancestry: Option<&Ancestry<'_>>,
 ) -> Result<Capture> {
+    capture_options(entry, rules, ancestry, false)
+}
+pub fn capture_reconciliation(entry: &Path, allow_conflicts: bool) -> Result<Capture> {
+    capture_options(entry, None, None, allow_conflicts)
+}
+fn capture_options(
+    entry: &Path,
+    rules: Option<&Map>,
+    ancestry: Option<&Ancestry<'_>>,
+    allow_conflicts: bool,
+) -> Result<Capture> {
     let absolute = if entry.is_absolute() {
         entry.to_owned()
     } else {
@@ -341,7 +353,24 @@ pub fn capture(
         string_is(&map(&marker)?["authority"], "history"),
         "history_not_active",
     )?;
-    let document = history_yaml::decode_document(&entry_bytes)?;
+    let alternatives = if allow_conflicts {
+        crate::history_view::alternatives(&entry_bytes)?
+    } else {
+        vec![crate::history_view::Alternative {
+            name: "view".into(),
+            bytes: entry_bytes.clone(),
+            document: history_yaml::decode_document(&entry_bytes)?,
+        }]
+    };
+    let document = alternatives[0].document.clone();
+    for alternative in &alternatives {
+        let supplied = map(&alternative.document)?
+            .get("meta")
+            .and_then(|m| map(m).ok())
+            .and_then(|m| m.get("history"))
+            .ok_or_else(|| error("baseline_mismatch"))?;
+        A::bind_authority(&marker, supplied)?;
+    }
     let supplied = map(&document)?
         .get("meta")
         .and_then(|m| map(m).ok())
@@ -407,20 +436,24 @@ pub fn capture(
         Some(g) => (g.commits, g.objects, g.object_bytes),
         None => (Files::new(), Map::new(), ObjectBytes::new()),
     };
-    for (role, act) in [("heads", false), ("open_acts", true)] {
-        for (subject, versions) in map(&map(supplied)?[role])? {
-            let V::List(versions) = versions else {
-                unreachable!("baseline")
-            };
-            for version in versions {
-                let obj = objects
-                    .get(text(version)?)
-                    .ok_or_else(|| error("incomplete_view_baseline"))?;
-                let obj = map(obj)?;
-                require(
-                    string_is(&obj["subject"], subject) && string_is(&obj["kind"], "act") == act,
-                    "baseline_reference_mismatch",
-                )?;
+    for alternative in &alternatives {
+        let supplied = &map(&map(&alternative.document)?["meta"])?["history"];
+        for (role, act) in [("heads", false), ("open_acts", true)] {
+            for (subject, versions) in map(&map(supplied)?[role])? {
+                let V::List(versions) = versions else {
+                    unreachable!("baseline")
+                };
+                for version in versions {
+                    let obj = objects
+                        .get(text(version)?)
+                        .ok_or_else(|| error("incomplete_view_baseline"))?;
+                    let obj = map(obj)?;
+                    require(
+                        string_is(&obj["subject"], subject)
+                            && string_is(&obj["kind"], "act") == act,
+                        "baseline_reference_mismatch",
+                    )?;
+                }
             }
         }
     }
@@ -433,6 +466,7 @@ pub fn capture(
         layout,
         entry_bytes,
         document,
+        view_alternatives: alternatives,
         authority_bytes,
         marker,
         commits,

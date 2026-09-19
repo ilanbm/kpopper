@@ -768,6 +768,13 @@ sources:
     at: "PR #119 run 35285716254 attempt 1 and local forced-date and fixed-day test runs"
     of: "2026-09-18"
     read: "2026-09-18"
+  s.2026_09_19_native_transactions:
+    name: "Prepared native transactions and source-order compatibility"
+    asked: "Continue the approved kpopper Rust migration autonomously through verified completion,
+            preserving existing behavior and source evidence."
+    of: "Continuation task 01a0b716-7ef6-7ac0-91b9-05418f0ac055; retained and verified source-order
+         code provenance originally implemented at 0b6c99a, not the original measurement session."
+    read: "2026-09-19"
   s.background_ingestion:
     name: "Background capture and selective delivery contract"
     file: "skills/kpopper/INGESTION.md"
@@ -978,6 +985,7 @@ sources:
     read: "2026-09-14"
   doc.history_source_clock_order:
     name: "Source clock grouping and retained mapping order"
+    from: s.2026_09_19_native_transactions
     file: "scripts/versions.py"
     at: "_subject_entry lines 488-492 at b639cdbab1e3c624ad52708350166d222821aec1;
          native/src/history_reduce.rs lines 281-294 at 0b6c99a135e9ff36f3c26b4f5dbd55598ed69d5f"

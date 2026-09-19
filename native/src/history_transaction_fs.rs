@@ -198,7 +198,7 @@ pub fn target(root: &Path, relative: &str) -> Result<PathBuf> {
     }
     Ok(path)
 }
-fn read(path: &Path) -> Result<Option<Vec<u8>>> {
+pub(crate) fn read(path: &Path) -> Result<Option<Vec<u8>>> {
     let mut f = match File::open(path) {
         Ok(f) => f,
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(None),
@@ -225,7 +225,7 @@ fn remove(path: &Path) -> Result<()> {
         Err(e) => Err(e.into()),
     }
 }
-fn replace(path: &Path, bytes: Option<&[u8]>) -> Result<()> {
+pub(crate) fn replace(path: &Path, bytes: Option<&[u8]>) -> Result<()> {
     let Some(bytes) = bytes else {
         return remove(path);
     };

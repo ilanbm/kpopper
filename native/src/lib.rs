@@ -3,10 +3,14 @@
 pub mod history_authority;
 pub mod history_capture;
 pub mod history_contract;
+pub mod history_emit;
 pub mod history_paths;
+pub mod history_preparation;
 pub mod history_reduce;
+pub mod history_store;
 pub mod history_transaction;
 pub mod history_transaction_fs;
+pub mod history_view;
 pub mod history_yaml;
 pub mod identity;
 pub mod source_clock;

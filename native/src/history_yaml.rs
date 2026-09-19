@@ -171,7 +171,7 @@ fn scalar(text: &str, style: ScalarStyle, tag: Option<&str>) -> Result<Node> {
         _ => return Err(invalid()),
     }))
 }
-fn resolve(text: &str) -> &str {
+pub(crate) fn resolve(text: &str) -> &str {
     match text {
         "" | "~" | "null" | "Null" | "NULL" => "null",
         "yes" | "Yes" | "YES" | "no" | "No" | "NO" | "true" | "True" | "TRUE" | "false"
