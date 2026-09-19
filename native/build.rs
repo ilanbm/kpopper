@@ -30,6 +30,12 @@ fn walk(root: &Path, dir: &Path, out: &mut BTreeMap<String, String>) {
     }
 }
 fn main() {
+    let ordinary_source = "../scripts/session/lean/Main.lean";
+    println!("cargo:rerun-if-changed={ordinary_source}");
+    println!(
+        "cargo:rustc-env=KPOP_ORDINARY_SOURCE_SHA256={}",
+        hash(&fs::read(ordinary_source).unwrap())
+    );
     let root = Path::new("../scripts/reasoning/lean");
     println!("cargo:rerun-if-changed={}", root.display());
     let mut sources = BTreeMap::new();

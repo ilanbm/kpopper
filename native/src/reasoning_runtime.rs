@@ -250,6 +250,7 @@ fn hash_file(path: &Path) -> Result<String> {
 }
 #[derive(Debug)]
 pub struct Runtime {
+    ordinary: Option<crate::ordinary_runtime::Program>,
     pub root: PathBuf,
     pub binary: PathBuf,
     pub manifest: J,
@@ -258,6 +259,14 @@ pub struct Runtime {
     observed: BTreeMap<String, String>,
 }
 impl Runtime {
+    pub fn with_ordinary_program(mut self, mut program: crate::ordinary_runtime::Program) -> Self {
+        program.limit(&self.bounds);
+        self.ordinary = Some(program);
+        self
+    }
+    pub(crate) fn ordinary_program(&self) -> Option<&crate::ordinary_runtime::Program> {
+        self.ordinary.as_ref()
+    }
     pub fn open(archive: &Path, cache: &Path, bounds: OperationalBounds) -> Result<Self> {
         bounds.validate()?;
         let target = target_name()?;
@@ -351,6 +360,7 @@ impl Runtime {
         }
         let binary = root.join(manifest["executable"].as_str().unwrap());
         let mut runtime = Self {
+            ordinary: None,
             root,
             binary,
             manifest,

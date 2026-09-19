@@ -215,7 +215,16 @@ fn final_world(
     W::validate_declared(&before_doc)?;
     let (staged, raw_steps) = stage(&before_doc, actions)?;
     let staged = A::destination(&staged)?;
-    let normalization = World::new(&staged, None, runtime, OperationalBounds::default())?;
+    let normalization = if W::selected(&staged, None)? {
+        Some(World::new(
+            &staged,
+            None,
+            runtime,
+            OperationalBounds::default(),
+        )?)
+    } else {
+        None
+    };
     let mut normalized = vec![];
     let mut notes = vec![];
     for step in &raw_steps {
@@ -224,7 +233,12 @@ fn final_world(
             .into_iter()
             .map(|(id, (_, body))| (id, body))
             .collect();
-        let (action, observed) = normalization.normalize(&step.action, Some(&previous))?;
+        let (action, observed) = if let Some(normalization) = &normalization {
+            normalization.normalize(&step.action, Some(&previous))?
+        } else {
+            let mut reader = crate::history_authoring_reader::AuthoringReader::new(&doc, runtime)?;
+            reader.normalize(&step.action)?
+        };
         normalized.push(action);
         notes.push(observed);
     }
@@ -242,11 +256,12 @@ fn final_world(
     }
     require(profiles.len() <= 1, "incompatible_authored_profiles")?;
     let cap = F::capabilities(&doc, profiles.first().copied())?;
-    require(
-        string_is(&map(&cap)?["profile"], "core/v1"),
-        "ordinary_history_authoring_unsupported",
-    )?;
-    let mut final_world = World::new(&doc, None, runtime, OperationalBounds::default())?;
+    let mut final_world = crate::history_authoring_reader::AuthoringReader::new(&doc, runtime)?;
+    let mut effective_options = options.clone();
+    if !final_world.core() {
+        effective_options.receipt_version = 6;
+    }
+    let options = &effective_options;
     let mut witnesses = vec![];
     for step in &steps {
         let a = map(&step.action)?;
@@ -259,13 +274,13 @@ fn final_world(
             A::head(original, &step.subject)?;
         }
         let prior = admission_document(&doc, step)?;
-        let mut admission = World::batch_admission(
+        let mut admission = crate::history_authoring_reader::AuthoringReader::batch_admission(
             &doc,
             &prior,
             &step.subject,
             runtime,
-            OperationalBounds::default(),
         )?;
+        admission.for_action(&step.action)?;
         let refusals = admission.validate(&step.action)?;
         require(
             refusals.is_empty(),
@@ -307,9 +322,9 @@ fn final_world(
                     .insert(step.subject.clone(), step.body.clone());
             }
         }
-        final_world = World::new(&doc, None, runtime, OperationalBounds::default())?;
+        final_world = crate::history_authoring_reader::AuthoringReader::new(&doc, runtime)?;
     }
-    let mut after = A::evidence(&doc, &mut final_world, audit)?;
+    let mut after = final_world.evidence(&doc, audit, &Map::new())?;
     let mut by_subject = BTreeMap::<String, Vec<usize>>::new();
     let mut producing = BTreeSet::new();
     for step in &steps {
@@ -351,7 +366,7 @@ fn final_world(
                     .unwrap_or(&[])
                 {
                     let name = text(dep)?;
-                    if !(options.receipt_version == 8
+                    if !((options.receipt_version == 8 || !final_world.core())
                         && blocked
                         && !original_states.contains_key(name)
                         && !producing.contains(name))
@@ -447,7 +462,7 @@ fn final_world(
                         obj([
                             ("collection", s(&step.collection)),
                             ("fields", V::Map(fields.clone())),
-                            ("profile", s("core/v1")),
+                            ("profile", map(&cap)?["profile"].clone()),
                         ])
                     };
                     let claim = A::make_object(
@@ -510,14 +525,10 @@ fn final_world(
     selected.extend(objects.clone());
     validate_closure(&selected)?;
     let files = evidence_files(options)?;
-    A::attach_temporal_replay(&mut after, &doc, &final_world, &versions)?;
-    let mut before_world = World::new(&before_doc, None, runtime, OperationalBounds::default())?;
-    let mut before = A::evidence_with_versions(
-        &before_doc,
-        &mut before_world,
-        audit,
-        &A::accepted_versions(original)?,
-    )?;
+    final_world.attach_temporal(&mut after, &doc, &versions)?;
+    let mut before_world =
+        crate::history_authoring_reader::AuthoringReader::new(&before_doc, runtime)?;
+    let mut before = before_world.evidence(&before_doc, audit, &A::accepted_versions(original)?)?;
     map_mut(&mut before)?.insert(
         "authoring".into(),
         intent(original, actions, options, &frozen, true),
@@ -534,7 +545,7 @@ fn final_world(
             ("final_dependency_pins", V::Bool(true)),
         ]),
     );
-    let receipt = T::semantic_receipt("core/v1", &cap, &before, &after)?;
+    let receipt = T::semantic_receipt(text(&map(&cap)?["profile"])?, &cap, &before, &after)?;
     let mutation = P::prepare_commit_with_files(
         original,
         &op.operation,

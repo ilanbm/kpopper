@@ -15,7 +15,7 @@ use crate::{
     identity::{sha256, typed_object_identity},
     reasoning_authoring::{self as Authoring, World},
     reasoning_fields as F,
-    reasoning_runtime::{OperationalBounds, Runtime},
+    reasoning_runtime::Runtime,
     reasoning_snapshot::entries,
     require,
     value::{Integer, TypedValue as V},
@@ -89,6 +89,9 @@ pub(crate) fn document(capture: &Capture) -> Result<V> {
     Ok(doc)
 }
 pub(crate) fn destination(document: &V) -> Result<V> {
+    if !Authoring::selected(document, None)? {
+        return Ok(document.clone());
+    }
     let cap = F::capabilities(document, None)?;
     let desired = Authoring::declaration(document)?;
     let have = list(&map(&cap)?["requires"])?;
@@ -304,7 +307,9 @@ pub(crate) fn template(capture: &Capture, doc: &V) -> Result<V> {
     if let Some(updated) = meta.get("updated") {
         target.insert("updated".into(), updated.clone());
     }
-    target.insert("reasoning".into(), meta["reasoning"].clone());
+    if let Some(reasoning) = meta.get("reasoning") {
+        target.insert("reasoning".into(), reasoning.clone());
+    }
     Ok(template)
 }
 pub(crate) fn candidate(capture: &Capture, mutation: &PreparedMutation) -> Result<Capture> {
@@ -414,10 +419,7 @@ pub(crate) fn prepare_inner(
     }
     require(profiles.len() <= 1, "incompatible_authored_profiles")?;
     let cap = F::capabilities(&before_doc, profiles.first().copied())?;
-    require(
-        string_is(&map(&cap)?["profile"], "core/v1"),
-        "ordinary_history_authoring_unsupported",
-    )?;
+
     require(
         map(&action)?
             .get("profile")
@@ -425,8 +427,9 @@ pub(crate) fn prepare_inner(
         "history_profile_migration_required",
     )?;
     Authoring::validate_declared(&before_doc)?;
-    let mut before_world = World::new(&before_doc, None, runtime, OperationalBounds::default())?;
-    let (action, notes) = before_world.normalize(&action, None)?;
+    let mut before_world =
+        crate::history_authoring_reader::AuthoringReader::new(&before_doc, runtime)?;
+    let (action, notes) = before_world.normalize(&action)?;
     let refusals = before_world.validate(&action)?;
     require(
         refusals.is_empty(),
@@ -490,8 +493,8 @@ pub(crate) fn prepare_inner(
             options,
         )?);
     } else {
-        let candidate_world = before_world.candidate(&action)?;
-        let mut body = entries(candidate_world.document())?
+        let candidate_doc = before_world.candidate_document(&action)?;
+        let mut body = entries(&candidate_doc)?
             .get(subject)
             .ok_or_else(|| error("unresolved_history_subject"))?
             .1
@@ -499,15 +502,24 @@ pub(crate) fn prepare_inner(
         let collection = if let Some(old) = old {
             text(&map(&map(old)?["authored"])?["collection"])?.to_owned()
         } else {
-            entries(candidate_world.document())?[subject].0.clone()
+            entries(&candidate_doc)?[subject].0.clone()
         };
         let authored = if kind == "set" {
             map(old.ok_or_else(|| error("unresolved_history_subject"))?)?["authored"].clone()
         } else {
             obj([
                 ("collection", s(&collection)),
-                ("fields", V::Map(fields.clone())),
-                ("profile", s("core/v1")),
+                (
+                    "fields",
+                    V::Map(
+                        fields
+                            .iter()
+                            .filter(|(_, v)| truth(v))
+                            .map(|(k, v)| (k.clone(), v.clone()))
+                            .collect(),
+                    ),
+                ),
+                ("profile", map(&cap)?["profile"].clone()),
             ])
         };
         let judgment = map(&body).is_ok_and(|m| m.contains_key(deps_field));
@@ -520,9 +532,13 @@ pub(crate) fn prepare_inner(
             .to_vec();
         version = options
             .receipt_version
-            .unwrap_or(if judgment { 7 } else { 1 });
+            .unwrap_or(if judgment && before_world.core() {
+                7
+            } else {
+                1
+            });
         require([1, 7].contains(&version), "invalid_authoring_receipt")?;
-        if judgment && version == 7 {
+        if judgment && version == 7 && before_world.core() {
             let mut seen = Map::new();
             for dep in &deps {
                 let name = text(dep)?;
@@ -535,7 +551,9 @@ pub(crate) fn prepare_inner(
         let (pins, gaps) = pins(
             capture,
             &deps,
-            judgment && version == 7 && !Authoring::blocked_text(&body).is_empty(),
+            judgment
+                && (version == 7 || !before_world.core())
+                && !Authoring::blocked_text(&body).is_empty(),
         )?;
         let claim = make_object(
             subject,
@@ -585,7 +603,7 @@ pub(crate) fn prepare_inner(
         }
     }
     doc = destination(&doc)?;
-    let cap = F::capabilities(&doc, Some("core/v1"))?;
+    let cap = F::capabilities(&doc, Some(text(&map(&cap)?["profile"])?))?;
     let meta = map_mut(
         map_mut(&mut doc)?
             .get_mut("meta")
@@ -595,14 +613,13 @@ pub(crate) fn prepare_inner(
         meta.insert("updated".into(), a["as_of"].clone());
     }
     let template = template(capture, &doc)?;
-    let mut after_world = World::new(&doc, None, runtime, OperationalBounds::default())?;
+    let mut after_world = crate::history_authoring_reader::AuthoringReader::new(&doc, runtime)?;
     let before_versions = accepted_versions(capture)?;
     let mut after_versions = before_versions.clone();
     if kind != "review" {
         after_versions.insert(subject.into(), map(&new[0])?["id"].clone());
     }
-    let mut before =
-        evidence_with_versions(&before_doc, &mut before_world, audit, &before_versions)?;
+    let mut before = before_world.evidence(&before_doc, audit, &before_versions)?;
     map_mut(&mut before)?.insert(
         "authoring".into(),
         obj([
@@ -614,7 +631,7 @@ pub(crate) fn prepare_inner(
             ("baseline", capture.baseline.clone()),
         ]),
     );
-    let mut after = evidence_with_versions(&doc, &mut after_world, audit, &after_versions)?;
+    let mut after = after_world.evidence(&doc, audit, &after_versions)?;
     let ids = new
         .iter()
         .map(|o| text(&map(o)?["id"]).map(str::to_owned))
@@ -623,7 +640,7 @@ pub(crate) fn prepare_inner(
         "authoring".into(),
         obj([("objects", strings(ids)), ("notes", strings(notes))]),
     );
-    let receipt = T::semantic_receipt("core/v1", &cap, &before, &after)?;
+    let receipt = T::semantic_receipt(text(&map(&cap)?["profile"])?, &cap, &before, &after)?;
     let mutation = Preparation::prepare_commit(
         capture,
         &options.operation,
@@ -719,10 +736,7 @@ fn prepare_act_inner(
     }
     let profile = text(field(map(field(map(target)?, "authored")?)?, "profile")?)?;
     let cap = F::capabilities(&before_doc, Some(profile))?;
-    require(
-        string_is(&map(&cap)?["profile"], "core/v1"),
-        "ordinary_history_authoring_unsupported",
-    )?;
+
     let body = obj([
         ("act", s(kind)),
         ("of", s(target_id)),
@@ -764,14 +778,11 @@ fn prepare_act_inner(
     let projected = candidate(capture, &draft)?;
     let after_doc = document(&projected)?;
     let cap = F::capabilities(&after_doc, Some(profile))?;
-    let mut before_world = World::new(&before_doc, None, runtime, OperationalBounds::default())?;
-    let mut after_world = World::new(&after_doc, None, runtime, OperationalBounds::default())?;
-    let mut before = evidence_with_versions(
-        &before_doc,
-        &mut before_world,
-        audit,
-        &accepted_versions(capture)?,
-    )?;
+    let mut before_world =
+        crate::history_authoring_reader::AuthoringReader::new(&before_doc, runtime)?;
+    let mut after_world =
+        crate::history_authoring_reader::AuthoringReader::new(&after_doc, runtime)?;
+    let mut before = before_world.evidence(&before_doc, audit, &accepted_versions(capture)?)?;
     map_mut(&mut before)?.insert(
         "authoring".into(),
         obj([
@@ -784,12 +795,7 @@ fn prepare_act_inner(
             ("baseline", capture.baseline.clone()),
         ]),
     );
-    let mut after = evidence_with_versions(
-        &after_doc,
-        &mut after_world,
-        audit,
-        &accepted_versions(&projected)?,
-    )?;
+    let mut after = after_world.evidence(&after_doc, audit, &accepted_versions(&projected)?)?;
     map_mut(&mut after)?.insert(
         "authoring".into(),
         obj([
@@ -857,7 +863,7 @@ pub(crate) fn prepare_proposal_inner(
     )?;
     require(!proposal.because.trim().is_empty(), "act_reason_required")?;
     require(options.strict, "strict_history_capability_required")?;
-    let version = options.receipt_version.unwrap_or(9);
+    let mut version = options.receipt_version.unwrap_or(9);
     require([5, 9].contains(&version), "invalid_authoring_receipt")?;
     guards(store, capture, options)?;
     let frozen_archive = archive(store)?;
@@ -879,10 +885,10 @@ pub(crate) fn prepare_proposal_inner(
         })
         .transpose()?;
     let cap = F::capabilities(&doc, profile)?;
-    require(
-        string_is(&map(&cap)?["profile"], "core/v1"),
-        "ordinary_history_authoring_unsupported",
-    )?;
+
+    if !string_is(&map(&cap)?["profile"], "core/v1") {
+        version = 5;
+    }
     let deps_field = text(&fields["deps"])?;
     let snapshot_field = text(&fields["snapshot"])?;
     let mut body = proposal.body.clone();
@@ -905,8 +911,17 @@ pub(crate) fn prepare_proposal_inner(
     )?;
     let mut authored = obj([
         ("collection", s(collection)),
-        ("fields", V::Map(fields.clone())),
-        ("profile", s("core/v1")),
+        (
+            "fields",
+            V::Map(
+                fields
+                    .iter()
+                    .filter(|(_, v)| truth(v))
+                    .map(|(k, v)| (k.clone(), v.clone()))
+                    .collect(),
+            ),
+        ),
+        ("profile", map(&cap)?["profile"].clone()),
     ]);
     if let Some(hypothesis) = &proposal.hypothesis {
         map_mut(&mut authored)?.insert("hypothesis".into(), hypothesis.clone());
@@ -923,7 +938,7 @@ pub(crate) fn prepare_proposal_inner(
     .insert(subject.into(), body.clone());
     hypothetical = destination(&hypothetical)?;
     let mut hypothetical_world =
-        World::new(&hypothetical, None, runtime, OperationalBounds::default())?;
+        crate::history_authoring_reader::AuthoringReader::new(&hypothetical, runtime)?;
     if version == 9 && judgment {
         let mut seen = Map::new();
         for dep in &deps {
@@ -936,7 +951,7 @@ pub(crate) fn prepare_proposal_inner(
         map_mut(map_mut(&mut hypothetical)?.get_mut(collection).unwrap())?
             .insert(subject.into(), body.clone());
         hypothetical_world =
-            World::new(&hypothetical, None, runtime, OperationalBounds::default())?;
+            crate::history_authoring_reader::AuthoringReader::new(&hypothetical, runtime)?;
     }
     let saw = saw(capture, subject)?;
     let (pins, _) = pins(capture, &deps, false)?;
@@ -976,8 +991,8 @@ pub(crate) fn prepare_proposal_inner(
     }
     validate_closure(&selected)?;
     let versions = accepted_versions(capture)?;
-    let mut before_world = World::new(&doc, None, runtime, OperationalBounds::default())?;
-    let mut before = evidence_with_versions(&doc, &mut before_world, audit, &versions)?;
+    let mut before_world = crate::history_authoring_reader::AuthoringReader::new(&doc, runtime)?;
+    let mut before = before_world.evidence(&doc, audit, &versions)?;
     map_mut(&mut before)?.insert(
         "authoring".into(),
         obj([
@@ -994,11 +1009,11 @@ pub(crate) fn prepare_proposal_inner(
             ("baseline", capture.baseline.clone()),
         ]),
     );
-    let mut after_world = World::new(&doc, None, runtime, OperationalBounds::default())?;
-    let mut after = evidence_with_versions(&doc, &mut after_world, audit, &versions)?;
+    let mut after_world = crate::history_authoring_reader::AuthoringReader::new(&doc, runtime)?;
+    let mut after = after_world.evidence(&doc, audit, &versions)?;
     map_mut(&mut after)?.insert(
         "proposal".into(),
-        evidence_with_versions(&hypothetical, &mut hypothetical_world, audit, &versions)?,
+        hypothetical_world.evidence(&hypothetical, audit, &versions)?,
     );
     let ids = new
         .iter()
@@ -1012,7 +1027,7 @@ pub(crate) fn prepare_proposal_inner(
             ("proposal", claim_id),
         ]),
     );
-    let receipt = T::semantic_receipt("core/v1", &cap, &before, &after)?;
+    let receipt = T::semantic_receipt(text(&map(&cap)?["profile"])?, &cap, &before, &after)?;
     let mut template = template(capture, &doc)?;
     map_mut(&mut template)?
         .entry(collection.into())
@@ -1242,10 +1257,17 @@ pub fn commit(
 mod temporal_tests;
 
 #[cfg(test)]
-mod tests {
+pub(crate) mod tests {
     use super::*;
+    mod ordinary {
+        include!(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/tests/support/ordinary_authoring.rs"
+        ));
+    }
+    use crate::reasoning_runtime::OperationalBounds;
     use serde_json::Value as J;
-    pub(super) fn runtime(cache: &std::path::Path) -> Runtime {
+    pub(crate) fn runtime(cache: &std::path::Path) -> Runtime {
         let archive = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
             .join("../scripts/reasoning/native")
             .join(format!(

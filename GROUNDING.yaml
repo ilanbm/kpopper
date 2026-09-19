@@ -968,6 +968,15 @@ sources:
     at: "b1b6019; native/tests/fixtures/history-hypothesis.json, history-hypothesis-candidate.json
          and history-hypothesis-retained.json"
     from: s.2026_09_19_native_hypothesis_edit_continuation
+  s.native_ordinary_authoring:
+    name: "Ordinary native reader and immutable authoring conformance"
+    read: "2026-09-19"
+    file: "native/tests/fixtures/ordinary-authoring.json"
+    at: "task 01a0b8c8-d7ed-7763-b52e-7b5ecafead65; final Python 1.7 oracle 5acfd0f; ordinary
+         reader, counts, direct acts proposals and batches; macOS arm64"
+    scope: "Native ordinary profile retains legacy comparisons and the verified ordinary Lean
+            program; no core assessment or profile promotion is fabricated; public activation and
+            supported-platform distribution remain pending"
   s.native_project_routing:
     name: "Native project policy and record routing evidence"
     from: s.2026_09_19_native_identity_continuation
@@ -2238,6 +2247,12 @@ known:
     name: "Native live comparison field-role cases"
     v: 113
     from: s.native_live_capture
+  m.native_ordinary_tests:
+    name: "Full native regression gate with ordinary authoring"
+    v: 191
+    from: s.native_ordinary_authoring
+    at: "R3-ordinary-full-tests.txt; full native suite, zero failures; final source fingerprint;
+         macOS arm64"
   m.native_scenario_watch_tests:
     name: "Full native regression gate after temporal authoring and scenarios"
     v: 185

@@ -14,6 +14,61 @@ use std::{
     collections::{BTreeMap, BTreeSet},
     sync::LazyLock,
 };
+
+pub(crate) trait Admission {
+    fn fields(&self) -> &Map;
+    fn raw(&self) -> &BTreeMap<String, V>;
+    fn role(&self, name: &str) -> &str {
+        self.fields()
+            .get(name)
+            .and_then(|v| text(v).ok())
+            .unwrap_or("")
+    }
+    fn document(&self) -> &V;
+    fn hypotheses(&self) -> Result<&Map>;
+    fn as_of(&self) -> Option<&V>;
+    fn core(&self) -> bool;
+    fn same(&self, a: &V, b: &V) -> Result<bool> {
+        crate::reasoning_authoring::same(a, b)
+    }
+    fn value(&mut self, id: &str) -> Result<V>;
+    fn result(&mut self, id: &str) -> Result<J>;
+    fn same_value(&mut self, id: &str, candidate: &V) -> Result<bool>;
+    fn standing_predicate(&self, id: &str, expression: &V) -> Result<Option<bool>>;
+}
+impl Admission for World<'_> {
+    fn fields(&self) -> &Map {
+        self.fields()
+    }
+    fn raw(&self) -> &BTreeMap<String, V> {
+        self.raw()
+    }
+    fn document(&self) -> &V {
+        self.document()
+    }
+    fn hypotheses(&self) -> Result<&Map> {
+        map(&map(self.snapshot.data())?["hypotheses"])
+    }
+    fn as_of(&self) -> Option<&V> {
+        map(self.snapshot.data()).ok()?.get("as_of")
+    }
+    fn core(&self) -> bool {
+        true
+    }
+    fn value(&mut self, id: &str) -> Result<V> {
+        self.value(id)
+    }
+    fn result(&mut self, id: &str) -> Result<J> {
+        self.result(id)
+    }
+    fn same_value(&mut self, id: &str, candidate: &V) -> Result<bool> {
+        self.same_value(id, candidate)
+    }
+    fn standing_predicate(&self, id: &str, expression: &V) -> Result<Option<bool>> {
+        self.standing_predicate(id, expression)
+    }
+}
+
 static ID: LazyLock<regex::Regex> =
     LazyLock::new(|| regex::Regex::new(r"^[A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z0-9_]+)*$").unwrap());
 static REFS: LazyLock<regex::Regex> = LazyLock::new(|| {
@@ -53,12 +108,12 @@ fn shaped(body: &V, deps: &str) -> bool {
         |v| matches!(v,V::List(a) if !a.is_empty()&&a.iter().all(|v|matches!(v,V::Text(_)))),
     )
 }
-fn judgment(world: &World<'_>, id: &str) -> bool {
+fn judgment(world: &impl Admission, id: &str) -> bool {
     world
-        .raw
+        .raw()
         .get(id)
         .and_then(|v| map(v).ok())
-        .is_some_and(|m| m.contains_key(text(&world.fields["deps"]).unwrap()))
+        .is_some_and(|m| m.contains_key(world.role("deps")))
 }
 fn source(body: &V) -> bool {
     map(body).is_ok_and(|m| {
@@ -68,22 +123,22 @@ fn source(body: &V) -> bool {
                 .any(|k| m.contains_key(*k))
     })
 }
-fn asked(world: &World<'_>, id: &str) -> bool {
+fn asked(world: &impl Admission, id: &str) -> bool {
     world
-        .raw
+        .raw()
         .get(id)
         .and_then(|v| map(v).ok())
         .and_then(|m| m.get("asked"))
         .is_some_and(truth)
 }
-fn arrangement(world: &World<'_>, body: &V) -> bool {
-    let dep = text(&world.fields["deps"]).unwrap();
+pub(crate) fn arrangement(world: &impl Admission, body: &V) -> bool {
+    let dep = world.role("deps");
     if !shaped(body, dep) {
         return false;
     }
     let m = map(body).unwrap();
     let deps = names(&m[dep]);
-    let pred = get(m, text(&world.fields["predicate"]).unwrap());
+    let pred = get(m, world.role("predicate"));
     let rs = if let V::Text(v) = pred {
         DOTTED.find_iter(v).map(|m| m.as_str().into()).collect()
     } else {
@@ -92,9 +147,9 @@ fn arrangement(world: &World<'_>, body: &V) -> bool {
     deps.iter().any(|d| asked(world, d))
         && (deps.iter().any(|d| builtin(d)) || rs.iter().any(|r| builtin(r)))
 }
-fn layers(world: &World<'_>) -> Result<BTreeMap<String, BTreeMap<String, V>>> {
+fn layers(world: &impl Admission) -> Result<BTreeMap<String, BTreeMap<String, V>>> {
     let mut result = BTreeMap::new();
-    for (name, h) in map(&map(world.snapshot.data())?["hypotheses"])? {
+    for (name, h) in world.hypotheses()? {
         let h = map(h)?;
         if h.get("error").is_some_and(truth) {
             continue;
@@ -117,12 +172,12 @@ fn held_by(layers: &BTreeMap<String, BTreeMap<String, V>>, id: &str) -> Vec<Stri
         .collect()
 }
 pub(crate) fn collection_for(
-    world: &World<'_>,
+    world: &impl Admission,
     id: &str,
     body: &V,
     explicit: Option<&str>,
 ) -> Result<String> {
-    collection_for_document(&world.document, &world.fields, id, body, explicit)
+    collection_for_document(world.document(), world.fields(), id, body, explicit)
 }
 pub(crate) fn collection_for_document(
     document: &V,
@@ -218,16 +273,16 @@ pub(crate) fn collection_for_document(
     .unwrap_or_else(|| "known".into()))
 }
 fn scalar_type(
-    world: &World<'_>,
+    world: &impl Admission,
     tree: &J,
     visiting: &mut BTreeSet<String>,
 ) -> Result<Option<&'static str>> {
     if let Some(id) = tree.get("ref").and_then(J::as_str) {
-        if visiting.contains(id) || !world.raw.contains_key(id) {
+        if visiting.contains(id) || !world.raw().contains_key(id) {
             return Ok(None);
         }
         visiting.insert(id.into());
-        let body = &world.raw[id];
+        let body = &world.raw()[id];
         let r = if let Ok(m) = map(body) {
             if let Some(rule @ V::Map(_)) = m.get("rule") {
                 scalar_type(world, &L::lower(rule)?, visiting)?
@@ -270,7 +325,7 @@ fn raw_type(v: &V) -> Option<&'static str> {
     }
 }
 pub(crate) fn normalize(
-    world: &World<'_>,
+    world: &impl Admission,
     action: &V,
     previous: Option<&BTreeMap<String, V>>,
 ) -> Result<(V, Vec<String>)> {
@@ -282,9 +337,9 @@ pub(crate) fn normalize(
         return Ok((action.clone(), vec![]));
     };
     let id = text(field(a, "id")?)?;
-    let predicate = body.contains_key(text(&world.fields["deps"])?);
+    let predicate = body.contains_key(world.role("deps"));
     let field = if predicate {
-        text(&world.fields["predicate"])?
+        world.role("predicate")
     } else {
         "rule"
     };
@@ -292,7 +347,7 @@ pub(crate) fn normalize(
         return Ok((action.clone(), vec![]));
     };
     if previous
-        .unwrap_or(&world.raw)
+        .unwrap_or(world.raw())
         .get(id)
         .and_then(|v| map(v).ok())
         .and_then(|m| m.get(field))
@@ -324,7 +379,7 @@ pub(crate) fn normalize(
     };
     let refs = L::references(&tree);
     World::check_builtin(&refs)?;
-    if !predicate && refs.iter().any(|r| !world.raw.contains_key(r) && r != id) {
+    if !predicate && refs.iter().any(|r| !world.raw().contains_key(r) && r != id) {
         return keep(
             "unknown or ambiguous reference; use rule={expr: \"...\"} for an intended calculation"
                 .into(),
@@ -381,7 +436,7 @@ fn day(v: &V) -> Option<String> {
     let d = t.trim_start().get(..10)?;
     crate::value::Date::new(d).ok().map(|_| d.into())
 }
-pub(crate) fn read_on(body: &V, world: &World<'_>) -> Option<String> {
+pub(crate) fn read_on(body: &V, world: &impl Admission) -> Option<String> {
     let m = map(body).ok()?;
     for k in ["of", "read"] {
         if let Some(d) = m.get(k).and_then(day) {
@@ -391,7 +446,7 @@ pub(crate) fn read_on(body: &V, world: &World<'_>) -> Option<String> {
     let src = m
         .get("from")
         .and_then(|v| text(v).ok())
-        .and_then(|s| world.raw.get(s))
+        .and_then(|s| world.raw().get(s))
         .and_then(|v| map(v).ok())?;
     for k in ["read", "of"] {
         if let Some(d) = src.get(k).and_then(day) {
@@ -400,15 +455,10 @@ pub(crate) fn read_on(body: &V, world: &World<'_>) -> Option<String> {
     }
     None
 }
-fn clock_day(world: &World<'_>, a: &Map) -> Result<String> {
+fn clock_day(world: &impl Admission, a: &Map) -> Result<String> {
     a.get("as_of")
         .and_then(day)
-        .or_else(|| {
-            map(world.snapshot.data())
-                .ok()
-                .and_then(|m| m.get("as_of"))
-                .and_then(day)
-        })
+        .or_else(|| world.as_of().and_then(day))
         .ok_or_else(|| Error("write requires an explicitly captured day".into()))
 }
 struct Disagreement {
@@ -419,15 +469,15 @@ struct Disagreement {
     why: String,
     when: Option<String>,
 }
-fn disagreement(world: &mut World<'_>, a: &Map) -> Result<Option<Disagreement>> {
+fn disagreement(world: &mut impl Admission, a: &Map) -> Result<Option<Disagreement>> {
     let id = text(field(a, "id")?)?;
-    let Some(body) = world.raw.get(id).cloned() else {
+    let Some(body) = world.raw().get(id).cloned() else {
         return Ok(None);
     };
     let kind = text(field(a, "kind")?)?;
     let new_body = get(a, "body");
     if judgment(world, id) {
-        if kind != "add" || !shaped(new_body, text(&world.fields["deps"])?) {
+        if kind != "add" || !shaped(new_body, world.role("deps")) {
             return Ok(None);
         }
         let old = map(&body)?
@@ -439,9 +489,9 @@ fn disagreement(world: &mut World<'_>, a: &Map) -> Result<Option<Disagreement>> 
         let (Some(old), Some(new)) = (old, new) else {
             return Ok(None);
         };
-        let same = crate::reasoning_authoring::same(old, new)?;
+        let same = world.same(old, new)?;
         let kind = if same {
-            let snapshot = text(&world.fields["snapshot"])?;
+            let snapshot = world.role("snapshot");
             let clean = |v: &V| {
                 map(v)
                     .unwrap()
@@ -463,9 +513,7 @@ fn disagreement(world: &mut World<'_>, a: &Map) -> Result<Option<Disagreement>> 
         } else {
             "verdict"
         };
-        let pred = map(&body)?
-            .get(text(&world.fields["predicate"])?)
-            .unwrap_or(&V::Null);
+        let pred = map(&body)?.get(world.role("predicate")).unwrap_or(&V::Null);
         let may = world.standing_predicate(id, pred)? == Some(true);
         let why = if may {
             format!("its wrong_if holds ({})", short(pred, 60))
@@ -485,7 +533,9 @@ fn disagreement(world: &mut World<'_>, a: &Map) -> Result<Option<Disagreement>> 
         return Ok(None);
     }
     let old = world.value(id)?;
-    if old == V::Null && world.result(id)?["status"] != "ok" {
+    if old == V::Null && world.result(id)?["status"] != "ok"
+        || !world.core() && matches!(old, V::Map(_) | V::List(_))
+    {
         return Ok(None);
     }
     let new = if kind == "set" {
@@ -494,9 +544,16 @@ fn disagreement(world: &mut World<'_>, a: &Map) -> Result<Option<Disagreement>> 
         let Ok(m) = map(new_body) else {
             return Ok(None);
         };
-        let Some(v) = m.get("v").or_else(|| m.get("quoted")) else {
+        let Some(v) = m
+            .get("v")
+            .filter(|v| world.core() || **v != V::Null)
+            .or_else(|| m.get("quoted"))
+        else {
             return Ok(None);
         };
+        if !world.core() && matches!(v, V::Null | V::List(_) | V::Map(_)) {
+            return Ok(None);
+        }
         v
     };
     if world.same_value(id, new)? {
@@ -590,7 +647,7 @@ fn command(a: &Map, name: &str) -> String {
         .collect::<Vec<_>>()
         .join(" ")
 }
-fn hypothesis(world: &World<'_>, id: &str, claim: &V) -> Result<String> {
+fn hypothesis(world: &impl Admission, id: &str, claim: &V) -> Result<String> {
     let normalized = crate::reasoning_authoring::claim_key(claim)?;
     let base = format!(
         "{}_{}",
@@ -603,7 +660,7 @@ fn hypothesis(world: &World<'_>, id: &str, claim: &V) -> Result<String> {
             .collect::<String>(),
         &crate::identity::sha256(normalized.as_bytes())[..6]
     );
-    let hypotheses = map(&map(world.snapshot.data())?["hypotheses"])?;
+    let hypotheses = world.hypotheses()?;
     let mut name = base.clone();
     let mut suffix = 1;
     while let Some(h) = hypotheses.get(&name) {
@@ -637,19 +694,19 @@ fn hypothesis(world: &World<'_>, id: &str, claim: &V) -> Result<String> {
     }
     Ok(name)
 }
-pub(crate) fn validate(world: &mut World<'_>, action: &V) -> Result<Vec<String>> {
+pub(crate) fn validate(world: &mut impl Admission, action: &V) -> Result<Vec<String>> {
     let a = map(action)?;
     let id = text(field(a, "id")?)?;
     let kind = text(field(a, "kind")?)?;
     let empty = Map::new();
     let b = map(get(a, "body")).unwrap_or(&empty);
     let body = get(a, "body");
-    let dep = text(&world.fields["deps"])?.to_owned();
-    let pred = text(&world.fields["predicate"])?.to_owned();
-    let seen = text(&world.fields["snapshot"])?.to_owned();
+    let dep = world.role("deps").to_owned();
+    let pred = world.role("predicate").to_owned();
+    let seen = world.role("snapshot").to_owned();
     let layers = layers(world)?;
     let aimed = a.get("hypothesis").filter(|v| truth(v));
-    let known = world.raw.contains_key(id);
+    let known = world.raw().contains_key(id);
     let is_jud = judgment(world, id);
     let mut out = vec![];
     let diff = if (kind == "add" || kind == "set") && known {
@@ -667,7 +724,7 @@ pub(crate) fn validate(world: &mut World<'_>, action: &V) -> Result<Vec<String>>
             out.push(format!("{id} is a judgment: it is reviewed, not set"))
         } else if builtin(id) {
             out.push(format!("{id} is counted by the reader, never set"))
-        } else if let Some(V::Map(old)) = world.raw.get(id)
+        } else if let Some(V::Map(old)) = world.raw().get(id)
             && !old.contains_key("v")
             && !old.contains_key("quoted")
         {
@@ -692,7 +749,7 @@ pub(crate) fn validate(world: &mut World<'_>, action: &V) -> Result<Vec<String>>
             .and_then(|v| text(v).ok())
             .and_then(|h| layers.get(h))
             .map_or(known, |m| m.contains_key(id))
-            || map(&world.document)?
+            || map(world.document())?
                 .get("meta")
                 .and_then(|v| map(v).ok())
                 .is_some_and(|m| m.contains_key(id))
@@ -732,7 +789,7 @@ pub(crate) fn validate(world: &mut World<'_>, action: &V) -> Result<Vec<String>>
             } else {
                 let ds = names(ds);
                 for d in &ds {
-                    if !world.raw.contains_key(d)
+                    if !world.raw().contains_key(d)
                         && !builtin(d)
                         && blocked_text(body).is_empty()
                         && (aimed.is_some() || held_by(&layers, d).is_empty())
@@ -752,7 +809,7 @@ pub(crate) fn validate(world: &mut World<'_>, action: &V) -> Result<Vec<String>>
                         .collect()
                 };
                 for r in rs.into_iter().collect::<BTreeSet<_>>() {
-                    if (matches!(p, V::Map(_)) || world.raw.contains_key(&r) || builtin(&r))
+                    if (matches!(p, V::Map(_)) || world.raw().contains_key(&r) || builtin(&r))
                         && !ds.contains(&r)
                     {
                         out.push(format!(
@@ -765,7 +822,7 @@ pub(crate) fn validate(world: &mut World<'_>, action: &V) -> Result<Vec<String>>
         for (f, v) in b {
             if let V::Text(v) = v {
                 for r in refs(v) {
-                    if !world.raw.contains_key(&r) && !builtin(&r) {
+                    if !world.raw().contains_key(&r) && !builtin(&r) {
                         if aimed.is_none() && !held_by(&layers, &r).is_empty() {
                             continue;
                         }
@@ -794,7 +851,7 @@ pub(crate) fn validate(world: &mut World<'_>, action: &V) -> Result<Vec<String>>
             out.push("set requires --source and --at together, both nonempty".into())
         } else {
             let src = text(get(a, "source"))?;
-            let sb = world.raw.get(src).and_then(|v| map(v).ok());
+            let sb = world.raw().get(src).and_then(|v| map(v).ok());
             if src == id
                 || judgment(world, src)
                 || builtin(src)
@@ -808,7 +865,7 @@ pub(crate) fn validate(world: &mut World<'_>, action: &V) -> Result<Vec<String>>
                 out.push(format!(
                     "{src} is not a recorded source; add the source before citing it"
                 ))
-            } else if let Some(V::Map(m)) = world.raw.get(id) {
+            } else if let Some(V::Map(m)) = world.raw().get(id) {
                 if ["src", "source"].iter().any(|k| m.contains_key(*k)) {
                     out.push("set --source writes from/at; reconcile the entry's src/source fields first".into())
                 } else if ["from", "at"]
@@ -824,7 +881,7 @@ pub(crate) fn validate(world: &mut World<'_>, action: &V) -> Result<Vec<String>>
         let reopened = reopened_text(body);
         if CMP
             .captures(&reopened)
-            .is_some_and(|c| world.raw.contains_key(&c[1]))
+            .is_some_and(|c| world.raw().contains_key(&c[1]))
         {
             out.push(format!("reopened_by reads as a comparison ({}) - a predicate belongs in wrong_if, where it is evaluated",short(&s(&reopened),60)))
         }
@@ -855,7 +912,7 @@ pub(crate) fn validate(world: &mut World<'_>, action: &V) -> Result<Vec<String>>
                     EXPR.is_match(s)
                         && DOTTED
                             .find_iter(s)
-                            .any(|m| world.raw.contains_key(m.as_str()))
+                            .any(|m| world.raw().contains_key(m.as_str()))
                 })
             {
                 Some(format!(
@@ -879,13 +936,13 @@ pub(crate) fn validate(world: &mut World<'_>, action: &V) -> Result<Vec<String>>
     }
     // Retired aliases include every readable hypothesis, never an id still live.
     let live = world
-        .raw
+        .raw()
         .keys()
         .chain(layers.values().flat_map(|m| m.keys()))
         .cloned()
         .collect::<BTreeSet<_>>();
     if !known && !live.contains(id) && dep != "also" {
-        for m in std::iter::once(&world.raw).chain(layers.values()) {
+        for m in std::iter::once(world.raw()).chain(layers.values()) {
             if let Some((into, _)) = m.iter().find(|(_, b)| {
                 map(b)
                     .ok()
@@ -947,7 +1004,7 @@ pub(crate) fn validate(world: &mut World<'_>, action: &V) -> Result<Vec<String>>
                 }
             }
             for (d, how) in cone {
-                if world.raw.contains_key(&d) || builtin(&d) {
+                if world.raw().contains_key(&d) || builtin(&d) {
                     continue;
                 }
                 let held = held_by(&layers, &d);
@@ -968,10 +1025,10 @@ pub(crate) fn validate(world: &mut World<'_>, action: &V) -> Result<Vec<String>>
         && is_jud
         && shaped(body, &dep)
         && !arrangement(world, body)
-        && !arrangement(world, &world.raw[id])
+        && !arrangement(world, &world.raw()[id])
         && diff.as_ref().is_some_and(|d| d.kind != "value" && d.may)
     {
-        let gone = names(&map(&world.raw[id])?[&dep])
+        let gone = names(&map(&world.raw()[id])?[&dep])
             .into_iter()
             .filter(|d| !names(get(b, &dep)).contains(d))
             .collect::<Vec<_>>();
@@ -1023,12 +1080,13 @@ pub(crate) fn validate(world: &mut World<'_>, action: &V) -> Result<Vec<String>>
             ))
         }
     }
-    if a.get("section").is_some_and(truth)
-        || arrangement(world, body)
-        || world
-            .raw
-            .get(id)
-            .is_some_and(|b| judgment(world, id) && arrangement(world, b))
+    if world.core()
+        && (a.get("section").is_some_and(truth)
+            || arrangement(world, body)
+            || world
+                .raw()
+                .get(id)
+                .is_some_and(|b| judgment(world, id) && arrangement(world, b)))
     {
         out.push("unsupported_core_builtin: page arrangement/section review requires its own declared inputs".into())
     }

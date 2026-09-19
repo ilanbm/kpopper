@@ -43,6 +43,24 @@ the host. This command does not register hooks or establish host trust.
 
 ## Supported history boundary
 
+`ordinary_reader` preserves ordinary-reader/v1 value selection, legacy comparison
+coercion, conservative formula normalization and graph counters. Captured hypothesis
+documents and conflict IDs can be supplied explicitly. Ordinary authoring uses the
+same immutable storage boundary for direct writes, acts, proposals and sequential or
+final batches, while retaining ordinary receipt versions and historical core replay
+versions. Its evidence contains the authored document; it does not invent a core
+assessment or promote the record's profile.
+
+Explicit ordinary formulas use the existing ordinary Lean program, whose JSON
+protocol is separate from core/v1. A caller opens its selected build with
+`ordinary_runtime::Program::open` and supplies it through
+`Runtime::with_ordinary_program`. The source hash is bound at build time, and the
+manifest and executable bytes are rechecked around each bounded request. Ordinary
+scalar reads and writes need no evaluator. These library APIs perform no program
+discovery or installation; packaging and public CLI routing remain pending.
+The ordinary conformance tests use `KPOP_TEST_ORDINARY_PROGRAM` when supplied,
+otherwise the existing ordinary Lean cache for the current platform and source hash.
+
 The library validates final 1.7 temporal claim metadata and the required
 `temporal-applicability/v1` manifest capability. Captured history retains at most
 64 exact observations, with separate evidence kinds for recorded receipts and
