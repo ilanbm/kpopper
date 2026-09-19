@@ -1,8 +1,10 @@
-# Experimental deterministic core
+# Deterministic reasoning and history
 
-`core/v1` is an explicit assessment and authoring profile. Existing ordinary
-records keep their legacy interpretation. Select the profile explicitly for
-the core readers described below.
+The first `kpop add` in a workspace without a record creates a `core/v1` record
+with immutable history. Creation and recovery use one guarded transaction, so
+an interrupted first write cannot expose a partial record. Existing ordinary
+records keep their legacy interpretation; reading them never changes authority.
+The profile can also be selected explicitly for the readers described below.
 
 ```sh
 kpop assess m.total d.order --profile core/v1 --record example.yaml
@@ -30,7 +32,7 @@ independent integrity/contention findings. An unavailable executor produces an
 operational error, never `false`. Prose remains a declared unknown; it is not
 silently promoted to an executable condition.
 
-The profile remains explicit and default-off. Its scalar fragment supports
+Adopting the profile for an existing legacy record remains explicit. Its scalar fragment supports
 literals, references, exact arithmetic and comparisons through `arithmetic/v1`.
 Records may additionally declare `composition/v1` for finite typed values and
 composable conditions. Finite-scope query and member selection are provided by

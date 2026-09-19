@@ -107,6 +107,25 @@ class InstalledOperationalCLI(unittest.TestCase):
                 "    verdict: okay\n"
                 "    wrong_if: {op: gt, args: [{ref: p.input}, {num: '20'}]}\n")
 
+    @unittest.skipIf(os.name == 'nt', 'history writes require POSIX locks')
+    def test_installed_first_add_creates_history_and_reopens(self):
+        import yaml
+        with tempfile.TemporaryDirectory(prefix="installed-new-history-") as directory:
+            root = Path(directory)
+            result = subprocess.run([sys.executable, str(self.cli_path()), "add", "p.input",
+                "v=1", "--as-of", "2026-09-01"], cwd=root, text=True,
+                capture_output=True, check=False)
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+            record = yaml.safe_load((root / "GROUNDING.yaml").read_text())
+            marker = yaml.safe_load((root / ".kpopper/history.yaml").read_text())
+            self.assertEqual(record["meta"]["reasoning"]["profile"], "core/v1")
+            self.assertEqual(marker["authority"], "history")
+            self.assertEqual(record["meta"]["history"]["record_id"], marker["record_id"])
+            for command in (["open", "--json"], ["check"]):
+                reopened = subprocess.run([sys.executable, str(self.cli_path()), *command],
+                    cwd=root, text=True, capture_output=True, check=False)
+                self.assertEqual(reopened.returncode, 0, reopened.stdout + reopened.stderr)
+
     def history_fixture(self, *, measured=1, judgment=False):
         """Use the checked history fixture while importing all product modules from ``scripts``."""
         from tests.test_history_snapshot_capture import HistorySnapshotCapture
