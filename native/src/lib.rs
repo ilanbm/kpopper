@@ -67,6 +67,7 @@ mod reasoning_query_bounds;
 pub mod reasoning_runtime;
 pub mod reasoning_scope;
 pub mod reasoning_snapshot;
+mod reasoning_temporal;
 pub mod reasoning_transport;
 pub mod reasoning_values;
 pub mod source_capture;

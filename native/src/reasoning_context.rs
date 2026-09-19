@@ -108,7 +108,7 @@ impl CapturedAssessment {
             "assessment_revision".into(),
             r["base_assessment_revision"].clone(),
         );
-        let nodes = map(&r["nodes"])?
+        let mut nodes = map(&r["nodes"])?
             .iter()
             .map(|(id, n)| {
                 let n = map(n)?;
@@ -123,14 +123,49 @@ impl CapturedAssessment {
                 ))
             })
             .collect::<Result<Map>>()?;
+        for node in nodes.values_mut() {
+            let n = crate::history_view::map_mut(node)?;
+            if let Some(V::List(actions)) = n.get_mut("attention") {
+                actions.retain(|action| {
+                    let Ok(a) = map(action) else {
+                        return true;
+                    };
+                    let Ok(reasons) = crate::history_view::list(&a["reasons"]) else {
+                        return true;
+                    };
+                    !(string_is(&a["action"], "review")
+                        && !reasons.is_empty()
+                        && reasons.iter().all(|r| {
+                            map(r).is_ok_and(|r| {
+                                ["historical_counterexample", "historical_evidence_unknown"]
+                                    .iter()
+                                    .any(|code| string_is(&r["code"], code))
+                            })
+                        }))
+                });
+            }
+        }
         base.insert("nodes".into(), V::Map(nodes));
         let base = H::validate_v2(&snapshot, &V::Map(base))?;
         let display = crate::history_view::list(&r["display_selection"])?
             .iter()
             .map(|v| text(v).map(str::to_owned))
             .collect::<Result<Vec<_>>>()?;
+        let evidence = V::Map(
+            map(&r["history_subjects"])?
+                .iter()
+                .filter_map(|(id, subject)| {
+                    map(subject)
+                        .ok()?
+                        .get("temporal")
+                        .and_then(|v| map(v).ok())
+                        .and_then(|t| t.get("episodes"))
+                        .map(|e| (id.clone(), e.clone()))
+                })
+                .collect(),
+        );
         require(
-            H::from_v2(&snapshot, &base, Some(&display))? == assessment,
+            H::from_v2_temporal(&snapshot, &base, Some(&display), Some(&evidence))? == assessment,
             "assessment does not match retained snapshot",
         )?;
         let view = P::project_findings(&assessment)?;

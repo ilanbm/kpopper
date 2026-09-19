@@ -9,7 +9,7 @@ use crate::{
     reasoning_assessment as A, reasoning_history_support as H,
     reasoning_runtime::{OperationalBounds, Runtime},
     reasoning_snapshot::{Snapshot, digest},
-    require,
+    reasoning_temporal as Temporal, require,
     value::TypedValue as V,
 };
 use serde_json::{Value as J, json};
@@ -259,7 +259,7 @@ fn locations(v: &J) -> Result<Vec<Vec<String>>> {
     )?;
     Ok(out)
 }
-fn computation(value: &V, snapshot_id: &str) -> Result<()> {
+pub(crate) fn computation(value: &V, snapshot_id: &str) -> Result<()> {
     let r = value.to_json()?;
     let numeric = |v: &J| match v {
         J::Bool(v) => Some(if *v { 1.0 } else { 0.0 }),
@@ -849,8 +849,11 @@ fn history_summary(v: &V) -> Result<()> {
             "identity_schemes",
             "integrity",
         ],
-        &[],
+        &["capabilities"],
     )?;
+    if let Some(capabilities) = m.get("capabilities") {
+        crate::history_authority::validate_history_requires(capabilities)?;
+    }
     require(
         string_is(&m["authority_status"], "active")
             && crate::source_clock::python_equal(&m["projection_version"], &val(json!(1))?),
@@ -994,7 +997,7 @@ pub fn validate(report: &V) -> Result<V> {
                 "assurance",
                 "support",
             ],
-            &[],
+            &["temporal"],
         )?;
         node_v2(&select(
             n,
@@ -1016,6 +1019,9 @@ pub fn validate(report: &V) -> Result<V> {
         assurance(&n["assurance"])?;
         support(&n["support"])?;
         node_history(&n["history"])?;
+        if let Some(temporal) = n.get("temporal") {
+            Temporal::validate(temporal)?;
+        }
     }
     for h in subjects.values() {
         let h = schema(
@@ -1035,7 +1041,7 @@ pub fn validate(report: &V) -> Result<V> {
                 "coverage",
                 "support",
             ],
-            &["source_state"],
+            &["source_state", "temporal"],
         )?;
         require(
             H::ACCEPTANCE.contains(&text(&h["acceptance"])?),
@@ -1057,6 +1063,9 @@ pub fn validate(report: &V) -> Result<V> {
         }
         coverage(&h["coverage"])?;
         support(&h["support"])?;
+        if let Some(temporal) = h.get("temporal") {
+            Temporal::validate(temporal)?;
+        }
     }
     history_summary(&r["history"])?;
     if string_is(&map(&r["history"])?["authority_status"], "not_active") {
@@ -1417,6 +1426,38 @@ fn enrich(id: &str, node: &V, projection: Option<&V>, subjects: &Map) -> Result<
     if let Some(p) = p {
         n.insert("coverage".into(), p["coverage"].clone());
         n.insert("support".into(), p["support"].clone());
+        if let Some(temporal) = p.get("temporal") {
+            n.insert("temporal".into(), temporal.clone());
+            let t = map(temporal)?;
+            if string_is(&t["status"], "counterexample") || string_is(&t["status"], "unknown") {
+                let reason = obj([
+                    (
+                        "code",
+                        s(if string_is(&t["status"], "counterexample") {
+                            "historical_counterexample"
+                        } else {
+                            "historical_evidence_unknown"
+                        }),
+                    ),
+                    ("related_ids", t["counterexample_claim_ids"].clone()),
+                ]);
+                let attention = n.get_mut("attention").unwrap();
+                let V::List(actions) = attention else {
+                    return Err(error("invalid attention"));
+                };
+                if !actions.iter().any(|a| {
+                    map(a).is_ok_and(|a| {
+                        string_is(&a["action"], "review")
+                            && list(&a["reasons"]).is_ok_and(|r| r.contains(&reason))
+                    })
+                }) {
+                    actions.push(obj([
+                        ("action", s("review")),
+                        ("reasons", V::List(vec![reason])),
+                    ]));
+                }
+            }
+        }
     } else {
         n.insert("coverage".into(),obj([("included",V::Bool(false)),("complete",V::Bool(inactive)),("findings",if inactive{arr()}else{val(json!([{"code":"history_subject_unavailable","subject":id,"object_id":"","detail":"computational node is outside captured history coverage"}]))?})]));
         n.insert("support".into(),val(json!({"reducer":H::REDUCER,"status":if inactive{"clear"}else{"reserved"},"visited":[],"visited_count":0,"reservations":if inactive{json!([])}else{json!([{"code":"missing_support","state":"unavailable","subject":id,"version":"","path":[]}])}}))?);
@@ -1429,7 +1470,7 @@ fn summary(projection: Option<&V>) -> Result<V> {
     };
     let p = map(p)?;
     let a = map(&p["authority"])?;
-    Ok(obj([
+    let mut result = obj([
         ("authority_status", s("active")),
         ("projection_version", p["projection_version"].clone()),
         (
@@ -1448,9 +1489,26 @@ fn summary(projection: Option<&V>) -> Result<V> {
         ("coverage", p["coverage"].clone()),
         ("identity_schemes", p["identity_schemes"].clone()),
         ("integrity", p["integrity"].clone()),
-    ]))
+    ]);
+    if matches!(p.get("requires"), Some(V::List(v)) if v.iter().any(|v| string_is(v,crate::history_authority::TEMPORAL_APPLICABILITY)))
+    {
+        crate::history_view::map_mut(&mut result)?.insert(
+            "capabilities".into(),
+            V::List(vec![s(crate::history_authority::TEMPORAL_APPLICABILITY)]),
+        );
+    }
+    Ok(result)
 }
 pub fn from_v2(snapshot: &Snapshot, report: &V, display_selection: Option<&[String]>) -> Result<V> {
+    from_v2_temporal(snapshot, report, display_selection, None)
+}
+/// Adapt retained evidence without opening a source or invoking an evaluator.
+pub fn from_v2_temporal(
+    snapshot: &Snapshot,
+    report: &V,
+    display_selection: Option<&[String]>,
+    temporal_evidence: Option<&V>,
+) -> Result<V> {
     let base = validate_v2(snapshot, report)?;
     let base = map(&base)?;
     let projection = map(&map(snapshot.data())?["context"])?
@@ -1460,10 +1518,11 @@ pub fn from_v2(snapshot: &Snapshot, report: &V, display_selection: Option<&[Stri
     let mut subjects = Map::new();
     if let Some(p) = projection {
         history_projection::validate_projection(p)?;
-        require(
-            !map(p)?.get("temporal").is_some_and(|v| *v != V::Null),
-            "temporal_assessment_unsupported",
-        )?;
+        let temporal_replays = if let Some(evidence) = temporal_evidence {
+            Temporal::retained(p, map(evidence)?)?
+        } else {
+            Temporal::unknown(p)?
+        };
         let graph = graph(map(p)?)?;
         let mut budget = H::SupportBudget::default();
         for id in map(&map(p)?["subjects"])?.keys() {
@@ -1471,6 +1530,20 @@ pub fn from_v2(snapshot: &Snapshot, report: &V, display_selection: Option<&[Stri
                 id.clone(),
                 project_subject(p, id, &graph, &outcomes, &mut budget)?,
             );
+        }
+        if map(p)?.get("temporal").is_some_and(|v| *v != V::Null) {
+            for (id, projected) in &mut subjects {
+                let episodes = temporal_replays
+                    .get(id)
+                    .map(list)
+                    .transpose()?
+                    .unwrap_or(&[]);
+                if let Some(temporal) =
+                    Temporal::state(p, id, map(&base["nodes"])?.get(id), episodes)?
+                {
+                    crate::history_view::map_mut(projected)?.insert("temporal".into(), temporal);
+                }
+            }
         }
     }
     let nodes = map(&base["nodes"])?
@@ -1528,9 +1601,15 @@ pub fn assess(
     bounds: OperationalBounds,
     display: Option<&[String]>,
 ) -> Result<V> {
-    from_v2(
-        snapshot,
-        &A::assess(snapshot, selection, policy, runtime, bounds)?,
-        display,
-    )
+    let base = A::assess(snapshot, selection, policy, runtime, bounds)?;
+    let projection = map(&map(snapshot.data())?["context"])?
+        .get("history")
+        .filter(|v| **v != V::Null);
+    let evidence = if let Some(p) = projection {
+        history_projection::validate_projection(p)?;
+        V::Map(Temporal::replay(p, runtime)?)
+    } else {
+        empty()
+    };
+    from_v2_temporal(snapshot, &base, display, Some(&evidence))
 }

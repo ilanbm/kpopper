@@ -307,6 +307,30 @@ pub fn project_node_status(node: &V) -> Result<V> {
     };
     f.insert("holds".into(), predicate_truth(get(&falsifier, "status")));
     result.insert("coverage_included".into(), included);
+    let temporal = dimension(&n, &state, "temporal");
+    if *temporal != V::Null {
+        let t = mapping(temporal)?;
+        result.insert(
+            "temporal".into(),
+            V::Map(Map::from([
+                ("applicability".into(), get(&t, "applicability").clone()),
+                (
+                    "status".into(),
+                    t.get("status").cloned().unwrap_or_else(|| s("unknown")),
+                ),
+                (
+                    "complete".into(),
+                    V::Bool(t.get("complete") == Some(&V::Bool(true))),
+                ),
+                (
+                    "counterexample_claim_ids".into(),
+                    t.get("counterexample_claim_ids")
+                        .cloned()
+                        .unwrap_or_else(|| V::List(vec![])),
+                ),
+            ])),
+        );
+    }
     Ok(V::Map(result))
 }
 pub fn render_node_status(node: &V) -> Result<String> {
@@ -323,7 +347,7 @@ pub fn render_node_status(node: &V) -> Result<String> {
         .iter()
         .map(|v| text(v))
         .collect::<Result<Vec<_>>>()?;
-    Ok(format!(
+    let mut rendered = format!(
         "acceptance={}; computation={}; basis={}; falsifier={}; contention={}; integrity={}; coverage={}; assurance={}; support={}{}",
         text(&m["acceptance"])?,
         computation,
@@ -339,7 +363,11 @@ pub fn render_node_status(node: &V) -> Result<String> {
         } else {
             format!("[{}]", states.join(","))
         }
-    ))
+    );
+    if let Some(temporal) = m.get("temporal") {
+        rendered.push_str(&format!("; temporal={}", text(&map(temporal)?["status"])?));
+    }
+    Ok(rendered)
 }
 fn witness_ids(v: &V) -> Result<BTreeSet<String>> {
     if *v == V::Null {

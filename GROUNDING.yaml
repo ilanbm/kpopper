@@ -988,6 +988,15 @@ sources:
     at: "45 cases; 38 exact accepted snapshots and 7 refusals against b639cdb; source_capture and
          source_document; guarded inventory and member journals"
     read: "2026-09-19"
+  s.native_temporal_assessment:
+    name: "Native temporal assessment and frozen evidence conformance"
+    from: s.2026_09_19_native_temporal_continuation
+    file: "native/tests/reasoning_temporal.rs"
+    at: "Final Python 1.7.0 reference 5acfd0f: seven exact frozen assessments and consumer views, 42
+         evidence forgeries, 12 rehashed outer-context boolean and basis forgeries, seven actual
+         Lean-backed applicability and roundtrip scenarios. Fresh runtime identity remains explicit;
+         deserialization performs no source read or evaluation. Temporal authoring remains unported."
+    read: "2026-09-19"
   s.native_temporal_capture:
     name: "Native temporal capability and causal capture conformance"
     from: s.2026_09_19_native_temporal_continuation

@@ -174,9 +174,7 @@ fn temporal_capture_rejects_rehashed_frontier_and_receipt_forgery() {
 #[test]
 fn temporal_history_bounds_produce_explicit_incomplete_coverage() {
     use kpop_native::{
-        history_adapter, history_emit as E, history_transaction as T,
-        history_view as W, history_yaml as Y, reasoning_history_assessment as H,
-        reasoning_runtime::OperationalBounds, reasoning_snapshot::CaptureOptions,
+        history_adapter, history_emit as E, history_transaction as T, history_view as W,
     };
     let (_root, mut capture) = capture_fixture();
     let empty = V::Map(Default::default());
@@ -217,19 +215,4 @@ fn temporal_history_bounds_produce_explicit_incomplete_coverage() {
         panic!()
     };
     assert_eq!(coverage["complete"], V::Bool(false));
-    let snapshot = adapted.snapshot(CaptureOptions::default()).unwrap();
-    assert_eq!(
-        H::assess(
-            &snapshot,
-            None,
-            "focused-review/v1",
-            None,
-            OperationalBounds::default(),
-            None
-        )
-        .unwrap_err()
-        .0,
-        "temporal_assessment_unsupported"
-    );
-    let _ = Y::decode_document(&capture.entry_bytes).unwrap();
 }

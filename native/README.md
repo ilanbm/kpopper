@@ -48,8 +48,12 @@ The library validates final 1.7 temporal claim metadata and the required
 64 exact observations, with separate evidence kinds for recorded receipts and
 reconstructed committed worlds. Each observation binds to its causal frontier,
 claim, predicate and original anchors. Exceeding replay bounds produces explicit
-incomplete coverage. Temporal assessment and authoring are still refused while
-their native ports are pending; the public CLI remains the subset described above.
+incomplete coverage. Temporal assessment replays through an explicitly supplied
+runtime, preserves current/anchored/general applicability, and verifies frozen
+contexts without evaluating or reopening sources. Rehashed temporal results must
+still match their immutable predicate, anchors, Snapshot inputs and computation
+witnesses. Temporal authoring remains unsupported; the public CLI remains the
+subset described above.
 
 The library also provides an explicit `TypedValue` model and canonical typed JSON
 codec. It preserves integers of arbitrary size, finite IEEE754 floats (including
