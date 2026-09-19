@@ -1,0 +1,169 @@
+{
+  "status": [
+    {
+      "name": "simple_live",
+      "setup": "simple",
+      "read_mode": "live",
+      "actual": {
+        "code": 0,
+        "stdout": "{\"mode\": \"simple\", \"record\": \"$ROOT/GROUNDING.yaml\", \"read_mode\": \"live\", \"contributions\": [], \"conflicts\": {}, \"publication\": null, \"private_drafts\": [], \"target_unavailable\": null}\n",
+        "stderr": ""
+      }
+    },
+    {
+      "name": "simple_frozen",
+      "setup": "simple",
+      "read_mode": "frozen",
+      "actual": {
+        "code": 0,
+        "stdout": "{\"mode\": \"simple\", \"record\": \"$ROOT/GROUNDING.yaml\", \"read_mode\": \"frozen\", \"contributions\": [], \"conflicts\": {}, \"publication\": null, \"private_drafts\": [], \"target_unavailable\": null}\n",
+        "stderr": ""
+      }
+    },
+    {
+      "name": "empty_live",
+      "setup": "empty",
+      "read_mode": "live",
+      "actual": {
+        "code": 0,
+        "stdout": "{\"mode\": \"advanced\", \"record\": \"$ROOT/GROUNDING.yaml\", \"read_mode\": \"live\", \"contributions\": [], \"conflicts\": {}, \"publication\": {\"states\": {}, \"decisions\": {}, \"paused\": false, \"pr\": null, \"expected_head\": null, \"ledger_ref\": null, \"retry_at\": 0, \"failures\": 0, \"intent\": null, \"verified\": false, \"last_verified\": null}, \"private_drafts\": [], \"target_unavailable\": null}\n",
+        "stderr": ""
+      }
+    },
+    {
+      "name": "empty_frozen",
+      "setup": "empty",
+      "read_mode": "frozen",
+      "actual": {
+        "code": 0,
+        "stdout": "{\"mode\": \"advanced\", \"record\": \"$ROOT/GROUNDING.yaml\", \"read_mode\": \"frozen\", \"contributions\": [], \"conflicts\": {}, \"publication\": null, \"private_drafts\": [], \"target_unavailable\": null}\n",
+        "stderr": ""
+      }
+    },
+    {
+      "name": "one_live",
+      "setup": "one",
+      "read_mode": "live",
+      "actual": {
+        "code": 0,
+        "stdout": "{\"mode\": \"advanced\", \"record\": \"$ROOT/GROUNDING.yaml\", \"read_mode\": \"live\", \"contributions\": [{\"revision\": \"8887db9b513dddd4f3d7d26155713251effcfaa5e97a8edbcb1d7ced6d7297dd\", \"state\": \"captured locally\", \"scope\": {\"environment\": \"API v2\", \"kind\": \"external\"}, \"roots\": [\"api.limit\"], \"events\": [{\"captured_at_ns\": 1, \"contribution_id\": \"limit\", \"event_id\": \"event-0\", \"revision\": \"8887db9b513dddd4f3d7d26155713251effcfaa5e97a8edbcb1d7ced6d7297dd\", \"sequence\": 1}], \"ledger_ref\": \"0fb26ab1d38923497106b48af21b78db29372cba\", \"publication_state\": \"captured\", \"verified\": false, \"last_verified\": null, \"pr\": null}], \"conflicts\": {}, \"publication\": {\"states\": {\"8887db9b513dddd4f3d7d26155713251effcfaa5e97a8edbcb1d7ced6d7297dd\": \"captured\"}, \"decisions\": {}, \"paused\": false, \"pr\": null, \"expected_head\": null, \"ledger_ref\": \"0fb26ab1d38923497106b48af21b78db29372cba\", \"retry_at\": 0, \"failures\": 0, \"intent\": null, \"verified\": false, \"last_verified\": null}, \"private_drafts\": [{\"event_id\": \"private-one\", \"state\": \"private draft\", \"path\": \"$PRIVATE/c1b941318b48dbce2a4cdd406a51b6b23267a791d89e9c741969e9ac2e0ddc29/private-one.json\"}], \"target_unavailable\": null}\n",
+        "stderr": ""
+      }
+    },
+    {
+      "name": "one_frozen",
+      "setup": "one",
+      "read_mode": "frozen",
+      "actual": {
+        "code": 0,
+        "stdout": "{\"mode\": \"advanced\", \"record\": \"$ROOT/GROUNDING.yaml\", \"read_mode\": \"frozen\", \"contributions\": [], \"conflicts\": {}, \"publication\": null, \"private_drafts\": [], \"target_unavailable\": null}\n",
+        "stderr": ""
+      }
+    },
+    {
+      "name": "target_missing_live",
+      "setup": "target_missing",
+      "read_mode": "live",
+      "actual": {
+        "code": 0,
+        "stdout": "{\"mode\": \"advanced\", \"record\": \"$ROOT/GROUNDING.yaml\", \"read_mode\": \"live\", \"contributions\": [{\"revision\": \"8887db9b513dddd4f3d7d26155713251effcfaa5e97a8edbcb1d7ced6d7297dd\", \"state\": \"captured locally\", \"scope\": {\"environment\": \"API v2\", \"kind\": \"external\"}, \"roots\": [\"api.limit\"], \"events\": [{\"captured_at_ns\": 1, \"contribution_id\": \"limit\", \"event_id\": \"event-0\", \"revision\": \"8887db9b513dddd4f3d7d26155713251effcfaa5e97a8edbcb1d7ced6d7297dd\", \"sequence\": 1}], \"ledger_ref\": \"48e5806d4dda76679f05658f0a316e5a29a2b5cf\", \"publication_state\": \"captured\", \"verified\": false, \"last_verified\": null, \"pr\": null}], \"conflicts\": {}, \"publication\": {\"states\": {\"8887db9b513dddd4f3d7d26155713251effcfaa5e97a8edbcb1d7ced6d7297dd\": \"captured\"}, \"decisions\": {}, \"paused\": false, \"pr\": null, \"expected_head\": null, \"ledger_ref\": \"48e5806d4dda76679f05658f0a316e5a29a2b5cf\", \"retry_at\": 0, \"failures\": 0, \"intent\": null, \"verified\": false, \"last_verified\": null}, \"private_drafts\": [], \"target_unavailable\": \"configured target has no locally available observation\"}\n",
+        "stderr": ""
+      }
+    },
+    {
+      "name": "target_missing_frozen",
+      "setup": "target_missing",
+      "read_mode": "frozen",
+      "actual": {
+        "code": 0,
+        "stdout": "{\"mode\": \"advanced\", \"record\": \"$ROOT/GROUNDING.yaml\", \"read_mode\": \"frozen\", \"contributions\": [], \"conflicts\": {}, \"publication\": null, \"private_drafts\": [], \"target_unavailable\": null}\n",
+        "stderr": ""
+      }
+    },
+    {
+      "name": "registered_other_cwd",
+      "setup": "registered",
+      "read_mode": "live",
+      "actual": {
+        "code": 0,
+        "stdout": "{\"mode\": \"simple\", \"record\": \"$RECORD\", \"read_mode\": \"live\", \"contributions\": [], \"conflicts\": {}, \"publication\": null, \"private_drafts\": [], \"target_unavailable\": null}\n",
+        "stderr": ""
+      }
+    }
+  ],
+  "pending": [
+    {
+      "name": "simple",
+      "setup": "simple",
+      "actual": {
+        "code": 0,
+        "stdout": "{\n  \"mode\": \"simple\",\n  \"states\": {},\n  \"verified\": false,\n  \"publication\": null,\n  \"reason\": \"Simple uses the shared project record\"\n}\n",
+        "stderr": ""
+      }
+    },
+    {
+      "name": "empty",
+      "setup": "empty",
+      "actual": {
+        "code": 0,
+        "stdout": "{\n  \"states\": {},\n  \"decisions\": {},\n  \"paused\": false,\n  \"pr\": null,\n  \"expected_head\": null,\n  \"ledger_ref\": null,\n  \"retry_at\": 0,\n  \"failures\": 0,\n  \"intent\": null,\n  \"verified\": false,\n  \"last_verified\": null,\n  \"authority\": {\n    \"configured\": false,\n    \"standing_permission\": false,\n    \"scope\": null,\n    \"actions\": [\n      \"push_managed_branch\",\n      \"create_pull_request\",\n      \"update_pull_request\"\n    ]\n  },\n  \"mode\": \"advanced\"\n}\n",
+        "stderr": ""
+      }
+    },
+    {
+      "name": "one",
+      "setup": "one",
+      "actual": {
+        "code": 0,
+        "stdout": "{\n  \"states\": {\n    \"8887db9b513dddd4f3d7d26155713251effcfaa5e97a8edbcb1d7ced6d7297dd\": \"captured\"\n  },\n  \"decisions\": {},\n  \"paused\": false,\n  \"pr\": null,\n  \"expected_head\": null,\n  \"ledger_ref\": \"0fb26ab1d38923497106b48af21b78db29372cba\",\n  \"retry_at\": 0,\n  \"failures\": 0,\n  \"intent\": null,\n  \"verified\": false,\n  \"last_verified\": null,\n  \"authority\": {\n    \"configured\": false,\n    \"standing_permission\": false,\n    \"scope\": null,\n    \"actions\": [\n      \"push_managed_branch\",\n      \"create_pull_request\",\n      \"update_pull_request\"\n    ]\n  },\n  \"mode\": \"advanced\"\n}\n",
+        "stderr": ""
+      }
+    },
+    {
+      "name": "target_missing",
+      "setup": "target_missing",
+      "actual": {
+        "code": 0,
+        "stdout": "{\n  \"states\": {\n    \"8887db9b513dddd4f3d7d26155713251effcfaa5e97a8edbcb1d7ced6d7297dd\": \"captured\"\n  },\n  \"decisions\": {},\n  \"paused\": false,\n  \"pr\": null,\n  \"expected_head\": null,\n  \"ledger_ref\": \"48e5806d4dda76679f05658f0a316e5a29a2b5cf\",\n  \"retry_at\": 0,\n  \"failures\": 0,\n  \"intent\": null,\n  \"verified\": false,\n  \"last_verified\": null,\n  \"authority\": {\n    \"configured\": true,\n    \"standing_permission\": false,\n    \"scope\": {\n      \"branch\": \"pending\",\n      \"remote\": \"origin\",\n      \"repository\": \"https://example.test/repo.git\",\n      \"standing_permission\": false,\n      \"target\": \"trunk\"\n    },\n    \"actions\": [\n      \"push_managed_branch\",\n      \"create_pull_request\",\n      \"update_pull_request\"\n    ]\n  },\n  \"mode\": \"advanced\"\n}\n",
+        "stderr": ""
+      }
+    }
+  ],
+  "materialize": [
+    {
+      "name": "complete",
+      "setup": "one",
+      "revision": "8887db9b513dddd4f3d7d26155713251effcfaa5e97a8edbcb1d7ced6d7297dd",
+      "actual": {
+        "code": 0,
+        "stdout": "{\"state\": \"materialized\", \"revision\": \"8887db9b513dddd4f3d7d26155713251effcfaa5e97a8edbcb1d7ced6d7297dd\", \"record\": \"$OUT/GROUNDING.yaml\", \"read_mode\": \"frozen\", \"ledger_ref\": \"0fb26ab1d38923497106b48af21b78db29372cba\"}\n",
+        "stderr": ""
+      },
+      "files": {
+        "GROUNDING.yaml": "a25vd246CiAgYXBpLmxpbWl0OgogICAgYXQ6IHRhYmxlIDEKICAgIGZyb206IHMudmVuZG9yCiAgICBuYW1lOiBMaW1pdAogICAgc2NvcGU6CiAgICAgIGVudmlyb25tZW50OiBBUEkgdjIKICAgICAga2luZDogZXh0ZXJuYWwKICAgIHY6IDEwCnNvdXJjZXM6CiAgcy52ZW5kb3I6CiAgICBmaWxlOiBldmlkZW5jZS92ZW5kb3IudHh0CiAgICBuYW1lOiBWZW5kb3IKICAgIHJlYWQ6ICcyMDI2LTA5LTE0Jwo=",
+        "evidence/vendor.txt": "VGhlIGxpbWl0IGlzIDEwLgo=",
+        "snapshot.json": "eyJsZWRnZXJfcmVmIjoiMGZiMjZhYjFkMzg5MjM0OTcxMDZiNDhhZjIxYjc4ZGIyOTM3MmNiYSIsInJlYWRfbW9kZSI6ImZyb3plbiIsInJldmlzaW9uIjoiODg4N2RiOWI1MTNkZGRkNGYzZDdkMjYxNTU3MTMyNTFlZmZjZmFhNWU5N2E4ZWRiY2IxZDdjZWQ2ZDcyOTdkZCIsInZlcnNpb24iOjF9"
+      }
+    },
+    {
+      "name": "overwrite",
+      "setup": "one",
+      "revision": "8887db9b513dddd4f3d7d26155713251effcfaa5e97a8edbcb1d7ced6d7297dd",
+      "actual": {
+        "code": 2,
+        "stdout": "{\"state\": \"needs attention\", \"error\": \"snapshot destination already exists; select a new directory\"}\n",
+        "stderr": ""
+      }
+    },
+    {
+      "name": "unavailable",
+      "setup": "one",
+      "revision": "0000000000000000000000000000000000000000000000000000000000000000",
+      "actual": {
+        "code": 2,
+        "stdout": "{\"state\": \"needs attention\", \"error\": \"contribution is unavailable at the selected ledger revision\"}\n",
+        "stderr": ""
+      }
+    }
+  ]
+}

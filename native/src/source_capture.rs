@@ -382,6 +382,39 @@ impl CapturedSource {
     pub(crate) fn pending_observation(&self) -> Option<&crate::pending_state::Observation> {
         self.routing.pending.as_ref()
     }
+    /// Exact public knowledge-status fields from this already captured view.
+    /// This performs no reads and preserves ordinary records that cannot form a
+    /// strict portable Snapshot.
+    pub(crate) fn knowledge_status_context(&self) -> V {
+        let overlay = self.document.overlay.as_ref();
+        object([
+            (
+                "contributions",
+                overlay
+                    .map(|value| V::List(value.contributions.clone()))
+                    .unwrap_or_else(|| V::List(vec![])),
+            ),
+            (
+                "conflicts",
+                overlay
+                    .map(|value| value.conflicts.clone())
+                    .unwrap_or_else(empty),
+            ),
+            (
+                "publication",
+                overlay
+                    .map(|value| value.publication.clone())
+                    .unwrap_or(V::Null),
+            ),
+            (
+                "target_unavailable",
+                overlay
+                    .and_then(|value| value.unavailable.as_ref())
+                    .map(|value| s(value))
+                    .unwrap_or(V::Null),
+            ),
+        ])
+    }
     pub fn snapshot(&self) -> Result<&Snapshot> {
         self.snapshot
             .as_ref()
