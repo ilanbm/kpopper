@@ -952,6 +952,14 @@ sources:
     at: "172 adaptations, 348 v2 and 288 v3 schema cases; companion reasoning-context.json has 43
          retained contexts and reasoning-operations.json has prospective-operation cases"
     read: "2026-09-19"
+  s.native_core_hub_delivery:
+    name: "Native core Hub and session receipt compatibility"
+    file: "/Users/ilanbm/docs/kpopper/rust-migration/R5-CORE-HUB-RESULT.md"
+    read: "2026-09-19"
+    at: "cc8beb6; task 01a0b9d7-9fca-7301-ba63-580bfc152fb9"
+    scope: "Core Hub build/verify/browser checks and exact session ownership/delivery APIs. Ordinary
+            Hub, Annotated Documents, complete Session hooks and remaining R4-R6 are open. macOS
+            arm64 execution only."
   s.native_edit_rewrite:
     name: "Native view edit and identity rewrite conformance"
     file: "native/src/history_edits.rs"
@@ -2364,6 +2372,38 @@ known:
     at: "R2-authority-final-tests.txt: 214 passed, zero failures; two opt-in actual-launcher tests
          ignored by default, native activation with the actual configured final Python launcher
          passed separately; Clippy all-targets with warnings denied passed"
+    of: "2026-09-19"
+  m.native_core_hub_browser_checks:
+    name: "Passing Chrome checks on native core Hub"
+    v: 16
+    from: s.native_core_hub_delivery
+    at: "R5-final-browser-checks.log; final release; encoded output filename"
+    of: "2026-09-19"
+  m.native_core_hub_error_differences:
+    name: "Retained native versus Python Hub error wrapper differences"
+    v: 2
+    from: s.native_core_hub_delivery
+    at: "R5-core-hub-parity.json; both refuse scalar/non-iterable briefs; native exit 2 diagnostic,
+         Python exit 1 traceback"
+    of: "2026-09-19"
+  m.native_core_hub_exact_cli_cases:
+    name: "Exact native versus Python Hub verification cases"
+    v: 28
+    from: s.native_core_hub_delivery
+    at: "R5-core-hub-parity.json; immutable ff0d02e oracle"
+    of: "2026-09-19"
+  m.native_core_hub_interop_cases:
+    name: "Native and Python session receipt interoperability cases"
+    v: 3
+    from: s.native_core_hub_delivery
+    at: "R4-session-receipt-interop.json; exact owned bodies, later edits, shared once-only
+         delivery"
+    of: "2026-09-19"
+  m.native_core_hub_tests:
+    name: "Passing native tests after core Hub integration"
+    v: 280
+    from: s.native_core_hub_delivery
+    at: "R5-integrated-suite.log; 2 opt-in launcher tests ignored"
     of: "2026-09-19"
   m.native_core_page_cases:
     name: "Native core page conformance cases including expected refusals"
