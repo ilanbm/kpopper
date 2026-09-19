@@ -13,6 +13,32 @@ fn cli(root: &Path, args: &[&str], private: &Path) -> std::process::Output {
 }
 const ORDINARY: &str = "schema: {deps: rests_on, snapshot: seen, predicate: wrong_if}\nknown:\n  p.load: {v: 61, from: s.note}\n  s.note: {name: source}\njudgments:\n  d.work:\n    verdict: continue\n    rests_on: [p.load]\n    seen: {p.load: 44}\n    wrong_if: p.load > 80\n";
 #[test]
+fn contested_check_uses_the_reference_forty_character_claim_width() {
+    let tmp = tempfile::tempdir().unwrap();
+    let root = tmp.path();
+    fs::write(root.join("GROUNDING.yaml"), ORDINARY).unwrap();
+    fs::create_dir_all(root.join(".kpopper/hypotheses")).unwrap();
+    for (name, claim) in [
+        (
+            "alpha",
+            "a very long alternative reading that definitely exceeds forty characters",
+        ),
+        (
+            "beta",
+            "another equally long alternative reading exceeding forty characters",
+        ),
+    ] {
+        fs::write(
+            root.join(".kpopper/hypotheses")
+                .join(format!("{name}.yaml")),
+            format!("known:\n  p.load: {{quoted: {claim:?}}}\n"),
+        )
+        .unwrap();
+    }
+    let output = cli(root, &["check"], &root.join("private"));
+    assert!(String::from_utf8(output.stdout).unwrap().contains("CONTESTED p.load: alpha says a very long alternative reading that de…, beta says another equally long alternative readin… - one of them folds, or neither; a person decides"));
+}
+#[test]
 fn actual_ordinary_cli_reads_physical_hypotheses_and_private_metadata_without_writes() {
     let tmp = tempfile::tempdir().unwrap();
     let root = tmp.path().canonicalize().unwrap();

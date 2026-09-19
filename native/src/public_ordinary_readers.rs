@@ -1,4 +1,5 @@
 //! Ordinary reader projections retain the legacy interpretation of authored text.
+use crate::history_yaml::SourceValue;
 use crate::{
     Result,
     history_contract::*,
@@ -10,6 +11,8 @@ use crate::{
     reasoning_runtime::Runtime,
     value::TypedValue as V,
 };
+use libyaml_safer::{Emitter, Encoding, Event, MappingStyle, ScalarStyle, SequenceStyle};
+use sha2::{Digest, Sha256};
 use std::collections::{BTreeMap, BTreeSet};
 type Reach = (Vec<(String, String)>, BTreeSet<String>);
 fn s(v: &str) -> V {
@@ -264,8 +267,234 @@ pub struct Projection<'a> {
     pub(crate) layers: BTreeMap<String, World<'a>>,
     pub(crate) hypotheses: Map,
     pub(crate) unread: Vec<String>,
+    unread_failures: Vec<String>,
     pub(crate) disputed: BTreeMap<String, Vec<(String, V)>>,
     pub(crate) knowledge: Vec<String>,
+}
+
+/// Stable data needed by the session stop gate.  This deliberately excludes
+/// page coverage: the Hub is the sole owner of optional HTML assessment.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct GateJudgment {
+    pub shape: String,
+    pub predicate: Option<bool>,
+    pub arrangement: bool,
+    pub inputs: BTreeMap<String, String>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct GateData {
+    pub failures: Vec<String>,
+    pub ids: BTreeSet<String>,
+    pub judgments: BTreeMap<String, GateJudgment>,
+    pub intents: BTreeSet<String>,
+    pub attributed: BTreeSet<String>,
+}
+
+fn source_body<'a>(source: &'a SourceValue, id: &str) -> Option<&'a SourceValue> {
+    let SourceValue::Map(collections) = source else {
+        return None;
+    };
+    collections
+        .iter()
+        .filter_map(|(_, members)| {
+            let SourceValue::Map(members) = members else {
+                return None;
+            };
+            members
+                .iter()
+                .find(|(name, _)| name == id)
+                .map(|(_, body)| body)
+        })
+        .next_back()
+}
+
+fn shape_value_as(value: &V, key: &str) -> V {
+    map(value)
+        .ok()
+        .and_then(|value| value.get(key))
+        .cloned()
+        .unwrap_or(V::Null)
+}
+
+fn python_scalar(value: &V) -> (&'static str, String) {
+    match value {
+        V::Null => ("tag:yaml.org,2002:null", "null".into()),
+        V::Bool(value) => ("tag:yaml.org,2002:bool", value.to_string()),
+        V::Integer(value) => ("tag:yaml.org,2002:int", value.as_str().into()),
+        V::Float(value) => (
+            "tag:yaml.org,2002:float",
+            crate::identity::python_float(value.get()),
+        ),
+        V::Date(value) => ("tag:yaml.org,2002:timestamp", value.as_str().into()),
+        V::DateTime(value) => ("tag:yaml.org,2002:timestamp", value.as_str().into()),
+        V::Text(value) => ("tag:yaml.org,2002:str", value.clone()),
+        _ => unreachable!(),
+    }
+}
+
+fn python_emit(value: &SourceValue, emitter: &mut Emitter<'_>, anchor: Option<&str>) -> Result<()> {
+    match value {
+        SourceValue::Scalar(value) => {
+            let (tag, value) = python_scalar(value);
+            emitter
+                .emit(Event::scalar(
+                    anchor,
+                    Some(tag),
+                    &value,
+                    true,
+                    true,
+                    ScalarStyle::Any,
+                ))
+                .map_err(|err| error(&format!("yaml_emit: {err}")))?;
+        }
+        SourceValue::List(values) => {
+            emitter
+                .emit(Event::sequence_start(
+                    anchor,
+                    Some("tag:yaml.org,2002:seq"),
+                    true,
+                    SequenceStyle::Block,
+                ))
+                .map_err(|err| error(&format!("yaml_emit: {err}")))?;
+            for value in values {
+                python_emit(value, emitter, None)?;
+            }
+            emitter
+                .emit(Event::sequence_end())
+                .map_err(|err| error(&format!("yaml_emit: {err}")))?;
+        }
+        SourceValue::Map(values) => {
+            emitter
+                .emit(Event::mapping_start(
+                    anchor,
+                    Some("tag:yaml.org,2002:map"),
+                    true,
+                    MappingStyle::Block,
+                ))
+                .map_err(|err| error(&format!("yaml_emit: {err}")))?;
+            for (key, value) in values {
+                python_emit(&SourceValue::Scalar(V::Text(key.clone())), emitter, None)?;
+                python_emit(value, emitter, None)?;
+            }
+            emitter
+                .emit(Event::mapping_end())
+                .map_err(|err| error(&format!("yaml_emit: {err}")))?;
+        }
+    }
+    Ok(())
+}
+
+fn python_emitter(output: &mut Vec<u8>) -> Result<Emitter<'_>> {
+    let mut emitter = Emitter::new();
+    emitter.set_output_string(output);
+    emitter.set_unicode(false);
+    emitter.set_width(80);
+    emitter
+        .emit(Event::stream_start(Encoding::Utf8))
+        .map_err(|err| error(&format!("yaml_emit: {err}")))?;
+    emitter
+        .emit(Event::document_start(None, &[], true))
+        .map_err(|err| error(&format!("yaml_emit: {err}")))?;
+    Ok(emitter)
+}
+
+fn python_finish(mut emitter: Emitter<'_>) -> Result<()> {
+    emitter
+        .emit(Event::document_end(true))
+        .map_err(|err| error(&format!("yaml_emit: {err}")))?;
+    emitter
+        .emit(Event::stream_end())
+        .map_err(|err| error(&format!("yaml_emit: {err}")))?;
+    Ok(())
+}
+
+fn python_safe_dump(value: &SourceValue) -> Result<Vec<u8>> {
+    let mut output = Vec::new();
+    let mut emitter = python_emitter(&mut output)?;
+    python_emit(value, &mut emitter, None)?;
+    python_finish(emitter)?;
+    if matches!(value, SourceValue::Scalar(_)) && !output.ends_with(b"...\n") {
+        output.extend_from_slice(b"...\n");
+    }
+    Ok(output)
+}
+
+fn python_gate_shape(
+    body: &SourceValue,
+    dependencies: &V,
+    predicate: &V,
+    predicate_field: &str,
+) -> Result<Vec<u8>> {
+    let structured = matches!(predicate, V::Map(_) | V::List(_));
+    let SourceValue::Map(body_fields) = body else {
+        return python_safe_dump(&SourceValue::Map(vec![
+            ("body".into(), body.clone()),
+            ("deps".into(), SourceValue::from_typed(dependencies)),
+            ("predicate".into(), SourceValue::from_typed(predicate)),
+        ]));
+    };
+    let mut output = Vec::new();
+    let mut emitter = python_emitter(&mut output)?;
+    emitter
+        .emit(Event::mapping_start(
+            None,
+            Some("tag:yaml.org,2002:map"),
+            true,
+            MappingStyle::Block,
+        ))
+        .map_err(|err| error(&format!("yaml_emit: {err}")))?;
+    python_emit(
+        &SourceValue::Scalar(V::Text("body".into())),
+        &mut emitter,
+        None,
+    )?;
+    emitter
+        .emit(Event::mapping_start(
+            None,
+            Some("tag:yaml.org,2002:map"),
+            true,
+            MappingStyle::Block,
+        ))
+        .map_err(|err| error(&format!("yaml_emit: {err}")))?;
+    for (key, value) in body_fields {
+        python_emit(
+            &SourceValue::Scalar(V::Text(key.clone())),
+            &mut emitter,
+            None,
+        )?;
+        python_emit(
+            value,
+            &mut emitter,
+            (structured && key == predicate_field).then_some("id001"),
+        )?;
+    }
+    emitter
+        .emit(Event::mapping_end())
+        .map_err(|err| error(&format!("yaml_emit: {err}")))?;
+    python_emit(
+        &SourceValue::Scalar(V::Text("deps".into())),
+        &mut emitter,
+        None,
+    )?;
+    python_emit(&SourceValue::from_typed(dependencies), &mut emitter, None)?;
+    python_emit(
+        &SourceValue::Scalar(V::Text("predicate".into())),
+        &mut emitter,
+        None,
+    )?;
+    if structured {
+        emitter
+            .emit(Event::alias("id001"))
+            .map_err(|err| error(&format!("yaml_emit: {err}")))?;
+    } else {
+        python_emit(&SourceValue::from_typed(predicate), &mut emitter, None)?;
+    }
+    emitter
+        .emit(Event::mapping_end())
+        .map_err(|err| error(&format!("yaml_emit: {err}")))?;
+    python_finish(emitter)?;
+    Ok(output)
 }
 impl<'a> Projection<'a> {
     pub fn new(
@@ -304,10 +533,20 @@ impl<'a> Projection<'a> {
         let base = World::new(document, &hypotheses, &conflict_ids, runtime)?;
         let mut layers = BTreeMap::new();
         let mut unread = vec![];
+        let mut unread_failures = vec![];
         let mut holders = BTreeMap::<String, Vec<(String, V)>>::new();
         for (name, h) in &hypotheses {
             let h = map(h)?;
+            let label = if string_is(get(h, "kind"), "contribution") {
+                "contribution"
+            } else {
+                "hypothesis"
+            };
             if truth(get(h, "error")) {
+                unread_failures.push(format!(
+                    "{label} {name} could not be read: {}",
+                    py(&h["error"])
+                ));
                 unread.push(format!(
                     "! hypothesis {name} could not be read: {}",
                     py(&h["error"])
@@ -324,6 +563,10 @@ impl<'a> Projection<'a> {
                     layers.insert(name.clone(), world);
                 }
                 Err(e) => {
+                    unread_failures.push(format!(
+                        "{label} {name} cannot be read over the base: {}",
+                        e.0
+                    ));
                     unread.push(format!(
                         "! hypothesis {name} cannot be read over the base: {}",
                         e.0
@@ -361,6 +604,7 @@ impl<'a> Projection<'a> {
             layers,
             hypotheses,
             unread,
+            unread_failures,
             disputed,
             knowledge,
         })
@@ -377,6 +621,171 @@ impl<'a> Projection<'a> {
                     .flat_map(|w| w.reader.ids.iter().cloned()),
             )
             .collect()
+    }
+
+    pub fn gate_data(&self) -> Result<GateData> {
+        self.gate_data_inner(None, &BTreeSet::new())
+    }
+
+    pub fn gate_data_with_source(&self, source: Option<&SourceValue>) -> Result<GateData> {
+        self.gate_data_inner(source, &BTreeSet::new())
+    }
+
+    pub fn gate_data_with_recordings(&self, recordings: &BTreeSet<String>) -> Result<GateData> {
+        self.gate_data_inner(None, recordings)
+    }
+
+    pub fn gate_data_with_source_and_recordings(
+        &self,
+        source: Option<&SourceValue>,
+        recordings: &BTreeSet<String>,
+    ) -> Result<GateData> {
+        self.gate_data_inner(source, recordings)
+    }
+
+    fn gate_data_inner(
+        &self,
+        source: Option<&SourceValue>,
+        recordings: &BTreeSet<String>,
+    ) -> Result<GateData> {
+        let (check, _) = self.check(None)?;
+        let failures = check
+            .lines()
+            .filter_map(|line| line.strip_prefix("FAIL ").map(str::to_owned))
+            .collect();
+        let mut judgments = BTreeMap::new();
+        let mut judgment_dependencies = BTreeMap::new();
+        for (id, body) in &self.base.judgments {
+            let dependencies = self.base.deps(id)?;
+            judgment_dependencies.insert(id.clone(), dependencies.clone());
+            let predicate = self.base.pred(id);
+            let input_values = dependencies
+                .iter()
+                .filter(|dependency| {
+                    self.base.reader.ids.contains(*dependency)
+                        && !self.base.judgments.contains_key(*dependency)
+                        && !F::BUILTINS.contains(&dependency.as_str())
+                })
+                .map(|dependency| Ok((dependency.clone(), self.base.reader.value(dependency)?)))
+                .collect::<Result<BTreeMap<_, _>>>()?;
+            let shape_value = V::Map(Map::from([
+                ("body".into(), body.clone()),
+                (
+                    "deps".into(),
+                    V::List(dependencies.iter().cloned().map(V::Text).collect()),
+                ),
+                ("predicate".into(), predicate.clone()),
+            ]));
+            let judgment_body = source.and_then(|source| source_body(source, id));
+            let shape = if let Some(body) = judgment_body {
+                format!(
+                    "{:x}",
+                    Sha256::digest(python_gate_shape(
+                        body,
+                        &shape_value_as(&shape_value, "deps"),
+                        &predicate,
+                        text(&self.base.reader.fields["predicate"])?
+                    )?)
+                )
+            } else {
+                shape_value.digest()?
+            };
+            let inputs = input_values
+                .into_iter()
+                .map(|(dependency, value)| {
+                    let ordered = source
+                        .and_then(|s| source_body(s, &dependency))
+                        .and_then(|body| {
+                            body.get("v")
+                                .filter(|v| v.typed() != V::Null)
+                                .or_else(|| body.get("quoted"))
+                        })
+                        .filter(|original| original.typed() == value)
+                        .cloned()
+                        .unwrap_or_else(|| SourceValue::from_typed(&value));
+                    Ok((
+                        dependency,
+                        String::from_utf8(python_safe_dump(&ordered)?)
+                            .map_err(|_| error("invalid_yaml_encoding"))?,
+                    ))
+                })
+                .collect::<Result<_>>()?;
+            judgments.insert(
+                id.clone(),
+                GateJudgment {
+                    shape,
+                    predicate: self.base.reader.predicate(&predicate)?,
+                    arrangement: crate::reasoning_authoring_guards::arrangement(
+                        &self.base.reader,
+                        body,
+                    ),
+                    inputs,
+                },
+            );
+        }
+
+        let mut raw = self.base.reader.raw.clone();
+        let mut hypothesis_judgments = BTreeMap::<String, Vec<String>>::new();
+        for hypothesis in self.hypotheses.values() {
+            let hypothesis = map(hypothesis)?;
+            let document = hypothesis
+                .get("document")
+                .or_else(|| hypothesis.get("doc"))
+                .unwrap_or(&V::Null);
+            for (id, body) in F::collections(document)?.values().flat_map(|m| m.iter()) {
+                raw.entry(id.clone()).or_insert_with(|| body.clone());
+                if let Ok(body) = map(body)
+                    && let Some(deps) = body.get(text(&self.base.reader.fields["deps"])?)
+                    && let Ok(deps) = iterable(deps)
+                {
+                    hypothesis_judgments.entry(id.clone()).or_insert(deps);
+                }
+            }
+        }
+        let ids = self.every();
+        let mut intents = ids
+            .iter()
+            .filter(|id| !judgments.contains_key(*id))
+            .filter(|id| {
+                map(raw.get(*id).unwrap_or(&V::Null)).is_ok_and(|b| truth(get(b, "asked")))
+            })
+            .cloned()
+            .collect::<BTreeSet<_>>();
+        intents.extend(
+            recordings
+                .iter()
+                .filter(|id| ids.contains(*id) && !judgments.contains_key(*id))
+                .cloned(),
+        );
+        let attributed =
+            ids.iter()
+                .filter(|id| {
+                    let Some(body) = raw.get(*id).and_then(|body| map(body).ok()) else {
+                        return false;
+                    };
+                    if body.get("from").is_some_and(|source| {
+                        text(source).is_ok_and(|source| intents.contains(source))
+                    }) {
+                        return true;
+                    }
+                    let dependencies = if judgments.contains_key(*id) {
+                        judgment_dependencies.get(*id).cloned().unwrap_or_default()
+                    } else {
+                        hypothesis_judgments.get(*id).cloned().unwrap_or_default()
+                    };
+                    dependencies
+                        .iter()
+                        .any(|dependency| intents.contains(dependency))
+                })
+                .cloned()
+                .collect();
+        Ok(GateData {
+            failures,
+            ids,
+            judgments,
+            intents,
+            attributed,
+        })
     }
     fn expanded(&self, seeds: &[String]) -> Result<(Vec<String>, Vec<String>)> {
         let every = self.every();
@@ -1461,18 +1870,14 @@ impl Projection<'_> {
             note.push(format!("{id} is served by no tab - asked: {asked}"));
             note.push(hint);
         }
-        fail.extend(
-            self.unread
-                .iter()
-                .map(|line| line.strip_prefix("! ").unwrap_or(line).to_owned()),
-        );
+        fail.extend(self.unread_failures.clone());
         let mut lines = vec![];
         lines.extend(note.iter().map(|line| format!("NOTE {line}")));
         lines.extend(moved.iter().map(|line| format!("MOVED {line}")));
         for (id, variants) in &self.disputed {
             let claims = variants
                 .iter()
-                .map(|(name, value)| format!("{name} says {}", short(value, 60)))
+                .map(|(name, value)| format!("{name} says {}", short(value, 40)))
                 .collect::<Vec<_>>()
                 .join(", ");
             let reason = if self.base.reader.knowledge_conflicts.contains(id) {

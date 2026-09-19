@@ -61,6 +61,12 @@ enum Command {
     },
     /// Consume a SessionStart JSON payload; never installs a hook or runtime.
     SessionStart,
+    /// Consume a Stop payload and deliver each new finding once per session.
+    SessionStop(kpop_native::public_session::HookOptions),
+    /// Save a private session-start baseline.
+    Mark(kpop_native::public_session::Options),
+    /// Assess against a saved baseline; --session enables once-only delivery.
+    Gate(kpop_native::public_session::Options),
     /// Canonical typed identity for JSON-compatible input on stdin.
     Identity {
         #[arg(long, conflicts_with = "yaml")]
@@ -149,14 +155,12 @@ fn session() -> Result<()> {
         } else {
             kpop_native::source_capture::ReadMode::Live
         };
-        let runtime = kpop_native::public_workspace::runtime()?;
-        let opening = kpop_native::public_readers::run(
+        let opening = kpop_native::public_readers::run_auto(
             "open",
             &kpop_native::public_readers::Options::default(),
             &root,
             mode,
             false,
-            runtime.as_ref(),
         )?;
         print!("{}", opening.text);
     }
@@ -177,6 +181,12 @@ fn session() -> Result<()> {
         println!(
             "Pass this session environment to record-writing and mapping commands. For mapping, execute the returned task. The identity routes work back to this session; it grants no source access."
         );
+        let mode = if std::env::var("KPOPPER_READ_MODE").as_deref() == Ok("frozen") {
+            kpop_native::source_capture::ReadMode::Frozen
+        } else {
+            kpop_native::source_capture::ReadMode::Live
+        };
+        kpop_native::public_session::start_mark(&root, &payload, mode)?;
     }
     Ok(())
 }
@@ -306,7 +316,10 @@ fn run(args: Args) -> Result<Value> {
         | Command::HistoryValidate { .. }
         | Command::HistoryEnvelope { .. }
         | Command::HistoryCapture { .. }
-        | Command::SessionStart => {
+        | Command::SessionStart
+        | Command::SessionStop(_)
+        | Command::Mark(_)
+        | Command::Gate(_) => {
             unreachable!()
         }
         Command::Review(_) => Err(kpop_native::Error("review requires a public record".into())),
@@ -322,6 +335,59 @@ fn run(args: Args) -> Result<Value> {
 }
 fn main() {
     let args = Args::parse();
+    let session_command = match &args.command {
+        Command::Mark(o) => Some(("mark", o)),
+        Command::Gate(o) => Some(("gate", o)),
+        _ => None,
+    };
+    if let Some((kind, options)) = session_command {
+        let result = (|| {
+            let cwd = args
+                .workspace
+                .clone()
+                .map(Ok)
+                .unwrap_or_else(std::env::current_dir)?;
+            let mode =
+                if args.frozen || std::env::var("KPOPPER_READ_MODE").as_deref() == Ok("frozen") {
+                    kpop_native::source_capture::ReadMode::Frozen
+                } else {
+                    kpop_native::source_capture::ReadMode::Live
+                };
+            kpop_native::public_session::run(kind, options, &cwd, mode)
+        })();
+        match result {
+            Ok(output) => {
+                print!("{}", output.text);
+                std::process::exit(output.code);
+            }
+            Err(error) => {
+                eprintln!("kpop-native {kind}: {error}");
+                std::process::exit(1);
+            }
+        }
+    }
+    if let Command::SessionStop(options) = &args.command {
+        let result = (|| {
+            let payload = stdin()?;
+            let mode =
+                if args.frozen || std::env::var("KPOPPER_READ_MODE").as_deref() == Ok("frozen") {
+                    kpop_native::source_capture::ReadMode::Frozen
+                } else {
+                    kpop_native::source_capture::ReadMode::Live
+                };
+            kpop_native::public_session::stop(&payload, options.host.as_deref(), mode)
+        })();
+        match result {
+            Ok(output) => {
+                eprint!("{}", output.text);
+                std::process::exit(output.code);
+            }
+            Err(error) => {
+                eprintln!("kpop-native session-stop: assessment unavailable: {error}");
+                return;
+            }
+        }
+    }
     if let Command::Page(options)
     | Command::Experimental {
         application: Application::Hub(options),
@@ -439,11 +505,7 @@ fn main() {
                 )?;
                 return Store::history(&cwd, options.operation.as_deref());
             }
-            kpop_native::public_history::run(
-                options,
-                &cwd,
-                args.frozen || std::env::var("KPOPPER_READ_MODE").as_deref() == Ok("frozen"),
-            )
+            kpop_native::public_history::run(options, &cwd)
         })();
         match result {
             Ok(value) => println!("{value}"),
@@ -486,15 +548,7 @@ fn main() {
                 } else {
                     kpop_native::source_capture::ReadMode::Live
                 };
-            let runtime = kpop_native::public_workspace::runtime()?;
-            kpop_native::public_readers::run(
-                command,
-                options,
-                &cwd,
-                mode,
-                args.json,
-                runtime.as_ref(),
-            )
+            kpop_native::public_readers::run_auto(command, options, &cwd, mode, args.json)
         })();
         match result {
             Ok(output) => {

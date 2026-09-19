@@ -87,7 +87,7 @@ fn status(entry: &Path) -> Result<Value> {
         "objects":capture.objects.len(), "subjects":subjects}))
 }
 
-pub fn run(options: &Options, cwd: &Path, _frozen: bool) -> Result<Value> {
+pub fn run(options: &Options, cwd: &Path) -> Result<Value> {
     let operation = options
         .operation
         .as_deref()
@@ -178,7 +178,8 @@ pub fn run(options: &Options, cwd: &Path, _frozen: bool) -> Result<Value> {
                 _ if string_is(&map(&project.config()?)?["mode"], "advanced") => ReadMode::Live,
                 _ => ReadMode::Frozen,
             };
-            let runtime = public_workspace::runtime()?;
+            let runtime =
+                public_workspace::runtime_for_paths(std::slice::from_ref(entry), &cwd, None)?;
             let authority = entry.parent().unwrap().join(
                 crate::history_transaction::Layout::for_entry(
                     entry

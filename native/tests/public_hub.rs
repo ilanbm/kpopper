@@ -137,16 +137,23 @@ fn output_parent_symlinks_keep_working_links_but_leaf_symlinks_are_refused() {
 fn hub_does_not_overwrite_a_linked_source_document() {
     let tmp = tempfile::tempdir().unwrap();
     let root = tmp.path();
-    fs::write(
-        root.join("GROUNDING.yaml"),
-        RECORD.replace("notes # %.txt", "source.html"),
-    )
-    .unwrap();
-    fs::write(root.join("source.html"), "original source").unwrap();
-    let result = cli(root, &["page", "--out", "source.html"]);
-    assert!(!result.status.success());
-    assert_eq!(
-        fs::read_to_string(root.join("source.html")).unwrap(),
-        "original source"
-    );
+    for reference in [
+        "file: 'source.html'",
+        "file: 'missing/../source.html'",
+        "file: 'source.html', url: 'https://example.com/report'",
+    ] {
+        fs::write(
+            root.join("GROUNDING.yaml"),
+            RECORD.replace("file: 'notes # %.txt'", reference),
+        )
+        .unwrap();
+        fs::write(root.join("source.html"), "original source").unwrap();
+        let result = cli(root, &["page", "--out", "source.html"]);
+        assert!(!result.status.success(), "{reference}");
+        assert_eq!(
+            fs::read_to_string(root.join("source.html")).unwrap(),
+            "original source",
+            "{reference}"
+        );
+    }
 }

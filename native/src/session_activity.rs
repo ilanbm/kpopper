@@ -20,15 +20,41 @@ use std::{
 
 const MAX_STATE: usize = 1024 * 1024;
 
+/// Empty TMPDIR must never turn optional private state into workspace files.
+pub fn temporary_directory() -> PathBuf {
+    if let Some(path) = env::var_os("TMPDIR").filter(|s| !s.is_empty()) {
+        return PathBuf::from(path);
+    }
+    for name in ["TEMP", "TMP"] {
+        if let Some(path) = env::var_os(name)
+            .filter(|s| !s.is_empty())
+            .map(PathBuf::from)
+            && path.is_dir()
+        {
+            return path;
+        }
+    }
+    let system = env::temp_dir();
+    if !system.as_os_str().is_empty() {
+        return system;
+    }
+    #[cfg(unix)]
+    {
+        PathBuf::from("/tmp")
+    }
+    #[cfg(not(unix))]
+    {
+        PathBuf::from(env::var_os("SystemRoot").unwrap_or_else(|| "C:\\Windows".into()))
+            .join("Temp")
+    }
+}
+
 pub fn published(root: &Path, files: &[FileImage], subjects: Option<&BTreeSet<String>>) {
     let sid = env::var("KPOPPER_AGENT_SESSION")
         .ok()
         .filter(|s| !s.is_empty())
         .or_else(|| env::var("CODEX_THREAD_ID").ok().filter(|s| !s.is_empty()));
-    let tmp = env::var_os("TMPDIR")
-        .filter(|v| !v.is_empty())
-        .map(PathBuf::from)
-        .unwrap_or_else(env::temp_dir);
+    let tmp = temporary_directory();
     if let Some(sid) = sid {
         let _ = published_with(&sid, &tmp, root, files, subjects);
     }
@@ -279,7 +305,7 @@ pub fn deliver_stop(
     issues: &[(String, String, String)],
     paths: &[PathBuf],
 ) -> Vec<String> {
-    if !valid_session(sid) || paths.is_empty() {
+    if !valid_session(sid) || paths.is_empty() || issues.is_empty() {
         return Vec::new();
     }
     // Bound caller data before cloning/hashing it, as well as the persisted JSON.
@@ -723,6 +749,21 @@ mod tests {
             deliver_stop(tmp.path(), "s1", &issues, std::slice::from_ref(&other)),
             vec!["A", "B"]
         );
+    }
+
+    #[test]
+    fn empty_stop_issues_do_not_create_private_state() {
+        let temp = tempdir().unwrap();
+        assert!(
+            deliver_stop(
+                temp.path(),
+                "empty",
+                &[],
+                &[temp.path().join("GROUNDING.yaml")]
+            )
+            .is_empty()
+        );
+        assert!(!temp.path().join("kpopper-session-empty").exists());
     }
 
     #[test]

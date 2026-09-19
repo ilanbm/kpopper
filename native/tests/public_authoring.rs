@@ -38,6 +38,37 @@ fn success(output: Output) -> String {
     String::from_utf8(output.stdout).unwrap()
 }
 #[test]
+fn empty_tmpdir_keeps_publication_receipts_outside_the_workspace() {
+    let temp = tempfile::tempdir().unwrap();
+    let root = temp.path().canonicalize().unwrap();
+    let sessions = tempfile::tempdir().unwrap();
+    let sid = format!(
+        "empty-tmp-{}",
+        &kpop_native::identity::sha256(root.to_string_lossy().as_bytes())[..16]
+    );
+    success(
+        command(&root)
+            .env("TMPDIR", "")
+            .env("TEMP", sessions.path())
+            .env_remove("TMP")
+            .env("KPOPPER_AGENT_SESSION", &sid)
+            .args(["add", "p.x", "v=1"])
+            .output()
+            .unwrap(),
+    );
+    assert!(!root.join(format!("kpopper-session-{sid}")).exists());
+    let receipt_home = sessions.path().join(format!("kpopper-session-{sid}"));
+    assert!(receipt_home.is_dir());
+    assert!(fs::read_dir(receipt_home).unwrap().any(|entry| {
+        entry
+            .unwrap()
+            .file_name()
+            .to_string_lossy()
+            .starts_with("writes-")
+    }));
+}
+
+#[test]
 fn first_add_creates_history_and_subsequent_set_retains_the_original_version() {
     let temp = tempfile::tempdir().unwrap();
     let root = temp.path().canonicalize().unwrap();

@@ -231,6 +231,19 @@ fn orientation(source: &crate::history_yaml::SourceValue) -> Vec<String> {
         vec![format!("  {}", places.join(" | "))]
     }
 }
+pub fn run_auto(
+    command: &str,
+    options: &Options,
+    cwd: &Path,
+    mode: ReadMode,
+    as_json: bool,
+) -> Result<C::Output> {
+    let cwd = cwd.canonicalize()?;
+    let (paths, _) = files(options, &cwd, command)?;
+    let runtime = W::runtime_for_paths(&paths, &cwd, options.profile.as_deref())?;
+    run(command, options, &cwd, mode, as_json, runtime.as_ref())
+}
+
 pub fn run(
     command: &str,
     options: &Options,

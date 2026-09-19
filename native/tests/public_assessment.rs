@@ -300,6 +300,9 @@ fn actual_cli_runs_bundled_ordinary_and_core_lean_programs() {
     let data: J = serde_json::from_slice(&out.stdout).unwrap();
     assert_eq!(data["schema_version"], 3);
     fs::remove_file(ordinary.join("build.json")).unwrap();
+    // The unavailable optional ordinary program cannot poison core reads.
+    assert!(run(&[]).status.success());
+    fs::write(root.join("GROUNDING.yaml"), &body).unwrap();
     let out = run(&[]);
     assert_eq!(out.status.code(), Some(2));
     assert!(out.stdout.is_empty());

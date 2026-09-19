@@ -50,9 +50,11 @@ fn destination(options: &Options, cwd: &Path, first: &Path) -> Result<PathBuf> {
     })
 }
 
-fn verify(page: &serde_json::Value) -> Output {
+fn verify(page: &serde_json::Value) -> Result<Output> {
     let values = &page["page_inputs"]["values"];
-    let nodes = values["nodes"].as_array().expect("projected nodes");
+    let nodes = values["nodes"]
+        .as_array()
+        .ok_or_else(|| error("Hub projection has no node array"))?;
     let judgments = nodes.iter().filter(|n| n["kind"] == "judgment").count();
     let coverage = &values["coverage"];
     let mut failures = vec![];
@@ -83,13 +85,17 @@ fn verify(page: &serde_json::Value) -> Output {
         nodes.len(),
         nodes.len() - judgments,
         judgments,
-        values["arrangements"].as_array().unwrap().len() + 1,
+        values["arrangements"]
+            .as_array()
+            .ok_or_else(|| error("Hub projection has no arrangement array"))?
+            .len()
+            + 1,
         failures.len()
     ));
-    Output {
+    Ok(Output {
         text,
         code: i32::from(!failures.is_empty()),
-    }
+    })
 }
 
 fn output_path(path: &Path, protected: &[PathBuf]) -> Result<PathBuf> {
@@ -143,14 +149,42 @@ fn browser_checks(page: &Path) -> Result<Output> {
     })
 }
 
-fn protect_linked_sources(page: &serde_json::Value, output: &Path) -> Result<()> {
-    for node in page["page_inputs"]["values"]["nodes"]
-        .as_array()
-        .into_iter()
-        .flatten()
-    {
-        let Some(href) = node["href"].as_str().filter(|s| !s.is_empty()) else {
+fn declared_source_paths(document: &crate::value::TypedValue, base: &Path) -> Result<Vec<PathBuf>> {
+    let mut paths = Vec::new();
+    let mut declarations = Vec::new();
+    for (section, members) in map(document)? {
+        if matches!(section.as_str(), "meta" | "schema" | "record" | "also") {
             continue;
+        }
+        let Ok(members) = map(members) else { continue };
+        for body in members.values() {
+            let Ok(body) = map(body) else { continue };
+            for field in ["file", "url"] {
+                if let Some(crate::value::TypedValue::Text(value)) = body.get(field) {
+                    if field == "file" && !value.is_empty() {
+                        // A declared local source stays protected even when a URL
+                        // wins for display, or its name contains literal % or #.
+                        paths.push(base.join(value));
+                        paths.push(base.join(value.trim()));
+                    }
+                    if field == "url" || value.to_ascii_lowercase().starts_with("file:") {
+                        declarations.push(value.trim().to_owned());
+                    }
+                }
+            }
+        }
+    }
+    for href in declarations {
+        if href.is_empty() {
+            continue;
+        }
+        let href = if href
+            .get(..5)
+            .is_some_and(|s| s.eq_ignore_ascii_case("file:"))
+        {
+            "file:".to_string() + &href[5..]
+        } else {
+            href
         };
         let href = if let Some(file) = href.strip_prefix("file://localhost/") {
             format!("/{file}")
@@ -165,7 +199,7 @@ fn protect_linked_sources(page: &serde_json::Value, output: &Path) -> Result<()>
         } else if href.split('/').next().is_some_and(|p| p.contains(':')) {
             continue;
         } else {
-            href.to_string()
+            href
         };
         let raw = href.split(['?', '#']).next().unwrap_or("").as_bytes();
         let mut decoded = Vec::with_capacity(raw.len());
@@ -187,13 +221,9 @@ fn protect_linked_sources(page: &serde_json::Value, output: &Path) -> Result<()>
         let Ok(local) = String::from_utf8(decoded) else {
             continue;
         };
-        let source = output.parent().unwrap().join(local);
-        require(
-            crate::project_modes::resolved(&source)? != output,
-            "Hub output would overwrite a linked source document",
-        )?;
+        paths.push(base.join(local));
     }
-    Ok(())
+    Ok(paths)
 }
 
 fn open_page(path: &Path, tree: bool) -> Result<()> {
@@ -309,14 +339,23 @@ pub fn run(options: &Options, cwd: &Path, mode: ReadMode) -> Result<Output> {
         core_html::render(page, MAX_HTML).map_err(Error)?;
         captured.verify()?;
         inventory.verify()?;
-        return Ok(verify(page));
+        return verify(page);
     }
     let destination = destination(options, &cwd, first)?;
     let mut protected = captured.files().keys().cloned().collect::<Vec<_>>();
+    protected.extend(declared_source_paths(
+        &captured.document(),
+        first.parent().unwrap(),
+    )?);
+    for hypothesis in map(captured.hypotheses())?.values() {
+        let hypothesis = map(hypothesis)?;
+        if let Some(document) = hypothesis.get("doc").or_else(|| hypothesis.get("document")) {
+            protected.extend(declared_source_paths(document, first.parent().unwrap())?);
+        }
+    }
     protected.push(brief);
     let resolved = output_path(&destination, &protected)?;
     let projection = core_page::project_for_page(&context, content.as_deref(), first, &resolved)?;
-    protect_linked_sources(&projection["page_assessment"], &resolved)?;
     let html = core_html::render(&projection["page_assessment"], MAX_HTML).map_err(Error)?;
     captured.verify()?;
     inventory.verify()?;

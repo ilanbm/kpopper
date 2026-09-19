@@ -127,8 +127,20 @@ by `open`. Each new observation requires a new operation and an explicit recorde
 For ordinary public records it runs the same captured opener and returns an executable
 `KPOPPER_AGENT_CONTEXT.command`; explicitly marked feasibility stores retain their
 older private opener. It ignores subagent payloads, and reports failed opening visibly
-without blocking the host. This command does not install hooks, write the stop-gate
-baseline, or establish host trust.
+without blocking the host. It saves a private baseline for a valid session ID and
+preserves that baseline on resume or compaction. An absent record gets an empty
+private mark so its first write can be checked without creating a record at opening.
+The command does not install hooks or establish host trust.
+
+`session-stop` consumes the corresponding host payload and assesses against that
+baseline every time. Private receipts attribute exact published bodies and suppress
+each repeated finding independently. New findings still appear after an earlier
+reminder. An unavailable assessment is reported visibly and cannot trap the host.
+`mark STATE [RECORD ...]` and `gate STATE [RECORD ...]` expose the same baseline and
+assessment for explicit callers; `gate --session ID` enables once-only delivery.
+They preserve compatible Python marks, inherited failures and unchanged judgments
+newly falsified by updated readings. Neither command checks optional HTML layouts.
+Only verified ingestion receipts can establish the purpose of a captured report.
 
 Successful direct and first-record writes retain optional private session receipts
 for their exact changed bodies. Failed writes, previews and private drafts receive

@@ -72,7 +72,10 @@ fn safe_href(raw: &str) -> bool {
 
 fn push(out: &mut String, part: &str, max: usize) -> Result<(), String> {
     if part.len() > max.saturating_sub(out.len()) {
-        return Err("html output limit exceeded".into());
+        return Err(format!(
+            "html output limit exceeded ({max} bytes; at least {} needed)",
+            out.len().saturating_add(part.len())
+        ));
     }
     out.push_str(part);
     Ok(())
@@ -243,7 +246,7 @@ fn card(node: &Value, out: &mut String, max: usize) -> Result<(), String> {
 /// Render one validated `page-secondary/v1` envelope as standalone static HTML.
 pub fn render(page: &Value, max_bytes: usize) -> Result<String, String> {
     if max_bytes == 0 {
-        return err("html output limit exceeded");
+        return err(&format!("html output limit exceeded ({max_bytes} bytes)"));
     }
     let object = page.as_object().ok_or("page envelope must be an object")?;
     if object.get("schema_version").and_then(Value::as_u64) != Some(1)

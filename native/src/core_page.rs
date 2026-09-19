@@ -557,9 +557,13 @@ fn quote(value: &str, safe: &str) -> String {
     }
     output
 }
-fn link_for_page(body: &J, record_entry: Option<&Path>, page_path: Option<&Path>) -> String {
+fn link_for_page(
+    body: &J,
+    record_entry: Option<&Path>,
+    page_path: Option<&Path>,
+) -> Result<String> {
     if !has_link(body) {
-        return String::new();
+        return Ok(String::new());
     }
     let is_url = truth(&body["url"]);
     let value = string(if is_url { &body["url"] } else { &body["file"] });
@@ -603,22 +607,22 @@ fn link_for_page(body: &J, record_entry: Option<&Path>, page_path: Option<&Path>
             out.push('#');
             out.push_str(&quote(f, "/?.-_~%:@!$&'()*+,;="));
         }
-        out
+        Ok(out)
     } else if let (Some(record), Some(page)) = (record_entry, page_path) {
         let source = if Path::new(value).is_absolute() {
             Path::new(value).to_path_buf()
         } else {
             record.parent().unwrap_or(record).join(value)
         };
-        let source = realpath_like(&source);
+        let source = crate::project_modes::resolved(&source)?;
         let page_dir = page.parent().unwrap_or(Path::new("."));
-        let page_dir = realpath_like(page_dir);
+        let page_dir = crate::project_modes::resolved(page_dir)?;
         let relative = pathdiff(&source, &page_dir);
-        quote(&relative, "/.-_~")
+        Ok(quote(&relative, "/.-_~"))
     } else if is_url && (value.starts_with('#') || value.starts_with('?')) {
-        quote(value, "?.-_~%=&#+@!$'()*+,;:/")
+        Ok(quote(value, "?.-_~%=&#+@!$'()*+,;:/"))
     } else {
-        quote(value, if is_url { "/.-_~%?=&#+@" } else { "/.-_~" })
+        Ok(quote(value, if is_url { "/.-_~%?=&#+@" } else { "/.-_~" }))
     }
 }
 
@@ -642,31 +646,6 @@ fn pathdiff(path: &Path, base: &Path) -> String {
     }
 }
 
-fn realpath_like(path: &Path) -> std::path::PathBuf {
-    let absolute = if path.is_absolute() {
-        path.to_path_buf()
-    } else {
-        std::env::current_dir()
-            .unwrap_or_else(|_| Path::new(".").to_path_buf())
-            .join(path)
-    };
-    let mut missing = Vec::new();
-    let mut probe = absolute.as_path();
-    while !probe.exists() {
-        if let Some(name) = probe.file_name() {
-            missing.push(name.to_owned());
-        }
-        let Some(parent) = probe.parent() else {
-            return absolute;
-        };
-        probe = parent;
-    }
-    let mut resolved = std::fs::canonicalize(probe).unwrap_or_else(|_| probe.to_path_buf());
-    for name in missing.iter().rev() {
-        resolved.push(name);
-    }
-    resolved
-}
 fn language(doc: &J) -> String {
     let meta = &doc["meta"];
     if let Some(explicit) = [&meta["language"], &meta["lang"]]
@@ -810,7 +789,7 @@ fn secondary(
                     .filter_map(|d| d["id"].as_str()),
             )
             .collect::<BTreeSet<_>>();
-        nodes.push(json!({"id":id,"kind":if judgments.contains(id){"judgment"}else{"entry"},"label":label,"value":projected["status"]["computation"]["value_text"],"rule":rule,"status":projected["status"],"status_text":projected["status_text"],"dependencies":deps,"flags":flags[id],"href":if with_links{json!(link_for_page(body, record_entry, page_path))}else{J::Null}}));
+        nodes.push(json!({"id":id,"kind":if judgments.contains(id){"judgment"}else{"entry"},"label":label,"value":projected["status"]["computation"]["value_text"],"rule":rule,"status":projected["status"],"status_text":projected["status_text"],"dependencies":deps,"flags":flags[id],"href":if with_links{json!(link_for_page(body, record_entry, page_path)?)}else{J::Null}}));
     }
     let values = json!({"consumer_view_version":view["version"],"title":title,"language":lang,"direction":direction,"nodes":nodes,"arrangements":arrangements,"coverage":coverage});
     let to_value = |v: &J| V::from_json_bounded(v, 64 * 1024 * 1024 / 8);
@@ -853,8 +832,23 @@ mod page_link_tests {
                 &body,
                 Some(Path::new("/tmp/record/GROUNDING.yaml")),
                 Some(Path::new("/tmp/out/pages/index.html")),
-            ),
+            )
+            .unwrap(),
             "../../record/evidence/space%20%23/%25/%CE%94.txt"
+        );
+    }
+
+    #[test]
+    fn nonexistent_parent_then_dotdot_keeps_the_correct_source() {
+        let body = json!({"file":"missing/../source.html"});
+        assert_eq!(
+            link_for_page(
+                &body,
+                Some(Path::new("/tmp/record/GROUNDING.yaml")),
+                Some(Path::new("/tmp/out/page.html"))
+            )
+            .unwrap(),
+            "../record/source.html"
         );
     }
 
@@ -866,7 +860,8 @@ mod page_link_tests {
                 &body,
                 Some(Path::new("/tmp/record/GROUNDING.yaml")),
                 Some(Path::new("/tmp/page.html"))
-            ),
+            )
+            .unwrap(),
             "https://example.com/a%20b?q=x%20y#frag%20ment"
         );
     }

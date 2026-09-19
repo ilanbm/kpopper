@@ -114,7 +114,13 @@ pub fn report(
     Ok(report)
 }
 pub fn run(options: &Options, cwd: &Path, mode: ReadMode) -> Result<String> {
-    let runtime = crate::public_workspace::runtime()?;
+    let paths = if options.records.is_empty() {
+        crate::public_workspace::records(cwd)?
+    } else {
+        options.records.clone()
+    };
+    let runtime =
+        crate::public_workspace::runtime_for_paths(&paths, cwd, options.profile.as_deref())?;
     let report = report(options, cwd, mode, runtime.as_ref())?;
     crate::ordinary_assessment_report::compact_json(&report)
 }

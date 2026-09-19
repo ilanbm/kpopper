@@ -65,6 +65,31 @@ pub fn runtime() -> Result<Option<Runtime>> {
 pub fn core_runtime() -> Result<Option<Runtime>> {
     load_runtime(false)
 }
+/// Inspect only source declarations to select resources before the semantic
+/// capture. No assessment is performed here; the command still captures and
+/// verifies its own complete reading after resource selection.
+pub fn runtime_for_paths(
+    paths: &[PathBuf],
+    cwd: &Path,
+    profile: Option<&str>,
+) -> Result<Option<Runtime>> {
+    crate::require(!paths.is_empty(), "record_required")?;
+    let paths = paths
+        .iter()
+        .map(|path| crate::source_inventory::absolute(&cwd.join(path)))
+        .collect::<Result<Vec<_>>>()?;
+    let mut inventory = crate::source_inventory::Inventory::default();
+    let document = crate::source_document::load(&paths, &mut inventory, true)?;
+    let capabilities = crate::reasoning_fields::capabilities(&document.source.typed(), profile)?;
+    let ordinary = !document.members.is_empty()
+        && !crate::history_contract::string_is(
+            &crate::history_contract::map(&capabilities)?["profile"],
+            "core/v1",
+        );
+    let runtime = load_runtime(ordinary)?;
+    inventory.verify()?;
+    Ok(runtime)
+}
 pub fn runtime_for_document(document: &crate::value::TypedValue) -> Result<Option<Runtime>> {
     let capabilities = crate::reasoning_fields::capabilities(document, None)?;
     if crate::history_contract::string_is(
