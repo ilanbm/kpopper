@@ -1,7 +1,7 @@
-# Standalone HTML authoring
+# Annotated Documents author guide
 
-When asked for an HTML document, write the requested content and design, and create its
-internal evidence mapping while writing. Deliver the output of `document build`. The
+When explicitly asked for a kpopper HTML document with evidence (or under a standing preference), write the requested content and design, and create its
+internal evidence mapping while writing. Deliver the output of `kpop experimental annotated-doc build`. The
 user supplies neither anchors nor mapping. A one-off document needs no record setup.
 The document contains all display resources, source excerpts and decisions. JavaScript
 is required for viewing and review; no server, CDN, neighboring files or network is needed.
@@ -35,8 +35,8 @@ is required for viewing and review; no server, CDN, neighboring files or network
    check its actual layout and interactions when available.
 
 ```sh
-kpop document build --html draft.html --manifest evidence.json --out report.html
-kpop document inspect report.html
+kpop experimental annotated-doc build --html draft.html --manifest evidence.json --out report.html
+kpop experimental annotated-doc inspect report.html
 ```
 
 `--root` defaults to the manifest's directory. Source paths must stay inside it and
@@ -111,7 +111,7 @@ Read the new sources first. Create `sources.json`, an object from existing sourc
 to new input definitions (the same shape as the manifest's `sources` object), then run:
 
 ```sh
-kpop document refresh report.html --sources sources.json --out report-updated.html
+kpop experimental annotated-doc refresh report.html --sources sources.json --out report-updated.html
 ```
 
 Only supplied sources are reread. Others retain their old snapshots and are labeled

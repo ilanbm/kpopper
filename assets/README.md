@@ -80,7 +80,8 @@ organize every source.
 ## Product screenshots
 
 `standalone-document-reasoning.png` is an unaltered browser capture of **The Autumn Garden
-Workshop**, an HTML report produced by the standalone document workflow. The document and
+Workshop**, an HTML report illustrating the optional, experimental Annotated Documents
+application. The document and
 the focused explanation for its 16-day registration window appear together. The card marks
 that interpretation as **Not checked**, explains its basis in two dates, and links to the
 project notes offered as context. It does not present the interpretation as an automatically

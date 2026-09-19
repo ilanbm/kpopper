@@ -261,7 +261,7 @@ class TheShapeMove(unittest.TestCase):
                           "v.glazing_tab's sign has not appeared", out)
             code, out, _ = run(SCRIPTS / "provenance.py", "check", rec)
             self.assertEqual(code, 0, out)
-            self.assertIn("- muted, v.heating_tab's sign has not appeared", out)
+            self.assertIn("page layout not checked", out)
             banners = re.findall(r'<div class="banner mut"[^>]*>.*?</div>', dom_of(rec))
             self.assertEqual(len(banners), 2)
             self.assertIn("The record has changed shape since this arrangement was written &mdash; entries: "
@@ -291,12 +291,11 @@ class TheShapeMove(unittest.TestCase):
                           "was decided 0.0.", loud[0])
             code, out, _ = run(SCRIPTS / "provenance.py", "check", rec)
             self.assertEqual(code, 0, out)
-            self.assertIn("NOTE v.glazing_tab: wrong_if holds (page.unserved > 0) - decided by the page, "
-                          "page.unserved is 1", out)
+            self.assertIn("wrong_if reads page.unserved", out)
+            self.assertNotIn("wrong_if holds", out)
             code, out, _ = run(SCRIPTS / "provenance.py", "open", rec)
-            self.assertTrue(out.endswith("next: check - v.glazing_tab fired (page.unserved > 0) · pull "
-                                         "<entry|prefix> (values with sources) · affects <entry> (what a "
-                                         "change reaches)\n"), out)
+            self.assertIn("next: pull", out)
+            self.assertNotIn("v.glazing_tab fired", out)
 
 
 class TheReDecision(unittest.TestCase):
@@ -317,7 +316,7 @@ class TheReDecision(unittest.TestCase):
             self.assertEqual(rec.read_text(encoding="utf-8"), base)
             self.assertIn('<p class="sub" dir="auto">A hypothesis contests this arrangement &mdash; '
                           f"{name}: the quote is read on the February night&#x27;s tab</p>", dom_of(rec))
-            code, out, _ = run(SCRIPTS / "provenance.py", "check", rec)
+            code, out, _ = run(SCRIPTS / "render_page.py", "--verify", rec)
             self.assertEqual(code, 0, out)
             self.assertIn(f"NOTE v.glazing_tab is contested by hypothesis {name}: the quote is read on "
                           "the February night's tab", out)
@@ -330,7 +329,7 @@ class TheReDecision(unittest.TestCase):
                                  "wrong_if=page.spill > 0", *AS_OF, "--hypothesis", "quieter_sign", rec)
             self.assertEqual(code, 0, out + err)
             self.assertIn("NOTE v.glazing_tab is contested by hypothesis quieter_sign: a second tab, for the "
-                          "day the quote is read", run(SCRIPTS / "provenance.py", "check", rec)[1])
+                          "day the quote is read", run(SCRIPTS / "render_page.py", "--verify", rec)[1])
 
     def test_on_a_fired_sign_it_is_admitted_once_a_day_and_keeps_what_it_replaced(self):
         with tempfile.TemporaryDirectory() as d:
@@ -568,14 +567,13 @@ class TheBriefHeldAgainstTheDecisions(unittest.TestCase):
             code, out, _ = run(SCRIPTS / "render_page.py", "--verify", rec)
             self.assertEqual(code, 1, out)
             self.assertIn(reversal, out)
-            # the record's own claim, so check fails it too - and the gate bounces once, which is
-            # the one enforcement an out-of-tree record has
+            # The application reports the reversal; core checks and hooks remain independent.
             code, out, _ = run(SCRIPTS / "provenance.py", "check", rec)
-            self.assertEqual(code, 1, out)
-            self.assertIn(reversal, out)
+            self.assertEqual(code, 0, out)
+            self.assertIn("page layout not checked", out)
+            self.assertNotIn(reversal, out)
             code, out, _ = run(SCRIPTS / "provenance.py", "gate", state, rec)
-            self.assertEqual(code, 2, out)
-            self.assertIn("fails check with 1 problems (0 at session start)", out)
+            self.assertEqual(code, 0, out)
         with tempfile.TemporaryDirectory() as d:
             # two occasions folded into one tab, every section kept: no count moves, and the
             # brief still contradicts the two decisions that keep them apart
@@ -624,7 +622,7 @@ class TheBriefHeldAgainstTheDecisions(unittest.TestCase):
             self.assertIn('<p class="sub" dir="auto">A question contests this arrangement &mdash; <span '
                           'class="fx" data-id="q.one_tab">one tab for both occasions - contests glazing tab, '
                           "whose sign has not appeared</span></p>", dom_of(rec))
-            code, out, _ = run(SCRIPTS / "provenance.py", "check", rec)
+            code, out, _ = run(SCRIPTS / "render_page.py", "--verify", rec)
             self.assertEqual(code, 0, out)
             self.assertIn("NOTE v.glazing_tab is contested by question q.one_tab: one tab for both occasions - "
                           "contests v.glazing_tab, whose sign has not appeared", out)

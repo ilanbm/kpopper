@@ -47,7 +47,7 @@ class PageMeasurements(unittest.TestCase):
         return self.store.scan()['items'][0]['state']
 
     def measure(self):
-        result = subprocess.run([sys.executable, str(Path(R.__file__).parent / 'cli.py'), 'page', '--verify'],
+        result = subprocess.run([sys.executable, str(Path(R.__file__).parent / 'cli.py'), 'experimental', 'hub', '--verify'],
                                 cwd=self.work, env=os.environ, text=True, capture_output=True, timeout=30)
         self.assertNotIn('Traceback', result.stderr)
         return result

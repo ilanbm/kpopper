@@ -708,7 +708,7 @@ def measure(paths, run=False, timeout=None, cap=None, today=None):
     laid = sorted(hyps + [tree], key=lambda h: h["name"])
     # the same day and the same page facts the fold would ask the door with, so this run and
     # the consolidation walk say the same thing about every hypothesis laid over the record
-    c = C.union_of(doc, laid, (fail_b, moved_b), today.isoformat(), C.page_of(paths))
+    c = C.union_of(doc, laid, (fail_b, moved_b), today.isoformat(), C.page_of(paths, laid, doc=doc))
     report = [l for l in C.report(c, today) if l not in GENERIC]
     if report and report[-1] and not c.contested:
         report = report[:-1]           # the fold's verdict: the tree never folds, and the last word is below

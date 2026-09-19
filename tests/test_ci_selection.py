@@ -48,6 +48,8 @@ class Selection(unittest.TestCase):
 
     def test_shared_reader_and_cli_run_all_consumers_without_recompiling(self):
         for path in ("scripts/provenance.py", "scripts/cli.py", "scripts/session/core.py",
+                     "scripts/applications/hub.py", "scripts/applications/annotated_doc.py",
+                     "scripts/applications/document.py", "scripts/applications/__init__.py",
                      "scripts/reasoning/evaluate.py", "tests/test_session.py", "tests/fixtures/page/PROVENANCE.yaml",
                      "examples/scoped-query/exercise.py", "examples/scoped-query/record.yaml"):
             with self.subTest(path=path):
