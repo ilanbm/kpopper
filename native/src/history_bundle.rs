@@ -42,7 +42,7 @@ pub(crate) fn files_valid(files: &Files) -> Result<()> {
     }
     Ok(())
 }
-fn capture(files: &Files, rules: &V) -> Result<Capture> {
+pub(crate) fn capture(files: &Files, rules: Option<&V>) -> Result<Capture> {
     files_valid(files)?;
     let authority_bytes = files
         .get("authority.yaml")
@@ -102,7 +102,7 @@ fn capture(files: &Files, rules: &V) -> Result<Capture> {
         .filter(|((_, id), _)| objects.contains_key(id))
         .map(|(k, v)| (k.clone(), v.clone()))
         .collect();
-    let state = history_reduce::reduce_bytes(&selected_bytes, Some(map(rules)?), None)?;
+    let state = history_reduce::reduce_bytes(&selected_bytes, rules.map(map).transpose()?, None)?;
     let baseline = H::baseline(&marker, &commits, &state)?;
     let actual = map(&document)?
         .get("meta")
@@ -190,7 +190,7 @@ pub fn validate_observation(evidence: &V, files: &Files) -> Result<CapturedHisto
     for (path, bytes) in files {
         require(hashes[path] == s(&sha256(bytes)), "history_bundle_checksum")?;
     }
-    let captured = capture(files, &e["rules"])?;
+    let captured = capture(files, Some(&e["rules"]))?;
     let retained = V::Map(
         captured
             .inactive_generations
@@ -308,7 +308,7 @@ fn validate_artifact(manifest: &V, revision: &V, files: &Files) -> Result<Captur
         require(hashes[path] == s(&sha256(raw)), "history_bundle_checksum")?;
         privacy(&Y::decode_document(raw)?)?;
     }
-    let captured = capture(files, &m["rules"])?;
+    let captured = capture(files, Some(&m["rules"]))?;
     let meta = map(&map(&captured.document)?["meta"])?;
     require(
         version == 2 || !meta.contains_key("history_subset"),

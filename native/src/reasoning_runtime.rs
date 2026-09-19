@@ -77,10 +77,18 @@ pub fn run_bounded(
     timeout: Duration,
     output_limit: usize,
 ) -> Result<Vec<u8>> {
-    let deadline = Instant::now() + timeout;
     let mut cmd = Command::new(command);
-    cmd.args(args)
-        .stdin(Stdio::piped())
+    cmd.args(args);
+    run_command_bounded(&mut cmd, payload, timeout, output_limit)
+}
+pub(crate) fn run_command_bounded(
+    cmd: &mut Command,
+    payload: Vec<u8>,
+    timeout: Duration,
+    output_limit: usize,
+) -> Result<Vec<u8>> {
+    let deadline = Instant::now() + timeout;
+    cmd.stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped());
     #[cfg(unix)]

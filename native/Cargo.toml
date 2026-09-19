@@ -16,6 +16,7 @@ num-bigint = "0.4"
 regex = "1"
 ryu = "1"
 sha2 = "0.10"
+sha1 = "0.10"
 zip = { version = "6", default-features = false, features = ["deflate"] }
 rustpython-parser = { version = "0.4", default-features = false, features = ["num-bigint"] }
 unicode-normalization = "0.1"

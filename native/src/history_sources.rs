@@ -74,7 +74,7 @@ fn pattern(text: &str) -> Vec<Pattern> {
     }
     out
 }
-fn matches(name: &str, glob: &str) -> Result<bool> {
+pub(crate) fn matches(name: &str, glob: &str) -> Result<bool> {
     let name: Vec<_> = name.chars().collect();
     let pattern = pattern(glob);
     require(

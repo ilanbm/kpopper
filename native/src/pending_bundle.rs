@@ -245,7 +245,7 @@ fn declared(document: &V) -> Result<V> {
     require(req.windows(2).all(|w| w[0] < w[1]), "invalid_capability")?;
     Ok(reasoning.clone())
 }
-fn required_files(value: &V) -> Result<BTreeSet<String>> {
+pub(crate) fn required_files(value: &V) -> Result<BTreeSet<String>> {
     let mut todo = vec![value];
     let mut out = BTreeSet::new();
     while let Some(v) = todo.pop() {

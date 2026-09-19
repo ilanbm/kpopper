@@ -877,6 +877,14 @@ sources:
     file: "native/src/history_authoring_batch.rs"
     of: "2026-09-19: batch preparation and causal-parent replay added after direct-authoring
          checkpoint 0c757063ab8a2e40f87c3d967dffdbbd3d621cbe"
+  s.native_branch_audit:
+    name: "Native committed branch capture and source-free audit evidence"
+    from: s.2026_09_19_native_identity_continuation
+    file: "native/src/history_branch.rs"
+    at: "Branch evidence closure, exact Snapshot and scoped prior-capsule coverage;
+         history_branch_git local capture; history-branch.json 49 Python cases with 30 accepted
+         envelopes and Git SHA1/SHA256 tests"
+    read: "2026-09-19"
   s.native_context_verification:
     name: "Native captured history and operation conformance"
     from: s.2026_09_19_native_snapshot_continuation
@@ -1884,6 +1892,18 @@ known:
     at: "history_authoring_batch stage, final_world and sequential; reasoning_authoring
          World.batch_admission; exact batch conformance and
          native_batch_replay_preserves_final_pins_evidence_and_retry tests"
+  p.native_branch_audit_boundary:
+    name: "Native committed branch audit boundary"
+    v: "Source-free branch validation binds exact Git blob identities, current and inactive
+        generations, authored and commit-bound evidence, imported physical hypotheses, scoped prior
+        audit capsules and the complete Snapshot. Local Git capture resolves the ref once, ignores
+        dirty checkout and orphan object bodies, and performs no source writes or fetches. The 49
+        pinned Python cases include 30 exact accepted envelopes. Actual SHA1 and SHA256 Git
+        repositories and detached wire replay pass. This boundary does not yet enable branch adoption
+        publication or expand the public CLI."
+    from: s.native_branch_audit
+    at: "history_branch and history_branch_git focused tests; source-free validation and typed
+         transport"
   p.native_context_replay_boundary:
     name: "Captured assessment replay boundary"
     v: "CapturedAssessment replay rebuilds v2 findings, v3 history projection and the consumer view
