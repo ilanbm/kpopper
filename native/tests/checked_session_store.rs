@@ -3,6 +3,8 @@ use kpop_native::{
     reasoning_snapshot::Snapshot, tokenizer::Encoding, value::TypedValue as V,
 };
 use serde_json::{Value as J, json};
+#[cfg(windows)]
+use std::path::PathBuf;
 use std::{
     fs,
     sync::{Arc, Barrier},
@@ -224,15 +226,23 @@ fn revalidates_root_identity_and_project_claim_on_every_operation() {
     assert!(store.load(&revision, &s).is_err());
     assert!(store.save(&c, &s).is_err());
 
-    fs::rename(&root, dir.path().join("old-state")).unwrap();
-    fs::create_dir(&root).unwrap();
-    fs::write(
-        root.join("project.json"),
-        serde_json::to_vec(&json!({"project":"fixture","input_path":source})).unwrap(),
-    )
-    .unwrap();
-    assert!(store.context_path(&revision).is_err());
-    assert!(store.load(&revision, &s).is_err());
+    #[cfg(unix)]
+    {
+        fs::rename(&root, dir.path().join("old-state")).unwrap();
+        fs::create_dir(&root).unwrap();
+        fs::write(
+            root.join("project.json"),
+            serde_json::to_vec(&json!({"project":"fixture","input_path":source})).unwrap(),
+        )
+        .unwrap();
+        assert!(store.context_path(&revision).is_err());
+        assert!(store.load(&revision, &s).is_err());
+    }
+    #[cfg(windows)]
+    {
+        assert!(fs::rename(&root, dir.path().join("old-state")).is_err());
+        assert!(store.context_path(&revision).is_err());
+    }
 }
 
 #[cfg(unix)]
@@ -349,6 +359,109 @@ fn concurrent_different_identity_claims_have_one_winner() {
         .map(|worker| worker.join().unwrap())
         .collect();
     assert_eq!(outcomes.iter().filter(|value| **value).count(), 1);
+}
+
+#[cfg(windows)]
+#[test]
+fn windows_store_anchors_reads_and_refuses_network_and_reparse_roots() {
+    use std::process::Command;
+
+    assert!(
+        CheckedSessionStore::open(
+            r"\\example.invalid\share\state",
+            "fixture",
+            r"C:\missing.yaml",
+            None,
+            Encoding::O200kBase,
+        )
+        .is_err()
+    );
+
+    let dir = tempfile::tempdir().unwrap();
+    let root = dir.path().join("StateRoot");
+    let source = dir.path().join("input");
+    fs::write(&source, b"x").unwrap();
+    let c = context();
+    let s = snapshot(&c);
+    let store =
+        CheckedSessionStore::open(&root, "fixture", &source, None, Encoding::O200kBase).unwrap();
+    let revision = store.save(&c, &s).unwrap();
+
+    let case_alias = PathBuf::from(root.to_string_lossy().to_lowercase());
+    let reopened =
+        CheckedSessionStore::open(case_alias, "fixture", &source, None, Encoding::O200kBase)
+            .unwrap();
+    assert_eq!(reopened.load(&revision, &s).unwrap().revision(), revision);
+
+    let junction = dir.path().join("state-junction");
+    let linked = Command::new("cmd")
+        .args(["/C", "mklink", "/J"])
+        .arg(&junction)
+        .arg(&root)
+        .output()
+        .unwrap();
+    assert!(
+        linked.status.success(),
+        "{}",
+        String::from_utf8_lossy(&linked.stderr)
+    );
+    assert!(
+        CheckedSessionStore::open(
+            &junction,
+            "fixture",
+            &source,
+            None,
+            Encoding::O200kBase,
+        )
+        .is_err()
+    );
+
+    let context_path = store.context_path(&revision).unwrap();
+    fs::remove_file(&context_path).unwrap();
+    fs::create_dir(&context_path).unwrap();
+    assert!(store.load(&revision, &s).is_err());
+}
+
+#[cfg(windows)]
+#[test]
+fn windows_store_never_reads_project_identity_from_process_cwd() {
+    use std::process::Command;
+
+    let dir = tempfile::tempdir().unwrap();
+    let root = dir.path().join("state");
+    let source = dir.path().join("input");
+    fs::write(&source, b"x").unwrap();
+    CheckedSessionStore::open(&root, "fixture", &source, None, Encoding::O200kBase).unwrap();
+    let unrelated = dir.path().join("unrelated");
+    fs::create_dir(&unrelated).unwrap();
+    fs::write(
+        unrelated.join("project.json"),
+        br#"{"project":"foreign","input_path":"C:\\foreign"}"#,
+    )
+    .unwrap();
+    let output = Command::new(std::env::current_exe().unwrap())
+        .args(["--exact", "windows_store_cwd_child", "--nocapture"])
+        .current_dir(&unrelated)
+        .env("KPOP_CHECKED_STORE_ROOT", &root)
+        .env("KPOP_CHECKED_STORE_SOURCE", &source)
+        .output()
+        .unwrap();
+    assert!(
+        output.status.success(),
+        "stdout={} stderr={}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+}
+
+#[cfg(windows)]
+#[test]
+fn windows_store_cwd_child() {
+    let Some(root) = std::env::var_os("KPOP_CHECKED_STORE_ROOT") else {
+        return;
+    };
+    let source = std::env::var_os("KPOP_CHECKED_STORE_SOURCE").unwrap();
+    CheckedSessionStore::open(root, "fixture", source, None, Encoding::O200kBase).unwrap();
 }
 
 #[cfg(unix)]

@@ -23,6 +23,8 @@ use std::{
 use rustix::fs::{AtFlags, Mode, OFlags};
 #[cfg(unix)]
 use std::os::unix::fs::MetadataExt;
+#[cfg(windows)]
+use std::os::windows::fs::OpenOptionsExt;
 
 const MAX_FILE: u64 = 64 * 1024 * 1024;
 const VERSION: u64 = 1;
@@ -34,6 +36,8 @@ pub struct CheckedSessionStore {
     root_dir: Arc<File>,
     #[cfg(unix)]
     root_identity: (u64, u64),
+    #[cfg(windows)]
+    root_identity: Arc<same_file::Handle>,
     identity: V,
     profile: Option<V>,
     encoding: Encoding,
@@ -51,13 +55,22 @@ impl CheckedSessionStore {
         require(valid_project(project), "invalid project name")?;
         let root = root.as_ref();
         require(root.is_absolute(), "state root must be absolute")?;
-        create_state_dir(root)?;
+        #[cfg(windows)]
+        let root = windows_state_root(root)?;
+        #[cfg(not(windows))]
+        let root = root.to_path_buf();
+        create_state_dir(&root)?;
         let root = root
             .canonicalize()
             .map_err(|e| Error(format!("state root: {e}")))?;
         let root_dir = Arc::new(open_directory(&root)?);
         #[cfg(unix)]
         let root_identity = file_identity(&root_dir)?;
+        #[cfg(windows)]
+        let root_identity = Arc::new(
+            same_file::Handle::from_file(root_dir.try_clone()?)
+                .map_err(|e| Error(format!("state root: {e}")))?,
+        );
         let input = crate::project_modes::resolved(input.as_ref())?;
         let identity = V::Map(std::collections::BTreeMap::from([
             ("project".into(), V::Text(project.into())),
@@ -70,6 +83,8 @@ impl CheckedSessionStore {
             root,
             root_dir,
             #[cfg(unix)]
+            root_identity,
+            #[cfg(windows)]
             root_identity,
             identity,
             profile: navigation_profile,
@@ -218,7 +233,14 @@ impl CheckedSessionStore {
             file_identity(&current)? == self.root_identity,
             "state root changed",
         )?;
-        #[cfg(not(unix))]
+        #[cfg(windows)]
+        require(
+            same_file::Handle::from_file(current)
+                .map_err(|e| Error(format!("state root changed: {e}")))?
+                == *self.root_identity,
+            "state root changed",
+        )?;
+        #[cfg(not(any(unix, windows)))]
         let _ = current;
         let expected = ordinary(&self.identity)?;
         require(
@@ -228,7 +250,7 @@ impl CheckedSessionStore {
     }
 
     fn read_json_optional(&self, name: &str) -> Result<Option<J>> {
-        match open_bounded_at(&self.root_dir, name) {
+        match open_bounded_at(&self.root_dir, &self.root, name) {
             Ok(file) => read_json_file(file).map(Some),
             Err(e) if e.0 == "state file missing" => Ok(None),
             Err(e) => Err(e),
@@ -236,7 +258,7 @@ impl CheckedSessionStore {
     }
 
     fn read_json(&self, name: &str) -> Result<J> {
-        read_json_file(open_bounded_at(&self.root_dir, name)?)
+        read_json_file(open_bounded_at(&self.root_dir, &self.root, name)?)
     }
 
     fn atomic_create(&self, name: &str, value: &J) -> Result<J> {
@@ -390,7 +412,25 @@ fn open_directory(path: &Path) -> Result<File> {
         .map_err(|e| Error(format!("state root: {e}")))?;
         Ok(File::from(fd))
     }
-    #[cfg(not(unix))]
+    #[cfg(windows)]
+    {
+        require(
+            windows_local_path(path),
+            "network state root is unsupported",
+        )?;
+        let file = fs::OpenOptions::new()
+            .access_mode(0x8000_0000) // GENERIC_READ
+            .share_mode(0x0000_0001 | 0x0000_0002) // deny FILE_SHARE_DELETE
+            .custom_flags(0x0200_0000) // FILE_FLAG_BACKUP_SEMANTICS
+            .open(path)
+            .map_err(|e| Error(format!("state root: {e}")))?;
+        require(
+            file.metadata().map_err(|e| Error(e.to_string()))?.is_dir(),
+            "state root is not a directory",
+        )?;
+        Ok(file)
+    }
+    #[cfg(not(any(unix, windows)))]
     {
         let file = File::open(path).map_err(|e| Error(format!("state root: {e}")))?;
         require(
@@ -410,7 +450,7 @@ fn file_identity(file: &File) -> Result<(u64, u64)> {
     Ok((metadata.dev(), metadata.ino()))
 }
 
-fn open_bounded_at(root: &File, name: &str) -> Result<File> {
+fn open_bounded_at(root: &File, _root_path: &Path, name: &str) -> Result<File> {
     #[cfg(unix)]
     {
         let fd = rustix::fs::openat(
@@ -428,7 +468,56 @@ fn open_bounded_at(root: &File, name: &str) -> Result<File> {
         })?;
         Ok(File::from(fd))
     }
-    #[cfg(not(unix))]
+    #[cfg(windows)]
+    {
+        let _ = root;
+        let root_path = _root_path;
+        require(
+            Path::new(name).components().count() == 1
+                && matches!(
+                    Path::new(name).components().next(),
+                    Some(std::path::Component::Normal(_))
+                ),
+            "invalid retained context name",
+        )?;
+        let path = root_path.join(name);
+        let metadata = fs::symlink_metadata(&path).map_err(|e| {
+            if e.kind() == std::io::ErrorKind::NotFound {
+                Error("state file missing".into())
+            } else {
+                Error(format!("retained context: {e}"))
+            }
+        })?;
+        require(
+            metadata.is_file() && !metadata.file_type().is_symlink(),
+            "retained context is not a regular file",
+        )?;
+        let file = fs::OpenOptions::new()
+            .read(true)
+            .share_mode(0x0000_0001 | 0x0000_0002) // deny FILE_SHARE_DELETE
+            .custom_flags(0x0020_0000) // FILE_FLAG_OPEN_REPARSE_POINT
+            .open(&path)
+            .map_err(|e| {
+                if e.kind() == std::io::ErrorKind::NotFound {
+                    Error("state file missing".into())
+                } else {
+                    Error(format!("retained context: {e}"))
+                }
+            })?;
+        require(
+            file.metadata()
+                .map_err(|e| Error(format!("retained context: {e}")))?
+                .is_file(),
+            "retained context is not a regular file",
+        )?;
+        let opened = same_file::Handle::from_file(file.try_clone()?)
+            .map_err(|e| Error(format!("retained context: {e}")))?;
+        let named = same_file::Handle::from_path(&path)
+            .map_err(|e| Error(format!("retained context: {e}")))?;
+        require(opened == named, "retained context path changed")?;
+        Ok(file)
+    }
+    #[cfg(not(any(unix, windows)))]
     {
         let _ = root;
         File::open(Path::new(name)).map_err(|e| {
@@ -439,6 +528,54 @@ fn open_bounded_at(root: &File, name: &str) -> Result<File> {
             }
         })
     }
+}
+
+#[cfg(windows)]
+fn windows_local_path(path: &Path) -> bool {
+    use std::path::{Component, Prefix};
+    !matches!(
+        path.components().next(),
+        Some(Component::Prefix(prefix))
+            if matches!(
+                prefix.kind(),
+                Prefix::DeviceNS(_) | Prefix::UNC(_, _) | Prefix::VerbatimUNC(_, _)
+            )
+    )
+}
+
+#[cfg(windows)]
+fn windows_state_root(path: &Path) -> Result<PathBuf> {
+    require(
+        windows_local_path(path),
+        "network state root is unsupported",
+    )?;
+    if path.exists() {
+        return Ok(path.to_path_buf());
+    }
+    let mut ancestor = path;
+    let mut tail = Vec::new();
+    while !ancestor.exists() {
+        tail.push(
+            ancestor
+                .file_name()
+                .ok_or_else(|| Error("state root is not a directory".into()))?
+                .to_owned(),
+        );
+        ancestor = ancestor
+            .parent()
+            .ok_or_else(|| Error("state root is not a directory".into()))?;
+    }
+    let mut resolved = ancestor
+        .canonicalize()
+        .map_err(|e| Error(format!("state root: {e}")))?;
+    require(
+        windows_local_path(&resolved),
+        "network state root is unsupported",
+    )?;
+    for part in tail.into_iter().rev() {
+        resolved.push(part);
+    }
+    Ok(resolved)
 }
 
 fn read_json_file(mut file: File) -> Result<J> {
