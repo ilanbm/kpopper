@@ -785,6 +785,11 @@ sources:
     asked: "Continue the approved kpopper Rust migration autonomously until the full planned native
             outcome is verified."
     at: "task 01a0b85b-9000-7183-b0dc-7d2b01fd008e"
+  s.2026_09_19_native_ordinary_authoring:
+    name: "Ordinary native migration continuation"
+    asked: "Continue the approved kpopper Rust migration autonomously until the FULL planned native
+            outcome is verified."
+    of: "2026-09-19"
   s.2026_09_19_native_snapshot_continuation:
     name: "Continue the approved native migration"
     asked: "Continue the approved kpopper Rust migration autonomously until the full planned native
@@ -970,6 +975,7 @@ sources:
     from: s.2026_09_19_native_hypothesis_edit_continuation
   s.native_ordinary_authoring:
     name: "Ordinary native reader and immutable authoring conformance"
+    from: s.2026_09_19_native_ordinary_authoring
     read: "2026-09-19"
     file: "native/tests/fixtures/ordinary-authoring.json"
     at: "task 01a0b8c8-d7ed-7763-b52e-7b5ecafead65; final Python 1.7 oracle 5acfd0f; ordinary
