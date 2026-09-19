@@ -406,14 +406,8 @@ fn windows_store_anchors_reads_and_refuses_network_and_reparse_roots() {
         String::from_utf8_lossy(&linked.stderr)
     );
     assert!(
-        CheckedSessionStore::open(
-            &junction,
-            "fixture",
-            &source,
-            None,
-            Encoding::O200kBase,
-        )
-        .is_err()
+        CheckedSessionStore::open(&junction, "fixture", &source, None, Encoding::O200kBase,)
+            .is_err()
     );
 
     let context_path = store.context_path(&revision).unwrap();

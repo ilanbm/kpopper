@@ -142,6 +142,20 @@ back an interrupted first write. `--hypothesis NAME` supports named authoring du
 bootstrap and on active records, including recovery of its own receipts. Existing
 legacy-record writes and explicit contribution routing remain unconnected.
 
+Named hypotheses on active native history can be previewed, folded or refuted:
+
+```sh
+kpop-native consolidate --dry-run trial
+kpop-native consolidate trial
+kpop-native consolidate --refute trial "tested and refuted"
+```
+
+Omitting names selects every active group. Preview preserves record and evidence
+bytes; both implementations may create the empty project coordination lock.
+Fold and refutation use the same privacy, journal and recovery boundaries as other
+public history writes. Cross-branch `--from` and legacy-record consolidation remain
+unconnected. `--json` wraps the command's text, error and exit code.
+
 For the earlier feasibility writer, supply an absolute path to an existing **empty** directory:
 
 ```sh

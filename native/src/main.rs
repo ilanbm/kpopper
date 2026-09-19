@@ -55,6 +55,8 @@ enum Command {
     Add(WriteArgs),
     Set(WriteArgs),
     Review(WriteArgs),
+    /// Preview, fold or refute named hypotheses in active history.
+    Consolidate(ConsolidateArgs),
     History(kpop_native::public_history::Options),
     Recover {
         #[arg(long)]
@@ -122,6 +124,46 @@ enum Envelope {
     Template,
 }
 type WriteArgs = kpop_native::public_authoring::Options;
+#[derive(clap::Args)]
+struct ConsolidateArgs {
+    /// Hypothesis names and, optionally, one record YAML path.
+    subjects: Vec<String>,
+    #[arg(long)]
+    dry_run: bool,
+    #[arg(long, num_args = 2, value_names = ["NAME", "WHY"])]
+    refute: Vec<String>,
+    #[arg(long = "as")]
+    source: Option<String>,
+    #[arg(long)]
+    as_of: Option<String>,
+    #[arg(long)]
+    take: Vec<String>,
+    #[arg(long = "drop")]
+    drops: Vec<String>,
+}
+impl ConsolidateArgs {
+    fn options(&self) -> Result<kpop_native::public_consolidation::Options> {
+        let mut options = kpop_native::public_consolidation::Options {
+            dry_run: self.dry_run,
+            refute: self.refute.first().cloned(),
+            why: self.refute.get(1).cloned(),
+            source: self.source.clone(),
+            as_of: self.as_of.clone(),
+            take: self.take.clone(),
+            drops: self.drops.clone(),
+            ..Default::default()
+        };
+        for subject in &self.subjects {
+            if subject.ends_with(".yaml") || subject.ends_with(".yml") {
+                require(options.record.is_none(), "choose one logical record entry")?;
+                options.record = Some(subject.into());
+            } else {
+                options.names.push(subject.clone());
+            }
+        }
+        Ok(options)
+    }
+}
 fn stdin() -> Result<Value> {
     json_input(&stdin_bytes()?)
 }
@@ -332,6 +374,7 @@ fn run(args: Args) -> Result<Value> {
         Command::Review(_) => Err(kpop_native::Error("review requires a public record".into())),
         Command::Assess(_)
         | Command::Session(_)
+        | Command::Consolidate(_)
         | Command::Check(_)
         | Command::Pull(_)
         | Command::Affects(_)
@@ -344,6 +387,30 @@ fn run(args: Args) -> Result<Value> {
 }
 fn main() {
     let args = Args::parse();
+    if let Command::Consolidate(arguments) = &args.command {
+        let result = (|| {
+            let cwd = args
+                .workspace
+                .clone()
+                .map(Ok)
+                .unwrap_or_else(std::env::current_dir)?;
+            kpop_native::public_consolidation::run(&arguments.options()?, &cwd)
+        })();
+        let (output, error, code) = match result {
+            Ok(output) => (output, String::new(), 0),
+            Err(error) => (String::new(), format!("{error}\n"), 1),
+        };
+        if args.json {
+            println!(
+                "{}",
+                json!({"command":"consolidate","exit_code":code,"output":output,"error":error})
+            );
+        } else {
+            print!("{output}");
+            eprint!("{error}");
+        }
+        std::process::exit(code);
+    }
     if let Command::Session(options) = &args.command {
         let result = (|| {
             let cwd = args

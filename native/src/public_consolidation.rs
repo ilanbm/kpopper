@@ -233,6 +233,121 @@ pub fn run(options: &Options, cwd: &Path) -> Result<String> {
     run_with_runtime(options, cwd, None, &mut |_| Ok(()))
 }
 
+fn run_with_runtime(
+    options: &Options,
+    cwd: &Path,
+    runtime_override: Option<&Runtime>,
+    probe: &mut dyn FnMut(&str) -> Result<()>,
+) -> Result<String> {
+    validate(options)?;
+    let cwd = cwd.canonicalize()?;
+    let original = options
+        .record
+        .as_ref()
+        .map(|path| vec![cwd.join(path)])
+        .map(Ok)
+        .unwrap_or_else(|| public_workspace::records(&cwd))?;
+    let route = WriteRoute::capture(&original, &cwd)?;
+    require(route.paths().len() == 1, "choose one logical record entry")?;
+    let store = Store::new(&route.paths()[0])?;
+    let _lock = F::DirectoryGuard::acquire(&store.root, true)?;
+    let journal = format!("{}.history", store.layout.journal);
+    require(
+        F::read(&F::target(&store.root, &journal)?)?.is_none(),
+        "recovery_required",
+    )?;
+    let captured = store.capture()?;
+    let by = options.source.as_deref().map(s).unwrap_or(V::Null);
+    let write_options = authoring_options(
+        if options.refute.is_some() {
+            "hypothesis-refute"
+        } else {
+            "hypothesis-fold"
+        },
+        by,
+    )?;
+    let context = HA::capture(&store, &captured, &write_options)?;
+    let requested = options
+        .refute
+        .as_ref()
+        .map(|name| vec![name.clone()])
+        .unwrap_or_else(|| options.names.clone());
+    let names = selected_names(&context, &requested)?;
+    if names.is_empty() {
+        route.verify()?;
+        return Ok("unchanged: \n".into());
+    }
+    let action = obj([
+        (
+            "kind",
+            s(if options.refute.is_some() {
+                "refute"
+            } else {
+                "consolidate"
+            }),
+        ),
+        ("why", options.why.as_deref().map(s).unwrap_or(V::Null)),
+        (
+            "source",
+            options.source.as_deref().map(s).unwrap_or(V::Null),
+        ),
+    ]);
+    if !options.dry_run {
+        privacy_guard(&route, &context, &names, options.source.as_deref(), &action)?;
+    }
+    let loaded_runtime;
+    let runtime = if let Some(runtime) = runtime_override {
+        Some(runtime)
+    } else {
+        loaded_runtime = public_workspace::core_runtime()?;
+        loaded_runtime.as_ref()
+    };
+    let mutation: PreparedMutation = if options.refute.is_some() {
+        HA::prepare_refute(
+            &store,
+            &captured,
+            &names,
+            options.why.as_deref().unwrap(),
+            &write_options,
+            runtime,
+        )?
+    } else {
+        HA::prepare_fold(
+            &store,
+            &captured,
+            &HA::Fold {
+                names: names.clone(),
+                because: if options.dry_run {
+                    "consolidation preview".into()
+                } else {
+                    "explicit consolidation".into()
+                },
+                take: options.take.clone(),
+                drops: drops(&options.drops)?,
+                assessment_version: 1,
+            },
+            &write_options,
+            runtime,
+        )?
+    };
+    route.verify()?;
+    if options.dry_run {
+        let assessment = HA::assess_prepared_fold(&store, &captured, &mutation, runtime)?;
+        route.verify()?;
+        return preview_output(&names, &assessment);
+    }
+    direct_history::publish_prepared(&store, &mutation, &route, &original, runtime, probe)?;
+    Ok(format!(
+        "{}: {}\n",
+        if options.refute.is_some() {
+            "refuted"
+        } else {
+            "folded"
+        },
+        names.join(", ")
+    ))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -337,6 +452,7 @@ mod tests {
     }
 
     #[test]
+    #[ignore = "requires explicit immutable Python oracle and core runtime"]
     fn dry_run_fold_and_refute_match_the_python_18_public_contract() {
         let oracle = oracle();
         for action in ["dry-run", "fold", "refute"] {
@@ -393,6 +509,7 @@ mod tests {
     }
 
     #[test]
+    #[ignore = "requires explicit immutable Python oracle and core runtime"]
     fn conflicts_and_interruptions_retain_the_python_refusal_and_exact_recovery() {
         let oracle = oracle();
         let py_root = materialize(&case("0-overlapping"));
@@ -443,118 +560,4 @@ mod tests {
             assert!(!bytes.is_empty());
         }
     }
-}
-
-fn run_with_runtime(
-    options: &Options,
-    cwd: &Path,
-    runtime_override: Option<&Runtime>,
-    probe: &mut dyn FnMut(&str) -> Result<()>,
-) -> Result<String> {
-    validate(options)?;
-    let cwd = cwd.canonicalize()?;
-    let original = options
-        .record
-        .as_ref()
-        .map(|path| vec![cwd.join(path)])
-        .map(Ok)
-        .unwrap_or_else(|| public_workspace::records(&cwd))?;
-    let route = WriteRoute::capture(&original, &cwd)?;
-    require(route.paths().len() == 1, "choose one logical record entry")?;
-    let store = Store::new(&route.paths()[0])?;
-    let _lock = F::DirectoryGuard::acquire(&store.root, true)?;
-    let journal = format!("{}.history", store.layout.journal);
-    require(
-        F::read(&F::target(&store.root, &journal)?)?.is_none(),
-        "recovery_required",
-    )?;
-    let captured = store.capture()?;
-    let by = options.source.as_deref().map(s).unwrap_or(V::Null);
-    let write_options = authoring_options(
-        if options.refute.is_some() {
-            "hypothesis-refute"
-        } else {
-            "hypothesis-fold"
-        },
-        by,
-    )?;
-    let context = HA::capture(&store, &captured, &write_options)?;
-    let requested = options
-        .refute
-        .as_ref()
-        .map(|name| vec![name.clone()])
-        .unwrap_or_else(|| options.names.clone());
-    let names = selected_names(&context, &requested)?;
-    if names.is_empty() {
-        return Ok("no hypotheses beside the record - nothing to consolidate\n".into());
-    }
-    let action = obj([
-        (
-            "kind",
-            s(if options.refute.is_some() {
-                "refute"
-            } else {
-                "consolidate"
-            }),
-        ),
-        ("why", options.why.as_deref().map(s).unwrap_or(V::Null)),
-        (
-            "source",
-            options.source.as_deref().map(s).unwrap_or(V::Null),
-        ),
-    ]);
-    if !options.dry_run {
-        privacy_guard(&route, &context, &names, options.source.as_deref(), &action)?;
-    }
-    let loaded_runtime;
-    let runtime = if let Some(runtime) = runtime_override {
-        Some(runtime)
-    } else {
-        loaded_runtime = public_workspace::core_runtime()?;
-        loaded_runtime.as_ref()
-    };
-    let mutation: PreparedMutation = if options.refute.is_some() {
-        HA::prepare_refute(
-            &store,
-            &captured,
-            &names,
-            options.why.as_deref().unwrap(),
-            &write_options,
-            runtime,
-        )?
-    } else {
-        HA::prepare_fold(
-            &store,
-            &captured,
-            &HA::Fold {
-                names: names.clone(),
-                because: if options.dry_run {
-                    "consolidation preview".into()
-                } else {
-                    "explicit consolidation".into()
-                },
-                take: options.take.clone(),
-                drops: drops(&options.drops)?,
-                assessment_version: 1,
-            },
-            &write_options,
-            runtime,
-        )?
-    };
-    route.verify()?;
-    if options.dry_run {
-        let assessment = HA::assess_prepared_fold(&store, &captured, &mutation, runtime)?;
-        route.verify()?;
-        return preview_output(&names, &assessment);
-    }
-    direct_history::publish_prepared(&store, &mutation, &route, &original, runtime, probe)?;
-    Ok(format!(
-        "{}: {}\n",
-        if options.refute.is_some() {
-            "refuted"
-        } else {
-            "folded"
-        },
-        names.join(", ")
-    ))
 }

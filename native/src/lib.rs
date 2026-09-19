@@ -70,6 +70,7 @@ pub mod public_annotated_document;
 pub mod public_assessment;
 pub mod public_authoring;
 pub mod public_checked_session;
+pub mod public_consolidation;
 pub mod public_history;
 pub mod public_hub;
 pub mod public_workspace;
