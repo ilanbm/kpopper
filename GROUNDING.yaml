@@ -768,6 +768,12 @@ sources:
     at: "PR #119 run 35285716254 attempt 1 and local forced-date and fixed-day test runs"
     of: "2026-09-18"
     read: "2026-09-18"
+  s.2026_09_19_native_hypothesis_edit_continuation:
+    name: "Native hypothesis, edit and identity rewrite continuation"
+    asked: "Continue the approved kpopper Rust migration autonomously until the full planned native
+            outcome is verified."
+    at: "Opening delegated instruction for task 01a0b7f5-569b-7293-87e3-3bc50a7f29aa"
+    read: "2026-09-19"
   s.2026_09_19_native_snapshot_continuation:
     name: "Continue the approved native migration"
     asked: "Continue the approved kpopper Rust migration autonomously until the full planned native
@@ -878,17 +884,20 @@ sources:
     read: "2026-09-19"
     at: "history_edits; history_identity_rewrite, history_identity_text and history_identity_brief;
          their exact fixtures and tests"
+    from: s.2026_09_19_native_hypothesis_edit_continuation
   s.native_named_authoring:
     name: "Native named hypothesis preparation and replay"
     file: "native/src/history_hypothesis_authoring.rs"
     read: "2026-09-19"
     at: "b1b6019; native/tests/fixtures/history-hypothesis.json, history-hypothesis-candidate.json
          and history-hypothesis-retained.json"
+    from: s.2026_09_19_native_hypothesis_edit_continuation
   s.native_prospective:
     name: "Native proposed history and fold conformance"
     file: "native/src/history_prospective.rs"
     read: "2026-09-19"
     at: "Native hypothesis fold and prospective regression tests and history-fold fixtures"
+    from: s.2026_09_19_native_hypothesis_edit_continuation
   s.native_snapshot_verification:
     name: "Native snapshot and evaluator conformance"
     from: s.2026_09_19_native_snapshot_continuation
