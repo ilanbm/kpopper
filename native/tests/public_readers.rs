@@ -173,3 +173,85 @@ fn actual_seed_case_and_legacy_negative_budget_remain_distinct_from_filenames() 
         "... 2 more lines - raise the budget\n\naffects <entry> shows what a change reaches\n"
     );
 }
+
+#[test]
+fn actual_ordinary_cli_opens_and_checks_the_record() {
+    let tmp = tempfile::tempdir().unwrap();
+    let root = tmp.path().canonicalize().unwrap();
+    let record = include_str!("../../examples/offer-review/after/GROUNDING.yaml");
+    fs::write(root.join("GROUNDING.yaml"), record).unwrap();
+
+    let open = cli(&root, &["--frozen", "open"], &root.join("private"));
+    assert!(
+        open.status.success(),
+        "{}",
+        String::from_utf8_lossy(&open.stderr)
+    );
+    assert_eq!(
+        String::from_utf8(open.stdout).unwrap(),
+        concat!(
+            "Illustrative mortgage plan after an agent records a replacement offer, before reviewing the old plan. All details are fictional.\n",
+            "holds: offer (2) · and 2 standalone\n",
+            "5 entries, 1 judgments\n",
+            "\n",
+            "needs a person (1):\n",
+            "  plan.application_deadline: offer.current_id differs from what it last saw: A -> B\n",
+            "      because: The plan uses Offer A and its written validity period; its application conditions sti ...\n",
+            "\n",
+            "next: pull <entry|prefix> (values with sources) · affects <entry> (what a change reaches) · check\n",
+        )
+    );
+
+    let check = cli(&root, &["--frozen", "check"], &root.join("private"));
+    assert!(
+        check.status.success(),
+        "{}",
+        String::from_utf8_lossy(&check.stderr)
+    );
+    assert_eq!(
+        String::from_utf8(check.stdout).unwrap(),
+        concat!(
+            "NOTE plan.application_deadline: no predicate at all - decided; reopened by: A replacement offer or written bank clarification changes the terms this plan relies on. R\n",
+            "MOVED plan.application_deadline: offer.current_id differs from its snapshot (A -> B) - re-review, or refresh seen\n",
+            "\n",
+            "1 judgments, 5 entries, 0 problems, 1 moved, 1 declared\n",
+        )
+    );
+}
+
+#[test]
+fn actual_ordinary_pull_history_reads_the_retained_versions() {
+    let tmp = tempfile::tempdir().unwrap();
+    let root = tmp.path().canonicalize().unwrap();
+    fs::write(root.join("GROUNDING.yaml"), ORDINARY).unwrap();
+    fs::create_dir(root.join(".kpopper")).unwrap();
+    fs::write(
+        root.join(".kpopper/replaced.yaml"),
+        "d.work:\n- verdict: before\n  because: the earlier reason\n  rests_on: [p.load]\n  wrong_if: p.load > 70\n  request: s.note\n  dropped: {p.old: superseded}\n  ended: the standing judgment broke\n  day: '2026-09-18'\n- same_as: 1\n  ended: a person restored it\n  day: '2026-09-19'\n",
+    )
+    .unwrap();
+    let output = cli(
+        &root,
+        &["--frozen", "pull", "d.work", "--history"],
+        &root.join("private"),
+    );
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert_eq!(
+        String::from_utf8(output.stdout).unwrap(),
+        concat!(
+            "history of d.work: 2 versions kept in .kpopper/replaced.yaml\n",
+            "  1. until 2026-09-18 - the standing judgment broke\n",
+            "     verdict: before\n",
+            "     because: the earlier reason\n",
+            "     rests_on: [p.load]\n",
+            "     wrong_if: p.load > 70\n",
+            "     request: s.note\n",
+            "     no longer rested on p.old: superseded\n",
+            "  2. until 2026-09-19 - a person restored it (the same decision as version 1)\n",
+        )
+    );
+}

@@ -166,6 +166,43 @@ fn brief(paths: &[PathBuf], cwd: &Path, inventory: &mut Inventory) -> Result<Opt
     }
     Ok(None)
 }
+fn replaced(
+    paths: &[PathBuf],
+    inventory: &mut Inventory,
+) -> Result<(Option<crate::value::TypedValue>, String)> {
+    let first = paths.first().ok_or_else(|| error("record_required"))?;
+    let path = if first
+        .file_name()
+        .is_some_and(|name| name == "GROUNDING.yaml")
+    {
+        first.parent().unwrap().join(".kpopper/replaced.yaml")
+    } else {
+        let name = first.to_string_lossy();
+        let stem = name
+            .strip_suffix(".yaml")
+            .or_else(|| name.strip_suffix(".yml"))
+            .unwrap_or(&name);
+        PathBuf::from(format!("{stem}.replaced.yaml"))
+    };
+    let relative = path
+        .strip_prefix(first.parent().unwrap())
+        .unwrap_or(&path)
+        .to_string_lossy()
+        .to_string();
+    if !inventory.exists(&path)? || !inventory.file(&path)? {
+        return Ok((None, relative));
+    }
+    let value = crate::history_yaml::decode_document(&inventory.read(&path)?)?;
+    Ok((Some(value), relative))
+}
+fn prefix_order(source: &crate::history_yaml::SourceValue) -> Vec<String> {
+    let Some(crate::history_yaml::SourceValue::Map(prefixes)) =
+        source.get("meta").and_then(|meta| meta.get("prefixes"))
+    else {
+        return vec![];
+    };
+    prefixes.iter().map(|(key, _)| key.clone()).collect()
+}
 pub fn run(
     command: &str,
     options: &Options,
@@ -253,16 +290,34 @@ pub fn run(
             knowledge,
             runtime,
         )?;
+        let page = brief(&paths, &cwd, &mut inventory)?
+            .map(|bytes| crate::history_yaml::decode_document(&bytes))
+            .transpose()?;
+        let prefix_order = prefix_order(capture.source());
         let output = match command {
-            "pull" => {
+            "open" => {
+                projection.opening(options.budget.unwrap_or(25), page.as_ref(), &prefix_order)?
+            }
+            "check" => {
+                let (text, code) = projection.check(page.as_ref())?;
+                capture.verify()?;
+                inventory.verify()?;
                 crate::require(
-                    !options.history,
-                    "ordinary history projection is not yet connected",
+                    W::locate(&cwd, mode)? == location,
+                    "workspace changed while reading it; retry",
                 )?;
-                projection.pull(&seeds, options.budget.unwrap_or(40))?
+                return Ok(C::Output { text, code });
+            }
+            "pull" => {
+                if options.history {
+                    let (history, path) = replaced(&paths, &mut inventory)?;
+                    projection.history(history.as_ref(), &path, &seeds)?
+                } else {
+                    projection.pull(&seeds, options.budget.unwrap_or(40))?
+                }
             }
             "affects" => projection.affects(&seeds)?,
-            _ => return Err(error("ordinary open/check projection is not yet connected")),
+            _ => return Err(error("unknown ordinary reader command")),
         };
         capture.verify()?;
         inventory.verify()?;

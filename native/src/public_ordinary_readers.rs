@@ -884,6 +884,100 @@ impl World<'_> {
     }
 }
 impl Projection<'_> {
+    fn page_unserved(&self, brief: Option<&V>) -> Result<Vec<(String, String, String)>> {
+        let Some(brief) = brief else {
+            return Ok(vec![]);
+        };
+        let brief = map(brief)?;
+        let mut served = BTreeSet::new();
+        if let Some(tabs) = brief.get("tabs").and_then(|value| list(value).ok()) {
+            for tab in tabs {
+                if let Ok(tab) = map(tab)
+                    && let Some(ids) = tab.get("serves").and_then(|value| list(value).ok())
+                {
+                    served.extend(
+                        ids.iter()
+                            .filter_map(|value| text(value).ok().map(str::to_owned)),
+                    );
+                }
+            }
+        }
+        let mut picked = BTreeSet::new();
+        let mut collect_sections = |sections: Option<&V>| {
+            if let Some(sections) = sections.and_then(|value| list(value).ok()) {
+                for section in sections {
+                    if let Ok(section) = map(section)
+                        && let Some(ids) = section.get("pick").and_then(|value| list(value).ok())
+                    {
+                        picked.extend(
+                            ids.iter()
+                                .filter_map(|value| text(value).ok().map(str::to_owned)),
+                        );
+                    }
+                }
+            }
+        };
+        collect_sections(brief.get("sections"));
+        if let Some(tabs) = brief.get("tabs").and_then(|value| list(value).ok()) {
+            for tab in tabs {
+                if let Ok(tab) = map(tab) {
+                    collect_sections(tab.get("sections"));
+                }
+            }
+        }
+        let mut out = vec![];
+        for (id, body) in &self.base.reader.raw {
+            let Ok(body) = map(body) else { continue };
+            let Some(asked) = body.get("asked").filter(|value| truth(value)) else {
+                continue;
+            };
+            if served.contains(id) {
+                continue;
+            }
+            let authored = self
+                .base
+                .reader
+                .raw
+                .iter()
+                .filter_map(|(entry, body)| {
+                    let body = map(body).ok()?;
+                    let from = body.get("from")?;
+                    let names = match from {
+                        V::Text(name) => vec![name.as_str()],
+                        V::List(values) => {
+                            values.iter().filter_map(|value| text(value).ok()).collect()
+                        }
+                        _ => vec![],
+                    };
+                    names.contains(&id.as_str()).then_some(entry.clone())
+                })
+                .collect::<Vec<_>>();
+            let mut groups = BTreeMap::<String, usize>::new();
+            for entry in &authored {
+                let prefix = entry
+                    .split_once('.')
+                    .map_or(entry.as_str(), |(head, _)| head);
+                *groups.entry(prefix.to_owned()).or_insert(0) += 1;
+            }
+            let written = groups
+                .into_iter()
+                .map(|(prefix, count)| format!("{prefix}. ({count})"))
+                .collect::<Vec<_>>()
+                .join(", ");
+            let inside = authored
+                .iter()
+                .filter(|entry| picked.contains(*entry))
+                .count();
+            let hint = format!(
+                "  hint: it wrote {written} - {inside} of {} inside 'Now'",
+                authored.len()
+            );
+            out.push((id.clone(), py(asked), hint));
+        }
+        out.sort_by(|a, b| b.0.cmp(&a.0));
+        Ok(out)
+    }
+
     fn holders(&self, id: &str) -> Vec<(&String, &World<'_>)> {
         self.layers
             .iter()
@@ -910,6 +1004,444 @@ impl Projection<'_> {
             110,
         )
     }
+
+    fn held_counts(&self) -> (usize, usize, BTreeMap<String, usize>, usize) {
+        let judgments = self.base.judgments.len();
+        let held = self
+            .base
+            .reader
+            .ids
+            .iter()
+            .filter(|id| !F::BUILTINS.contains(&id.as_str()))
+            .count();
+        let mut prefixes = BTreeMap::new();
+        for id in self.base.reader.ids.iter().filter(|id| {
+            !F::BUILTINS.contains(&id.as_str()) && !self.base.judgments.contains_key(*id)
+        }) {
+            let prefix = id.split_once('.').map_or(id.as_str(), |(head, _)| head);
+            *prefixes.entry(prefix.to_owned()).or_insert(0) += 1;
+        }
+        let loose = prefixes.values().filter(|count| **count == 1).sum();
+        (held, judgments, prefixes, loose)
+    }
+
+    pub fn opening(
+        &self,
+        budget: i64,
+        brief: Option<&V>,
+        prefix_order: &[String],
+    ) -> Result<String> {
+        crate::require(budget > 0, "--budget must be positive")?;
+        let (held, judgments, prefixes, loose) = self.held_counts();
+        let doc = map(&self.base.reader.document)?;
+        let meta = doc.get("meta").and_then(|value| map(value).ok());
+        let mut head = vec![];
+        if let Some(scope) = meta
+            .and_then(|meta| meta.get("scope").or_else(|| meta.get("about")))
+            .filter(|value| truth(value))
+        {
+            head.push(cut(&py(scope), 300));
+        }
+        let mut heavy = prefixes
+            .iter()
+            .filter(|(_, count)| **count > 1)
+            .map(|(prefix, count)| (prefix.clone(), *count))
+            .collect::<Vec<_>>();
+        heavy.sort_by(|a, b| b.1.cmp(&a.1).then_with(|| a.0.cmp(&b.0)));
+        if !heavy.is_empty() {
+            let mut holds = heavy
+                .into_iter()
+                .map(|(prefix, count)| format!("{prefix} ({count})"))
+                .collect::<Vec<_>>()
+                .join(" · ");
+            if loose > 0 {
+                holds.push_str(&format!(" · and {loose} standalone"));
+            }
+            head.push(format!("holds: {holds}"));
+        }
+        if let Some(legend) = meta
+            .and_then(|meta| meta.get("prefixes"))
+            .and_then(|value| map(value).ok())
+        {
+            let ordered = prefix_order
+                .iter()
+                .chain(legend.keys().filter(|key| !prefix_order.contains(key)))
+                .collect::<Vec<_>>();
+            let entries = ordered
+                .into_iter()
+                .filter_map(|prefix| legend.get(prefix).map(|value| (prefix, value)))
+                .filter(|(prefix, value)| {
+                    truth(value)
+                        && self.base.reader.ids.iter().any(|id| {
+                            !F::BUILTINS.contains(&id.as_str())
+                                && id.split_once('.').map_or(id.as_str(), |(head, _)| head)
+                                    == prefix.as_str()
+                        })
+                })
+                .map(|(prefix, value)| format!("{prefix}={}", py(value)))
+                .collect::<Vec<_>>();
+            if !entries.is_empty() {
+                head.push(format!("prefixes: {}", entries.join(" · ")));
+            }
+        }
+        let open = ["open", "questions"]
+            .into_iter()
+            .filter_map(|key| doc.get(key))
+            .filter_map(|value| map(value).ok())
+            .flat_map(|values| values.keys())
+            .collect::<BTreeSet<_>>()
+            .len();
+        let mut summary = format!("{held} entries, {judgments} judgments");
+        if open > 0 {
+            summary.push_str(&format!(", {open} open questions"));
+        }
+        if let Some(updated) = meta
+            .and_then(|meta| meta.get("updated"))
+            .filter(|v| truth(v))
+        {
+            summary.push_str(&format!(", updated {}", py(updated)));
+        }
+        head.push(summary);
+
+        let mut items = vec![];
+        for (id, body) in &self.base.judgments {
+            let flags = crate::ordinary_counts::flags(&self.base.reader, body)?;
+            if flags.contains("falsified") {
+                items.push((
+                    95,
+                    id.clone(),
+                    format!(
+                        "wrong_if holds ({}) - broken by its own condition",
+                        predicate_text(&self.base.pred(id))
+                    ),
+                ));
+            }
+            if flags.contains("broken") {
+                let missing = self
+                    .base
+                    .deps(id)?
+                    .into_iter()
+                    .filter(|dep| !self.base.reader.ids.contains(dep))
+                    .collect::<Vec<_>>();
+                if !missing.is_empty() {
+                    items.push((
+                        100,
+                        id.clone(),
+                        format!("rests on {}, which is not an entry", missing.join(", ")),
+                    ));
+                }
+            }
+            if flags.contains("unchecked") {
+                let b = map(body)?;
+                let empty = Map::new();
+                let seen = map(get(
+                    b,
+                    text(&self.base.reader.fields["snapshot"]).unwrap_or(""),
+                ))
+                .unwrap_or(&empty);
+                for dep in self
+                    .base
+                    .deps(id)?
+                    .into_iter()
+                    .filter(|dep| self.base.reader.ids.contains(dep) && !seen.contains_key(dep))
+                {
+                    items.push((80, id.clone(), format!("never checked against {dep}")));
+                }
+            }
+            for (dep, old, now, state) in self.base.moved(id)? {
+                if state == "moved" {
+                    let (old, now) = apart(&old, &now, 28);
+                    items.push((
+                        70,
+                        id.clone(),
+                        format!("{dep} differs from what it last saw: {old} -> {now}"),
+                    ));
+                }
+            }
+            if flags.contains("no_predicate") {
+                items.push((40, id.clone(), "nothing evaluable would falsify it".into()));
+            }
+        }
+        for (id, variants) in &self.disputed {
+            items.push((
+                110,
+                id.clone(),
+                format!(
+                    "CONTESTED - {}",
+                    variants
+                        .iter()
+                        .map(|(name, claim)| format!("{name} says {}", short(claim, 30)))
+                        .collect::<Vec<_>>()
+                        .join(", ")
+                ),
+            ));
+        }
+        items.sort_by(|a, b| b.0.cmp(&a.0).then_with(|| a.1.cmp(&b.1)));
+        let flagged = items
+            .iter()
+            .map(|(_, id, _)| id.clone())
+            .collect::<BTreeSet<_>>();
+        let total = items.len();
+        let kept = items.into_iter().take(budget as usize).collect::<Vec<_>>();
+        let mut needs = if total == 0 {
+            vec!["nothing needs a person right now.".into()]
+        } else {
+            vec![format!("needs a person ({total}):")]
+        };
+        let mut reasoned = BTreeSet::new();
+        for (_, id, why) in kept {
+            needs.push(format!("  {id}: {why}"));
+            if reasoned.insert(id.clone())
+                && let Some(because) = map(&self.base.judgments[&id])?
+                    .get("because")
+                    .filter(|v| truth(v))
+            {
+                let line = format!("      because: {}", self.base.said(because, 400)?[0]);
+                needs.push(if line.chars().count() < 100 {
+                    line
+                } else {
+                    line.chars().take(100).collect::<String>() + " ..."
+                });
+            }
+        }
+        if total > budget as usize {
+            needs.push(format!(
+                "  ... {} more - raise the budget to see them",
+                total - budget as usize
+            ));
+        }
+        let mut questions = vec![];
+        for key in ["open", "questions"] {
+            if let Some(values) = doc.get(key).and_then(|value| map(value).ok()) {
+                for (id, value) in values {
+                    let line = format!("  ? {id}: {}", py(value));
+                    questions.push(if line.chars().count() < 100 {
+                        line
+                    } else {
+                        line.chars().take(100).collect::<String>() + " ..."
+                    });
+                }
+            }
+        }
+        questions.sort();
+        let mut standing = vec![];
+        let live = self
+            .base
+            .judgments
+            .keys()
+            .filter(|id| !flagged.contains(*id))
+            .collect::<Vec<_>>();
+        if !live.is_empty() {
+            standing.push(if flagged.is_empty() {
+                "standing:".into()
+            } else {
+                format!(
+                    "standing:  ({} above {} a person)",
+                    flagged.len(),
+                    if flagged.len() == 1 { "needs" } else { "need" }
+                )
+            });
+            for id in live {
+                let body = &self.base.judgments[id];
+                let b = map(body)?;
+                let verdict = b
+                    .get("verdict")
+                    .filter(|value| truth(value))
+                    .or_else(|| b.get("title").filter(|value| truth(value)))
+                    .map(py)
+                    .unwrap_or_else(|| id.clone());
+                let mut line = format!("  = {id}");
+                if let Some(request) = b.get("request").filter(|value| truth(value)) {
+                    line.push_str(&format!(" (on the word of {})", py(request)));
+                }
+                line.push_str(&format!(": {verdict}"));
+                standing.push(if line.chars().count() < 80 {
+                    line
+                } else {
+                    line.chars().take(80).collect::<String>() + " ..."
+                });
+            }
+        }
+        let unserved = self.page_unserved(brief)?;
+        let footer = if let Some((id, _, _)) = unserved.first() {
+            format!(
+                "next: check - {id} is served by no tab{} · pull <entry|prefix> (values with sources) · affects <entry> (what a change reaches)",
+                if unserved.len() > 1 {
+                    format!(" (and {} more)", unserved.len() - 1)
+                } else {
+                    String::new()
+                }
+            )
+        } else {
+            "next: pull <entry|prefix> (values with sources) · affects <entry> (what a change reaches) · check".into()
+        };
+        let mut sections = vec![head.join("\n"), needs.join("\n")];
+        if !questions.is_empty() {
+            sections.push(questions.join("\n"));
+        }
+        if !standing.is_empty() {
+            sections.push(standing.join("\n"));
+        }
+        sections.push(footer);
+        Ok(sections.join("\n\n") + "\n")
+    }
+
+    pub fn check(&self, brief: Option<&V>) -> Result<(String, i32)> {
+        let (held, judgments, _, _) = self.held_counts();
+        let mut fail = vec![];
+        let mut note = self.knowledge.clone();
+        note.extend(self.unread.clone());
+        let mut moved = vec![];
+        for (id, body) in &self.base.judgments {
+            let flags = crate::ordinary_counts::flags(&self.base.reader, body)?;
+            let pred = self.base.pred(id);
+            let blocked = blocked_text(body);
+            let reopened = reopened_text(body);
+            if flags.contains("broken") {
+                for dep in self
+                    .base
+                    .deps(id)?
+                    .into_iter()
+                    .filter(|dep| !self.base.reader.ids.contains(dep))
+                {
+                    fail.push(format!("{id}: rests on {dep}, which is not an entry"));
+                }
+            }
+            if flags.contains("unchecked") {
+                let b = map(body)?;
+                let empty = Map::new();
+                let seen = map(get(
+                    b,
+                    text(&self.base.reader.fields["snapshot"]).unwrap_or(""),
+                ))
+                .unwrap_or(&empty);
+                for dep in self
+                    .base
+                    .deps(id)?
+                    .into_iter()
+                    .filter(|dep| self.base.reader.ids.contains(dep) && !seen.contains_key(dep))
+                {
+                    fail.push(format!(
+                        "{id}: no snapshot for {dep} - never checked against it"
+                    ));
+                }
+            }
+            if flags.contains("falsified") {
+                fail.push(format!(
+                    "{id}: wrong_if holds ({}) - broken by its own condition",
+                    predicate_text(&pred)
+                ));
+            }
+            if flags.contains("no_predicate") {
+                if !blocked.is_empty() {
+                    note.push(format!(
+                        "{id}: no predicate at all (declared: {})",
+                        cut(&blocked, 90)
+                    ));
+                } else {
+                    fail.push(format!("{id}: no predicate at all - and nothing says why not, so it can never be re-checked"));
+                }
+            } else if !truth(&pred) && blocked.is_empty() && !reopened.is_empty() {
+                note.push(format!(
+                    "{id}: no predicate at all - decided; reopened by: {}",
+                    reopened.chars().take(90).collect::<String>()
+                ));
+            }
+            for (dep, old, now, state) in self.base.moved(id)? {
+                if state == "moved" {
+                    let (old, now) = apart(&old, &now, 60);
+                    moved.push(format!("{id}: {dep} differs from its snapshot ({old} -> {now}) - re-review, or refresh seen"));
+                }
+            }
+        }
+        for (id, asked, hint) in self.page_unserved(brief)? {
+            note.push(format!("{id} is served by no tab - asked: {asked}"));
+            note.push(hint);
+        }
+        let mut lines = vec![];
+        lines.extend(fail.iter().map(|line| format!("FAIL {line}")));
+        lines.extend(note.iter().map(|line| format!("NOTE {line}")));
+        lines.extend(moved.iter().map(|line| format!("MOVED {line}")));
+        let mut summary = format!(
+            "{judgments} judgments, {held} entries, {} problems",
+            fail.len()
+        );
+        if !moved.is_empty() {
+            summary.push_str(&format!(", {} moved", moved.len()));
+        }
+        if !self.disputed.is_empty() {
+            summary.push_str(&format!(", {} contested", self.disputed.len()));
+        }
+        if !note.is_empty() {
+            summary.push_str(&format!(", {} declared", note.len()));
+        }
+        lines.push(String::new());
+        lines.push(summary);
+        Ok((lines.join("\n") + "\n", i32::from(!fail.is_empty())))
+    }
+
+    pub fn history(&self, replaced: Option<&V>, path: &str, seeds: &[String]) -> Result<String> {
+        let (names, _) = self.expanded(seeds)?;
+        let empty = Map::new();
+        let kept = replaced.and_then(|value| map(value).ok()).unwrap_or(&empty);
+        let mut out = vec![];
+        for id in names {
+            let Some(versions) = kept.get(&id).and_then(|value| list(value).ok()) else {
+                continue;
+            };
+            if versions.is_empty() {
+                continue;
+            }
+            out.push(format!(
+                "history of {id}: {} version{} kept in {path}",
+                versions.len(),
+                if versions.len() == 1 { "" } else { "s" }
+            ));
+            for (index, version) in versions.iter().enumerate() {
+                let body = map(version)?;
+                let mut head = format!(
+                    "  {}. until {} - {}",
+                    index + 1,
+                    py(get(body, "day")),
+                    py(get(body, "ended"))
+                );
+                if let Some(same) = body.get("same_as").filter(|value| truth(value)) {
+                    head.push_str(&format!(" (the same decision as version {})", py(same)));
+                    out.push(head);
+                    continue;
+                }
+                out.push(head);
+                for field in ["verdict", "because"] {
+                    if let Some(value) = body.get(field).filter(|value| truth(value)) {
+                        out.push(format!("     {field}: {}", short(value, 100)));
+                    }
+                }
+                if let Some(deps) = body.get("rests_on").and_then(|value| list(value).ok()) {
+                    out.push(format!(
+                        "     rests_on: [{}]",
+                        deps.iter().map(py).collect::<Vec<_>>().join(", ")
+                    ));
+                }
+                if let Some(value) = body.get("wrong_if").filter(|value| truth(value)) {
+                    out.push(format!("     wrong_if: {}", predicate_text(value)));
+                }
+                if let Some(value) = body.get("request").filter(|value| truth(value)) {
+                    out.push(format!("     request: {}", py(value)));
+                }
+                if let Some(dropped) = body.get("dropped").and_then(|value| map(value).ok()) {
+                    for (dep, why) in dropped {
+                        out.push(format!("     no longer rested on {dep}: {}", py(why)));
+                    }
+                }
+            }
+        }
+        Ok(if out.is_empty() {
+            String::new()
+        } else {
+            out.join("\n") + "\n"
+        })
+    }
+
     pub fn pull(&self, seeds: &[String], budget: i64) -> Result<String> {
         let (expanded, _) = self.expanded(seeds)?;
         let every = self.every();
