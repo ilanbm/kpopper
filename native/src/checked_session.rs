@@ -1023,11 +1023,55 @@ fn typed_pointer<'a>(mut value: &'a V, pointer: &str) -> Result<&'a V> {
     Ok(value)
 }
 fn children_refs(reference: &str, value: &J) -> Vec<String> {
-    let keys: Vec<String> = match value {
+    let mut keys: Vec<String> = match value {
         J::Object(m) => m.keys().cloned().collect(),
         J::Array(a) => (0..a.len()).map(|i| i.to_string()).collect(),
         _ => vec![],
     };
+    // The response JSON is canonical, but a children list follows the source
+    // dictionary's insertion order in the public Python reader contract.
+    let pointer = reference.split_once('#').map(|(_, p)| p);
+    let preferred: &[&str] = match pointer {
+        None if value.get("body_encoding").is_some() && value.get("finding_ref").is_some() => &[
+            "body",
+            "body_encoding",
+            "finding_ref",
+            "status",
+            "status_text",
+            "dependencies",
+            "scope",
+        ],
+        Some("/status") => &[
+            "acceptance",
+            "computation",
+            "basis",
+            "falsifier",
+            "contention",
+            "integrity",
+            "coverage",
+            "coverage_included",
+            "assurance",
+            "recorded_evidence_kinds",
+            "support",
+            "temporal",
+        ],
+        Some("/status/computation") => &["status", "truth", "value_text"],
+        Some("/status/falsifier") => &["status", "holds"],
+        Some("/status/support") => &["status", "states", "codes"],
+        Some("/status/temporal") => &[
+            "applicability",
+            "status",
+            "complete",
+            "counterexample_claim_ids",
+        ],
+        _ => &[],
+    };
+    keys.sort_by_key(|key| {
+        preferred
+            .iter()
+            .position(|wanted| *wanted == key)
+            .unwrap_or(preferred.len())
+    });
     keys.into_iter()
         .map(|k| {
             format!(

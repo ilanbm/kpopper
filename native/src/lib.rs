@@ -105,6 +105,7 @@ mod source_overlay;
 mod source_target;
 pub mod source_text;
 pub mod store;
+pub mod tokenizer;
 pub mod value;
 
 use std::fmt;

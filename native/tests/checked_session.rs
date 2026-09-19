@@ -29,6 +29,44 @@ fn chars(text: &str) -> usize {
 }
 
 #[test]
+fn real_token_budgets_match_pinned_python_views() {
+    use kpop_native::tokenizer::Encoding;
+    let corpus: J =
+        serde_json::from_str(include_str!("fixtures/checked-token-budgets.json")).unwrap();
+    for case in corpus["counts"].as_array().unwrap() {
+        let encoding = Encoding::parse(case["encoding"].as_str().unwrap()).unwrap();
+        assert_eq!(
+            encoding.count(case["text"].as_str().unwrap()),
+            case["count"].as_u64().unwrap() as usize,
+            "{case}"
+        );
+    }
+    let checked = session(None);
+    for case in corpus["cases"].as_array().unwrap() {
+        let encoding = Encoding::parse(case["encoding"].as_str().unwrap()).unwrap();
+        let tokens = case["tokens"].as_u64().unwrap() as usize;
+        let actual = if let Some(reference) = case["ref"].as_str() {
+            checked.read(
+                reference,
+                checked.revision(),
+                tokens,
+                case["offset"].as_u64().map(|n| n as usize),
+                |text| encoding.count(text),
+            )
+        } else {
+            checked
+                .opening(tokens, |text| encoding.count(text))
+                .map(|o| o.text)
+        };
+        if let Some(error) = case["error"].as_str() {
+            assert_eq!(actual.unwrap_err().0, error, "{case}");
+        } else {
+            assert_eq!(actual.unwrap(), case["text"].as_str().unwrap(), "{case}");
+        }
+    }
+}
+
+#[test]
 fn source_free_opening_binds_the_pinned_python_revision_and_complete_capture() {
     let checked = session(None);
     // Oracle: baseline-ff0d02e under the pinned bf494... Python runtime.
