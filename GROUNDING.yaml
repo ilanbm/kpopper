@@ -1009,6 +1009,10 @@ sources:
     name: "Explicit Python setup and runtime selection for plugin hooks"
     file: "docs/plugin-runtime.md"
     read: "2026-09-17"
+  doc.session_activity:
+    name: "Session write attribution and Stop delivery contract"
+    file: "docs/reference.md"
+    read: "2026-09-19"
   doc.session_test_gates:
     name: "Checked-session integration test readiness gates"
     file: "tests/test_predicate_literals.py"
@@ -2258,6 +2262,16 @@ known:
            to matter, and the page stays JS either way"
     from: s.2026_09_03_language
     reach: general
+  p.session_hook_contract:
+    name: "Session authorship and Stop delivery scope"
+    v: "The Claude/Codex Stop hook attributes entries and intents only from private successful-write
+        receipts matching the session, source file and current body. Imported and manual changes
+        alone leave authorship unknown. Each finding has a separate per-session delivery receipt;
+        repeated stops and resume do not repeat it. Delivery suppression never changes check or write
+        admission. Missing temporary state loses attribution and delivery history; unavailable
+        delivery storage makes Stop yield."
+    from: doc.session_activity
+    at: "The plugin hooks: session write attribution and delivery receipts"
   p.skills_shipped:
     v: 8
     name: "Skill directories the plugin ships, each one occasion with its own SKILL.md"
