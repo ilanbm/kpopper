@@ -2238,6 +2238,14 @@ known:
     name: "Native live comparison field-role cases"
     v: 113
     from: s.native_live_capture
+  m.native_scenario_watch_tests:
+    name: "Full native regression gate after temporal authoring and scenarios"
+    v: 185
+    from: s.native_scenario_watch
+    at: "Fresh cargo test --locked completed with 185 passing tests and zero failures on product
+         commit 07871d2, macOS arm64. All-target Clippy with warnings denied, release build and
+         record check also passed. No installed activation or cross-platform acceptance is implied."
+    of: "2026-09-19"
   m.native_source_capture_cases:
     name: "Native source capture differential cases"
     v: 45
