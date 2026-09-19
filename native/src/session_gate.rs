@@ -490,11 +490,36 @@ fn write_mark(path: &Path, state: &MarkState) -> Result<()> {
     Ok(())
 }
 
+fn mark_overlaps_history_namespace<'a>(
+    path: &Path,
+    entries: impl Iterator<Item = &'a PathBuf>,
+) -> bool {
+    let Ok(target) = crate::project_modes::resolved(path) else {
+        return true;
+    };
+    // All files in this directory belong to the recovery protocol, including
+    // direct-history and bootstrap journal companions and future receipt types.
+    let mut entries = entries;
+    entries.any(|entry| {
+        let parent = entry.parent().unwrap_or_else(|| Path::new("."));
+        let name = entry.file_name().and_then(|v| v.to_str()).unwrap_or("");
+        crate::history_transaction::Layout::for_entry(name)
+            .ok()
+            .is_some_and(|layout| {
+                crate::project_modes::resolved(&parent.join(layout.home).join(".history-local"))
+                    .is_ok_and(|directory| target.starts_with(directory))
+            })
+    })
+}
+
 fn mark_overlaps_capture(path: &Path, capture: &CapturedSource, paths: &[PathBuf]) -> bool {
     let Ok(target) = crate::project_modes::resolved(path) else {
         return true;
     };
-    let mut reserved = paths.iter().flat_map(|entry| {
+    if mark_overlaps_history_namespace(path, paths.iter().chain(capture.members())) {
+        return true;
+    }
+    let mut reserved = paths.iter().chain(capture.members()).flat_map(|entry| {
         let parent = entry.parent().unwrap_or_else(|| Path::new("."));
         let name = entry.file_name().and_then(|v| v.to_str()).unwrap_or("");
         crate::history_transaction::Layout::for_entry(name)
@@ -506,7 +531,8 @@ fn mark_overlaps_capture(path: &Path, capture: &CapturedSource, paths: &[PathBuf
                     layout.replaced,
                     layout.authority,
                     layout.journal,
-                    format!("{}/project.json", layout.home),
+                    Path::new(&layout.home).join("project.json").to_string_lossy().into_owned(),
+                    ".kpopper/project.json".into(),
                 ]
                 .into_iter()
                 .map(move |relative| parent.join(relative))
@@ -525,6 +551,9 @@ fn mark_overlaps_capture(path: &Path, capture: &CapturedSource, paths: &[PathBuf
 
 /// Capture and persist the bounded private session-start mark.
 pub fn mark(options: &GateOptions<'_>) -> Result<()> {
+    if mark_overlaps_history_namespace(options.state_path, options.paths.iter()) {
+        return Err(Error("session_mark_overlaps_record".into()));
+    }
     let (capture, current, _) = capture(options, false, None)?;
     if mark_overlaps_capture(options.state_path, &capture, options.paths) {
         return Err(Error("session_mark_overlaps_record".into()));
@@ -607,11 +636,17 @@ pub fn gate_with_recording_context(
     options: &GateOptions<'_>,
     preparing: Option<&crate::recording_receipt::PreparingContext>,
 ) -> Result<GateResult> {
+    if mark_overlaps_history_namespace(options.state_path, options.paths.iter()) {
+        return Err(Error("session_mark_overlaps_record".into()));
+    }
     let saved_base = read_mark(options.state_path)?;
     let mut use_recordings = true;
     loop {
         let mut base = saved_base.clone();
         let (capture, current, recordings) = capture(options, use_recordings, preparing)?;
+        if mark_overlaps_capture(options.state_path, &capture, options.paths) {
+            return Err(Error("session_mark_overlaps_record".into()));
+        }
         let previous = base
             .failures
             .clone()

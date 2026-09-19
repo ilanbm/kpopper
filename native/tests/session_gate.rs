@@ -267,6 +267,47 @@ fn mark_refuses_record_member_and_hypothesis_targets() {
     );
 }
 
+#[test]
+fn marks_and_gate_rewrites_cannot_replace_recovery_journal_files() {
+    for name in ["GROUNDING.yaml", "PROVENANCE.yaml"] {
+        let (tmp, original, state) = setup(GOOD);
+        let record = tmp.path().join(name);
+        if original != record {
+            fs::rename(&original, &record).unwrap();
+        }
+        session_gate::mark(&options(&state, &record, tmp.path())).unwrap();
+        let saved = fs::read(&state).unwrap();
+        let layout = kpop_native::history_transaction::Layout::for_entry(name).unwrap();
+        for relative in [
+            format!("{}.history", layout.journal),
+            Path::new(&layout.home)
+                .join(".history-local/other-transaction.json")
+                .to_string_lossy()
+                .into_owned(),
+        ] {
+            let target = tmp.path().join(relative);
+            fs::create_dir_all(target.parent().unwrap()).unwrap();
+            let retained = b"retained transaction before/after images";
+            fs::write(&target, retained).unwrap();
+            let mut overlap = options(&target, &record, tmp.path());
+            assert_eq!(
+                session_gate::mark(&overlap).unwrap_err().0,
+                "session_mark_overlaps_record"
+            );
+            assert_eq!(fs::read(&target).unwrap(), retained);
+            // Even a valid baseline placed in an owned journal namespace cannot
+            // authorize the gate's nudge rewrite of that pathname.
+            fs::write(&target, &saved).unwrap();
+            overlap.turns = 100;
+            assert_eq!(
+                session_gate::gate(&overlap).unwrap_err().0,
+                "session_mark_overlaps_record"
+            );
+            assert_eq!(fs::read(&target).unwrap(), saved);
+        }
+    }
+}
+
 #[cfg(unix)]
 #[test]
 fn unavailable_ingestion_evidence_does_not_hide_new_failures_or_block() {
