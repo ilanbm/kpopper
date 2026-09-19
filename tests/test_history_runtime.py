@@ -42,7 +42,7 @@ class Runtime(unittest.TestCase):
         shutil.copytree(source / 'reasoning/lean', self.package / 'reasoning/lean')
         native = self.package / 'reasoning/native'
         native.mkdir()
-        target = R.R.target_name() + '.zip'
+        target = R.R.target_name() + R.R.RUNTIME_ARCHIVE_SUFFIX
         shutil.copyfile(source / 'reasoning/native' / target, native / target)
         self.nonce = '0123456789abcdef0123456789abcdef'
         self.code = (f'import sys,json; sys.path.insert(0,{str(self.root)!r}); '

@@ -235,7 +235,7 @@ class CommittedBundleTests(unittest.TestCase):
             (payload / "libgmp").write_bytes(b"synthetic library")
             shutil.copytree(ROOT / "scripts/reasoning/third_party", payload / "licenses")
             shutil.copyfile(payload / "licenses/THIRD_PARTY_NOTICES.txt", payload / "THIRD_PARTY_NOTICES.txt")
-            builder.archive_payload(payload, self.native / (target + ".zip"), {
+            builder.archive_payload(payload, self.native / (target + builder.RUNTIME_ARCHIVE_SUFFIX), {
                 "version": 3, "protocols": ["KP2", "KP3", "KP4"], "target": target, "min_os": "test fixture",
                 "lean_version": builder.LEAN_VERSION, "source_sha256": builder.source_hash(self.source),
                 "files": {}, "executable": "evaluator", "libraries": ["libgmp"],
@@ -246,13 +246,13 @@ class CommittedBundleTests(unittest.TestCase):
         return builder.check_bundles(self.native, self.source)
 
     def rewrite_zip(self, mutate):
-        path = self.native / "darwin-arm64.zip"
+        path = self.native / ("darwin-arm64" + builder.RUNTIME_ARCHIVE_SUFFIX)
         with zipfile.ZipFile(path) as zf:
             members = [(entry, zf.read(entry)) for entry in zf.infolist()]
         with zipfile.ZipFile(path, "w") as zf:
             for entry, data in mutate(members):
                 zf.writestr(entry, data)
-        path.with_suffix(".zip.sha256").unlink()
+        Path(str(path) + ".sha256").unlink()
 
     def rewrite_source(self, mutate):
         path = self.native / "gmp-source-and-build.tar.gz"
@@ -276,7 +276,7 @@ class CommittedBundleTests(unittest.TestCase):
         self.assertEqual(before, {p.name: p.read_bytes() for p in self.native.iterdir()})
 
     def test_missing_target_refuses(self):
-        (self.native / "windows-x86_64.zip").unlink()
+        (self.native / ("windows-x86_64" + builder.RUNTIME_ARCHIVE_SUFFIX)).unlink()
         with self.assertRaisesRegex(ValueError, "inventory mismatch"):
             self.check()
 
