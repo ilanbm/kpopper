@@ -177,8 +177,10 @@ story in the README. Keep a direct installation link above the examples.
 
 Immediately after Contents, ask **Where would you like to start?** and offer three
 native disclosure sections: **Coding agents**, **Cowork / Work**, and **Research**.
-All start closed. Each summary states the practical benefit without requiring the
-reader to open it. Keep the opening record overview, installation, quick reference
+Keep Contents open by default; the three paths start closed. Each summary includes
+a small crop from its existing illustration and states the practical benefit without
+requiring the reader to open it. Thumbnails link to the full illustrations and have
+short preview labels; the summary text opens the path and remains usable on its own. Keep the opening record overview, installation, quick reference
 and capability overview visible; group longer explanations under **Go deeper**.
 Preserve existing example anchors, images, source links and runnable excerpts.
 

@@ -30,7 +30,7 @@ changes, kpopper traces its reach through the record and surfaces what needs ano
 
 [Phone layout](assets/diagrams/reasoning-check-mobile.png)
 
-<details>
+<details open>
 <summary>Contents</summary>
 
 - [Choose your path](#choose-your-path)
@@ -65,7 +65,7 @@ and what the checks return. You can also [go straight to installation](#get-star
 <a id="example-1-coding-agent"></a>
 
 <details>
-<summary><strong>Coding agents</strong> — Catch assumptions that break across branches and worktrees.</summary>
+<summary><a href="assets/stories/cache-privacy.png"><img src="assets/navigation/coding.png" width="112" height="70" align="middle" alt="Preview the coding-agent illustration"></a> <strong>Coding agents</strong><br>Catch assumptions that break across branches and worktrees.</summary>
 
 ## Example 1: Coding Agent (assumption checks)
 
@@ -250,7 +250,7 @@ These project modes also apply to document and research work.
 <a id="example-2-claude-cowork-and-chatgpt-work"></a>
 
 <details>
-<summary><strong>Cowork / Work</strong> — Keep plans current when the brief changes.</summary>
+<summary><a href="assets/stories/cowork-workshop.png"><img src="assets/navigation/cowork.png" width="112" height="70" align="middle" alt="Preview the workshop illustration"></a> <strong>Cowork / Work</strong><br>Keep plans current when the brief changes.</summary>
 
 ## Example 2: Claude Cowork / ChatGPT Work (freshness)
 
@@ -373,7 +373,7 @@ For another example that needs judgment, explore
 <a id="example-3-research"></a>
 
 <details>
-<summary><strong>Research</strong> — Connect evidence and revisit conclusions as findings change.</summary>
+<summary><a href="assets/stories/dark-matter-intro.png"><img src="assets/navigation/research.png" width="112" height="70" align="middle" alt="Preview the research illustration"></a> <strong>Research</strong><br>Connect evidence and revisit conclusions as findings change.</summary>
 
 ## Example 3: Research (evidence synthesis)
 
