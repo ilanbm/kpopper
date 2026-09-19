@@ -28,8 +28,10 @@ pub fn make_commit(
 ) -> Result<V> {
     A::bind_authority(marker, baseline)?;
     let mut inventory = Vec::new();
+    let mut temporal = false;
     for (obj, bytes) in objects {
         validate_object(obj)?;
+        temporal |= A::has_temporal_metadata(obj)?;
         let decoded = crate::history_yaml::decode_document(bytes)?;
         validate_object(&decoded)?;
         require(decoded.digest()? == obj.digest()?, "object_bytes_mismatch")?;
@@ -68,6 +70,21 @@ pub fn make_commit(
     }
     if let Some(r) = requires {
         m.insert("requires".into(), r.clone());
+    }
+    if temporal {
+        let mut capabilities = match requires {
+            Some(V::List(values)) => values
+                .iter()
+                .map(text)
+                .collect::<Result<std::collections::BTreeSet<_>>>()?,
+            None => Default::default(),
+            _ => return Err(error("unsupported_history_capability")),
+        };
+        capabilities.insert(A::TEMPORAL_APPLICABILITY);
+        m.insert(
+            "requires".into(),
+            V::List(capabilities.into_iter().map(s).collect()),
+        );
     }
     let value = V::Map(m);
     A::validate_commit(&value)?;

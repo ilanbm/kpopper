@@ -24,7 +24,7 @@ fn obj(fields: impl IntoIterator<Item = (&'static str, V)>) -> V {
 fn strings(values: impl IntoIterator<Item = String>) -> V {
     V::List(values.into_iter().map(V::Text).collect())
 }
-fn authored(obj: &V) -> Result<&Map> {
+pub(crate) fn authored(obj: &V) -> Result<&Map> {
     let m = map(obj)?;
     let a = m
         .get("authored")
@@ -388,6 +388,11 @@ pub fn from_store_capture(capture: &Capture) -> Result<CapturedHistory> {
             }
         }
     }
+    for (version, object) in objects {
+        if A::has_temporal_metadata(object)? {
+            versions.insert(version.clone());
+        }
+    }
     let mut pins = Map::new();
     for version in &versions {
         let o = objects
@@ -484,11 +489,19 @@ pub fn from_store_capture(capture: &Capture) -> Result<CapturedHistory> {
         }
     }
     if !required.is_empty() {
-        map_mut(&mut projection)?.insert("requires".into(), strings(required));
+        map_mut(&mut projection)?.insert("requires".into(), strings(required.iter().cloned()));
     }
     let mut gaps = Vec::new();
+    if let Some(temporal) = crate::history_temporal_capture::capture(capture, &required)? {
+        gaps.extend(list(&map(&temporal)?["findings"])?.iter().cloned());
+        map_mut(&mut projection)?.insert("temporal".into(), temporal);
+    }
     for v in &versions {
-        gaps.extend(P::pin_gap_findings(&objects[v])?);
+        for finding in P::pin_gap_findings(&objects[v])? {
+            if !gaps.contains(&finding) {
+                gaps.push(finding);
+            }
+        }
     }
     if !gaps.is_empty() {
         let p = map_mut(&mut projection)?;

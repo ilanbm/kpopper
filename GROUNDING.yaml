@@ -789,6 +789,11 @@ sources:
     name: "Continue the approved native migration"
     asked: "Continue the approved kpopper Rust migration autonomously until the full planned native
             outcome is verified."
+  s.2026_09_19_native_temporal_continuation:
+    name: "Native temporal contract and captured history continuation"
+    asked: "Continue the approved kpopper Rust migration autonomously until the full planned native
+            outcome is verified."
+    at: "task 01a0b897-a244-78b2-807e-e5209ea88125"
   s.2026_09_19_native_transactions:
     name: "Prepared native transactions and source-order compatibility"
     asked: "Continue the approved kpopper Rust migration autonomously through verified completion,
@@ -982,6 +987,15 @@ sources:
     file: "native/tests/fixtures/source-capture.json"
     at: "45 cases; 38 exact accepted snapshots and 7 refusals against b639cdb; source_capture and
          source_document; guarded inventory and member journals"
+    read: "2026-09-19"
+  s.native_temporal_capture:
+    name: "Native temporal capability and causal capture conformance"
+    from: s.2026_09_19_native_temporal_continuation
+    file: "native/tests/history_temporal.rs"
+    at: "Final Python 1.7.0 reference 5acfd0f: 40 contract vectors and 19 complete captured-history
+         comparisons; rehashed receipt and frontier forgery refusals; 64-observation limit reports
+         incomplete coverage. Temporal assessment and authoring remain unsupported at this capture
+         boundary."
     read: "2026-09-19"
   s.native_writer_verification:
     name: "Native writer conformance"

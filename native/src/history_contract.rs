@@ -316,6 +316,21 @@ pub fn validate_object(value: &V) -> Result<()> {
             pins(v)?;
         }
     }
+    if typed
+        && let Some(temporal) = map(body)
+            .ok()
+            .and_then(|b| b.get("temporal"))
+            .filter(|v| **v != V::Null)
+    {
+        require(string_is(kind, "judgment"), "invalid_temporal_metadata")?;
+        let temporal = schema(temporal, &["version", "applicability"], &[])?;
+        require(
+            is_int(&temporal["version"], "1")
+                && text(&temporal["applicability"])
+                    .is_ok_and(|v| ["current", "anchored", "general"].contains(&v)),
+            "invalid_temporal_metadata",
+        )?;
+    }
     require(
         text(field(m, "id")?)? == typed_object_identity(value)?,
         "identity_mismatch",

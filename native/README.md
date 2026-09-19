@@ -43,6 +43,14 @@ the host. This command does not register hooks or establish host trust.
 
 ## Supported history boundary
 
+The library validates final 1.7 temporal claim metadata and the required
+`temporal-applicability/v1` manifest capability. Captured history retains at most
+64 exact observations, with separate evidence kinds for recorded receipts and
+reconstructed committed worlds. Each observation binds to its causal frontier,
+claim, predicate and original anchors. Exceeding replay bounds produces explicit
+incomplete coverage. Temporal assessment and authoring are still refused while
+their native ports are pending; the public CLI remains the subset described above.
+
 The library also provides an explicit `TypedValue` model and canonical typed JSON
 codec. It preserves integers of arbitrary size, finite IEEE754 floats (including
 signed zero), dates, naive/offset datetimes, Unicode text, lists and ordered maps.

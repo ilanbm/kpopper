@@ -13,6 +13,7 @@ use std::collections::{BTreeMap, BTreeSet, VecDeque};
 
 pub const CANCELLATION: &str = "generation-cancellation/v1";
 pub const ROOT_DISPOSITION: &str = "explicit-root-disposition/v1";
+pub const TEMPORAL_APPLICABILITY: &str = "temporal-applicability/v1";
 pub type Files = BTreeMap<String, Vec<u8>>;
 pub type ObjectBytes = BTreeMap<(String, String), Vec<u8>>;
 pub type ObjectPaths = BTreeMap<(String, String), String>;
@@ -312,9 +313,33 @@ pub fn validate_history_requires(value: &V) -> Result<()> {
         strings.windows(2).all(|w| w[0] < w[1])
             && strings
                 .iter()
-                .all(|v| [ROOT_DISPOSITION, paths::CAPABILITY].contains(v)),
+                .all(|v| [ROOT_DISPOSITION, paths::CAPABILITY, TEMPORAL_APPLICABILITY].contains(v)),
         "unsupported_history_capability",
     )
+}
+pub fn validate_temporal_capability(manifest: &V, objects: &Map) -> Result<()> {
+    validate_commit(manifest)?;
+    let m = map(manifest)?;
+    for member in list(&m["objects"])? {
+        if let Some(object) = objects.get(text(&map(member)?["id"])?)
+            && has_temporal_metadata(object)?
+        {
+            require(
+                capability(m, TEMPORAL_APPLICABILITY),
+                "temporal_capability_required",
+            )?;
+        }
+    }
+    Ok(())
+}
+pub(crate) fn has_temporal_metadata(object: &V) -> Result<bool> {
+    let m = map(object)?;
+    Ok(m.get("id_scheme")
+        .is_some_and(|v| string_is(v, "typed-history/v2"))
+        && m.get("body")
+            .and_then(|v| map(v).ok())
+            .and_then(|b| b.get("temporal"))
+            .is_some_and(|v| *v != V::Null))
 }
 pub fn validate_commit(value: &V) -> Result<()> {
     bounded(value, 16_777_216)?;
@@ -496,6 +521,7 @@ pub fn committed_objects(marker: &V, commits: &Files, objects: &ObjectBytes) -> 
             )?;
             selected.insert(key.1, obj);
         }
+        validate_temporal_capability(&v, &selected)?;
         manifests.insert(op.clone(), map(&v)?.clone());
     }
     let mut children: BTreeMap<String, Vec<String>> =

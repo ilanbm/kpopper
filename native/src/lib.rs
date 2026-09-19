@@ -35,6 +35,8 @@ pub mod history_prospective;
 pub mod history_reduce;
 pub mod history_sources;
 pub mod history_store;
+mod history_temporal;
+mod history_temporal_capture;
 pub mod history_transaction;
 pub mod history_transaction_fs;
 pub mod history_view;

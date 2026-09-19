@@ -160,7 +160,7 @@ pub fn validate_projection(value: &V) -> Result<()> {
             "pins",
             "integrity",
         ],
-        &["dispositions", "origin", "requires"],
+        &["dispositions", "origin", "requires", "temporal"],
     )?;
     require(
         is_int(&m["projection_version"], "1"),
@@ -170,6 +170,7 @@ pub fn validate_projection(value: &V) -> Result<()> {
     if let Some(r) = m.get("requires") {
         A::validate_history_requires(r)?;
     }
+    crate::history_temporal::validate_projection(m)?;
     let schemes = strings(&m["identity_schemes"], "unsupported_identity")
         .map_err(|_| error("unsupported_identity"))?;
     require(
@@ -280,6 +281,7 @@ pub fn validate_projection(value: &V) -> Result<()> {
             require(w["object"] == V::Null, "invalid_pin_witness")?;
         }
     }
+    crate::history_temporal::validate_witnesses(m, pins)?;
     let empty_map = V::Map(Map::new());
     let dispositions = map_code(
         m.get("dispositions").unwrap_or(&empty_map),

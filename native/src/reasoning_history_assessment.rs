@@ -1460,6 +1460,10 @@ pub fn from_v2(snapshot: &Snapshot, report: &V, display_selection: Option<&[Stri
     let mut subjects = Map::new();
     if let Some(p) = projection {
         history_projection::validate_projection(p)?;
+        require(
+            !map(p)?.get("temporal").is_some_and(|v| *v != V::Null),
+            "temporal_assessment_unsupported",
+        )?;
         let graph = graph(map(p)?)?;
         let mut budget = H::SupportBudget::default();
         for id in map(&map(p)?["subjects"])?.keys() {
