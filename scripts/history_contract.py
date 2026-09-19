@@ -28,6 +28,7 @@ except ImportError:
 ID_SCHEME = 'typed-history/v2'
 LEGACY_SCHEME = 'prototype/v1'
 EXPLICIT_ROOT_DISPOSITION = 'explicit-root-disposition/v1'
+TEMPORAL_APPLICABILITY = 'temporal-applicability/v1'
 PROFILE = 'history/v1'
 TOKEN = re.compile(r'[A-Za-z0-9][A-Za-z0-9_.-]{0,159}\Z')
 SUBJECT = re.compile(r'[A-Za-z0-9_][A-Za-z0-9_.-]*\Z')
@@ -242,6 +243,13 @@ def validate_object(value):
         _require(isinstance(body['because'], str), 'invalid_act')
         if 'read' in body:
             _pins(body['read'])
+    temporal = value['body'].get('temporal') if isinstance(value['body'], dict) else None
+    if temporal is not None and value.get('id_scheme') == ID_SCHEME:
+        _require(value['kind'] == 'judgment', 'invalid_temporal_metadata')
+        _mapping(temporal, ('version', 'applicability'))
+        _require(type(temporal['version']) is int and temporal['version'] == 1
+                 and temporal['applicability'] in ('current', 'anchored', 'general'),
+                 'invalid_temporal_metadata')
     _require(value['id'] == object_identity(value), 'identity_mismatch')
     return value
 
@@ -514,8 +522,26 @@ def validate_commit(value):
 
 def validate_history_requires(value):
     _require(isinstance(value, list) and all(isinstance(item, str) for item in value)
-             and value == sorted(set(value)) and all(item in (EXPLICIT_ROOT_DISPOSITION, HP.CAPABILITY) for item in value), 'unsupported_history_capability')
+             and value == sorted(set(value)) and all(item in (
+                 EXPLICIT_ROOT_DISPOSITION, HP.CAPABILITY, TEMPORAL_APPLICABILITY)
+                 for item in value), 'unsupported_history_capability')
     return value
+
+
+def validate_temporal_capability(manifest, objects):
+    """Bind opt-in temporal meaning to an explicit reader capability.
+
+    An object is immutable outside its commit, so the enclosing manifest is the
+    only place an old reader can refuse semantics it does not understand.
+    """
+    manifest = validate_commit(manifest)
+    members = {item['id'] for item in manifest['objects']}
+    temporal = [objects[vid] for vid in members if vid in objects
+                and objects[vid].get('id_scheme') == ID_SCHEME
+                and isinstance(objects[vid].get('body'), dict)
+                and objects[vid]['body'].get('temporal') is not None]
+    _require(not temporal or TEMPORAL_APPLICABILITY in manifest.get('requires', []),
+             'temporal_capability_required')
 
 
 def validate_root_dispositions(manifest, objects, *, prior_ids=()):
@@ -546,10 +572,15 @@ def make_commit(*, marker, operation, parents, baseline, objects, receipt, view,
     """
     marker, baseline = bind_authority(marker, baseline)
     inventory = []
+    temporal = False
     for obj, raw in objects:
         obj = validate_object(obj)
+        temporal = temporal or (obj.get('id_scheme') == ID_SCHEME
+            and isinstance(obj.get('body'), dict) and obj['body'].get('temporal') is not None)
         _require(identity(validate_object(decode_document(raw))) == identity(obj), 'object_bytes_mismatch')
         inventory.append({'subject': obj['subject'], 'id': obj['id'], 'sha256': sha256(raw)})
+    if temporal:
+        requires = sorted(set(requires or []) | {TEMPORAL_APPLICABILITY})
     return validate_commit({'version': 1, 'record_id': marker['record_id'],
                             'authority_generation': marker['generation'], 'operation': operation,
                             **({'authority_digest': identity(marker)} if marker['version'] == 2 else {}),
@@ -681,6 +712,7 @@ def committed_objects(marker, commits, objects):
             _require((obj['subject'], obj['id']) == key, 'reference_mismatch')
             selected[obj['id']] = obj
     for operation, manifest in manifests.items():
+        validate_temporal_capability(manifest, selected)
         for parent, expected in manifest['parents'].items():
             _require(parent in commits, 'incomplete_commit', parent)
             _require(sha256(commits[parent]) == expected, 'parent_bytes_mismatch')
@@ -813,12 +845,56 @@ def validate_projection(value):
     value = detached(value, MAX_PROJECTION_BYTES)
     _mapping(value, ('projection_version', 'authority', 'baseline', 'identity_schemes', 'rules',
                      'rules_digest', 'closure_digest', 'coverage', 'subjects', 'pins', 'integrity'),
-             ('dispositions', 'origin', 'requires'))
+             ('dispositions', 'origin', 'requires', 'temporal'))
     _require(type(value['projection_version']) is int and value['projection_version'] == 1,
              'unsupported_projection')
     bind_authority(value['authority'], value['baseline'])
     if 'requires' in value:
         validate_history_requires(value['requires'])
+    temporal = value.get('temporal')
+    _require((temporal is None) == (TEMPORAL_APPLICABILITY not in value.get('requires', [])),
+             'temporal_capability_mismatch')
+    if temporal is not None:
+        _mapping(temporal, ('version', 'complete', 'observations', 'findings'))
+        _require(temporal['version'] == 1 and type(temporal['complete']) is bool
+                 and isinstance(temporal['observations'], list)
+                 and len(temporal['observations']) <= 64
+                 and isinstance(temporal['findings'], list), 'invalid_temporal_projection')
+        observation_keys = []
+        for observation in temporal['observations']:
+            _mapping(observation, ('operation', 'phase', 'evidence_kind', 'snapshot',
+                                   'assessment', 'claims'))
+            _text(observation['operation'])
+            _require(observation['phase'] in ('before', 'after')
+                     and observation['evidence_kind'] in (
+                         'recorded_receipt', 'reconstructed_committed_world')
+                     and isinstance(observation['snapshot'], str)
+                     and (isinstance(observation['assessment'], dict)
+                          if observation['evidence_kind'] == 'recorded_receipt'
+                          else observation['assessment'] is None)
+                     and isinstance(observation['claims'], list), 'invalid_temporal_projection')
+            claim_keys = []
+            for claim in observation['claims']:
+                _mapping(claim, ('subject', 'claim_id', 'applicability',
+                                 'predicate_digest', 'anchors'))
+                _text(claim['subject'], SUBJECT)
+                _text(claim['claim_id'], OBJECT_ID)
+                _text(claim['predicate_digest'], HEX)
+                _require(claim['applicability'] in ('current', 'anchored', 'general')
+                         and isinstance(claim['anchors'], dict)
+                         and set(claim['anchors']) == {'on', 'at', 'applies'},
+                         'invalid_temporal_projection')
+                claim_keys.append((claim['subject'], claim['claim_id']))
+            _require(claim_keys == sorted(set(claim_keys)), 'invalid_temporal_projection')
+            observation_keys.append((observation['operation'], observation['phase']))
+        _require(len(observation_keys) == len(set(observation_keys)),
+                 'invalid_temporal_projection')
+        for finding in temporal['findings']:
+            _mapping(finding, ('code', 'subject', 'object_id', 'detail'))
+            _require(all(isinstance(item, str) for item in finding.values()),
+                     'invalid_temporal_projection')
+        _require(temporal['complete'] == (not temporal['findings']),
+                 'invalid_temporal_projection')
     schemes = value['identity_schemes']
     _require(isinstance(schemes, list) and all(s in (ID_SCHEME, LEGACY_SCHEME) for s in schemes)
              and schemes == sorted(set(schemes)), 'unsupported_identity')
@@ -866,6 +942,21 @@ def validate_projection(value):
                      'reference_mismatch')
         else:
             _require(witness['object'] is None, 'invalid_pin_witness')
+    if temporal is not None:
+        for observation in temporal['observations']:
+            for claim in observation['claims']:
+                witness = value['pins'].get(claim['claim_id'])
+                _require(witness is not None and witness['status'] == 'recorded'
+                         and witness['subject'] == claim['subject'],
+                         'temporal_claim_mismatch')
+                obj = witness['object']
+                metadata = obj['body'].get('temporal') if isinstance(obj['body'], dict) else None
+                predicate = obj['authored']['fields']['predicate']
+                _require(metadata == {'version': 1, 'applicability': claim['applicability']}
+                         and identity(obj['body'].get(predicate)) == claim['predicate_digest']
+                         and claim['anchors'] == {'on': obj.get('on'), 'at': obj.get('at'),
+                                                 'applies': obj.get('applies')},
+                         'temporal_claim_mismatch')
     dispositions = value.get('dispositions', {})
     _require(isinstance(dispositions, dict) and set(dispositions) <= set(value['subjects']),
              'invalid_dispositions')

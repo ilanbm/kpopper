@@ -1,6 +1,6 @@
 [![kpopper. An ink illustration of Karl Popper holds a microphone and makes a finger heart, looking toward the wordmark and fictional quotation: It really whips the lemma's ass! Logic symbols rise from the blue word lemma. A separate italic attribution reads - Karl Popper, the father of K-pop. His speech bubble says OMG 이건 꼭 필요해! — roughly, OMG, I really need this!](assets/kpopper-hero.png)](assets/kpopper-hero.png)
 
-[![CI tests and record checks](https://github.com/ilanbm/kpopper/actions/workflows/check.yml/badge.svg?branch=main)](https://github.com/ilanbm/kpopper/actions/workflows/check.yml) [![Latest release](https://img.shields.io/github/v/release/ilanbm/kpopper)](https://github.com/ilanbm/kpopper/releases/latest) [![License: MIT](https://img.shields.io/badge/license-MIT-blue)](LICENSE) [![reasoning-runtime: Lean 4](https://img.shields.io/badge/reasoning--runtime-Lean%204-3B82F6)](docs/reasoning-core.md) [![Versioned knowledge: experimental](https://img.shields.io/badge/Versioned%20knowledge-experimental-8B5CF6)](docs/history-contract.md)
+[![CI tests and record checks](https://github.com/ilanbm/kpopper/actions/workflows/check.yml/badge.svg?branch=main)](https://github.com/ilanbm/kpopper/actions/workflows/check.yml) [![Latest release](https://img.shields.io/github/v/release/ilanbm/kpopper)](https://github.com/ilanbm/kpopper/releases/latest) [![License: MIT](https://img.shields.io/badge/license-MIT-blue)](LICENSE) [![reasoning-runtime: Lean 4](https://img.shields.io/badge/reasoning--runtime-Lean%204-3B82F6)](docs/reasoning-core.md) [![Versioned knowledge: default for new records](https://img.shields.io/badge/Versioned%20knowledge-default%20for%20new%20records-8B5CF6)](docs/history-contract.md)
 
 <p align="center">
   <a href="#popper-give-a-conclusion-a-way-to-fail">What's going on? Who is this guy?</a>
@@ -157,15 +157,19 @@ shows the same 7-versus-30-day conflict across two branches, with executable cod
 measurement recipes and a separate integration probe.
 
 These are executable examples. Checks cover the assumptions the record
-declares and the inputs deliberately measured or recorded.
+declares and the inputs deliberately measured or recorded. The examples on this page
+retain their compact legacy records, which kpopper 1.7 continues to read without
+migration. [New records also preserve immutable history](#the-knowledge-record).
 
 ### Two working modes
 
 The difference is **whether sessions share one project context or work against different
 versions of the code**. Both modes support several sessions and competing hypotheses.
 
-**`GROUNDING.yaml` is the project record shown below:** one shared file in Simple,
-and a version kept with each branch, including `main`, in Advanced.
+**`GROUNDING.yaml` is the readable project record shown below:** one shared context in
+Simple, and a version kept with each branch, including `main`, in Advanced. New
+history-backed records also keep their supporting history in `.kpopper/`; carry
+that directory with the YAML when sharing or versioning the record.
 
 [![Simple: sessions share one sourced project record labeled GROUNDING.yaml, with competing hypotheses beside it; consolidation compares and checks proposals, then folds them into the record, refutes them with a reason, or leaves them pending. Advanced: Branch A, Branch B and main each have a GROUNDING.yaml record for their version of the code. Branch records pass through consolidation before integration into main. A continuing Shared findings, pending review path captures feature-independent findings with their source, scope and status. Dashed arrows show local reading before merge. With permission, findings enter a knowledge PR, where consolidation reconciles them with the target record before acceptance. Both paths reach the same main record; the shared path continues for the next batch.](assets/diagrams/two-working-modes.png)](assets/diagrams/two-working-modes.png)
 
@@ -325,6 +329,25 @@ judgments:
 The current value is `remote`; the decision was reviewed against `onsite`. That is a
 `MOVED` notice. The prose in `reopened_by` tells the agent what deserves attention;
 it is not an executable predicate. [Read the complete after record](examples/cowork-workshop/after/GROUNDING.yaml).
+
+### Before the first answer
+
+The next session opens with the saved context: all five plans need review because
+`workshop.format` changed from `onsite` to `remote`. Then the user asks:
+
+> Prepare the ingredient portions for the 18 participants.
+
+On a host with the prompt hook enabled, this matching prompt produces a focused
+pointer (actual hook output, shown here with Codex skill syntax):
+
+```text
+kpopper: the record holds workshop.ingredient_plan on this - $ground workshop.ingredient_plan before answering from memory.
+```
+
+The agent follows that pointer with `pull workshop.ingredient_plan`. It retrieves
+`remote`, the old venue-based plan and its `onsite` review snapshot before answering.
+The next decision is how ingredients will reach participants at home.
+[See the opening and retrieval output](examples/cowork-workshop/README.md#before-the-first-answer).
 
 **Keep your existing documents, notes and task tools.**
 The record links back to relevant evidence; there is no need to migrate your knowledge system.
@@ -646,15 +669,18 @@ Other adapters describe their own interpreter configuration. A Python package in
 includes dependencies in its own environment; do not run pip against an externally managed
 system Python to repair plugin hooks.
 
-Lean is optional; the ordinary reader and page work without it. In a new agent session
-with the project open, start with:
+New records use the packaged reasoning runtime; you do not need to install the Lean
+development toolchain. The optional [checked-session mode](docs/checked-sessions.md)
+has its own setup. In a new agent session with the project open, start with:
 
 > Use kpopper to keep this project's reasoning across sessions. If a record exists, open it
 > and show what needs review. As we work, preserve the useful findings, sources, decisions
 > and conditions that would make those decisions worth reconsidering.
 
 Installation creates no record. Start with the first finding worth carrying into another
-session. A one-off question may need no record at all.
+session. On macOS/Linux or WSL, the first `kpop add` creates a record with `core/v1`
+reasoning and immutable history. Existing legacy records keep their interpretation
+until explicitly adopted. A one-off question may need no record at all.
 
 Keep useful findings within the existing schema and your write permissions. The
 [recording guidance](skills/record/SKILL.md#record-what-the-work-calls-for) includes an
@@ -692,8 +718,9 @@ calendars, task systems, files and earlier sessions. In software, they also incl
 commits and pull requests. One project can cross several tools; one source can serve several
 projects.
 
-kpopper keeps a *picture of the project's reasoning* in `GROUNDING.yaml`: a readable record
-that connects claims to sources and decisions to their premises. Your documents and tools
+kpopper presents a *picture of the project's reasoning* in `GROUNDING.yaml`: a readable
+record that connects claims to sources and decisions to their premises, backed by
+immutable history in `.kpopper/` for new records. Your documents and tools
 keep their own content. The record makes the reasoning between them available to the next
 person or agent working on the goal.
 
@@ -785,6 +812,13 @@ The technical term is an **epistemic record**: a record of what is known and how
 grounded. These are roles in the method, not six mandatory YAML sections. Start with
 what the work needs; a source and one finding can be enough.
 
+**Since 1.7, new records preserve immutable versions of their claims and recorded acts.**
+`GROUNDING.yaml` presents the current readable record; `.kpopper/` holds the history
+and its authority metadata. Retain both together. Supported CLI writes update the
+record through that history, and ordinary reads automatically use `core/v1`. An
+existing legacy YAML record is not migrated by reading it. See the
+[history contract](docs/history-contract.md) for adoption and editing rules.
+
 | Piece | What it preserves |
 |---|---|
 | Source | The document, conversation, observation or other origin of a claim, with dates and locators. |
@@ -834,9 +868,9 @@ and experiments; a workshop can name participants and supplies; a codebase can n
 interfaces and deployment assumptions. Add subjects, categories and views when the
 work creates a reason for them.
 
-The record is ordinary YAML, and Git is optional. Keep it with the project or in a
-deliberately configured external location; your source documents stay in their
-existing tools. [Storage and location](docs/reference.md#record-location-and-shape).
+The readable record is YAML, and Git is optional. Keep it and its `.kpopper/`
+directory with the project or in a deliberately configured external location;
+your source documents stay in their existing tools. [Storage and location](docs/reference.md#record-location-and-shape).
 
 The vocabulary is flexible. The ordinary reader recognizes dependency, predicate
 and snapshot roles by their shape; `facts`/`claims` can serve the same purpose as
@@ -1063,7 +1097,9 @@ this reasoning and review layer a **third brain**; the agent supplies the interp
 **Keep the knowledge system already in use.** A folder of Markdown files, an Obsidian vault,
 a project wiki, or memory files used by Claude or Codex can stay where they are. The agent
 reads relevant material through its available tools and records the claims it relies on,
-with links back to those sources, in `GROUNDING.yaml`. There is no need to migrate the
+with links back to those sources, in the [project record](#the-knowledge-record).
+`GROUNDING.yaml` presents those claims; new records retain their history in `.kpopper/`.
+There is no need to migrate the
 existing notes or replace the agent's memory system.
 
 [![Dense clusters of notes and memory, documents and research, conversations, plans and commitments, and code and data fill the left side. An agent selects relevant evidence. On the right, kpopper arranges claims, decisions and review conditions in GROUNDING.yaml. Sources stay put; reasoning stays connected.](assets/knowledge-sources.png)](assets/knowledge-sources.png)
@@ -1108,18 +1144,24 @@ and the [published proof](https://github.com/anthropics/fermats-last-theorem).
 >
 > — Karl Popper, father of K-pop.
 
-**kpopper's optional, experimental session mode uses the Lean 4 programming language** for
-a smaller, specific job: checking rules about an agent's view of the record. The language
-is also a theorem prover: its kernel checks formal proofs against a precisely defined
-type theory. [The Lean reference](https://lean-lang.org/doc/reference/latest/Elaboration-and-Compilation/)
+**kpopper uses a compiled Lean 4 runtime for deterministic reasoning in new records.**
+It evaluates supported calculations and conditions from explicit inputs. The
+optional, experimental checked-session mode also uses Lean to check rules about
+an agent's view of the record. The language is a theorem prover: its kernel checks
+formal proofs against a precisely defined type theory. [The Lean reference](https://lean-lang.org/doc/reference/latest/Elaboration-and-Compilation/)
 explains how proof checking and compiled execution fit together.
 
-In kpopper, Python reads the record and prepares a normalized snapshot. A local compiled
-Lean core computes assessments and checks the proposed session view. Python then exposes
-the result through CLI or MCP. Reads are bound to the revision returned at opening, so a
-changed record rejects a request using the old revision.
+For the default reasoning core, Python captures the record and the packaged Lean
+runtime evaluates supported rules. [Reasoning and history](docs/reasoning-core.md)
+describes its scope, supported platforms and formal guarantees.
 
-The [Lean source](scripts/session/lean/Main.lean) contains formal proofs of specific properties:
+In checked-session mode, Python prepares a normalized snapshot, a separate local Lean
+core checks the proposed session view, and CLI or MCP exposes the result. Reads are
+bound to the revision returned at opening, so a changed record rejects a request
+using the old revision.
+
+The [checked-session Lean source](scripts/session/lean/Main.lean) contains formal proofs
+of specific properties:
 
 | Property | Why it matters |
 |---|---|
@@ -1219,12 +1261,19 @@ original-field details and output options.
 This table describes the current repository. Check the [changelog](CHANGELOG.md) when
 updating an older installation; a merged feature may still be awaiting a release.
 
-Records with structured expressions and computed snapshots require kpopper 1.6.0 or later
-across the CLI, plugins and CI. Upgrade them together before writing or reviewing those
-records with another installation; [reader compatibility](skills/kpopper/EXPRESSIONS.md#reader-compatibility)
-explains the old-writer risk and the separate Lean setup requirement. On native Windows,
-use individual `add`/`set` writes and deliberate judgment reviews; durable report batching
-requires POSIX file locking.
+Use kpopper **1.7 or later** across the CLI, plugins and CI for the new default
+history-backed records. The [reasoning runtime is packaged](docs/reasoning-core.md);
+existing legacy records require explicit adoption.
+
+Legacy records with structured expressions and computed snapshots require at least
+1.6.0 and their [documented Lean setup](skills/kpopper/EXPRESSIONS.md#reader-compatibility).
+Upgrade every reader and writer together. On native Windows, legacy records support
+individual `add`/`set` writes and deliberate reviews; durable report batching requires
+POSIX file locking.
+
+New history-backed records also require POSIX locking for creation and writes.
+On native Windows, create and author history on a POSIX host such as WSL;
+read-only assessment and the packaged Windows reasoning runtime remain available.
 
 | Status | Capability |
 |---|---|
@@ -1235,7 +1284,7 @@ requires POSIX file locking.
 | Available within stated limits | Background processing of explicit reports and selective delivery of important findings. |
 | Platform import route documented; runtime not yet validated | ChatGPT Work installation and execution of this plugin. |
 | Experimental, opt-in | Lean-checked session views, revision-bound reads and a project-bound MCP server. |
-| Experimental, opt-in | [Deterministic `core/v1` assessment](docs/reasoning-core.md) with a packaged arithmetic runtime; existing commands retain their legacy interpretation. |
+| Default for new records | [Deterministic `core/v1` assessment](docs/reasoning-core.md) and [immutable history](docs/history-contract.md), with a packaged arithmetic runtime and automatic reader selection. Existing legacy records require explicit adoption. |
 | Available through the agent | Guided starting choices: learn during ordinary work, map selected existing materials, or investigate a defined subject and period in depth. |
 | Available within host limits | Optional first-use explanations, workspace guidance and the ability to skip or turn guidance off. |
 

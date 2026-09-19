@@ -1,7 +1,10 @@
 """Ordinary direct commands publish and recover immutable history operations."""
 import contextlib
 import io
+import os
 from pathlib import Path
+import subprocess
+import sys
 import unittest
 from unittest import mock
 
@@ -28,6 +31,63 @@ class DirectHistory(unittest.TestCase):
         self.assertEqual(captured.objects[self.source['id']]['body'], {'v': 1})
         self.assertEqual(Snapshot.capture(self.entry).to_data()['nodes']['p.input']['body']['v'], 5)
         self.assertFalse((self.entry.parent / D.journal(self.entry)).exists())
+
+    def test_fold_preview_retains_captured_assessment_without_writing(self):
+        HH = D.P._peer('history_hypotheses')
+        mutation = HH.prepare(self.entry, 'alternative',
+                              {'kind': 'set', 'id': 'p.input', 'value': 2}, operation='proposal')
+        HH.commit(self.entry, mutation, verify=lambda data: None)
+        before = H.Store(self.entry).capture()
+        result = D.finish_hypotheses([str(self.entry)], ['alternative'], kind='fold',
+                                     because='preview', dry=True)
+        self.assertEqual(result['state'], 'prepared')
+        assessment = result['assessment']
+        self.assertNotEqual(assessment['source_snapshot'], assessment['candidate_snapshot'])
+        self.assertEqual(assessment['candidate']['holes'], [])
+        self.assertEqual(before.inventory, H.Store(self.entry).capture().inventory)
+        self.assertFalse((self.entry.parent / D.journal(self.entry)).exists())
+
+    def test_legacy_history_preview_keeps_its_existing_result(self):
+        from tests import test_history_store as storage
+        fixture = storage.Storage()
+        fixture.setUp()
+        self.addCleanup(fixture.doCleanups)
+        entry = fixture.entry
+        document = D.C.decode_document(entry.read_bytes())
+        document['meta'].pop('reasoning')
+        entry.write_bytes(D.C.encode_document(document))
+        reading = fixtures.claim()
+        reading['authored']['profile'] = 'ordinary-reader/v1'
+        reading['id'] = D.C.object_identity(reading)
+        judgment = fixtures.claim('d.ready', kind='judgment', operation='legacy-judgment',
+            body={'verdict': 'ready', 'rests_on': ['p.input'], 'seen': {'p.input': 1},
+                  'wrong_if': 'p.input > 5'}, pins={'p.input': reading['id']})
+        judgment['authored']['profile'] = 'ordinary-reader/v1'
+        judgment['authored']['collection'] = 'judgments'
+        judgment['id'] = D.C.object_identity(judgment)
+        fixture.publish([reading, judgment], op='legacy-bootstrap')
+        HH = D.P._peer('history_hypotheses')
+        mutation = HH.prepare(entry, 'alternative',
+                              {'kind': 'set', 'id': 'p.input', 'value': 2}, operation='proposal')
+        HH.commit(entry, mutation, verify=lambda data: None)
+        result = D.finish_hypotheses([str(entry)], ['alternative'], kind='fold',
+                                     because='preview', dry=True)
+        self.assertEqual(result, {'state': 'prepared', 'hypotheses': ['alternative'], 'action': 'fold'})
+
+    @unittest.skipIf(os.name == 'nt', 'History fixture publication requires POSIX locking')
+    def test_public_cli_shows_captured_history_preview(self):
+        HH = D.P._peer('history_hypotheses')
+        mutation = HH.prepare(self.entry, 'alternative',
+                              {'kind': 'set', 'id': 'p.input', 'value': 2}, operation='proposal')
+        HH.commit(self.entry, mutation, verify=lambda data: None)
+        before = H.Store(self.entry).capture()
+        result = subprocess.run([sys.executable, str(Path(D.__file__).with_name('cli.py')),
+            '--frozen', 'consolidate', '--dry-run', str(self.entry)],
+            capture_output=True, text=True, timeout=60)
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertIn('captured history preview:', result.stdout)
+        self.assertIn('candidate: 0 falsified, 0 holes', result.stdout)
+        self.assertEqual(before.inventory, H.Store(self.entry).capture().inventory)
 
     def test_ordinary_scalar_add_keeps_the_original_authored_body(self):
         with contextlib.redirect_stdout(io.StringIO()):

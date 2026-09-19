@@ -48,6 +48,8 @@ def add(root, collection, entry_id, fields):
 def demonstrate(root):
     data = yaml.safe_load((HERE / "inputs.yaml").read_text())
     record = root / "GROUNDING.yaml"
+    # Seed the legacy format explicitly to replay the published example. An
+    # absent record would instead start with core/v1 and history in kpopper 1.7.
     seed = yaml.safe_dump({
         "meta": {"scope": "Six-paper worked example; selected source readings and an authored synthesis, not a complete review or live research-agent evaluation."},
         "sources": data["sources"], "known": None, "judgments": None, "open": None,

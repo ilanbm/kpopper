@@ -4,8 +4,10 @@
 callable history store, pure capture adapter, and prepared legacy writes. These
 interfaces do not activate history for an existing record. Direct history writes, local source reports, copied migration and captured Simple/Advanced
 reads use these interfaces. Guarded authority transitions are callable for explicitly
-selected records. Public combined assessment and default consumer policy remain
-separate integration work.
+selected records. New records start with immutable history and `core/v1`;
+ordinary readers select declared core records automatically. Combined assessment
+retains computational, historical and operational findings separately. See
+[reasoning and history](reasoning-core.md) for the public consumer contract.
 
 ## Objects and identity
 
@@ -304,8 +306,24 @@ fold/refute, same/distinct and expression migration. Hypothesis additions and
 deletions bind exact membership and protect separately opened files. Shared
 watch reports retain exact prepared generations and durable event completion
 receipts; interrupted storage remains retryable in their owning processor. Public
-combined assessment, default consumer binding and temporal applicability policy
-remain incomplete. Authority transitions use the separate guarded interface below.
+combined assessment and default consumer binding remain separate from storage.
+Typed judgments may opt into `temporal-applicability/v1` with
+`temporal: {version: 1, applicability: current|anchored|general}`. Their authoring
+receipts retain the exact bounded Snapshot and claim-version map for every observed
+committed before/after world. Fresh assessment replays those snapshots through the
+canonical evaluator once; serialized assessment replay is source-free. A current
+claim recovers when its present falsifier clears while retaining the earlier fired
+episode. Anchored and general claims retain a verified firing as a counterexample
+until an explicit new claim or correction version replaces them. Missing, malformed,
+over-limit or non-reproducible evidence remains unknown. No source clock is inferred:
+object `on`, optional `at`/`applies`, and Snapshot `as_of` remain separate and may be
+unknown. Claims without the explicit metadata retain their existing semantics.
+Applicability selects only how a verified counterexample persists for that exact
+claim version. It does not infer a date window, reinterpret a current reference as
+a past value, change acceptance, or synthesize support. Anchored predicate and
+evidence subjects must therefore be authored explicitly; `on`, `at`, `applies`,
+and `as_of` remain independent provenance fields rather than selectors.
+Authority transitions use the separate guarded interface below.
 
 
 ## History commands and portable contributions
@@ -323,7 +341,15 @@ Direct history commands retain a private retry envelope binding their exact
 PreparedMutation and routing policy. `recover` completes the same operation after
 a crash; `recover --rollback` can cancel an uncommitted operation, but cannot
 delete committed knowledge. Original claim bodies and seen values stay immutable;
-a review adds a review act with current dependency pins. Computational receipts
+a review adds a review act with current dependency pins. New core judgment writes
+capture their dependency values and computational bases into reader-owned `seen`
+after validating that the caller did not supply that field. Direct receipt v7,
+final-world batch receipt v8 and proposal receipt v9 distinguish this behavior;
+older v1/v6/v5 receipts replay without retroactive snapshot synthesis. A batch
+captures all new judgments against its one final staged world, including forward
+references, while a named proposal captures only inside its proposed layer and
+does not write the base. Explicit blocked dependencies become `pin_gaps` and are
+omitted from `seen`; unblocked missing dependencies still refuse. Computational receipts
 assess a named document projection and separately bind history, avoiding a circular
 receipt/manifest identity. They are not the public combined assessment envelope.
 

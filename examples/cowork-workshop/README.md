@@ -123,6 +123,67 @@ Both checks exit zero. The after check reports `MOVED` for `workshop.agenda`,
 `workshop.safety_plan`. Their earlier review snapshots are preserved.
 No model is called and the commands do not interpret the briefs or rewrite the plans.
 
+## Before the first answer
+
+An enabled session-opening hook reads the existing record before work begins.
+Its bounded context exposes the changed plans. You can inspect the same context
+from the repository root:
+
+```sh
+kpop open examples/cowork-workshop/after/GROUNDING.yaml --chars 1300
+```
+
+Selected output (other plans and open questions omitted):
+
+```text
+Cooking-workshop plan after the client changes the format; the saved plans await review.
+holds: workshop (9) · planning (4) · s (4) · venue (4)
+26 entries, 5 judgments, 4 open questions, updated 2025-01-02
+
+needs a person (5):
+  workshop.ingredient_plan: workshop.format differs from what it last saw: onsite -> remote
+```
+
+The user then asks:
+
+> Prepare the ingredient portions for the 18 participants.
+
+The prompt hook compares those words with the record's IDs, names and verdicts.
+For this prompt it returned, with Codex skill syntax:
+
+```text
+kpopper: the record holds workshop.ingredient_plan on this - $ground workshop.ingredient_plan before answering from memory.
+```
+
+That line names an entry; the agent then retrieves its values and sources:
+
+```sh
+kpop pull workshop.ingredient_plan examples/cowork-workshop/after/GROUNDING.yaml --budget 2200
+```
+
+Selected output (the other affected plans omitted):
+
+```text
+venue.ingredients_supplied: True (Venue supplies ingredients) <- s.logistics_plan, at Venue provision
+workshop.format: remote (Workshop format) <- s.updated_brief, at Participants join online from home as of 2025 ...
+workshop.participants: 18 (Participants in the client brief) <- s.session_plan, at Client constraints
++ workshop.ingredient_plan: Prepare ingredient portions at the venue for the 18 participants.
+    holds
+    because: The logistics pass assumes ingredients and participants meet in the same place.
+    reopened by: The format, ingredient provision or participant count changes; review purchasing, portions an ...
+    moved since review: workshop.format onsite -> remote
+```
+
+The venue's ingredient provision is an earlier reading. With the format now remote,
+it does not establish how participants will receive ingredients at home. The agent
+has enough context to revisit that plan before giving preparation instructions.
+
+The prompt hook emits at most three IDs, not the full record or an answer. It can
+also ground matching later prompts, with cooldown and read tracking. These outputs
+were checked locally against the 1.7 source on 2026-09-19, using this legacy example
+record. The prompt-hook probe is not evidence that every host has the integration
+enabled; see the [adapter capability matrix](../../adapters/README.md#capability-matrix).
+
 ## Continue with an agent
 
 > Continue planning from the after record. Read the original brief, planning notes

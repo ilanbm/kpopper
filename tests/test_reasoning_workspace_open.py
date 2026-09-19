@@ -7,7 +7,7 @@ import tempfile
 import unittest
 from unittest import mock
 
-from scripts import workspace_cli as W
+from scripts import provenance as P, workspace_cli as W
 
 
 DOCUMENT = '''meta:
@@ -56,6 +56,42 @@ class CoreWorkspaceOpen(unittest.TestCase):
                 code = W.open_context([str(path)])
         self.assertEqual(code, 0)
         read.assert_called_once()
+
+    def test_default_core_opening_is_bounded_but_json_keeps_attention(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / 'GROUNDING.yaml'
+            path.write_text(DOCUMENT, encoding='utf-8')
+            nodes = {('d.' + str(index)): {
+                'attention': [{'reasons': [{'code': 'needs_review_' + ('x' * 80)}]}],
+                'support': {'status': 'clear', 'reservations': []}}
+                for index in range(100)}
+            context = type('Context', (), {
+                'assessment': {'nodes': nodes, 'history_subjects': {},
+                               'attention_policy': 'focused-review/v1'},
+                'snapshot_id': 's' * 64, 'findings_revision': 'f' * 64,
+                'snapshot': type('Snapshot', (), {'to_data': lambda self: {
+                    'document': {'meta': {'name': 'Bounded'}}}})()})()
+            module = type('ContextModule', (), {
+                'CaptureError': ValueError,
+                'CapturedAssessment': type('Capture', (), {
+                    'capture': staticmethod(lambda files: context)})})
+            location = {'workspace': directory, 'record': str(path), 'status': 'found',
+                        'key': 'core-workspace'}
+            with mock.patch.object(W.W, 'locate', return_value=location), \
+                    mock.patch.object(P, 'core_reader_selected', return_value=True), \
+                    mock.patch.object(P, '_peer', return_value=module), \
+                    contextlib.redirect_stdout(output := io.StringIO()):
+                self.assertEqual(W.open_context([str(path)]), 0)
+            self.assertLessEqual(len(output.getvalue().rstrip()), W.CORE_OPEN_CHARS)
+            self.assertIn('more attention items omitted', output.getvalue())
+            with mock.patch.object(W.W, 'locate', return_value=location), \
+                    mock.patch.object(P, 'core_reader_selected', return_value=True), \
+                    mock.patch.object(P, '_peer', return_value=module), \
+                    contextlib.redirect_stdout(output := io.StringIO()):
+                self.assertEqual(W.open_context(['--json', str(path)]), 0)
+            payload = json.loads(output.getvalue())
+            self.assertEqual(len(payload['attention']), 100)
+            self.assertGreater(payload['text_omitted_attention'], 0)
 
 
 if __name__ == '__main__':

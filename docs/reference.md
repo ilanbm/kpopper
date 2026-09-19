@@ -391,6 +391,20 @@ a session that changed files of the tree, or ran eight prompts, with the record 
 asked once whether there was nothing to keep - as a stop, on the turn after the same
 question rode a prompt unanswered. An unchanged judgment whose falsifier fires after a new
 scalar reading can remain flagged while recording finishes; `check` still reports it.
+The Claude/Codex Stop hook attributes entries and intents to a session only when a
+successful direct write retained a private receipt for that exact entry body and source
+file. Git updates and manual edits alone do not establish session authorship. Writers
+use `KPOPPER_AGENT_SESSION` from the opening context (or `CODEX_THREAD_ID` in Codex).
+Legacy and active-history direct writes retain these receipts after publication;
+previews, failed writes and private drafts do not. Missing receipts leave ownership
+unknown. Captured reports retain their own existing source-purpose receipts.
+
+The hook retains a separate delivery receipt for each finding under the session's
+temporary state directory. Repeated stops and resumed sessions do not repeat the same
+finding, even without a host recursion flag; a new finding may still be delivered.
+This controls notification only: `check` and write admission continue to report failures
+on every evaluation. Temporary state loss removes this delivery history and attribution
+evidence; unavailable delivery storage makes the hook yield rather than repeatedly block.
 Adapters differ in their ability to block, remind or deliver asynchronously—consult the
 [capability matrix](../adapters/README.md#capability-matrix).
 

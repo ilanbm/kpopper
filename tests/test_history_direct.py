@@ -200,4 +200,5 @@ class DirectTransactions(unittest.TestCase):
         self.assertFalse(self.entry.exists())
         self.assertIsNone(next(i['before'] for i in mutation.files if i['role'] == 'record'))
         P.recover_direct([str(self.entry)])
-        self.assertEqual(P.bodies(P.load([str(self.entry)]))['p.value']['v'], 2)
+        captured = P._peer('history_store').Store(self.entry).capture()
+        self.assertEqual(captured.state['subjects']['p.value']['body']['v'], 2)

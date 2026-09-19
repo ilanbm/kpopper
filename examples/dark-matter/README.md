@@ -201,7 +201,10 @@ python3 scripts/kpopper session status
 python3 examples/dark-matter/run.py
 ```
 
-If the core is not ready, follow the [reasoning-core setup](../../docs/reasoning-core.md).
+This replay deliberately seeds a legacy-format YAML record, matching the checked-in
+example and its CLI output. It does not exercise the 1.7 default for newly created
+history-backed records. If the calculation core is not ready, follow the
+[legacy expression setup](../../skills/kpopper/EXPRESSIONS.md#reader-compatibility).
 The script replays [inputs.yaml](inputs.yaml) using three overlapping CLI writers,
 then records the calculation and linked judgments in dependency order. It verifies
 that all readings survive, every judgment snapshots its exact premises, and the

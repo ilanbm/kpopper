@@ -71,9 +71,21 @@ class CapturedAssessment:
                 for identifier, node in report['nodes'].items()},
             'operational_limits': copy.deepcopy(report['operational_limits']),
         }
+        # Temporal review requests are v3 policy, not part of the retained v2
+        # assessment revision. Remove only the separately appended action.
+        for node in base['nodes'].values():
+            node['attention'] = [action for action in node['attention'] if not (
+                action.get('action') == 'review' and action.get('reasons') and
+                all(reason.get('code') in ('historical_counterexample',
+                                           'historical_evidence_unknown')
+                    for reason in action['reasons']))]
         base = validate_v2(snapshot, base)
+        temporal_evidence = {identifier: copy.deepcopy(subject['temporal']['episodes'])
+                             for identifier, subject in report['history_subjects'].items()
+                             if 'temporal' in subject}
         rebuilt = history_from_v2(snapshot, base,
-                                  display_selection=report['display_selection'])
+                                  display_selection=report['display_selection'],
+                                  temporal_evidence=temporal_evidence)
         if rebuilt != report:
             raise ValueError('assessment does not match its retained snapshot')
         view = project_findings(report)
@@ -81,6 +93,7 @@ class CapturedAssessment:
                 or view['findings_revision'] != report['findings_revision']:
             raise ValueError('consumer view belongs to a different assessment')
         self._snapshot = snapshot
+        self._base_assessment = base
         self._assessment = report
         self._view = view
 
@@ -118,6 +131,11 @@ class CapturedAssessment:
     @property
     def findings_revision(self):
         return self._assessment['findings_revision']
+
+    @property
+    def base_assessment(self):
+        """The validated v2 computational findings underlying this v3 context."""
+        return copy.deepcopy(self._base_assessment)
 
     @property
     def assessment(self):

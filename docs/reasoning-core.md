@@ -1,8 +1,18 @@
-# Experimental deterministic core
+# Deterministic reasoning and history
 
-`core/v1` is an explicit assessment and authoring profile. Existing ordinary
-records keep their legacy interpretation. Select the profile explicitly for
-the core readers described below.
+On a POSIX host, the first `kpop add` in a workspace without a record creates a `core/v1` record
+with immutable history. Creation and recovery use one guarded transaction, so
+an interrupted first write cannot expose a partial record. Existing ordinary
+records keep their legacy interpretation; reading them never changes authority.
+Ordinary open, check, pull, affects, assess, export, search, page and session reads
+automatically select the declared core interpretation. No profile flag is needed
+for a newly created record. The profile can also be selected explicitly for the
+readers described below.
+
+History authoring and activation require POSIX file locking. On native Windows,
+use a supported POSIX host (for example WSL) for those writes, including first-record
+creation. Read-only assessment and the packaged Windows reasoning runtime remain
+separate supported capabilities; this release does not add a Windows history writer.
 
 ```sh
 kpop assess m.total d.order --profile core/v1 --record example.yaml
@@ -30,7 +40,7 @@ independent integrity/contention findings. An unavailable executor produces an
 operational error, never `false`. Prose remains a declared unknown; it is not
 silently promoted to an executable condition.
 
-The profile remains explicit and default-off. Its scalar fragment supports
+Adopting the profile for an existing legacy record remains explicit. Its scalar fragment supports
 literals, references, exact arithmetic and comparisons through `arithmetic/v1`.
 Records may additionally declare `composition/v1` for finite typed values and
 composable conditions. Finite-scope query and member selection are provided by
@@ -70,11 +80,41 @@ options and preserve unknown/error independently from false. The core session ha
 project identity, Snapshot, findings and consumer-view version; follow-up reads reuse its retained
 source-free context and recapture only to reject staleness.
 
-`consolidate`, watch compatibility/uncertainty, followups, and `remeasure` remain explicit
-legacy-only operations with this experimental profile. A declared core record fails them closed with
-`unsupported_capability: use core/v1 consumer`; they never fall back to the legacy evaluator.
-Use the shared read consumers above for current findings. Activation remains blocked while these
-operation-specific contracts are not migrated.
+Followups read declared core and history-backed records through the same captured assessment.
+Conditions compare exact scalar readings; `changed` also observes their computational basis and
+history evidence. A judgment supplies its authored verdict, with acceptance, falsifier, support
+and integrity reported separately. An unavailable reading stays unknown for conditions that need
+it; a scheduled diagnostic can still become due. Scanning does not change the record or execute work.
+
+Declared core records support `consolidate --dry-run`, guarded folds, explicit refutation,
+and committed-branch input. Base and prospective findings retain their captured snapshots;
+replacement, date, `--take`, and `--drop` rules still apply. Hypotheses with executable legacy
+fields require explicit migration before entering a core union. History-backed consolidation
+retains its guarded history transaction and replay path. New history folds also check the complete
+prepared candidate for newly introduced falsified conditions or assessment holes before publication.
+Retained older prepared operations keep their original recovery semantics.
+History fold previews also retain the original pending, target and routing observations while
+rebuilding the candidate's committed history and named hypotheses. The preview reports base and
+candidate findings without publishing the candidate or treating pending contributions as accepted.
+
+Watch compatibility and `remeasure` support declared core and active-history records through
+captured assessments. Watch combines compatible committed histories with the canonical reducer;
+the merge-base delta preserves newer main readings when the local branch did not change them.
+Conflicting claims and incomplete history remain explicit findings.
+
+Hypothetical watch computations use a separate, replay-validated scenario. It retains the complete
+source snapshots and selects only captured hypothesis/shared bodies. New hypothetical values are
+evaluated by the same native core, including `folds: never` layers and already-fired head conditions.
+Standing unchanged hypotheses contribute their head condition without replaying stale values over
+the new base. Scenario findings are labeled with their perspective, source and scenario identity;
+they do not establish history acceptance or permission to fold. Shared literal legacy readings keep
+their original source evidence; executable legacy fields need explicit interpretation first.
+
+Remeasure runs only named allowlisted recipes, prepares admissible named history folds and measured
+values without publishing either, and assesses the final measured world. It verifies the original
+captured source after recipes complete. Existing date, replacement and never-fold rules remain;
+physical hypotheses without an admitted history path are reported as incomplete. Unknown or failed
+computations never become a false condition or a successful measurement.
 
 ## Composable conditions
 

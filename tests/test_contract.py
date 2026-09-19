@@ -56,10 +56,10 @@ DATED = ('  c.dated:\n    rests_on: [when.first_cold_night]\n'
          '    seen: {when.first_cold_night: "2027-02-01"}\n')
 
 
-def run(*args, cwd=None):
+def run(*args, cwd=None, env=None):
     """The scripts as a session runs them: a subprocess, its exit code and both streams."""
     p = subprocess.run([sys.executable] + [str(a) for a in args], cwd=cwd,
-                       capture_output=True, text=True)
+                       capture_output=True, text=True, env=env)
     return p.returncode, p.stdout, p.stderr
 
 
@@ -1479,7 +1479,7 @@ class IntentsTabsCoverage(unittest.TestCase):
     def test_the_hooks_mark_at_open_and_bounce_once_at_stop(self):
         with tempfile.TemporaryDirectory() as d:
             rec = copy_fixture(pathlib.Path(d))
-            env = dict(os.environ, TMPDIR=d)
+            env = dict(os.environ, TMPDIR=d, KPOPPER_AGENT_SESSION="t1")
 
             def hook(name, payload):
                 return subprocess.run(["sh", str(SCRIPTS / name)], cwd=d, input=json.dumps(payload),
@@ -1490,12 +1490,12 @@ class IntentsTabsCoverage(unittest.TestCase):
             self.assertTrue((pathlib.Path(d) / "kpopper-base-t1").exists())
             self.assertEqual(hook("session_gate.sh", {"session_id": "t1"}).returncode, 0)
             run(SCRIPTS / "provenance.py", "add", "heat.storm_kw", "v=5", "unit=kW", "name=loss in a storm",
-                "from=doc.boiler_sheet", "--as-of", "2026-09-04", rec)
+                "from=doc.boiler_sheet", "--as-of", "2026-09-04", rec, env=env)
             p = hook("session_gate.sh", {"session_id": "t1"})
             self.assertEqual(p.returncode, 2)
             self.assertIn("this session wrote 1 entry (heat.storm_kw) and recorded no intent", p.stderr)
             # once: the second stop goes through
-            p = hook("session_gate.sh", {"session_id": "t1", "stop_hook_active": True})
+            p = hook("session_gate.sh", {"session_id": "t1"})
             self.assertEqual(p.returncode, 0)
             self.assertEqual(p.stderr, "")
 

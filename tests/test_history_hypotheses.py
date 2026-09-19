@@ -47,6 +47,15 @@ class NamedHypotheses(unittest.TestCase):
             replay = Snapshot.from_json(snapshot.to_json())
         self.assertEqual(replay.snapshot_id, snapshot.snapshot_id)
 
+    def test_bare_open_question_stays_in_its_named_hypothesis(self):
+        body = 'Does the enterprise tier include support?'
+        mutation = self.prepare('add', 'q.support', action={'body': body})
+        self.commit(T.PreparedMutation.from_bytes(mutation.to_bytes()))
+        captured = self.store.capture()
+        self.assertEqual(captured.state['subjects']['q.support']['acceptance'], 'proposed')
+        self.assertEqual(self.groups()[0]['alternative']['doc']['open']['q.support'], body)
+        self.assertNotIn('q.support', captured.document.get('open', {}))
+
     def test_new_root_proposal_and_edit_never_auto_accept(self):
         self.commit(self.prepare('add', 'p.new', action={'body': {'v': 4}, 'into': 'readings'}))
         original = self.groups()[1]['groups']['alternative']['p.new'][0]
@@ -57,6 +66,17 @@ class NamedHypotheses(unittest.TestCase):
         self.assertEqual(captured.objects[original]['body'], {'v': 4})
         self.assertEqual(captured.state['subjects']['p.new']['marks'][original], 'retired')
         self.assertEqual(self.groups()[0]['alternative']['doc']['readings']['p.new']['v'], 5)
+
+    def test_retained_version_one_judgment_proposal_replays_without_new_seen(self):
+        mutation = HH.prepare(self.entry, 'legacy', {'kind': 'add', 'id': 'd.legacy',
+            'into': 'decisions', 'body': {'verdict': 'ready', 'rests_on': ['p.input'],
+                                          'wrong_if': {'expr': 'p.input > 5'}}},
+            by='writer', operation='legacy-hypothesis', _receipt_version=1)
+        self.assertEqual(mutation.to_data()['receipt']['before']['hypothesis_authoring']['version'], 1)
+        made = [C.decode_document(item['after']) for item in mutation.files
+                if item['role'] == 'history_object']
+        self.assertNotIn('seen', next(item for item in made if item['kind'] == 'judgment')['body'])
+        HH.verify_prepared(self.entry, T.PreparedMutation.from_bytes(mutation.to_bytes()))
 
     def test_fold_all_selected_subjects_is_one_explicit_commit(self):
         self.commit(self.prepare())
@@ -80,6 +100,43 @@ class NamedHypotheses(unittest.TestCase):
         self.assertEqual(captured.objects[original['id']], original)
         self.assertEqual(set(self.groups()[0]), {'other'})
 
+    def test_fold_checks_existing_judgments_in_prepared_history(self):
+        decision = fixture.claim('d.ready', kind='judgment', operation='decision',
+            body={'verdict': 'ready', 'rests_on': ['p.input'],
+                  'wrong_if': {'expr': 'p.input > 5'}},
+            pins={'p.input': self.fixture.source['id']})
+        self.fixture.publish([decision], 'decision')
+        self.commit(self.prepare(action={'value': 9}))
+        before = self.store.capture()
+        with self.assertRaisesRegex(C.HistoryError, 'hypothesis_candidate_not_clean.*d.ready'):
+            HH.prepare_fold(self.entry, ['alternative'], because='candidate must be checked')
+        self.assertEqual(before.inventory, self.store.capture().inventory)
+        self.assertIn('alternative', self.groups()[0])
+        # A previously prepared receipt keeps its original admission semantics
+        # during recovery; new operations always opt in to the stronger check.
+        old = HH.prepare_fold(self.entry, ['alternative'], because='retained old operation',
+                              _assessment_version=0)
+        self.assertNotIn('assessment_version', old.to_data()['receipt']['before']['hypothesis_authoring'])
+        HH.verify_prepared(self.entry, old)
+
+    def test_prepared_assessment_retains_history_and_matches_publication(self):
+        from scripts import history_prospective
+        self.commit(self.prepare())
+        captured = self.store.capture()
+        mutation = HH.prepare_fold(self.entry, ['alternative'], because='verified candidate',
+                                   recorded_at='2026-09-18T00:00:00+00:00')
+        self.assertEqual(mutation.to_data()['receipt']['before']['hypothesis_authoring']['assessment_version'], 1)
+        checked = history_prospective.assess(captured, mutation, as_of='2026-09-18')
+        self.assertEqual(checked['introduced']['holes'], [])
+        self.assertEqual(checked['introduced']['falsified'], [])
+        candidate = checked['after'].snapshot.to_data()
+        self.assertEqual(candidate['context']['operation_scope'], 'committed_history')
+        self.assertNotIn('alternative', candidate['hypotheses'])
+        self.commit(mutation)
+        actual = D.from_store_capture(self.store.capture()).snapshot(as_of='2026-09-18').to_data()
+        self.assertEqual(candidate['document'], actual['document'])
+        self.assertEqual(candidate['context']['history'], actual['context']['history'])
+
     def test_review_keeps_original_seen_and_pins_group_dependency(self):
         self.commit(self.prepare())
         group_input = self.groups()[1]['groups']['alternative']['p.input'][0]
@@ -87,6 +144,9 @@ class NamedHypotheses(unittest.TestCase):
             'verdict': 'ready', 'rests_on': ['p.input'], 'wrong_if': {'expr': 'p.input > 5'}}, 'into': 'decisions'}))
         version = self.groups()[1]['groups']['alternative']['d.ready'][0]
         original = copy.deepcopy(self.store.capture().objects[version])
+        self.assertEqual(original['body']['seen']['p.input']['computed']['value'],
+                         {'type': 'number', 'numerator': '2', 'denominator': '1'})
+        self.assertNotIn('d.ready', self.store.capture().document.get('decisions', {}))
         self.commit(self.prepare('set', action={'value': 3}))
         new_input = self.groups()[1]['groups']['alternative']['p.input'][0]
         mutation = self.prepare('review', 'd.ready', action={})
@@ -94,7 +154,8 @@ class NamedHypotheses(unittest.TestCase):
         capture = self.store.capture()
         self.assertEqual(capture.objects[version], original)
         self.assertEqual(original['pins']['p.input'], group_input)
-        self.assertNotIn('seen', original['body'])
+        self.assertEqual(original['body']['seen']['p.input']['computed']['value'],
+                         {'type': 'number', 'numerator': '2', 'denominator': '1'})
         review = next(obj for obj in capture.objects.values() if obj['op'] == mutation.to_data()['operation'])
         self.assertEqual(review['body']['read'], {'p.input': new_input})
         snapshot = Snapshot.capture(self.entry, read_mode='frozen').to_data()
@@ -236,9 +297,14 @@ class NamedHypotheses(unittest.TestCase):
         new_body = {**old_body, 'wrong_if': {'expr': 'p.input > 10'}}
         self.commit(self.prepare('add', 'd.change', action={'body': new_body}))
         current = self.store.capture()
-        self.assertEqual(current.objects[old]['body'], old_body)
+        self.assertEqual({key: value for key, value in current.objects[old]['body'].items()
+                          if key != 'seen'}, old_body)
+        self.assertEqual(current.objects[old]['body']['seen']['p.input']['computed']['value'],
+                         {'type': 'number', 'numerator': '1', 'denominator': '1'})
         self.assertEqual(current.state['subjects']['d.change']['marks'][old], 'retired')
-        self.assertEqual(self.groups()[0]['alternative']['doc']['decisions']['d.change'], new_body)
+        current_body = self.groups()[0]['alternative']['doc']['decisions']['d.change']
+        self.assertEqual({key: value for key, value in current_body.items() if key != 'seen'},
+                         new_body)
         self.assertNotIn('d.change', current.document['decisions'])
 
 
