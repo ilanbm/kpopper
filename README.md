@@ -782,16 +782,23 @@ See the [command reference](docs/reference.md), [history commands](docs/history-
 | [Map selected existing materials](skills/map/SKILL.md) | `/kpopper:map` | `$map` |
 | [Reconcile hypotheses and branch records](skills/consolidate/SKILL.md) | `/kpopper:consolidate` | `$consolidate` |
 | [Configure background checks](skills/watch/SKILL.md) | `/kpopper:watch` | `$watch` |
-| [Use kpopper Hub](skills/hub/SKILL.md) | `/kpopper:hub` | `$hub` |
-| [Create Annotated Documents](skills/annotated-doc/SKILL.md) | `/kpopper:annotated-doc` | `$annotated-doc` |
 
 For example, `$ground workshop.ingredient_plan` asks Codex to retrieve that plan and
 its basis. **`ground` is a skill; the CLI reads use `open`, `pull`, `affects` and `check`.**
 Other hosts expose skills through their [adapters](adapters/README.md).
 
-Hub and Annotated Documents are [optional experimental applications](#experimental-applications),
-invoked from the CLI with `kpop experimental hub` and `kpop experimental annotated-doc`.
-`page` and `document` remain compatibility aliases. The separate
+**Experimental — optional HTML applications**
+
+These skills require the [optional HTML setup](#experimental-applications) and explicit
+selection. Their interfaces and artifact formats may change.
+
+| Application | Claude Code | Codex |
+|---|---|---|
+| [kpopper Hub](skills/hub/SKILL.md) | `/kpopper:hub` | `$hub` |
+| [Annotated Documents](skills/annotated-doc/SKILL.md) | `/kpopper:annotated-doc` | `$annotated-doc` |
+
+The CLI entry points are `kpop experimental hub` and `kpop experimental annotated-doc`.
+`page` and `document` remain compatibility aliases. The separate experimental
 [checked-session integration](docs/checked-sessions.md) uses `kpop session` and has its
 own setup; it is optional alongside the default reasoning engine.
 
@@ -895,13 +902,49 @@ evaluation of the same inputs and rules gives the same result.**
 
 In kpopper, this means:
 
-- **Repeatable checks.** With seven days of retention and a 30-day promise,
-  `files.days < link.days` evaluates to `true` each time those values are checked.
+- **Repeatable checks.** A $1,200 plan exceeds a $1,000 budget:
+  `total_cost > budget` evaluates to `true` each time those values are checked.
   No fresh model response is needed to decide that comparison.
 - **Explicit assumptions.** The record names what a conclusion depends on and
   the condition that would make it fail or deserve another look.
 - **Traceable support.** Follow a result through its recorded inputs, rule,
   source references and last-review snapshot.
+
+**The same answer can rest on different evidence.** Consider this illustrative
+exchange after adding LZ to the [research example](examples/dark-matter/advanced/README.md):
+
+> **User:** “Include the LZ paper. Does our selection of astronomy studies change?”
+>
+> **Agent:** “I'll apply the recorded selection rule and compare its evidence basis
+> with the last review.”
+
+The selection rule requires `in_review` **and** `domain == "astronomy"`.
+The agent runs the following against the generated history-backed record.
+`jq` selects four fields from the actual CLI assessment for display:
+
+```sh
+kpop assess m.astronomy_count m.particle_identities d.review_scope \
+  --record /tmp/dark-matter-query/history/GROUNDING.yaml --history |
+  jq -f examples/dark-matter/advanced/assessment-summary.jq
+```
+
+```json
+{
+  "studies_scanned": 6,
+  "astronomy_studies_selected": 5,
+  "particle_identity_status": "unknown",
+  "review_basis": "changed"
+}
+```
+
+Five studies matched before; five still match. LZ is recorded as laboratory evidence,
+so it joins the scope without entering that selection. The retained review still names
+the earlier basis, and missing particle-identity readings stay unknown.
+
+The agent can now explain: **“The selection is unchanged, but the evidence considered
+has changed. The saved review needs another look.”** The runnable example also replays
+the earlier Snapshot after removing access to the source files, recovering its original
+five-paper scope and basis. [Run it and inspect the full responses](examples/dark-matter/advanced/README.md#run-it).
 
 Agents still interpret sources, choose which assumptions to record and make
 judgments. The reliability of a conclusion depends on that evidence and those

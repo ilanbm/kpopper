@@ -63,6 +63,21 @@ python -m kpopper.cli assess m.astronomy_count m.particle_identities \
   --record /tmp/dark-matter-query/history/GROUNDING.yaml --history
 ```
 
+For the compact agent/CLI exchange shown in the main README, install `jq` and run
+this from the repository root after the exercise has created that directory:
+
+```sh
+kpop assess m.astronomy_count m.particle_identities d.review_scope \
+  --record /tmp/dark-matter-query/history/GROUNDING.yaml --history |
+  jq -f examples/dark-matter/advanced/assessment-summary.jq
+```
+
+The filter selects and names four fields from the CLI response. For a completed count,
+`astronomy_studies_selected` shows the definite matches; otherwise it preserves the
+reported unknown or error status. It performs no additional research reasoning.
+The complete response retains the diagnostics and evidence. The full exercise runs
+without `jq`.
+
 The exercise first uses the supported `history migrate` CLI to import a copy of
 the explicit core fixture. It records a qualitative judgment through `add`, then
 captures a Snapshot. The later `add` publishes the LZ member through the same
