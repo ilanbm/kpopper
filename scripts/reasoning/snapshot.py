@@ -918,6 +918,10 @@ def _capture_load(paths, mode, initial, *, retain_source=False):
     document = adapted.document
     _retained_history_members(document, active[0])
     doc = P.Record(document)
+    # Private reader metadata: the authoritative entry owns this history projection.
+    # Retain it for local consumers without adding paths to the portable Snapshot.
+    doc.origins = {section: {nid: active[0] for nid in members}
+                   for section, members in P.collections_of(doc).items()}
     doc.hypotheses = P.load_hypotheses(routed)
     from .. import history_hypotheses as HH
     doc.hypotheses = HH.active_physical(document, active[0], doc.hypotheses)

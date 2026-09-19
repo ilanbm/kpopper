@@ -106,7 +106,8 @@ def opening(payload, host=None):
             "environment": {"KPOPPER_AGENT_SESSION": sid},
             "command": [sys.executable, str(HERE / "cli.py")],
             "workspace": directory}, ensure_ascii=False)
-            + "\nFor mapping, pass this session environment to the CLI and execute the returned task. "
+            + "\nPass this session environment to record-writing and mapping commands. "
+              "For mapping, execute the returned task. "
               "The identity routes work back to this session; it grants no source access.")
         baseline = Path(tempfile.gettempdir()) / ("kpopper-base-" + sid)
         if not (payload.get("source") in ("compact", "resume") and baseline.exists()):

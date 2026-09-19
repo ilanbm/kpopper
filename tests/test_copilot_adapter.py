@@ -70,9 +70,24 @@ known:
         self.assertEqual(result["decision"], "block")
         self.assertIn("no snapshot", result["reason"])
         self.assertEqual(self.call("stop", {**self.payload, "stop_hook_active": True}), {})
-        # A later user turn must still check the failure; the host's flag scopes
-        # the guard to the forced continuation, not the entire session.
-        self.assertEqual(self.call("stop", {**self.payload, "stop_hook_active": False})["decision"], "block")
+        # The same finding stays quiet across later turns, independently of the flag.
+        self.assertEqual(self.call("stop", {**self.payload, "stop_hook_active": False}), {})
+        record = self.work / "GROUNDING.yaml"
+        record.write_text(record.read_text(encoding="utf-8") + '''  decision.other:
+    verdict: Another unchecked decision
+    rests_on: [deadline.days]
+    seen: {}
+    wrong_if: deadline.days < 1
+''', encoding="utf-8")
+        new = self.call("stop", {**self.payload, "stop_hook_active": False})
+        self.assertEqual(new["decision"], "block")
+        self.assertIn("decision.other", new["reason"])
+        self.assertNotIn("decision.ready", new["reason"])
+        checked = subprocess.run([sys.executable, str(ROOT / "scripts/provenance.py"), "check"],
+                                 cwd=self.work, env=self.env, text=True, capture_output=True)
+        self.assertNotEqual(checked.returncode, 0)
+        self.assertIn("decision.ready", checked.stdout)
+        self.assertIn("decision.other", checked.stdout)
 
     def test_resume_does_not_reset_baseline_after_a_new_failure(self):
         self.record()

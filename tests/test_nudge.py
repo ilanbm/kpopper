@@ -120,7 +120,10 @@ class Gate(Scratch):
     def test_a_session_that_wrote_is_not_asked_and_a_plain_host_hears_the_command(self):
         self.record()
         payload = {"session_id": "n2", "cwd": str(self.dir)}
-        self.hook("session_open.sh", payload)
+        _, opened, _ = self.hook("session_open.sh", payload)
+        context = next(line.removeprefix("KPOPPER_AGENT_CONTEXT ")
+                       for line in opened.splitlines() if line.startswith("KPOPPER_AGENT_CONTEXT "))
+        self.env.update(json.loads(context)["environment"])
         (self.dir / "notes.md").write_text("a finding\n", encoding="utf-8")
         code, out, err = self.cli("add", "heat.storm_kw", "v=5", "unit=kW", "name=loss in a storm",
                                   "from=doc.boiler_sheet", "--as-of", "2026-09-04")
