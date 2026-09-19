@@ -135,6 +135,16 @@ class PluginRuntime(unittest.TestCase):
         self.assertIn("setup", result.stdout)
         self.assertNotIn("KPOPPER_AGENT_CONTEXT", result.stdout)
 
+    def test_missing_timezone_dataset_does_not_block_record_opening(self):
+        python, site = self.repaired()
+        shutil.rmtree(site / "tzdata")
+        (self.project / "GROUNDING.yaml").write_text("known:\n  m.sample: 17\n")
+        result = self.hook()
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("KPOPPER_AGENT_CONTEXT", result.stdout)
+        self.assertIn(str(python), result.stdout)
+        self.assertNotIn("dependencies unavailable", result.stdout + result.stderr)
+
     def test_launcher_errors_do_not_block_but_hook_exit_two_is_preserved(self):
         self.repaired()
         for script in ("nonexistent.py", "../cli.py"):

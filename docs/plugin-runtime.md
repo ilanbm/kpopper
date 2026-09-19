@@ -3,9 +3,13 @@
 Claude Code and Codex copy plugin files; that does not install Python dependencies.
 Their hook commands start a small standard-library-only launcher with `python3`.
 The launcher selects a private dependency environment if one exists, otherwise it
-checks that bootstrap Python. It probes only the core dependencies, `yaml` and `tzdata`
+checks that bootstrap Python. Opening a record probes only `yaml`
 before running the hook. Failures name the actual interpreter and the repair command;
 they do not block the host session or claim the record was opened.
+
+Normal setup also installs `tzdata` for followup scheduling on systems without an IANA
+timezone database. It is not an HTML dependency and its absence does not block record
+opening. Configured followups still require their named timezone to be available.
 
 ## Setup and diagnosis
 

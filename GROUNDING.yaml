@@ -5034,6 +5034,17 @@ judgments:
                   applied, evidence runs in the document shell, or an unmarked statement is presented
                   as checked."
     seen: {doc.standalone_html: "read 2026-09-10"}
+  d.startup_checks_only_record_dependencies:
+    from: s.2026_09_19_main_integration
+    rests_on: [s.2026_09_19_main_integration, doc.applications]
+    verdict: "Session startup probes only PyYAML. Normal setup retains timezone data for followups,
+              and HTML applications retain their explicit optional runtime."
+    because: "Opening and checking a record do not need an HTML renderer or a timezone database.
+              Missing dependencies for another operation should be reported at that operation without
+              preventing access to the record."
+    reopened_by: "A record opening is blocked solely by missing HTML or timezone libraries, or
+                  configured followups silently accept an unavailable timezone."
+    seen: {s.2026_09_19_main_integration: "read 2026-09-19", doc.applications: "read 2026-09-18"}
   d.stood_is_derived:
     rests_on: [s.2026_09_03_arrangements, d.metrics_derived_builtin, d.minimal_repair, p.fields_a_build_writes]
     verdict: "how long an arrangement stood is derived - the sessions read on a later day than it

@@ -16,6 +16,9 @@ HERE = Path(__file__).resolve().parent
 # Keep aligned with project.dependencies; the regression test checks the contract.
 REQUIREMENTS = ("PyYAML>=5.1", "tzdata")
 MODULES = ("yaml", "tzdata")
+# Opening the record needs YAML. Timezone data belongs to configured followup
+# operations and remains part of setup, but its absence must not block a session.
+STARTUP_MODULES = ("yaml",)
 try:
     from .applications import HTML_REQUIREMENTS, HTML_MODULES
 except ImportError:
@@ -55,7 +58,7 @@ def venv_python(directory):
     return directory / ("Scripts/python.exe" if os.name == "nt" else "bin/python")
 
 
-def probe(python, isolated=False, modules=MODULES):
+def probe(python, isolated=False, modules=STARTUP_MODULES):
     try:
         # Match a hook script's import environment, including existing user-site
         # installs. For -c, cwd=HERE stands in for the script's sys.path[0].
@@ -158,7 +161,7 @@ def main(argv=None):
         if args.action == "doctor":
             print("Bootstrap Python: " + sys.executable)
             print("Hook Python: " + status["python"])
-            print("Dependencies ready: " + ", ".join(MODULES))
+            print("Startup dependencies ready: " + ", ".join(STARTUP_MODULES))
             print("Plugin code: " + str(HERE))
             return 0
         if args.action == "python":

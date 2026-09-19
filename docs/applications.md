@@ -34,7 +34,8 @@ For a Claude Code or Codex plugin, use the active plugin's runtime setup:
 python3 /absolute/path/to/kpopper/scripts/plugin_runtime.py setup --applications html
 ```
 
-Ordinary setup and hooks require only core dependencies. Installing an application
+Ordinary setup installs the core dependencies and timezone data for followups; hooks
+check only PyYAML before opening the record. Installing an application
 does not activate it on every task. Request the record page or kpopper's evidence-bearing
 HTML document explicitly, or give the agent a standing preference to use it. A generic
 HTML request and completion of a map do not automatically select these applications.

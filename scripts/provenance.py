@@ -2038,6 +2038,8 @@ def with_builtins(doc, ids, jud, fields):
 
 def check(paths):
     fail, note, moved, cont, summary = check_lines(paths)
+    if paths and _brief_beside(paths[0]):
+        print("NOTE page layout not checked; use kpop experimental hub --verify")
     for n in note:
         print("NOTE", n)
     for m in moved:
@@ -2316,8 +2318,6 @@ def check_lines(paths):
     note += legend_notes(doc.get("meta"), ids)
     # Presentation is an optional application. Its failures cannot change the
     # record check; page-dependent predicates above remain explicitly undecided.
-    if _brief_beside(_first_of(paths)):
-        note.append("page layout not checked; use kpop experimental hub --verify")
     # `also:` where the named id is an entry after all: the retirement reading does not hold
     # there, and the sibling reading is a record's own business - so this is said, and decided
     # by nobody but a person.
