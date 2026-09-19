@@ -1,6 +1,7 @@
 # Experimental native history CLI
 
-`kpop-native` is an opt-in Rust executable for a bounded subset of kpopper history.
+`kpop-native` is an opt-in Rust executable with versioned knowledge assessment and
+an experimental bounded history writer.
 It does not replace `kpop`, modify installed plugins, or activate existing records.
 Use disposable workspaces only. macOS arm64 is the initial verified target;
 other platforms are not yet verified, and non-POSIX operations currently refuse.
@@ -18,7 +19,34 @@ cargo build --locked --release
 The resulting executable does not require Python, Node, Cargo or Rust on the runtime
 PATH. Rust and downloaded build dependencies are required only when building it.
 
-Supply an absolute path to an existing **empty** directory:
+### Assess an existing record
+
+```sh
+kpop-native --workspace /absolute/workspace assess d.decision p.input
+kpop-native --frozen assess d.decision --record /absolute/GROUNDING.yaml --attention-only
+kpop-native assess d.decision --profile core/v1 --as-of 2026-09-19 --history
+```
+
+`assess` discovers the real record within the workspace's ancestor boundary,
+honors configured and registered locations, follows record pointers, and captures
+the actual pending, target and hypothesis observations. It preserves the ordinary
+reader's versioned findings, typed conflict identity, historical formulas and
+missing or unavailable readings. Attention selection does not rerun evaluation or
+change assessment scope. The ordinary reader and explicitly declared core records
+retain their distinct interpretation; declaring core does not translate legacy text.
+
+Explicit computations use verified Lean programs. A runtime bundle contains
+`resources/reasoning/<target>.zip` and
+`resources/ordinary/<target>/{build.json,epistemic-core}` beside the executable
+(`epistemic-core.exe` on Windows). `KPOPPER_NATIVE_RESOURCES` can explicitly select
+that resource directory and `KPOPPER_NATIVE_CACHE` can select its extraction cache.
+Absent programs produce unavailable computation findings; invalid selected resources
+refuse. Reads do not build programs, install dependencies, or search PATH for a substitute.
+
+The other public commands below still use the experimental history store. Full CLI,
+MCP, hooks, browser and distribution integration remain in progress.
+
+For the experimental writer, supply an absolute path to an existing **empty** directory:
 
 ```sh
 kpop-native --workspace /absolute/disposable/workspace init --record-id example
@@ -317,7 +345,7 @@ currently refuses with `unsupported_branch_adoption`. General Store preparation,
 generation cancellation orchestration, grouped transitions and the public product
 write flows are not yet integrated with these primitives.
 
-- No judgments, dependency pins, formulas, competing histories, review/refutation,
+- The experimental store commands do not support judgments, dependency pins, formulas, competing histories, review/refutation,
   temporal semantics, Lean evaluation, MCP, UI, migration or production activation.
 - No authority v2 cancellation metadata, legacy 40-hex storage operations or typed
   date/datetime storage operations. The standalone codec does not expand those limits.

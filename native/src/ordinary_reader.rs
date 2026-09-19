@@ -14,9 +14,9 @@ use crate::{
 };
 use serde_json::{Value as J, json};
 use std::{collections::BTreeSet, sync::LazyLock};
-static ID: LazyLock<regex::Regex> =
+pub(crate) static ID: LazyLock<regex::Regex> =
     LazyLock::new(|| regex::Regex::new(r"[A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z0-9_]+)+").unwrap());
-static CMP: LazyLock<regex::Regex> = LazyLock::new(|| {
+pub(crate) static CMP: LazyLock<regex::Regex> = LazyLock::new(|| {
     regex::Regex::new(
         r"^\s*([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z0-9_]+)+)\s*(<=|>=|==|!=|<|>)\s*(.+?)\s*$",
     )
@@ -74,7 +74,7 @@ fn unquoted(source: &str) -> String {
 }
 pub fn why_undecided(pred: &V) -> String {
     if matches!(pred, V::Map(_)) {
-        let tree = match L::legacy_expression(pred, true) {
+        let tree = match L::legacy_expression_detailed(pred, true) {
             Ok(t) => t,
             Err(e) => return e.0,
         };
@@ -407,7 +407,7 @@ impl<'a> Reader<'a> {
         self.raw.extend(crate::ordinary_counts::builtins(&self)?);
         Ok(self)
     }
-    fn program(&self) -> Option<&Program> {
+    pub(crate) fn program(&self) -> Option<&Program> {
         self.runtime.and_then(Runtime::ordinary_program)
     }
     pub fn fields(&self) -> &Map {

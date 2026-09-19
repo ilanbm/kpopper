@@ -392,6 +392,29 @@ impl CapturedSource {
     pub fn hypotheses(&self) -> &V {
         &self.document.hypotheses
     }
+    /// The ordinary revision binds the original knowledge observation, before
+    /// Snapshot portability rewrites paths and adds its own target status fields.
+    pub(crate) fn ordinary_context(&self) -> V {
+        let overlay = self.document.overlay.as_ref();
+        object([
+            ("read_mode", s(self.mode.name())),
+            (
+                "conflicts",
+                overlay.map(|v| v.conflicts.clone()).unwrap_or_else(empty),
+            ),
+            (
+                "target",
+                overlay.and_then(|v| v.target.clone()).unwrap_or(V::Null),
+            ),
+            (
+                "target_unavailable",
+                overlay
+                    .and_then(|v| v.unavailable.as_ref())
+                    .map(|v| s(v))
+                    .unwrap_or(V::Null),
+            ),
+        ])
+    }
     pub fn origins(&self) -> &BTreeMap<String, BTreeMap<String, PathBuf>> {
         &self.document.origins
     }

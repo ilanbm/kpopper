@@ -285,12 +285,21 @@ pub(crate) fn legacy_references(value: &V) -> Vec<String> {
         .unwrap_or_default()
 }
 pub(crate) fn legacy_expression(value: &V, predicate: bool) -> Result<V> {
+    legacy_expression_detailed(value, predicate).map_err(|e| {
+        if e.0 == "unsupported_unicode_scalar" {
+            e
+        } else {
+            err("invalid_legacy_expression")
+        }
+    })
+}
+pub(crate) fn legacy_expression_detailed(value: &V, predicate: bool) -> Result<V> {
     fn legacy_visit(source: &str, node: &ast::Expr, depth: usize) -> Result<J> {
-        require(depth < 64, "invalid_legacy_expression")?;
+        require(depth < 64, "expression depth exceeds 64")?;
         Ok(match node {
             ast::Expr::Name(_) | ast::Expr::Attribute(_) => {
                 let name = segment(source, node)?;
-                require(name.split('.').all(name_part), "invalid_legacy_expression")?;
+                require(name.split('.').all(name_part), "unsupported reference")?;
                 match name {
                     "true" | "True" => json!({"bool":true}),
                     "false" | "False" => json!({"bool":false}),
@@ -303,7 +312,7 @@ pub(crate) fn legacy_expression(value: &V, predicate: bool) -> Result<V> {
                 ast::Constant::Int(_) | ast::Constant::Float(_) => {
                     json!({"num":segment(source,node)?})
                 }
-                _ => return Err(err("invalid_legacy_expression")),
+                _ => return Err(err("unsupported legacy expression; it was not converted")),
             },
             ast::Expr::UnaryOp(u) if u.op == ast::UnaryOp::USub => {
                 let child = legacy_visit(source, &u.operand, depth + 1)?;
@@ -319,7 +328,7 @@ pub(crate) fn legacy_expression(value: &V, predicate: bool) -> Result<V> {
                     ast::Operator::Sub => "sub",
                     ast::Operator::Mult => "mul",
                     ast::Operator::Div => "div",
-                    _ => return Err(err("invalid_legacy_expression")),
+                    _ => return Err(err("unsupported legacy expression; it was not converted")),
                 };
                 op(
                     operator,
@@ -337,7 +346,7 @@ pub(crate) fn legacy_expression(value: &V, predicate: bool) -> Result<V> {
                     ast::CmpOp::LtE => "le",
                     ast::CmpOp::Gt => "gt",
                     ast::CmpOp::GtE => "ge",
-                    _ => return Err(err("invalid_legacy_expression")),
+                    _ => return Err(err("unsupported legacy expression; it was not converted")),
                 };
                 op(
                     operator,
@@ -353,15 +362,15 @@ pub(crate) fn legacy_expression(value: &V, predicate: bool) -> Result<V> {
                     && matches!(c.func.as_ref(), ast::Expr::Name(_))
                     && segment(source, c.func.as_ref())?.nfkc().collect::<String>() == "ref" =>
             {
-                json!({"ref":string_literal(&c.args[0]).ok_or_else(|| err("invalid_legacy_expression"))?})
+                json!({"ref":string_literal(&c.args[0]).ok_or_else(|| err("unsupported legacy expression; it was not converted"))?})
             }
-            _ => return Err(err("invalid_legacy_expression")),
+            _ => return Err(err("unsupported legacy expression; it was not converted")),
         })
     }
     fn validate(value: &V, depth: usize, predicate: bool) -> Result<()> {
-        require(depth < 64, "invalid_legacy_expression")?;
+        require(depth < 64, "expression must be a mapping within 64 levels")?;
         let V::Map(m) = value else {
-            return Err(err("invalid_legacy_expression"));
+            return Err(err("expression must be a mapping within 64 levels"));
         };
         if keys(m, &["op", "args"]) {
             let operators = if predicate {
@@ -371,53 +380,60 @@ pub(crate) fn legacy_expression(value: &V, predicate: bool) -> Result<V> {
             };
             require(
                 text(&m["op"]).is_some_and(|v| operators.contains(&v)),
-                "invalid_legacy_expression",
+                if predicate {
+                    "unsupported comparison"
+                } else {
+                    "unsupported arithmetic operator"
+                },
             )?;
             let V::List(args) = &m["args"] else {
-                return Err(err("invalid_legacy_expression"));
+                return Err(err("an operator requires exactly two arguments"));
             };
-            require(args.len() == 2, "invalid_legacy_expression")?;
+            require(
+                args.len() == 2,
+                "an operator requires exactly two arguments",
+            )?;
             for child in args {
                 validate(child, depth + 1, false)?;
             }
             if predicate {
                 require(
                     !references(&value.to_json()?).is_empty(),
-                    "invalid_legacy_expression",
+                    "predicate_needs_a_reference",
                 )?;
             }
         } else if predicate {
-            return Err(err("invalid_legacy_expression"));
+            return Err(err("a predicate must be a structured comparison"));
         } else if keys(m, &["ref"]) {
             require(
                 text(&m["ref"]).is_some_and(|v| !v.is_empty() && v.chars().count() <= 500),
-                "invalid_legacy_expression",
+                "ref must be an entry ID",
             )?;
         } else if keys(m, &["num"]) {
             static NUMBER: std::sync::LazyLock<regex::Regex> = std::sync::LazyLock::new(|| {
                 regex::Regex::new(r"^-?(?:0|[1-9][0-9]*)(?:\.[0-9]+)?(?:[eE][+-]?[0-9]+)?$")
                     .unwrap()
             });
-            let n = text(&m["num"]).ok_or_else(|| err("invalid_legacy_expression"))?;
+            let n = text(&m["num"]).ok_or_else(|| err("num must be a bounded decimal string"))?;
             require(
                 n.len() <= 512 && NUMBER.is_match(n),
-                "invalid_legacy_expression",
+                "num must be a bounded decimal string",
             )?;
             let (mantissa, exponent) = n.split_once(['e', 'E']).unwrap_or((n, "0"));
             let exponent = exponent
                 .parse::<i32>()
-                .map_err(|_| err("invalid_legacy_expression"))?;
+                .map_err(|_| err("numeric exponent exceeds 256"))?;
             let fraction = mantissa.split_once('.').map_or(0, |(_, v)| v.len() as i32);
             require(
                 (-256..=256).contains(&exponent) && fraction - exponent <= 256,
-                "invalid_legacy_expression",
+                "numeric exponent exceeds 256",
             )?;
         } else if keys(m, &["text"]) {
-            require(text(&m["text"]).is_some(), "invalid_legacy_expression")?;
+            require(text(&m["text"]).is_some(), "text must be a string")?;
         } else if keys(m, &["bool"]) {
-            require(matches!(m["bool"], V::Bool(_)), "invalid_legacy_expression")?;
+            require(matches!(m["bool"], V::Bool(_)), "bool must be a boolean")?;
         } else {
-            return Err(err("invalid_legacy_expression"));
+            return Err(err("invalid expression fields"));
         }
         Ok(())
     }
@@ -426,10 +442,10 @@ pub(crate) fn legacy_expression(value: &V, predicate: bool) -> Result<V> {
     {
         let source = text(&m["expr"])
             .filter(|s| !trim(s).is_empty() && s.chars().count() <= 4000)
-            .ok_or_else(|| err("invalid_legacy_expression"))?;
+            .ok_or_else(|| err("expr must be nonempty text within 4000 characters"))?;
         let source = trim(source);
         let ast = ast::Expr::parse(&parser_source(source)?, "<expression>")
-            .map_err(|_| err("invalid_legacy_expression"))?;
+            .map_err(|_| err("unsupported expression syntax"))?;
         V::from_json(&legacy_visit(source, &ast, 0)?)?
     } else {
         value.clone()

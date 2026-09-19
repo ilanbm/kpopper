@@ -1021,6 +1021,16 @@ sources:
     read: "2026-09-19"
     at: "Native hypothesis fold and prospective regression tests and history-fold fixtures"
     from: s.2026_09_19_native_hypothesis_edit_continuation
+  s.native_public_assessment:
+    name: "Native ordinary assessment and public CLI conformance"
+    from: s.2026_09_19_native_import_continuation
+    file: "native/tests/public_assessment.rs"
+    read: "2026-09-19"
+    at: "Task 01a0b94a-dca7-7283-96c9-7c5d1ed2aeb4; final Python 1.7 baseline 5acfd0f; 56 full
+         ordinary oracle cases under two policies, 14 actual CLI parity cases, 220 passing native
+         tests, actual bundled ordinary and core Lean CLI execution"
+    scope: "Actual assess command only on macOS arm64. Remaining public commands, MCP/hooks, browser
+            and supported-platform distribution remain pending."
   s.native_scenario_watch:
     name: "Native captured scenarios and pure history watch conformance"
     from: s.2026_09_19_native_temporal_authoring
@@ -2270,6 +2280,28 @@ known:
     from: doc.host_compatibility
     at: "Scope before launch / initial pre-fix observation on baseline 5c2062b"
     of: "2026-09-17"
+  m.native_assessment_cli_parity:
+    name: "Native actual ordinary assessment CLI parity cases"
+    v: 14
+    from: s.native_public_assessment
+    of: "2026-09-19"
+    at: "R4-public-python-parity.json; live/frozen, pointers, hypotheses, Git commits and changed
+         candidate branch; exact complete reports and revision identities"
+  m.native_assessment_oracle_cases:
+    name: "Native complete ordinary assessment oracle cases"
+    v: 56
+    from: s.native_public_assessment
+    of: "2026-09-19"
+    at: "native/tests/fixtures/ordinary-assessment.json; 112 complete typed envelopes under two
+         attention policies"
+  m.native_assessment_tests:
+    name: "Full native regression gate after public assessment"
+    v: 220
+    from: s.native_public_assessment
+    of: "2026-09-19"
+    at: "R4-assessment-full-tests.txt; 220 passed, zero failed, two explicit-launcher tests ignored.
+         Actual CLI ordinary and core Lean resource bundle test passed. Clippy all-targets with
+         warnings denied passed."
   m.native_authority_oracle_cases:
     name: "Complete native authority activation and inverse cases"
     v: 24

@@ -21,14 +21,14 @@ fn strings(v: &V) -> Vec<String> {
         _ => vec![],
     }
 }
-fn same_rule(a: &V, b: &V) -> bool {
+pub(crate) fn same_rule(a: &V, b: &V) -> bool {
     crate::source_clock::python_equal(a, b)
         || L::legacy_rule(a)
             .ok()
             .zip(L::legacy_rule(b).ok())
             .is_some_and(|(a, b)| a == b)
 }
-fn legacy_rule(old: &V, current: &V) -> Option<V> {
+pub(crate) fn legacy_rule(old: &V, current: &V) -> Option<V> {
     if let (V::Text(t), V::Map(_)) = (old, current) {
         let t = V::Map(Map::from([("expr".into(), V::Text(t.clone()))]));
         L::legacy_rule(&t)

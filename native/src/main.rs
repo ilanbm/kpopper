@@ -17,11 +17,19 @@ use std::{
 struct Args {
     #[arg(long, global = true)]
     workspace: Option<PathBuf>,
+    #[arg(long, global = true)]
+    frozen: bool,
+    #[arg(long, global = true)]
+    json: bool,
+    #[arg(long, global = true)]
+    no_cache: bool,
     #[command(subcommand)]
     command: Command,
 }
 #[derive(Subcommand)]
 enum Command {
+    /// Read versioned assessment findings and scoped attention from actual records.
+    Assess(kpop_native::public_assessment::Options),
     Init {
         #[arg(long)]
         record_id: String,
@@ -252,10 +260,35 @@ fn run(args: Args) -> Result<Value> {
         | Command::SessionStart => {
             unreachable!()
         }
+        Command::Assess(_) => unreachable!(),
     }
 }
 fn main() {
     let args = Args::parse();
+    if let Command::Assess(options) = &args.command {
+        let result = (|| {
+            let cwd = args
+                .workspace
+                .clone()
+                .map(Ok)
+                .unwrap_or_else(std::env::current_dir)?;
+            let mode =
+                if args.frozen || std::env::var("KPOPPER_READ_MODE").as_deref() == Ok("frozen") {
+                    kpop_native::source_capture::ReadMode::Frozen
+                } else {
+                    kpop_native::source_capture::ReadMode::Live
+                };
+            kpop_native::public_assessment::run(options, &cwd, mode)
+        })();
+        match result {
+            Ok(text) => println!("{text}"),
+            Err(error) => {
+                eprintln!("kpop-native assess: {error}");
+                std::process::exit(2);
+            }
+        }
+        return;
+    }
     if matches!(args.command, Command::SessionStart) {
         if let Err(error) = session() {
             eprintln!("kpop-native: record was not opened: {error}");
