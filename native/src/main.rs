@@ -44,6 +44,7 @@ enum Command {
     Affects(kpop_native::public_readers::Options),
     Add(WriteArgs),
     Set(WriteArgs),
+    Review(WriteArgs),
     History(kpop_native::public_history::Options),
     Recover {
         #[arg(long)]
@@ -95,20 +96,7 @@ enum Envelope {
     Cancellation,
     Template,
 }
-#[derive(clap::Args)]
-struct WriteArgs {
-    subject: String,
-    #[arg(long, allow_hyphen_values = true)]
-    value: String,
-    #[arg(long)]
-    source: Option<String>,
-    #[arg(long)]
-    operation: String,
-    #[arg(long)]
-    on: String,
-    #[arg(long)]
-    expected_revision: Option<String>,
-}
+type WriteArgs = kpop_native::public_authoring::Options;
 fn stdin() -> Result<Value> {
     json_input(&stdin_bytes()?)
 }
@@ -278,7 +266,12 @@ fn run(args: Args) -> Result<Value> {
             let (Command::Add(write) | Command::Set(write)) = command else {
                 unreachable!()
             };
-            let value = json_input(write.value.as_bytes())?;
+            let value = json_input(
+                write
+                    .value
+                    .ok_or_else(|| kpop_native::Error("--value is required".into()))?
+                    .as_bytes(),
+            )?;
             Store::write(
                 &root,
                 Request {
@@ -286,8 +279,12 @@ fn run(args: Args) -> Result<Value> {
                     subject: write.subject,
                     value,
                     source: write.source,
-                    operation: write.operation,
-                    on: write.on,
+                    operation: write
+                        .operation
+                        .ok_or_else(|| kpop_native::Error("--operation is required".into()))?,
+                    on: write
+                        .on
+                        .ok_or_else(|| kpop_native::Error("--on is required".into()))?,
                 },
                 write.expected_revision.as_deref(),
             )
@@ -300,6 +297,7 @@ fn run(args: Args) -> Result<Value> {
         | Command::SessionStart => {
             unreachable!()
         }
+        Command::Review(_) => Err(kpop_native::Error("review requires a public record".into())),
         Command::Assess(_) | Command::Check(_) | Command::Pull(_) | Command::Affects(_) => {
             unreachable!()
         }
@@ -307,6 +305,36 @@ fn run(args: Args) -> Result<Value> {
 }
 fn main() {
     let args = Args::parse();
+    let write = match &args.command {
+        Command::Add(o) => Some(("add", o)),
+        Command::Set(o) => Some(("set", o)),
+        Command::Review(o) => Some(("review", o)),
+        _ => None,
+    };
+    if let Some((kind, options)) = write {
+        let cwd = match args
+            .workspace
+            .clone()
+            .map(Ok)
+            .unwrap_or_else(std::env::current_dir)
+        {
+            Ok(cwd) => cwd,
+            Err(error) => {
+                eprintln!("{error}");
+                std::process::exit(1);
+            }
+        };
+        if !cwd.join(".kpopper/native-feasibility.json").is_file() {
+            match kpop_native::public_authoring::run(kind, options, &cwd) {
+                Ok(output) => print!("{output}"),
+                Err(error) => {
+                    eprintln!("{error}");
+                    std::process::exit(1);
+                }
+            }
+            return;
+        }
+    }
     if let Command::Recover { record, rollback } = &args.command {
         let result = (|| {
             let cwd = args

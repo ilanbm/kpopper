@@ -66,7 +66,26 @@ notices, historical decisions and final source revalidation. Existing feasibilit
 store workspaces retain their explicitly marked experimental opener. The writer
 commands below, MCP, hooks, browser and distribution integration remain in progress.
 
-For the experimental writer, supply an absolute path to an existing **empty** directory:
+### Author an active history record
+
+```sh
+kpop-native add p.hours v=10
+kpop-native set p.hours 12 --as-of 2026-09-19
+kpop-native review d.schedule
+```
+
+An implicit first `add` creates a core history record through the guarded bootstrap
+transaction. Core authoring needs the selected core runtime archive; it does not
+require the ordinary computation program. Subsequent add/set/review operations on
+active history retain exact retry journals and immutable prior versions. Plain
+command-line numbers and `true`/`false` retain their types; other scalar text stays
+text, while explicit YAML lists/maps retain their structure.
+
+Private writes are retained outside the project. `recover` also resumes or rolls
+back an interrupted first write. Existing legacy records, named-hypothesis writes
+and explicit contribution routing remain unconnected in this public writer.
+
+For the earlier feasibility writer, supply an absolute path to an existing **empty** directory:
 
 ```sh
 kpop-native --workspace /absolute/disposable/workspace init --record-id example

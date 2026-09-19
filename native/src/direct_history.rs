@@ -245,6 +245,110 @@ fn act_with_probe(
     ]))
 }
 
+pub fn write(original: &[PathBuf], cwd: &Path, action: &V) -> Result<V> {
+    let a = map(action)?;
+    let kind = text(field(a, "kind")?)?;
+    require(
+        ["add", "set", "review"].contains(&kind),
+        "unsupported_history_action",
+    )?;
+    let route = WriteRoute::capture(original, cwd)?;
+    require(route.paths().len() == 1, "choose one logical record entry")?;
+    let store = Store::new(&route.paths()[0])?;
+    let _lock = F::DirectoryGuard::acquire(&store.root, true)?;
+    require(
+        F::read(&F::target(&store.root, &journal(&store))?)?.is_none(),
+        "recovery_required",
+    )?;
+    let captured = store.capture()?;
+    let mut document = history_adapter::from_store_capture(&captured)?
+        .document()
+        .clone();
+    if let Some(meta) = map_mut(&mut document)?.get_mut("meta") {
+        map_mut(meta)?.remove("history");
+    }
+    if let Some(draft) = Privacy::selected_draft(route.project(), action, &document)? {
+        return Ok(draft);
+    }
+    let id = text(field(a, "id")?)?;
+    let existing = crate::reasoning_snapshot::entries(&document)?;
+    let mut candidate = document.clone();
+    if kind == "add" {
+        for collection in crate::reasoning_fields::collections(&document)?.keys() {
+            map_mut(map_mut(&mut candidate)?.get_mut(collection).unwrap())?.remove(id);
+        }
+        let collection = a
+            .get("into")
+            .and_then(|v| text(v).ok())
+            .or_else(|| existing.get(id).map(|(c, _)| c.as_str()))
+            .unwrap_or("known");
+        map_mut(
+            map_mut(&mut candidate)?
+                .entry(collection.into())
+                .or_insert_with(crate::history_authoring::empty),
+        )?
+        .insert(id.into(), field(a, "body")?.clone());
+    } else if kind == "set"
+        && let Some((collection, body)) = existing.get(id)
+        && matches!(body, V::Map(_))
+    {
+        let mut body = body.clone();
+        let b = map_mut(&mut body)?;
+        let key = if b.contains_key("v") { "v" } else { "quoted" };
+        b.insert(key.into(), field(a, "value")?.clone());
+        if let Some(source) = a.get("source").filter(|v| **v != V::Null) {
+            b.insert("from".into(), source.clone());
+        }
+        map_mut(map_mut(&mut candidate)?.get_mut(collection).unwrap())?.insert(id.into(), body);
+    }
+    if let Some(draft) = Privacy::selected_draft(route.project(), action, &candidate)? {
+        return Ok(draft);
+    }
+    let runtime = if string_is(
+        &map(&crate::reasoning_fields::capabilities(&document, None)?)?["profile"],
+        "core/v1",
+    ) {
+        public_workspace::core_runtime()?
+    } else {
+        public_workspace::runtime()?
+    };
+    let mutation = A::prepare(
+        &store,
+        &captured,
+        action,
+        &options("write", V::Null)?,
+        runtime.as_ref(),
+    )?;
+    let authored = V::List(
+        mutation
+            .files()
+            .iter()
+            .filter(|f| f.role == "history_object")
+            .map(|f| history_yaml::decode_document(f.after.as_ref().unwrap()))
+            .collect::<Result<_>>()?,
+    );
+    if Privacy::private_marker(&authored) {
+        return Privacy::draft(
+            route.project(),
+            action,
+            &obj([("history", authored)]),
+            "private historical proposal",
+        );
+    }
+    publish(
+        &store,
+        &mutation,
+        &route,
+        original,
+        runtime.as_ref(),
+        &mut |_| Ok(()),
+    )?;
+    Ok(obj([
+        ("state", s("committed")),
+        ("operation", map(&mutation.to_data())?["operation"].clone()),
+    ]))
+}
+
 pub fn proposals(
     original: &[PathBuf],
     cwd: &Path,
@@ -305,6 +409,41 @@ pub fn recover(original: &[PathBuf], cwd: &Path, before: bool) -> Result<V> {
     require(route.paths().len() == 1, "choose one logical record entry")?;
     let store = Store::new(&route.paths()[0])?;
     let _lock = F::DirectoryGuard::acquire(&store.root, true)?;
+    if let Some(raw) = F::read(&F::target(&store.root, &store.layout.journal)?)? {
+        let mutation = PreparedMutation::from_bytes(&raw)?;
+        let data = mutation.to_data();
+        let baseline = map(&map(&data)?["baseline"])?;
+        if baseline
+            .get("bootstrap")
+            .and_then(|b| map(b).ok())
+            .and_then(|b| b.get("kind"))
+            .is_some_and(|k| string_is(k, crate::history_bootstrap::KIND))
+        {
+            let runtime = public_workspace::core_runtime()?;
+            let mutation = crate::history_bootstrap::recover(
+                &store.entry,
+                route.config(),
+                runtime.as_ref(),
+                if before {
+                    F::Direction::Before
+                } else {
+                    F::Direction::After
+                },
+                &mut |_| route.verify(),
+            )?;
+            let data = mutation.to_data();
+            return Ok(obj([
+                ("state", s(if before { "restored" } else { "recovered" })),
+                ("operation", map(&data)?["operation"].clone()),
+                ("mutation_digest", map(&data)?["digest"].clone()),
+            ]));
+        }
+        require(
+            map(&data)?.get("transition").is_none(),
+            "transition_recovery_required: history activation requires the original managed-deployment guard",
+        )?;
+        return Err(error("unsupported public recovery journal"));
+    }
     let path = F::target(&store.root, &journal(&store))?;
     let raw = F::read(&path)?.ok_or_else(|| error("no_recovery_pending"))?;
     let (mutation, retained) = decode(&raw)?;
@@ -312,7 +451,14 @@ pub fn recover(original: &[PathBuf], cwd: &Path, before: bool) -> Result<V> {
         routing(&route, original)? == retained,
         "history_routing_changed",
     )?;
-    let runtime = public_workspace::runtime()?;
+    let runtime = if string_is(
+        &map(&map(&mutation.to_data())?["receipt"])?["profile"],
+        "core/v1",
+    ) {
+        public_workspace::core_runtime()?
+    } else {
+        public_workspace::runtime()?
+    };
     route.verify()?;
     if before {
         require(

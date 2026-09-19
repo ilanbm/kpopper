@@ -61,6 +61,7 @@ pub mod pending_bundle;
 pub mod pending_state;
 pub mod project_modes;
 pub mod public_assessment;
+pub mod public_authoring;
 pub mod public_history;
 pub mod public_workspace;
 mod python_identifiers;

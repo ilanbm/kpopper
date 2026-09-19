@@ -58,6 +58,14 @@ pub fn records(cwd: &Path) -> Result<Vec<PathBuf>> {
 }
 
 pub fn runtime() -> Result<Option<Runtime>> {
+    load_runtime(true)
+}
+/// A core-only authoring route needs the core archive, independently of ordinary
+/// computation. Full distribution bundles still include both programs.
+pub fn core_runtime() -> Result<Option<Runtime>> {
+    load_runtime(false)
+}
+fn load_runtime(ordinary: bool) -> Result<Option<Runtime>> {
     let configured = std::env::var_os("KPOPPER_NATIVE_RESOURCES").map(PathBuf::from);
     let root = configured.clone().unwrap_or(
         std::env::current_exe()?
@@ -88,8 +96,12 @@ pub fn runtime() -> Result<Option<Runtime>> {
         &cache,
         OperationalBounds::default(),
     )?;
-    let ordinary = crate::ordinary_runtime::Program::open(&root.join("ordinary").join(target))?;
-    Ok(Some(runtime.with_ordinary_program(ordinary)))
+    if ordinary {
+        let program = crate::ordinary_runtime::Program::open(&root.join("ordinary").join(target))?;
+        Ok(Some(runtime.with_ordinary_program(program)))
+    } else {
+        Ok(Some(runtime))
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
