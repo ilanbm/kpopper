@@ -198,9 +198,11 @@ jobs:
                           '--installed-python', str(python), *composition_args], check=True)
           if kind != 'plugin':
               sys.exit(0)
-          # Make the native oracle/framing suites and schema validation mandatory.
-          # Once per Python/target, from the same installed sdist used by the plugin lane.
-          subprocess.run([str(python), '-m', 'pip', 'install', 'jsonschema'], check=True)
+          # The core-only installed acceptance above has already run. The broader
+          # suite also exercises Hub and document consumers, so opt into their
+          # runtime now, once per Python/target, using the same installed artifact.
+          subprocess.run([str(python), '-m', 'pip', 'install',
+                          str(artifact) + '[html]', 'jsonschema'], check=True)
           suite_env = dict(os.environ, XDG_CACHE_HOME=str(work/'native-suite-cache'),
                            KPOPPER_REQUIRE_REASONING_TESTS='1', KPOPPER_REQUIRE_CORE_TESTS='1')
           binary = subprocess.check_output([str(python), '-c', 'from kpopper.reasoning.runtime import Runtime; print(Runtime().binary)'],

@@ -792,6 +792,12 @@ sources:
     of: "2026-09-19, request to merge current main into the applications branch and preserve
          optional HTML installation and canonical hub/annotated-doc commands"
     read: "2026-09-19"
+  s.2026_09_19_pr137_ci_review:
+    name: "Fix PR 137 CI and obtain an adversarial Opus 5 review"
+    asked: "הPR נכשל. תתקן ותריץ גם adverserial review עם opus 5?"
+    of: "2026-09-19, PR 137 failures in the plugin-lane broad reasoning suite after successful
+         core-only installed acceptance; requested independent adversarial review"
+    read: "2026-09-19"
   s.2026_09_19_pr_and_plugin_descriptions:
     name: "Review the application separation and align plugin descriptions with the README"
     asked: "יש עוד merge קטן שנעשה לתוך main אז תבדוק. חוץ מזה תעבור על זה ותכין PR? אה אגב אולי
