@@ -39,6 +39,7 @@ pub mod history_view;
 pub mod history_yaml;
 pub mod identity;
 pub mod pending_bundle;
+pub mod project_modes;
 mod python_identifiers;
 pub mod reasoning_assessment;
 pub mod reasoning_authoring;

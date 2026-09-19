@@ -928,6 +928,13 @@ sources:
     at: "b1b6019; native/tests/fixtures/history-hypothesis.json, history-hypothesis-candidate.json
          and history-hypothesis-retained.json"
     from: s.2026_09_19_native_hypothesis_edit_continuation
+  s.native_project_routing:
+    name: "Native project policy and record routing evidence"
+    from: s.2026_09_19_native_identity_continuation
+    file: "native/src/project_modes.rs"
+    at: "15 Python configuration and routing fixtures; linked worktrees, registered records, policy
+         changes, symlink refusal and held write-route lock tests"
+    read: "2026-09-19"
   s.native_prospective:
     name: "Native proposed history and fold conformance"
     file: "native/src/history_prospective.rs"
@@ -1997,6 +2004,17 @@ known:
     from: s.native_authoring_envelopes
     at: "verify_prepared and commit; history_authoring_audit witnessed and ReplayAudit;
          native/README.md Library authoring"
+  p.native_project_routing_boundary:
+    name: "Native project policy and write-route boundary"
+    v: "Local project discovery preserves Git common-directory policy, worktree defaults, registered
+        records and explicit Simple routing. A write route holds the policy file lock through its
+        caller publication and rechecks exact configuration bytes, project topology and selected
+        paths. It identifies when canonical Advanced routing requires pending overlay capture.
+        Fifteen pinned configuration fixtures and four focused native tests pass. This API does not
+        implement pending ledger capture, live overlays, project transitions or real-record
+        migration, and is not yet connected to the public CLI."
+    from: s.native_project_routing
+    at: "project_modes configuration and WriteRoute tests"
   p.native_prospective_fold_boundary:
     name: "Native proposed history and fold boundary"
     v: "Detached proposed history checks authority, baseline, complete causal closure, original
