@@ -182,6 +182,12 @@ def findings(context):
             line = identifier + ': falsifier ' + condition['status']
             (result['notes'] if allowed else result['holes']).append(line)
             uncertain.append('falsifier ' + condition['status'])
+        temporal = node.get('temporal', {})
+        if temporal.get('status') == 'counterexample' and condition['status'] != 'holds':
+            result['falsified'].append(identifier + ': retained historical counterexample')
+        elif temporal.get('status') == 'unknown':
+            result['holes'].append(identifier + ': historical evidence unknown')
+            uncertain.append('historical evidence unknown')
         computed = node['computation']
         if computed is not None and computed['status'] not in ('ok', 'unknown'):
             result['holes'].append(identifier + ': computation ' + computed['status'])

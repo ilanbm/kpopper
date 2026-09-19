@@ -299,6 +299,10 @@ class Snapshot:
                 or not isinstance(data['hypotheses'], dict):
             raise SnapshotError('invalid_snapshot', 'invalid snapshot structure')
         _validate_history(data['document'], data['context'], data['hypotheses'])
+        if 'scenario' in data['context']:
+            from .scenario import validate as validate_scenario
+            validate_scenario(data['document'], data['context'], data['hypotheses'], data['as_of'],
+                              snapshot_data=data)
         _validate_authored_revision(data['authored_revision'])
         if digest(_snapshot_preimage(data)) != data['snapshot_id']:
             raise SnapshotError('stale_snapshot', 'snapshot digest does not match')
@@ -335,6 +339,9 @@ class Snapshot:
             if derived:
                 context.setdefault('history_hypotheses', index)
         _validate_history(document, context, normalized_hypotheses)
+        if 'scenario' in context:
+            from .scenario import validate as validate_scenario
+            validate_scenario(document, context, normalized_hypotheses, normalize_as_of(as_of))
         if context['read_mode'] not in ('supplied', 'live', 'frozen', 'captured-live'):
             raise SnapshotError('invalid_snapshot', 'unknown captured read mode')
         _validate_authored_revision(authored_revision)

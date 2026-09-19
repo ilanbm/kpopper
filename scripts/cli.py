@@ -108,6 +108,28 @@ def do_checks(args):
     return subprocess.run([node, str(checker)] + args).returncode
 
 
+def _automatic_core_profile(command, args):
+    """Select existing core consumers for an explicitly declared record."""
+    if command not in {'assess', 'export', 'page', 'search'} or '--profile' in args \
+            or command == 'page' and '--checks' in args:
+        return args
+    try:
+        from . import provenance as P, workspace as W
+    except ImportError:
+        import provenance as P
+        import workspace as W
+    records = []
+    for index, value in enumerate(args[:-1]):
+        if value == '--record':
+            records.append(args[index + 1])
+    if not records and command == 'page':
+        records = [value for value in args if value.lower().endswith(('.yaml', '.yml'))]
+    if not records:
+        location = W.locate()
+        records = [location['record']] if location['status'] == 'found' else []
+    return [*args, '--profile', 'core/v1'] if records and P.core_reader_selected(records) else args
+
+
 def page_of(rest):
     """Where the page lands without --out, and what --checks looks at without a path: the
     record's build directory, `.kpopper/build/page.html`, or record.html in the working
@@ -228,6 +250,7 @@ def main():
             os.chdir(pathlib.Path(options.workspace).expanduser())
         except (OSError, ValueError) as error:
             root.error(str(error))
+    rest = _automatic_core_profile(cmd, rest)
     if cmd == 'knowledge':
         try:
             from .knowledge_cli import main as knowledge_main

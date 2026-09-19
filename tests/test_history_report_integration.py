@@ -74,12 +74,14 @@ class HistoryReports(unittest.TestCase):
         self.assertEqual(result['state'], 'applied', result)
         self.assertNotIn('d.new', result['actionable_judgments'])
         held = self.store.state()['subjects']['d.new']['body']
-        self.assertNotIn('seen', held)
+        self.assertEqual(held['seen']['p.input']['computed']['value'],
+                         {'type': 'number', 'numerator': '1', 'denominator': '1'})
         graph = I._history_graph(self.entry, ['d.new'])
-        self.assertEqual(graph['judgments']['d.new']['tag'], 'UNKNOWN')
+        self.assertEqual(graph['judgments']['d.new']['tag'], 'HOLDS')
         mutation = I._mutation_from_journal(self.journal())
         # An actual unavailable condition must still prompt review.
         changed = copy.deepcopy(graph)
+        changed['judgments']['d.new']['tag'] = 'UNKNOWN'
         decoded = I.P._peer('pending_grounding')._decode(changed['assessment'])
         decoded['nodes']['d.new']['state']['falsifier']['status'] = 'unknown'
         changed['assessment'] = I.P._peer('pending_grounding')._encode(decoded)

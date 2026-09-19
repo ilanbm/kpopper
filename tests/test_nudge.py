@@ -9,6 +9,8 @@ import sys
 import tempfile
 import unittest
 
+import yaml
+
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 SCRIPTS = ROOT / "scripts"
 FIXTURE = ROOT / "tests" / "fixtures" / "page"
@@ -54,10 +56,10 @@ class FirstWrite(Scratch):
         record = self.dir / "GROUNDING.yaml"
         self.assertTrue(record.exists())
         text = record.read_text(encoding="utf-8")
-        self.assertTrue(text.startswith("# Kept with kpopper"), text[:80])
-        self.assertIn("meta:\n  updated: 2026-08-30", text)
-        self.assertIn("sources:", text)
-        self.assertIn("  pricing:", text)
+        document = yaml.safe_load(text)
+        self.assertEqual(document["meta"]["updated"], "2026-08-30")
+        self.assertEqual(document["meta"]["reasoning"]["profile"], "core/v1")
+        self.assertIn("pricing", document["sources"])
         code, out, err = self.cli("add", "acme.seat_price", "v=42", "unit=USD/mo", "from=pricing",
                                   "at=Enterprise tier", "name=seat price")
         self.assertEqual(code, 0, err)

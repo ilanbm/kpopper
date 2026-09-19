@@ -180,11 +180,38 @@ def _retain_adapter_audit(report):
     return report
 
 
-def _evidence(document, world):
+def _temporal_bodies(document):
+    return {subject: body['temporal'] for subject, (_, body) in entries(document).items()
+            if isinstance(body, dict) and isinstance(body.get('temporal'), dict)}
+
+
+def _accepted_versions(captured):
+    return {subject: state['head'] for subject, state in captured.state['subjects'].items()
+            if state.get('acceptance') == 'accepted' and 'head' in state}
+
+
+def _temporal_requires(document, base):
+    required = list(base or [])
+    if _temporal_bodies(document):
+        required.append(C.TEMPORAL_APPLICABILITY)
+    return HP.commit_requires(sorted(set(required)))
+
+
+def _evidence(document, world, *, versions=None):
     evidence = {'kind': 'authored-computational-projection/v1', 'document': dict(document)}
     if world is not None:
         evidence['assessment'] = _retain_adapter_audit(world.assessment())
+        _attach_temporal_replay(evidence, document, world, versions or {})
     return evidence
+
+
+def _attach_temporal_replay(evidence, document, world, versions):
+    temporal = {subject: metadata for subject, metadata in _temporal_bodies(document).items()
+                if subject in versions}
+    if temporal:
+        evidence['temporal_replay'] = {
+            'version': 1, 'snapshot': world.snapshot.to_json(),
+            'claims': {subject: versions[subject] for subject in sorted(temporal)}}
 
 
 def _head(captured, subject):
@@ -203,7 +230,19 @@ def _pins(captured, deps, *, allow_missing=False):
     return pins
 
 
-def prepare(entry, action, *, by=None, operation=None, recorded_at=None, capture=None, _strict=True):
+def _pins_and_gaps(captured, deps, *, allow_missing=False):
+    pins, gaps = {}, {}
+    for subject in deps:
+        if subject not in captured.state['subjects']:
+            C._require(allow_missing, 'unresolved_history_subject', subject)
+            gaps[subject] = 'unavailable'
+        else:
+            pins[subject] = _head(captured, subject)['id']
+    return pins, gaps
+
+
+def prepare(entry, action, *, by=None, operation=None, recorded_at=None, capture=None, _strict=True,
+            _receipt_version=None):
     """Validate add/set/review and return its complete immutable retry envelope.
 
     `capture` may supply detached Store evidence. An existing operation must be
@@ -248,6 +287,7 @@ def prepare(entry, action, *, by=None, operation=None, recorded_at=None, capture
     if refusals:
         raise P.Refused('refused - ' + '\n          '.join(refusals))
     subject, kind = action['id'], action['kind']
+    receipt_version = _receipt_version or 1
     existing = entries(document)
     old = _head(captured, subject) if subject in captured.state['subjects'] else None
     saw = sorted(vid for vid, obj in captured.objects.items() if obj['subject'] == subject)
@@ -275,10 +315,19 @@ def prepare(entry, action, *, by=None, operation=None, recorded_at=None, capture
             authored = {'collection': collection, 'fields': {k: v for k, v in fields.items() if v},
                         'profile': cap['profile']}
         deps = body.get(fields['deps'], []) if isinstance(body, dict) else []
-        pins = _pins(captured, deps)
-        claim = C.make_object(subject=subject, kind='judgment' if isinstance(body, dict) and fields['deps'] in body else 'reading',
+        is_judgment = isinstance(body, dict) and fields['deps'] in body
+        capture_seen = is_judgment and cap['profile'] == 'core/v1'
+        receipt_version = _receipt_version if _receipt_version is not None else (7 if capture_seen else 1)
+        C._require(receipt_version in (1, 7), 'invalid_authoring_receipt')
+        if capture_seen and receipt_version == 7:
+            body[fields['snapshot']] = P._snapshot(
+                list(deps), raw, ids, judgments, [], None)
+            action['body'] = copy.deepcopy(body)
+        pins, gaps = _pins_and_gaps(captured, deps,
+            allow_missing=is_judgment and bool(P._blocked_text(body)))
+        claim = C.make_object(subject=subject, kind='judgment' if is_judgment else 'reading',
                               by=by, on=recorded_at, operation=operation, body=body, saw=saw,
-                              pins=pins, authored=authored)
+                              pins=pins, pin_gaps=gaps or None, authored=authored)
         new.append(claim)
         document.setdefault(collection, {})[subject] = copy.deepcopy(body)
         if old is not None or _strict:
@@ -300,17 +349,21 @@ def prepare(entry, action, *, by=None, operation=None, recorded_at=None, capture
         template['meta']['updated'] = document['meta']['updated']
     _declare_template(template, document)
     after_world = _world(document)
-    before = _evidence(before_document, before_world)
-    before['authoring'] = {'version': 1, 'action': intent, 'by': by, 'recorded_at': recorded_at,
+    before_versions = _accepted_versions(captured)
+    after_versions = dict(before_versions)
+    if kind != 'review':
+        after_versions[subject] = claim['id']
+    before = _evidence(before_document, before_world, versions=before_versions)
+    before['authoring'] = {'version': receipt_version, 'action': intent, 'by': by, 'recorded_at': recorded_at,
                            'archive': frozen_archive, 'baseline': captured.baseline}
-    after = _evidence(document, after_world)
+    after = _evidence(document, after_world, versions=after_versions)
     after['authoring'] = {'objects': sorted(obj['id'] for obj in new), 'notes': notes}
     receipt = T.semantic_receipt(profile=cap['profile'], capabilities=cap, before=before, after=after)
     pairs = [(obj, C.encode_document(obj)) for obj in new]
     parents = C.commit_frontier(captured.commits)
     draft = C.make_commit(marker=captured.marker, operation=operation, parents=parents,
         baseline=captured.baseline, objects=pairs, receipt=receipt, view=b'', view_template=template,
-        requires=HP.commit_requires([C.EXPLICIT_ROOT_DISPOSITION] if _strict else None))
+        requires=_temporal_requires(document, [C.EXPLICIT_ROOT_DISPOSITION] if _strict else None))
     combined = {**captured.commits, operation: C.encode_document(draft)}
     rendered = store.render(captured, objects={**captured.objects, **{o['id']: o for o in new}}, commits=combined)
     candidate_objects = {**captured.objects, **{o['id']: o for o in new}}
@@ -321,7 +374,7 @@ def prepare(entry, action, *, by=None, operation=None, recorded_at=None, capture
     history_adapter.from_store_capture(candidate)
     manifest = C.make_commit(marker=captured.marker, operation=operation, parents=parents,
         baseline=captured.baseline, objects=pairs, receipt=receipt, view=rendered, view_template=template,
-        requires=HP.commit_requires([C.EXPLICIT_ROOT_DISPOSITION] if _strict else None))
+        requires=_temporal_requires(document, [C.EXPLICIT_ROOT_DISPOSITION] if _strict else None))
     files = [{'path': store.entry.name, 'role': 'record', 'before': captured.entry_bytes, 'after': rendered}]
     for obj, raw in pairs:
         path = Path(store.layout['history']) / HP.path_for_object(obj, captured)
@@ -394,7 +447,8 @@ def prepare_act(entry, action, *, by=None, operation=None, recorded_at=None, cap
     placeholder = T.semantic_receipt(profile=cap['profile'], capabilities=cap, before={}, after={})
     draft = C.make_commit(marker=captured.marker, operation=operation, parents=parents,
         baseline=captured.baseline, objects=pairs, receipt=placeholder, view=b'', view_template=template,
-        requires=HP.commit_requires([C.EXPLICIT_ROOT_DISPOSITION] if _strict else None))
+        requires=_temporal_requires(before_document,
+                                    [C.EXPLICIT_ROOT_DISPOSITION] if _strict else None))
     combined = {**captured.commits, operation: C.encode_document(draft)}
     selected = {**captured.objects, obj['id']: obj}
     state = H.reduce(selected, captured.state['rules'])
@@ -405,7 +459,8 @@ def prepare_act(entry, action, *, by=None, operation=None, recorded_at=None, cap
     _declare_template(template, projected)
     draft = C.make_commit(marker=captured.marker, operation=operation, parents=parents,
         baseline=captured.baseline, objects=pairs, receipt=placeholder, view=b'', view_template=template,
-        requires=HP.commit_requires([C.EXPLICIT_ROOT_DISPOSITION] if _strict else None))
+        requires=_temporal_requires(projected,
+                                    [C.EXPLICIT_ROOT_DISPOSITION] if _strict else None))
     combined = {**captured.commits, operation: C.encode_document(draft)}
     rendered = store.render(captured, objects=selected, commits=combined)
     candidate = replace(captured, entry_bytes=rendered, document=C.decode_document(rendered),
@@ -414,16 +469,19 @@ def prepare_act(entry, action, *, by=None, operation=None, recorded_at=None, cap
         baseline=H.baseline(captured.marker, combined, state))
     after_document = _document(history_adapter.from_store_capture(candidate).document)
     cap = capabilities(after_document, profile=target['authored']['profile'])
-    before = _evidence(before_document, _world(before_document))
+    before = _evidence(before_document, _world(before_document),
+                       versions=_accepted_versions(captured))
     before['authoring'] = {'version': 4, 'kind': 'act', 'action': action, 'by': by,
         'recorded_at': recorded_at, 'archive': frozen_archive, 'baseline': captured.baseline}
-    after = _evidence(after_document, _world(after_document))
+    after = _evidence(after_document, _world(after_document),
+                      versions=_accepted_versions(candidate))
     after['authoring'] = {'objects': [obj['id']], 'subject': action['id'],
                          'acceptance': state['subjects'][action['id']]['acceptance']}
     receipt = T.semantic_receipt(profile=cap['profile'], capabilities=cap, before=before, after=after)
     manifest = C.make_commit(marker=captured.marker, operation=operation, parents=parents,
         baseline=captured.baseline, objects=pairs, receipt=receipt, view=rendered, view_template=template,
-        requires=HP.commit_requires([C.EXPLICIT_ROOT_DISPOSITION] if _strict else None))
+        requires=_temporal_requires(after_document,
+                                    [C.EXPLICIT_ROOT_DISPOSITION] if _strict else None))
     C._require(store.render(captured, objects=selected,
         commits={**captured.commits, operation: C.encode_document(manifest)}) == rendered,
         'view_projection_mismatch')
@@ -440,7 +498,7 @@ def prepare_act(entry, action, *, by=None, operation=None, recorded_at=None, cap
 
 
 def prepare_proposal(entry, subject, body=None, collection=None, *, because=None, by=None, operation=None,
-                     recorded_at=None, capture=None, hypothesis=None):
+                     recorded_at=None, capture=None, hypothesis=None, _receipt_version=9):
     """Prepare an explicitly requested claim plus propose act, never an edited-view import.
 
     The body is retained exactly. Existing resolvable dependencies are pinned;
@@ -471,11 +529,29 @@ def prepare_proposal(entry, subject, body=None, collection=None, *, because=None
     profile = captured.objects[current['head']]['authored']['profile'] if 'head' in current else None
     cap = capabilities(document, profile=profile)
     body = C.detached(body)
+    intent_body = copy.deepcopy(body)
     deps = body.get(fields['deps'], []) if isinstance(body, dict) else []
     C._require(isinstance(deps, list) and all(isinstance(dep, str) for dep in deps), 'invalid_proposal_dependencies')
+    C._require(_receipt_version in (5, 9), 'invalid_authoring_receipt')
+    if _receipt_version == 9 and isinstance(body, dict) and fields['deps'] in body:
+        C._require(fields['snapshot'] not in body, 'authored_snapshot_forbidden')
     authored = {'collection': collection, 'fields': fields, 'profile': cap['profile']}
     if hypothesis is not None:
         authored['hypothesis'] = C.detached(hypothesis)
+    hypothetical = copy.deepcopy(document)
+    for name in list(P.collections_of(hypothetical)):
+        if name != 'meta':
+            hypothetical[name].pop(subject, None)
+    hypothetical.setdefault(collection, {})[subject] = body
+    hypothetical = _destination(hypothetical)
+    hypothetical_world = _world(hypothetical)
+    receipt_version = 9 if _receipt_version == 9 and hypothetical_world is not None else 5
+    if receipt_version == 9 and isinstance(body, dict) and fields['deps'] in body:
+        hyp_ids, hyp_judgments, _ = READER.infer(hypothetical)
+        body[fields['snapshot']] = P._snapshot(
+            list(deps), hypothetical_world.raw, hyp_ids, hyp_judgments, [], None)
+        hypothetical[collection][subject] = copy.deepcopy(body)
+        hypothetical_world = _world(hypothetical)
     saw = sorted(version for version, obj in captured.objects.items() if obj['subject'] == subject)
     claim = C.make_object(subject=subject,
         kind='judgment' if isinstance(body, dict) and fields['deps'] in body else 'reading',
@@ -486,22 +562,17 @@ def prepare_proposal(entry, subject, body=None, collection=None, *, because=None
         body={'act': 'propose', 'of': claim['id'], 'over': [], 'because': because})
     objects = {**captured.objects, claim['id']: claim, propose['id']: propose}
     C.validate_closure(objects)
-    hypothetical = copy.deepcopy(document)
-    for name in list(P.collections_of(hypothetical)):
-        if name != 'meta':
-            hypothetical[name].pop(subject, None)
-    hypothetical.setdefault(collection, {})[subject] = body
-    hypothetical = _destination(hypothetical)
-    before = _evidence(document, _world(document))
-    before['authoring'] = {'version': 5, 'kind': 'proposal', 'subject': subject,
-        'body': body, 'collection': collection, 'because': because, 'hypothesis': hypothesis,
+    current_versions = _accepted_versions(captured)
+    before = _evidence(document, _world(document), versions=current_versions)
+    before['authoring'] = {'version': receipt_version, 'kind': 'proposal', 'subject': subject,
+        'body': intent_body, 'collection': collection, 'because': because, 'hypothesis': hypothesis,
         'by': by, 'recorded_at': recorded_at, 'archive': frozen_archive, 'baseline': captured.baseline}
     # The accepted computational view is unchanged. Hypothetical assessment is
     # labelled separately and is never used as a reducer acceptance decision.
     accepted_document = copy.deepcopy(document)
     cap = capabilities(accepted_document, profile=cap['profile'])
-    after = _evidence(accepted_document, _world(accepted_document))
-    after['proposal'] = _evidence(hypothetical, _world(hypothetical))
+    after = _evidence(accepted_document, _world(accepted_document), versions=current_versions)
+    after['proposal'] = _evidence(hypothetical, hypothetical_world, versions=current_versions)
     after['authoring'] = {'objects': sorted([claim['id'], propose['id']]), 'subject': subject,
                           'proposal': claim['id']}
     receipt = T.semantic_receipt(profile=cap['profile'], capabilities=cap, before=before, after=after)
@@ -512,7 +583,7 @@ def prepare_proposal(entry, subject, body=None, collection=None, *, because=None
     parents = C.commit_frontier(captured.commits)
     draft = C.make_commit(marker=captured.marker, operation=operation, parents=parents,
         baseline=captured.baseline, objects=pairs, receipt=receipt, view=b'', view_template=template,
-        requires=HP.commit_requires([C.EXPLICIT_ROOT_DISPOSITION]))
+        requires=_temporal_requires(hypothetical, [C.EXPLICIT_ROOT_DISPOSITION]))
     commits = {**captured.commits, operation: C.encode_document(draft)}
     rendered = store.render(captured, objects=objects, commits=commits)
     state = H.reduce(objects, captured.state['rules'])
@@ -522,7 +593,7 @@ def prepare_proposal(entry, subject, body=None, collection=None, *, because=None
     history_adapter.from_store_capture(candidate)
     manifest = C.make_commit(marker=captured.marker, operation=operation, parents=parents,
         baseline=captured.baseline, objects=pairs, receipt=receipt, view=rendered, view_template=template,
-        requires=HP.commit_requires([C.EXPLICIT_ROOT_DISPOSITION]))
+        requires=_temporal_requires(hypothetical, [C.EXPLICIT_ROOT_DISPOSITION]))
     files = [{'path': store.entry.name, 'role': 'record', 'before': captured.entry_bytes, 'after': rendered},
         {'path': (Path(store.layout['history_commits']) / (operation + '.yaml')).relative_to(store.root).as_posix(),
          'role': 'history_commit', 'before': None, 'after': C.encode_document(manifest)}]
@@ -632,7 +703,7 @@ def _admission_document(final_document, step):
 
 
 def _prepare_final_batch(entry, actions, *, by=None, operation=None, recorded_at=None,
-                         capture=None, context=None, evidence=None):
+                         capture=None, context=None, evidence=None, _receipt_version=8):
     """Stage all bodies, validate one final world, then bind final dependency pins."""
     C._require(isinstance(actions, list) and 1 <= len(actions) <= 64, 'invalid_batch')
     store = H.Store(entry)
@@ -674,9 +745,6 @@ def _prepare_final_batch(entry, actions, *, by=None, operation=None, recorded_at
     C._require(len(profiles) <= 1, 'incompatible_authored_profiles')
     cap = capabilities(final_document, profile=next(iter(profiles), None))
     final_world = _world(final_document)
-    # Final-world assessment is computed once and reused in the receipt. Per-action
-    # admission below uses this same captured world, never an intermediate snapshot.
-    after_evidence = _evidence(final_document, final_world)
     admission_witnesses = []
     for step in steps:
         action, subject = step['action'], step['subject']
@@ -700,6 +768,22 @@ def _prepare_final_batch(entry, actions, *, by=None, operation=None, recorded_at
             'prior_body_digest': identity(step['prior'][1]) if step['prior'] is not None else None,
             'notes': notes[step['index']]})
     fields = _fields(final_document)
+    C._require(_receipt_version in (6, 8), 'invalid_authoring_receipt')
+    receipt_version = 8 if _receipt_version == 8 and final_world is not None else 6
+    if receipt_version == 8:
+        final_ids, final_judgments, _ = READER.infer(final_document)
+        for step in steps:
+            body = step['body']
+            if step['action']['kind'] == 'add' and isinstance(body, dict) and fields['deps'] in body:
+                body[fields['snapshot']] = P._snapshot(
+                    list(body[fields['deps']]), final_world.raw, final_ids,
+                    final_judgments, [], None)
+                step['action']['body'] = copy.deepcopy(body)
+                final_document[step['collection']][step['subject']] = copy.deepcopy(body)
+        final_world = _world(final_document)
+    # Final-world assessment is computed once and reused in the receipt. Per-action
+    # admission above uses the pre-snapshot authored world, never an intermediate state.
+    after_evidence = _evidence(final_document, final_world)
     by_subject = {}
     for step in steps:
         by_subject.setdefault(step['subject'], []).append(step)
@@ -714,7 +798,7 @@ def _prepare_final_batch(entry, actions, *, by=None, operation=None, recorded_at
             sequence = by_subject[subject]
             dependencies = {dep for step in sequence if isinstance(step['body'], dict)
                 for dep in step['body'].get(fields['deps'], [])
-                if not (step['action']['kind'] == 'review' and P._blocked_text(step['body'])
+                if not (P._blocked_text(step['body'])
                         and dep not in original.state['subjects'] and dep not in producing)}
             if any(dep in producing and dep not in final_versions for dep in dependencies):
                 continue
@@ -726,8 +810,9 @@ def _prepare_final_batch(entry, actions, *, by=None, operation=None, recorded_at
             for step in sequence:
                 action, body = step['action'], step['body']
                 op = 'batch-step-' + identity({'operation': operation, 'index': step['index']})
-                pins = {dep: final_versions[dep] for dep in body.get(fields['deps'], [])
-                        if dep in final_versions} if isinstance(body, dict) else {}
+                declared_deps = body.get(fields['deps'], []) if isinstance(body, dict) else []
+                pins = {dep: final_versions[dep] for dep in declared_deps if dep in final_versions}
+                gaps = {dep: 'unavailable' for dep in declared_deps if dep not in final_versions}
                 generated = []
                 if action['kind'] == 'review':
                     C._require(current is not None and current['kind'] == 'judgment', 'invalid_review')
@@ -739,7 +824,8 @@ def _prepare_final_batch(entry, actions, *, by=None, operation=None, recorded_at
                         'collection': step['collection'], 'fields': fields, 'profile': cap['profile']}
                     claim = C.make_object(subject=subject,
                         kind='judgment' if isinstance(body, dict) and fields['deps'] in body else 'reading',
-                        by=by, on=recorded_at, operation=op, body=body, saw=saw, pins=pins, authored=authored)
+                        by=by, on=recorded_at, operation=op, body=body, saw=saw, pins=pins,
+                        pin_gaps=gaps or None, authored=authored)
                     generated += [claim, C.make_object(subject=subject, kind='act', by=by, on=recorded_at,
                         operation=op, saw=sorted([*saw, claim['id']]), body={'act': 'accept', 'of': claim['id'],
                             'over': sorted(heads), 'because': str(action.get('why') or 'explicit ' + action['kind'])})]
@@ -759,8 +845,10 @@ def _prepare_final_batch(entry, actions, *, by=None, operation=None, recorded_at
     for path, raw in evidence.items():
         C.relative_path(path)
         C._require(type(raw) is bytes, 'invalid_bytes')
-    before = _evidence(before_document, _world(before_document))
-    before['authoring'] = {'version': 6, 'kind': 'batch', 'actions': intent_actions, 'by': by,
+    _attach_temporal_replay(after_evidence, final_document, final_world, final_versions)
+    before = _evidence(before_document, _world(before_document),
+                       versions=_accepted_versions(original))
+    before['authoring'] = {'version': receipt_version, 'kind': 'batch', 'actions': intent_actions, 'by': by,
         'recorded_at': recorded_at, 'archive': frozen_archive, 'baseline': original.baseline,
         'context': C.detached(context or {}), 'evidence': {path: C.sha256(raw) for path, raw in sorted(evidence.items())}}
     after_evidence['authoring'] = {'steps': [{**item, 'objects': produced_by_action[item['index']]}
@@ -777,7 +865,7 @@ def _prepare_final_batch(entry, actions, *, by=None, operation=None, recorded_at
     _declare_template(template, final_document)
     args = dict(marker=original.marker, operation=operation, parents=C.commit_frontier(original.commits),
         baseline=original.baseline, objects=pairs, receipt=receipt, view_template=template,
-        requires=HP.commit_requires([C.EXPLICIT_ROOT_DISPOSITION]))
+        requires=_temporal_requires(final_document, [C.EXPLICIT_ROOT_DISPOSITION]))
     draft = C.make_commit(**args, view=b'')
     selected = {**original.objects, **objects}
     commits = {**original.commits, operation: C.encode_document(draft)}
@@ -802,16 +890,17 @@ def _prepare_final_batch(entry, actions, *, by=None, operation=None, recorded_at
 
 
 def prepare_batch(entry, actions, *, by=None, operation=None, recorded_at=None, capture=None,
-                  context=None, evidence=None, _receipt_version=6, _strict=None):
+                  context=None, evidence=None, _receipt_version=8, _strict=None):
     """Prepare one final-world generation; retain v2/v3 sequential retry semantics.
 
     New v6 operations stage all bodies and final dependency versions before
     validation. The old paths below are immutable-envelope compatibility only;
     their virtual step manifests and recorded receipt shapes are not rewritten.
     """
-    if _receipt_version == 6:
+    if _receipt_version in (6, 8):
         return _prepare_final_batch(entry, actions, by=by, operation=operation, recorded_at=recorded_at,
-                                    capture=capture, context=context, evidence=evidence)
+                                    capture=capture, context=context, evidence=evidence,
+                                    _receipt_version=_receipt_version)
     C._require(isinstance(actions, list) and 1 <= len(actions) <= 64, 'invalid_batch')
     _strict = _receipt_version >= 3 if _strict is None else _strict
     store = H.Store(entry)
@@ -872,12 +961,14 @@ def prepare_batch(entry, actions, *, by=None, operation=None, recorded_at=None, 
     template = store._template(virtual.commits)
     draft = C.make_commit(marker=original.marker, operation=operation, parents=parents,
         baseline=original.baseline, objects=pairs, receipt=receipt, view=b'', view_template=template,
-        requires=HP.commit_requires([C.EXPLICIT_ROOT_DISPOSITION] if _strict else None))
+        requires=_temporal_requires(last_receipt['after']['document'],
+                                    [C.EXPLICIT_ROOT_DISPOSITION] if _strict else None))
     combined = {**original.commits, operation: C.encode_document(draft)}
     rendered = store.render(original, objects=virtual.objects, commits=combined)
     manifest = C.make_commit(marker=original.marker, operation=operation, parents=parents,
         baseline=original.baseline, objects=pairs, receipt=receipt, view=rendered, view_template=template,
-        requires=HP.commit_requires([C.EXPLICIT_ROOT_DISPOSITION] if _strict else None))
+        requires=_temporal_requires(last_receipt['after']['document'],
+                                    [C.EXPLICIT_ROOT_DISPOSITION] if _strict else None))
     files += [{'path': store.entry.name, 'role': 'record', 'before': original.entry_bytes, 'after': rendered},
               {'path': (Path(store.layout['history_commits']) / (operation + '.yaml')).relative_to(store.root).as_posix(),
                'role': 'history_commit', 'before': None, 'after': C.encode_document(manifest)}]
@@ -901,7 +992,8 @@ def verify_prepared(entry, mutation):
     live = store.capture()
     data = mutation.to_data()
     intent = data['receipt']['before'].get('authoring')
-    C._require(isinstance(intent, dict) and intent.get('version') in (1, 2, 3, 4, 5, 6), 'invalid_authoring_receipt')
+    C._require(isinstance(intent, dict) and intent.get('version') in (1, 2, 3, 4, 5, 6, 7, 8, 9),
+               'invalid_authoring_receipt')
     C._require(_archive(store) == intent['archive'], 'concurrent_archive_edit')
     manifest = C.decode_document(next(i['after'] for i in mutation.files if i['role'] == 'history_commit'))
     commits, todo = {}, list(manifest['parents'])
@@ -920,16 +1012,17 @@ def verify_prepared(entry, mutation):
     token = _REPLAY_AUDIT.set(_witnessed_adapter_audit(data['receipt'], commits))
     try:
         strict = C.EXPLICIT_ROOT_DISPOSITION in manifest.get('requires', [])
-        if intent['version'] == 5:
+        if intent['version'] in (5, 9):
             C._require(intent.get('kind') == 'proposal' and strict, 'invalid_authoring_receipt')
             expected = prepare_proposal(entry, intent['subject'], intent['body'], intent['collection'],
                 because=intent['because'], hypothesis=intent['hypothesis'], by=intent['by'],
-                operation=data['operation'], recorded_at=intent['recorded_at'], capture=captured)
+                operation=data['operation'], recorded_at=intent['recorded_at'], capture=captured,
+                _receipt_version=intent['version'])
         elif intent['version'] == 4:
             C._require(intent.get('kind') == 'act', 'invalid_authoring_receipt')
             expected = prepare_act(entry, intent['action'], by=intent['by'], operation=data['operation'],
                                    recorded_at=intent['recorded_at'], capture=captured, _strict=strict)
-        elif intent['version'] in (2, 3, 6):
+        elif intent['version'] in (2, 3, 6, 8):
             C._require(intent.get('kind') == 'batch', 'invalid_authoring_receipt')
             expected = prepare_batch(entry, intent['actions'], by=intent['by'], operation=data['operation'],
                 recorded_at=intent['recorded_at'], capture=captured, context=intent['context'],
@@ -937,7 +1030,8 @@ def verify_prepared(entry, mutation):
                 _receipt_version=intent['version'], _strict=strict)
         else:
             expected = prepare(entry, intent['action'], by=intent['by'], operation=data['operation'],
-                               recorded_at=intent['recorded_at'], capture=captured, _strict=strict)
+                               recorded_at=intent['recorded_at'], capture=captured, _strict=strict,
+                               _receipt_version=intent['version'])
     finally:
         _REPLAY_AUDIT.reset(token)
     C._require(expected.to_bytes() == mutation.to_bytes(), 'authoring_receipt_mismatch')

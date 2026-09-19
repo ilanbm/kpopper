@@ -1,5 +1,6 @@
 """CI execution keeps every selected test and rejects empty or unknown plans."""
 import importlib.util
+import os
 import pathlib
 import shutil
 import tempfile
@@ -20,6 +21,54 @@ def module(name):
 
 
 class TestPlans(unittest.TestCase):
+    def test_installed_channels_keep_every_artifact_and_one_native_suite(self):
+        workflow = yaml.safe_load((ROOT / '.github/workflows/reasoning-target.yml').read_text())
+        job = workflow['jobs']['installed']
+        self.assertEqual(job['strategy']['matrix']['distribution'], ['wheel', 'sdist', 'plugin'])
+        self.assertFalse(job['strategy']['fail-fast'])
+        step = next(s for s in job['steps'] if s.get('shell') == 'python')
+        self.assertEqual(step['env']['KPOPPER_INSTALL_CHANNEL'], '${{ matrix.distribution }}')
+        code = compile(step['run'], 'installed-workflow', 'exec')
+        for channel in ('wheel', 'sdist', 'plugin'):
+            with self.subTest(channel=channel), tempfile.TemporaryDirectory() as directory:
+                root, work = pathlib.Path(directory) / 'source', pathlib.Path(directory) / 'work'
+                (root / 'dist').mkdir(parents=True)
+                work.mkdir()
+                (root / 'dist/package.whl').write_bytes(b'wheel fixture')
+                (root / 'dist/package.tar.gz').write_bytes(b'sdist fixture')
+                (root / 'probe.txt').write_text('retained plugin source')
+                with patch.object(pathlib.Path, 'cwd', return_value=root), \
+                        patch('tempfile.mkdtemp', return_value=str(work)), \
+                        patch.dict(os.environ, {'KPOPPER_INSTALL_CHANNEL': channel}), \
+                        patch('subprocess.run') as run, \
+                        patch('subprocess.check_output', return_value='/packaged/native\n'):
+                    try:
+                        exec(code, {'__name__': '__main__'})
+                    except SystemExit as stopped:
+                        self.assertEqual(stopped.code, 0)
+                        self.assertNotEqual(channel, 'plugin')
+                calls = [list(map(str, c.args[0])) for c in run.call_args_list]
+                self.assertTrue(all(c.kwargs.get('check') for c in run.call_args_list))
+                installs = [c for c in calls if 'pip' in c and c[-1] != 'jsonschema']
+                self.assertEqual(len(installs), 1)
+                self.assertTrue(installs[0][-1].endswith('.whl' if channel == 'wheel' else '.tar.gz'))
+                distribution = [c for c in calls if 'tests/test_reasoning_distribution.py' in c]
+                acceptance = [c for c in calls if 'tests/test_reasoning_composition_acceptance.py' in c]
+                native = [c for c in calls if 'unittest' in c]
+                self.assertEqual(len(distribution), 1)
+                self.assertEqual(len(acceptance), 1)
+                self.assertEqual(len(native), int(channel == 'plugin'))
+                self.assertEqual('--plugin-root' in acceptance[0], channel == 'plugin')
+                if channel == 'plugin':
+                    self.assertEqual((work / 'plugin-extracted/probe.txt').read_text(),
+                                     'retained plugin source')
+                    self.assertEqual(distribution[0][-1], str(work / 'plugin-extracted'))
+                    native_call = next(c for c in run.call_args_list if 'unittest' in c.args[0])
+                    for flag in ('KPOPPER_REQUIRE_REASONING_TESTS', 'KPOPPER_REQUIRE_CORE_TESTS'):
+                        self.assertEqual(native_call.kwargs['env'][flag], '1')
+                    self.assertEqual(native_call.kwargs['env']['KPOPPER_REASONING_TEST_BINARY'],
+                                     '/packaged/native')
+
     def test_shared_changes_keep_all_suites_and_documents_select_only_their_suite(self):
         ci = module('ci_selection')
         self.assertEqual(ci.test_suites(ci.select(['scripts/cli.py'])),

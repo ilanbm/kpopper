@@ -275,7 +275,8 @@
         "history": {"$ref": "#/$defs/node_history"},
         "coverage": {"$ref": "#/$defs/coverage"},
         "assurance": {"$ref": "#/$defs/assurance"},
-        "support": {"$ref": "#/$defs/support"}
+        "support": {"$ref": "#/$defs/support"},
+        "temporal": {"$ref": "#/$defs/temporal"}
       },
       "required": [
         "body", "fields", "state", "attention", "computation", "acceptance",
@@ -320,7 +321,8 @@
         },
         "coverage": {"$ref": "#/$defs/coverage"},
         "support": {"$ref": "#/$defs/support"},
-        "source_state": {"enum": ["committed", "prepared_candidate"]}
+        "source_state": {"enum": ["committed", "prepared_candidate"]},
+        "temporal": {"$ref": "#/$defs/temporal"}
       },
       "required": [
         "acceptance", "head_ids", "open_act_ids", "head_witnesses", "proposals",
@@ -365,6 +367,11 @@
               "additionalProperties": false
             },
             "identity_schemes": {"$ref": "#/$defs/ids"},
+            "capabilities": {
+              "type": "array",
+              "items": {"const": "temporal-applicability/v1"},
+              "uniqueItems": true
+            },
             "integrity": {
               "type": "object",
               "properties": {
@@ -382,6 +389,59 @@
           "additionalProperties": false
         }
       ]
+    },
+    "temporal": {
+      "type": "object",
+      "properties": {
+        "version": {"const": 1},
+        "applicability": {"enum": ["current", "anchored", "general"]},
+        "status": {"enum": ["clear", "recovered", "counterexample", "unknown"]},
+        "current_falsifier": {"type": "string"},
+        "complete": {"type": "boolean"},
+        "counterexample_claim_ids": {"$ref": "#/$defs/ids"},
+        "episodes": {
+          "type": "array", "maxItems": 64,
+          "items": {
+            "type": "object",
+            "properties": {
+              "evidence_version": {"const": 1},
+              "operation": {"type": "string"},
+              "phase": {"enum": ["before", "after"]},
+              "subject": {"type": "string"},
+              "claim_id": {"type": "string"},
+              "evidence_kind": {
+                "enum": ["recorded_receipt", "reconstructed_committed_world"]
+              },
+              "applicability": {"enum": ["current", "anchored", "general"]},
+              "predicate_digest": {"$ref": "#/$defs/digest"},
+              "anchors": {
+                "type": "object",
+                "properties": {"on": {}, "at": {}, "applies": {}},
+                "required": ["on", "at", "applies"],
+                "additionalProperties": false
+              },
+              "snapshot_id": {"anyOf": [{"$ref": "#/$defs/digest"}, {"type": "null"}]},
+              "as_of": {"type": ["string", "null"]},
+              "verification": {"enum": ["verified", "unknown"]},
+              "outcome": {"enum": ["counterexample", "not_counterexample", "unknown"]},
+              "finding": {"type": ["string", "null"]},
+              "result": {"type": ["object", "null"]}
+            },
+            "required": [
+              "evidence_version", "operation", "phase", "subject", "claim_id", "evidence_kind",
+              "applicability", "predicate_digest", "anchors", "snapshot_id", "as_of",
+              "verification", "outcome", "finding", "result"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "findings": {"type": "array", "items": {"type": "object"}}
+      },
+      "required": [
+        "version", "applicability", "status", "current_falsifier", "complete",
+        "counterexample_claim_ids", "episodes", "findings"
+      ],
+      "additionalProperties": false
     }
   }
 }

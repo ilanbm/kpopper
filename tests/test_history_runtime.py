@@ -26,7 +26,8 @@ class Runtime(unittest.TestCase):
                 target = self.package / path.relative_to(source)
                 target.parent.mkdir(parents=True, exist_ok=True)
                 shutil.copyfile(path, target)
-        for name in ('assessment.schema.json', 'reasoning/assessment.schema.json'):
+        for name in ('assessment.schema.json', 'reasoning/assessment.schema.json',
+                     'reasoning/history_assessment.schema.json'):
             shutil.copyfile(source / name, self.package / name)
         shutil.copytree(source / 'reasoning/lean', self.package / 'reasoning/lean')
         native = self.package / 'reasoning/native'
@@ -65,7 +66,8 @@ class Runtime(unittest.TestCase):
         for name in ('history_paths.py', 'history_identity.py', 'history_edits.py', 'history_branch.py'):
             self.assertIn(name, value['sources']['required'])
         self.assertEqual(value['schemas']['history']['prepared_mutation'], [1, 2])
-        self.assertEqual(value['schemas']['history']['authoring_receipt'], [1, 2, 3, 4, 5, 6])
+        self.assertEqual(value['schemas']['history']['authoring_receipt'],
+                         [1, 2, 3, 4, 5, 6, 7, 8, 9])
         self.assertEqual(value['schemas']['history']['identity_receipt'], [1, 2])
         self.assertEqual(value['schemas']['history']['history_auxiliary'], [1])
         self.assertEqual(value['schemas']['history']['branch_capture'], [1, 2])

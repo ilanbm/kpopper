@@ -5,14 +5,18 @@ neither reads a store nor infers acceptance, temporal precedence or capabilities
 The optional document supplies only retained record headers, never current nodes.
 """
 import copy
+import heapq
 
 from . import history_contract as C
 from .pending_grounding import identity
-from .reasoning.contract import MAX_REQUEST_BYTES, OutputBudget, capabilities, validate_value
+from .reasoning.contract import (MAX_REQUEST_BYTES, OperationalLimit, OutputBudget,
+                                 capabilities, digest, validate_value)
 
 
 _ROLES = ('deps', 'snapshot', 'predicate')
 _HEADERS = {'meta', 'schema', 'record', 'also'}
+MAX_TEMPORAL_OBSERVATIONS = 64
+MAX_TEMPORAL_FRONTIER_VISITS = 1_000_000
 
 
 def _require(condition, code, detail=''):
@@ -177,6 +181,236 @@ def capture_history(objects, projection, *, document=None):
     return C.CapturedHistory(document, projection)
 
 
+def _temporal_projection(captured, objects, required):
+    """Retain bounded exact replay inputs; truth is checked by the assessor."""
+    if C.TEMPORAL_APPLICABILITY not in required:
+        return None
+    from . import history_store as H, history_transaction as T
+    manifests = {operation: C.validate_commit(C.decode_document(raw))
+                 for operation, raw in captured.commits.items()}
+    children = {operation: [] for operation in manifests}
+    remaining = {operation: len(manifest['parents']) for operation, manifest in manifests.items()}
+    for child, manifest in manifests.items():
+        for parent in manifest['parents']:
+            _require(parent in manifests, 'incomplete_commit', parent)
+            children[parent].append(child)
+    temporal_lineage = {}
+    ready = [operation for operation, count in remaining.items() if count == 0]
+    heapq.heapify(ready)
+    while ready:
+        operation = heapq.heappop(ready)
+        manifest = manifests[operation]
+        temporal_lineage[operation] = (
+            C.TEMPORAL_APPLICABILITY in manifest.get('requires', [])
+            or any(temporal_lineage[parent] for parent in manifest['parents']))
+        for child in children[operation]:
+            remaining[child] -= 1
+            if remaining[child] == 0:
+                heapq.heappush(ready, child)
+    _require(len(temporal_lineage) == len(manifests), 'cyclic_commits')
+    closure_cache = {}
+    frontier_visits = [0]
+
+    def causal_ids(operation, include_self):
+        key = operation, include_self
+        if key in closure_cache:
+            return closure_cache[key]
+        pending = [operation] if include_self else list(manifests[operation]['parents'])
+        seen, ids = set(), set()
+        while pending:
+            current = pending.pop()
+            if current in seen:
+                continue
+            _require(current in manifests, 'incomplete_commit', current)
+            frontier_visits[0] += 1
+            if frontier_visits[0] > MAX_TEMPORAL_FRONTIER_VISITS:
+                raise OperationalLimit('temporal_frontier_limit')
+            seen.add(current)
+            ids.update(item['id'] for item in manifests[current]['objects'])
+            pending.extend(manifests[current]['parents'])
+            _require(len(seen) <= C.MAX_OBJECTS, 'history_limit', 'temporal causal frontier')
+        closure_cache[key] = ids
+        return ids
+
+    def causal_operations(operation, include_self):
+        pending = [operation] if include_self else list(manifests[operation]['parents'])
+        seen = set()
+        while pending:
+            current = pending.pop()
+            if current in seen:
+                continue
+            _require(current in manifests, 'incomplete_commit', current)
+            seen.add(current)
+            pending.extend(manifests[current]['parents'])
+            _require(len(seen) <= C.MAX_OBJECTS, 'history_limit', 'temporal causal frontier')
+        return seen
+
+    def accepted_at(operation, phase):
+        selected = {vid: objects[vid] for vid in causal_ids(operation, phase == 'after')}
+        state = H.reduce(selected, captured.state['rules'])
+        return {subject: item['head'] for subject, item in state['subjects'].items()
+                if item.get('acceptance') == 'accepted' and 'head' in item}
+
+    def reconstructed_snapshot(operation, phase, frontier):
+        operations = causal_operations(operation, phase == 'after')
+        commits = {name: captured.commits[name] for name in operations}
+        document = H.Store._template(commits)
+        schema = document.setdefault('schema', {})
+        _require(isinstance(schema, dict), 'invalid_authored_mapping')
+        profile = None
+        for subject, version in sorted(frontier.items()):
+            obj = objects[version]
+            authored = _mapping(obj)
+            _require(profile in (None, authored['profile']), 'incompatible_authored_profiles')
+            profile = authored['profile']
+            for role in _ROLES:
+                _require(role not in schema or schema[role] == authored['fields'][role],
+                         'incompatible_field_roles', subject)
+                schema[role] = authored['fields'][role]
+            collection = document.setdefault(authored['collection'], {})
+            _require(isinstance(collection, dict) and subject not in collection,
+                     'duplicate_projection', subject)
+            collection[subject] = _adapt_body(obj)
+        _require(profile == 'core/v1', 'incompatible_authored_profiles')
+        document.setdefault('meta', {}).pop('history', None)
+        from .reasoning.snapshot import Snapshot
+        return Snapshot.from_data(document, as_of=None)
+    temporal_claims = {vid: obj for vid, obj in objects.items()
+                       if obj.get('id_scheme') == C.ID_SCHEME
+                       and isinstance(obj.get('body'), dict)
+                       and obj['body'].get('temporal') is not None}
+    observations, findings = [], []
+    temporal_budget = OutputBudget(C.MAX_PROJECTION_BYTES // 2, 'temporal_history_limit')
+    temporal_budget.add({'version': 1, 'observations': [], 'complete': True, 'findings': []})
+    seen_claims = set()
+    truncated = False
+    missing_contexts = 0
+    missing_claims = {}
+    for operation, raw in sorted(captured.commits.items()):
+        manifest = manifests[operation]
+        receipt = T.validate_receipt(manifest['receipt'])
+        for phase in ('before', 'after'):
+            evidence = receipt[phase]
+            replay = evidence.get('temporal_replay') if isinstance(evidence, dict) else None
+            if replay is None:
+                lineage_active = (temporal_lineage[operation] if phase == 'after' else
+                                  any(temporal_lineage[parent] for parent in manifest['parents']))
+                if not lineage_active:
+                    continue
+                try:
+                    frontier = accepted_at(operation, phase)
+                except OperationalLimit:
+                    truncated = True
+                    continue
+                expected = [(subject, version) for subject, version in frontier.items()
+                            if version in temporal_claims]
+                if expected:
+                    try:
+                        snapshot = reconstructed_snapshot(operation, phase, frontier)
+                        replay = {'version': 1, 'snapshot': snapshot.to_json(),
+                                  'claims': dict(expected)}
+                        assessment = None
+                        evidence_kind = 'reconstructed_committed_world'
+                    except (ValueError, TypeError, KeyError, OperationalLimit, C.HistoryError):
+                        missing_contexts += 1
+                        for key in expected:
+                            missing_claims[key] = missing_claims.get(key, 0) + 1
+                        continue
+                else:
+                    continue
+            else:
+                assessment = evidence.get('assessment')
+                evidence_kind = 'recorded_receipt'
+            _require(isinstance(replay, dict) and set(replay) == {'version', 'snapshot', 'claims'}
+                     and replay['version'] == 1 and isinstance(replay['snapshot'], str)
+                     and isinstance(replay['claims'], dict),
+                     'invalid_temporal_replay', operation)
+            _require(assessment is None or isinstance(assessment, dict),
+                     'invalid_temporal_replay', operation)
+            try:
+                frontier = accepted_at(operation, phase)
+            except OperationalLimit:
+                truncated = True
+                continue
+            expected_claims = {subject: version for subject, version in frontier.items()
+                               if version in temporal_claims}
+            _require(replay['claims'] == expected_claims,
+                     'temporal_causal_frontier_mismatch', operation + ':' + phase)
+            from .reasoning.snapshot import Snapshot
+            try:
+                snapshot = Snapshot.from_json(replay['snapshot'])
+                snapshot_nodes = snapshot.to_data()['nodes']
+            except (ValueError, TypeError, KeyError) as error:
+                raise C.HistoryError('invalid_temporal_replay', operation) from error
+            expected_nodes = {subject: objects[version] for subject, version in frontier.items()}
+            _require(set(snapshot_nodes) == set(expected_nodes),
+                     'temporal_causal_frontier_mismatch', operation + ':' + phase)
+            for subject, obj in expected_nodes.items():
+                node = snapshot_nodes[subject]
+                _require(digest(node['body']) == digest(_adapt_body(obj))
+                         and node['collection'] == obj['authored']['collection']
+                         and node['fields'] == {role: obj['authored']['fields'][role]
+                                                for role in _ROLES},
+                         'temporal_causal_frontier_mismatch', subject)
+            claims = []
+            for subject, version in sorted(replay['claims'].items()):
+                _require(isinstance(subject, str) and isinstance(version, str),
+                         'invalid_temporal_replay', operation)
+                obj = temporal_claims.get(version)
+                _require(obj is not None and obj['subject'] == subject,
+                         'temporal_claim_mismatch', version)
+                if assessment is not None:
+                    node = assessment.get('nodes', {}).get(subject)
+                    _require(isinstance(node, dict) and digest(node.get('body')) == digest(obj['body']),
+                             'temporal_claim_mismatch', version)
+                field = obj['authored']['fields']['predicate']
+                claims.append({
+                    'subject': subject, 'claim_id': version,
+                    'applicability': obj['body']['temporal']['applicability'],
+                    'predicate_digest': digest(obj['body'].get(field)),
+                    'anchors': {'on': obj.get('on'), 'at': obj.get('at'),
+                                'applies': obj.get('applies')},
+                })
+                seen_claims.add(version)
+            if not claims:
+                continue
+            observation = {'operation': operation, 'phase': phase, 'evidence_kind': evidence_kind,
+                           'snapshot': replay['snapshot'], 'assessment': copy.deepcopy(assessment),
+                           'claims': claims}
+            if len(observations) >= MAX_TEMPORAL_OBSERVATIONS:
+                truncated = True
+                continue
+            try:
+                temporal_budget.add(observation)
+            except OperationalLimit:
+                truncated = True
+                continue
+            observations.append(observation)
+    if truncated:
+        findings.append(_finding('temporal_history_limit', '', '',
+                                 'retained temporal observations exceed replay bounds'))
+    if missing_contexts:
+        for (subject, version), count in sorted(missing_claims.items())[:63]:
+            findings.append(_finding('temporal_replay_unavailable', subject, version,
+                                     f'{count} committed contexts lack exact Snapshot replay evidence'))
+        if not missing_claims or len(missing_claims) > 63:
+            findings.append(_finding('temporal_replay_unavailable', '', '',
+                                     f'{missing_contexts} committed contexts lack exact Snapshot replay evidence'))
+    accepted_temporal = {claim['claim_id'] for observation in observations
+                         for claim in observation['claims']} | {version for _, version in missing_claims}
+    unseen = [(version, temporal_claims[version]) for version in sorted(accepted_temporal)
+              if version not in seen_claims and (temporal_claims[version]['subject'], version)
+              not in missing_claims]
+    for version, obj in unseen[:63]:
+        findings.append(_finding('temporal_replay_unavailable', obj['subject'], version,
+                                 'claim has no exact retained Snapshot context'))
+    if len(unseen) > 63:
+        findings.append(_finding('temporal_replay_unavailable', '', '',
+                                 f'{len(unseen)} claims have no exact retained Snapshot context'))
+    return {'version': 1, 'complete': not findings,
+            'observations': observations, 'findings': findings}
+
+
 
 def from_store_capture(captured):
     """Adapt detached Store.capture evidence; no mutable view supplies headers.
@@ -206,6 +440,10 @@ def from_store_capture(captured):
         versions.update(state['proposals'])
         for review in reviews[subject]:
             versions.update(review['body'].get('read', {}).values())
+    versions.update(version for version, obj in objects.items()
+                    if obj.get('id_scheme') == C.ID_SCHEME
+                    and isinstance(obj.get('body'), dict)
+                    and obj['body'].get('temporal') is not None)
     pins = {version: {'subject': objects[version]['subject'], 'version': version,
                       'status': 'recorded', 'object': objects[version]}
             for version in sorted(versions)}
@@ -229,10 +467,20 @@ def from_store_capture(captured):
         required.add(C.EXPLICIT_ROOT_DISPOSITION)
     if required:
         projection['requires'] = sorted(required)
+    temporal = _temporal_projection(captured, objects, required)
+    if temporal is not None:
+        projection['temporal'] = temporal
+        if not temporal['complete']:
+            projection['coverage']['complete'] = False
+            projection['integrity']['complete'] = False
+            projection['integrity']['findings'].extend(temporal['findings'])
     gap_findings = [finding for version in sorted(versions)
                     for finding in C.pin_gap_findings(objects[version])]
     if gap_findings:
-        projection['integrity'] = {'complete': False, 'findings': gap_findings}
+        projection['integrity']['complete'] = False
+        projection['integrity']['findings'].extend(
+            finding for finding in gap_findings
+            if finding not in projection['integrity']['findings'])
         projection['coverage']['complete'] = False
     template = Store._template(captured.commits)
     origin = template.get('meta', {}).get('history_subset')

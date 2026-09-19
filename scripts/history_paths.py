@@ -149,7 +149,8 @@ def replay_layout(manifest):
     _require(isinstance(manifest, dict), 'invalid_history_path_capabilities')
     requires = manifest.get('requires', [])
     known = {CAPABILITY, 'explicit-root-disposition/v1', 'history-closure/v1',
-             'history-generations/v1', 'generation-cancellation/v1', 'history-subset/v1'}
+             'history-generations/v1', 'generation-cancellation/v1', 'history-subset/v1',
+             'temporal-applicability/v1'}
     _require(isinstance(requires, list) and all(isinstance(item, str) for item in requires)
              and len(requires) == len(set(requires)) and set(requires) <= known,
              'invalid_history_path_capabilities')
