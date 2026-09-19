@@ -780,6 +780,11 @@ sources:
             outcome is verified."
     at: "Opening delegated instruction for task 01a0b812-a326-77a2-8e09-64ff2fe3815f"
     read: "2026-09-19"
+  s.2026_09_19_native_live_bootstrap_continuation:
+    name: "Native live capture, writer preparation and first-record bootstrap"
+    asked: "Continue the approved kpopper Rust migration autonomously until the full planned native
+            outcome is verified."
+    at: "task 01a0b85b-9000-7183-b0dc-7d2b01fd008e"
   s.2026_09_19_native_snapshot_continuation:
     name: "Continue the approved native migration"
     asked: "Continue the approved kpopper Rust migration autonomously until the full planned native
@@ -872,6 +877,7 @@ sources:
     of: "2026-09-19: direct, act and proposal preparation with causal-parent replay; conformance
          fixtures under native/tests/fixtures/history-authoring*.json"
   s.native_authoring_source:
+    from: s.2026_09_19_native_live_bootstrap_continuation
     name: "Native writer source and policy ownership evidence"
     file: "native/src/authoring_source.rs"
     at: "WriteRoute and CapturedSource stay owned together; actual pending decisions govern profile
@@ -885,6 +891,7 @@ sources:
     of: "2026-09-19: batch preparation and causal-parent replay added after direct-authoring
          checkpoint 0c757063ab8a2e40f87c3d967dffdbbd3d621cbe"
   s.native_bootstrap:
+    from: s.2026_09_19_native_live_bootstrap_continuation
     name: "Native first-record authoring and recovery evidence"
     file: "native/tests/fixtures/history-bootstrap.json"
     at: "Seven exact final Python 1.7.0 preparation envelopes, actual native publication, five
@@ -936,6 +943,7 @@ sources:
          source-aware merge module and current local/UTC date checks"
     read: "2026-09-19"
   s.native_live_capture:
+    from: s.2026_09_19_native_live_bootstrap_continuation
     name: "Native pending and committed target capture evidence"
     file: "native/tests/fixtures/pending-state.json"
     at: "15 actual Git fixtures against final Python 1.7.0 commit 5acfd0f; 14 exact complete
@@ -969,6 +977,7 @@ sources:
          and actual Lean evaluation envelopes"
     read: "2026-09-19"
   s.native_source_capture:
+    from: s.2026_09_19_native_live_bootstrap_continuation
     name: "Native source capture conformance evidence"
     file: "native/tests/fixtures/source-capture.json"
     at: "45 cases; 38 exact accepted snapshots and 7 refusals against b639cdb; source_capture and
@@ -982,6 +991,7 @@ sources:
          reasoning-authoring-identities.json beside this file"
     read: "2026-09-19"
   s.python_final_native_reference:
+    from: s.2026_09_19_native_live_bootstrap_continuation
     name: "Final Python 1.7.0 native compatibility reference"
     url: "https://github.com/ilanbm/kpopper/releases/tag/v1.7.0"
     at: "Tag and PR102 merge 5acfd0f9c7f4d839bb6930b8e1d0a5d1fd315ce4; tree
