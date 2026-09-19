@@ -732,16 +732,16 @@ installed, use `python3 scripts/kpopper` instead. For plugin work, use the comma
 by the session's `KPOPPER_AGENT_CONTEXT`. `<id>` names a record entry, such as
 `workshop.ingredient_plan`; `kpop --help` lists command groups.
 
-| What you need | Command |
-|---|---|
-| Locate this project's record | `kpop where` |
-| Open the current context and attention items | `kpop open` |
-| Retrieve a subject, its sources and reasons | `kpop pull <id>` |
-| Find matching claims and local source passages | `kpop search "terms"` |
-| Trace what depends on a premise | `kpop affects <id>` |
-| Check recorded conditions and changed premises | `kpop check` |
-| Inspect findings and scoped attention as JSON | `kpop assess <id>` |
-| Share a focused Markdown excerpt | `kpop export <id>` |
+| Command | What you need |
+| --- | --- |
+| `kpop where` | Locate this project's record |
+| `kpop open` | Open the current context and attention items |
+| `kpop pull <id>` | Retrieve a subject, its sources and reasons |
+| `kpop search "terms"` | Find matching claims and local source passages |
+| `kpop affects <id>` | Trace what depends on a premise |
+| `kpop check` | Check recorded conditions and changed premises |
+| `kpop assess <id>` | Inspect findings and scoped attention as JSON |
+| `kpop export <id>` | Share a focused Markdown excerpt |
 
 <details>
 <summary>Writing, history and background commands</summary>
@@ -749,22 +749,22 @@ by the session's `KPOPPER_AGENT_CONTEXT`. `<id>` names a record entry, such as
 These commands can record decisions, update project state or configure work. The linked
 guides describe their arguments and review steps.
 
-| What you need | Command or command group |
-|---|---|
-| Add a finding or judgment | `kpop add <id> field=value ...` |
-| Update a reading with its reason and date | `kpop set <id> <value> --why "reason" --as-of YYYY-MM-DD` |
-| Apply one prepared source report | `kpop update --file report.json` |
-| Record a completed review | `kpop review <id>` |
-| Resolve whether two IDs name the same subject | `kpop same <a> <b>` · `kpop distinct <a> <b> "reason"` |
-| Test hypotheses or another branch before folding | `kpop consolidate --dry-run` · `kpop consolidate --from <ref> --dry-run` |
-| Fold eligible hypotheses or retain a refutation | `kpop consolidate` · `kpop consolidate --refute <name> "reason"` |
-| Inspect committed history acceptance | `kpop history status` |
-| Rerun the record's configured measurement recipes | `kpop remeasure --run` |
-| Begin a guided mapping of existing material | `kpop map` |
-| Capture and process reports in the background | `kpop ingest` |
-| Configure branch checks or inspect shared findings | `kpop watch` |
-| Manage deferred work and its recorded outcomes | `kpop followups` |
-| Inspect or change workspace guidance | `kpop config` |
+| Command or command group | What you need |
+| --- | --- |
+| `kpop add <id> field=value ...` | Add a finding or judgment |
+| `kpop set <id> <value> --why "reason" --as-of YYYY-MM-DD` | Update a reading with its reason and date |
+| `kpop update --file report.json` | Apply one prepared source report |
+| `kpop review <id>` | Record a completed review |
+| `kpop same <a> <b>` · `kpop distinct <a> <b> "reason"` | Resolve whether two IDs name the same subject |
+| `kpop consolidate --dry-run` · `kpop consolidate --from <ref> --dry-run` | Test hypotheses or another branch before folding |
+| `kpop consolidate` · `kpop consolidate --refute <name> "reason"` | Fold eligible hypotheses or retain a refutation |
+| `kpop history status` | Inspect committed history acceptance |
+| `kpop remeasure --run` | Rerun the record's configured measurement recipes |
+| `kpop map` | Begin a guided mapping of existing material |
+| `kpop ingest` | Capture and process reports in the background |
+| `kpop watch` | Configure branch checks or inspect shared findings |
+| `kpop followups` | Manage deferred work and its recorded outcomes |
+| `kpop config` | Inspect or change workspace guidance |
 
 See the [command reference](docs/reference.md), [history commands](docs/history-contract.md#history-commands-and-portable-contributions),
 [background capture](skills/kpopper/INGESTION.md) and [followups](skills/kpopper/FOLLOWUPS.md).
@@ -774,19 +774,19 @@ See the [command reference](docs/reference.md), [history commands](docs/history-
 
 ### Plugin skills
 
-| Skill | What happens in practice · possible CLI calls | Claude Code | Codex |
-|---|---|---|---|
-| [kpopper](skills/kpopper/SKILL.md) | Explains the method and chooses the workflow that fits the task. CLI calls follow the selected workflow. | `/kpopper:kpopper` | `$kpopper` |
-| [ground](skills/ground/SKILL.md) | Retrieves relevant claims, sources and dependencies before answering, and checks what needs review.<br>May use `kpop pull <id>`, `kpop affects <id>`, `kpop check` or `kpop search "terms"`. | `/kpopper:ground` | `$ground` |
-| [record](skills/record/SKILL.md) | Saves findings, their sources and reasons; records decisions, open questions and completed reviews.<br>May use `kpop update --file report.json`, `kpop add`, `kpop set` or `kpop review`. | `/kpopper:record` | `$record` |
-| [map](skills/map/SKILL.md) | Examines the agreed materials, builds a sourced record and reports coverage and gaps.<br>Starts with `kpop map --json` or `kpop map --deep --json`, then follows the returned workflow. | `/kpopper:map` | `$map` |
-| [consolidate](skills/consolidate/SKILL.md) | Compares proposals with the record, surfaces disagreements and guides folding or refuting them.<br>May use `kpop consolidate --dry-run`, `kpop consolidate` or `kpop remeasure --run`. | `/kpopper:consolidate` | `$consolidate` |
-| [watch](skills/watch/SKILL.md) | Inspects branch checks and shared findings; configures background checks or daily review when requested.<br>May use `kpop watch status`, `kpop watch setup`, `kpop watch shared` or `kpop followups daily install`, plus the host's scheduler. | `/kpopper:watch` | `$watch` |
+| Command | Skill | What happens in practice · possible CLI calls |
+| --- | --- | --- |
+| `/kpopper:kpopper` | [kpopper](skills/kpopper/SKILL.md) | Explains the method and chooses the workflow that fits the task. CLI calls follow the selected workflow. |
+| `/kpopper:ground` | [ground](skills/ground/SKILL.md) | Retrieves relevant claims, sources and dependencies before answering, and checks what needs review.<br>May use `kpop pull <id>`, `kpop affects <id>`, `kpop check` or `kpop search "terms"`. |
+| `/kpopper:record` | [record](skills/record/SKILL.md) | Saves findings, their sources and reasons; records decisions, open questions and completed reviews.<br>May use `kpop update --file report.json`, `kpop add`, `kpop set` or `kpop review`. |
+| `/kpopper:map` | [map](skills/map/SKILL.md) | Examines the agreed materials, builds a sourced record and reports coverage and gaps.<br>Starts with `kpop map --json` or `kpop map --deep --json`, then follows the returned workflow. |
+| `/kpopper:consolidate` | [consolidate](skills/consolidate/SKILL.md) | Compares proposals with the record, surfaces disagreements and guides folding or refuting them.<br>May use `kpop consolidate --dry-run`, `kpop consolidate` or `kpop remeasure --run`. |
+| `/kpopper:watch` | [watch](skills/watch/SKILL.md) | Inspects branch checks and shared findings; configures background checks or daily review when requested.<br>May use `kpop watch status`, `kpop watch setup`, `kpop watch shared` or `kpop followups daily install`, plus the host's scheduler. |
 
 The agent chooses the calls for the task and the record's state, using its
 source-reading tools as needed.
 
-For example, `$ground workshop.ingredient_plan` asks Codex to retrieve that plan and
+For example, `/kpopper:ground workshop.ingredient_plan` asks the agent to retrieve that plan and
 its basis. **`ground` is a skill; the CLI reads use `open`, `pull`, `affects` and `check`.**
 Other hosts expose skills through their [adapters](adapters/README.md).
 
@@ -795,10 +795,10 @@ Other hosts expose skills through their [adapters](adapters/README.md).
 These skills require the [optional HTML setup](#experimental-applications) and explicit
 selection. Their interfaces and artifact formats may change.
 
-| Application | What happens in practice · possible CLI calls | Claude Code | Codex |
-|---|---|---|---|
-| [kpopper Hub](skills/hub/SKILL.md) | Builds a browsable snapshot of the record and checks its layout and coverage.<br>Uses `kpop experimental hub`, for example with `--open` or `--verify`. | `/kpopper:hub` | `$hub` |
-| [Annotated Documents](skills/annotated-doc/SKILL.md) | Authors or refreshes a standalone HTML document with selected evidence and reviewable copy updates.<br>Uses `kpop experimental annotated-doc` with operations such as `guide`, `build` and `refresh`. | `/kpopper:annotated-doc` | `$annotated-doc` |
+| Command | Application | What happens in practice · possible CLI calls |
+| --- | --- | --- |
+| `/kpopper:hub` | [kpopper Hub](skills/hub/SKILL.md) | Builds a browsable snapshot of the record and checks its layout and coverage.<br>Uses `kpop experimental hub`, for example with `--open` or `--verify`. |
+| `/kpopper:annotated-doc` | [Annotated Documents](skills/annotated-doc/SKILL.md) | Authors or refreshes a standalone HTML document with selected evidence and reviewable copy updates.<br>Uses `kpop experimental annotated-doc` with operations such as `guide`, `build` and `refresh`. |
 
 The CLI entry points are `kpop experimental hub` and `kpop experimental annotated-doc`.
 `page` and `document` remain compatibility aliases. The separate experimental
