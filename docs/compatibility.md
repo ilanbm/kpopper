@@ -4,6 +4,10 @@ kpopper shares a record and runtime across agents. Each host still has its own
 installation, skill discovery, hook protocol, filesystem and background behavior.
 Report those capabilities separately when deciding whether a release is ready.
 
+The current bundle names the HTML application skills `hub` and `annotated-doc` and
+retains `page` and `document` as compatibility aliases. The dated host observations
+below predate this rename.
+
 ## Verification matrix
 
 Compatibility work started 2026-09-16, with follow-up checks on 2026-09-17, on macOS arm64.

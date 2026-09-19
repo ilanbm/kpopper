@@ -28,7 +28,6 @@ kpop open                   # Project context, questions and attention signals
 kpop pull launch            # The announcement decision and its grounding
 kpop affects venue.status   # Decisions reachable from the venue's booking status
 kpop check                  # Check structure and declared breaking conditions
-kpop page --open            # Explore the record in a browser
 ```
 
 Then, in that example directory, record the cancellation:
@@ -317,14 +316,19 @@ checks of repository facts, or other deliberately configured observations. It is
 automatic external monitoring service. See [Contributing](../CONTRIBUTING.md) for the
 repository's measurement and CI contract.
 
-## Page and browser checks
+<a id="page-and-browser-checks"></a>
+
+## kpopper Hub and browser checks
+
+This is an optional experimental application. Install `kpopper[html]` first;
+see [application boundaries and compatibility](applications.md).
 
 ```sh
-kpop page --open
-kpop page --open --tree
-kpop page --verify
-kpop page                      # written to .kpopper/build/page.html
-kpop page --checks .kpopper/build/page.html
+kpop experimental hub --open
+kpop experimental hub --open --tree
+kpop experimental hub --verify
+kpop experimental hub                      # written to .kpopper/build/page.html
+kpop experimental hub --checks .kpopper/build/page.html
 ```
 
 The renderer generates a self-contained HTML snapshot. The deterministic `--verify` checks
@@ -333,7 +337,7 @@ and `playwright-core`, which is not bundled:
 
 ```sh
 npm i --no-save playwright-core
-kpop page --checks .kpopper/build/page.html
+kpop experimental hub --checks .kpopper/build/page.html
 ```
 
 The checker looks for the driver beside the page; `NODE_PATH` can point at an existing
@@ -344,20 +348,25 @@ interactive page; a preview that strips JavaScript will show only part of its be
 See [PAGE.md](../skills/kpopper/PAGE.md) for arrangements, components, reference cards,
 localization, coverage and prose-drift checks.
 
-## Authored HTML documents
+<a id="authored-html-documents"></a>
 
-`kpop document build` packages an authored document with its selected evidence,
-`document inspect` validates and reads a saved copy without running its scripts, and
-`document refresh` prepares a new copy against explicitly supplied sources. The authoring
+## Annotated Documents
+
+This is an optional experimental application using the same `kpopper[html]` extra.
+
+`kpop experimental annotated-doc build` packages an authored document with its selected evidence,
+`annotated-doc inspect` validates and reads a saved copy without running its scripts, and
+`annotated-doc refresh` prepares a new copy against explicitly supplied sources. The authoring
 agent creates anchors and mapping during ordinary document work. The final HTML contains
 all display resources and review state; only source refresh needs the agent and inputs.
-See [the user flow](documents.md) and run `kpop document guide` for the author contract.
+See [the user flow](documents.md) and run `kpop experimental annotated-doc guide` for the author contract.
 
 ## Distribution and implementation
 
 | Part | Source |
 |---|---|
-| Method and agent guidance | [skills/kpopper](../skills/kpopper/SKILL.md), one skill per occasion beside it: [ground](../skills/ground/SKILL.md), [record](../skills/record/SKILL.md), [map](../skills/map/SKILL.md), [document](../skills/document/SKILL.md), [page](../skills/page/SKILL.md), [consolidate](../skills/consolidate/SKILL.md), [watch](../skills/watch/SKILL.md) |
+| Method and agent guidance | [skills/kpopper](../skills/kpopper/SKILL.md), one skill per occasion beside it: [ground](../skills/ground/SKILL.md), [record](../skills/record/SKILL.md), [map](../skills/map/SKILL.md), [annotated-doc](../skills/annotated-doc/SKILL.md), [hub](../skills/hub/SKILL.md), [consolidate](../skills/consolidate/SKILL.md), [watch](../skills/watch/SKILL.md) |
+| Optional application entry points | [scripts/applications](../scripts/applications), [installation and boundaries](applications.md) |
 | CLI dispatcher | [scripts/cli.py](../scripts/cli.py), also exposed by `scripts/kpopper` |
 | YAML reader, checks and writer | [scripts/provenance.py](../scripts/provenance.py) |
 | Background report processing | [scripts/ingestion.py](../scripts/ingestion.py) |
@@ -366,7 +375,7 @@ See [the user flow](documents.md) and run `kpop document guide` for the author c
 | Browser verification | [scripts/verify_page.js](../scripts/verify_page.js) |
 | Agent integration | [hooks](../hooks/hooks.json), [adapters](../adapters/README.md) |
 
-PyPI installs the Python CLI and page tools. Agent plugins add the method and host-specific
+PyPI installs the core Python CLI; the `html` extra supplies the optional application runtime. Agent plugins add the method and host-specific
 hooks. The npm package provides the Node browser checker, not the Python CLI. Shared code
 comes from the same source files, with one version across distribution manifests.
 

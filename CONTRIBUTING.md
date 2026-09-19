@@ -32,7 +32,7 @@ git remote add upstream https://github.com/ilanbm/kpopper.git
 git switch -c my-change
 python3 -m venv .venv
 source .venv/bin/activate
-python -m pip install -e .
+python -m pip install -e ".[html]"
 ```
 
 On Windows, create the environment with `py -m venv .venv` and activate it in PowerShell
@@ -42,7 +42,7 @@ does not support durable report batching, which requires POSIX file locking.
 | If you are changing… | Start here |
 |---|---|
 | The CLI, reader or record writes | `scripts/`, `tests/` and the [reference](docs/reference.md) |
-| The record page or standalone documents | `scripts/page/`, `scripts/document/` and `tests/` |
+| kpopper Hub or Annotated Documents | `scripts/applications/`, supporting assets in `scripts/page/` and `scripts/document/`, and `tests/` |
 | Agent guidance or integration | `skills/`, `hooks/` and [adapters](adapters/README.md) |
 | An example or explanation | `examples/`, `docs/` and `README.md` |
 | The optional checked-session runtime | `scripts/session/` and [checked sessions](docs/checked-sessions.md) |
@@ -67,7 +67,7 @@ Before submitting a code change, run the ordinary test suite and record checks:
 python -m unittest discover -s tests
 kpop --frozen check
 kpop --frozen consolidate --dry-run
-kpop --frozen page --verify
+kpop --frozen experimental hub --verify
 ```
 
 If `.kpopper/view.yaml` changes because you updated the record, include that generated view.
@@ -126,7 +126,7 @@ and what would prompt reconsideration. Routine fixes need no new decision entry.
 ## Record and measurement checks
 
 Every pull request runs the skill/release contracts, CI selection tests, `kpop check`,
-`kpop consolidate --dry-run`, `kpop remeasure --run` and `kpop page --verify` on
+`kpop consolidate --dry-run`, `kpop remeasure --run` and `kpop experimental hub --verify` on
 Python 3.13. It fails if `.kpopper/view.yaml` no longer matches the record it renders from.
 The checkout remains GitHub's proposed merge result.
 
@@ -258,7 +258,7 @@ version publishes, so a release that failed is made by rerunning its own run rat
 pushing again.
 
 The pull request is opened by the workflow's own token, which runs no checks of its own, so
-the script runs `kpop check` and `kpop page --verify` on the release tree before pushing
+the script runs `kpop check` and `kpop experimental hub --verify` on the release tree before pushing
 it. One repository setting must allow it, once: *Settings → Actions → General → Workflow
 permissions → Allow GitHub Actions to create and approve pull requests*. Until then the branch
 is pushed and the run says which command opens the pull request by hand.
@@ -284,16 +284,16 @@ every channel, but the driver that drives the browser ships with none of them, s
 local step:
 
 ```
-kpop page
+kpop experimental hub
 npm i --no-save playwright-core
-kpop page --checks .kpopper/build/page.html
+kpop experimental hub --checks .kpopper/build/page.html
 ```
 
 `--checks` runs the copy of the checker that came with the reader, so it works the same from a
 checkout and from an installed command. The driver is found in the `node_modules` beside the
 page; point `NODE_PATH` at another one to use a project's own.
 
-None of that is a substitute for looking. `kpop page --open` renders the page and opens it in
+None of that is a substitute for looking. `kpop experimental hub --open` renders the page and opens it in
 your own browser, and `--tree` lands on the tree. It has to be a real browser: the provenance
 layer is all JavaScript, so a preview pane or a viewer that does not run the page's scripts shows
 every word of it and none of its behaviour.

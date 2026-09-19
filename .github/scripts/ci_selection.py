@@ -53,6 +53,7 @@ def families(path):
         return set()
     if (path.startswith(("scripts/document/", "tests/document-support/"))
             or path in {"scripts/documents.py", "scripts/document_cli.py", "scripts/document_html.py",
+                        "scripts/applications/document.py", "scripts/applications/annotated_doc.py",
                         "scripts/document-guide.md", "tests/document_ui_fixture.py", "tests/test_document_ui.cjs"}
             or (path.startswith("tests/test_document") and path.endswith(".py"))):
         return {"documents"}

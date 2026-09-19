@@ -1,14 +1,14 @@
-# The page
+# kpopper Hub
 
 *Reference for `render_page.py`, which ships with the kpopper plugin. Read this when you
 are about to build or change a page; it is not part of what a session reads to start.*
 
 `render_page.py` turns any record into one self-contained HTML file — no domain knowledge,
-nothing typed twice. The first two are what `kpop page` runs for you:
+nothing typed twice. The first two are what `kpop experimental hub` runs for you:
 
 ```bash
-kpop page                                                # the page, at .kpopper/build/page.html
-kpop page --verify                                       # deterministic, no browser
+kpop experimental hub                                                # the page, at .kpopper/build/page.html
+kpop experimental hub --verify                                       # deterministic, no browser
 ```
 
 The third has no wrapper, so it needs the directory the scripts sit in. Locate that the same way
@@ -298,7 +298,7 @@ session recorded. Declare `serves` and pick nothing of it and `--verify` fails: 
 be kept. An intent that recorded nothing stands outside coverage - it is said once and counted
 nowhere, since nothing could serve it and nothing needs to.
 
-**Coverage is mechanical and deliberately dumb.** Every build and every `check` hold the page
+**Coverage is mechanical and deliberately dumb.** Every explicit build and `kpop experimental hub --verify` hold the page
 against the intents and print what they count, as facts:
 
 - each intent no tab serves, with one hint beside it: the prefixes it wrote, and how many of
@@ -315,13 +315,10 @@ already picks most of what it wrote is a session's judgment - declare that the t
 intent, add a section, or open a tab - recorded as an arrangement decision with its own falsifier
 over these counts. The mechanism decides none of it and carries no threshold.
 
-The opener says the newest unserved intent in its `next:` line - one line, and `check` carries
-the rest; an arrangement whose sign appeared comes first in that line, since it is the gap read
-by a decision. The Stop gate holds the session's end against the mark its opener took and reminds,
-once, about what the session itself left: the record failing worse than it found it, an intent
-it left unserved, entries it wrote with no intent recorded. What was already red or unserved
-when the session opened never bounces it. The two commands behind the hooks, `mark <state
-file>` and `gate <state file>`, are the hooks' own.
+Coverage and arrangement findings belong to `kpop experimental hub --verify`.
+Ordinary record checks, the session opener and the Stop gate do not render the page
+or require a tab to serve every session. A project using the page should run its
+explicit verification alongside the record check.
 
 ## Arrangements: the decisions the page is held to
 
@@ -382,7 +379,7 @@ the decision in a section of its own.
 
 **A shape move reads by the arrangement's own sign.** When a tab's stored `shape:` no longer
 matches the record and an arrangement governs the tab, the move is *fired* if that arrangement's
-`wrong_if` holds - the banner, the failure at `--verify`, the `next:` line at `open` - and *muted*
+`wrong_if` holds - the banner and the failure at `--verify` - and *muted*
 otherwise: said quietly with the counts beside it as facts (spill, unserved, drift, and the share
 of what sessions recorded since *this* arrangement was born that nothing picks), and settled by
 `kpop review` whenever a session next reads it. The mechanism draws no line of its own. A tab
@@ -392,10 +389,10 @@ no arrangement governs keeps the plain banner.
 out-of-tree record has no git to ask. What the link sees is the radical layer, and only that:
 
 - a tab that earns intents no arrangement rests on is *an arrangement no decision records* -
-  a note, at `--verify` and `check`: add one;
+  a note at `--verify`: add one;
 - a standing arrangement whose sources no tab earns together - a split, a gutting, a deletion -
-  is *the brief does not serve … as it decided*: a failure at `--verify` **and at `check`**, so
-  the Stop gate bounces once on a record `--verify` never runs on;
+  is *the brief does not serve … as it decided*: a failure at `--verify`;
+  ordinary `check` leaves presentation validation to the application;
 - two arrangements with no source in common, both earning sources on one tab, is a merge no
   decision records: a failure the same way - re-decide the one whose occasion changed, and review
   the other;
@@ -526,7 +523,7 @@ A judgment may rest on a count, and a falsifier may draw its line against one:
 `wrong_if: "page.spill > 0"`. These names are never written and never stored. One becomes an
 entry the moment something in the record mentions it, with its value counted each time the
 record is read (`graph.*`) or each time the page is built (`page.*` — a predicate over it is
-decided by `page --verify`, and `check` says so). Every page name is counted before the
+decided by `kpop experimental hub --verify`, and `check` says so). Every page name is counted before the
 arrangement's own falsifiers are decided, and a falsifier over one that holds fails `page
 --verify`. One of them can hold no value: `page.drift` needs a `born` to count from, and a
 record whose arrangements carry none leaves it uncounted - the page says *not counted yet*

@@ -125,10 +125,10 @@ class PluginRuntime(unittest.TestCase):
 
     def test_partial_private_runtime_does_not_fall_back_to_path(self):
         python, site = self.repaired()
-        shutil.rmtree(site / "html5lib")
+        shutil.rmtree(site / "yaml")
         result = self.hook()
         self.assertIn(str(python), result.stdout)
-        self.assertIn("html5lib", result.stdout)
+        self.assertIn("yaml", result.stdout)
         self.assertIn("setup", result.stdout)
         self.assertNotIn("KPOPPER_AGENT_CONTEXT", result.stdout)
 
@@ -181,6 +181,21 @@ class PluginRuntime(unittest.TestCase):
                 mock.call([sys.executable, "-I", "-m", "venv", str(directory)], check=True),
                 mock.call([python, "-I", "-m", "pip", "--isolated", "install", *R.REQUIREMENTS], check=True)])
 
+    def test_explicit_html_setup_extends_the_same_private_runtime(self):
+        with mock.patch.dict(os.environ, self.env):
+            directory = R.runtime_dir()
+            python = str(R.venv_python(directory))
+            status = {"python": python, "prefix": str(directory), "base_prefix": "/base",
+                      "errors": ["html5lib missing"]}
+            with mock.patch.object(R, "probe", side_effect=[status, dict(status, errors=[])]) as probe, \
+                    mock.patch.object(R.subprocess, "run") as run:
+                self.assertEqual(R.main(["setup", "--applications", "html"]), 0)
+            self.assertEqual(R.runtime_dir(), directory)
+            self.assertEqual(probe.call_args.kwargs['modules'], R.MODULES + R.HTML_MODULES)
+            self.assertEqual(run.call_args.args[0],
+                [python, "-I", "-m", "pip", "--isolated", "install",
+                 *R.REQUIREMENTS, *R.HTML_REQUIREMENTS])
+
     def test_setup_does_not_count_ambient_pythonpath_as_installed(self):
         _, site = self.repaired()
         ambient = self.root / "ambient dependencies"
@@ -223,6 +238,10 @@ class RuntimeContract(unittest.TestCase):
         line = next(line for line in (ROOT / "pyproject.toml").read_text().splitlines()
                     if line.startswith("dependencies = "))
         self.assertEqual(list(R.REQUIREMENTS), json.loads(line.split(" = ", 1)[1]))
+        html = next(line for line in (ROOT / "pyproject.toml").read_text().splitlines()
+                    if line.startswith("html = "))
+        self.assertEqual(list(R.HTML_REQUIREMENTS), json.loads(html.split(" = ", 1)[1]))
+        self.assertFalse(set(R.HTML_MODULES) & set(R.MODULES))
 
     def test_hook_preserves_exit_code_and_arguments(self):
         with mock.patch.object(R, "select", return_value={"python": "/private/python", "errors": []}), \

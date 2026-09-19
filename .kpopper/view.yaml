@@ -68,7 +68,8 @@ tabs:
 
   - title: What holds
     occasion: "you are about to write something here and need to know what this project already decided, and on what"
-    serves: [s.2026_09_03_coverage, s.2026_09_03_written_layer, s.2026_09_03_hypotheses,
+    serves: [s.2026_09_18_application_names, s.2026_09_18_experimental_applications,
+             s.2026_09_03_coverage, s.2026_09_03_written_layer, s.2026_09_03_hypotheses,
              s.2026_09_04_priors_count, s.2026_09_03_arrangements,
              s.2026_09_04_consolidate, s.2026_09_04_sameness, s.2026_09_04_calibration,
              s.2026_09_04_prior_reversal_share, s.2026_09_04_forks_chapter, s.2026_09_04_remeasure,
@@ -154,7 +155,8 @@ tabs:
 
   - title: What this rests on
     occasion: "you are weighing a decision here and want to see the ground under it rather than the reasoning on top"
-    serves: [s.2026_09_02_priors, s.2026_09_03_language, s.2026_09_01_consolidation,
+    serves: [s.2026_09_18_experimental_applications,
+             s.2026_09_02_priors, s.2026_09_03_language, s.2026_09_01_consolidation,
              s.2026_09_04_calibration, s.2026_09_10_standalone_html,
              s.2026_09_16_versions_core, s.2026_09_17_host_compatibility]
     sections:

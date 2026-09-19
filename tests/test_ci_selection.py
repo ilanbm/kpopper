@@ -40,7 +40,7 @@ class Selection(unittest.TestCase):
         self.assertTrue(all(CI.select(["SECURITY.md", "scripts/reasoning/lean/Kernel.lean"]).values()))
 
     def test_documents_run_python_and_dom_document_tests(self):
-        for path in ("scripts/documents.py", "scripts/document/layer.js", "scripts/document-guide.md",
+        for path in ("scripts/documents.py", "scripts/applications/annotated_doc.py", "scripts/document/layer.js", "scripts/document-guide.md",
                      "tests/test_document_cli.py", "tests/test_documents.py", "tests/document_ui_fixture.py",
                      "tests/document-support/package-lock.json"):
             with self.subTest(path=path):

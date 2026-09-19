@@ -1,9 +1,11 @@
-# HTML documents with evidence
+# Annotated Documents (experimental)
 
-Ask the agent for the document you want, for example: “Create an HTML project update
-from these notes” or “Make an HTML report from these results.” With kpopper active,
-the authoring workflow creates the content, design and source/check mapping together.
-You do not need to prepare a mapping or ask for a second provenance operation.
+Install the optional HTML runtime with `python -m pip install 'kpopper[html]'`, or
+use the [plugin application setup](applications.md#installation-and-use). Request
+Annotated Documents explicitly, or give the agent a standing
+preference to use it. A generic HTML request does not select this application.
+The agent creates the content, design and source/check mapping together. You do not
+need to prepare the mapping. Interfaces and artifact formats remain experimental.
 
 The result is one HTML file containing the authored document, styles, scripts, required
 assets, selected evidence snapshots and review state. Open it in a browser with
@@ -48,10 +50,10 @@ later source changes by itself.
 ## Author and developer entry points
 
 ```sh
-kpop document guide
-kpop document build --html draft.html --manifest evidence.json --out report.html
-kpop document inspect report.html
-kpop document refresh report.html --sources sources.json --out report-updated.html
+kpop experimental annotated-doc guide
+kpop experimental annotated-doc build --html draft.html --manifest evidence.json --out report.html
+kpop experimental annotated-doc inspect report.html
+kpop experimental annotated-doc refresh report.html --sources sources.json --out report-updated.html
 ```
 
 The [author guide](../scripts/document-guide.md) describes exact source selectors,

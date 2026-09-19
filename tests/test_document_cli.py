@@ -33,15 +33,16 @@ class DocumentCLI(unittest.TestCase):
                               cwd=self.root, env=self.env, capture_output=True, text=True, encoding="utf-8")
 
     def build(self, *extra):
-        return self.cli("document", "build", "--html", "draft.html", "--manifest", "manifest.json", "--out", "result.html", *extra)
+        return self.cli("experimental", "annotated-doc", "build", "--html", "draft.html", "--manifest", "manifest.json", "--out", "result.html", *extra)
 
     def test_help_and_packaged_guide_explain_the_author_flow(self):
         public = self.cli("--help")
-        self.assertIn("kpop document", public.stdout)
-        help_result = self.cli("document", "--help")
+        self.assertIn("kpop experimental", public.stdout)
+        self.assertIn("kpop experimental annotated-doc", self.cli("experimental", "--help").stdout)
+        help_result = self.cli("experimental", "annotated-doc", "--help")
         self.assertEqual(help_result.returncode, 0, help_result.stderr)
         self.assertIn("refresh", help_result.stdout)
-        guide = self.cli("document", "guide")
+        guide = self.cli("experimental", "annotated-doc", "guide")
         self.assertEqual(guide.returncode, 0, guide.stderr)
         self.assertIn("The\nuser supplies neither anchors nor mapping", guide.stdout)
 
@@ -54,7 +55,7 @@ class DocumentCLI(unittest.TestCase):
         for name in ("draft.html", "manifest.json", "source.json"):
             (self.root / name).unlink()
         self.assertEqual({p.name for p in self.root.iterdir()}, {"result.html"})
-        inspect = self.cli("document", "inspect", "result.html")
+        inspect = self.cli("experimental", "annotated-doc", "inspect", "result.html")
         self.assertEqual(inspect.returncode, 0, inspect.stderr)
         data = json.loads(inspect.stdout)
         self.assertEqual(data["checks"]["capacity"]["status"], "match")
@@ -72,13 +73,13 @@ class DocumentCLI(unittest.TestCase):
         original = (self.root / "result.html").read_bytes()
         (self.root / "source.json").write_text('{"capacity":30}')
         (self.root / "sources.json").write_text(json.dumps({"room": self.source}))
-        changed = self.cli("document", "refresh", "result.html", "--sources", "sources.json", "--out", "refreshed.html")
+        changed = self.cli("experimental", "annotated-doc", "refresh", "result.html", "--sources", "sources.json", "--out", "refreshed.html")
         self.assertEqual(changed.returncode, 0, changed.stderr)
         self.assertEqual((self.root / "result.html").read_bytes(), original)
         data = D.load_artifact((self.root / "refreshed.html").read_text(encoding="utf-8"))
         data["groups"][0].update(decision="accepted", decided_at="2026-09-12T00:00:00Z")
         D.write_output(data, self.root / "chosen.html")
-        reopened = self.cli("document", "inspect", "chosen.html")
+        reopened = self.cli("experimental", "annotated-doc", "inspect", "chosen.html")
         self.assertEqual(reopened.returncode, 0, reopened.stderr)
         self.assertEqual(json.loads(reopened.stdout)["checks"]["capacity"]["actual"], "30")
         self.assertEqual(json.loads(reopened.stdout)["proposals"][0]["decision"], "accepted")
@@ -92,7 +93,7 @@ class DocumentCLI(unittest.TestCase):
         self.assertEqual(self.build("--overwrite").returncode, 0)
         for out in ("draft.html", "manifest.json", "source.json"):
             before = (self.root / out).read_bytes()
-            result = self.cli("document", "build", "--html", "draft.html", "--manifest", "manifest.json", "--out", out, "--overwrite")
+            result = self.cli("experimental", "annotated-doc", "build", "--html", "draft.html", "--manifest", "manifest.json", "--out", out, "--overwrite")
             self.assertNotEqual(result.returncode, 0)
             self.assertIn("separate copy", result.stderr)
             self.assertEqual((self.root / out).read_bytes(), before)

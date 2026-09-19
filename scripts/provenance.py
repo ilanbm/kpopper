@@ -2047,20 +2047,6 @@ def core_check(paths):
         if node['support']['status'] == 'reserved':
             states = sorted({item['state'] for item in node['support']['reservations']})
             notes.append(nid + ': support reserved (' + ', '.join(states) + ')')
-    try:
-        page = _peer('render_page')
-        page_info = page.core_build(paths, context=context)[4]
-        unresolved = page_info['coverage'].get('unresolved_selectors', [])
-        if unresolved:
-            failures.append('page selectors unresolved (' + ', '.join(unresolved) + ')')
-        misfits = page_info['coverage'].get('renderer_misfits', [])
-        if misfits:
-            failures.append('page renderer mismatch (' + '; '.join(misfits) + ')')
-        stale = page_info['coverage'].get('stale_shapes', [])
-        if stale:
-            failures.append('page shape moved (' + '; '.join(stale) + ')')
-    except (OSError, ValueError, TypeError) as error:
-        failures.append('page projection unavailable (' + str(error) + ')')
     for line in notes:
         print('NOTE ' + line)
     for line in failures:
@@ -2223,7 +2209,7 @@ def check_lines(paths):
         elif [t for t in predicate_refs(j["pred"]) if t in PAGE]:
             named_page = sorted({t for t in predicate_refs(j["pred"]) if t in PAGE})
             note.append(f"{name}: wrong_if reads {', '.join(named_page)}, which is counted "
-                        f"when the page is built - `page --verify` decides it")
+                        f"when the page is built - `kpop experimental hub --verify` decides it")
         elif condition is None:
             # one comparison, and the reading it needs is not there: a side that holds no
             # value yet, or a truth value held against something that is not one. The shape
@@ -2268,22 +2254,10 @@ def check_lines(paths):
         note.append(priors)
     # A legend the opener could not print, said here since the opener says nothing.
     note += legend_notes(doc.get("meta"), ids)
-    # Coverage, when a brief sits beside the record: which intents no tab of the page serves,
-    # and where what each of them wrote falls - facts the page counted, said here so a session
-    # that never builds the page still hears them. The page decides its own falsifiers; the
-    # brief held against the arrangements that stand is the record's own claim, so a brief
-    # that no longer carries what an arrangement decided fails here too.
-    info = _page_or_error(paths, read_mode=getattr(doc, 'read_mode', None))
-    if info and "error" in info:
-        note.append(f"the brief beside the record could not be built: {info['error']}")
-    elif info:
-        sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-        import render_page as R
-        if info.get("coverage"):
-            note += R.coverage_lines(info["coverage"], full=False)
-        af, an = R.arrangement_lines(info, page_decides=True)
-        fail += af
-        note += an
+    # Presentation is an optional application. Its failures cannot change the
+    # record check; page-dependent predicates above remain explicitly undecided.
+    if _brief_beside(_first_of(paths)):
+        note.append("page layout not checked; use kpop experimental hub --verify")
     # `also:` where the named id is an entry after all: the retirement reading does not hold
     # there, and the sibling reading is a record's own business - so this is said, and decided
     # by nobody but a person.
@@ -2509,21 +2483,6 @@ def opening(paths, budget=25, chars=None, host=None):
                   "(what a change reaches) · check")
         rest = (" · pull <entry|prefix> (values with sources) · affects <entry> "
                 "(what a change reaches)")
-    # An intent no tab of the page serves is said at every open, in the one line that is
-    # already about what to do next: the newest first and how many more, never the list -
-    # the slot is for what needs a person, and check names the rest with a hint each. An
-    # arrangement whose sign appeared comes first: it is the gap read by a decision.
-    info = _page_or_error(paths, read_mode=getattr(doc, 'read_mode', None))
-    facts = (info.get("arrangements") or {}) if info and "error" not in info else {}
-    fired = sorted(k for k, f in facts.items() if f["fired"])
-    cov = info.get("coverage") if info and "error" not in info else None
-    unserved = [r["id"] for r in cov["rows"] if r["unserved"]] if cov else []
-    if fired:
-        footer = (f"next: check - {fired[0]} fired ({short(jud[fired[0]]['pred'], 40)})"
-                  + (f" (and {len(fired) - 1} more)" if len(fired) > 1 else "") + rest)
-    elif unserved:
-        footer = (f"next: check - {unserved[0]} is served by no tab"
-                  + (f" (and {len(unserved) - 1} more)" if len(unserved) > 1 else "") + rest)
     if moves and doc.hypotheses:
         # hypotheses beside the record are a move of their own on a host that has the skill
         n = len(doc.hypotheses)
@@ -3143,53 +3102,16 @@ def _brief_beside(path):
     return b if os.path.exists(b) else None
 
 
-def _page_info(paths, read_mode=None):
-    """What the page knows when it is built beside this record - its counts, its shape, the
-    coverage report - or None when no brief sits beside the record."""
-    sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-    import render_page as R
-    mode = read_mode or ('frozen' if _RAW_READS.get() else os.environ.get('KPOPPER_READ_MODE', 'live'))
-    paths = R.record_paths(paths, read_mode=mode)
-    brief = R.find_brief(paths, read_mode=mode)
-    if not brief:
-        return None
-    return R.build(paths, brief, read_mode=mode)[4]
-
-
 def _page_side(paths, read_mode=None):
-    """page.* as the page counts them - every name, mentioned or not, since a new judgment
-    may be the first to rest on one - the record's shape, and every arrangement held against
-    the brief: -> (values, shape, arrangements). ({}, None, {}) without a brief; a count the
-    page could not take is left out."""
-    info = _page_info(paths) if read_mode is None else _page_info(paths, read_mode=read_mode)
-    if info is None:
-        return {}, None, {}
-    return ({k: v for k, v in info["page"].items() if v is not None}, info["shape"],
-            info.get("arrangements") or {})
+    """Explicit presentation authoring crosses into the optional page application.
 
-
-def _page_or_error(paths, read_mode=None):
-    """What the page knows, or None without a brief, or {"error": why} when the brief cannot
-    be built - the reader never fails on the page's account, it says so in a line."""
+    Ordinary reads, checks and hooks never call this compatibility seam.
+    """
     try:
-        return _page_info(paths) if read_mode is None else _page_info(paths, read_mode=read_mode)
-    except (Exception, SystemExit) as e:
-        return {"error": str(e)}
-
-
-def _coverage(paths):
-    """The page's coverage report, or None: without a brief, or when the brief cannot be
-    built."""
-    info = _page_or_error(paths)
-    if info and "error" in info:
-        return info
-    return info["coverage"] if info and info.get("coverage") else None
-
-
-def _unserved(paths):
-    """Intents no tab of the page serves, newest first."""
-    cov = _coverage(paths)
-    return [r["id"] for r in cov["rows"] if r["unserved"]] if cov and "rows" in cov else []
+        return _peer('applications.hub').page_side(paths, read_mode=read_mode,
+                                                   reader=(sys.modules.get(__name__) or _Reader()))
+    except (ImportError, ValueError) as error:
+        raise Refused('presentation application unavailable: ' + str(error)) from None
 
 
 def snapshot_value(dep, raw, ids, jud, page):
@@ -3342,7 +3264,7 @@ def _state(name, j, raw, ids, fields, touched=()):
         if why_undecided(j["pred"]):
             return "UNKNOWN", f"wrong_if is not a comparison this reader decides ({pred})"
         if any(t in PAGE for t in predicate_refs(j["pred"])):
-            return "UNKNOWN", f"wrong_if is counted when the page is built ({pred}) - page --verify decides it"
+            return "UNKNOWN", f"wrong_if is counted when the page is built ({pred}) - kpop experimental hub --verify decides it"
         return "UNKNOWN", f"wrong_if cannot currently be evaluated ({pred}); a value or the Lean core is unavailable, or types differ"
     return "HOLDS", f"wrong_if does not hold ({pred})"
 
@@ -5840,13 +5762,13 @@ def untouched(base, paths, turns, host=None, nudged_at=None, workspace=None):
 
 
 def mark(state_path, paths):
-    """Written at session start: how many problems check finds, which intents no tab of the
-    page serves, the ids the record holds, and the record and tree as the session found
-    them."""
+    """Written at session start: record failures, IDs and the initial tree.
+
+    Keep an empty legacy unserved field for older readers; hooks do not assess pages."""
     doc = load(paths)
     ids, jud, fields = infer(doc)
     fail, _, _, _, _ = check_lines(paths)
-    state = {"fails": len(fail), "failures": fail, "unserved": _unserved(paths),
+    state = {"fails": len(fail), "failures": fail, "unserved": [],
              "ids": sorted(_every_id(doc, ids)),
              "judgments": _gate_judgments(ids, jud, with_builtins(doc, ids, jud, fields)),
              "nudged": False, **tree_state(paths)}
@@ -5908,10 +5830,6 @@ def gate(state_path, paths, turns=0, host=None, nudged_at=None, *, _recording_co
                    f"session start).")
         out.append("Fix the record - or declare the hole with blocked_on - before finishing:")
         out += ["FAIL " + f for f in added[:12]]
-    for s in _unserved(paths):
-        if s not in base["unserved"]:
-            out.append(f"{s} is served by no tab of the page - serve it in a tab whose sections "
-                       f"pick what it wrote, or leave it outside and say why")
     if base["ids"] is not None:
         raw = bodies(doc)
         # what a hypothesis holds is the session's writing too, attributed the same way

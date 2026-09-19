@@ -66,3 +66,16 @@ d.fold_passes_the_one_door:
     p.supersede_doors: 1
   ended: the standing judgment holds, and a person takes this over it by name
   day: '2026-09-16'
+d.first_meeting_artifact:
+- rests_on:
+  - doc.agent_graph
+  verdict: a record born in this session, on a surface that can publish, is rendered and shown as a live
+    artifact without asking
+  because: The first turn must feel like a normal session, and the first meeting with the record should
+    be the page, alive - not a yaml file. Surfaces that strip script from previews get the browser instead.
+  blocked_on: 'observational: falsified if users close or ignore the unrequested page more often than
+    they touch it'
+  seen:
+    doc.agent_graph: read 2026-09-01
+  ended: the standing judgment holds, and a person takes this over it by name
+  day: '2026-09-18'

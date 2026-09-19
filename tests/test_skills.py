@@ -15,8 +15,8 @@ import yaml
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 SKILLS = ROOT / "skills"
-# the occasions, and the ceiling each body keeps so an invocation costs the occasion and not the method
-OCCASIONS = {"kpopper": 140, "ground": 160, "record": 260, "map": 110, "document": 70, "page": 60,
+# Canonical occasions and thin compatibility aliases, with a body-size ceiling for each.
+OCCASIONS = {"kpopper": 140, "ground": 160, "record": 260, "map": 110, "annotated-doc": 70, "hub": 60, "document": 12, "page": 12,
              "consolidate": 160, "watch": 110}
 DESCRIPTION_CHARS = 1536     # the host truncates the listing's description past this
 COMMUNITY_DOCS = ("README.md", "CONTRIBUTING.md", "SECURITY.md", "CODE_OF_CONDUCT.md")
@@ -146,7 +146,7 @@ def frontmatter(text):
 
 
 class Skills(unittest.TestCase):
-    def test_one_skill_per_occasion_each_named_for_its_directory(self):
+    def test_canonical_skills_and_aliases_match_their_directories(self):
         found = {p.parent.name for p in SKILLS.glob("*/SKILL.md")}
         self.assertEqual(found, set(OCCASIONS))
         for name in OCCASIONS:

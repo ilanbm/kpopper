@@ -85,7 +85,8 @@ The Python commands are the same as in other hosts:
 kpop pull <entry-or-prefix>
 kpop affects <entry>
 kpop check
-kpop page
+# Optional experimental application; install kpopper[html] first.
+kpop experimental hub
 ```
 
 Open the generated `.kpopper/build/page.html` in a browser. Browser automation and

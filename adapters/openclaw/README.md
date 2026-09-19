@@ -132,7 +132,7 @@ give the exact pass criteria and distinguish command tests from conversation tes
 | Stop gate | Run `check` explicitly; no enforced stop hook. |
 | Grounding nudges and background delivery | No OpenClaw integration in the bundle. |
 | Mapping, workers and scheduled reviews | Host-specific dispatch and scheduling are unverified; skill discovery does not supply them. |
-| Record page | `kpop page` creates a local HTML file; viewing or delivering it depends on the host. |
+| Record page | `kpop experimental hub` (optional `kpopper[html]` application) creates a local HTML file; viewing or delivering it depends on the host. |
 
 ## Verification boundary
 

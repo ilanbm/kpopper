@@ -14,8 +14,14 @@ import sys
 
 HERE = Path(__file__).resolve().parent
 # Keep aligned with project.dependencies; the regression test checks the contract.
-REQUIREMENTS = ("PyYAML>=5.1", "html5lib>=1.1,<2", "tinycss2>=1.2,<2", "tzdata")
-MODULES = ("yaml", "html5lib", "tinycss2", "tzdata")
+REQUIREMENTS = ("PyYAML>=5.1", "tzdata")
+MODULES = ("yaml", "tzdata")
+try:
+    from .applications import HTML_REQUIREMENTS, HTML_MODULES
+except ImportError:
+    # Also support loading the launcher by path, outside the plugin directory.
+    sys.path.insert(0, str(HERE))
+    from applications import HTML_REQUIREMENTS, HTML_MODULES
 PROBE = """
 import importlib, json, sys
 errors = []
@@ -28,7 +34,7 @@ for name in %r:
         errors.append(name + ': ' + str(error))
 print(json.dumps({'python': sys.executable, 'prefix': sys.prefix,
                   'base_prefix': sys.base_prefix, 'errors': errors}))
-""" % (MODULES,)
+"""
 
 
 def runtime_dir():
@@ -49,11 +55,11 @@ def venv_python(directory):
     return directory / ("Scripts/python.exe" if os.name == "nt" else "bin/python")
 
 
-def probe(python, isolated=False):
+def probe(python, isolated=False, modules=MODULES):
     try:
         # Match a hook script's import environment, including existing user-site
         # installs. For -c, cwd=HERE stands in for the script's sys.path[0].
-        command = [str(python), *(["-I"] if isolated else []), "-c", PROBE]
+        command = [str(python), *(["-I"] if isolated else []), "-c", PROBE % (modules,)]
         result = subprocess.run(command, cwd=HERE, capture_output=True,
                                 text=True, encoding="utf-8", timeout=10)
         if result.returncode:
@@ -70,23 +76,27 @@ def select():
     return probe(python)
 
 
-def setup_command():
+def setup_command(html=False):
     command = [sys.executable, str(HERE / "plugin_runtime.py"), "setup"]
+    if html:
+        command += ["--applications", "html"]
     prefix = ""
     if os.environ.get("KPOPPER_RUNTIME_HOME"):
         prefix = "KPOPPER_RUNTIME_HOME=" + shlex.quote(os.environ["KPOPPER_RUNTIME_HOME"]) + " "
     return prefix + shlex.join(command)
 
 
-def diagnostic(status):
+def diagnostic(status, html=False):
     return ("kpopper Python dependencies unavailable; the record has not been opened.\n"
             "Bootstrap Python: %s\nSelected Python: %s\n%s\n"
             "Run in a terminal (creates a private virtualenv; installs dependencies from PyPI):\n%s\n"
             "Then start a new session. Hooks never install packages."
-            % (sys.executable, status["python"], "; ".join(status["errors"]), setup_command()))
+            % (sys.executable, status["python"], "; ".join(status["errors"]), setup_command(html)))
 
 
-def setup():
+def setup(html=False):
+    modules = MODULES + HTML_MODULES if html else MODULES
+    requirements = REQUIREMENTS + HTML_REQUIREMENTS if html else REQUIREMENTS
     directory = runtime_dir()
     directory.parent.mkdir(parents=True, exist_ok=True)
     lock = directory.with_name(directory.name + ".setup-lock")
@@ -104,20 +114,22 @@ def setup():
         subprocess.run([sys.executable, "-I", "-m", "venv", str(directory)], check=True)
         # Setup must install dependencies into the venv itself, even if the
         # terminal supplies them through PYTHONPATH that the host will not inherit.
-        status = probe(python, isolated=True)
+        status = probe(python, isolated=True, modules=modules)
         # Never hand pip a system interpreter, even if a partial venv is damaged.
         if (Path(status.get("prefix", "")).resolve() != directory.resolve()
                 or status.get("prefix") == status.get("base_prefix")):
             raise ValueError("The private Python could not be verified as a virtualenv: " + str(python))
         if status["errors"]:
             print("Installing plugin dependencies into " + str(python), flush=True)
-            subprocess.run([str(python), "-I", "-m", "pip", "--isolated", "install", *REQUIREMENTS], check=True)
-        status = probe(python, isolated=True)
+            subprocess.run([str(python), "-I", "-m", "pip", "--isolated", "install", *requirements], check=True)
+        status = probe(python, isolated=True, modules=modules)
         if status["errors"]:
-            print(diagnostic(status), file=sys.stderr)
+            print(diagnostic(status, html), file=sys.stderr)
             return 1
         print("Ready. Hook Python: " + status["python"])
         print("Plugin code: " + str(HERE))
+        if html:
+            print("Experimental HTML applications ready; invoke kpop experimental hub or kpop experimental annotated-doc explicitly.")
         print("Start a new host session; KPOPPER_AGENT_CONTEXT.command will name this Python.")
         return 0
     finally:
@@ -131,7 +143,11 @@ def main(argv=None):
     args = parser.parse_args(argv)
     try:
         if args.action == "setup":
-            return setup()
+            setup_parser = argparse.ArgumentParser(prog="plugin_runtime.py setup")
+            setup_parser.add_argument("--applications", choices=("html",),
+                                      help="also install the experimental HTML applications")
+            selected = setup_parser.parse_args(args.args)
+            return setup(html=selected.applications == "html")
         status = select()
         if status["errors"]:
             # Startup failures are context the host can show, not a stack trace or

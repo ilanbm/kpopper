@@ -173,14 +173,33 @@ def _read_day(body, raw):
     return P._read_on(body, raw)
 
 
-def page_of(paths):
-    """What the brief holds every arrangement to, taken once before anything is tested - the
-    same facts the write path asks its door with. Empty without a brief, or when the brief
-    cannot be built: the fold never fails on the page's account."""
+def page_of(paths, hyps=None):
+    """Read presentation facts only for an explicit layout contribution.
+
+    Ordinary record consolidation has no renderer dependency. Layout proposals keep
+    the same optional application validation as a direct presentation write.
+    """
+    if hyps is not None:
+        doc = P.load(paths)
+        ids, jud, fields = P.infer(doc)
+        raw = P.bodies(doc)
+        # A proposal can introduce both its intent source and its first layout.
+        # Classify using the proposed shape; evaluate against the base as before.
+        candidate = doc
+        for hypothesis in hyps:
+            candidate = P.layered(candidate, hypothesis)
+        _, _, candidate_fields = P.infer(candidate)
+        candidate_raw = P.bodies(candidate)
+        relevant = any(isinstance(body, dict) and body != raw.get(nid) and
+                       (P._arrangement_shaped(body, candidate_fields, candidate_raw) or
+                        (nid in jud and P.is_arrangement(jud[nid], raw)))
+                       for hypothesis in hyps for nid, body in hypothesis.get('raw', {}).items())
+        if not relevant:
+            return {}
     try:
         return P._page_side(paths)[2]
-    except (Exception, SystemExit):
-        return {}
+    except (Exception, SystemExit) as error:
+        raise P.Refused('presentation contribution cannot be checked: ' + str(error)) from None
 
 
 def union_of(doc, hyps, base_check=None, as_of=None, page=None, take=(), drops=None):
@@ -788,7 +807,7 @@ def _fold_candidate(paths, names=(), refs=(), stamp=None, take=(), drops=None):
                                 f"so the fold is a commit of its own - commit first, then consolidate "
                                 f"again")
         fail_b, _, moved_b, _, _ = P.check_lines(paths)
-        page = page_of(paths)
+        page = page_of(paths, hyps)
         c = union_of(doc, hyps, (fail_b, moved_b), stamp, page, take, drops)
         for l in report(c):
             print(l)
@@ -1518,7 +1537,7 @@ def main(argv=None):
         print("no hypotheses beside the record - nothing to consolidate")
         return 0
     fail_b, _, moved_b, _, _ = P.check_lines(paths)
-    c = union_of(doc, hyps, (fail_b, moved_b), as_of, page_of(paths), take, drops)
+    c = union_of(doc, hyps, (fail_b, moved_b), as_of, page_of(paths, hyps), take, drops)
     for l in report(c):
         print(l)
     stray = _stray(c, take)

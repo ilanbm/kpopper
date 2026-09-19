@@ -18,7 +18,7 @@ Record the first useful finding within the user's authorization. Sources and fac
 
 Where no record resolves for the workspace, `kpop add` creates `GROUNDING.yaml` at the repository root (the working directory outside git) with that first entry, and a later `add` extends it. A registered record that is unavailable is a location problem: restore it rather than starting another. The [shape reference](../kpopper/references/shape.md) shows the sections, pointer records and how a record lives outside a tree that cannot hold it.
 
-**Make a new record useful to its reader.** Link and briefly explain the finding when its explanation is due. Showing the shipped page is optional, when a visual view helps and is supported.
+**Make a new record useful to its reader.** Link and briefly explain the finding when its explanation is due. Show the optional experimental hub only on an explicit request or standing preference.
 
 ## Record what the work calls for
 
@@ -222,8 +222,8 @@ entries with `src` / `source` fields must reconcile those fields before using th
 judgments and their current inputs as well as check failures. When updated readings make an
 unchanged, pre-existing judgment's explicit condition fire, the stop gate lets the recording
 finish. It does not refresh `seen`, rewrite the verdict or make `check` green. Review that
-judgment before relying on it. New or edited broken judgments, structural errors and page
-arrangement failures still receive the gate's reminder. Older count-only marks retain their
+judgment before relying on it. New or edited broken judgments and structural errors still receive the gate's reminder.
+Page arrangement checks belong to explicit application verification. Older count-only marks retain their
 conservative behavior until the next session opens.
 
 ## Background capture, shared facts and deferred work

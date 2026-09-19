@@ -31,7 +31,7 @@ jobs:
           python-version: "3.13"
 
       - name: Install the package the way a user gets it
-        run: pip install .
+        run: pip install ".[html]"
 
       - name: Keep the release pull request current
         env:

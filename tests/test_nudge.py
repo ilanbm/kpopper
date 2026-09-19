@@ -30,7 +30,9 @@ class Scratch(unittest.TestCase):
         state = pathlib.Path(self.tmp.name).resolve() / "state"
         state.mkdir()
         self.env = dict(os.environ, TMPDIR=str(state), GIT_AUTHOR_NAME="t", GIT_AUTHOR_EMAIL="t@t",
-                        GIT_COMMITTER_NAME="t", GIT_COMMITTER_EMAIL="t@t")
+                        GIT_COMMITTER_NAME="t", GIT_COMMITTER_EMAIL="t@t",
+                        PATH=str(pathlib.Path(sys.executable).parent) + os.pathsep + os.environ["PATH"],
+                        KPOPPER_RUNTIME_HOME=str(state / "no-private-runtime"))
 
     def git(self, *args, cwd=None):
         code, out, err = run("git", *args, cwd=cwd or self.dir, env=self.env)

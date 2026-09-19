@@ -3,7 +3,7 @@
 Claude Code and Codex copy plugin files; that does not install Python dependencies.
 Their hook commands start a small standard-library-only launcher with `python3`.
 The launcher selects a private dependency environment if one exists, otherwise it
-checks that bootstrap Python. It probes `yaml`, `html5lib`, `tinycss2` and `tzdata`
+checks that bootstrap Python. It probes only the core dependencies, `yaml` and `tzdata`
 before running the hook. Failures name the actual interpreter and the repair command;
 they do not block the host session or claim the record was opened.
 
@@ -46,6 +46,20 @@ must agree. The command's second element names the active plugin's `scripts/cli.
 Use both elements together when recording or reading from that session; an unrelated
 `kpop` on PATH may be a different installed version. `setup` does not create a global
 `kpop` command. For that, see the [standalone CLI guide](reference.md#try-it-from-the-command-line).
+
+## Optional experimental HTML applications
+
+Ordinary setup installs core dependencies only. To add the page and document applications
+in the same private runtime, run:
+
+```sh
+python3 "/absolute/path/to/kpopper/scripts/plugin_runtime.py" setup --applications html
+```
+
+This explicitly adds `html5lib` and `tinycss2`; it does not change which runtime the hooks
+select or activate applications on ordinary tasks. Hooks remain usable if an optional
+application dependency is missing. Use the next session's `KPOPPER_AGENT_CONTEXT.command`
+with `experimental hub` or `experimental annotated-doc`. See [applications](applications.md).
 
 ## Check the installation
 
