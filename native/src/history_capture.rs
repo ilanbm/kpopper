@@ -9,8 +9,6 @@ use crate::{
     source_clock::Ancestry,
     value::{Integer, TypedValue as V},
 };
-#[cfg(unix)]
-use fs2::FileExt;
 use std::{
     collections::BTreeMap,
     fs::{self, File},
@@ -143,24 +141,17 @@ struct Reader {
     total: usize,
     inventory: BTreeMap<(String, String), Observation>,
     // The directory flock is the existing POSIX reader/writer coordination boundary.
-    #[cfg(unix)]
-    _lock: File,
+    _lock: crate::history_transaction_fs::DirectoryGuard,
 }
 impl Reader {
     fn open(root: &Path) -> Result<Self> {
         let root = root.canonicalize()?;
         require(root.is_dir(), "invalid_path")?;
-        #[cfg(unix)]
-        let lock = {
-            let lock = File::open(&root)?;
-            FileExt::lock_shared(&lock)?;
-            lock
-        };
+        let lock = crate::history_transaction_fs::DirectoryGuard::acquire(&root, false)?;
         Ok(Self {
             root,
             total: 0,
             inventory: BTreeMap::new(),
-            #[cfg(unix)]
             _lock: lock,
         })
     }
@@ -233,15 +224,7 @@ impl Reader {
         Ok(names)
     }
     fn journal_guard(&self, path: &str) -> Result<()> {
-        let path = self.target(path)?;
-        if path.exists() {
-            require(
-                path.metadata()?.len() <= MAX_CAPTURE_BYTES as u64,
-                "history_limit",
-            )?;
-            return Err(error("recovery_required"));
-        }
-        Ok(())
+        crate::history_transaction_fs::check_reader_journal(&self.root, path)
     }
     fn verify(&self) -> Result<()> {
         for ((_, relative), expected) in &self.inventory {

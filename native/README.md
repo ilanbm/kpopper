@@ -146,6 +146,24 @@ rules; commit ancestry is supplied explicitly to the library. Capture does not
 evaluate conditions or review sufficiency, reconcile conflicted YAML, or publish a
 transaction. `Capture::verify_current` rechecks the captured bytes and membership.
 
+The detached `history_transaction` library decodes Python prepared mutations,
+validates semantic receipts and exact file images, and serializes canonical typed
+journals up to 64 MiB. Its companion `history_transaction_fs` implements guarded
+legacy publication and authority transitions, exact retry collision checks,
+participant journal replicas, forward recovery and restoration of before images.
+Restoration retains immutable history evidence. Every publisher/recovery call takes
+a mandatory verifier for the complete reader-resolved baseline and capabilities;
+the prepared digest does not grant publication permission.
+
+Capture and these publishers share reentrant POSIX directory locks. A scoped
+auxiliary owner can read only its exact pending auxiliary envelope while holding
+the exclusive lock. Other readers refuse pending journals. These are library
+boundaries tested on disposable files; the public experimental store commands
+above still use their earlier limited writer. Branch-adoption capsule validation
+currently refuses with `unsupported_branch_adoption`. General Store preparation,
+generation cancellation orchestration, grouped transitions and the public product
+write flows are not yet integrated with these primitives.
+
 - No judgments, dependency pins, formulas, competing histories, review/refutation,
   temporal semantics, Lean evaluation, MCP, UI, migration or production activation.
 - No authority v2 cancellation metadata, legacy 40-hex storage operations or typed

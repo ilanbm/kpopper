@@ -976,6 +976,13 @@ sources:
     name: "Focused graph export contract"
     file: "docs/graph-export.md"
     read: "2026-09-14"
+  doc.history_source_clock_order:
+    name: "Source clock grouping and retained mapping order"
+    file: "scripts/versions.py"
+    at: "_subject_entry lines 488-492 at b639cdbab1e3c624ad52708350166d222821aec1;
+         native/src/history_reduce.rs lines 281-294 at 0b6c99a135e9ff36f3c26b4f5dbd55598ed69d5f"
+    read: "2026-09-19"
+    scope: {kind: code, commit: "0b6c99a135e9ff36f3c26b4f5dbd55598ed69d5f"}
   doc.history_writer_contract_c5cc6a3:
     name: "History writer, replay and branch adoption contract at c5cc6a3"
     file: "docs/history-contract.md"
@@ -1724,6 +1731,16 @@ known:
     at: "docs/history-contract.md; scripts/history_authoring.py; tests/test_history_batch_final_world.py"
     scope: "Source replay admission contract; recorded provenance is not proof of external source
             truth"
+  p.history_source_clock_order:
+    name: "Source mapping order in history clock grouping"
+    v: "Source-clock grouping uses the Python string representation of body.from, which preserves
+        nested mapping order. Captured reduction retains original source mapping order separately
+        from canonical typed identity. Canonicalizing source bytes before reduction can change
+        accepted heads while preserving typed object identity."
+    from: doc.history_source_clock_order
+    on: "2026-09-19"
+    at: "Python 3.14.5 source-order conformance in native/tests/history_reduction.rs and
+         fixtures/history-reduction.json"
   p.history_writer_compatibility:
     name: "History writer compatibility"
     v: "History batch receipt v6 validates the final staged world while retaining per-action

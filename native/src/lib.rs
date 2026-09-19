@@ -5,6 +5,8 @@ pub mod history_capture;
 pub mod history_contract;
 pub mod history_paths;
 pub mod history_reduce;
+pub mod history_transaction;
+pub mod history_transaction_fs;
 pub mod history_yaml;
 pub mod identity;
 pub mod source_clock;
