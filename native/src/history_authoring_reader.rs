@@ -14,6 +14,26 @@ pub(crate) enum AuthoringReader<'a> {
     Ordinary(Reader<'a>),
 }
 impl<'a> AuthoringReader<'a> {
+    /// Ordinary receipts retain authored evidence without requiring inferred
+    /// judgment fields. Explicit acts can target a record with no judgments.
+    pub fn document_evidence(
+        doc: &V,
+        runtime: Option<&'a Runtime>,
+        audit: Option<&ReplayAudit>,
+        versions: &Map,
+    ) -> Result<V> {
+        if string_is(&map(&F::capabilities(doc, None)?)?["profile"], "core/v1") {
+            Self::new(doc, runtime)?.evidence(doc, audit, versions)
+        } else {
+            Ok(V::Map(Map::from([
+                (
+                    "kind".into(),
+                    V::Text("authored-computational-projection/v1".into()),
+                ),
+                ("document".into(), doc.clone()),
+            ])))
+        }
+    }
     pub fn new(doc: &V, runtime: Option<&'a Runtime>) -> Result<Self> {
         if string_is(&map(&F::capabilities(doc, None)?)?["profile"], "core/v1") {
             Ok(Self::Core(Box::new(World::new(

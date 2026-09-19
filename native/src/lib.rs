@@ -1,6 +1,7 @@
 #![forbid(unsafe_code)]
 
 pub mod authoring_source;
+pub mod direct_history;
 pub mod history_activation;
 mod history_activation_verify;
 pub mod history_adapter;
@@ -88,6 +89,7 @@ pub mod reasoning_snapshot;
 mod reasoning_temporal;
 pub mod reasoning_transport;
 pub mod reasoning_values;
+mod recording_privacy;
 pub mod source_capture;
 pub mod source_clock;
 mod source_document;

@@ -154,3 +154,119 @@ fn explicit_record_and_copy_only_option_validation() {
     );
     assert_eq!(tree(tmp.path()), before);
 }
+
+fn imported(root: &Path, record: &str) -> std::path::PathBuf {
+    let source = root.join("source");
+    fs::create_dir(&source).unwrap();
+    fs::write(source.join("GROUNDING.yaml"), record).unwrap();
+    let copy = root.join("copy");
+    ok(run(
+        &source,
+        &["history", "migrate", "--to", copy.to_str().unwrap()],
+    ));
+    copy
+}
+
+#[test]
+fn explicit_acts_and_edited_view_proposals_retain_old_claims() {
+    let tmp = tempfile::tempdir().unwrap();
+    let copy = imported(tmp.path(), "known: {p.x: {v: 1}}\n");
+    let status = ok(run(&copy, &["history", "status"]));
+    let version = status["subjects"]["p.x"]["heads"][0].as_str().unwrap();
+    let retired = ok(run(
+        &copy,
+        &[
+            "history",
+            "retire",
+            "--subject",
+            "p.x",
+            "--of",
+            version,
+            "--because",
+            "no longer used",
+        ],
+    ));
+    assert_eq!(retired["state"], "committed");
+    assert_eq!(
+        ok(run(&copy, &["history", "status"]))["subjects"]["p.x"]["acceptance"],
+        "retired"
+    );
+    ok(run(
+        &copy,
+        &[
+            "history",
+            "accept",
+            "--subject",
+            "p.x",
+            "--of",
+            version,
+            "--because",
+            "explicitly restore",
+        ],
+    ));
+    assert_eq!(
+        ok(run(&copy, &["history", "status"]))["subjects"]["p.x"]["acceptance"],
+        "accepted"
+    );
+    let entry = copy.join("GROUNDING.yaml");
+    fs::write(
+        &entry,
+        fs::read_to_string(&entry).unwrap().replace("v: 1", "v: 8"),
+    )
+    .unwrap();
+    let result = ok(run(
+        &copy,
+        &[
+            "history",
+            "reconcile",
+            "--record-proposals",
+            "--proposal-subject",
+            "p.x",
+            "--because",
+            "observed changed reading",
+            "--by",
+            "fixture",
+        ],
+    ));
+    assert_eq!(result["state"], "proposed");
+    let status = ok(run(&copy, &["history", "status"]));
+    assert_eq!(status["subjects"]["p.x"]["heads"][0], version);
+    assert!(fs::read_to_string(&entry).unwrap().contains("v: 1"));
+}
+
+#[test]
+fn private_historical_claim_stays_a_private_draft() {
+    let tmp = tempfile::tempdir().unwrap();
+    let copy = imported(tmp.path(), "known: {p.x: {v: 1, private: true}}\n");
+    let status = ok(run(&copy, &["history", "status"]));
+    let version = status["subjects"]["p.x"]["heads"][0].as_str().unwrap();
+    let entry = fs::read(copy.join("GROUNDING.yaml")).unwrap();
+    let home = tmp.path().join("private");
+    let output = Command::new(env!("CARGO_BIN_EXE_kpop-native"))
+        .current_dir(&copy)
+        .env("KPOPPER_PRIVATE_HOME", &home)
+        .args([
+            "history",
+            "retire",
+            "--subject",
+            "p.x",
+            "--of",
+            version,
+            "--because",
+            "private decision",
+        ])
+        .output()
+        .unwrap();
+    let result = ok(output);
+    assert_eq!(result["state"], "private draft");
+    let path = Path::new(result["path"].as_str().unwrap());
+    assert!(path.starts_with(home.canonicalize().unwrap()));
+    let retained: Value = serde_json::from_slice(&fs::read(path).unwrap()).unwrap();
+    let retained = kpop_native::value::TypedValue::from_tagged(&retained)
+        .unwrap()
+        .to_json()
+        .unwrap();
+    assert_eq!(retained["action"]["of"], version);
+    assert_eq!(fs::read(copy.join("GROUNDING.yaml")).unwrap(), entry);
+    assert_eq!(ok(run(&copy, &["history", "status"]))["commits"], 1);
+}

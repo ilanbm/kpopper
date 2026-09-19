@@ -24,9 +24,38 @@ pub struct Options {
     pub to: Option<PathBuf>,
     #[arg(long, value_parser = ["live", "frozen"])]
     pub read_mode: Option<String>,
+    #[arg(long)]
+    pub subject: Option<String>,
+    #[arg(long = "of")]
+    pub target: Option<String>,
+    #[arg(long)]
+    pub over: Vec<String>,
+    #[arg(long)]
+    pub because: Option<String>,
+    #[arg(long)]
+    pub by: Option<String>,
+    #[arg(long)]
+    pub record_proposals: bool,
+    #[arg(long)]
+    pub proposal_subject: Vec<String>,
 }
 
-fn fresh_id(prefix: &str) -> Result<String> {
+impl Options {
+    pub fn selects_public_operation(&self) -> bool {
+        self.record.is_some()
+            || self.to.is_some()
+            || self.read_mode.is_some()
+            || self.subject.is_some()
+            || self.target.is_some()
+            || !self.over.is_empty()
+            || self.because.is_some()
+            || self.by.is_some()
+            || self.record_proposals
+            || !self.proposal_subject.is_empty()
+    }
+}
+
+pub(crate) fn fresh_id(prefix: &str) -> Result<String> {
     let token = tempfile::Builder::new()
         .prefix("kpop-identity-")
         .rand_bytes(24)
@@ -64,7 +93,18 @@ pub fn run(options: &Options, cwd: &Path, frozen: bool) -> Result<Value> {
         .as_deref()
         .ok_or_else(|| error("history operation required"))?;
     require(
-        ["status", "reconcile", "rebuild", "migrate"].contains(&operation),
+        [
+            "status",
+            "reconcile",
+            "rebuild",
+            "migrate",
+            "accept",
+            "refute",
+            "correct",
+            "propose",
+            "retire",
+        ]
+        .contains(&operation),
         "history operation unsupported",
     )?;
     require(
@@ -80,6 +120,35 @@ pub fn run(options: &Options, cwd: &Path, frozen: bool) -> Result<Value> {
     require(paths.len() == 1, "choose one logical record entry")?;
     let entry = &paths[0];
     let result = match operation {
+        "accept" | "refute" | "correct" | "propose" | "retire" => {
+            require(
+                options.subject.as_ref().is_some_and(|s| !s.is_empty())
+                    && options.target.as_ref().is_some_and(|s| !s.is_empty())
+                    && options.because.as_ref().is_some_and(|s| !s.is_empty()),
+                "explicit acts require --subject, --of, and --because",
+            )?;
+            let action = crate::value::TypedValue::from_json(&json!({
+                "kind":operation, "id":options.subject, "of":options.target,
+                "over":options.over, "because":options.because,
+            }))?;
+            json_value(&crate::direct_history::act(&original, &cwd, &action)?)?
+        }
+        "reconcile" if options.record_proposals => {
+            let because = options
+                .because
+                .as_deref()
+                .filter(|s| !s.is_empty())
+                .ok_or_else(|| error("recording proposals requires --because"))?;
+            let subjects = (!options.proposal_subject.is_empty())
+                .then_some(options.proposal_subject.as_slice());
+            json_value(&crate::direct_history::proposals(
+                &original,
+                &cwd,
+                subjects,
+                because,
+                options.by.as_deref(),
+            )?)?
+        }
         "status" => status(entry)?,
         "reconcile" => json_value(&Store::new(entry)?.prepare_reconciliation(None, true, &[])?)?,
         "rebuild" => {

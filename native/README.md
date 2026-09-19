@@ -109,9 +109,27 @@ activate the source record. `--record` selects an explicit record and `--read-mo
 selects live or frozen migration capture. The default is frozen in Simple mode and
 live in Advanced mode; global `--frozen` also selects frozen capture.
 
-Explicit history acts, adoption and edited-view proposal routing remain unconnected.
-The old subject-oriented `history <subject>` command is available only inside an
-explicitly marked feasibility store.
+Explicit history acts target an immutable version with a recorded reason:
+
+```sh
+kpop-native history retire --subject p.input --of VERSION --because 'no longer used'
+kpop-native history accept --subject p.input --of VERSION --because 'verified again'
+kpop-native history reconcile --record-proposals --proposal-subject p.input \
+  --because 'retain the edited reading for review'
+kpop-native recover --json
+kpop-native recover --rollback --json
+```
+
+`refute`, `correct` and `propose` use the same explicit-act interface; `--over`
+names each version superseded by an acceptance or correction. Private claims are
+retained as drafts outside the project. Edited-view proposals remain unaccepted.
+An exact, policy-bound journal is retained before publication. Recovery completes
+those bytes; rollback can cancel only an uncommitted operation with unchanged
+mutable before images. Interrupted immutable object publication is preserved.
+
+Adoption and runtime capability declarations remain unconnected. The old
+subject-oriented `history <subject>` command is available only inside an explicitly
+marked feasibility store.
 
 ## Supported history boundary
 

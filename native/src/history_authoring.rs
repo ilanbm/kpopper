@@ -778,11 +778,12 @@ fn prepare_act_inner(
     let projected = candidate(capture, &draft)?;
     let after_doc = document(&projected)?;
     let cap = F::capabilities(&after_doc, Some(profile))?;
-    let mut before_world =
-        crate::history_authoring_reader::AuthoringReader::new(&before_doc, runtime)?;
-    let mut after_world =
-        crate::history_authoring_reader::AuthoringReader::new(&after_doc, runtime)?;
-    let mut before = before_world.evidence(&before_doc, audit, &accepted_versions(capture)?)?;
+    let mut before = crate::history_authoring_reader::AuthoringReader::document_evidence(
+        &before_doc,
+        runtime,
+        audit,
+        &accepted_versions(capture)?,
+    )?;
     map_mut(&mut before)?.insert(
         "authoring".into(),
         obj([
@@ -795,7 +796,12 @@ fn prepare_act_inner(
             ("baseline", capture.baseline.clone()),
         ]),
     );
-    let mut after = after_world.evidence(&after_doc, audit, &accepted_versions(&projected)?)?;
+    let mut after = crate::history_authoring_reader::AuthoringReader::document_evidence(
+        &after_doc,
+        runtime,
+        audit,
+        &accepted_versions(&projected)?,
+    )?;
     map_mut(&mut after)?.insert(
         "authoring".into(),
         obj([
@@ -937,9 +943,9 @@ pub(crate) fn prepare_proposal_inner(
     )?
     .insert(subject.into(), body.clone());
     hypothetical = destination(&hypothetical)?;
-    let mut hypothetical_world =
-        crate::history_authoring_reader::AuthoringReader::new(&hypothetical, runtime)?;
     if version == 9 && judgment {
+        let mut hypothetical_world =
+            crate::history_authoring_reader::AuthoringReader::new(&hypothetical, runtime)?;
         let mut seen = Map::new();
         for dep in &deps {
             let dep = text(dep)?;
@@ -950,8 +956,6 @@ pub(crate) fn prepare_proposal_inner(
         map_mut(&mut body)?.insert(snapshot_field.into(), V::Map(seen));
         map_mut(map_mut(&mut hypothetical)?.get_mut(collection).unwrap())?
             .insert(subject.into(), body.clone());
-        hypothetical_world =
-            crate::history_authoring_reader::AuthoringReader::new(&hypothetical, runtime)?;
     }
     let saw = saw(capture, subject)?;
     let (pins, _) = pins(capture, &deps, false)?;
@@ -991,8 +995,9 @@ pub(crate) fn prepare_proposal_inner(
     }
     validate_closure(&selected)?;
     let versions = accepted_versions(capture)?;
-    let mut before_world = crate::history_authoring_reader::AuthoringReader::new(&doc, runtime)?;
-    let mut before = before_world.evidence(&doc, audit, &versions)?;
+    let mut before = crate::history_authoring_reader::AuthoringReader::document_evidence(
+        &doc, runtime, audit, &versions,
+    )?;
     map_mut(&mut before)?.insert(
         "authoring".into(),
         obj([
@@ -1009,11 +1014,17 @@ pub(crate) fn prepare_proposal_inner(
             ("baseline", capture.baseline.clone()),
         ]),
     );
-    let mut after_world = crate::history_authoring_reader::AuthoringReader::new(&doc, runtime)?;
-    let mut after = after_world.evidence(&doc, audit, &versions)?;
+    let mut after = crate::history_authoring_reader::AuthoringReader::document_evidence(
+        &doc, runtime, audit, &versions,
+    )?;
     map_mut(&mut after)?.insert(
         "proposal".into(),
-        hypothetical_world.evidence(&hypothetical, audit, &versions)?,
+        crate::history_authoring_reader::AuthoringReader::document_evidence(
+            &hypothetical,
+            runtime,
+            audit,
+            &versions,
+        )?,
     );
     let ids = new
         .iter()

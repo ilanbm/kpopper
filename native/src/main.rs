@@ -45,7 +45,12 @@ enum Command {
     Add(WriteArgs),
     Set(WriteArgs),
     History(kpop_native::public_history::Options),
-    Recover,
+    Recover {
+        #[arg(long)]
+        record: Option<PathBuf>,
+        #[arg(long)]
+        rollback: bool,
+    },
     /// Consume a SessionStart JSON payload; never installs a hook or runtime.
     SessionStart,
     /// Canonical typed identity for JSON-compatible input on stdin.
@@ -263,7 +268,7 @@ fn run(args: Args) -> Result<Value> {
                 unreachable!()
             }
         }
-        Command::Recover => Store::recover(&root),
+        Command::Recover { .. } => Store::recover(&root),
         command @ (Command::Add(_) | Command::Set(_)) => {
             let kind = if matches!(command, Command::Add(_)) {
                 "add"
@@ -302,6 +307,49 @@ fn run(args: Args) -> Result<Value> {
 }
 fn main() {
     let args = Args::parse();
+    if let Command::Recover { record, rollback } = &args.command {
+        let result = (|| {
+            let cwd = args
+                .workspace
+                .clone()
+                .map(Ok)
+                .unwrap_or_else(std::env::current_dir)?;
+            if cwd.join(".kpopper/native-feasibility.json").is_file() {
+                require(
+                    record.is_none() && !rollback,
+                    "public recovery options require a public record",
+                )?;
+                return Store::recover(&cwd);
+            }
+            let paths = match record {
+                Some(path) => vec![cwd.join(path)],
+                None => kpop_native::public_workspace::records(&cwd)?,
+            };
+            kpop_native::direct_history::recover(&paths, &cwd, *rollback)?.to_json()
+        })();
+        match result {
+            Ok(value) => {
+                if args.json || value.get("mutation_digest").is_none() {
+                    println!("{value}");
+                } else {
+                    println!(
+                        "{}: {}",
+                        value["state"].as_str().unwrap(),
+                        value["operation"].as_str().unwrap()
+                    );
+                }
+            }
+            Err(error) => {
+                if args.json {
+                    println!("{}", kpop_native::public_history::refusal(&error));
+                } else {
+                    println!("refused: {error}");
+                }
+                std::process::exit(1);
+            }
+        }
+        return;
+    }
     if let Command::History(options) = &args.command {
         let result = (|| {
             let cwd = args
@@ -311,7 +359,7 @@ fn main() {
                 .unwrap_or_else(std::env::current_dir)?;
             if cwd.join(".kpopper/native-feasibility.json").is_file() {
                 require(
-                    options.record.is_none() && options.to.is_none() && options.read_mode.is_none(),
+                    !options.selects_public_operation(),
                     "public history options require a public record",
                 )?;
                 return Store::history(&cwd, options.operation.as_deref());
