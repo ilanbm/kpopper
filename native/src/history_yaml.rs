@@ -441,6 +441,14 @@ pub fn decode_document(raw: &[u8]) -> Result<TypedValue> {
 }
 
 pub fn decode_source_document(raw: &[u8]) -> Result<SourceValue> {
+    decode_source(raw, true)
+}
+/// Ordinary physical sources may be empty or scalar; the caller owns their
+/// document-shape rules. History objects still require a mapping.
+pub fn decode_source_value(raw: &[u8]) -> Result<SourceValue> {
+    decode_source(raw, false)
+}
+fn decode_source(raw: &[u8], mapping: bool) -> Result<SourceValue> {
     require(raw.len() <= MAX_DOCUMENT_BYTES, "history_limit")?;
     std::str::from_utf8(raw).map_err(|_| invalid())?;
     let source = source_for_parser(raw)?;
@@ -455,8 +463,12 @@ pub fn decode_source_document(raw: &[u8]) -> Result<SourceValue> {
         matches!(reader.next()?, Event::StreamStart { .. }),
         "invalid_history_yaml",
     )?;
+    let start = reader.next()?;
+    if !mapping && matches!(start, Event::StreamEnd) {
+        return Ok(SourceValue::Scalar(TypedValue::Null));
+    }
     require(
-        matches!(reader.next()?, Event::DocumentStart { .. }),
+        matches!(start, Event::DocumentStart { .. }),
         "invalid_schema",
     )?;
     let event = reader.next()?;
@@ -467,7 +479,10 @@ pub fn decode_source_document(raw: &[u8]) -> Result<SourceValue> {
         "invalid_history_yaml",
     )?;
     let value = construct(node)?;
-    require(matches!(value, SourceValue::Map(_)), "invalid_schema")?;
+    require(
+        !mapping || matches!(value, SourceValue::Map(_)),
+        "invalid_schema",
+    )?;
     validate_value(&value.typed(), MAX_DOCUMENT_BYTES)?;
     Ok(value)
 }

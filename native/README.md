@@ -206,6 +206,15 @@ rules; commit ancestry is supplied explicitly to the library. Capture does not
 evaluate conditions or review sufficiency, reconcile conflicted YAML, or publish a
 transaction. `Capture::verify_current` rechecks the captured bytes and membership.
 
+The `source_capture` library captures ordinary records in source order and active
+history through two complete, verified loads. It retains exact private file bytes,
+source origins, physical and recorded hypotheses, routing observations and the
+detached computational Snapshot. Participant journals protect independently opened
+members; authored revision metadata excludes private history storage. Frozen and
+Simple live reads are supported. Advanced live reads currently refuse with
+`pending_capture_required` until their actual pending and target observations are
+available. This library does not activate installed command or write routes.
+
 The detached `history_transaction` library decodes Python prepared mutations,
 validates semantic receipts and exact file images, and serializes canonical typed
 journals up to 64 MiB. Its companion `history_transaction_fs` implements guarded

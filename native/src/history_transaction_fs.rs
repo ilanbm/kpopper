@@ -122,6 +122,113 @@ pub(crate) fn check_reader_journal(root: &Path, journal: &str) -> Result<()> {
     }
     Ok(())
 }
+/// Check every local member guard before reading any participant. A replica
+/// contains local basenames only; it never authorizes following a private link.
+pub fn check_member_journals(entries: &[PathBuf]) -> Result<()> {
+    for entry in entries {
+        let parent = entry.parent().ok_or_else(|| error("invalid_path"))?;
+        if !parent.is_dir() {
+            continue;
+        }
+        let root = parent.canonicalize()?;
+        let name = to_str(Path::new(
+            entry.file_name().ok_or_else(|| error("invalid_path"))?,
+        ))?;
+        check_reader_journal(&root, &Layout::for_entry(name)?.journal)?;
+        let mut pending = BTreeSet::new();
+        for home in [".kpopper/.history-local", ".history-local"] {
+            let path = target(&root, home)?;
+            if !path.is_dir() {
+                continue;
+            }
+            for item in fs::read_dir(path)? {
+                let item = item?;
+                let filename = item.file_name();
+                let filename = filename.to_str().ok_or_else(|| error("invalid_path"))?;
+                if !filename.starts_with('.') && filename.ends_with(".json") {
+                    pending.insert(target(&root, &format!("{home}/{filename}"))?);
+                    require(pending.len() <= 1024, "history_limit")?;
+                }
+            }
+        }
+        let mut total = 0usize;
+        for path in pending {
+            let raw = read(&path)?.ok_or_else(|| error("invalid_pending_journal"))?;
+            total = total.saturating_add(raw.len());
+            require(total <= MAX_TRANSACTION_BYTES, "history_limit")?;
+            if owned_auxiliary(&root, &path, &raw)? {
+                continue;
+            }
+            let participating = (|| -> Result<bool> {
+                if raw.iter().find(|c| !c.is_ascii_whitespace()) == Some(&b'{') {
+                    let json = crate::store::json_input(&raw)?;
+                    let guard = V::from_json(&json)?;
+                    let g = schema(
+                        &guard,
+                        &["version", "kind", "operation", "digest", "members"],
+                        &[],
+                    )?;
+                    require(
+                        is_int(&g["version"], "1") && string_is(&g["kind"], "member_guard"),
+                        "invalid_member_guard",
+                    )?;
+                    token(&g["operation"])?;
+                    let digest = text(&g["digest"])?;
+                    require(
+                        digest.len() == 64 && crate::history_paths::object_id(digest),
+                        "invalid_member_guard",
+                    )?;
+                    require(
+                        path.file_name().and_then(|v| v.to_str())
+                            == Some(&format!("{digest}.json")),
+                        "invalid_member_guard",
+                    )?;
+                    let names = crate::history_view::list(&g["members"])?;
+                    require(
+                        !names.is_empty() && names.len() <= 100_000,
+                        "invalid_member_guard",
+                    )?;
+                    let mut previous = None;
+                    for member in names {
+                        let member = text(member)?;
+                        A::relative_path(member)?;
+                        require(
+                            !member.contains('/') && previous.is_none_or(|p| p < member),
+                            "invalid_member_guard",
+                        )?;
+                        previous = Some(member);
+                    }
+                    return Ok(names.iter().any(|v| string_is(v, name)));
+                }
+                let mutation = PreparedMutation::from_bytes(&raw)?;
+                let value = mutation.to_data();
+                let baseline = map(&map(&value)?["baseline"])?;
+                let namespace = baseline
+                    .get("transaction_root")
+                    .map(text)
+                    .transpose()?
+                    .map(PathBuf::from)
+                    .unwrap_or(root.clone());
+                require(namespace.is_absolute(), "invalid_pending_journal")?;
+                let journal = Layout::for_entry(&mutation_entry(&mutation)?)?.journal;
+                let primary = target(&namespace, &journal)?;
+                let mut expected = replicas(&namespace, &journal, &mutation)?;
+                expected.push(primary);
+                require(expected.contains(&path), "invalid_pending_journal")?;
+                let mut members = participants(&mutation)?;
+                members.extend(mutation.files().iter().map(|file| file.path.clone()));
+                Ok(members
+                    .iter()
+                    .map(|p| target(&namespace, p))
+                    .collect::<Result<Vec<_>>>()?
+                    .contains(&root.join(name)))
+            })()
+            .map_err(|e| error(&format!("invalid_pending_journal: {e}")))?;
+            require(!participating, "recovery_required")?;
+        }
+    }
+    Ok(())
+}
 /// Thread-bound, reentrant directory lock; clones keep the same kernel lock alive.
 pub struct DirectoryGuard {
     _held: Option<Rc<Held>>,

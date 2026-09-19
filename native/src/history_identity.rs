@@ -1164,6 +1164,7 @@ mod tests {
                     FS::auxiliary_owner(&store.root, &store.layout.journal, &mutation).unwrap();
                 FS::publish_auxiliary_journal(&store.root, &store.layout.journal, &mutation)
                     .unwrap();
+                FS::check_member_journals(std::slice::from_ref(&store.entry)).unwrap();
                 if phase > 0 {
                     for f in mutation
                         .files()
@@ -1191,6 +1192,12 @@ mod tests {
                 }
             }
             assert_eq!(store.capture().unwrap_err().0, "recovery_required");
+            assert_eq!(
+                FS::check_member_journals(std::slice::from_ref(&store.entry))
+                    .unwrap_err()
+                    .0,
+                "recovery_required"
+            );
             if phase == 0 {
                 store
                     .recover_auxiliary("before", Some(&runtime), &mut |_| Ok(()))
