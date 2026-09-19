@@ -87,7 +87,10 @@ class PluginRuntime(unittest.TestCase):
             self.assertEqual(saved.returncode, 0, saved.stderr + saved.stdout)
         self.payload["session_id"] = "reopened"
         reopened = self.hook(args=("--host", "codex"))
-        self.assertIn("2 entries", reopened.stdout)
+        self.assertEqual(reopened.returncode, 0, reopened.stderr)
+        self.assertIn("core/v1 snapshot", reopened.stdout)
+        self.assertIn("2 computational nodes; 2 history subjects", reopened.stdout)
+        self.assertNotIn("could not be opened", reopened.stdout)
         self.assertNotIn("unavailable", reopened.stdout + reopened.stderr)
         self.assertTrue((self.root / "kpopper-base-reopened").exists())
         read = subprocess.run([*context["command"], "pull", "m.seats"], env=self.env, cwd=self.project,

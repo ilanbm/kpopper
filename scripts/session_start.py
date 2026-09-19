@@ -50,7 +50,12 @@ def read_view(location, reader_args=None, host=None):
         result = _run("session_hook.py", [location["record"]], location["workspace"])
         if result.returncode != 3:
             return result, True
-        reader_args = ["--chars", str(LEGACY_CHARS), location["record"]]
+        if __package__:
+            from . import provenance
+        else:
+            import provenance
+        reader_args = ([location["record"]] if provenance.core_reader_selected([location["record"]])
+                       else ["--chars", str(LEGACY_CHARS), location["record"]])
     if host:
         reader_args = [*reader_args, "--host", host]
     return _run("provenance.py", ["open", *reader_args], location["workspace"]), False

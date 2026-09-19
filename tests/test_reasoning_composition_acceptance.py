@@ -121,7 +121,11 @@ class InstalledOperationalCLI(unittest.TestCase):
             self.assertEqual(record["meta"]["reasoning"]["profile"], "core/v1")
             self.assertEqual(marker["authority"], "history")
             self.assertEqual(record["meta"]["history"]["record_id"], marker["record_id"])
-            for command in (["open", "--json"], ["check"]):
+            for command in (["open", "--json"], ["check"], ["pull", "p.input"],
+                            ["affects", "p.input"], ["assess", "p.input"],
+                            ["export", "p.input"], ["search", "input"],
+                            ["page", "--out", str(root / "page.html")],
+                            ["session", "open", "--no-settings", "--tokens", "2000"]):
                 reopened = subprocess.run([sys.executable, str(self.cli_path()), *command],
                     cwd=root, text=True, capture_output=True, check=False)
                 self.assertEqual(reopened.returncode, 0, reopened.stdout + reopened.stderr)

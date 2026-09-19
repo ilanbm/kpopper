@@ -258,6 +258,8 @@ def _core_project(paths, seeds, direction='support', depth=1, max_nodes=12):
 
 def project(paths, seeds, direction='support', depth=1, max_nodes=12, profile=None):
     """Use the ordinary reader's roles, values and flags; never evaluate a partial record."""
+    if profile is None and P.core_reader_selected(paths):
+        profile = 'core/v1'
     if profile is not None:
         if profile != 'core/v1':
             raise ValueError('unsupported export profile')

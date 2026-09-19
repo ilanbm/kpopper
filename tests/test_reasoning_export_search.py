@@ -45,6 +45,16 @@ class CoreExportSearchTests(unittest.TestCase):
     def captured(self):
         return C.CapturedAssessment.capture([str(self.record)])
 
+    def test_declared_profile_selects_core_for_direct_export_and_search(self):
+        exported = E.project([str(self.record)], ['p.value'])
+        searched = S.search('Primary value', record=str(self.record))
+        self.assertEqual(exported['profile'], 'core/v1')
+        self.assertIn('snapshot_id', searched)
+        self.assertEqual(exported['snapshot_id'],
+                         E.project([str(self.record)], ['p.value'], profile='core/v1')['snapshot_id'])
+        self.assertEqual(searched['snapshot_id'],
+                         S.search('Primary value', record=str(self.record), profile='core/v1')['snapshot_id'])
+
     def test_export_projects_one_context_and_never_turns_unknown_into_false(self):
         captured = self.captured()
         with mock.patch.object(C.CapturedAssessment, 'capture', return_value=captured) as capture, \

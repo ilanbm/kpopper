@@ -257,6 +257,8 @@ def _core_corpus(record=None, state_dir=None, source_roots=None):
 
 
 def corpus(record=None, state_dir=None, source_roots=None, profile=None):
+    if profile is None and P.core_reader_selected([str(I._record_path(record))]):
+        profile = 'core/v1'
     if profile is not None:
         if profile != 'core/v1':
             raise ValueError('unsupported search profile')

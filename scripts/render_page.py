@@ -910,6 +910,8 @@ def build(paths, brief_path=None, page_path=None, *, read_mode=None, profile=Non
     a stated mode that disagrees with this one, and a dormant reasoning profile its own reading
     would have refused. The reader's `_page_or_error` catches everything, so both reach a read
     command as a note rather than a traceback."""
+    if profile is None and doc is None and (context is not None or P.core_reader_selected(paths)):
+        profile = 'core/v1'
     if profile == 'core/v1':
         if doc is not None:
             raise ValueError('the core page profile builds from its own reading')
@@ -2294,6 +2296,8 @@ def core_verify(paths, brief_path=None, *, read_mode=None, context=None):
 
 def measured_build(paths, brief_path=None, page_path=None, *, profile=None, context=None):
     """Explicit page construction publishes counts for the exact inputs it read."""
+    if profile is None and (context is not None or P.core_reader_selected(paths)):
+        profile = 'core/v1'
     if profile == 'core/v1':
         # The core page has a page-secondary/v1 revision over its exact brief and
         # derived values.  It deliberately does not publish that presentation back
@@ -2322,6 +2326,8 @@ def measured_build(paths, brief_path=None, page_path=None, *, profile=None, cont
 
 def verify(paths, brief_path=None, *, profile=None, context=None):
     """Deterministic, no browser. What only looking can catch is a separate job."""
+    if profile is None and (context is not None or P.core_reader_selected(paths)):
+        profile = 'core/v1'
     if profile == 'core/v1':
         return core_verify(paths, brief_path, context=context)
     if profile is not None:
@@ -2438,6 +2444,8 @@ if __name__ == "__main__":
             sys.exit('unsupported page profile: ' + profile)
     brief = a[a.index("--brief") + 1] if "--brief" in a else None
     files = [x for x in a if x.endswith((".yaml", ".yml")) and x != brief] or P.default_paths()
+    if profile is None and P.core_reader_selected(files):
+        profile = 'core/v1'
     try:
         if "--verify" in a:
             sys.exit(verify(files, brief, profile=profile))
