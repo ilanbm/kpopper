@@ -10,6 +10,7 @@ use crate::{
 };
 use serde_json::{Value as J, json};
 use std::{
+    collections::BTreeMap,
     fs::{self, File},
     io::{Read, Write},
     path::{Path, PathBuf},
@@ -18,6 +19,25 @@ use std::{
         atomic::{AtomicU64, Ordering},
     },
 };
+
+const PROPOSAL_CLAIM: &str = "session; not authenticated as a person";
+
+/// Untrusted proposal input. Validation is performed against the freshly
+/// loaded checked session before any state file is created.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ProposalRequest {
+    pub kind: String,
+    pub text: String,
+    pub basis: Vec<String>,
+    pub revisit: String,
+}
+
+/// Validate proposal fields that do not depend on a captured session and
+/// calculate the deterministic content identity.
+pub fn proposal_id(project: &str, revision: &str, request: &ProposalRequest) -> Result<String> {
+    let core = proposal_core(project, revision, request, |_| Ok(()))?;
+    Ok(sha256(&serde_json::to_vec(&core)?))
+}
 
 #[cfg(unix)]
 use rustix::fs::{AtFlags, Mode, OFlags};
@@ -168,6 +188,80 @@ impl CheckedSessionStore {
         Ok(result)
     }
 
+    /// Persist one proposal against a caller-supplied fresh Snapshot. This
+    /// never opens source material, runs an evaluator, or changes the record.
+    pub fn propose(
+        &self,
+        revision: &str,
+        freshness: &Snapshot,
+        request: &ProposalRequest,
+    ) -> Result<J> {
+        let session = self.load(revision, freshness)?;
+        let project = self.project()?;
+        let core = proposal_core(project, revision, request, |reference| {
+            session.validate_reference(reference)
+        })?;
+        let id = sha256(&serde_json::to_vec(&core)?);
+        let external = core["basis"]
+            .as_array()
+            .expect("proposal basis constructed as an array")
+            .iter()
+            .filter(|reference| {
+                reference
+                    .as_str()
+                    .is_some_and(|reference| reference.starts_with("external:"))
+            })
+            .cloned()
+            .collect::<Vec<_>>();
+        let mut proposal = core.clone();
+        let map = proposal
+            .as_object_mut()
+            .expect("proposal core constructed as an object");
+        map.insert("id".into(), json!(id));
+        map.insert("status".into(), json!("proposed"));
+        map.insert("claimed_by".into(), json!(PROPOSAL_CLAIM));
+        map.insert("unverified_external_basis".into(), J::Array(external));
+        map.insert(
+            "created_at".into(),
+            json!(chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Micros, false)),
+        );
+        let name = proposal_name(&id)?;
+        let held = self.atomic_create(&name, &proposal)?;
+        require(
+            proposal_core_from_stored(&held)? == core,
+            "proposal collision",
+        )?;
+        validate_stored_proposal(&name, project, &held)?;
+        self.validate_root()?;
+        Ok(json!({
+            "id": id,
+            "status": "proposed",
+            "read": format!("proposal:{id}"),
+            "canonical_record_changed": false,
+        }))
+    }
+
+    /// List all proposals bound to this store, including proposals based on
+    /// older session revisions. Callers compare `base_revision` to their
+    /// current revision when projecting stale state.
+    pub fn proposals(&self) -> Result<BTreeMap<String, J>> {
+        self.validate_root()?;
+        let mut names = proposal_names(&self.root_dir, &self.root)?;
+        names.sort();
+        let project = self.project()?;
+        let mut proposals = BTreeMap::new();
+        for name in names {
+            let proposal = self.read_json(&name)?;
+            let id = validate_stored_proposal(&name, project, &proposal)?;
+            require(
+                proposals.insert(id, proposal).is_none(),
+                "proposal identity mismatch",
+            )?;
+        }
+        self.validate_root()?;
+        Ok(proposals)
+    }
+
     pub fn context_path(&self, revision: &str) -> Result<PathBuf> {
         let name = context_name(revision)?;
         self.validate_root()?;
@@ -196,6 +290,16 @@ impl CheckedSessionStore {
                     .ok_or_else(|| Error("invalid project identity".into()))?,
             ),
         ])))
+    }
+
+    fn project(&self) -> Result<&str> {
+        let V::Map(identity) = &self.identity else {
+            return Err(Error("invalid project identity".into()));
+        };
+        match identity.get("project") {
+            Some(V::Text(project)) => Ok(project),
+            _ => Err(Error("invalid project identity".into())),
+        }
     }
 
     fn session_identity(&self) -> Result<V> {
@@ -344,6 +448,245 @@ impl Drop for TempAt<'_> {
             let _ = rustix::fs::unlinkat(self.dir, self.name.as_str(), AtFlags::empty());
         }
     }
+}
+
+fn proposal_core<F>(
+    project: &str,
+    revision: &str,
+    request: &ProposalRequest,
+    mut validate_reference: F,
+) -> Result<J>
+where
+    F: FnMut(&str) -> Result<()>,
+{
+    require(
+        matches!(
+            request.kind.as_str(),
+            "observed" | "inferred" | "assumed" | "question"
+        ),
+        "unknown epistemic kind",
+    )?;
+    require(
+        !request.text.trim().is_empty() && request.text.chars().count() <= 8000,
+        "text must contain 1..8000 characters",
+    )?;
+    require(
+        request.basis.len() <= 30
+            && request
+                .basis
+                .iter()
+                .all(|reference| reference.chars().count() <= 500),
+        "basis must contain at most 30 reference strings",
+    )?;
+    require(request.revisit.chars().count() <= 2000, "invalid re-opener")?;
+    require(
+        !matches!(request.kind.as_str(), "observed" | "inferred") || !request.basis.is_empty(),
+        "observed/inferred claims need source or premise references",
+    )?;
+    require(
+        request.kind == "question" || !request.revisit.trim().is_empty(),
+        "a consequential claim needs a falsifier or human re-opener",
+    )?;
+    for reference in &request.basis {
+        if let Some(locator) = reference.strip_prefix("external:") {
+            require(
+                valid_external_locator(locator),
+                "external basis needs an explicit http(s) or file locator",
+            )?;
+        } else if reference.starts_with("node:") || reference.starts_with("source:") {
+            validate_reference(reference)?;
+        } else {
+            return Err(Error(
+                "basis must name recorded refs or an external: locator".into(),
+            ));
+        }
+    }
+    require(valid_project(project), "invalid project name")?;
+    require(valid_revision(revision), "invalid core session revision")?;
+    let basis = request
+        .basis
+        .iter()
+        .cloned()
+        .collect::<std::collections::BTreeSet<_>>()
+        .into_iter()
+        .collect::<Vec<_>>();
+    Ok(json!({
+        "project": project,
+        "base_revision": revision,
+        "kind": request.kind,
+        "text": request.text,
+        "basis": basis,
+        "revisit": request.revisit,
+    }))
+}
+
+fn proposal_core_from_stored(proposal: &J) -> Result<J> {
+    let map = proposal
+        .as_object()
+        .ok_or_else(|| Error("proposal identity mismatch".into()))?;
+    let text = |field: &str| {
+        map.get(field)
+            .and_then(J::as_str)
+            .map(str::to_owned)
+            .ok_or_else(|| Error("proposal identity mismatch".into()))
+    };
+    let basis = map
+        .get("basis")
+        .and_then(J::as_array)
+        .ok_or_else(|| Error("proposal identity mismatch".into()))?
+        .iter()
+        .map(|item| {
+            item.as_str()
+                .map(str::to_owned)
+                .ok_or_else(|| Error("proposal identity mismatch".into()))
+        })
+        .collect::<Result<Vec<_>>>()?;
+    let request = ProposalRequest {
+        kind: text("kind")?,
+        text: text("text")?,
+        basis,
+        revisit: text("revisit")?,
+    };
+    proposal_core(&text("project")?, &text("base_revision")?, &request, |_| {
+        Ok(())
+    })
+    .map_err(|_| Error("proposal identity mismatch".into()))
+}
+
+fn validate_stored_metadata(map: &serde_json::Map<String, J>, core: &J) -> Result<()> {
+    const FIELDS: [&str; 10] = [
+        "project",
+        "base_revision",
+        "kind",
+        "text",
+        "basis",
+        "revisit",
+        "id",
+        "status",
+        "claimed_by",
+        "unverified_external_basis",
+    ];
+    require(
+        map.len() == FIELDS.len() + 1 && FIELDS.iter().all(|field| map.contains_key(*field)),
+        "proposal identity mismatch",
+    )?;
+    let core_map = core
+        .as_object()
+        .expect("proposal core constructed as an object");
+    require(
+        core_map
+            .iter()
+            .all(|(field, value)| map.get(field) == Some(value)),
+        "proposal identity mismatch",
+    )?;
+    require(
+        map.get("claimed_by") == Some(&json!(PROPOSAL_CLAIM)),
+        "proposal identity mismatch",
+    )?;
+    let created_at = map
+        .get("created_at")
+        .and_then(J::as_str)
+        .ok_or_else(|| Error("proposal identity mismatch".into()))?;
+    chrono::DateTime::parse_from_rfc3339(created_at)
+        .map_err(|_| Error("proposal identity mismatch".into()))?;
+    let external = core["basis"]
+        .as_array()
+        .expect("proposal basis constructed as an array")
+        .iter()
+        .filter(|reference| {
+            reference
+                .as_str()
+                .is_some_and(|reference| reference.starts_with("external:"))
+        })
+        .cloned()
+        .collect::<Vec<_>>();
+    require(
+        map.get("unverified_external_basis") == Some(&J::Array(external)),
+        "proposal identity mismatch",
+    )
+}
+
+fn validate_stored_proposal(name: &str, project: &str, proposal: &J) -> Result<String> {
+    let core = proposal_core_from_stored(proposal)?;
+    let id = sha256(&serde_json::to_vec(&core)?);
+    require(name == proposal_name(&id)?, "proposal identity mismatch")?;
+    let map = proposal
+        .as_object()
+        .ok_or_else(|| Error("proposal identity mismatch".into()))?;
+    require(
+        map.get("project") == Some(&json!(project))
+            && map.get("id") == Some(&json!(id))
+            && map.get("status") == Some(&json!("proposed")),
+        "proposal identity mismatch",
+    )?;
+    validate_stored_metadata(map, &core)?;
+    Ok(id)
+}
+
+fn valid_external_locator(locator: &str) -> bool {
+    let Some((scheme, remainder)) = locator.split_once(':') else {
+        return false;
+    };
+    if !matches!(
+        scheme.to_ascii_lowercase().as_str(),
+        "http" | "https" | "file"
+    ) {
+        return false;
+    }
+    if let Some(authority_and_path) = remainder.strip_prefix("//") {
+        let authority_end = authority_and_path
+            .find(['/', '?', '#'])
+            .unwrap_or(authority_and_path.len());
+        let authority = &authority_and_path[..authority_end];
+        let path_and_more = &authority_and_path[authority_end..];
+        let path_end = path_and_more
+            .find(['?', '#'])
+            .unwrap_or(path_and_more.len());
+        !authority.is_empty() || !path_and_more[..path_end].is_empty()
+    } else {
+        let path_end = remainder.find(['?', '#']).unwrap_or(remainder.len());
+        !remainder[..path_end].is_empty()
+    }
+}
+
+fn proposal_name(id: &str) -> Result<String> {
+    require(valid_revision(id), "proposal identity mismatch")?;
+    Ok(format!("proposal-{id}.json"))
+}
+
+#[cfg(unix)]
+fn proposal_names(root: &File, _root_path: &Path) -> Result<Vec<String>> {
+    let directory =
+        rustix::fs::Dir::read_from(root).map_err(|e| Error(format!("list proposals: {e}")))?;
+    let mut names = Vec::new();
+    for entry in directory {
+        let entry = entry.map_err(|e| Error(format!("list proposals: {e}")))?;
+        let raw_name = entry.file_name().to_bytes();
+        if raw_name.starts_with(b"proposal-") && raw_name.ends_with(b".json") {
+            let name = entry
+                .file_name()
+                .to_str()
+                .map_err(|_| Error("invalid proposal filename".into()))?;
+            names.push(name.to_owned());
+        }
+    }
+    Ok(names)
+}
+
+#[cfg(not(unix))]
+fn proposal_names(_root: &File, root_path: &Path) -> Result<Vec<String>> {
+    let mut names = Vec::new();
+    for entry in fs::read_dir(root_path).map_err(|e| Error(format!("list proposals: {e}")))? {
+        let entry = entry.map_err(|e| Error(format!("list proposals: {e}")))?;
+        let name = entry
+            .file_name()
+            .into_string()
+            .map_err(|_| Error("invalid proposal filename".into()))?;
+        if name.starts_with("proposal-") && name.ends_with(".json") {
+            names.push(name);
+        }
+    }
+    Ok(names)
 }
 
 fn valid_project(s: &str) -> bool {

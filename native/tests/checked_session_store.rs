@@ -1,6 +1,9 @@
 use kpop_native::{
-    checked_session_store::CheckedSessionStore, reasoning_context::CapturedAssessment,
-    reasoning_snapshot::Snapshot, tokenizer::Encoding, value::TypedValue as V,
+    checked_session_store::{CheckedSessionStore, ProposalRequest, proposal_id},
+    reasoning_context::CapturedAssessment,
+    reasoning_snapshot::Snapshot,
+    tokenizer::Encoding,
+    value::TypedValue as V,
 };
 use serde_json::{Value as J, json};
 #[cfg(windows)]
@@ -23,6 +26,15 @@ fn context() -> CapturedAssessment {
 }
 fn snapshot(c: &CapturedAssessment) -> Snapshot {
     c.snapshot().clone()
+}
+
+fn request(kind: &str, text: &str, basis: &[&str], revisit: &str) -> ProposalRequest {
+    ProposalRequest {
+        kind: kind.into(),
+        text: text.into(),
+        basis: basis.iter().map(|item| (*item).into()).collect(),
+        revisit: revisit.into(),
+    }
 }
 
 #[test]
@@ -119,6 +131,342 @@ fn concurrent_identical_create_is_allowed_and_complete() {
         store.load(&revisions[0], &s).unwrap().revision(),
         revisions[0]
     );
+}
+
+#[test]
+fn proposal_id_and_refusals_match_the_python_oracle_fixture() {
+    let oracle: J = serde_json::from_str(include_str!("fixtures/session-proposals.json")).unwrap();
+    let revision = oracle["base_revision"].as_str().unwrap();
+    let inferred = request(
+        "inferred",
+        "Observed conclusion",
+        &[
+            "source:source.one",
+            "external:https://example.test/evidence",
+            "node:fact.one",
+            "node:fact.one",
+        ],
+        "Changes if the source or node changes.",
+    );
+    assert_eq!(
+        proposal_id("fixture", revision, &inferred).unwrap(),
+        oracle["cases"][0]["ok"]["id"]
+    );
+    assert_eq!(
+        proposal_id(
+            "fixture",
+            revision,
+            &request("question", "What should be checked?", &[], ""),
+        )
+        .unwrap(),
+        oracle["cases"][1]["ok"]["id"]
+    );
+
+    let refusals = [
+        request("known", "x", &["node:fact.one"], "later"),
+        request("assumed", "  ", &[], "later"),
+        request("observed", "x", &[], "later"),
+        request("assumed", "x", &[], ""),
+        request("observed", "x", &["external:javascript:alert(1)"], "later"),
+        request("observed", "x", &["external:https:"], "later"),
+        request("question", "x", &["pending"], ""),
+    ];
+    let oracle_indexes = [2, 3, 4, 5, 8, 9, 10];
+    for (input, index) in refusals.iter().zip(oracle_indexes) {
+        assert_eq!(
+            proposal_id("fixture", revision, input).unwrap_err().0,
+            oracle["cases"][index]["refused"]
+        );
+    }
+}
+
+#[test]
+fn proposal_listing_matches_python_oracle_values_including_old_revisions() {
+    let oracle: J = serde_json::from_str(include_str!("fixtures/session-proposals.json")).unwrap();
+    let dir = tempfile::tempdir().unwrap();
+    let source = dir.path().join("input");
+    fs::write(&source, b"x").unwrap();
+    let store = CheckedSessionStore::open(
+        dir.path().join("state"),
+        "fixture",
+        &source,
+        None,
+        Encoding::O200kBase,
+    )
+    .unwrap();
+    for (id, proposal) in oracle["proposals"].as_object().unwrap() {
+        fs::write(
+            dir.path().join("state").join(format!("proposal-{id}.json")),
+            serde_json::to_vec(proposal).unwrap(),
+        )
+        .unwrap();
+    }
+    assert_eq!(
+        serde_json::to_value(store.proposals().unwrap()).unwrap(),
+        oracle["proposals"]
+    );
+}
+
+#[test]
+fn proposal_is_idempotent_and_keeps_canonical_source_unchanged() {
+    let dir = tempfile::tempdir().unwrap();
+    let source = dir.path().join("GROUNDING.yaml");
+    let canonical = b"canonical record bytes";
+    fs::write(&source, canonical).unwrap();
+    let c = context();
+    let fresh = snapshot(&c);
+    let store = CheckedSessionStore::open(
+        dir.path().join("state"),
+        "fixture",
+        &source,
+        None,
+        Encoding::O200kBase,
+    )
+    .unwrap();
+    let revision = store.save(&c, &fresh).unwrap();
+    let input = request(
+        "inferred",
+        "Observed conclusion",
+        &[
+            "node:p.a",
+            "external:https://example.test/evidence",
+            "node:p.a",
+        ],
+        "Changes if the source or node changes.",
+    );
+    let first = store.propose(&revision, &fresh, &input).unwrap();
+    let path = dir
+        .path()
+        .join("state")
+        .join(format!("proposal-{}.json", first["id"].as_str().unwrap()));
+    let first_bytes = fs::read(&path).unwrap();
+    std::thread::sleep(Duration::from_millis(2));
+    assert_eq!(store.propose(&revision, &fresh, &input).unwrap(), first);
+    assert_eq!(fs::read(&path).unwrap(), first_bytes);
+    assert_eq!(fs::read(&source).unwrap(), canonical);
+
+    let listed = store.proposals().unwrap();
+    let stored = &listed[first["id"].as_str().unwrap()];
+    assert_eq!(
+        stored["basis"],
+        json!(["external:https://example.test/evidence", "node:p.a"])
+    );
+    assert_eq!(
+        stored["claimed_by"],
+        "session; not authenticated as a person"
+    );
+    assert_eq!(
+        stored["unverified_external_basis"],
+        json!(["external:https://example.test/evidence"])
+    );
+    assert!(chrono::DateTime::parse_from_rfc3339(stored["created_at"].as_str().unwrap()).is_ok());
+}
+
+#[test]
+fn proposing_requires_fresh_session_and_valid_recorded_basis() {
+    let dir = tempfile::tempdir().unwrap();
+    let source = dir.path().join("input");
+    fs::write(&source, b"x").unwrap();
+    let c = context();
+    let fresh = snapshot(&c);
+    let store = CheckedSessionStore::open(
+        dir.path().join("state"),
+        "fixture",
+        &source,
+        None,
+        Encoding::O200kBase,
+    )
+    .unwrap();
+    let revision = store.save(&c, &fresh).unwrap();
+    for basis in ["node:missing", "source:missing"] {
+        assert_eq!(
+            store
+                .propose(
+                    &revision,
+                    &fresh,
+                    &request("inferred", "x", &[basis], "later"),
+                )
+                .unwrap_err()
+                .0,
+            "unlisted operation or identifier"
+        );
+    }
+    let changed = Snapshot::from_data(
+        &V::from_json(&json!({"meta":{"scope":"changed"}})).unwrap(),
+        Default::default(),
+    )
+    .unwrap();
+    assert_eq!(
+        store
+            .propose(
+                &revision,
+                &changed,
+                &request("question", "Still current?", &[], ""),
+            )
+            .unwrap_err()
+            .0,
+        "project record or history changed; reopen"
+    );
+    assert!(store.proposals().unwrap().is_empty());
+}
+
+#[test]
+fn concurrent_proposal_creation_has_one_complete_value() {
+    let dir = tempfile::tempdir().unwrap();
+    let source = dir.path().join("input");
+    fs::write(&source, b"x").unwrap();
+    let c = context();
+    let fresh = snapshot(&c);
+    let store = Arc::new(
+        CheckedSessionStore::open(
+            dir.path().join("state"),
+            "fixture",
+            &source,
+            None,
+            Encoding::O200kBase,
+        )
+        .unwrap(),
+    );
+    let revision = store.save(&c, &fresh).unwrap();
+    let input = request("question", "What next?", &[], "");
+    let mut workers = Vec::new();
+    for _ in 0..8 {
+        let store = store.clone();
+        let revision = revision.clone();
+        let fresh = fresh.clone();
+        let input = input.clone();
+        workers.push(std::thread::spawn(move || {
+            store.propose(&revision, &fresh, &input).unwrap()
+        }));
+    }
+    let results = workers
+        .into_iter()
+        .map(|worker| worker.join().unwrap())
+        .collect::<Vec<_>>();
+    assert!(results.iter().all(|result| result == &results[0]));
+    assert_eq!(store.proposals().unwrap().len(), 1);
+}
+
+#[test]
+fn proposal_listing_refuses_forged_identity_project_status_and_filename() {
+    for field in ["id", "project", "status", "filename"] {
+        let dir = tempfile::tempdir().unwrap();
+        let source = dir.path().join("input");
+        fs::write(&source, b"x").unwrap();
+        let c = context();
+        let fresh = snapshot(&c);
+        let store = CheckedSessionStore::open(
+            dir.path().join("state"),
+            "fixture",
+            &source,
+            None,
+            Encoding::O200kBase,
+        )
+        .unwrap();
+        let revision = store.save(&c, &fresh).unwrap();
+        let result = store
+            .propose(
+                &revision,
+                &fresh,
+                &request("question", "What next?", &[], ""),
+            )
+            .unwrap();
+        let path = dir
+            .path()
+            .join("state")
+            .join(format!("proposal-{}.json", result["id"].as_str().unwrap()));
+        if field == "filename" {
+            fs::rename(
+                &path,
+                dir.path().join("state/proposal-0000000000000000000000000000000000000000000000000000000000000000.json"),
+            )
+            .unwrap();
+        } else {
+            let mut proposal: J = serde_json::from_slice(&fs::read(&path).unwrap()).unwrap();
+            proposal[field] = json!("forged");
+            fs::write(&path, serde_json::to_vec(&proposal).unwrap()).unwrap();
+        }
+        assert_eq!(
+            store.proposals().unwrap_err().0,
+            "proposal identity mismatch"
+        );
+    }
+}
+
+#[test]
+fn proposing_refuses_a_tampered_same_id_collision() {
+    let dir = tempfile::tempdir().unwrap();
+    let source = dir.path().join("input");
+    fs::write(&source, b"x").unwrap();
+    let c = context();
+    let fresh = snapshot(&c);
+    let store = CheckedSessionStore::open(
+        dir.path().join("state"),
+        "fixture",
+        &source,
+        None,
+        Encoding::O200kBase,
+    )
+    .unwrap();
+    let revision = store.save(&c, &fresh).unwrap();
+    let input = request("question", "What next?", &[], "");
+    let result = store.propose(&revision, &fresh, &input).unwrap();
+    let path = dir
+        .path()
+        .join("state")
+        .join(format!("proposal-{}.json", result["id"].as_str().unwrap()));
+    let mut proposal: J = serde_json::from_slice(&fs::read(&path).unwrap()).unwrap();
+    proposal["text"] = json!("tampered");
+    fs::write(path, serde_json::to_vec(&proposal).unwrap()).unwrap();
+    assert_eq!(
+        store.propose(&revision, &fresh, &input).unwrap_err().0,
+        "proposal collision"
+    );
+}
+
+#[cfg(unix)]
+#[test]
+fn proposal_listing_refuses_symlink_fifo_and_oversized_members_without_blocking() {
+    for kind in ["symlink", "fifo", "oversized"] {
+        let dir = tempfile::tempdir().unwrap();
+        let source = dir.path().join("input");
+        fs::write(&source, b"x").unwrap();
+        let store = CheckedSessionStore::open(
+            dir.path().join("state"),
+            "fixture",
+            &source,
+            None,
+            Encoding::O200kBase,
+        )
+        .unwrap();
+        let member = dir.path().join(
+            "state/proposal-0000000000000000000000000000000000000000000000000000000000000000.json",
+        );
+        match kind {
+            "symlink" => {
+                let outside = dir.path().join("outside");
+                fs::write(&outside, b"{}").unwrap();
+                symlink(outside, &member).unwrap();
+            }
+            "fifo" => assert!(
+                Command::new("mkfifo")
+                    .arg(&member)
+                    .status()
+                    .unwrap()
+                    .success()
+            ),
+            "oversized" => {
+                let file = fs::File::create(&member).unwrap();
+                file.set_len(64 * 1024 * 1024 + 1).unwrap();
+            }
+            _ => unreachable!(),
+        }
+        let message = store.proposals().unwrap_err().0;
+        assert!(
+            message.contains("retained context") || message.contains("proposal identity"),
+            "{kind}: {message}"
+        );
+    }
 }
 
 #[test]
