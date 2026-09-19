@@ -1,5 +1,16 @@
 # Changelog
 
+## 2.0.0 — 2026-09-19
+
+- Guide readers through three expandable README paths (#142) — patch
+- Run focused CI for the research example instead of the full matrix (#141) — patch
+- Refresh README capabilities and demonstrate research query replay (#140) — patch
+- Show how GROUNDING.yaml connects sessions, checks and evidence (#139) — patch
+- Separate optional HTML applications from the core (#137) — major
+- Fix session attribution and repeated Stop reminders (#135) — patch
+
+Decisions recorded: d.application_names_are_nouns, d.html_applications_are_optional, d.plugin_descriptions_lead_with_reasoning, d.readme_illustration_reading_order, d.readme_images_use_markdown, d.readme_reasoning_overview, d.startup_checks_only_record_dependencies
+
 ## Unreleased
 
 - Plugin users upgrading from the earlier HTML-dependent runtime should run
