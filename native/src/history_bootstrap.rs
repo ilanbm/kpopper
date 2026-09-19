@@ -626,8 +626,14 @@ pub fn publish(
         verify(data)?;
         verify_prepared(&entry, mutation, policy, runtime)
     };
-    F::publish_transition(root, &layout.journal, mutation, &mut checked, None)?;
-    verify_result(&entry, mutation)
+    F::publish_transition(root, &layout.journal, mutation, &mut checked, None).map_err(|e| {
+        eprintln!("platform-trace: transition publication: {e}");
+        e
+    })?;
+    verify_result(&entry, mutation).map_err(|e| {
+        eprintln!("platform-trace: bootstrap result verification: {e}");
+        e
+    })
 }
 pub fn recover(
     path: &Path,
