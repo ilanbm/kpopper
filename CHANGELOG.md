@@ -1,5 +1,43 @@
 # Changelog
 
+## 1.7.0 — 2026-09-19
+
+- Default new records to history-backed reasoning and complete temporal observers (#134) — minor
+- Retain captured context in history fold previews (#133) — minor
+- Name the kpopper plugin when describing skill use (#105) — patch
+- Support core observers and verify prepared history folds (#132) — minor
+- Use captured core findings for consolidation (#131) — minor
+- Build the page from the record the reader already read (#127) — patch
+- Read core and history assessments in followup scans (#128) — minor
+- Infer roles once per document the overlay compares, not once per entry (#126) — patch
+- Add reasoning runtime and versioned knowledge badges (#129) — patch
+- Keep remeasure tests stable across UTC midnight (#122) — patch
+- Reduce CI latency with parallel tests and verified native caches (#121) — patch
+- Connect query verification to its original request (#124) — patch
+- Record finite-query release candidate verification (#123) — patch
+- Add finite scoped query reasoning (#120) — minor
+- Check Darwin where a change lands, and bound every job's runtime (#119) — patch
+- Unify core assessment across consumers (#118) — minor
+- Add composable typed conditions to core/v1 (#117) — minor
+- Add immutable history and recoverable record writes (#116) — minor
+- Verify OpenClaw without native plugin fallback and clarify writes (#115) — patch
+- Add contribution guides, issue forms and repository status badges (#114) — patch
+- Fix plugin Python setup and hook runtime selection (#113) — patch
+- Document OpenClaw and OpenCode setup and fix host hook contracts (#111) — minor
+- Record the intent behind selective CI (#112) — patch
+- Keep the insertion test independent of timezone differences (#110) — patch
+- Run CI by changed input families and avoid unchanged native builds (#107) — patch
+- Make kpop the command; kpopper stays the project and package name (#106) — minor
+- Make a page's source links and its own address reach their files (#100) — patch
+- Add the versions core under examination, with its scenarios, counterexamples and cost as tests (#103) — minor
+- Take the two re-decided rules by name, and ask the person before a take rather than hand them the command (#104) — patch
+- Fold a verdict over a standing judgment only by its own condition or by name, and keep what it replaced (#101) — minor
+- Add an experimental portable deterministic reasoning core (#86) — minor
+- Wait for the worker lease in the batch capture test before cleanup (#97) — patch
+- Clarify working modes and show consolidation in README (#85) — patch
+
+Decisions recorded: d.a_name_becomes_a_url_by_escaping, d.ci_execution_reuses_verified_work, d.ci_selects_families, d.community_entrypoints, d.darwin_checked_where_it_lands, d.every_worker_test_waits_for_the_lease, d.history_authority_is_explicit, d.link_ends_share_one_spelling, d.native_workflow_is_corresponding_source, d.overlay_infers_once_per_document, d.page_build_reads_the_loaded_record, d.plugin_runtime_is_explicit, d.readme_working_modes, d.remeasure_tests_share_one_day, d.replacement_leaves_a_trail
+
 ## 1.6.0 — 2026-09-14
 
 - Document focused exports and recording scope in README (#78) — patch
