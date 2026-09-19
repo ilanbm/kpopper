@@ -1,9 +1,9 @@
 #![forbid(unsafe_code)]
 
-pub mod authoring_source;
-pub mod checked_session;
 pub mod annotated_document;
 mod annotated_document_html;
+pub mod authoring_source;
+pub mod checked_session;
 pub mod core_html;
 pub mod direct_history;
 pub mod history_activation;
@@ -65,6 +65,7 @@ pub mod ordinary_runtime;
 pub mod pending_bundle;
 pub mod pending_state;
 pub mod project_modes;
+pub mod public_annotated_document;
 pub mod public_assessment;
 pub mod public_authoring;
 pub mod public_history;
@@ -99,6 +100,7 @@ pub mod reasoning_values;
 mod recording_privacy;
 pub mod recording_receipt;
 pub mod session_activity;
+pub mod session_mcp;
 pub mod session_gate;
 pub mod source_capture;
 pub mod source_clock;

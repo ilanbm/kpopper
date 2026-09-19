@@ -49,6 +49,9 @@ enum Command {
     },
     /// Compatibility alias for experimental hub.
     Page(kpop_native::public_hub::Options),
+    /// Compatibility alias for experimental annotated-doc.
+    #[command(alias = "annotated-doc")]
+    Document(kpop_native::public_annotated_document::Options),
     Add(WriteArgs),
     Set(WriteArgs),
     Review(WriteArgs),
@@ -105,6 +108,8 @@ enum Command {
 enum Application {
     /// Build or verify the optional record Hub.
     Hub(kpop_native::public_hub::Options),
+    /// Standalone HTML documents with embedded evidence and source checks.
+    AnnotatedDoc(kpop_native::public_annotated_document::Options),
 }
 #[derive(Clone, clap::ValueEnum)]
 enum Envelope {
@@ -328,6 +333,7 @@ fn run(args: Args) -> Result<Value> {
         | Command::Pull(_)
         | Command::Affects(_)
         | Command::Page(_)
+        | Command::Document(_)
         | Command::Experimental { .. } => {
             unreachable!()
         }
@@ -417,6 +423,28 @@ fn main() {
                 std::process::exit(2);
             }
         }
+    }
+    if let Command::Document(options)
+    | Command::Experimental {
+        application: Application::AnnotatedDoc(options),
+    } = &args.command
+    {
+        let result = (|| {
+            let cwd = args
+                .workspace
+                .clone()
+                .map(Ok)
+                .unwrap_or_else(std::env::current_dir)?;
+            kpop_native::public_annotated_document::run(options, &cwd)
+        })();
+        match result {
+            Ok(text) => print!("{text}"),
+            Err(error) => {
+                eprintln!("document: {error}");
+                std::process::exit(2);
+            }
+        }
+        return;
     }
     let write = match &args.command {
         Command::Add(o) => Some(("add", o)),
