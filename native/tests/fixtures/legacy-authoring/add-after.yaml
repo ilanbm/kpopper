@@ -1,0 +1,25 @@
+# authored heading survives
+meta:
+  updated: 2026-09-19
+  opaque:
+    count: 7
+    enabled: false
+    absent: null
+    date: 2026-09-02
+known:
+  p.alpha: {label: "שלום 🎵", v: 'old text', of: 2026-09-01} # הערת מקור 🎤
+  p.beta:
+    v: 2
+    of: 2026-09-02
+  p.gamma:
+    v: 3
+    note: "new value"
+judgments:
+  d.keep:
+    verdict: continue
+    rests_on: [p.alpha, p.beta]
+    seen:
+      p.alpha: stale
+      p.beta: 2
+    wrong_if: p.beta > 3
+    reviewed: 2026-09-01

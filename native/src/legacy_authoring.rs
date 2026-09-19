@@ -1,0 +1,1664 @@
+//! Byte-preserving writes for existing Simple records without active history.
+use crate::{
+    Result, history_authority,
+    history_contract::*,
+    history_transaction::{self as T, FileImage, Layout, PreparedMutation},
+    history_transaction_fs as F,
+    history_view::map_mut,
+    ordinary_reader::{Reader, same_legacy},
+    project_modes::WriteRoute,
+    recording_privacy as Privacy, require, source_document,
+    source_inventory::{Inventory, absolute, name},
+    value::{Integer, TypedValue as V},
+};
+use regex::Regex;
+use std::{
+    collections::BTreeSet,
+    path::{Path, PathBuf},
+    sync::LazyLock,
+};
+
+static TOP: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"^([A-Za-z_][A-Za-z0-9_]*):(?: |$)").unwrap());
+static MEMBER: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"^( +)([A-Za-z_][A-Za-z0-9_.]*):(?: |$)").unwrap());
+static BARE: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"^[A-Za-z_][A-Za-z0-9_.-]*$").unwrap());
+static DATE: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"^[0-9]{4}-[0-9]{2}-[0-9]{2}$").unwrap());
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum AuthorityRoute {
+    History,
+    Legacy,
+}
+
+fn s(value: &str) -> V {
+    V::Text(value.into())
+}
+
+fn n(value: &str) -> V {
+    V::Integer(Integer::new(value).expect("literal integer"))
+}
+
+fn object(items: impl IntoIterator<Item = (&'static str, V)>) -> V {
+    V::Map(items.into_iter().map(|(k, v)| (k.into(), v)).collect())
+}
+
+fn entry_layout(entry: &Path) -> Result<Layout> {
+    Layout::for_entry(name(Path::new(
+        entry.file_name().ok_or_else(|| error("invalid_path"))?,
+    ))?)
+}
+
+/// Resolve only from durable policy and authority state. Invalid or interrupted
+/// authority must never fall through to the ordinary writer.
+pub(crate) fn route(entry: &Path, config: &V) -> Result<AuthorityRoute> {
+    let layout = entry_layout(entry)?;
+    let authority_path = entry
+        .parent()
+        .ok_or_else(|| error("invalid_path"))?
+        .join(layout.authority);
+    let authority = F::read(&authority_path)?;
+    if let Some(raw) = authority {
+        let marker = crate::history_yaml::decode_document(&raw)?;
+        history_authority::validate_authority(&marker)?;
+        return match text(field(map(&marker)?, "authority")?)? {
+            "history" => Ok(AuthorityRoute::History),
+            "legacy" => {
+                require(
+                    string_is(field(map(config)?, "mode")?, "simple"),
+                    "legacy_authoring_requires_simple_project",
+                )?;
+                Ok(AuthorityRoute::Legacy)
+            }
+            _ => Err(error("unsupported_authority")),
+        };
+    }
+    require(
+        string_is(field(map(config)?, "mode")?, "simple"),
+        "legacy_authoring_requires_simple_project",
+    )?;
+    Ok(AuthorityRoute::Legacy)
+}
+
+#[derive(Clone, Debug)]
+struct Collection {
+    name: String,
+    start: usize,
+    end: usize,
+}
+
+#[derive(Clone, Debug)]
+struct Member {
+    name: String,
+    indent: usize,
+    start: usize,
+    end: usize,
+}
+
+fn indent(line: &str) -> usize {
+    line.len() - line.trim_start_matches(' ').len()
+}
+
+fn blank(line: &str) -> bool {
+    let line = line.trim();
+    line.is_empty() || line.starts_with('#')
+}
+
+fn inline(line: &str) -> &str {
+    line.split_once(':').map_or("", |(_, v)| v.trim())
+}
+
+fn collections(lines: &[String]) -> Vec<Collection> {
+    let mut out = Vec::new();
+    let mut current: Option<(String, usize)> = None;
+    for (index, line) in lines.iter().enumerate() {
+        if let Some(found) = TOP.captures(line) {
+            if let Some((name, start)) = current.take() {
+                out.push(Collection {
+                    name,
+                    start,
+                    end: index,
+                });
+            }
+            current = Some((found[1].into(), index));
+        }
+    }
+    if let Some((name, start)) = current {
+        out.push(Collection {
+            name,
+            start,
+            end: lines.len(),
+        });
+    }
+    out
+}
+
+fn members(lines: &[String], collection: &Collection) -> Vec<Member> {
+    let mut member_indent = None;
+    let mut starts = Vec::<(String, usize, usize)>::new();
+    for (index, line) in lines
+        .iter()
+        .enumerate()
+        .take(collection.end)
+        .skip(collection.start + 1)
+    {
+        if blank(line) {
+            continue;
+        }
+        let this_indent = indent(line);
+        let expected = *member_indent.get_or_insert(this_indent);
+        if this_indent == expected
+            && let Some(found) = MEMBER.captures(line)
+            && found[1].len() == expected
+        {
+            starts.push((found[2].into(), expected, index));
+        }
+    }
+    starts
+        .iter()
+        .enumerate()
+        .map(|(position, (name, ind, start))| {
+            let mut end = starts
+                .get(position + 1)
+                .map(|(_, _, start)| *start)
+                .unwrap_or(collection.end);
+            while end > start + 1 && blank(&lines[end - 1]) {
+                end -= 1;
+            }
+            Member {
+                name: name.clone(),
+                indent: *ind,
+                start: *start,
+                end,
+            }
+        })
+        .collect()
+}
+
+fn locate(lines: &[String], id: &str) -> Option<(Collection, Member)> {
+    for collection in collections(lines) {
+        if let Some(member) = members(lines, &collection)
+            .into_iter()
+            .find(|member| member.name == id)
+        {
+            return Some((collection, member));
+        }
+    }
+    None
+}
+
+fn field_span(lines: &[String], member: &Member, field: &str) -> Option<Member> {
+    let collection = Collection {
+        name: String::new(),
+        start: member.start,
+        end: member.end,
+    };
+    members(lines, &collection)
+        .into_iter()
+        .find(|item| item.name == field)
+}
+
+#[derive(Clone, Copy)]
+enum Style {
+    Bare,
+    Single,
+    Double,
+    Date,
+}
+
+fn style(raw: &str) -> Style {
+    let raw = raw.trim();
+    if raw.starts_with('\'') {
+        Style::Single
+    } else if raw.starts_with('"') {
+        Style::Double
+    } else if DATE.is_match(raw) {
+        Style::Date
+    } else {
+        Style::Bare
+    }
+}
+
+fn bare_ok(value: &str) -> bool {
+    BARE.is_match(value)
+        && !matches!(
+            value.to_ascii_lowercase().as_str(),
+            "null" | "true" | "false" | "yes" | "no" | "on" | "off" | "~"
+        )
+}
+
+fn scalar(value: &V, style: Style) -> Result<String> {
+    Ok(match value {
+        V::Null => "null".into(),
+        V::Bool(value) => value.to_string(),
+        V::Integer(value) => value.as_str().into(),
+        V::Float(value) => crate::identity::python_float(value.get()),
+        V::Text(value) => text_scalar(value, style),
+        V::Date(value) => match style {
+            Style::Date => value.as_str().into(),
+            _ => text_scalar(value.as_str(), style),
+        },
+        V::DateTime(value) => text_scalar(value.as_str(), style),
+        V::List(_) | V::Map(_) => return Err(error("container_requires_field_emission")),
+    })
+}
+
+fn text_scalar(value: &str, style: Style) -> String {
+    if matches!(style, Style::Date) && DATE.is_match(value) {
+        return value.into();
+    }
+    if matches!(style, Style::Single) && !value.contains('\n') {
+        return format!("'{}'", value.replace('\'', "''"));
+    }
+    if matches!(style, Style::Bare | Style::Date) && bare_ok(value) {
+        return value.into();
+    }
+    format!(
+        "\"{}\"",
+        value
+            .replace('\\', "\\\\")
+            .replace('"', "\\\"")
+            .replace('\n', "\\n")
+    )
+}
+
+fn safe_key(key: &str) -> Result<String> {
+    require(!key.starts_with('\0'), "invalid_ordinary_authored_key")?;
+    Ok(if bare_ok(key) {
+        key.into()
+    } else {
+        text_scalar(key, Style::Double)
+    })
+}
+
+fn field_lines(field: &str, value: &V, ind: usize) -> Result<Vec<String>> {
+    let key = safe_key(field)?;
+    match value {
+        V::List(values) if values.iter().all(|v| !matches!(v, V::List(_) | V::Map(_))) => {
+            Ok(vec![format!(
+                "{}{key}: [{}]",
+                " ".repeat(ind),
+                values
+                    .iter()
+                    .map(|v| scalar(v, Style::Bare))
+                    .collect::<Result<Vec<_>>>()?
+                    .join(", ")
+            )])
+        }
+        V::Map(values)
+            if values
+                .values()
+                .all(|v| !matches!(v, V::List(_) | V::Map(_))) =>
+        {
+            let pairs = values
+                .iter()
+                .map(|(key, value)| {
+                    Ok(format!(
+                        "{}: {}",
+                        safe_key(key)?,
+                        scalar(value, Style::Bare)?
+                    ))
+                })
+                .collect::<Result<Vec<_>>>()?;
+            let flow = format!("{}{key}: {{{}}}", " ".repeat(ind), pairs.join(", "));
+            if flow.len() <= 100 {
+                Ok(vec![flow])
+            } else {
+                let mut lines = vec![format!("{}{key}:", " ".repeat(ind))];
+                for (key, value) in values {
+                    lines.extend(field_lines(key, value, ind + 2)?);
+                }
+                Ok(lines)
+            }
+        }
+        V::List(values) => {
+            let mut lines = vec![format!("{}{key}:", " ".repeat(ind))];
+            for value in values {
+                require(
+                    !matches!(value, V::Map(_) | V::List(_)),
+                    "nested_sequence_authoring_unsupported",
+                )?;
+                lines.push(format!(
+                    "{}- {}",
+                    " ".repeat(ind + 2),
+                    scalar(value, Style::Bare)?
+                ));
+            }
+            Ok(lines)
+        }
+        V::Map(values) => {
+            let mut lines = vec![format!("{}{key}:", " ".repeat(ind))];
+            for (key, value) in values {
+                lines.extend(field_lines(key, value, ind + 2)?);
+            }
+            Ok(lines)
+        }
+        _ => Ok(vec![format!(
+            "{}{key}: {}",
+            " ".repeat(ind),
+            scalar(value, Style::Bare)?
+        )]),
+    }
+}
+
+fn entry_lines(
+    id: &str,
+    body: &V,
+    ind: usize,
+    field_indent: usize,
+    flow: bool,
+) -> Result<Vec<String>> {
+    safe_key(id)?;
+    let V::Map(fields) = body else {
+        return field_lines(id, body, ind);
+    };
+    if flow
+        && fields
+            .values()
+            .all(|v| !matches!(v, V::Map(_) | V::List(_)))
+    {
+        let pairs = ordered_fields(fields)
+            .into_iter()
+            .map(|(key, value)| {
+                Ok(format!(
+                    "{}: {}",
+                    safe_key(key)?,
+                    scalar(value, Style::Bare)?
+                ))
+            })
+            .collect::<Result<Vec<_>>>()?;
+        let line = format!("{}{id}: {{{}}}", " ".repeat(ind), pairs.join(", "));
+        if line.len() <= 100 {
+            return Ok(vec![line]);
+        }
+    }
+    let mut lines = vec![format!("{}{id}:", " ".repeat(ind))];
+    for (key, value) in ordered_fields(fields) {
+        lines.extend(field_lines(key, value, field_indent)?);
+    }
+    Ok(lines)
+}
+
+fn ordered_fields(fields: &Map) -> Vec<(&String, &V)> {
+    fn rank(key: &str) -> usize {
+        match key {
+            "v" | "quoted" | "rule" | "verdict" => 0,
+            "because" => 1,
+            "request" => 2,
+            "rests_on" => 3,
+            "wrong_if" => 4,
+            "seen" => 100,
+            _ => 10,
+        }
+    }
+    let mut values = fields.iter().collect::<Vec<_>>();
+    values.sort_by(|(left, _), (right, _)| rank(left).cmp(&rank(right)).then(left.cmp(right)));
+    values
+}
+
+fn common_prefix(left: &str, right: &str) -> usize {
+    left.split('.')
+        .zip(right.split('.'))
+        .take_while(|(left, right)| left == right)
+        .count()
+}
+
+fn insert_entry(
+    lines: &mut Vec<String>,
+    collection_name: &str,
+    id: &str,
+    body: &V,
+) -> Result<String> {
+    let collection = collections(lines)
+        .into_iter()
+        .find(|collection| collection.name == collection_name)
+        .ok_or_else(|| error(&format!("no collection {collection_name} in this file")))?;
+    let existing = members(lines, &collection);
+    if existing.is_empty() {
+        let new = entry_lines(id, body, 2, 4, false)?;
+        lines.splice(collection.start + 1..collection.start + 1, new);
+        return Ok(format!("{id} into {collection_name}, its first entry"));
+    }
+    let best = existing
+        .iter()
+        .map(|member| common_prefix(&member.name, id))
+        .max()
+        .unwrap_or(0);
+    let siblings = existing
+        .iter()
+        .filter(|member| best == 0 || common_prefix(&member.name, id) == best)
+        .collect::<Vec<_>>();
+    let (anchor, before) = siblings
+        .iter()
+        .find(|member| member.name.as_str() > id)
+        .map(|member| (*member, true))
+        .unwrap_or((*siblings.last().unwrap(), false));
+    let field_indent = field_span(lines, anchor, "v")
+        .or_else(|| field_span(lines, anchor, "quoted"))
+        .map_or(anchor.indent + 2, |field| field.indent);
+    let flow = inline(&lines[anchor.start]).starts_with('{');
+    let mut new = entry_lines(id, body, anchor.indent, field_indent, flow)?;
+    let position = if before {
+        if anchor.start > collection.start + 1 && blank(&lines[anchor.start - 1]) {
+            new.push(String::new());
+            anchor.start - 1
+        } else {
+            anchor.start
+        }
+    } else {
+        let mut position = anchor.end;
+        if position < collection.end && blank(&lines[position]) {
+            position += 1;
+            new.push(String::new());
+        }
+        position
+    };
+    lines.splice(position..position, new);
+    Ok(format!(
+        "{id} into {collection_name}, {} {}",
+        if before { "before" } else { "after" },
+        anchor.name
+    ))
+}
+
+fn ensure_collection(lines: &mut Vec<String>, collection: &str) {
+    if collections(lines)
+        .iter()
+        .any(|item| item.name == collection)
+    {
+        return;
+    }
+    while lines.last().is_some_and(|line| line.trim().is_empty()) {
+        lines.pop();
+    }
+    if !lines.is_empty() {
+        lines.push(String::new());
+    }
+    lines.push(format!("{collection}:"));
+    lines.push(String::new());
+}
+
+fn replace_field(
+    lines: &mut Vec<String>,
+    member: &Member,
+    field: &str,
+    value: &V,
+) -> Result<usize> {
+    if let Some(span) = field_span(lines, member, field) {
+        let replacement = field_lines(field, value, span.indent)?;
+        let new_end = member.end + replacement.len() - (span.end - span.start);
+        lines.splice(span.start..span.end, replacement);
+        Ok(new_end)
+    } else {
+        let replacement = field_lines(field, value, member.indent + 2)?;
+        let len = replacement.len();
+        lines.splice(member.end..member.end, replacement);
+        Ok(member.end + len)
+    }
+}
+
+fn replace_date_field(
+    lines: &mut Vec<String>,
+    member: &Member,
+    field: &str,
+    stamp: &str,
+) -> Result<usize> {
+    if let Some(span) = field_span(lines, member, field) {
+        require(span.end == span.start + 1, "invalid_date_field")?;
+        let re = Regex::new(&format!(
+            r"^(\s+{}:\s*)(\S+)(\s*(?:#.*)?)$",
+            regex::escape(field)
+        ))
+        .unwrap();
+        let found = re
+            .captures(&lines[span.start])
+            .ok_or_else(|| error("invalid_date_field"))?;
+        lines[span.start] = format!(
+            "{}{}{}",
+            &found[1],
+            scalar(&s(stamp), style(&found[2]))?,
+            &found[3]
+        );
+        Ok(member.end)
+    } else {
+        let replacement = vec![format!(
+            "{}{}: \"{stamp}\"",
+            " ".repeat(member.indent + 2),
+            field
+        )];
+        lines.splice(member.end..member.end, replacement);
+        Ok(member.end + 1)
+    }
+}
+
+fn replace_scalar_in_flow(block: &str, field: &str, value: &V) -> Result<(String, String)> {
+    use libyaml_safer::{Scanner, TokenData};
+    let mut input = block.as_bytes();
+    let mut scanner = Scanner::new();
+    scanner.set_input_string(&mut input);
+    let tokens = scanner
+        .collect::<std::result::Result<Vec<_>, _>>()
+        .map_err(|_| error("invalid_history_yaml"))?;
+    let mut depth = 0_i32;
+    for index in 0..tokens.len() {
+        match tokens[index].data {
+            TokenData::BlockMappingStart | TokenData::FlowMappingStart => depth += 1,
+            TokenData::BlockEnd | TokenData::FlowMappingEnd => depth -= 1,
+            TokenData::Key if depth == 2 => {
+                let Some(key) = tokens.get(index + 1) else {
+                    continue;
+                };
+                let TokenData::Scalar {
+                    value: ref key_value,
+                    ..
+                } = key.data
+                else {
+                    continue;
+                };
+                if key_value != field {
+                    continue;
+                }
+                let Some(old) = tokens.get(index + 3) else {
+                    break;
+                };
+                let TokenData::Scalar { .. } = old.data else {
+                    return Err(error(&format!("{field} is not a scalar")));
+                };
+                let start =
+                    usize::try_from(old.start_mark.index).map_err(|_| error("source_limit"))?;
+                let end = usize::try_from(old.end_mark.index).map_err(|_| error("source_limit"))?;
+                let before = &block[start..end];
+                let replacement = scalar(value, style(before))?;
+                return Ok((
+                    format!("{}{}{}", &block[..start], replacement, &block[end..]),
+                    before.into(),
+                ));
+            }
+            _ => {}
+        }
+    }
+    Err(error(&format!("field_not_found:{field}")))
+}
+
+fn upsert_scalar_in_flow(block: &str, field: &str, value: &V) -> Result<String> {
+    if let Ok((block, _)) = replace_scalar_in_flow(block, field, value) {
+        return Ok(block);
+    }
+    use libyaml_safer::{Scanner, TokenData};
+    let mut input = block.as_bytes();
+    let mut scanner = Scanner::new();
+    scanner.set_input_string(&mut input);
+    let tokens = scanner
+        .collect::<std::result::Result<Vec<_>, _>>()
+        .map_err(|_| error("invalid_history_yaml"))?;
+    let opening = tokens
+        .iter()
+        .find(|token| matches!(token.data, TokenData::FlowMappingStart))
+        .ok_or_else(|| error("invalid_history_yaml"))?;
+    let at = usize::try_from(opening.end_mark.index).map_err(|_| error("source_limit"))?;
+    let separator = if block[at..].trim_start().starts_with('}') {
+        ""
+    } else {
+        ", "
+    };
+    Ok(format!(
+        "{}{field}: {}{separator}{}",
+        &block[..at],
+        scalar(value, Style::Bare)?,
+        &block[at..]
+    ))
+}
+
+fn set_entry(
+    lines: &mut Vec<String>,
+    id: &str,
+    value: &V,
+    stamp: &str,
+    why: Option<&str>,
+    source: Option<&str>,
+    at: Option<&str>,
+) -> Result<String> {
+    let (_, member) = locate(lines, id)
+        .ok_or_else(|| error(&format!("refused - no file of the record holds {id}")))?;
+    if inline(&lines[member.start]).starts_with('{') {
+        let block = lines[member.start..member.end].join("\n");
+        let (mut block, old) = replace_scalar_in_flow(&block, "v", value)
+            .or_else(|_| replace_scalar_in_flow(&block, "quoted", value))?;
+        let date = s(stamp);
+        block = match replace_scalar_in_flow(&block, "of", &date) {
+            Ok((block, _)) => block,
+            Err(_) => {
+                let close = block
+                    .rfind('}')
+                    .ok_or_else(|| error("invalid_history_yaml"))?;
+                format!("{}, of: \"{stamp}\"{}", &block[..close], &block[close..])
+            }
+        };
+        if source.is_some() || at.is_some() {
+            let source = source.ok_or_else(|| error("--source and --at go together"))?;
+            let at = at.ok_or_else(|| error("--source and --at go together"))?;
+            block = upsert_scalar_in_flow(&block, "from", &s(source))?;
+            block = upsert_scalar_in_flow(&block, "at", &s(at))?;
+        }
+        let mut replacement = block.split('\n').map(str::to_owned).collect::<Vec<_>>();
+        if let Some(why) = why {
+            replacement.push(format!(
+                "{}# set {stamp}: {why}",
+                " ".repeat(member.indent + 2)
+            ));
+        }
+        lines.splice(member.start..member.end, replacement);
+        return Ok(old);
+    }
+    let field = field_span(lines, &member, "v")
+        .or_else(|| field_span(lines, &member, "quoted"))
+        .ok_or_else(|| error(&format!("{id} carries no v: this reader can rewrite")))?;
+    require(
+        field.end == field.start + 1,
+        "multiline_scalar_authoring_unsupported",
+    )?;
+    let old = inline(&lines[field.start]).to_owned();
+    let value_field = lines[field.start]
+        .trim()
+        .split_once(':')
+        .map(|(name, _)| name)
+        .ok_or_else(|| error("invalid_history_yaml"))?
+        .to_owned();
+    lines[field.start] = format!(
+        "{}{}: {}",
+        " ".repeat(field.indent),
+        value_field,
+        scalar(value, style(&old))?
+    );
+    let (_, member) = locate(lines, id).unwrap();
+    let had_of = field_span(lines, &member, "of").is_some();
+    if let Some(of) = field_span(lines, &member, "of") {
+        require(
+            of.end == of.start + 1,
+            "multiline_date_authoring_unsupported",
+        )?;
+        let old_date = inline(&lines[of.start]);
+        lines[of.start] = format!(
+            "{}of: {}",
+            " ".repeat(of.indent),
+            scalar(&s(stamp), style(old_date))?
+        );
+    } else {
+        let insertion = field.start + 1;
+        lines.insert(
+            insertion,
+            format!("{}of: \"{stamp}\"", " ".repeat(field.indent)),
+        );
+    }
+    if source.is_some() || at.is_some() {
+        let (_, member) = locate(lines, id).unwrap();
+        for (name, value) in [("from", source), ("at", at)] {
+            let value = value.ok_or_else(|| error("--source and --at go together"))?;
+            replace_field(lines, &member, name, &s(value))?;
+        }
+    }
+    if let Some(why) = why {
+        let (_, member) = locate(lines, id).unwrap();
+        let insertion = if had_of {
+            field_span(lines, &member, &value_field).unwrap().end
+        } else {
+            field_span(lines, &member, "of").unwrap().end
+        };
+        lines.insert(
+            insertion,
+            format!("{}# set {stamp}: {why}", " ".repeat(member.indent + 2)),
+        );
+    }
+    Ok(old)
+}
+
+fn bump_updated(lines: &mut Vec<String>, stamp: &str) -> Result<()> {
+    let Some(meta) = collections(lines)
+        .into_iter()
+        .find(|item| item.name == "meta")
+    else {
+        return Ok(());
+    };
+    if inline(&lines[meta.start]).starts_with('{') {
+        let block = lines[meta.start..meta.end].join("\n");
+        let block = match replace_scalar_in_flow(&block, "updated", &s(stamp)) {
+            Ok((block, _)) => block,
+            Err(_) => {
+                let opening = block
+                    .find('{')
+                    .ok_or_else(|| error("invalid_history_yaml"))?
+                    + 1;
+                let separator = if block[opening..].trim_start().starts_with('}') {
+                    ""
+                } else {
+                    ", "
+                };
+                format!(
+                    "{}updated: \"{stamp}\"{separator}{}",
+                    &block[..opening],
+                    &block[opening..]
+                )
+            }
+        };
+        lines.splice(meta.start..meta.end, block.split('\n').map(str::to_owned));
+        return Ok(());
+    }
+    let pseudo = Member {
+        name: "meta".into(),
+        indent: 0,
+        start: meta.start,
+        end: meta.end,
+    };
+    if let Some(updated) = field_span(lines, &pseudo, "updated") {
+        require(updated.end == updated.start + 1, "invalid_updated_field")?;
+        let line = &lines[updated.start];
+        let re = Regex::new(r"^(\s+updated:\s*)(\S+)(\s*(?:#.*)?)$").unwrap();
+        let found = re
+            .captures(line)
+            .ok_or_else(|| error("invalid_updated_field"))?;
+        lines[updated.start] = format!(
+            "{}{}{}",
+            &found[1],
+            scalar(&s(stamp), style(&found[2]))?,
+            &found[3]
+        );
+    } else {
+        lines.insert(meta.start + 1, format!("  updated: {stamp}"));
+    }
+    Ok(())
+}
+
+fn projected_document(source: &crate::history_yaml::OrdinaryValue) -> V {
+    source.projected()
+}
+
+fn action_stamp(action: &Map) -> String {
+    action
+        .get("as_of")
+        .and_then(|value| text(value).ok())
+        .map(str::to_owned)
+        .unwrap_or_else(|| {
+            chrono::Utc::now()
+                .date_naive()
+                .max(chrono::Local::now().date_naive())
+                .to_string()
+        })
+}
+
+fn snapshot_value(reader: &Reader<'_>, dependency: &str, deps_field: &str) -> Result<V> {
+    let body = reader.raw().get(dependency).unwrap_or(&V::Null);
+    if let Ok(body) = map(body)
+        && body.contains_key(deps_field)
+    {
+        return Ok(body
+            .get("verdict")
+            .or_else(|| body.get("title"))
+            .cloned()
+            .unwrap_or_else(|| s(dependency)));
+    }
+    let value = reader.value(dependency)?;
+    if value != V::Null {
+        return Ok(value);
+    }
+    if let Ok(body) = map(body) {
+        if let Some(rule) = body.get("rule").or_else(|| body.get("v"))
+            && matches!(rule, V::Text(_) | V::Map(_))
+        {
+            return Ok(rule.clone());
+        }
+        if let Some(day) = body.get("read").or_else(|| body.get("of")) {
+            return Ok(s(&format!("read {}", display(day)?)));
+        }
+        if let Some(name) = body.get("name").or_else(|| body.get("title")) {
+            return Ok(name.clone());
+        }
+        return Ok(s("present"));
+    }
+    Ok(body.clone())
+}
+
+fn dependency_snapshot(reader: &Reader<'_>, body: &Map) -> Result<Map> {
+    let deps_field = text(&reader.fields()["deps"])?;
+    let dependencies = body
+        .get(deps_field)
+        .and_then(|value| match value {
+            V::List(values) => Some(values),
+            _ => None,
+        })
+        .ok_or_else(|| error("invalid_dependencies"))?;
+    dependencies
+        .iter()
+        .map(|dependency| {
+            let dependency = text(dependency)?;
+            Ok((
+                dependency.into(),
+                snapshot_value(reader, dependency, deps_field)?,
+            ))
+        })
+        .collect()
+}
+
+fn display(value: &V) -> Result<String> {
+    Ok(match value {
+        V::Text(value) => value.clone(),
+        V::Date(value) => value.as_str().into(),
+        V::DateTime(value) => value.as_str().replacen('T', " ", 1),
+        V::Null => "None".into(),
+        V::Bool(value) => if *value { "True" } else { "False" }.into(),
+        V::Integer(value) => value.as_str().into(),
+        V::Float(value) => crate::identity::python_float(value.get()),
+        V::List(_) | V::Map(_) => crate::source_text::ordinary_python_str(value),
+    })
+}
+
+fn authored_equal(left: &V, right: &V) -> bool {
+    match (left, right) {
+        (V::Date(left), V::Text(right)) | (V::Text(right), V::Date(left)) => left.as_str() == right,
+        (V::DateTime(left), V::Text(right)) | (V::Text(right), V::DateTime(left)) => {
+            left.as_str() == right
+        }
+        (V::List(left), V::List(right)) => {
+            left.len() == right.len()
+                && left
+                    .iter()
+                    .zip(right)
+                    .all(|(left, right)| authored_equal(left, right))
+        }
+        (V::Map(left), V::Map(right)) => {
+            left.len() == right.len()
+                && left.iter().all(|(key, left)| {
+                    right
+                        .get(key)
+                        .is_some_and(|right| authored_equal(left, right))
+                })
+        }
+        _ => left == right,
+    }
+}
+
+fn collection_for(reader: &Reader<'_>, action: &Map) -> Result<String> {
+    let candidate = reader.candidate(&V::Map(action.clone()))?;
+    let id = text(field(action, "id")?)?;
+    crate::reasoning_fields::collections(&candidate)?
+        .into_iter()
+        .find(|(_, members)| members.contains_key(id))
+        .map(|(name, _)| name)
+        .ok_or_else(|| error("invalid_candidate"))
+}
+
+fn owner_for(document: &source_document::Document, collection: &str, id: &str) -> Option<PathBuf> {
+    document
+        .origins
+        .get(collection)
+        .and_then(|m| m.get(id))
+        .cloned()
+}
+
+fn choose_add_owner(
+    document: &source_document::Document,
+    collection: &str,
+    id: &str,
+) -> Result<PathBuf> {
+    let head = id.split('.').next().unwrap_or(id);
+    let origins = document.origins.get(collection);
+    if let Some(path) = origins.and_then(|origins| {
+        origins
+            .iter()
+            .find(|(candidate, _)| candidate.split('.').next() == Some(head))
+            .map(|(_, path)| path.clone())
+    }) {
+        return Ok(path);
+    }
+    if let Some(path) = origins.and_then(|origins| origins.values().next()).cloned() {
+        return Ok(path);
+    }
+    for collection in document.origins.values() {
+        if let Some(path) = collection.values().next() {
+            return Ok(path.clone());
+        }
+    }
+    document
+        .members
+        .first()
+        .cloned()
+        .ok_or_else(|| error("missing_record"))
+}
+
+fn add_collection_if_needed(lines: &mut Vec<String>, collection: &str) {
+    ensure_collection(lines, collection);
+}
+
+fn update_review_candidate(
+    document: &V,
+    collection: &str,
+    id: &str,
+    seen_field: &str,
+    seen: &Map,
+    stamp: &str,
+) -> Result<V> {
+    let mut candidate = document.clone();
+    let body = map_mut(
+        map_mut(&mut candidate)?
+            .get_mut(collection)
+            .ok_or_else(|| error("invalid_candidate"))?,
+    )?
+    .get_mut(id)
+    .ok_or_else(|| error("invalid_candidate"))?;
+    let body = map_mut(body)?;
+    body.insert(seen_field.into(), V::Map(seen.clone()));
+    if body.contains_key("reviewed") {
+        body.insert("reviewed".into(), s(stamp));
+    }
+    Ok(candidate)
+}
+
+fn common_root(entry: &Path, members: &[PathBuf]) -> Result<PathBuf> {
+    let mut root = entry
+        .parent()
+        .ok_or_else(|| error("invalid_path"))?
+        .to_path_buf();
+    for member in members {
+        let parent = member.parent().ok_or_else(|| error("invalid_path"))?;
+        while !parent.starts_with(&root) {
+            require(root.pop(), "invalid_path")?;
+        }
+    }
+    Ok(root)
+}
+
+fn relative(root: &Path, path: &Path) -> Result<String> {
+    let path = absolute(path)?;
+    let root = absolute(root)?;
+    let relative = path
+        .strip_prefix(&root)
+        .map_err(|_| error("invalid_path"))?;
+    let value = name(relative)?.replace('\\', "/");
+    history_authority::relative_path(&value)?;
+    Ok(value)
+}
+
+fn legacy_authority(entry: &Path) -> Result<V> {
+    let id = format!(
+        "legacy-{}",
+        &crate::identity::sha256(name(&absolute(entry)?)?.as_bytes())[..32]
+    );
+    history_authority::authority(&id, "legacy", &n("0"), Map::new())
+}
+
+fn authority(entry: &Path) -> Result<V> {
+    let layout = entry_layout(entry)?;
+    let path = entry.parent().unwrap().join(layout.authority);
+    if let Some(raw) = F::read(&path)? {
+        let value = crate::history_yaml::decode_document(&raw)?;
+        history_authority::validate_authority(&value)?;
+        require(
+            string_is(&map(&value)?["authority"], "legacy"),
+            "history_direct_writer_unsupported: use the history writer",
+        )?;
+        Ok(value)
+    } else {
+        legacy_authority(entry)
+    }
+}
+
+struct Prepared {
+    inventory: Inventory,
+    mutation: PreparedMutation,
+    output: String,
+    root: PathBuf,
+    journal: String,
+    subject: String,
+}
+
+enum Preparation {
+    Draft(String),
+    Mutation(Prepared),
+}
+
+fn prepare(action: &V, route: &WriteRoute) -> Result<Preparation> {
+    let a = map(action)?;
+    require(
+        a.get("hypothesis").is_none_or(|value| *value == V::Null),
+        "legacy_named_hypothesis_authoring_requires_history",
+    )?;
+    require(
+        string_is(field(map(route.config())?, "mode")?, "simple"),
+        "legacy_authoring_requires_simple_project",
+    )?;
+    let entry = route
+        .paths()
+        .first()
+        .ok_or_else(|| error("missing_record_path"))?;
+    let mut inventory = Inventory::default();
+    let document = source_document::load(route.paths(), &mut inventory, false)?;
+    require(
+        document.history.is_none(),
+        "history_direct_writer_unsupported: use the history writer",
+    )?;
+    let source = projected_document(&document.source);
+    let runtime = crate::public_workspace::runtime_for_document(&source)?;
+    let mut reader = Reader::new(&source, runtime.as_ref())?;
+    reader.for_action(action)?;
+    let (normalized, notes) = reader.normalize(action)?;
+    let mut action = map(&normalized)?.clone();
+    let refusals = reader.validate(&normalized)?;
+    require(
+        refusals.is_empty(),
+        &format!("refused - {}", refusals.join("\n          ")),
+    )?;
+    let kind = text(field(&action, "kind")?)?.to_owned();
+    let id = text(field(&action, "id")?)?.to_owned();
+    let stamp = action_stamp(&action);
+    let entries = crate::reasoning_snapshot::entries(&source)?;
+    let mut collection = entries.get(&id).map(|(collection, _)| collection.clone());
+    let mut seen = Map::new();
+    if kind == "add" {
+        collection = Some(collection_for(&reader, &action)?);
+        if let Ok(body) = map(field(&action, "body")?) {
+            let deps = text(&reader.fields()["deps"])?;
+            if body.contains_key(deps) {
+                seen = dependency_snapshot(&reader, body)?;
+                let snapshot = text(&reader.fields()["snapshot"])?;
+                map_mut(action.get_mut("body").unwrap())?
+                    .insert(snapshot.into(), V::Map(seen.clone()));
+            }
+        }
+    } else if kind == "review" {
+        let body = entries
+            .get(&id)
+            .ok_or_else(|| error(&format!("refused - {id} is not a judgment")))?
+            .1
+            .clone();
+        let body = map(&body)?;
+        let deps = text(&reader.fields()["deps"])?;
+        require(
+            body.contains_key(deps),
+            &format!("refused - {id} is not a judgment"),
+        )?;
+        seen = dependency_snapshot(&reader, body)?;
+    }
+    let collection =
+        collection.ok_or_else(|| error(&format!("refused - no file of the record holds {id}")))?;
+    let candidate = if kind == "review" {
+        update_review_candidate(
+            &source,
+            &collection,
+            &id,
+            text(&reader.fields()["snapshot"])?,
+            &seen,
+            &stamp,
+        )?
+    } else {
+        reader.candidate(&V::Map(action.clone()))?
+    };
+    if let Some(draft) =
+        Privacy::candidate_draft(route.project(), &V::Map(action.clone()), &candidate)?
+    {
+        return Ok(Preparation::Draft(format!(
+            "{}\n",
+            crate::public_core_readers::json_value(&draft)?
+        )));
+    }
+    if kind == "set"
+        && action.get("as_of").is_none_or(|value| *value == V::Null)
+        && action.get("source").is_none_or(|value| *value == V::Null)
+        && same_legacy(&reader.value(&id)?, field(&action, "value")?)
+    {
+        return Ok(Preparation::Draft(format!(
+            "{id} is already {}; nothing written\n",
+            scalar(field(&action, "value")?, Style::Bare)?
+        )));
+    }
+    let target = if kind == "add" {
+        choose_add_owner(&document, &collection, &id)?
+    } else {
+        owner_for(&document, &collection, &id)
+            .ok_or_else(|| error(&format!("refused - no file of the record holds {id}")))?
+    };
+    let before = inventory
+        .files
+        .get(&target)
+        .cloned()
+        .ok_or_else(|| error("snapshot_changed"))?;
+    let text_source =
+        std::str::from_utf8(&before).map_err(|_| error("nontext_record_authoring_unsupported"))?;
+    let mut lines = text_source
+        .split('\n')
+        .map(str::to_owned)
+        .collect::<Vec<_>>();
+    let mut output = notes;
+    match kind.as_str() {
+        "add" => {
+            add_collection_if_needed(&mut lines, &collection);
+            output.push(format!(
+                "add {}",
+                insert_entry(&mut lines, &collection, &id, field(&action, "body")?)?
+            ));
+        }
+        "set" => {
+            let old = set_entry(
+                &mut lines,
+                &id,
+                field(&action, "value")?,
+                &stamp,
+                action.get("why").and_then(|value| text(value).ok()),
+                action.get("source").and_then(|value| text(value).ok()),
+                action.get("at").and_then(|value| text(value).ok()),
+            )?;
+            output.push(format!(
+                "set {id}: {old} -> {} (as of {stamp})",
+                scalar(field(&action, "value")?, Style::Bare)?
+            ));
+            if let Some(source) = action.get("source").and_then(|value| text(value).ok()) {
+                output.push(format!(
+                    "source: {source}, at {}",
+                    text(field(&action, "at")?)?
+                ));
+            }
+        }
+        "review" => {
+            let (_, member) = locate(&lines, &id)
+                .ok_or_else(|| error(&format!("refused - no file of the record holds {id}")))?;
+            let snapshot = text(&reader.fields()["snapshot"])?;
+            let old_seen = map(map(&entries[&id].1)?
+                .get(snapshot)
+                .unwrap_or(&V::Map(Map::new())))?
+            .clone();
+            replace_field(&mut lines, &member, snapshot, &V::Map(seen.clone()))?;
+            let (_, member) = locate(&lines, &id).unwrap();
+            if field_span(&lines, &member, "reviewed").is_some() {
+                replace_date_field(&mut lines, &member, "reviewed", &stamp)?;
+            }
+            let changed = old_seen.len() != seen.len()
+                || old_seen
+                    .iter()
+                    .any(|(key, value)| seen.get(key).is_none_or(|now| !same_legacy(value, now)));
+            output.push(format!(
+                "review {id}: {} ({stamp})",
+                if changed {
+                    "seen rewritten from what the record holds"
+                } else {
+                    "what it saw is what the record holds"
+                }
+            ));
+            for dependency in map(&entries[&id].1)?[text(&reader.fields()["deps"])?]
+                .clone()
+                .into_list()?
+            {
+                let dependency = text(&dependency)?;
+                match (old_seen.get(dependency), seen.get(dependency)) {
+                    (Some(old), Some(now)) if !same_legacy(old, now) => output.push(format!(
+                        "  {dependency}: {} -> {}",
+                        display(old)?,
+                        display(now)?
+                    )),
+                    (None, Some(now)) => output.push(format!(
+                        "  {dependency}: {} (never checked against it before)",
+                        display(now)?
+                    )),
+                    _ => {}
+                }
+            }
+        }
+        _ => return Err(error("unsupported_legacy_authoring_kind")),
+    }
+    bump_updated(&mut lines, &stamp)?;
+    let after = lines.join("\n").into_bytes();
+    let parsed_before = crate::history_yaml::decode_ordinary_source_value(&before)?;
+    let parsed = crate::history_yaml::decode_ordinary_source_value(&after)?;
+    require(
+        parsed.get("record").map(|value| value.projected())
+            == parsed_before.get("record").map(|value| value.projected())
+            && parsed.get("also").map(|value| value.projected())
+                == parsed_before.get("also").map(|value| value.projected()),
+        "direct_pointer_change: record membership needs a separate migration",
+    )?;
+    let after_projected = parsed.projected();
+    let after_body = crate::reasoning_fields::collections(&after_projected)?
+        .get(&collection)
+        .and_then(|members| members.get(&id))
+        .cloned()
+        .ok_or_else(|| {
+            error("the write broke the record and was undone: entry missing after write")
+        })?;
+    let candidate_body =
+        crate::reasoning_fields::collections(&candidate)?[&collection][&id].clone();
+    require(
+        authored_equal(&after_body, &candidate_body),
+        "the write broke the record and was undone: entry changed meaning",
+    )?;
+    let after_reader = Reader::new(&candidate, runtime.as_ref())?;
+    output.extend(report_lines(&kind, &id, &after_reader)?);
+
+    let root = common_root(entry, &document.members)?;
+    let entry_relative = relative(&root, entry)?;
+    let target_relative = relative(&root, &target)?;
+    let record_members = document
+        .members
+        .iter()
+        .map(|path| {
+            Ok((
+                relative(&root, path)?,
+                s(&crate::identity::sha256(
+                    inventory
+                        .files
+                        .get(path)
+                        .ok_or_else(|| error("snapshot_changed"))?,
+                )),
+            ))
+        })
+        .collect::<Result<Map>>()?;
+    let baseline = object([
+        ("kind", s("direct/v1")),
+        ("transaction_root", s(name(&absolute(&root)?)?)),
+        ("record_members", V::Map(record_members)),
+    ]);
+    let capabilities = crate::reasoning_fields::capabilities(&source, None)?;
+    let receipt = T::semantic_receipt(
+        text(&map(&capabilities)?["profile"])?,
+        &capabilities,
+        &object([(
+            "source_sha256",
+            s(&crate::identity::sha256(&source.canonical_bytes()?)),
+        )]),
+        &object([(
+            "source_sha256",
+            s(&crate::identity::sha256(&candidate.canonical_bytes()?)),
+        )]),
+    )?;
+    let operation = crate::public_history::fresh_id("direct")?;
+    let marker = authority(entry)?;
+    let role = if target == *entry {
+        "record"
+    } else {
+        "record_member"
+    };
+    let mutation = PreparedMutation::prepare(
+        &operation,
+        &marker,
+        &baseline,
+        vec![FileImage {
+            path: target_relative,
+            role: role.into(),
+            before: Some(before),
+            after: Some(after),
+        }],
+        &receipt,
+        &entry_relative,
+        None,
+    )?;
+    let journal = entry_layout(Path::new(&entry_relative))?.journal;
+    Ok(Preparation::Mutation(Prepared {
+        inventory,
+        mutation,
+        output: format!("{}\n", output.join("\n")),
+        root,
+        journal,
+        subject: id,
+    }))
+}
+
+trait IntoList {
+    fn into_list(self) -> Result<Vec<V>>;
+}
+impl IntoList for V {
+    fn into_list(self) -> Result<Vec<V>> {
+        match self {
+            V::List(values) => Ok(values),
+            _ => Err(error("invalid_dependencies")),
+        }
+    }
+}
+
+fn judgment_state(reader: &Reader<'_>, id: &str) -> Result<(String, String)> {
+    let body = map(reader
+        .raw()
+        .get(id)
+        .ok_or_else(|| error("unknown judgment"))?)?;
+    let deps = text(&reader.fields()["deps"])?;
+    let snapshot = text(&reader.fields()["snapshot"])?;
+    let predicate = text(&reader.fields()["predicate"])?;
+    let seen = body.get(snapshot).and_then(|value| map(value).ok());
+    let mut moved = Vec::new();
+    if let Some(V::List(dependencies)) = body.get(deps) {
+        for dependency in dependencies {
+            let dependency = text(dependency)?;
+            let now = snapshot_value(reader, dependency, deps)?;
+            match seen.and_then(|seen| seen.get(dependency)) {
+                Some(old) if !same_legacy(old, &now) => moved.push(format!(
+                    "{dependency} moved {} -> {} since it was reviewed",
+                    display(old)?,
+                    display(&now)?
+                )),
+                None => moved.push(format!("{dependency} was never reviewed")),
+                _ => {}
+            }
+        }
+    }
+    if !moved.is_empty() {
+        return Ok((
+            "MOVED".into(),
+            format!("{} - if it still holds: review {id}", moved.join(", ")),
+        ));
+    }
+    let pred = body.get(predicate).unwrap_or(&V::Null);
+    Ok(match reader.predicate(pred)? {
+        Some(true) => (
+            "FALSIFIED".into(),
+            format!("{predicate} holds ({})", display(pred)?),
+        ),
+        Some(false) => (
+            "HOLDS".into(),
+            format!("{predicate} does not hold ({})", display(pred)?),
+        ),
+        None => (
+            "UNKNOWN".into(),
+            format!("{predicate} is undecidable ({})", display(pred)?),
+        ),
+    })
+}
+
+fn report_lines(kind: &str, id: &str, after: &Reader<'_>) -> Result<Vec<String>> {
+    let deps = text(&after.fields()["deps"])?;
+    if kind == "review" {
+        let (state, why) = judgment_state(after, id)?;
+        return Ok(vec![format!(
+            "  {id} {}: {why}",
+            state.to_ascii_lowercase()
+        )]);
+    }
+    let mut out = Vec::new();
+    let mut reached = Vec::new();
+    for (candidate, body) in after.raw() {
+        if let Ok(body) = map(body)
+            && let Some(V::List(values)) = body.get(deps)
+            && values.iter().any(|value| string_is(value, id))
+        {
+            reached.push(candidate.clone());
+        }
+    }
+    if kind == "add"
+        && after
+            .raw()
+            .get(id)
+            .and_then(|body| map(body).ok())
+            .is_some_and(|body| body.contains_key(deps))
+    {
+        let (state, why) = judgment_state(after, id)?;
+        out.push(format!(
+            "the new judgment {}: {why}",
+            state.to_ascii_lowercase()
+        ));
+        reached.retain(|candidate| candidate != id);
+    }
+    if !reached.is_empty() {
+        out.push("rests on it:".into());
+        reached.sort();
+        for candidate in reached {
+            let (state, why) = judgment_state(after, &candidate)?;
+            out.push(format!("  {state:<9} {candidate}: {why}"));
+        }
+    } else if kind == "set" {
+        out.push("nothing rests on it".into());
+    }
+    let mut moved = 0;
+    let mut falsified = 0;
+    for (candidate, body) in after.raw() {
+        if map(body).is_ok_and(|body| body.contains_key(deps)) {
+            match judgment_state(after, candidate)?.0.as_str() {
+                "MOVED" => moved += 1,
+                "FALSIFIED" => falsified += 1,
+                _ => {}
+            }
+        }
+    }
+    let flagged = moved + falsified;
+    let suffix = if flagged == 0 {
+        String::new()
+    } else {
+        format!(" ({moved} moved, {falsified} falsified)")
+    };
+    out.push(String::new());
+    out.push(format!(
+        "the record needs a person on {flagged} judgment{}{} - check says the rest",
+        if flagged == 1 { "" } else { "s" },
+        suffix
+    ));
+    Ok(out)
+}
+
+fn publish(prepared: Prepared, route: &WriteRoute) -> Result<String> {
+    if prepared.journal.is_empty() {
+        return Ok(prepared.output);
+    }
+    let mut verify = |_: &V| {
+        route.verify()?;
+        prepared.inventory.verify()?;
+        require(
+            self::route(
+                &entry_path(&prepared.root, &prepared.mutation)?,
+                route.config(),
+            )? == AuthorityRoute::Legacy,
+            "project_route_changed",
+        )
+    };
+    F::publish_legacy(
+        &prepared.root,
+        &prepared.journal,
+        &prepared.mutation,
+        &mut verify,
+        None,
+    )?;
+    crate::session_activity::published(
+        &prepared.root,
+        prepared.mutation.files(),
+        Some(&BTreeSet::from([prepared.subject.clone()])),
+    );
+    Ok(prepared.output)
+}
+
+fn entry_path(root: &Path, mutation: &PreparedMutation) -> Result<PathBuf> {
+    Ok(root.join(text(field(map(&mutation.to_data())?, "entry")?)?))
+}
+
+fn verify_recovery(route: &WriteRoute, root: &Path, mutation: &PreparedMutation) -> Result<()> {
+    route.verify()?;
+    let entry = entry_path(root, mutation)?;
+    require(
+        self::route(&entry, route.config())? == AuthorityRoute::Legacy,
+        "project_route_changed",
+    )?;
+    let data = mutation.to_data();
+    let baseline = map(field(map(&data)?, "baseline")?)?;
+    require(
+        baseline
+            .get("kind")
+            .is_some_and(|kind| string_is(kind, "direct/v1")),
+        "unsupported public recovery journal",
+    )?;
+    let expected = map(field(baseline, "record_members")?)?;
+    let mut inventory = Inventory::default();
+    let actual = source_document::members(route.paths(), &mut inventory)?;
+    let actual_names = actual
+        .iter()
+        .map(|path| relative(root, path))
+        .collect::<Result<BTreeSet<_>>>()?;
+    require(
+        actual_names == expected.keys().cloned().collect(),
+        "concurrent_edit: reader-resolved record membership changed",
+    )?;
+    for path in actual {
+        let relative = relative(root, &path)?;
+        let bytes = inventory
+            .files
+            .get(&path)
+            .ok_or_else(|| error("concurrent_edit"))?;
+        let digest = s(&crate::identity::sha256(bytes));
+        let changed = mutation.files().iter().find(|image| image.path == relative);
+        require(
+            changed.is_some_and(|image| {
+                image.before.as_ref() == Some(bytes) || image.after.as_ref() == Some(bytes)
+            }) || changed.is_none() && expected.get(&relative) == Some(&digest),
+            "concurrent_edit",
+        )?;
+    }
+    Ok(())
+}
+
+/// Resume or cancel a retained ordinary-write transaction. The public recover
+/// command can delegate here when this journal's baseline kind is `direct/v1`.
+pub fn recovery_pending(original: &[PathBuf], cwd: &Path) -> Result<bool> {
+    let route = WriteRoute::capture(original, cwd)?;
+    require(route.paths().len() == 1, "choose one logical record entry")?;
+    let entry = &route.paths()[0];
+    if self::route(entry, route.config())? != AuthorityRoute::Legacy {
+        return Ok(false);
+    }
+    let layout = entry_layout(entry)?;
+    let Some(raw) = F::read(&entry.parent().unwrap().join(layout.journal))? else {
+        return Ok(false);
+    };
+    let mutation = PreparedMutation::from_bytes(&raw)?;
+    let data = mutation.to_data();
+    let baseline = map(field(map(&data)?, "baseline")?)?;
+    Ok(baseline
+        .get("kind")
+        .is_some_and(|kind| string_is(kind, "direct/v1")))
+}
+
+pub fn recover(original: &[PathBuf], cwd: &Path, before: bool) -> Result<V> {
+    let route = WriteRoute::capture(original, cwd)?;
+    require(route.paths().len() == 1, "choose one logical record entry")?;
+    let entry = &route.paths()[0];
+    require(
+        self::route(entry, route.config())? == AuthorityRoute::Legacy,
+        "history_direct_writer_unsupported: use the history writer",
+    )?;
+    let local_layout = entry_layout(entry)?;
+    let local_journal = entry.parent().unwrap().join(&local_layout.journal);
+    let raw = F::read(&local_journal)?.ok_or_else(|| error("no_recovery_pending"))?;
+    let mutation = PreparedMutation::from_bytes(&raw)?;
+    let data = mutation.to_data();
+    let baseline = map(field(map(&data)?, "baseline")?)?;
+    require(
+        baseline
+            .get("kind")
+            .is_some_and(|kind| string_is(kind, "direct/v1")),
+        "unsupported public recovery journal",
+    )?;
+    let root = PathBuf::from(text(field(baseline, "transaction_root")?)?);
+    require(root.is_absolute(), "transaction_root_mismatch")?;
+    let journal = relative(&root, &local_journal)?;
+    let direction = if before {
+        F::Direction::Before
+    } else {
+        F::Direction::After
+    };
+    let mut verify = |_: &V| verify_recovery(&route, &root, &mutation);
+    let recovered = F::recover_legacy(&root, &journal, direction, &mut verify, None, None)?;
+    let data = recovered.to_data();
+    Ok(object([
+        ("state", s(if before { "restored" } else { "recovered" })),
+        ("operation", field(map(&data)?, "operation")?.clone()),
+        ("mutation_digest", field(map(&data)?, "digest")?.clone()),
+    ]))
+}
+
+pub(crate) fn write(action: &V, route: &WriteRoute) -> Result<String> {
+    match prepare(action, route)? {
+        Preparation::Draft(output) => Ok(output),
+        Preparation::Mutation(prepared) => publish(prepared, route),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::fs;
+
+    #[test]
+    fn captured_source_change_refuses_before_publication() {
+        let temp = tempfile::tempdir().unwrap();
+        let entry = temp.path().join("GROUNDING.yaml");
+        fs::write(&entry, "known:\n  p.a: {v: 1}\n").unwrap();
+        let route = WriteRoute::capture(std::slice::from_ref(&entry), temp.path()).unwrap();
+        let action = object([
+            ("kind", s("set")),
+            ("id", s("p.a")),
+            ("value", n("2")),
+            ("as_of", s("2026-09-19")),
+            ("why", V::Null),
+            ("into", V::Null),
+            ("hypothesis", V::Null),
+            ("source", V::Null),
+            ("at", V::Null),
+        ]);
+        let Preparation::Mutation(prepared) = prepare(&action, &route).unwrap() else {
+            panic!("expected mutation")
+        };
+        fs::write(&entry, "known:\n  p.a: {v: 7}\n").unwrap();
+        assert_eq!(publish(prepared, &route).unwrap_err().0, "concurrent_edit");
+        assert_eq!(
+            fs::read_to_string(entry).unwrap(),
+            "known:\n  p.a: {v: 7}\n"
+        );
+    }
+
+    #[test]
+    fn retained_publication_can_be_completed_by_legacy_recovery() {
+        for before in [false, true] {
+            let temp = tempfile::tempdir().unwrap();
+            let entry = temp.path().join("GROUNDING.yaml");
+            fs::write(&entry, "known:\n  p.a: {v: 1}\n").unwrap();
+            let route = WriteRoute::capture(std::slice::from_ref(&entry), temp.path()).unwrap();
+            let action = object([
+                ("kind", s("set")),
+                ("id", s("p.a")),
+                ("value", n("2")),
+                ("as_of", s("2026-09-19")),
+                ("why", V::Null),
+                ("into", V::Null),
+                ("hypothesis", V::Null),
+                ("source", V::Null),
+                ("at", V::Null),
+            ]);
+            let Preparation::Mutation(prepared) = prepare(&action, &route).unwrap() else {
+                panic!("expected mutation")
+            };
+            let mut verify = |_: &V| {
+                route.verify()?;
+                prepared.inventory.verify()
+            };
+            let mut stop = |_: &V| Err(error("injected_after_publication"));
+            assert_eq!(
+                F::publish_legacy(
+                    &prepared.root,
+                    &prepared.journal,
+                    &prepared.mutation,
+                    &mut verify,
+                    Some(&mut stop),
+                )
+                .unwrap_err()
+                .0,
+                "injected_after_publication"
+            );
+            assert!(entry.parent().unwrap().join(&prepared.journal).is_file());
+            drop(route);
+            let result = recover(std::slice::from_ref(&entry), temp.path(), before).unwrap();
+            assert!(string_is(
+                &map(&result).unwrap()["state"],
+                if before { "restored" } else { "recovered" }
+            ));
+            assert_eq!(
+                fs::read_to_string(&entry).unwrap(),
+                if before {
+                    "known:\n  p.a: {v: 1}\n"
+                } else {
+                    "known:\n  p.a: {v: 2, of: \"2026-09-19\"}\n"
+                }
+            );
+            assert!(!entry.parent().unwrap().join(prepared.journal).exists());
+        }
+    }
+}

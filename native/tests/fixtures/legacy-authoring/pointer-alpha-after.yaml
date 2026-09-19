@@ -1,0 +1,8 @@
+# alpha shard
+known:
+  p.alpha:
+    v: 1
+    of: 2026-09-01
+
+  p.gamma:
+    v: 3

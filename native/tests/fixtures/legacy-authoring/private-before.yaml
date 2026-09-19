@@ -1,0 +1,13 @@
+meta:
+  updated: 2026-09-01
+sources:
+  s.private:
+    asked: private interview
+    read: 2026-09-01
+    private: true
+known:
+  p.public:
+    v: 1
+    from: s.private
+    of: 2026-09-01
+judgments: {}

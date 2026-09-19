@@ -227,6 +227,12 @@ pub fn run(kind: &str, options: &Options, cwd: &Path) -> Result<String> {
     let entry = &route.paths()[0];
     let _lock =
         F::DirectoryGuard::acquire(entry.parent().ok_or_else(|| error("invalid_path"))?, true)?;
+    if entry.exists()
+        && crate::legacy_authoring::route(entry, route.config())?
+            == crate::legacy_authoring::AuthorityRoute::Legacy
+    {
+        return crate::legacy_authoring::write(&action, &route);
+    }
     if entry.exists() {
         drop(_lock);
         drop(route);
