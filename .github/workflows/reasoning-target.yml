@@ -131,7 +131,9 @@ jobs:
           if-no-files-found: error
 
   installed:
-    timeout-minutes: 20
+    # Three cold distribution checks and the native suites run serially. The
+    # complete history/temporal corpus exceeds 20 minutes on slower targets.
+    timeout-minutes: 45
     needs: build
     # Only this target waits for its own replacement library. Other platforms
     # proceed as soon as their matching build finishes or is intentionally skipped.
