@@ -1053,6 +1053,11 @@ sources:
          computational-only scenarios. Six focused tests and all-target Clippy pass. Full native
          regression suite is running; public CLI and final migration remain incomplete."
     read: "2026-09-19"
+  s.native_session_read:
+    name: "Native public session opening and corrected history composition"
+    file: "/Users/ilanbm/docs/kpopper/rust-migration/R4-SESSION-READ-RESULT.md"
+    read: "2026-09-19"
+    at: "Task 01a0b990; commits d317c86 and 5daf595"
   s.native_snapshot_verification:
     name: "Native snapshot and evaluator conformance"
     from: s.2026_09_19_native_snapshot_continuation
@@ -2397,6 +2402,11 @@ known:
          commit 07871d2, macOS arm64. All-target Clippy with warnings denied, release build and
          record check also passed. No installed activation or cross-platform acceptance is implied."
     of: "2026-09-19"
+  m.native_session_read_tests:
+    name: "Native CLI integration tests after public session routing"
+    v: 14
+    from: s.native_session_read
+    at: "native/tests/cli.rs"
   m.native_source_capture_cases:
     name: "Native source capture differential cases"
     v: 45
