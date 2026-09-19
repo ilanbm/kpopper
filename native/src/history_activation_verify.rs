@@ -520,9 +520,9 @@ pub(crate) fn live_result(
             at(observation, "snapshot_id")? == &s(expected.snapshot_id()),
             "transition_observation_mismatch",
         )?;
-        same_live_context(actual.snapshot(), &expected)?;
+        same_live_context(actual.snapshot()?, &expected)?;
         require(
-            M::entry_identity(&actual.document())?
+            M::entry_identity(&actual.strict_document()?)?
                 == M::entry_identity(at(&expected.to_data(), "document")?)?,
             "transition_meaning_mismatch",
         )?;

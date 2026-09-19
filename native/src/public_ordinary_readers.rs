@@ -1,12 +1,13 @@
 //! Ordinary reader projections retain the legacy interpretation of authored text.
-use crate::history_yaml::SourceValue;
+use crate::history_yaml::{OrdinaryKey, OrdinaryValue};
+use crate::source_text::ordinary_python_str as py;
 use crate::{
     Result,
     history_contract::*,
     history_view::{list, truth},
     ordinary_assessment as A,
     ordinary_reader::{self as R, Reader},
-    reasoning_authoring::{blocked_text, named, py, reopened_text},
+    reasoning_authoring::{blocked_text, named, reopened_text},
     reasoning_fields as F, reasoning_language as L,
     reasoning_runtime::Runtime,
     value::TypedValue as V,
@@ -320,19 +321,19 @@ pub(crate) struct HubData {
     pub reader_lines: Vec<String>,
 }
 
-fn source_body<'a>(source: &'a SourceValue, id: &str) -> Option<&'a SourceValue> {
-    let SourceValue::Map(collections) = source else {
+fn source_body<'a>(source: &'a OrdinaryValue, id: &str) -> Option<&'a OrdinaryValue> {
+    let OrdinaryValue::Map(collections) = source else {
         return None;
     };
     collections
         .iter()
         .filter_map(|(_, members)| {
-            let SourceValue::Map(members) = members else {
+            let OrdinaryValue::Map(members) = members else {
                 return None;
             };
             members
                 .iter()
-                .find(|(name, _)| name == id)
+                .find(|(name, _)| name.text() == Some(id))
                 .map(|(_, body)| body)
         })
         .next_back()
@@ -362,22 +363,25 @@ fn python_scalar(value: &V) -> (&'static str, String) {
     }
 }
 
-fn python_emit(value: &SourceValue, emitter: &mut Emitter<'_>, anchor: Option<&str>) -> Result<()> {
+fn python_emit(
+    value: &OrdinaryValue,
+    emitter: &mut Emitter<'_>,
+    anchor: Option<&str>,
+) -> Result<()> {
     match value {
-        SourceValue::Scalar(value) => {
+        OrdinaryValue::Scalar(value) => {
+            let style = match value {
+                V::Text(text) if crate::history_yaml::resolve(text) != "str" => {
+                    ScalarStyle::SingleQuoted
+                }
+                _ => ScalarStyle::Any,
+            };
             let (tag, value) = python_scalar(value);
             emitter
-                .emit(Event::scalar(
-                    anchor,
-                    Some(tag),
-                    &value,
-                    true,
-                    true,
-                    ScalarStyle::Any,
-                ))
+                .emit(Event::scalar(anchor, Some(tag), &value, true, true, style))
                 .map_err(|err| error(&format!("yaml_emit: {err}")))?;
         }
-        SourceValue::List(values) => {
+        OrdinaryValue::List(values) => {
             emitter
                 .emit(Event::sequence_start(
                     anchor,
@@ -393,7 +397,7 @@ fn python_emit(value: &SourceValue, emitter: &mut Emitter<'_>, anchor: Option<&s
                 .emit(Event::sequence_end())
                 .map_err(|err| error(&format!("yaml_emit: {err}")))?;
         }
-        SourceValue::Map(values) => {
+        OrdinaryValue::Map(values) => {
             emitter
                 .emit(Event::mapping_start(
                     anchor,
@@ -403,7 +407,7 @@ fn python_emit(value: &SourceValue, emitter: &mut Emitter<'_>, anchor: Option<&s
                 ))
                 .map_err(|err| error(&format!("yaml_emit: {err}")))?;
             for (key, value) in values {
-                python_emit(&SourceValue::Scalar(V::Text(key.clone())), emitter, None)?;
+                python_emit(&OrdinaryValue::Scalar(key.scalar().clone()), emitter, None)?;
                 python_emit(value, emitter, None)?;
             }
             emitter
@@ -438,29 +442,35 @@ fn python_finish(mut emitter: Emitter<'_>) -> Result<()> {
     Ok(())
 }
 
-fn python_safe_dump(value: &SourceValue) -> Result<Vec<u8>> {
+fn python_safe_dump(value: &OrdinaryValue) -> Result<Vec<u8>> {
     let mut output = Vec::new();
     let mut emitter = python_emitter(&mut output)?;
     python_emit(value, &mut emitter, None)?;
     python_finish(emitter)?;
-    if matches!(value, SourceValue::Scalar(_)) && !output.ends_with(b"...\n") {
+    if matches!(value, OrdinaryValue::Scalar(_)) && !output.ends_with(b"...\n") {
         output.extend_from_slice(b"...\n");
     }
     Ok(output)
 }
 
 fn python_gate_shape(
-    body: &SourceValue,
+    body: &OrdinaryValue,
     dependencies: &V,
     predicate: &V,
     predicate_field: &str,
 ) -> Result<Vec<u8>> {
     let structured = matches!(predicate, V::Map(_) | V::List(_));
-    let SourceValue::Map(body_fields) = body else {
-        return python_safe_dump(&SourceValue::Map(vec![
-            ("body".into(), body.clone()),
-            ("deps".into(), SourceValue::from_typed(dependencies)),
-            ("predicate".into(), SourceValue::from_typed(predicate)),
+    let OrdinaryValue::Map(body_fields) = body else {
+        return python_safe_dump(&OrdinaryValue::Map(vec![
+            (OrdinaryKey::text_key("body"), body.clone()),
+            (
+                OrdinaryKey::text_key("deps"),
+                OrdinaryValue::from_typed(dependencies),
+            ),
+            (
+                OrdinaryKey::text_key("predicate"),
+                OrdinaryValue::from_typed(predicate),
+            ),
         ]));
     };
     let mut output = Vec::new();
@@ -474,7 +484,7 @@ fn python_gate_shape(
         ))
         .map_err(|err| error(&format!("yaml_emit: {err}")))?;
     python_emit(
-        &SourceValue::Scalar(V::Text("body".into())),
+        &OrdinaryValue::Scalar(V::Text("body".into())),
         &mut emitter,
         None,
     )?;
@@ -488,27 +498,27 @@ fn python_gate_shape(
         .map_err(|err| error(&format!("yaml_emit: {err}")))?;
     for (key, value) in body_fields {
         python_emit(
-            &SourceValue::Scalar(V::Text(key.clone())),
+            &OrdinaryValue::Scalar(key.scalar().clone()),
             &mut emitter,
             None,
         )?;
         python_emit(
             value,
             &mut emitter,
-            (structured && key == predicate_field).then_some("id001"),
+            (structured && key.text() == Some(predicate_field)).then_some("id001"),
         )?;
     }
     emitter
         .emit(Event::mapping_end())
         .map_err(|err| error(&format!("yaml_emit: {err}")))?;
     python_emit(
-        &SourceValue::Scalar(V::Text("deps".into())),
+        &OrdinaryValue::Scalar(V::Text("deps".into())),
         &mut emitter,
         None,
     )?;
-    python_emit(&SourceValue::from_typed(dependencies), &mut emitter, None)?;
+    python_emit(&OrdinaryValue::from_typed(dependencies), &mut emitter, None)?;
     python_emit(
-        &SourceValue::Scalar(V::Text("predicate".into())),
+        &OrdinaryValue::Scalar(V::Text("predicate".into())),
         &mut emitter,
         None,
     )?;
@@ -517,7 +527,7 @@ fn python_gate_shape(
             .emit(Event::alias("id001"))
             .map_err(|err| error(&format!("yaml_emit: {err}")))?;
     } else {
-        python_emit(&SourceValue::from_typed(predicate), &mut emitter, None)?;
+        python_emit(&OrdinaryValue::from_typed(predicate), &mut emitter, None)?;
     }
     emitter
         .emit(Event::mapping_end())
@@ -715,7 +725,7 @@ impl<'a> Projection<'a> {
         })
     }
 
-    pub fn gate_data_with_source(&self, source: Option<&SourceValue>) -> Result<GateData> {
+    pub fn gate_data_with_source(&self, source: Option<&OrdinaryValue>) -> Result<GateData> {
         self.gate_data_inner(source, &BTreeSet::new())
     }
 
@@ -725,7 +735,7 @@ impl<'a> Projection<'a> {
 
     pub fn gate_data_with_source_and_recordings(
         &self,
-        source: Option<&SourceValue>,
+        source: Option<&OrdinaryValue>,
         recordings: &BTreeSet<String>,
     ) -> Result<GateData> {
         self.gate_data_inner(source, recordings)
@@ -733,7 +743,7 @@ impl<'a> Projection<'a> {
 
     fn gate_data_inner(
         &self,
-        source: Option<&SourceValue>,
+        source: Option<&OrdinaryValue>,
         recordings: &BTreeSet<String>,
     ) -> Result<GateData> {
         let (check, _) = self.check(None)?;
@@ -785,12 +795,12 @@ impl<'a> Projection<'a> {
                         .and_then(|s| source_body(s, &dependency))
                         .and_then(|body| {
                             body.get("v")
-                                .filter(|v| v.typed() != V::Null)
+                                .filter(|v| v.projected() != V::Null)
                                 .or_else(|| body.get("quoted"))
                         })
-                        .filter(|original| original.typed() == value)
+                        .filter(|original| original.projected() == value)
                         .cloned()
-                        .unwrap_or_else(|| SourceValue::from_typed(&value));
+                        .unwrap_or_else(|| OrdinaryValue::from_typed(&value));
                     Ok((
                         dependency,
                         String::from_utf8(python_safe_dump(&ordered)?)

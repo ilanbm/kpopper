@@ -3,11 +3,12 @@
 //! The ordinary assessment is supplied by `ordinary_assessment_report`; this module
 //! only selects and presents that retained result.  The browser behavior and styles
 //! remain the long-lived page assets shared with the Python implementation.
+use crate::source_text::ordinary_python_str as py;
 use crate::{
     Result,
     history_contract::{Map, map, text},
     history_view::{list, truth},
-    reasoning_authoring::{named, py},
+    reasoning_authoring::named,
     reasoning_runtime::Runtime,
     source_capture::CapturedSource,
     value::TypedValue as V,
@@ -477,11 +478,11 @@ pub fn build(
     max: usize,
     runtime: Option<&Runtime>,
 ) -> Result<Page> {
-    let document = capture.document();
-    let doc = map(&document)?;
+    let document = capture.ordinary_document();
+    let doc = map(document)?;
     let report = map(assessment)?;
     let nodes = map(&report["nodes"])?;
-    let fields = crate::reasoning_fields::snapshot_fields(&document)?;
+    let fields = crate::reasoning_fields::snapshot_fields(document)?;
     let dep_field = fields
         .get("deps")
         .and_then(|v| text(v).ok())
@@ -506,7 +507,7 @@ pub fn build(
     let empty_conflicts = V::Map(Map::new());
     let conflicts = map(context.get("conflicts").unwrap_or(&empty_conflicts))?;
     let projection = crate::public_ordinary_readers::Projection::new(
-        &document,
+        document,
         map(capture.hypotheses())?,
         conflicts,
         capture.reader_lines()?,

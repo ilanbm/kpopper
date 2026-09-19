@@ -354,8 +354,9 @@ fn snapshot(
             *publication = publication_context(publication)?;
         }
     }
+    let hypotheses = crate::history_yaml::strict_ordinary_projection(&hypotheses)?;
     Snapshot::from_data(
-        &doc.source.typed(),
+        &doc.source.strict_typed()?,
         CaptureOptions {
             context: Some(context),
             hypotheses: Some(portable(&hypotheses, &base, false)?),
@@ -365,7 +366,8 @@ fn snapshot(
     )
 }
 pub struct CapturedSource {
-    snapshot: Snapshot,
+    snapshot: Option<Snapshot>,
+    ordinary_document: V,
     inventory: Inventory,
     routing: Routing,
     document: Document,
@@ -380,13 +382,18 @@ impl CapturedSource {
     pub(crate) fn pending_observation(&self) -> Option<&crate::pending_state::Observation> {
         self.routing.pending.as_ref()
     }
-    pub fn snapshot(&self) -> &Snapshot {
-        &self.snapshot
+    pub fn snapshot(&self) -> Result<&Snapshot> {
+        self.snapshot
+            .as_ref()
+            .ok_or_else(|| crate::Error("invalid_yaml_key".into()))
     }
-    pub fn document(&self) -> V {
-        self.document.source.typed()
+    pub fn strict_document(&self) -> Result<V> {
+        self.document.source.strict_typed()
     }
-    pub fn source(&self) -> &crate::history_yaml::SourceValue {
+    pub fn ordinary_document(&self) -> &V {
+        &self.ordinary_document
+    }
+    pub fn source(&self) -> &crate::history_yaml::OrdinaryValue {
         &self.document.source
     }
     pub fn hypotheses(&self) -> &V {
@@ -553,9 +560,15 @@ fn capture_with(
         final_load = Some((doc, inventory));
     }
     let (document, inventory) = final_load.unwrap();
-    let snapshot = snapshot(&document, &inventory, &initial, &paths, mode, as_of)?;
+    let ordinary_document = document.source.projected();
+    let snapshot = match snapshot(&document, &inventory, &initial, &paths, mode, as_of) {
+        Ok(snapshot) => Some(snapshot),
+        Err(error) if error.0 == "invalid_yaml_key" => None,
+        Err(error) => return Err(error),
+    };
     let captured = CapturedSource {
         snapshot,
+        ordinary_document,
         inventory,
         routing: initial,
         document,
@@ -570,6 +583,44 @@ fn capture_with(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn ordinary_capture_preserves_nontext_body_keys_without_a_snapshot() {
+        let temp = tempfile::tempdir().unwrap();
+        let root = temp.path().canonicalize().unwrap();
+        let entry = root.join("GROUNDING.yaml");
+        std::fs::write(
+            &entry,
+            "p:\n  p.a:\n    v: {on: x}\n    seen: {p.z: {1: one, '1': text}}\n",
+        )
+        .unwrap();
+        let capture =
+            capture_source(std::slice::from_ref(&entry), &root, ReadMode::Frozen, None).unwrap();
+        assert_eq!(capture.snapshot().unwrap_err().0, "invalid_yaml_key");
+        assert_eq!(capture.strict_document().unwrap_err().0, "invalid_yaml_key");
+        let body = &map(capture.ordinary_document()).unwrap()["p"];
+        let body = &map(body).unwrap()["p.a"];
+        assert!(map(body).unwrap()["v"] != V::Null);
+        assert_eq!(capture.files()[&entry], std::fs::read(&entry).unwrap());
+        std::fs::write(&entry, "p: {p.a: {v: changed}}\n").unwrap();
+        assert_eq!(capture.verify().unwrap_err().0, "snapshot_changed");
+    }
+
+    #[test]
+    fn ordinary_capture_refuses_nontext_collection_ids() {
+        for text in ["true: {v: 1}\n", "p:\n  true: {v: 1}\n"] {
+            let temp = tempfile::tempdir().unwrap();
+            let root = temp.path().canonicalize().unwrap();
+            let entry = root.join("GROUNDING.yaml");
+            std::fs::write(&entry, text).unwrap();
+            let error = match capture_source(&[entry], &root, ReadMode::Frozen, None) {
+                Ok(_) => panic!("accepted a nontext structural key"),
+                Err(error) => error,
+            };
+            assert_eq!(error.0, "invalid_ordinary_structural_key");
+        }
+    }
+
     #[test]
     fn exact_bytes_membership_and_routing_are_rechecked() {
         for mutation in 0..4 {

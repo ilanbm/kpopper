@@ -66,7 +66,7 @@ impl<'a> AuthoringSource<'a> {
         } else {
             None
         };
-        let (document, world) = A::prepare(source.snapshot(), action, pending.as_ref(), runtime)?;
+        let (document, world) = A::prepare(source.snapshot()?, action, pending.as_ref(), runtime)?;
         let prepared = Self {
             route,
             source,

@@ -119,7 +119,7 @@ fn ordinary(
 ) -> Result<Current> {
     let context = capture.ordinary_context();
     let projection = Projection::new(
-        &capture.document(),
+        capture.ordinary_document(),
         map(capture.hypotheses())?,
         map(&map(&context)?["conflicts"])?,
         vec![],
@@ -170,7 +170,7 @@ fn ordinary(
 
 fn core(capture: &CapturedSource, runtime: Option<&Runtime>) -> Result<Current> {
     let context = CapturedAssessment::from_snapshot(
-        capture.snapshot().clone(),
+        capture.snapshot()?.clone(),
         None,
         "focused-review/v1",
         runtime,
@@ -313,7 +313,7 @@ fn capture(
         None,
         options.runtime,
     )?;
-    let capabilities = crate::reasoning_fields::capabilities(&capture.document(), None)?;
+    let capabilities = crate::reasoning_fields::capabilities(capture.ordinary_document(), None)?;
     let core_profile = string_is(&map(&capabilities)?["profile"], "core/v1");
     let recordings = if check_purpose && !core_profile {
         crate::recording_receipt::capture(&capture, preparing).unwrap_or_default()

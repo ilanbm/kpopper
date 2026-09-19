@@ -44,8 +44,10 @@ pub fn report(
         options.as_of.as_ref().map(|s| V::Text(s.clone())),
         runtime,
     )?;
-    let cap =
-        crate::reasoning_fields::capabilities(&capture.document(), options.profile.as_deref())?;
+    let cap = crate::reasoning_fields::capabilities(
+        capture.ordinary_document(),
+        options.profile.as_deref(),
+    )?;
     let core = string_is(&map(&cap)?["profile"], "core/v1");
     crate::require(
         core || !options.history,
@@ -59,7 +61,7 @@ pub fn report(
     let mut report = if core {
         if options.history {
             crate::reasoning_history_assessment::assess(
-                capture.snapshot(),
+                capture.snapshot()?,
                 Some(&options.ids),
                 &options.policy,
                 runtime,
@@ -68,7 +70,7 @@ pub fn report(
             )?
         } else {
             crate::reasoning_assessment::assess(
-                capture.snapshot(),
+                capture.snapshot()?,
                 Some(&options.ids),
                 &options.policy,
                 runtime,

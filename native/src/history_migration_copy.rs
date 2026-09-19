@@ -557,9 +557,9 @@ pub fn restore_from_copy(copied: &Path, destination: &Path) -> Result<V> {
                 Some(as_of.clone()),
             )?;
             require(
-                entry_identity(&capture.document())?
+                entry_identity(&capture.strict_document()?)?
                     == entry_identity(&map(&copy.original.to_data())?["document"])?
-                    && hypothesis_identity(&map(&capture.snapshot().to_data())?["hypotheses"])?
+                    && hypothesis_identity(&map(&capture.snapshot()?.to_data())?["hypotheses"])?
                         == hypothesis_identity(&map(&copy.original.to_data())?["hypotheses"])?,
                 "migration_replay_mismatch",
             )?;

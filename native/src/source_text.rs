@@ -138,3 +138,39 @@ pub fn python_str(value: &S) -> String {
         S::Map(_) | S::List(_) => python_repr(value),
     }
 }
+
+/// Python `str` for the ordinary reader's reversible `TypedValue` projection.
+/// Reserved map keys are decoded back to their original scalar identity.
+pub(crate) fn ordinary_python_repr(value: &V) -> String {
+    match value {
+        V::List(values) => format!(
+            "[{}]",
+            values
+                .iter()
+                .map(ordinary_python_repr)
+                .collect::<Vec<_>>()
+                .join(", ")
+        ),
+        V::Map(values) => format!(
+            "{{{}}}",
+            values
+                .iter()
+                .map(|(key, value)| {
+                    let key = crate::history_yaml::projected_ordinary_key(key)
+                        .map(|key| python_repr(&S::Scalar(key)))
+                        .unwrap_or_else(|| quoted(key));
+                    format!("{key}: {}", ordinary_python_repr(value))
+                })
+                .collect::<Vec<_>>()
+                .join(", ")
+        ),
+        _ => python_repr(&S::from_typed(value)),
+    }
+}
+
+pub(crate) fn ordinary_python_str(value: &V) -> String {
+    match value {
+        V::Map(_) | V::List(_) => ordinary_python_repr(value),
+        _ => python_str(&S::from_typed(value)),
+    }
+}

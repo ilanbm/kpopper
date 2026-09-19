@@ -455,7 +455,7 @@ fn actual_pending_bundles_are_retained_and_ref_changes_stop_activation() {
                 .unwrap();
                 fs::write(
                     std::env::temp_dir().join("kpop-authority-live-actual.json"),
-                    actual.snapshot().to_json().unwrap(),
+                    actual.snapshot().unwrap().to_json().unwrap(),
                 )
                 .unwrap();
                 fs::copy(
@@ -646,6 +646,7 @@ fn deployment_locks_do_not_change_detached_target_observations() {
     let expected = capture_source(std::slice::from_ref(&entry), &root, ReadMode::Live, None)
         .unwrap()
         .snapshot()
+        .unwrap()
         .to_data();
     let runtime = tempfile::tempdir().unwrap();
     let selection = selection(runtime.path());

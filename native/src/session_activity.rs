@@ -3,7 +3,7 @@
 use crate::{
     Error, Result,
     history_transaction::FileImage,
-    history_yaml::{self, SourceValue},
+    history_yaml::{self, OrdinaryValue, SourceValue},
     identity::sha256,
     source_capture::CapturedSource,
     value::TypedValue,
@@ -180,31 +180,41 @@ pub fn owned(tmp: &Path, sid: &str, capture: &CapturedSource) -> BTreeSet<String
         return BTreeSet::new();
     }
     let mut bodies = match capture.source() {
-        SourceValue::Map(collections) => collections
+        OrdinaryValue::Map(collections) => collections
             .iter()
             .filter(|(section, _)| {
-                !matches!(section.as_str(), "meta" | "schema" | "record" | "also")
+                !matches!(section.text(), Some("meta" | "schema" | "record" | "also"))
             })
             .filter_map(|(_, members)| match members {
-                SourceValue::Map(members) => Some(members),
+                OrdinaryValue::Map(members) => Some(members),
                 _ => None,
             })
-            .flat_map(|members| members.iter().map(|(id, body)| (id.clone(), body.typed())))
+            .filter_map(|members| {
+                members
+                    .iter()
+                    .map(|(id, body)| Some((id.text()?.to_owned(), body.projected())))
+                    .collect::<Option<Vec<_>>>()
+            })
+            .flatten()
             .collect::<BTreeMap<_, _>>(),
         _ => BTreeMap::new(),
     };
     let mut origins = BTreeMap::new();
-    if let SourceValue::Map(collections) = capture.source() {
+    if let OrdinaryValue::Map(collections) = capture.source() {
         for (section, members) in collections {
-            if matches!(section.as_str(), "meta" | "schema" | "record" | "also") {
+            let Some(section) = section.text() else {
+                continue;
+            };
+            if matches!(section, "meta" | "schema" | "record" | "also") {
                 continue;
             }
-            let SourceValue::Map(members) = members else {
+            let OrdinaryValue::Map(members) = members else {
                 continue;
             };
             for (id, _) in members {
+                let Some(id) = id.text() else { continue };
                 if let Some(path) = capture.origins().get(section).and_then(|m| m.get(id)) {
-                    origins.insert(id.clone(), path.clone());
+                    origins.insert(id.to_owned(), path.clone());
                 } else {
                     origins.remove(id);
                 }

@@ -3,7 +3,7 @@ use crate::{
     Result,
     history_contract::*,
     history_transaction as T, history_transaction_fs as F,
-    history_yaml::{self as Y, SourceValue as S},
+    history_yaml::{self as Y, OrdinaryKey as K, OrdinaryValue as S},
     reasoning_fields, require,
     source_inventory::{Inventory, absolute, name},
     value::TypedValue as V,
@@ -24,8 +24,8 @@ pub(crate) struct Document {
     pub overlay: Option<crate::source_overlay::Overlay>,
 }
 fn parse(inventory: &mut Inventory, path: &Path) -> Result<S> {
-    let value = Y::decode_source_value(&inventory.read(path)?)?;
-    Ok(if crate::history_view::truth(&value.typed()) {
+    let value = Y::decode_ordinary_source_value(&inventory.read(path)?)?;
+    Ok(if crate::history_view::truth(&value.projected()) {
         value
     } else {
         S::Map(vec![])
@@ -87,12 +87,37 @@ pub(crate) fn members(entries: &[PathBuf], inventory: &mut Inventory) -> Result<
     }
     Ok(out)
 }
-fn update(target: &mut Vec<(String, S)>, key: &str, value: S) {
-    if let Some((_, old)) = target.iter_mut().find(|(k, _)| k == key) {
+fn update(target: &mut Vec<(K, S)>, key: K, value: S) {
+    if let Some((_, old)) = target
+        .iter_mut()
+        .find(|(candidate, _)| candidate.python_eq(&key))
+    {
         *old = value;
     } else {
-        target.push((key.into(), value));
+        target.push((key, value));
     }
+}
+
+fn validate_structure(value: &S) -> Result<()> {
+    let S::Map(top) = value else {
+        return Ok(());
+    };
+    require(
+        top.iter().all(|(key, _)| key.text().is_some()),
+        "invalid_ordinary_structural_key",
+    )?;
+    let projected = value.projected();
+    let collections = reasoning_fields::collections(&projected)?;
+    for section in collections.keys() {
+        let Some(S::Map(members)) = value.get(section) else {
+            continue;
+        };
+        require(
+            members.iter().all(|(key, _)| key.text().is_some()),
+            "invalid_ordinary_structural_key",
+        )?;
+    }
+    Ok(())
 }
 fn merge(
     target: &mut S,
@@ -104,35 +129,42 @@ fn merge(
         return Err(error("invalid_schema"));
     };
     for (key, value) in incoming {
+        let key_text = key
+            .text()
+            .ok_or_else(|| error("invalid_ordinary_structural_key"))?;
         if let S::Map(m) = value {
-            if !matches!(target.iter().find(|(k, _)| k == key), Some((_, S::Map(_)))) {
-                origins.remove(key);
+            if !matches!(
+                target.iter().find(|(k, _)| k.python_eq(key)),
+                Some((_, S::Map(_)))
+            ) {
+                origins.remove(key_text);
             }
-            origins
-                .entry(key.clone())
-                .or_default()
-                .extend(m.iter().map(|(k, _)| (k.clone(), path.to_owned())));
+            origins.entry(key_text.to_owned()).or_default().extend(
+                m.iter()
+                    .filter_map(|(k, _)| k.text().map(|k| (k.to_owned(), path.to_owned()))),
+            );
         } else {
-            origins.remove(key);
+            origins.remove(key_text);
         }
-        if let Some((_, S::Map(old))) = target.iter_mut().find(|(k, _)| k == key)
+        if let Some((_, S::Map(old))) = target.iter_mut().find(|(k, _)| k.python_eq(key))
             && let S::Map(new) = value
         {
             for (field, item) in new {
-                if key == "meta"
-                    && field == "prefixes"
+                if key_text == "meta"
+                    && field.text() == Some("prefixes")
                     && let S::Map(add) = item
-                    && let Some((_, S::Map(existing))) = old.iter_mut().find(|(k, _)| k == field)
+                    && let Some((_, S::Map(existing))) =
+                        old.iter_mut().find(|(k, _)| k.python_eq(field))
                 {
                     for (k, v) in add {
-                        update(existing, k, v.clone());
+                        update(existing, k.clone(), v.clone());
                     }
                     continue;
                 }
-                update(old, field, item.clone());
+                update(old, field.clone(), item.clone());
             }
         } else {
-            update(target, key, value.clone());
+            update(target, key.clone(), value.clone());
         }
     }
     Ok(())
@@ -169,7 +201,9 @@ fn physical(directory: &Path, inventory: &mut Inventory) -> Result<V> {
         let mut head = V::Map(Map::new());
         let mut doc = V::Map(Map::new());
         let err = (|| -> Result<()> {
-            let value = parse(inventory, &path)?.typed();
+            let source = parse(inventory, &path)?;
+            validate_structure(&source)?;
+            let value = source.projected();
             let mut body = map(&value)
                 .map_err(|_| error("not a mapping of collections"))?
                 .clone();
@@ -377,11 +411,12 @@ pub(crate) fn load(
                     let S::Map(source) = &mut document.source else {
                         unreachable!()
                     };
-                    update(source, "meta", S::Map(vec![]));
+                    update(source, K::text_key("meta"), S::Map(vec![]));
                     continue;
                 }
                 let value = parse(inventory, &path)?;
-                let typed = value.typed();
+                validate_structure(&value)?;
+                let typed = value.projected();
                 let declared = map(&typed)?
                     .get("meta")
                     .and_then(|m| map(m).ok())
@@ -423,7 +458,7 @@ pub(crate) fn load(
     }
     document.hypotheses = physical(&hypdir, inventory)?;
     if let Some(capture) = &document.history {
-        let doc = document.source.typed();
+        let doc = document.source.strict_typed()?;
         if let Some(imported) = map(&doc)?
             .get("meta")
             .and_then(|m| map(m).ok())

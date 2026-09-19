@@ -33,7 +33,7 @@ fn source_snapshots_match_pinned_python() {
             match result {
                 Ok(capture) => {
                     let expected = V::from_tagged(expected).unwrap();
-                    let actual = capture.snapshot().to_data();
+                    let actual = capture.snapshot().unwrap().to_data();
                     if actual != expected {
                         let a = actual.to_json().unwrap();
                         let b = expected.to_json().unwrap();
@@ -54,7 +54,7 @@ fn source_snapshots_match_pinned_python() {
                         }
                     }
                     assert_eq!(
-                        capture.document(),
+                        capture.strict_document().unwrap(),
                         V::from_tagged(&case["document"]).unwrap()
                     );
                     capture.verify().unwrap();

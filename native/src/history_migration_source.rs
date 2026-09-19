@@ -172,7 +172,7 @@ pub(crate) fn extend(
         }
     }
     let mut evidence = BTreeSet::new();
-    references(&source.document(), &mut evidence);
+    references(&source.strict_document()?, &mut evidence);
     for hyp in map(source.hypotheses())?.values() {
         let h = map(hyp)?;
         if !h.get("kind").is_some_and(|v| string_is(v, "contribution"))

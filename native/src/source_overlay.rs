@@ -147,7 +147,7 @@ pub(crate) fn apply(
     record: &str,
     runtime: Option<&crate::reasoning_runtime::Runtime>,
 ) -> Result<Overlay> {
-    let base = document.source.typed();
+    let base = document.source.projected();
     let mut holders = Holders::new();
     let mut meanings = BTreeMap::new();
     observe(

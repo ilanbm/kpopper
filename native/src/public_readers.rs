@@ -179,22 +179,26 @@ fn replaced(
     let value = crate::history_yaml::decode_document(&inventory.read(&path)?)?;
     Ok((Some(value), relative))
 }
-fn prefix_order(source: &crate::history_yaml::SourceValue) -> Vec<String> {
-    let Some(crate::history_yaml::SourceValue::Map(prefixes)) =
+fn prefix_order(source: &crate::history_yaml::OrdinaryValue) -> Vec<String> {
+    let Some(crate::history_yaml::OrdinaryValue::Map(prefixes)) =
         source.get("meta").and_then(|meta| meta.get("prefixes"))
     else {
         return vec![];
     };
-    prefixes.iter().map(|(key, _)| key.clone()).collect()
+    prefixes
+        .iter()
+        .filter_map(|(key, _)| key.text().map(str::to_owned))
+        .collect()
 }
-fn orientation(source: &crate::history_yaml::SourceValue) -> Vec<String> {
-    use crate::history_yaml::SourceValue as S;
+fn orientation(source: &crate::history_yaml::OrdinaryValue) -> Vec<String> {
+    use crate::history_yaml::OrdinaryValue as S;
     let S::Map(fields) = source else {
         return vec![];
     };
     let mut places = Vec::new();
     for (key, value) in fields {
-        if !["record", "also", "skill", "entry"].contains(&key.as_str()) {
+        let Some(key) = key.text() else { continue };
+        if !["record", "also", "skill", "entry"].contains(&key) {
             continue;
         }
         let name = if let S::Scalar(crate::value::TypedValue::Text(s)) = value {
@@ -310,8 +314,10 @@ pub fn run(
         }
     }
     let capture = source_capture::capture_source_with_runtime(&paths, &cwd, mode, None, runtime)?;
-    let capabilities =
-        crate::reasoning_fields::capabilities(&capture.document(), options.profile.as_deref())?;
+    let capabilities = crate::reasoning_fields::capabilities(
+        capture.ordinary_document(),
+        options.profile.as_deref(),
+    )?;
     if !string_is(&map(&capabilities)?["profile"], "core/v1") {
         let context = capture.ordinary_context();
         let conflicts = map(&map(&context)?["conflicts"])?;
@@ -325,7 +331,7 @@ pub fn run(
             }
         }
         let projection = crate::public_ordinary_readers::Projection::new(
-            &capture.document(),
+            capture.ordinary_document(),
             map(capture.hypotheses())?,
             conflicts,
             knowledge,
@@ -406,7 +412,7 @@ pub fn run(
         "core_profile_option_unsupported: --history; core pull already includes captured history",
     )?;
     let context = CapturedAssessment::from_snapshot(
-        capture.snapshot().clone(),
+        capture.snapshot()?.clone(),
         None,
         "focused-review/v1",
         runtime,

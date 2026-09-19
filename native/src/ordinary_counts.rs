@@ -1,10 +1,11 @@
 //! Ordinary graph counters are derived before predicates over counters are evaluated.
+use crate::source_text::ordinary_python_str as py;
 use crate::{
     Result,
     history_contract::{Map, map, text},
     history_view::truth,
     ordinary_reader::{Reader, predicate_of, predicate_refs},
-    reasoning_authoring::{blocked_text, py, reopened_text},
+    reasoning_authoring::{blocked_text, reopened_text},
     reasoning_fields as F, reasoning_language as L,
     value::{Integer, TypedValue as V},
 };

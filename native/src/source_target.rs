@@ -329,7 +329,7 @@ fn records_isolated(
         None,
         runtime,
     )?;
-    let document = captured.document();
+    let document = captured.strict_document()?;
     let mut hypotheses = vec![];
     for (name, hyp) in map(captured.hypotheses())? {
         let hyp = map(hyp)?;
@@ -379,11 +379,11 @@ fn records_isolated(
             "history".into(),
             history_evidence(captured.history_capture().unwrap())?,
         );
-        captured.snapshot().to_data()
+        captured.snapshot()?.to_data()
     } else if crate::reasoning_operations::selected(&document)? {
         require(runtime.is_some(), "target_runtime_required")?;
         let context = crate::reasoning_context::CapturedAssessment::from_snapshot(
-            captured.snapshot().clone(),
+            captured.snapshot()?.clone(),
             None,
             "focused-review/v1",
             runtime,
@@ -393,12 +393,12 @@ fn records_isolated(
         map_mut(&mut output)?.insert(
             "core".into(),
             obj([
-                ("snapshot", s(&captured.snapshot().to_json()?)),
+                ("snapshot", s(&captured.snapshot()?.to_json()?)),
                 ("assessment", context.base_assessment().clone()),
                 ("findings", crate::reasoning_operations::findings(&context)?),
             ]),
         );
-        captured.snapshot().to_data()
+        captured.snapshot()?.to_data()
     } else {
         let hyps = V::Map(
             hypotheses

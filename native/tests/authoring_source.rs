@@ -33,7 +33,7 @@ fn actual_pending_disposition_controls_profile_preparation() {
         } else {
             let mut prepared = result.unwrap_or_else(|e| panic!("{scenario}: {e}"));
             assert!(prepared.world().is_some());
-            let V::Map(data) = prepared.source().snapshot().to_data() else {
+            let V::Map(data) = prepared.source().snapshot().unwrap().to_data() else {
                 unreachable!()
             };
             assert_eq!(data["as_of"], V::Null);

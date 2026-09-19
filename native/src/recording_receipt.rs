@@ -1,6 +1,6 @@
 //! Retained ingestion receipts establish recorded purpose, not source truth.
 use crate::{
-    Result, history_contract::map, history_yaml::SourceValue, identity::sha256,
+    Result, history_contract::map, history_yaml::OrdinaryValue, identity::sha256,
     project_modes::resolved, source_capture::CapturedSource, source_inventory::Inventory,
     value::TypedValue,
 };
@@ -222,22 +222,26 @@ pub fn capture(
     preparing: Option<&PreparingContext>,
 ) -> Result<RecordingSources> {
     let mut result = RecordingSources::default();
-    let SourceValue::Map(collections) = source.source() else {
+    let OrdinaryValue::Map(collections) = source.source() else {
         return Ok(result);
     };
     let mut effective = BTreeMap::new();
     for (section, members) in collections {
-        if matches!(section.as_str(), "meta" | "schema" | "record" | "also") {
+        let Some(section) = section.text() else {
+            continue;
+        };
+        if matches!(section, "meta" | "schema" | "record" | "also") {
             continue;
         }
-        let SourceValue::Map(members) = members else {
+        let OrdinaryValue::Map(members) = members else {
             continue;
         };
         for (id, body) in members {
+            let Some(id) = id.text() else { continue };
             effective.insert(
                 id,
                 (
-                    body.typed(),
+                    body.projected(),
                     source.origins().get(section).and_then(|m| m.get(id)),
                 ),
             );
@@ -254,7 +258,7 @@ pub fn capture(
             continue;
         }
         if let Ok(true) = valid(id, &body, origin, preparing, &mut result.inventory) {
-            result.ids.insert(id.clone());
+            result.ids.insert(id.to_owned());
         }
     }
     if result.verify().is_err() {

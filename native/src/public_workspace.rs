@@ -80,7 +80,8 @@ pub fn runtime_for_paths(
         .collect::<Result<Vec<_>>>()?;
     let mut inventory = crate::source_inventory::Inventory::default();
     let document = crate::source_document::load(&paths, &mut inventory, true)?;
-    let capabilities = crate::reasoning_fields::capabilities(&document.source.typed(), profile)?;
+    let capabilities =
+        crate::reasoning_fields::capabilities(&document.source.projected(), profile)?;
     let ordinary = !document.members.is_empty()
         && !crate::history_contract::string_is(
             &crate::history_contract::map(&capabilities)?["profile"],

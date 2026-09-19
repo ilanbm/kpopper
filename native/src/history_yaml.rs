@@ -70,6 +70,232 @@ impl SourceValue {
         a.iter().find(|(k, _)| k == key).map(|(_, v)| v)
     }
 }
+
+/// A PyYAML mapping key used only by legacy ordinary-record reads. Canonical
+/// history values continue to require text keys through [`SourceValue`].
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct OrdinaryKey(TypedValue);
+
+const ORDINARY_KEY_PREFIX: &str = "\0kpopper:ordinary-key:";
+
+fn float_integer(value: f64) -> Option<BigInt> {
+    if value == 0.0 {
+        return Some(BigInt::from(0));
+    }
+    let bits = value.to_bits();
+    let negative = bits >> 63 != 0;
+    let exponent = ((bits >> 52) & 0x7ff) as i32;
+    let fraction = bits & ((1_u64 << 52) - 1);
+    let (significand, power) = if exponent == 0 {
+        (fraction, -1022 - 52)
+    } else {
+        ((1_u64 << 52) | fraction, exponent - 1023 - 52)
+    };
+    let mut integer = BigInt::from(significand);
+    if power >= 0 {
+        integer <<= power as usize;
+    } else {
+        let shift = (-power) as usize;
+        if shift >= 64 || significand & ((1_u64 << shift) - 1) != 0 {
+            return None;
+        }
+        integer >>= shift;
+    }
+    Some(if negative { -integer } else { integer })
+}
+
+fn numeric_key(key: &TypedValue) -> Option<BigInt> {
+    match key {
+        TypedValue::Bool(value) => Some(BigInt::from(u8::from(*value))),
+        TypedValue::Integer(value) => BigInt::parse_bytes(value.as_str().as_bytes(), 10),
+        TypedValue::Float(value) => float_integer(value.get()),
+        _ => None,
+    }
+}
+
+impl OrdinaryKey {
+    fn new(value: TypedValue) -> Result<Self> {
+        require(
+            !matches!(value, TypedValue::Map(_) | TypedValue::List(_)),
+            "invalid_yaml_key",
+        )?;
+        Ok(Self(value))
+    }
+    pub fn scalar(&self) -> &TypedValue {
+        &self.0
+    }
+    pub fn text_key(value: impl Into<String>) -> Self {
+        Self(TypedValue::Text(value.into()))
+    }
+    pub fn text(&self) -> Option<&str> {
+        match &self.0 {
+            TypedValue::Text(value) => Some(value),
+            _ => None,
+        }
+    }
+    pub(crate) fn python_eq(&self, other: &Self) -> bool {
+        match (numeric_key(&self.0), numeric_key(&other.0)) {
+            (Some(left), Some(right)) => left == right,
+            _ => match (&self.0, &other.0) {
+                (TypedValue::Float(left), TypedValue::Float(right)) => left.get() == right.get(),
+                _ => self.0 == other.0,
+            },
+        }
+    }
+    fn projected(&self) -> String {
+        match &self.0 {
+            TypedValue::Text(value) if !value.starts_with(ORDINARY_KEY_PREFIX) => value.clone(),
+            TypedValue::Text(value) => format!("{ORDINARY_KEY_PREFIX}t:{value}"),
+            TypedValue::Null => format!("{ORDINARY_KEY_PREFIX}k:n"),
+            TypedValue::Bool(value) => {
+                format!("{ORDINARY_KEY_PREFIX}k:b{}", u8::from(*value))
+            }
+            TypedValue::Integer(value) => {
+                format!("{ORDINARY_KEY_PREFIX}k:i{}", value.as_str())
+            }
+            TypedValue::Float(value) => {
+                format!("{ORDINARY_KEY_PREFIX}k:f{}", value.hex())
+            }
+            TypedValue::Date(value) => {
+                format!("{ORDINARY_KEY_PREFIX}k:d{}", value.as_str())
+            }
+            TypedValue::DateTime(value) => {
+                format!("{ORDINARY_KEY_PREFIX}k:z{}", value.as_str())
+            }
+            TypedValue::Map(_) | TypedValue::List(_) => unreachable!(),
+        }
+    }
+}
+
+/// Source-order, scalar-keyed representation for the legacy ordinary reader.
+/// Its projection is internal compatibility data, never a canonical identity.
+#[derive(Clone, Debug)]
+pub enum OrdinaryValue {
+    Scalar(TypedValue),
+    List(Vec<OrdinaryValue>),
+    Map(Vec<(OrdinaryKey, OrdinaryValue)>),
+}
+
+impl OrdinaryValue {
+    pub fn from_typed(value: &TypedValue) -> Self {
+        match value {
+            TypedValue::List(values) => Self::List(values.iter().map(Self::from_typed).collect()),
+            TypedValue::Map(values) => Self::Map(
+                values
+                    .iter()
+                    .map(|(key, value)| {
+                        (
+                            OrdinaryKey(TypedValue::Text(key.clone())),
+                            Self::from_typed(value),
+                        )
+                    })
+                    .collect(),
+            ),
+            _ => Self::Scalar(value.clone()),
+        }
+    }
+    pub fn get(&self, key: &str) -> Option<&Self> {
+        let Self::Map(values) = self else {
+            return None;
+        };
+        values
+            .iter()
+            .find(|(candidate, _)| candidate.text() == Some(key))
+            .map(|(_, value)| value)
+    }
+    pub fn strict_typed(&self) -> Result<TypedValue> {
+        Ok(match self {
+            Self::Scalar(value) => value.clone(),
+            Self::List(values) => TypedValue::List(
+                values
+                    .iter()
+                    .map(Self::strict_typed)
+                    .collect::<Result<_>>()?,
+            ),
+            Self::Map(values) => {
+                let mut out = std::collections::BTreeMap::new();
+                for (key, value) in values {
+                    let Some(key) = key.text() else {
+                        return Err(Error("invalid_yaml_key".into()));
+                    };
+                    require(
+                        out.insert(key.to_owned(), value.strict_typed()?).is_none(),
+                        "invalid_yaml_key",
+                    )?;
+                }
+                TypedValue::Map(out)
+            }
+        })
+    }
+    pub fn projected(&self) -> TypedValue {
+        match self {
+            Self::Scalar(value) => value.clone(),
+            Self::List(values) => TypedValue::List(values.iter().map(Self::projected).collect()),
+            Self::Map(values) => TypedValue::Map(
+                values
+                    .iter()
+                    .map(|(key, value)| (key.projected(), value.projected()))
+                    .collect(),
+            ),
+        }
+    }
+}
+
+/// Recover a projected ordinary key. `None` means an ordinary text key that
+/// needed no escaping.
+pub(crate) fn projected_ordinary_key(key: &str) -> Option<TypedValue> {
+    let encoded = key.strip_prefix(ORDINARY_KEY_PREFIX)?;
+    if let Some(value) = encoded.strip_prefix("t:") {
+        return Some(TypedValue::Text(value.into()));
+    }
+    let value = encoded.strip_prefix("k:")?;
+    let mut value = value.chars();
+    let kind = value.next()?;
+    let text = value.as_str();
+    match kind {
+        'n' if text.is_empty() => Some(TypedValue::Null),
+        'b' => match text {
+            "0" => Some(TypedValue::Bool(false)),
+            "1" => Some(TypedValue::Bool(true)),
+            _ => None,
+        },
+        'i' => Integer::new(text).ok().map(TypedValue::Integer),
+        'f' => FiniteFloat::from_hex(text).ok().map(TypedValue::Float),
+        'd' => Date::new(text).ok().map(TypedValue::Date),
+        'z' => DateTime::new(text).ok().map(TypedValue::DateTime),
+        _ => None,
+    }
+}
+
+/// Convert an ordinary projection back into the strict string-keyed domain.
+/// Escaped text keys are restored; typed keys are rejected at any depth.
+pub(crate) fn strict_ordinary_projection(value: &TypedValue) -> Result<TypedValue> {
+    Ok(match value {
+        TypedValue::List(values) => TypedValue::List(
+            values
+                .iter()
+                .map(strict_ordinary_projection)
+                .collect::<Result<_>>()?,
+        ),
+        TypedValue::Map(values) => {
+            let mut out = std::collections::BTreeMap::new();
+            for (key, value) in values {
+                let key = match projected_ordinary_key(key) {
+                    Some(TypedValue::Text(key)) => key,
+                    Some(_) => return Err(Error("invalid_yaml_key".into())),
+                    None => key.clone(),
+                };
+                require(
+                    out.insert(key, strict_ordinary_projection(value)?)
+                        .is_none(),
+                    "invalid_yaml_key",
+                )?;
+            }
+            TypedValue::Map(out)
+        }
+        _ => value.clone(),
+    })
+}
 struct Reader<'a> {
     parser: Parser<&'a [u8]>,
     nodes: usize,
@@ -369,6 +595,40 @@ fn construct(node: Node) -> Result<SourceValue> {
     }
 }
 
+fn construct_ordinary(node: Node) -> Result<OrdinaryValue> {
+    match node {
+        Node::Scalar(value) => Ok(OrdinaryValue::Scalar(value)),
+        Node::List(values) => Ok(OrdinaryValue::List(
+            values
+                .into_iter()
+                .map(construct_ordinary)
+                .collect::<Result<_>>()?,
+        )),
+        Node::Map(pairs) => {
+            let mut values: Vec<(OrdinaryKey, OrdinaryValue)> = Vec::new();
+            for (key, value) in flatten(pairs)? {
+                let Node::Scalar(key) = key else {
+                    return Err(Error("invalid_yaml_key".into()));
+                };
+                let key = OrdinaryKey::new(key)?;
+                let value = construct_ordinary(value)?;
+                if let Some((_, previous)) = values
+                    .iter_mut()
+                    .find(|(candidate, _)| candidate.python_eq(&key))
+                {
+                    // Python dict assignment keeps the first inserted key object
+                    // and position while replacing its value.
+                    *previous = value;
+                } else {
+                    values.push((key, value));
+                }
+            }
+            Ok(OrdinaryValue::Map(values))
+        }
+        _ => Err(invalid()),
+    }
+}
+
 // Pure PyYAML differs from LibYAML in two lexical policies. Tabs may occur in
 // quoted/block content or comments, never token separators or plain scalars.
 // Version directives accept any 1.x; they do not change the 1.1 scalar resolver.
@@ -448,7 +708,34 @@ pub fn decode_source_document(raw: &[u8]) -> Result<SourceValue> {
 pub fn decode_source_value(raw: &[u8]) -> Result<SourceValue> {
     decode_source(raw, false)
 }
+
+/// Decode the permissive scalar-keyed mapping used by legacy ordinary reads.
+/// Strict history callers must continue to use `decode_source_*` above.
+pub fn decode_ordinary_source_value(raw: &[u8]) -> Result<OrdinaryValue> {
+    let (node, empty) = decode_node(raw, false)?;
+    if empty {
+        return Ok(OrdinaryValue::Scalar(TypedValue::Null));
+    }
+    let value = construct_ordinary(node.ok_or_else(invalid)?)?;
+    value.projected().validate()?;
+    Ok(value)
+}
+
 fn decode_source(raw: &[u8], mapping: bool) -> Result<SourceValue> {
+    let (node, empty) = decode_node(raw, mapping)?;
+    if empty {
+        return Ok(SourceValue::Scalar(TypedValue::Null));
+    }
+    let value = construct(node.ok_or_else(invalid)?)?;
+    require(
+        !mapping || matches!(value, SourceValue::Map(_)),
+        "invalid_schema",
+    )?;
+    validate_value(&value.typed(), MAX_DOCUMENT_BYTES)?;
+    Ok(value)
+}
+
+fn decode_node(raw: &[u8], mapping: bool) -> Result<(Option<Node>, bool)> {
     require(raw.len() <= MAX_DOCUMENT_BYTES, "history_limit")?;
     std::str::from_utf8(raw).map_err(|_| invalid())?;
     let source = source_for_parser(raw)?;
@@ -465,7 +752,7 @@ fn decode_source(raw: &[u8], mapping: bool) -> Result<SourceValue> {
     )?;
     let start = reader.next()?;
     if !mapping && matches!(start, Event::StreamEnd) {
-        return Ok(SourceValue::Scalar(TypedValue::Null));
+        return Ok((None, true));
     }
     require(
         matches!(start, Event::DocumentStart { .. }),
@@ -478,13 +765,7 @@ fn decode_source(raw: &[u8], mapping: bool) -> Result<SourceValue> {
             && matches!(reader.next()?, Event::StreamEnd),
         "invalid_history_yaml",
     )?;
-    let value = construct(node)?;
-    require(
-        !mapping || matches!(value, SourceValue::Map(_)),
-        "invalid_schema",
-    )?;
-    validate_value(&value.typed(), MAX_DOCUMENT_BYTES)?;
-    Ok(value)
+    Ok((Some(node), false))
 }
 
 /// Match history's compact ASCII JSON accounting, including escaped keys and dates.
@@ -606,4 +887,86 @@ pub fn encode_document(value: &TypedValue) -> Result<Vec<u8>> {
     let raw = out.into_bytes();
     require(decode_document(&raw)? == *value, "serialization_changed")?;
     Ok(raw)
+}
+
+#[cfg(test)]
+mod ordinary_tests {
+    use super::*;
+
+    fn map(value: &OrdinaryValue) -> &[(OrdinaryKey, OrdinaryValue)] {
+        let OrdinaryValue::Map(value) = value else {
+            panic!("expected map")
+        };
+        value
+    }
+
+    fn integer(value: &OrdinaryValue) -> &str {
+        let OrdinaryValue::Scalar(TypedValue::Integer(value)) = value else {
+            panic!("expected integer")
+        };
+        value.as_str()
+    }
+
+    #[test]
+    fn ordinary_keys_follow_python_numeric_collisions_and_first_identity() {
+        let value =
+            decode_ordinary_source_value(b"on: 1\ntrue: 2\n1: 3\n1.0: 4\n\"true\": 5\n\"1\": 6\n")
+                .unwrap();
+        let values = map(&value);
+        assert_eq!(values.len(), 3);
+        assert_eq!(values[0].0.scalar(), &TypedValue::Bool(true));
+        assert_eq!(integer(&values[0].1), "4");
+        assert_eq!(values[1].0.text(), Some("true"));
+        assert_eq!(integer(&values[1].1), "5");
+        assert_eq!(values[2].0.text(), Some("1"));
+        assert_eq!(integer(&values[2].1), "6");
+    }
+
+    #[test]
+    fn ordinary_projection_escapes_reserved_text_keys() {
+        let raw = b"true: typed\n\"\\0kpopper:ordinary-key:k:b1\": text\n";
+        let value = decode_ordinary_source_value(raw).unwrap();
+        let TypedValue::Map(projected) = value.projected() else {
+            panic!("expected map")
+        };
+        assert_eq!(projected.len(), 2);
+        let decoded = projected
+            .keys()
+            .map(|key| projected_ordinary_key(key).unwrap())
+            .collect::<Vec<_>>();
+        assert!(decoded.contains(&TypedValue::Bool(true)));
+        assert!(decoded.contains(&TypedValue::Text("\0kpopper:ordinary-key:k:b1".into())));
+        assert_eq!(
+            strict_ordinary_projection(&value.projected())
+                .unwrap_err()
+                .0,
+            "invalid_yaml_key"
+        );
+
+        let text_only =
+            decode_ordinary_source_value(b"\"\\0kpopper:ordinary-key:k:b1\": text\n").unwrap();
+        let strict = text_only.strict_typed().unwrap();
+        assert_eq!(
+            strict_ordinary_projection(&text_only.projected()).unwrap(),
+            strict
+        );
+    }
+
+    #[test]
+    fn strict_decoders_still_reject_nontext_keys_recursively() {
+        let raw = b"p:\n  p.a:\n    v: {on: x}\n";
+        let ordinary = decode_ordinary_source_value(raw).unwrap();
+        assert_eq!(ordinary.strict_typed().unwrap_err().0, "invalid_yaml_key");
+        assert_eq!(decode_document(raw).unwrap_err().0, "invalid_yaml_key");
+        assert_eq!(
+            decode_source_document(raw).unwrap_err().0,
+            "invalid_yaml_key"
+        );
+    }
+
+    #[test]
+    fn ordinary_collection_keys_must_still_be_scalar() {
+        let error = decode_ordinary_source_value(b"? [a, b]\n: value\n").unwrap_err();
+        assert_eq!(error.0, "invalid_yaml_key");
+    }
 }

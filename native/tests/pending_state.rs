@@ -127,16 +127,16 @@ fn pinned_git_ledgers_and_publisher_status_match_python() {
             .unwrap()
             .to_data();
         }
-        if captured.snapshot().to_data() != expected {
+        if captured.snapshot().unwrap().to_data() != expected {
             eprintln!(
                 "{} actual={} expected={}",
                 case["name"],
-                captured.snapshot().to_json().unwrap(),
+                captured.snapshot().unwrap().to_json().unwrap(),
                 serde_json::to_string(&case["snapshot"]).unwrap()
             );
         }
         assert_eq!(
-            captured.snapshot().to_data(),
+            captured.snapshot().unwrap().to_data(),
             expected,
             "{} live snapshot",
             case["name"]
@@ -185,7 +185,10 @@ fn telemetry_is_private_but_stale_observations_refuse() {
     .unwrap();
     assert_eq!(before.verify().unwrap_err().0, "snapshot_changed");
     let after = capture();
-    assert_eq!(before.snapshot().to_data(), after.snapshot().to_data());
+    assert_eq!(
+        before.snapshot().unwrap().to_data(),
+        after.snapshot().unwrap().to_data()
+    );
     git(&root, &["update-ref", "-d", P::REF], None);
     assert_eq!(after.verify().unwrap_err().0, "snapshot_changed");
 }

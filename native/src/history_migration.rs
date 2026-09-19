@@ -367,7 +367,7 @@ impl Plan {
             options.as_of.clone(),
             runtime,
         )?;
-        let original = source.snapshot().clone();
+        let original = source.snapshot()?.clone();
         let project = P::project_for(std::slice::from_ref(&record), cwd)?;
         let layout = T::Layout::for_entry(entry)?;
         let record_files = source
@@ -451,9 +451,10 @@ impl Plan {
             None
         };
         if let Some(observed) = &observed {
-            Copy::validate_pending(observed.snapshot())?;
+            Copy::validate_pending(observed.snapshot()?)?;
             require(
-                entry_identity(&observed.document())? == entry_identity(&source.document())?,
+                entry_identity(&observed.strict_document()?)?
+                    == entry_identity(&source.strict_document()?)?,
                 "migration_source_changed",
             )?;
         }
@@ -478,7 +479,7 @@ impl Plan {
                 ("members", strings(absolute_members)),
             ]))
         };
-        let document = source.document();
+        let document = source.strict_document()?;
         let d = map(&document)?;
         let meta = d.get("meta").cloned().unwrap_or_else(empty);
         let meta = map(&meta).map_err(|_| error("unsupported_history_metadata"))?;
@@ -738,11 +739,11 @@ impl Plan {
         );
         let observation = if let Some(observed) = &observed {
             let path = format!("{artifacts}/live.json");
-            let bytes = observed.snapshot().to_json()?.into_bytes();
+            let bytes = observed.snapshot()?.to_json()?.into_bytes();
             let v = obj([
                 ("read_mode", s("live")),
                 ("path", s(&path)),
-                ("snapshot_id", s(observed.snapshot().snapshot_id())),
+                ("snapshot_id", s(observed.snapshot()?.snapshot_id())),
                 ("sha256", s(&sha256(&bytes))),
             ]);
             files.insert(path, bytes);
@@ -963,7 +964,8 @@ impl Plan {
         let data = original.to_data();
         let observation_data = observed
             .as_ref()
-            .map(|o| o.snapshot().to_data())
+            .map(|o| o.snapshot().map(|snapshot| snapshot.to_data()))
+            .transpose()?
             .unwrap_or_else(|| data.clone());
         let mut context = map(&observation_data)?["context"].clone();
         map_mut(&mut context)?.insert("read_mode".into(), s("frozen"));
@@ -1163,14 +1165,15 @@ impl Plan {
             ReadMode::Frozen,
             self.options.as_of.clone(),
         )?;
-        let snapshot = capture.snapshot();
+        let snapshot = capture.snapshot()?;
         let replay = Snapshot::from_json(snapshot.to_json()?.as_bytes())?;
         require(
             replay.snapshot_id() == snapshot.snapshot_id(),
             "migration_replay_mismatch",
         )?;
         require(
-            entry_identity(&capture.document())? == entry_identity(&self.source.document())?,
+            entry_identity(&capture.strict_document()?)?
+                == entry_identity(&self.source.strict_document()?)?,
             "migration_body_mismatch",
         )?;
         require(

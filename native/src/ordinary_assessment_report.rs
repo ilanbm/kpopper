@@ -60,7 +60,20 @@ fn json_text(value: &V, spaces: bool) -> Result<String> {
                     if i > 0 {
                         out.push_str(if spaces { ", " } else { "," })
                     }
-                    out.push_str(&serde_json::to_string(k)?);
+                    let key = match crate::history_yaml::projected_ordinary_key(k) {
+                        Some(V::Text(value)) => value,
+                        Some(V::Null) => "null".into(),
+                        Some(V::Bool(value)) => value.to_string(),
+                        Some(V::Integer(value)) => value.as_str().into(),
+                        Some(V::Float(value)) => crate::identity::python_float(value.get()),
+                        Some(V::Date(_) | V::DateTime(_) | V::List(_) | V::Map(_)) => {
+                            return Err(error(
+                                "ordinary JSON requires scalar JSON-compatible keys",
+                            ));
+                        }
+                        None => k.clone(),
+                    };
+                    out.push_str(&serde_json::to_string(&key)?);
                     out.push_str(if spaces { ": " } else { ":" });
                     write(v, out, depth + 1, spaces)?;
                 }
@@ -375,7 +388,7 @@ pub fn from_capture(
     policy: &str,
 ) -> Result<V> {
     let report = assess(
-        &capture.document(),
+        capture.ordinary_document(),
         map(capture.hypotheses())?,
         &capture.ordinary_context(),
         runtime,

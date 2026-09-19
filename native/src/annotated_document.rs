@@ -832,7 +832,7 @@ fn core_record_source(
     let capture = capture_source(&[path.to_owned()], cwd, ReadMode::Frozen, None)
         .map_err(|e| err(format!("The source could not be assessed as core/v1: {e}")))?;
     let context = CapturedAssessment::from_snapshot(
-        capture.snapshot().clone(),
+        capture.snapshot()?.clone(),
         None,
         "focused-review/v1",
         None,
@@ -840,7 +840,7 @@ fn core_record_source(
         None,
     )
     .map_err(|e| err(format!("The source could not be assessed as core/v1: {e}")))?;
-    let snapshot = capture.snapshot().to_data();
+    let snapshot = capture.snapshot()?.to_data();
     let snapshot_nodes = typed_map(&typed_map(&snapshot)?["nodes"])?;
     let report = context.assessment();
     let report_map = typed_map(report)?;

@@ -1,9 +1,10 @@
 //! Ordinary authored admission: identity, references, citations and replacement.
+use crate::source_text::ordinary_python_str as py;
 use crate::{
     Error, Result,
     history_contract::*,
     history_view::truth,
-    reasoning_authoring::{World, blocked_text, py, reopened_text},
+    reasoning_authoring::{World, blocked_text, reopened_text},
     reasoning_fields as F, reasoning_language as L,
     reasoning_snapshot::entries,
     require,

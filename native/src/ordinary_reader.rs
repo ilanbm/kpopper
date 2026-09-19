@@ -1,11 +1,12 @@
 //! Ordinary-reader/v1 values and authored syntax. Legacy coercion is preserved;
 //! explicit formulas use only the separately supplied, verified ordinary Lean program.
+use crate::source_text::ordinary_python_str as py;
 use crate::{
     Error, Result,
     history_contract::*,
     history_view::{map_mut, truth},
     ordinary_runtime::Program,
-    reasoning_authoring::{blocked_text, py},
+    reasoning_authoring::blocked_text,
     reasoning_authoring_guards::{self as G, Admission},
     reasoning_fields as F, reasoning_language as L,
     reasoning_runtime::{OperationalBounds, Runtime},
@@ -153,7 +154,22 @@ fn json_value(v: &V, depth: usize) -> Result<J> {
     Ok(match v {
         V::Map(m) => J::Object(
             m.iter()
-                .map(|(k, v)| Ok((k.clone(), json_value(v, depth + 1)?)))
+                .map(|(k, v)| {
+                    let key = match crate::history_yaml::projected_ordinary_key(k) {
+                        Some(V::Text(value)) => value,
+                        Some(V::Null) => "null".into(),
+                        Some(V::Bool(value)) => value.to_string(),
+                        Some(V::Integer(value)) => value.as_str().into(),
+                        Some(V::Float(value)) => crate::identity::python_float(value.get()),
+                        Some(V::Date(_) | V::DateTime(_) | V::List(_) | V::Map(_)) => {
+                            return Err(Error(
+                                "ordinary JSON requires scalar JSON-compatible keys".into(),
+                            ));
+                        }
+                        None => k.clone(),
+                    };
+                    Ok((key, json_value(v, depth + 1)?))
+                })
                 .collect::<Result<_>>()?,
         ),
         V::List(a) => J::Array(
@@ -395,10 +411,12 @@ impl<'a> Reader<'a> {
             let h = map(h)?;
             if !h.get("error").is_some_and(truth) {
                 let doc = field(h, "document")?;
-                require(
-                    F::semantic_roles(doc)?.is_some(),
-                    "ordinary_hypothesis_unreadable",
-                )?;
+                // A physical hypothesis may contain only one collection and
+                // inherit the base record's field roles, as the legacy reader
+                // does. Explicit roles are still validated when present.
+                if F::semantic_roles(doc)?.is_none() {
+                    F::collections(doc)?;
+                }
             }
         }
         self.hypotheses = hypotheses;

@@ -317,8 +317,10 @@ pub fn run(options: &Options, cwd: &Path, mode: ReadMode) -> Result<Output> {
     let runtime = W::runtime_for_paths(&paths, &cwd, options.profile.as_deref())?;
     let captured =
         source_capture::capture_source_with_runtime(&paths, &cwd, mode, None, runtime.as_ref())?;
-    let capabilities =
-        crate::reasoning_fields::capabilities(&captured.document(), options.profile.as_deref())?;
+    let capabilities = crate::reasoning_fields::capabilities(
+        captured.ordinary_document(),
+        options.profile.as_deref(),
+    )?;
     let core = string_is(&map(&capabilities)?["profile"], "core/v1");
     let brief = match &options.brief {
         Some(path) => absolute(&cwd.join(path))?,
@@ -341,7 +343,7 @@ pub fn run(options: &Options, cwd: &Path, mode: ReadMode) -> Result<Output> {
     if options.verify {
         let output = if core {
             let context = CapturedAssessment::from_snapshot(
-                captured.snapshot().clone(),
+                captured.snapshot()?.clone(),
                 None,
                 "focused-review/v1",
                 runtime.as_ref(),
@@ -395,7 +397,7 @@ pub fn run(options: &Options, cwd: &Path, mode: ReadMode) -> Result<Output> {
     let destination = destination(options, &cwd, first)?;
     let mut protected = captured.files().keys().cloned().collect::<Vec<_>>();
     protected.extend(declared_source_paths(
-        &captured.document(),
+        captured.ordinary_document(),
         first.parent().unwrap(),
     )?);
     for hypothesis in map(captured.hypotheses())?.values() {
@@ -408,7 +410,7 @@ pub fn run(options: &Options, cwd: &Path, mode: ReadMode) -> Result<Output> {
     let resolved = output_path(&destination, &protected)?;
     let html = if core {
         let context = CapturedAssessment::from_snapshot(
-            captured.snapshot().clone(),
+            captured.snapshot()?.clone(),
             None,
             "focused-review/v1",
             runtime.as_ref(),
