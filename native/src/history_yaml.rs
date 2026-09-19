@@ -487,45 +487,46 @@ pub(crate) fn validate_value(value: &TypedValue, maximum: usize) -> Result<()> {
             _ => {}
         }
     }
-    fn size(v: &TypedValue) -> usize {
-        fn string(s: &str) -> usize {
-            2 + s
-                .chars()
-                .map(|c| match c {
-                    '"' | '\\' | '\u{8}' | '\u{c}' | '\n' | '\r' | '\t' => 2,
-                    c if !('\u{20}'..'\u{7f}').contains(&c) => {
-                        if (c as u32) > 0xffff {
-                            12
-                        } else {
-                            6
-                        }
+    require(compact_json_size(value) <= maximum, "history_limit")
+}
+pub(crate) fn compact_json_size(v: &TypedValue) -> usize {
+    fn string(s: &str) -> usize {
+        2 + s
+            .chars()
+            .map(|c| match c {
+                '"' | '\\' | '\u{8}' | '\u{c}' | '\n' | '\r' | '\t' => 2,
+                c if !('\u{20}'..'\u{7f}').contains(&c) => {
+                    if (c as u32) > 0xffff {
+                        12
+                    } else {
+                        6
                     }
-                    _ => 1,
-                })
-                .sum::<usize>()
+                }
+                _ => 1,
+            })
+            .sum::<usize>()
+    }
+    match v {
+        TypedValue::Null => 4,
+        TypedValue::Bool(true) => 4,
+        TypedValue::Bool(false) => 5,
+        TypedValue::Integer(v) => v.as_str().len(),
+        TypedValue::Float(v) => crate::identity::python_float(v.get()).len(),
+        TypedValue::Text(v) => string(v),
+        TypedValue::Date(v) => string(v.as_str()),
+        TypedValue::DateTime(v) => string(v.as_str()),
+        TypedValue::List(v) => {
+            2 + v.len().saturating_sub(1) + v.iter().map(compact_json_size).sum::<usize>()
         }
-        match v {
-            TypedValue::Null => 4,
-            TypedValue::Bool(true) => 4,
-            TypedValue::Bool(false) => 5,
-            TypedValue::Integer(v) => v.as_str().len(),
-            TypedValue::Float(v) => crate::identity::python_float(v.get()).len(),
-            TypedValue::Text(v) => string(v),
-            TypedValue::Date(v) => string(v.as_str()),
-            TypedValue::DateTime(v) => string(v.as_str()),
-            TypedValue::List(v) => {
-                2 + v.len().saturating_sub(1) + v.iter().map(size).sum::<usize>()
-            }
-            TypedValue::Map(v) => {
-                2 + v.len().saturating_sub(1)
-                    + v.iter()
-                        .map(|(k, v)| string(k) + 1 + size(v))
-                        .sum::<usize>()
-            }
+        TypedValue::Map(v) => {
+            2 + v.len().saturating_sub(1)
+                + v.iter()
+                    .map(|(k, v)| string(k) + 1 + compact_json_size(v))
+                    .sum::<usize>()
         }
     }
-    require(size(value) <= maximum, "history_limit")
 }
+
 fn quote(text: &str) -> String {
     // JSON escapes are valid in YAML; YAML line separators must additionally be escaped.
     let json = serde_json::to_string(text).unwrap();

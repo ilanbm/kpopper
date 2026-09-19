@@ -30,7 +30,7 @@ fn list(v: &V) -> &[V] {
     };
     a
 }
-fn claim_meaning(obj: &Map) -> Result<String> {
+pub(crate) fn claim_meaning(obj: &Map) -> Result<String> {
     let mut meaning: Map = ["kind", "body", "pins", "authored"]
         .into_iter()
         .map(|key| (key.into(), obj.get(key).cloned().unwrap_or(V::Null)))

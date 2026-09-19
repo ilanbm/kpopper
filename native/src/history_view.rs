@@ -73,78 +73,12 @@ pub(crate) fn selected_state(capture: &Capture, objects: &Map, raw: &ObjectBytes
     history_reduce::reduce_bytes(&selected, Some(map(&map(&capture.state)?["rules"])?), None)
 }
 
-fn core_declaration(document: &V, declaration: &V) -> Result<()> {
-    let d = map(declaration).map_err(|_| error("invalid_capability"))?;
+pub(crate) fn core_declaration(document: &V, _declaration: &V) -> Result<()> {
+    let capability = crate::reasoning_fields::capabilities(document, None)?;
     require(
-        d.len() == 3
-            && ["version", "profile", "requires"]
-                .iter()
-                .all(|k| d.contains_key(*k)),
-        "invalid_capability",
-    )?;
-    require(
-        matches!(d["version"], V::Integer(_)) && matches!(d["profile"], V::Text(_)),
-        "invalid_capability",
-    )?;
-    let requirements = list(&d["requires"]).map_err(|_| error("invalid_capability"))?;
-    let requirements = requirements
-        .iter()
-        .map(text)
-        .collect::<Result<Vec<_>>>()
-        .map_err(|_| error("invalid_capability"))?;
-    require(
-        requirements.windows(2).all(|w| w[0] < w[1]),
-        "invalid_capability",
-    )?;
-    require(
-        (is_int(&d["version"], "1") || is_int(&d["version"], "2"))
-            && string_is(&d["profile"], "core/v1"),
-        "unsupported_capability",
-    )?;
-    require(
-        requirements
-            .iter()
-            .all(|v| ["arithmetic/v1", "composition/v1", "query/v1"].contains(v)),
-        "unsupported_capability",
-    )?;
-    require(
-        requirements.contains(&"arithmetic/v1"),
-        "invalid_capability",
-    )?;
-    // Typed historical fields require the complete reasoning field-inference
-    // boundary. Until it is available, never certify such a v1 declaration.
-    if is_int(&d["version"], "1") {
-        for (collection, members) in map(document)? {
-            if ["meta", "schema", "record", "also"].contains(&collection.as_str()) {
-                continue;
-            }
-            let V::Map(members) = members else {
-                continue;
-            };
-            for body in members.values() {
-                let V::Map(body) = body else {
-                    continue;
-                };
-                for seen in body.values() {
-                    let V::Map(seen) = seen else {
-                        continue;
-                    };
-                    for old in seen.values() {
-                        if map(old)
-                            .ok()
-                            .and_then(|m| m.get("computed"))
-                            .and_then(|v| map(v).ok())
-                            .and_then(|m| m.get("version"))
-                            .is_some_and(|v| is_int(v, "2"))
-                        {
-                            return Err(error("unsupported_core_history_fields"));
-                        }
-                    }
-                }
-            }
-        }
-    }
-    Ok(())
+        string_is(&map(&capability)?["profile"], "core/v1"),
+        "incompatible_authored_profiles",
+    )
 }
 
 pub fn render_document(
@@ -188,22 +122,7 @@ pub fn render_document(
             .ok_or_else(|| error("unresolved_projection"))?;
         for version in list(&entry["heads"])? {
             let obj = map(&objects[text(version)?])?;
-            let interpretation = obj
-                .get("authored")
-                .and_then(|a| map(a).ok())
-                .and_then(|a| a.get("locator"))
-                .and_then(|a| map(a).ok())
-                .and_then(|a| a.get("interpretation"))
-                .and_then(|a| map(a).ok());
-            require(
-                !interpretation.is_some_and(|i| {
-                    i.get("scope")
-                        .is_some_and(|v| string_is(v, "retained_archive_only"))
-                        && i.get("original_condition_profile")
-                            .is_some_and(|v| string_is(v, "unknown"))
-                }),
-                "profile_resolution_required",
-            )?;
+            crate::history_contract::require_interpretable_claim(&V::Map(obj.clone()))?;
         }
         let obj = map(&objects[text(head)?])?;
         let authored = map(&obj["authored"])?;

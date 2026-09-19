@@ -1,5 +1,6 @@
 #![forbid(unsafe_code)]
 
+pub mod history_adapter;
 pub mod history_authority;
 pub mod history_cancellation;
 pub mod history_capture;
@@ -8,6 +9,7 @@ pub mod history_emit;
 pub mod history_group;
 pub mod history_paths;
 pub mod history_preparation;
+pub mod history_projection;
 pub mod history_reduce;
 pub mod history_store;
 pub mod history_transaction;
@@ -15,6 +17,9 @@ pub mod history_transaction_fs;
 pub mod history_view;
 pub mod history_yaml;
 pub mod identity;
+mod python_identifiers;
+pub mod reasoning_fields;
+pub mod reasoning_language;
 pub mod reasoning_query;
 mod reasoning_query_bounds;
 pub mod reasoning_runtime;

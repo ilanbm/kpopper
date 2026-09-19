@@ -29,6 +29,27 @@ pub(crate) fn text(v: &V) -> Result<&str> {
 pub(crate) fn string_is(v: &V, s: &str) -> bool {
     matches!(v,V::Text(v) if v==s)
 }
+pub fn require_interpretable_claim(obj: &V) -> Result<()> {
+    let Some(authored) = map(obj)?.get("authored") else {
+        return Ok(());
+    };
+    let Some(locator) = map(authored)?.get("locator") else {
+        return Ok(());
+    };
+    let Some(interpretation) = map(locator)?.get("interpretation") else {
+        return Ok(());
+    };
+    let interpretation = map(interpretation)?;
+    require(
+        !(interpretation
+            .get("scope")
+            .is_some_and(|v| string_is(v, "retained_archive_only"))
+            && interpretation
+                .get("original_condition_profile")
+                .is_some_and(|v| string_is(v, "unknown"))),
+        "profile_resolution_required",
+    )
+}
 fn nonblank(s: &str) -> bool {
     !s.trim_matches(|c: char| c.is_whitespace() || ('\u{1c}'..='\u{1f}').contains(&c))
         .is_empty()
