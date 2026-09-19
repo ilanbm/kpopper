@@ -1,5 +1,5 @@
 meta:
-  updated: 2026-09-19
+  updated: 2026-09-20
   name: kpopper
   scope: "What this plugin is for and the decisions that shaped it, kept in its own format -
           the tools eat their own cooking, and every session here opens grounded."
@@ -791,6 +791,9 @@ sources:
     at: "PR #119 run 35285716254 attempt 1 and local forced-date and fixed-day test runs"
     of: "2026-09-18"
     read: "2026-09-18"
+  s.2026_09_19_claude_install_request:
+    asked: "לא בטוח שהבנתי, אבל בסדר תתקן ותעלה; מאשר לעלות עם --admin ולמזג ישר"
+    name: "Request to fix, publish and directly merge the Claude plugin installation repair"
   s.2026_09_19_claude_nested_zip:
     name: "Claude Desktop rejection of ZIP files nested in the kpopper plugin download"
     of: "2026-09-19, Claude Desktop main.log lines 28472, 28518 and 28567: RemotePluginManager
@@ -3090,17 +3093,20 @@ judgments:
                                  consumers and installation without recompiling native source."
   d.claude_plugin_has_no_nested_zip:
     name: "Claude plugin package avoids nested ZIP entries"
+    request: s.2026_09_19_claude_install_request
     verdict: "The Claude plugin source contains no tracked path ending in .zip; ZIP-formatted native
               runtimes use the .kpopper-runtime suffix."
     because: "Claude Desktop packages a relative-path plugin inside a ZIP and rejects any inner
               entry whose extension is .zip. The runtime reader uses zipfile content detection and
               does not require a .zip filename, so a domain-specific suffix preserves the verified
               offline payload while allowing the host to extract the plugin."
-    rests_on: [s.2026_09_19_claude_nested_zip]
+    rests_on: [s.2026_09_19_claude_install_request, s.2026_09_19_claude_nested_zip]
     reopened_by: "Claude documents and ships support for ZIP files nested in plugin downloads, or a
                   supported runtime consumer requires the .zip filename rather than ZIP-formatted
                   bytes."
     seen:
+      s.2026_09_19_claude_install_request: "Request to fix, publish and directly merge the Claude
+                                            plugin installation repair"
       s.2026_09_19_claude_nested_zip: "read 2026-09-19, Claude Desktop main.log lines 28472, 28518
                                        and 28567: RemotePluginManager retried and refused kpopper
                                        1.8.0 with ZipExtractionError because
