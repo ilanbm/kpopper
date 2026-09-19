@@ -1,6 +1,8 @@
 #![forbid(unsafe_code)]
 
 pub mod authoring_source;
+pub mod history_activation;
+mod history_activation_verify;
 pub mod history_adapter;
 pub mod history_authoring;
 mod history_authoring_audit;
@@ -20,6 +22,7 @@ pub mod history_contract;
 pub mod history_edits;
 pub mod history_emit;
 pub mod history_group;
+pub mod history_group_activation;
 pub mod history_hypotheses;
 pub mod history_hypothesis_authoring;
 pub mod history_hypothesis_import;

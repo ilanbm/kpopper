@@ -905,6 +905,16 @@ sources:
          preparation; tests prove accepted contributions remain active, explicit retirement and
          unrelated artifacts differ, and the policy lock survives until release"
     read: "2026-09-19"
+  s.native_authority_lifecycle:
+    name: "Native guarded authority lifecycle conformance"
+    from: s.2026_09_19_native_import_continuation
+    file: "native/tests/history_activation.rs"
+    read: "2026-09-19"
+    at: "task 01a0b92d-ec71-7c20-adea-675373657d06; final Python 1.7 oracle 5acfd0f; 24 exact
+         portable activation and inverse cases, actual Git pending/worktree tests and fault recovery"
+    scope: "Guarded library activation, deactivation and cancellation for single records and
+            explicit worktree groups on macOS arm64; public native CLI routing, browser integration
+            and supported-platform distribution remain pending"
   s.native_batch_envelopes:
     name: "Native final-world batch conformance"
     from: s.2026_09_19_native_snapshot_continuation
@@ -2260,6 +2270,22 @@ known:
     from: doc.host_compatibility
     at: "Scope before launch / initial pre-fix observation on baseline 5c2062b"
     of: "2026-09-17"
+  m.native_authority_oracle_cases:
+    name: "Complete native authority activation and inverse cases"
+    v: 24
+    from: s.native_authority_lifecycle
+    at: "native/tests/fixtures/history-activation.json; 28 final Python cases, 24 complete and 4
+         refused; all portable file images and receipts match, excluding host paths, nonce proof and
+         the activation digest that binds them"
+    of: "2026-09-19"
+  m.native_authority_tests:
+    name: "Full native regression gate after guarded authority lifecycle"
+    v: 214
+    from: s.native_authority_lifecycle
+    at: "R2-authority-final-tests.txt: 214 passed, zero failures; two opt-in actual-launcher tests
+         ignored by default, native activation with the actual configured final Python launcher
+         passed separately; Clippy all-targets with warnings denied passed"
+    of: "2026-09-19"
   m.native_import_runtime_tests:
     name: "Full native regression gate after record import and launcher probes"
     v: 201

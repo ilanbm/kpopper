@@ -95,6 +95,29 @@ fn observation(paths: &[PathBuf], cwd: &Path, mode: ReadMode) -> Result<Routing>
         pending,
     })
 }
+/// Exact routing observation for guarded lifecycle verification, never a Snapshot
+/// projection and never evidence of writer exclusion.
+pub(crate) fn routing_observation(paths: &[PathBuf], cwd: &Path) -> Result<V> {
+    let routing = observation(paths, cwd, ReadMode::Live)?;
+    let mut value = object([
+        ("config", routing.config),
+        ("config_exists", V::Bool(routing.config_bytes.is_some())),
+        ("root", s(name(&routing.root)?)),
+        ("record", s(name(&routing.record)?)),
+    ]);
+    if let Some(pending) = routing.pending {
+        let m = map_mut(&mut value)?;
+        m.insert(
+            "pending_ref".into(),
+            pending.ledger.head.map(|h| s(&h)).unwrap_or(V::Null),
+        );
+        m.insert("publication".into(), pending.publication);
+        if let Some(target) = pending.target {
+            m.insert("target".into(), target);
+        }
+    }
+    Ok(value)
+}
 fn origin(base: &Path, path: &Path) -> Result<String> {
     let path = absolute(path)?;
     Ok(match path.strip_prefix(base) {

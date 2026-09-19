@@ -71,7 +71,7 @@ fn expanded(
     }
     Ok(out)
 }
-fn members(entries: &[PathBuf], inventory: &mut Inventory) -> Result<Vec<PathBuf>> {
+pub(crate) fn members(entries: &[PathBuf], inventory: &mut Inventory) -> Result<Vec<PathBuf>> {
     let mut out = vec![];
     let mut seen = BTreeSet::new();
     let mut pending: Vec<_> = entries.iter().rev().cloned().collect();

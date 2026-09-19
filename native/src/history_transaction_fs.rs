@@ -325,7 +325,7 @@ fn sync(path: &Path) -> Result<()> {
     File::open(path)?.sync_all()?;
     Ok(())
 }
-fn remove(path: &Path) -> Result<()> {
+pub(crate) fn remove(path: &Path) -> Result<()> {
     match fs::remove_file(path) {
         Ok(()) => sync(path.parent().unwrap()),
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(()),
@@ -402,7 +402,7 @@ pub fn participant_directories(root: &Path, m: &PreparedMutation) -> Result<Vec<
         .collect::<Result<BTreeSet<_>>>()
         .map(|v| v.into_iter().collect())
 }
-fn journal_path(root: &Path, journal: &str, m: &PreparedMutation) -> Result<PathBuf> {
+pub(crate) fn journal_path(root: &Path, journal: &str, m: &PreparedMutation) -> Result<PathBuf> {
     let path = target(root, journal)?;
     let candidate = Path::new(journal);
     for item in m.files() {
@@ -435,7 +435,7 @@ fn relative<'a>(root: &Path, path: &'a Path) -> Result<&'a str> {
             .map_err(|_| error("invalid_path"))?,
     )
 }
-fn replicas(root: &Path, journal: &str, m: &PreparedMutation) -> Result<Vec<PathBuf>> {
+pub(crate) fn replicas(root: &Path, journal: &str, m: &PreparedMutation) -> Result<Vec<PathBuf>> {
     let value = data(m);
     let base = map(field(map(&value)?, "baseline")?)?;
     let Some(transaction_root) = base.get("transaction_root") else {
@@ -467,7 +467,7 @@ fn replicas(root: &Path, journal: &str, m: &PreparedMutation) -> Result<Vec<Path
         })
         .collect())
 }
-fn member_guard(root: &Path, m: &PreparedMutation, directory: &Path) -> Result<Vec<u8>> {
+pub(crate) fn member_guard(root: &Path, m: &PreparedMutation, directory: &Path) -> Result<Vec<u8>> {
     let members = participants(m)?
         .iter()
         .map(|p| target(root, p))
@@ -516,7 +516,7 @@ fn ready_path(primary: &Path, m: &PreparedMutation) -> Result<PathBuf> {
         digest(m)?
     )))
 }
-fn remove_journals(primary: &Path, replicas: &[PathBuf]) -> Result<()> {
+pub(crate) fn remove_journals(primary: &Path, replicas: &[PathBuf]) -> Result<()> {
     for path in replicas {
         remove(path)?;
     }
@@ -703,7 +703,7 @@ pub fn reader_guard<T>(
 fn transition_immutable(role: &str) -> bool {
     ["history_object", "history_commit", "history_retained"].contains(&role)
 }
-fn transition_targets(root: &Path, m: &PreparedMutation) -> Result<Vec<PathBuf>> {
+pub(crate) fn transition_targets(root: &Path, m: &PreparedMutation) -> Result<Vec<PathBuf>> {
     let value = data(m);
     let value = map(&value)?;
     require(
@@ -729,7 +729,7 @@ fn transition_targets(root: &Path, m: &PreparedMutation) -> Result<Vec<PathBuf>>
     }
     Ok(paths)
 }
-fn mutable_before(m: &PreparedMutation, paths: &[PathBuf]) -> Result<()> {
+pub(crate) fn mutable_before(m: &PreparedMutation, paths: &[PathBuf]) -> Result<()> {
     for (item, path) in m.files().iter().zip(paths) {
         if !transition_immutable(&item.role) {
             require(read(path)? == item.before, "concurrent_edit")?;
@@ -737,7 +737,7 @@ fn mutable_before(m: &PreparedMutation, paths: &[PathBuf]) -> Result<()> {
     }
     Ok(())
 }
-fn apply_transition(
+pub(crate) fn apply_transition(
     root: &Path,
     m: &PreparedMutation,
     paths: &[PathBuf],
@@ -808,6 +808,36 @@ pub fn recover_transition(
     committed: Option<Verify<'_>>,
 ) -> Result<PreparedMutation> {
     recover_transition_inner(root, journal, direction, verify, committed, false)
+}
+/// Called only by the guarded lifecycle after terminal cancellation verification.
+pub(crate) fn finish_cancelled_transition(
+    root: &Path,
+    journal: &str,
+    m: &PreparedMutation,
+) -> Result<()> {
+    let primary = journal_path(root, journal, m)?;
+    require(
+        read(&primary)?.as_ref() == Some(&m.to_bytes()?),
+        "concurrent_edit",
+    )?;
+    let mut copies = replicas(root, journal, m)?;
+    for path in &copies {
+        let expected = member_guard(root, m, path.parent().unwrap().parent().unwrap())?;
+        require(
+            read(path)?.is_none_or(|raw| raw == expected),
+            "member_guard_mismatch",
+        )?;
+    }
+    if !copies.is_empty() {
+        let ready = ready_path(&primary, m)?;
+        let expected = digest(m)?;
+        require(
+            read(&ready)?.is_none_or(|raw| raw == expected.as_bytes()),
+            "invalid_ready_marker",
+        )?;
+        copies.push(ready);
+    }
+    remove_journals(&primary, &copies)
 }
 pub(crate) fn rollback_bootstrap(
     root: &Path,

@@ -171,6 +171,27 @@ limit. These are bounded input contracts, not a claim to accept every PyYAML sou
 
 ## Library authoring
 
+### Authority lifecycle
+
+`history_activation` prepares and publishes same-record activation, lossless
+deactivation and recovery. It requires an explicit launcher `Selection` and a
+caller-owned `Deployment` guard that excludes managed writers and source replacement
+through publication. The lifecycle holds project policy and ordered record/member
+directory locks, validates the actual pending ledger and publisher observation, and
+reimports retained originals independently before accepting the candidate images.
+Launcher probes execute the selected programs with a fresh nonce and expected
+source/schema/runtime digests. They currently validate `product-python/v1` declarations.
+
+`history_group_activation` applies the same checks to an explicit set of Git
+worktrees sharing one project. Readiness and durable completion precede release of
+the per-member journals. Cancelling a started activation retains its immutable
+evidence and fences the reserved generation at a new legacy epoch. Divergent user
+edits stop recovery. A decoded mutation or group envelope cannot supply the live
+deployment and lock context. These library entry points do not select real migration
+targets or activate an installed deployment; public CLI routing remains pending.
+
+### Immutable authoring
+
 `history_authoring` prepares core `add`, `set`, `review`, targeted disposition acts
 and explicit proposals over a captured history store. Preparation creates a complete
 immutable mutation without publishing it. Direct receipt versions 1/7, act version 4

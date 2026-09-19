@@ -157,6 +157,22 @@ pub(crate) fn records(
     revision: &str,
     runtime: Option<&Runtime>,
 ) -> Result<V> {
+    // The caller retains all live project/record guards. A detached immutable
+    // revision is replayed in a new temporary directory and must not inherit
+    // the caller's directory lock-order namespace.
+    std::thread::scope(|scope| {
+        scope
+            .spawn(|| records_isolated(root, entry, revision, runtime))
+            .join()
+            .map_err(|_| error("target_replay_failed"))?
+    })
+}
+fn records_isolated(
+    root: &Path,
+    entry: &str,
+    revision: &str,
+    runtime: Option<&Runtime>,
+) -> Result<V> {
     require(
         [40, 64].contains(&revision.len())
             && revision

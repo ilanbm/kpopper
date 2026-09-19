@@ -338,6 +338,12 @@ pub(crate) fn empty_capture(root: &Path, entry: &str, marker: &V) -> Result<H::C
     })
 }
 impl Plan {
+    pub(crate) fn inventory(&self) -> &Inventory {
+        &self.inventory
+    }
+    pub(crate) fn members(&self) -> &[PathBuf] {
+        self.source.members()
+    }
     pub fn prepare(
         record: &Path,
         cwd: &Path,
