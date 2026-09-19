@@ -270,6 +270,14 @@ complete or return to an absent record; rollback removes only the exact new imag
 owned by that birth while the recovery journal remains present. Existing records,
 companion evidence and changed images refuse. Publication requires POSIX locks.
 
+`history_migration::Plan` prepares an existing authored record for a new immutable
+history generation in a separate directory. It preserves original bytes and topology,
+archived claims, original provenance gaps, physical hypotheses, inactive generations
+and sealed live observations. Publication verifies the copied record and refuses an
+existing destination atomically. Source-free replay and inverse export validate the
+complete sealed inventory and its import receipt; inverse export never replaces a live
+record. Live authority activation remains a separate integration boundary.
+
 The detached `history_transaction` library decodes Python prepared mutations,
 validates semantic receipts and exact file images, and serializes canonical typed
 journals up to 64 MiB. Its companion `history_transaction_fs` implements guarded

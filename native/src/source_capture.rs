@@ -351,6 +351,9 @@ pub struct CapturedSource {
     mode: ReadMode,
 }
 impl CapturedSource {
+    pub(crate) fn inventory(&self) -> &Inventory {
+        &self.inventory
+    }
     pub(crate) fn pending_observation(&self) -> Option<&crate::pending_state::Observation> {
         self.routing.pending.as_ref()
     }

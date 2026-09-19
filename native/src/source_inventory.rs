@@ -172,6 +172,12 @@ impl Inventory {
             }
         }
     }
+    /// Bind administration bytes without retaining them in a portable source copy.
+    pub fn observe_bytes(&mut self, path: &Path) -> Result<()> {
+        let raw = bytes(path)?;
+        require(raw.len() <= MAX_FILE, "source_limit")?;
+        self.event("bytes", path, Observation::Bytes(sha256(&raw)))
+    }
     pub fn verify(&self) -> Result<()> {
         for ((_, path), expected) in &self.events {
             let actual = match expected {

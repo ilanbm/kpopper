@@ -780,6 +780,11 @@ sources:
             outcome is verified."
     at: "Opening delegated instruction for task 01a0b812-a326-77a2-8e09-64ff2fe3815f"
     read: "2026-09-19"
+  s.2026_09_19_native_import_continuation:
+    name: "Native preserved-authored record import continuation"
+    asked: "Continue the approved kpopper Rust migration autonomously until the FULL planned native
+            outcome is verified."
+    of: "2026-09-19"
   s.2026_09_19_native_live_bootstrap_continuation:
     name: "Native live capture, writer preparation and first-record bootstrap"
     asked: "Continue the approved kpopper Rust migration autonomously until the full planned native
@@ -983,6 +988,16 @@ sources:
     scope: "Native ordinary profile retains legacy comparisons and the verified ordinary Lean
             program; no core assessment or profile promotion is fabricated; public activation and
             supported-platform distribution remain pending"
+  s.native_preserved_import:
+    name: "Native preserved-authored import and managed launcher validation"
+    from: s.2026_09_19_native_import_continuation
+    file: "native/tests/history_migration.rs"
+    read: "2026-09-19"
+    at: "task 01a0b8e2-5100-7f33-b77c-c833dbaa1d52; final Python 1.7 oracle 5acfd0f; exact copy,
+         replay and inverse fixtures; native/tests/history_runtime.rs includes explicit managed
+         launcher validation"
+    scope: "Library import and managed Python launcher probes on macOS arm64; live authority
+            orchestration, public native routing and supported-platform distribution remain pending"
   s.native_project_routing:
     name: "Native project policy and record routing evidence"
     from: s.2026_09_19_native_identity_continuation
@@ -2245,6 +2260,20 @@ known:
     from: doc.host_compatibility
     at: "Scope before launch / initial pre-fix observation on baseline 5c2062b"
     of: "2026-09-17"
+  m.native_import_runtime_tests:
+    name: "Full native regression gate after record import and launcher probes"
+    v: 201
+    from: s.native_preserved_import
+    at: "R2-import-runtime-full-tests.txt: fresh full suite, zero failures, one opt-in launcher
+         probe ignored by default and executed separately; final native source fingerprint"
+    of: "2026-09-19"
+  m.native_import_scenarios:
+    name: "Preserved-authored native import scenarios"
+    v: 28
+    from: s.native_preserved_import
+    at: "native/tests/fixtures/history-migration.json: 27 prepared, 24 complete exact
+         publications/replays/inverses, 3 incomplete aliases, 1 refused"
+    of: "2026-09-19"
   m.native_live_capture_cases:
     name: "Native live pending and target capture cases"
     v: 15
@@ -2259,6 +2288,13 @@ known:
     from: s.native_ordinary_authoring
     at: "R3-ordinary-full-tests.txt; full native suite, zero failures; final source fingerprint;
          macOS arm64"
+  m.native_runtime_declarations:
+    name: "Managed launcher declaration conformance cases"
+    v: 18
+    from: s.native_preserved_import
+    at: "native/tests/fixtures/history-runtime.json; final Python 1.7 declarations and refusal
+         cases"
+    of: "2026-09-19"
   m.native_scenario_watch_tests:
     name: "Full native regression gate after temporal authoring and scenarios"
     v: 185

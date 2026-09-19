@@ -56,7 +56,8 @@ tabs:
     serves: [s.2026_09_19_native_live_bootstrap_continuation,
              s.2026_09_19_native_temporal_continuation,
              s.2026_09_19_native_temporal_authoring,
-             s.2026_09_19_native_ordinary_authoring]
+             s.2026_09_19_native_ordinary_authoring,
+             s.2026_09_19_native_import_continuation]
     sections:
       - title: The questions that pick the next piece of work
         why: each is open on purpose - answering one is how the next thing gets chosen

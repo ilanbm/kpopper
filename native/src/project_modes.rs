@@ -72,7 +72,7 @@ fn expanded(path: &Path) -> Result<PathBuf> {
     }
 }
 /// Resolve existing links while allowing a configured destination to be absent.
-fn resolved(path: &Path) -> Result<PathBuf> {
+pub(crate) fn resolved(path: &Path) -> Result<PathBuf> {
     let path = expanded(path)?;
     let path = if path.is_absolute() {
         path

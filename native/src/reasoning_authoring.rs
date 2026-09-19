@@ -928,7 +928,7 @@ const DECIMAL_ZEROES: &[u32] = &[
     0x11da0, 0x11f50, 0x16130, 0x16a60, 0x16ac0, 0x16b50, 0x16d70, 0x1ccf0, 0x1d7ce, 0x1d7d8,
     0x1d7e2, 0x1d7ec, 0x1d7f6, 0x1e140, 0x1e2f0, 0x1e4f0, 0x1e5f1, 0x1e950, 0x1fbf0,
 ];
-fn decimal_digits(s: &str) -> String {
+pub(crate) fn decimal_digits(s: &str) -> String {
     s.chars()
         .map(|c| {
             DECIMAL_ZEROES
