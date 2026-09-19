@@ -61,6 +61,10 @@ enum Command {
     Consolidate(ConsolidateArgs),
     /// Export a bounded core assessment as Markdown or Mermaid.
     Export(kpop_native::public_export::CommandOptions),
+    /// Inspect or materialize captured knowledge contributions.
+    Knowledge(kpop_native::public_knowledge::Options),
+    /// Inspect local pending contribution state.
+    Pending(kpop_native::public_pending::Options),
     History(kpop_native::public_history::Options),
     Recover {
         #[arg(long)]
@@ -381,6 +385,8 @@ fn run(args: Args) -> Result<Value> {
         | Command::Session(_)
         | Command::Consolidate(_)
         | Command::Export(_)
+        | Command::Knowledge(_)
+        | Command::Pending(_)
         | Command::Check(_)
         | Command::Pull(_)
         | Command::Affects(_)
@@ -393,6 +399,41 @@ fn run(args: Args) -> Result<Value> {
 }
 fn main() {
     let args = Args::parse();
+    if matches!(args.command, Command::Knowledge(_) | Command::Pending(_)) {
+        let cwd = match args
+            .workspace
+            .clone()
+            .map(Ok)
+            .unwrap_or_else(std::env::current_dir)
+        {
+            Ok(cwd) => cwd,
+            Err(error) => {
+                eprintln!("{}", json!({"error":error.to_string()}));
+                std::process::exit(2);
+            }
+        };
+        let (stdout, stderr, code) = match &args.command {
+            Command::Knowledge(options) => {
+                let mode = if args.frozen
+                    || std::env::var("KPOPPER_READ_MODE").as_deref() == Ok("frozen")
+                {
+                    kpop_native::source_capture::ReadMode::Frozen
+                } else {
+                    kpop_native::source_capture::ReadMode::Live
+                };
+                let result = kpop_native::public_knowledge::dispatch(options, &cwd, mode);
+                (result.stdout, result.stderr, result.code)
+            }
+            Command::Pending(options) => {
+                let result = kpop_native::public_pending::dispatch(options, &cwd, args.json);
+                (result.stdout, result.stderr, result.code)
+            }
+            _ => unreachable!(),
+        };
+        print!("{stdout}");
+        eprint!("{stderr}");
+        std::process::exit(code);
+    }
     if let Command::Export(options) = &args.command {
         let result = (|| {
             let cwd = args

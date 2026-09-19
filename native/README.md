@@ -81,6 +81,21 @@ missing/potential/executed relationships distinct, and reports omitted nodes and
 boundary links. Ordinary export remains unconnected. `--json` wraps the text and
 exit status; it does not turn the excerpt into a new assessment schema.
 
+Local contribution state can be inspected or materialized without remote reads:
+
+```sh
+kpop-native knowledge status
+kpop-native --frozen knowledge status
+kpop-native knowledge materialize REVISION --out /absolute/new-snapshot
+kpop-native pending status
+```
+
+Status preserves live/frozen contributions, conflicts, cached publication state,
+private draft descriptors and unavailable targets. Materialization validates the
+complete portable evidence closure and atomically creates an absent destination;
+it refuses an existing output. Import and mutating pending operations remain
+unconnected.
+
 ### Build optional HTML applications
 
 ```sh

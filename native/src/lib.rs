@@ -75,6 +75,8 @@ pub mod public_consolidation;
 pub mod public_export;
 pub mod public_history;
 pub mod public_hub;
+pub mod public_knowledge;
+pub mod public_pending;
 pub mod public_workspace;
 mod python_identifiers;
 pub mod reasoning_assessment;
