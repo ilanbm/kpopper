@@ -71,13 +71,15 @@ def open_context(argv):
             if data.get("mapping"):
                 text += "\nMapping: " + data["mapping"]["mapping"]
             return _emit({**data, "message": text}, text, args.json)
-        if args.profile == 'core/v1':
+        try:
+            from . import provenance as P
+        except ImportError:
+            import provenance as P
+        if args.profile == 'core/v1' or P.core_reader_selected(files):
             if args.chars is not None or args.budget is not None:
                 raise ValueError('core_profile_option_unsupported: --chars/--budget')
-            try:
-                from .reasoning.context import CaptureError, CapturedAssessment
-            except ImportError:
-                from reasoning.context import CaptureError, CapturedAssessment
+            context_module = P._peer('reasoning.context')
+            CaptureError, CapturedAssessment = context_module.CaptureError, context_module.CapturedAssessment
             try:
                 context = CapturedAssessment.capture(files)
             except CaptureError as error:

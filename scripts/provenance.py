@@ -1103,6 +1103,35 @@ def _load(paths, *, read_mode=None):
     return doc
 
 
+def core_reader_selected(paths):
+    """Route only explicitly declared core/history documents to captured readers."""
+    mode = 'frozen' if _RAW_READS.get() else os.environ.get('KPOPPER_READ_MODE', 'live')
+    selected = _peer('knowledge_views').write_paths(paths) if mode == 'live' else paths
+    for pattern in selected:
+        for path in sorted(glob.glob(pattern)) or [pattern]:
+            marker_path = layout(path)['history_authority']
+            if os.path.lexists(marker_path):
+                try:
+                    with io.open(marker_path, 'rb') as stream:
+                        marker_raw = stream.read()
+                    marker = _peer('history_contract').validate_authority(
+                        _peer('history_contract').decode_document(marker_raw))
+                except (OSError, ValueError):
+                    return True  # CapturedAssessment reports the exact authority failure.
+                if marker['authority'] == 'history':
+                    return True
+            if not os.path.isfile(path):
+                continue
+            try:
+                document = parse(path) or {}
+            except (OSError, ValueError, yaml.YAMLError):
+                continue
+            meta = document.get('meta') if isinstance(document, dict) else None
+            if isinstance(meta, dict) and ('history' in meta or 'reasoning' in meta):
+                return True
+    return False
+
+
 def collections_of(doc):
     """Any mapping-of-mappings is a candidate collection of entries."""
     out = {}
@@ -2027,11 +2056,7 @@ def _core_context(paths):
         return None
 
 
-def core_check(paths):
-    """Apply explicit core check policy to one captured v3 finding set."""
-    context = _core_context(paths)
-    if context is None:
-        return 1
+def _core_check_findings(paths, context):
     report = context.assessment
     failures, notes = [], []
     for nid, node in sorted(report['nodes'].items()):
@@ -2074,6 +2099,16 @@ def core_check(paths):
             failures.append('page shape moved (' + '; '.join(stale) + ')')
     except (OSError, ValueError, TypeError) as error:
         failures.append('page projection unavailable (' + str(error) + ')')
+    return failures, notes
+
+
+def core_check(paths):
+    """Apply explicit core check policy to one captured v3 finding set."""
+    context = _core_context(paths)
+    if context is None:
+        return 1
+    report = context.assessment
+    failures, notes = _core_check_findings(paths, context)
     for line in notes:
         print('NOTE ' + line)
     for line in failures:
@@ -5869,6 +5904,18 @@ def mark(state_path, paths):
     """Written at session start: how many problems check finds, which intents no tab of the
     page serves, the ids the record holds, and the record and tree as the session found
     them."""
+    if core_reader_selected(paths):
+        context = _peer('reasoning.context').CapturedAssessment.capture(paths)
+        fail, _ = _core_check_findings(paths, context)
+        report = context.assessment
+        state = {'profile': 'core/v1', 'snapshot_id': context.snapshot_id,
+                 'findings_revision': context.findings_revision,
+                 'fails': len(fail), 'failures': fail, 'unserved': [],
+                 'ids': sorted(set(report['nodes']) | set(report['history_subjects'])),
+                 'judgments': {}, 'nudged': False, **tree_state(paths)}
+        with io.open(state_path, 'w', encoding='utf-8') as f:
+            json.dump(state, f)
+        return 0
     doc = load(paths)
     ids, jud, fields = infer(doc)
     fail, _, _, _, _ = check_lines(paths)
@@ -5893,7 +5940,9 @@ def _marked(state_path):
             state = {"fails": int(str(state).strip() or 0)}
         except ValueError:
             state = {"fails": 0}
-    return {"fails": int(state.get("fails") or 0), "unserved": list(state.get("unserved") or []),
+    return {"profile": state.get("profile"), "snapshot_id": state.get("snapshot_id"),
+            "findings_revision": state.get("findings_revision"),
+            "fails": int(state.get("fails") or 0), "unserved": list(state.get("unserved") or []),
             "ids": state.get("ids"), "failures": state.get("failures"),
             "judgments": state.get("judgments") or {}, "digest": state.get("digest"),
             "tree": state.get("tree"), "nudged": bool(state.get("nudged"))}
@@ -5905,6 +5954,40 @@ def gate(state_path, paths, turns=0, host=None, nudged_at=None, *, _recording_co
     wrote with no intent recorded; and, once, real work that left the record untouched.
     Printed, and 2 when there is anything - the hook bounces once and yields."""
     base = _marked(state_path)
+    if core_reader_selected(paths):
+        context = _core_context(paths)
+        if context is None:
+            return 2
+        fail, _ = _core_check_findings(paths, context)
+        previous = set(base['failures'] or []) if base['profile'] == 'core/v1' else set()
+        out = []
+        added = [item for item in fail if item not in previous]
+        if added:
+            out.append(f"{paths[0]} fails core check with {len(fail)} problems "
+                       f"({base['fails']} at session start).")
+            out.extend('FAIL ' + item for item in added[:12])
+        now_ids = set(context.assessment['nodes']) | set(context.assessment['history_subjects'])
+        if base['ids'] is not None:
+            new = sorted(now_ids - set(base['ids']))
+            nodes = context.assessment['nodes']
+            intents = {identifier for identifier, node in nodes.items()
+                       if isinstance(node.get('body'), dict) and
+                       (node['body'].get('asked') or node['body'].get('recorded_for'))}
+            attributed = {identifier for identifier, node in nodes.items()
+                          if isinstance(node.get('body'), dict) and
+                          (node['body'].get('from') in intents or
+                           bool(set(node['body'].get(node.get('fields', {}).get('deps'), [])) & intents))}
+            if new and not set(new) & (intents | attributed):
+                names = ', '.join(new[:4]) + (f" and {len(new) - 4} more" if len(new) > 4 else '')
+                out.append(f"this session wrote {len(new)} {'entry' if len(new) == 1 else 'entries'} "
+                           f"({names}); verify its recorded intent before finishing")
+        if not out:
+            nudge = untouched(base, paths, turns, host, nudged_at)
+            if nudge:
+                out.append(nudge)
+        for line in out:
+            print(line)
+        return 2 if out else 0
     fail, _, _, _, _ = check_lines(paths)
     doc = load(paths)
     ids, jud, fields = infer(doc)
@@ -6339,7 +6422,8 @@ if __name__ == "__main__":
     if cmd == "affects":
         files = [x for x in rest if x.endswith((".yaml", ".yml"))] or default_paths()
         changed = [x for x in rest if not x.endswith((".yaml", ".yml"))]
-        sys.exit(core_affects(files, changed) if profile else affects(files, changed))
+        sys.exit(core_affects(files, changed) if profile or core_reader_selected(files)
+                 else affects(files, changed))
     if cmd == "pull":
         b, seeds, files, history, budget_requested = 40, [], [], False, False
         i = 0
@@ -6350,11 +6434,13 @@ if __name__ == "__main__":
                 history = True; i += 1; continue
             (files if rest[i].endswith((".yaml", ".yml")) else seeds).append(rest[i])
             i += 1
-        if profile and history:
+        selected = files or default_paths()
+        use_core = bool(profile) or core_reader_selected(selected)
+        if use_core and history:
             sys.exit('core_profile_option_unsupported: --history; core pull already includes captured history')
-        if profile and budget_requested:
+        if use_core and budget_requested:
             sys.exit('core_profile_option_unsupported: --budget')
-        code = core_pull(files or default_paths(), seeds) if profile else pull(files or default_paths(), seeds, b)
+        code = core_pull(selected, seeds) if use_core else pull(selected, seeds, b)
         if history:
             lines = history_lines(files or default_paths(), seeds)
             print()
@@ -6363,8 +6449,13 @@ if __name__ == "__main__":
         sys.exit(code)
     files = [x for x in rest if x.lower().endswith((".yaml", ".yml"))] or default_paths()
     if cmd == "open":
+        if profile or core_reader_selected(files):
+            args = ['--profile', 'core/v1', *files]
+            if '--json' in rest:
+                args.insert(0, '--json')
+            sys.exit(_peer('workspace_cli').open_context(args))
         b = int(rest[rest.index("--budget") + 1]) if "--budget" in rest else 25
         c = int(rest[rest.index("--chars") + 1]) if "--chars" in rest else None
         h = rest[rest.index("--host") + 1] if "--host" in rest else None
         sys.exit(opening(files, b, c, h))
-    sys.exit(core_check(files) if profile else check(files))
+    sys.exit(core_check(files) if profile or core_reader_selected(files) else check(files))

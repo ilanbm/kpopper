@@ -100,6 +100,8 @@ def prepare(entry, action, *, policy, operation=None, recorded_at=None, record_i
             _replay=False):
     """Prepare a deterministic parentless first commit without touching the tree."""
     entry = Path(entry).resolve()
+    C._require(not P.is_legacy(entry), 'legacy_record_birth_unsupported',
+               'new records must use GROUNDING.yaml')
     if not _replay:
         _verify_environment(entry)
     action = copy.deepcopy(action)

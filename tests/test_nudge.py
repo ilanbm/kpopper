@@ -67,7 +67,7 @@ class FirstWrite(Scratch):
         text = record.read_text(encoding="utf-8")
         self.assertIn("known:", text)
         self.assertIn("  acme.seat_price:", text)
-        self.assertEqual(self.cli("check", "--profile", "core/v1")[0], 0)
+        self.assertEqual(self.cli("check")[0], 0)
         code, out, _ = self.cli("add", "which_tier", "does the enterprise tier include support?")
         self.assertEqual(code, 0, out)
         self.assertIn("open:", record.read_text(encoding="utf-8"))

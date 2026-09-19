@@ -48,14 +48,20 @@ class NewRecordHistoryDefault(unittest.TestCase):
         captured = H.Store(record).capture()
         self.assertEqual(captured.state["subjects"]["p.value"]["body"]["v"], 1)
 
-        reopened = self.cli("--json", "history", "status")
+        reopened = self.cli("open", "--json")
         self.assertEqual(reopened.returncode, 0, reopened.stderr)
         payload = json.loads(reopened.stdout)
-        self.assertEqual(payload["state"], "captured")
-        self.assertEqual(payload["authority"]["authority"], "history")
+        self.assertEqual(payload["assessment_profile"], "core/v1")
         self.assertEqual(Path(payload["record"]).resolve(), record.resolve())
-        checked = self.cli("check", "--profile", "core/v1")
+        checked = self.cli("check")
         self.assertEqual(checked.returncode, 0, checked.stderr)
+        self.assertIn("core/v1 snapshot", checked.stdout)
+        pulled = self.cli("pull", "p.value")
+        self.assertEqual(pulled.returncode, 0, pulled.stderr)
+        self.assertEqual(json.loads(pulled.stdout)["profile"], "core/v1-consumer/v1")
+        affected = self.cli("affects", "p.value")
+        self.assertEqual(affected.returncode, 0, affected.stderr)
+        self.assertIn("core/v1 snapshot", affected.stdout)
 
     def test_existing_undeclared_grounding_stays_legacy(self):
         record = self.workspace / "GROUNDING.yaml"
@@ -67,6 +73,35 @@ class NewRecordHistoryDefault(unittest.TestCase):
         document = yaml.safe_load(record.read_text())
         self.assertNotIn("reasoning", document.get("meta", {}))
         self.assertFalse((self.workspace / ".kpopper" / "history.yaml").exists())
+
+    def test_other_public_readers_auto_select_declared_core(self):
+        self.add_first()
+        assessed = self.cli("assess", "p.value")
+        self.assertEqual(assessed.returncode, 0, assessed.stderr)
+        self.assertEqual(json.loads(assessed.stdout)["assessment_profile"], "core/v1")
+        exported = self.cli("export", "p.value")
+        self.assertEqual(exported.returncode, 0, exported.stderr)
+        self.assertIn("Shared assessment", exported.stdout)
+        searched = self.cli("search", "value")
+        self.assertEqual(searched.returncode, 0, searched.stderr)
+        self.assertIn("findings_revision", json.loads(searched.stdout))
+        page = self.root / "record.html"
+        rendered = self.cli("page", "--out", str(page))
+        self.assertEqual(rendered.returncode, 0, rendered.stderr)
+        self.assertTrue(page.is_file())
+
+    def test_session_mark_and_gate_auto_select_declared_core(self):
+        record = self.add_first()
+        state = self.root / "session-mark.json"
+        mark = subprocess.run([sys.executable, str(ROOT / "scripts/provenance.py"),
+            "mark", str(state), str(record)], cwd=self.workspace, env=self.env,
+            capture_output=True, text=True)
+        self.assertEqual(mark.returncode, 0, mark.stderr)
+        self.assertEqual(json.loads(state.read_text())["profile"], "core/v1")
+        gate = subprocess.run([sys.executable, str(ROOT / "scripts/provenance.py"),
+            "gate", str(state), str(record)], cwd=self.workspace, env=self.env,
+            capture_output=True, text=True)
+        self.assertEqual(gate.returncode, 0, gate.stderr + gate.stdout)
 
     def test_existing_undeclared_legacy_name_stays_legacy(self):
         record = self.workspace / "PROVENANCE.yaml"
@@ -92,6 +127,19 @@ class NewRecordHistoryDefault(unittest.TestCase):
         self.assertEqual(set(captured.state["subjects"]), {"p.first", "p.second"})
         self.assertEqual(captured.marker["generation"], 1)
         self.assertEqual(len(captured.commits), 2)
+
+    def test_configured_missing_legacy_name_is_not_created(self):
+        legacy = self.workspace / "PROVENANCE.yaml"
+        config = self.workspace / ".kpopper" / "project.json"
+        config.parent.mkdir()
+        config.write_text(json.dumps({"version": 1, "mode": "simple", "record": str(legacy),
+                                      "publication": None, "generation": 1}))
+        result = self.cli("add", "p.value", "v=1", "--as-of", "2026-09-01")
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("new records must use GROUNDING.yaml", result.stderr + result.stdout)
+        self.assertFalse(legacy.exists())
+        self.assertFalse((self.workspace / "PROVENANCE.history.yaml").exists())
+        self.assertFalse((self.workspace / "PROVENANCE.history").exists())
 
 
 if __name__ == "__main__":
