@@ -17,6 +17,9 @@ use std::{
     path::{Path, PathBuf},
 };
 
+#[path = "public_knowledge_import.rs"]
+pub(crate) mod import_helper;
+
 fn s(value: &str) -> V {
     V::Text(value.into())
 }
@@ -44,6 +47,8 @@ pub enum Command {
     Status(StatusOptions),
     /// Materialize one immutable contribution into a new frozen snapshot directory.
     Materialize(MaterializeOptions),
+    /// Capture an old shared record as an immutable pending contribution.
+    Import(ImportOptions),
 }
 
 #[derive(Clone, Debug, Default, clap::Args)]
@@ -56,6 +61,21 @@ pub struct MaterializeOptions {
     pub out: PathBuf,
     #[arg(long = "ref")]
     pub reference: Option<String>,
+}
+
+#[derive(Clone, Debug, clap::Args)]
+pub struct ImportOptions {
+    pub file: PathBuf,
+    #[arg(long, value_parser = ["project", "private", "unclear"], required = true)]
+    pub shareability: String,
+    #[arg(long, value_parser = ["project", "external"], required = true)]
+    pub scope: String,
+    #[arg(long, required = true)]
+    pub environment: String,
+    #[arg(long)]
+    pub evidence: Option<PathBuf>,
+    #[arg(long)]
+    pub event_id: Option<String>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -396,6 +416,7 @@ pub fn run(options: &Options, workspace: &Path, mode: ReadMode) -> Result<V> {
     match &options.command {
         Command::Status(status_options) => status(workspace, mode, status_options),
         Command::Materialize(materialize_options) => materialize(workspace, materialize_options),
+        Command::Import(import_options) => import_helper::run(workspace, import_options),
     }
 }
 
