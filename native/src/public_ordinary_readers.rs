@@ -13,8 +13,15 @@ use crate::{
 };
 use libyaml_safer::{Emitter, Encoding, Event, MappingStyle, ScalarStyle, SequenceStyle};
 use sha2::{Digest, Sha256};
-use std::collections::{BTreeMap, BTreeSet};
+use std::{
+    collections::{BTreeMap, BTreeSet},
+    sync::LazyLock,
+};
 type Reach = (Vec<(String, String)>, BTreeSet<String>);
+static MISFILED_REOPENER: LazyLock<regex::Regex> = LazyLock::new(|| {
+    regex::Regex::new(r"^\s*([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z0-9_]+)+)\s*(<=|>=|==|!=|<|>)")
+        .unwrap()
+});
 fn s(v: &str) -> V {
     V::Text(v.into())
 }
@@ -1885,17 +1892,81 @@ impl Projection<'_> {
         let mut fail = vec![];
         let mut note = self.knowledge.clone();
         let mut moved = vec![];
+
+        // Keep manual edits under the same structured-expression admission rules as
+        // tool-authored writes.  Check validates shape and graph reach only; it does
+        // not evaluate an optional page or create a second expression runtime.
+        let predicate_field = text(&self.base.reader.fields["predicate"]).ok();
+        let dependency_field = text(&self.base.reader.fields["deps"])?;
+        for (id, body) in self
+            .base
+            .reader
+            .raw
+            .iter()
+            .filter(|(id, _)| !F::BUILTINS.contains(&id.as_str()))
+        {
+            let Ok(fields) = map(body) else {
+                continue;
+            };
+            let mut expressions = vec![("rule", false)];
+            if let Some(field) = predicate_field {
+                expressions.push((field, true));
+            }
+            for (field, predicate) in expressions {
+                let Some(value @ V::Map(_)) = fields.get(field) else {
+                    continue;
+                };
+                if let Err(error) = L::legacy_expression_detailed(value, predicate) {
+                    fail.push(format!("{id}: {field}: {}", error.0));
+                    continue;
+                }
+                let references = L::legacy_references(value);
+                let missing = references
+                    .iter()
+                    .filter(|reference| {
+                        !self.base.reader.ids.contains(*reference)
+                            && !F::BUILTINS.contains(&reference.as_str())
+                    })
+                    .cloned()
+                    .collect::<Vec<_>>();
+                if !missing.is_empty() && blocked_text(body).is_empty() {
+                    fail.push(format!(
+                        "{id}: {field}: unknown references: {}",
+                        missing.join(", ")
+                    ));
+                }
+                if predicate {
+                    let dependencies = iterable(get(fields, dependency_field))?
+                        .into_iter()
+                        .collect::<BTreeSet<_>>();
+                    let undeclared = references
+                        .into_iter()
+                        .filter(|reference| !dependencies.contains(reference))
+                        .collect::<Vec<_>>();
+                    if !undeclared.is_empty() {
+                        fail.push(format!(
+                            "{id}: predicate reads undeclared references: {}",
+                            undeclared.join(", ")
+                        ));
+                    }
+                } else if fields.contains_key("v") || fields.contains_key("quoted") {
+                    fail.push(format!(
+                        "{id}: a structured rule cannot also store v or quoted"
+                    ));
+                }
+            }
+        }
+
         for (id, body) in &self.base.judgments {
             let flags = crate::ordinary_counts::flags(&self.base.reader, body)?;
             let pred = self.base.pred(id);
             let blocked = blocked_text(body);
             let reopened = reopened_text(body);
+            let dependencies = self.base.deps(id)?;
             if flags.contains("broken") {
-                for dep in self
-                    .base
-                    .deps(id)?
-                    .into_iter()
-                    .filter(|dep| !self.base.reader.ids.contains(dep))
+                for dep in dependencies
+                    .iter()
+                    .filter(|dep| !self.base.reader.ids.contains(*dep))
                 {
                     fail.push(format!("{id}: rests on {dep}, which is not an entry"));
                 }
@@ -1908,16 +1979,34 @@ impl Projection<'_> {
                     text(&self.base.reader.fields["snapshot"]).unwrap_or(""),
                 ))
                 .unwrap_or(&empty);
-                for dep in self
-                    .base
-                    .deps(id)?
-                    .into_iter()
-                    .filter(|dep| self.base.reader.ids.contains(dep) && !seen.contains_key(dep))
+                for dep in dependencies
+                    .iter()
+                    .filter(|dep| self.base.reader.ids.contains(*dep) && !seen.contains_key(*dep))
                 {
                     fail.push(format!(
                         "{id}: no snapshot for {dep} - never checked against it"
                     ));
                 }
+            }
+            let declared = dependencies.into_iter().collect::<BTreeSet<_>>();
+            for reference in R::predicate_refs(&pred)
+                .into_iter()
+                .collect::<BTreeSet<_>>()
+            {
+                if self.base.reader.ids.contains(&reference) && !declared.contains(&reference) {
+                    fail.push(format!(
+                        "{id}: predicate reads {reference}, which it does not declare as a dependency - a change to it would never reach this"
+                    ));
+                }
+            }
+            if MISFILED_REOPENER
+                .captures(&reopened)
+                .is_some_and(|captures| self.base.reader.ids.contains(&captures[1]))
+            {
+                fail.push(format!(
+                    "{id}: reopened_by reads as a comparison ({}) - a predicate belongs in wrong_if, where it is evaluated; a re-opener is the sign a person reads",
+                    short(&s(&reopened), 60)
+                ));
             }
             if flags.contains("falsified") {
                 fail.push(format!(

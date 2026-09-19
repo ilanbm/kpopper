@@ -38,6 +38,49 @@ fn contested_check_uses_the_reference_forty_character_claim_width() {
     let output = cli(root, &["check"], &root.join("private"));
     assert!(String::from_utf8(output.stdout).unwrap().contains("CONTESTED p.load: alpha says a very long alternative reading that de…, beta says another equally long alternative readin… - one of them folds, or neither; a person decides"));
 }
+
+#[test]
+fn ordinary_check_rejects_manual_expression_and_dependency_bypasses() {
+    let tmp = tempfile::tempdir().unwrap();
+    let root = tmp.path();
+    fs::write(
+        root.join("GROUNDING.yaml"),
+        concat!(
+            "schema: {deps: rests_on, snapshot: seen, predicate: wrong_if}\n",
+            "known:\n",
+            "  p.a: {v: 1}\n",
+            "  p.b: {v: 2}\n",
+            "  p.invalid: {rule: {op: add, of: [p.b]}}\n",
+            "  p.mixed: {v: 9, rule: {op: add, args: [{ref: p.a}, {num: '1'}]}}\n",
+            "  p.unknown: {rule: {op: add, args: [{ref: p.ghost}, {num: '1'}]}}\n",
+            "judgments:\n",
+            "  d.reopened: {verdict: wait, rests_on: [p.a], seen: {p.a: 1}, reopened_by: 'p.a > 9'}\n",
+            "  d.structured: {verdict: wait, rests_on: [p.a], seen: {p.a: 1}, wrong_if: {op: gt, args: [{ref: p.b}, {num: '9'}]}}\n",
+            "  d.text: {verdict: wait, rests_on: [p.a], seen: {p.a: 1}, wrong_if: 'p.b > 9'}\n",
+        ),
+    )
+    .unwrap();
+    let output = cli(root, &["--frozen", "check"], &root.join("private"));
+    assert_eq!(output.status.code(), Some(1));
+    let text = String::from_utf8(output.stdout).unwrap();
+    let failures = text
+        .lines()
+        .filter(|line| line.starts_with("FAIL "))
+        .collect::<Vec<_>>();
+    assert_eq!(
+        failures,
+        vec![
+            "FAIL d.structured: predicate reads undeclared references: p.b",
+            "FAIL p.invalid: rule: invalid expression fields",
+            "FAIL p.mixed: a structured rule cannot also store v or quoted",
+            "FAIL p.unknown: rule: unknown references: p.ghost",
+            "FAIL d.reopened: reopened_by reads as a comparison (p.a > 9) - a predicate belongs in wrong_if, where it is evaluated; a re-opener is the sign a person reads",
+            "FAIL d.structured: predicate reads p.b, which it does not declare as a dependency - a change to it would never reach this",
+            "FAIL d.text: predicate reads p.b, which it does not declare as a dependency - a change to it would never reach this",
+        ]
+    );
+    assert!(text.ends_with("3 judgments, 8 entries, 7 problems, 1 declared\n"));
+}
 #[test]
 fn actual_ordinary_cli_reads_physical_hypotheses_and_private_metadata_without_writes() {
     let tmp = tempfile::tempdir().unwrap();

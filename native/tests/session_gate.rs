@@ -98,6 +98,27 @@ fn inherited_failure_does_not_block_but_a_new_failure_does() {
 }
 
 #[test]
+fn inherited_predicate_reach_failure_does_not_hide_a_same_count_replacement() {
+    let inherited = "schema: {deps: rests_on, snapshot: seen, predicate: wrong_if}\nknown:\n  p.a: {v: 1}\n  p.b: {v: 2}\njudgments:\n  d.old: {rests_on: [p.a], seen: {p.a: 1}, wrong_if: 'p.b > 9'}\n";
+    let replacement = inherited.replace("d.old:", "d.new:");
+    let (tmp, record, state) = setup(inherited);
+    session_gate::mark(&options(&state, &record, tmp.path())).unwrap();
+    assert_eq!(
+        session_gate::gate(&options(&state, &record, tmp.path()))
+            .unwrap()
+            .code,
+        0
+    );
+    fs::write(&record, replacement).unwrap();
+    let result = session_gate::gate(&options(&state, &record, tmp.path())).unwrap();
+    assert_eq!(result.code, 2, "{}", result.text);
+    assert!(
+        result.issues.iter().any(|issue| issue.subject
+            == "d.new: predicate reads p.b, which it does not declare as a dependency - a change to it would never reach this")
+    );
+}
+
+#[test]
 fn updated_input_may_falsify_an_unchanged_judgment_and_remains_reported() {
     let (tmp, record, state) = setup(GOOD);
     session_gate::mark(&options(&state, &record, tmp.path())).unwrap();
@@ -483,5 +504,128 @@ fn mixed_marks_preserve_failure_sets_profile_changes_nulls_and_nudges() {
             assert_eq!(result.0, 2, "{}", result.1);
             assert!(result.1.contains("8 prompts in"));
         }
+    }
+}
+
+#[test]
+#[ignore = "requires an explicitly configured immutable Python oracle"]
+fn mixed_marks_block_each_manual_ordinary_check_rule_family() {
+    let cases = [
+        (
+            format!(
+                "{GOOD}  p.bad: {{rule: {{op: add, args: [{{ref: p.ghost}}, {{num: '1'}}]}}}}\n"
+            ),
+            "p.bad: rule: unknown references: p.ghost",
+        ),
+        (
+            format!("{GOOD}  p.bad: {{rule: {{op: add, of: [p.ready]}}}}\n"),
+            "p.bad: rule: invalid expression fields",
+        ),
+        (
+            format!(
+                "{GOOD}  p.bad: {{v: 9, rule: {{op: add, args: [{{ref: p.ready}}, {{num: '1'}}]}}}}\n"
+            ),
+            "p.bad: a structured rule cannot also store v or quoted",
+        ),
+        (
+            format!("{GOOD}  d.bad: {{rests_on: [], seen: {{}}, wrong_if: 'p.ready > 9'}}\n"),
+            "d.bad: predicate reads p.ready, which it does not declare as a dependency",
+        ),
+        (
+            format!(
+                "{GOOD}  d.bad: {{rests_on: [p.ready], seen: {{p.ready: true}}, reopened_by: 'p.ready > 9'}}\n"
+            ),
+            "d.bad: reopened_by reads as a comparison (p.ready > 9)",
+        ),
+        (
+            format!(
+                "{GOOD}  d.bad: {{rests_on: [p.ready], seen: {{p.ready: true}}, wrong_if: {{op: eq, args: [{{ref: graph.moved}}, {{num: '0'}}]}}}}\n"
+            ),
+            "d.bad: predicate reads undeclared references: graph.moved",
+        ),
+    ];
+    for (after, expected) in cases {
+        for python_marks in [true, false] {
+            let (tmp, record, state) = setup(GOOD);
+            if python_marks {
+                assert_eq!(
+                    python(
+                        tmp.path(),
+                        &["mark", state.to_str().unwrap(), record.to_str().unwrap()]
+                    )
+                    .0,
+                    0
+                );
+            } else {
+                session_gate::mark(&options(&state, &record, tmp.path())).unwrap();
+            }
+            fs::write(&record, &after).unwrap();
+            let result = if python_marks {
+                let result = session_gate::gate(&options(&state, &record, tmp.path())).unwrap();
+                (result.code, result.text)
+            } else {
+                python(
+                    tmp.path(),
+                    &["gate", state.to_str().unwrap(), record.to_str().unwrap()],
+                )
+            };
+            assert_eq!(
+                result.0, 2,
+                "python_marks={python_marks}, expected={expected}: {}",
+                result.1
+            );
+            assert!(
+                result.1.contains(expected),
+                "python_marks={python_marks}, expected={expected}: {}",
+                result.1
+            );
+        }
+    }
+
+    let inherited = "schema: {deps: rests_on, snapshot: seen, predicate: wrong_if}\nknown:\n  p.a: {v: 1}\n  p.b: {v: 2}\njudgments:\n  d.old: {rests_on: [p.a], seen: {p.a: 1}, wrong_if: 'p.b > 9'}\n";
+    for python_marks in [true, false] {
+        let (tmp, record, state) = setup(inherited);
+        if python_marks {
+            assert_eq!(
+                python(
+                    tmp.path(),
+                    &["mark", state.to_str().unwrap(), record.to_str().unwrap()]
+                )
+                .0,
+                0
+            );
+            assert_eq!(
+                session_gate::gate(&options(&state, &record, tmp.path()))
+                    .unwrap()
+                    .code,
+                0
+            );
+        } else {
+            session_gate::mark(&options(&state, &record, tmp.path())).unwrap();
+            assert_eq!(
+                python(
+                    tmp.path(),
+                    &["gate", state.to_str().unwrap(), record.to_str().unwrap()]
+                )
+                .0,
+                0
+            );
+        }
+        fs::write(&record, inherited.replace("d.old:", "d.new:")).unwrap();
+        let result = if python_marks {
+            let result = session_gate::gate(&options(&state, &record, tmp.path())).unwrap();
+            (result.code, result.text)
+        } else {
+            python(
+                tmp.path(),
+                &["gate", state.to_str().unwrap(), record.to_str().unwrap()],
+            )
+        };
+        assert_eq!(result.0, 2, "python_marks={python_marks}: {}", result.1);
+        assert!(
+            result.1.contains("d.new: predicate reads p.b"),
+            "python_marks={python_marks}: {}",
+            result.1
+        );
     }
 }
