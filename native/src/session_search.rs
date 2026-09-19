@@ -376,7 +376,7 @@ fn rank(
     if offset > nodes.len() {
         return Err(error("invalid search cursor offset"));
     }
-    if request.query.trim().is_empty() && supplied_ids.is_empty() {
+    if request.query.trim_matches(python_whitespace).is_empty() && supplied_ids.is_empty() {
         return Err(error("supply a query or exact IDs"));
     }
 
@@ -408,7 +408,9 @@ fn rank(
     let mut dense = None;
     let mut metadata = None;
     let mut fallback = None;
-    if request.mode != SearchMode::Lexical && !request.query.trim().is_empty() {
+    if request.mode != SearchMode::Lexical
+        && !request.query.trim_matches(python_whitespace).is_empty()
+    {
         match semantic {
             None => {
                 fallback =
@@ -710,6 +712,26 @@ pub fn search_checked_session(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn python_information_separators_do_not_form_a_query() {
+        for character in '\u{1c}'..='\u{1f}' {
+            let request = SearchRequest {
+                query: character.to_string(),
+                ..Default::default()
+            };
+            let result = search_checked_session(
+                "fixture",
+                "revision",
+                &BTreeMap::new(),
+                &BTreeMap::new(),
+                &request,
+                |_| 1,
+                None,
+            );
+            assert_eq!(result.unwrap_err().0, "supply a query or exact IDs");
+        }
+    }
     #[test]
     fn casefold_matches_every_python_3_14_unicode_16_mapping() {
         let root: Value =
