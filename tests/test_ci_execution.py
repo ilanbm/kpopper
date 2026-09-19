@@ -148,7 +148,7 @@ class TestPlans(unittest.TestCase):
         query = next(s for s in native['build']['steps']
                      if 'tests.test_reasoning_query_runtime' in s.get('run', ''))
         self.assertIn('KPOPPER_QUERY_ARCHIVE', query['run'])
-        self.assertIn('${{ inputs.target }}.zip', query['run'])
+        self.assertIn('${{ inputs.target }}.kpopper-runtime', query['run'])
         jobs = yaml.safe_load((ROOT / '.github/workflows/check.yml').read_text())['jobs']
         example = next(s for s in jobs['check']['steps'] if 'examples/scoped-query/exercise.py' in s.get('run', ''))
         self.assertIn('matrix.group == 1', example['if'])

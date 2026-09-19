@@ -791,6 +791,13 @@ sources:
     at: "PR #119 run 35285716254 attempt 1 and local forced-date and fixed-day test runs"
     of: "2026-09-18"
     read: "2026-09-18"
+  s.2026_09_19_claude_nested_zip:
+    name: "Claude Desktop rejection of ZIP files nested in the kpopper plugin download"
+    of: "2026-09-19, Claude Desktop main.log lines 28472, 28518 and 28567: RemotePluginManager
+         retried and refused kpopper 1.8.0 with ZipExtractionError because
+         scripts/reasoning/native/darwin-arm64.zip was a ZIP entry inside the downloaded plugin ZIP;
+         inspection of the installed client showed the plugin extraction policy rejects entries whose
+         lowercase extension is .zip."
   s.2026_09_19_readme_example_depth:
     name: "Maintainer request for richer example records and mobile compatibility"
     asked: "גם וגם"
@@ -3081,6 +3088,26 @@ judgments:
                                  native builds; unknown paths select all checks. Selector-only
                                  changes use mandatory contracts. Packaging metadata alone tests
                                  consumers and installation without recompiling native source."
+  d.claude_plugin_has_no_nested_zip:
+    name: "Claude plugin package avoids nested ZIP entries"
+    verdict: "The Claude plugin source contains no tracked path ending in .zip; ZIP-formatted native
+              runtimes use the .kpopper-runtime suffix."
+    because: "Claude Desktop packages a relative-path plugin inside a ZIP and rejects any inner
+              entry whose extension is .zip. The runtime reader uses zipfile content detection and
+              does not require a .zip filename, so a domain-specific suffix preserves the verified
+              offline payload while allowing the host to extract the plugin."
+    rests_on: [s.2026_09_19_claude_nested_zip]
+    reopened_by: "Claude documents and ships support for ZIP files nested in plugin downloads, or a
+                  supported runtime consumer requires the .zip filename rather than ZIP-formatted
+                  bytes."
+    seen:
+      s.2026_09_19_claude_nested_zip: "read 2026-09-19, Claude Desktop main.log lines 28472, 28518
+                                       and 28567: RemotePluginManager retried and refused kpopper
+                                       1.8.0 with ZipExtractionError because
+                                       scripts/reasoning/native/darwin-arm64.zip was a ZIP entry
+                                       inside the downloaded plugin ZIP; inspection of the installed
+                                       client showed the plugin extraction policy rejects entries
+                                       whose lowercase extension is .zip."
   d.community_entrypoints:
     because: "These entrypoints let a new contributor assess the existing checks, install the
               project, report a reproducible problem and submit a focused change. Badges link to

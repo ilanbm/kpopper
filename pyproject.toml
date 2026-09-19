@@ -61,4 +61,4 @@ package-dir = { kpopper = "scripts" }
 # the file it hands to node.
 kpopper = ["page/*.css", "page/*.js", "verify_page.js", "start-guide.md", "document-guide.md", "document/*.css", "document/*.js", "assessment.schema.json"]
 "kpopper.session" = ["rules.txt", "bootstrap.txt", "lean/*.lean", "lean/lean-toolchain"]
-"kpopper.reasoning" = ["assessment.schema.json", "history_assessment.schema.json", "lean/*.lean", "lean/Kpopper/*.lean", "lean/lean-toolchain", "lean/lakefile.toml", "native/*.zip", "native/*.tar.gz", "native/*.md", "third_party/*"]
+"kpopper.reasoning" = ["assessment.schema.json", "history_assessment.schema.json", "lean/*.lean", "lean/Kpopper/*.lean", "lean/lean-toolchain", "lean/lakefile.toml", "native/*.kpopper-runtime", "native/*.tar.gz", "native/*.md", "third_party/*"]

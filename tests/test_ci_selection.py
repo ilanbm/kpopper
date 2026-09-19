@@ -114,7 +114,7 @@ class Selection(unittest.TestCase):
 
     def test_native_inputs_and_probe_changes_keep_the_full_audit(self):
         for path in ("scripts/reasoning/lean/Kernel.lean", "scripts/reasoning/lean/lean-toolchain",
-                     "scripts/reasoning/build_runtime.py", "scripts/reasoning/native/linux-x86_64.zip",
+                     "scripts/reasoning/build_runtime.py", "scripts/reasoning/native/linux-x86_64.kpopper-runtime",
                      "scripts/reasoning/runtime.py", "tests/test_reasoning_runtime.py",
                      "scripts/reasoning/native/gmp-source-and-build.tar.gz",
                      "scripts/reasoning/third_party/COPYING.LESSERv3", "tests/test_reasoning_distribution.py",

@@ -176,7 +176,7 @@ def _native(root):
     except R.RuntimeUnavailable:
         return _seal({'version': 1, 'status': 'unavailable', 'reason': 'unsupported_target',
                       'target': None, 'readiness': 'not_tested'})
-    relative = 'reasoning/native/' + target + '.zip'
+    relative = 'reasoning/native/' + target + R.RUNTIME_ARCHIVE_SUFFIX
     if not (root / relative).exists():
         return _seal({'version': 1, 'status': 'unavailable', 'reason': 'archive_missing',
                       'target': target, 'readiness': 'not_tested'})
@@ -294,7 +294,7 @@ def _validate_declaration(value, nonce):
         _require(set(native) == {'version', 'status', 'target', 'archive', 'archive_sha256', 'manifest',
                                 'readiness', 'digest'} and native['status'] == 'archive_validated'
                  and isinstance(native['target'], str) and
-                 native['archive'] == 'reasoning/native/' + native['target'] + '.zip'
+                 native['archive'] == 'reasoning/native/' + native['target'] + R.RUNTIME_ARCHIVE_SUFFIX
                  and isinstance(native['archive_sha256'], str) and HEX.fullmatch(native['archive_sha256'])
                  and isinstance(native['manifest'], dict), 'unsupported_native_manifest')
     return value

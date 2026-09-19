@@ -72,6 +72,23 @@ class TheVersionFiles(unittest.TestCase):
 
 
 class WhatShips(unittest.TestCase):
+    def test_the_claude_plugin_source_contains_no_nested_zip(self):
+        # Claude downloads a relative-path plugin as one ZIP and refuses any .zip entry
+        # inside it.  Check the tracked source, not a working-tree glob that can see local
+        # caches or test output which never ships.
+        marketplace = json.loads((ROOT / ".claude-plugin/marketplace.json").read_text())
+        entry = next(plugin for plugin in marketplace["plugins"] if plugin["name"] == "kpopper")
+        source = entry["source"]
+        self.assertIsInstance(source, str)
+        self.assertTrue(source.startswith("./"), source)
+        prefix = source[2:].rstrip("/")
+        tracked = subprocess.check_output(
+            ["git", "ls-files", "-z"], cwd=ROOT
+        ).decode("utf-8").split("\0")
+        shipped = [path for path in tracked if not prefix or path == prefix or path.startswith(prefix + "/")]
+        nested = [path for path in shipped if pathlib.PurePosixPath(path).suffix.lower() == ".zip"]
+        self.assertEqual(nested, [], "Claude refuses nested ZIP entries: " + repr(nested))
+
     def test_the_browser_checks_travel_with_the_command_line(self):
         # `kpop experimental hub --checks` runs the file that came with the reader, so a wheel that
         # declares everything except that file turns the flag into an error message on every
