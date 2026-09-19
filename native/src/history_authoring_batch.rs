@@ -510,8 +510,14 @@ fn final_world(
     selected.extend(objects.clone());
     validate_closure(&selected)?;
     let files = evidence_files(options)?;
+    A::attach_temporal_replay(&mut after, &doc, &final_world, &versions)?;
     let mut before_world = World::new(&before_doc, None, runtime, OperationalBounds::default())?;
-    let mut before = A::evidence(&before_doc, &mut before_world, audit)?;
+    let mut before = A::evidence_with_versions(
+        &before_doc,
+        &mut before_world,
+        audit,
+        &A::accepted_versions(original)?,
+    )?;
     map_mut(&mut before)?.insert(
         "authoring".into(),
         intent(original, actions, options, &frozen, true),
@@ -535,7 +541,7 @@ fn final_world(
         &objects.values().cloned().collect::<Vec<_>>(),
         &A::template(original, &doc)?,
         &receipt,
-        op.requires().as_ref(),
+        op.requires_for(&doc)?.as_ref(),
         &files,
     )?;
     let adapted = A::document(&A::candidate(original, &mutation)?)?;
@@ -616,7 +622,9 @@ fn sequential(
             ])
             .digest()?
         );
-        child.receipt_version = Some(1);
+        // Fresh sequential batches use the current direct receipt version. A
+        // retained old batch can explicitly replay its v1 child semantics.
+        child.receipt_version = options.authoring.receipt_version;
         let mutation = A::prepare_inner(store, &virtual_capture, action, &child, runtime, audit)?;
         let data = mutation.to_data();
         let receipt = map(&data)?["receipt"].clone();
@@ -688,7 +696,10 @@ fn sequential(
         &new,
         &crate::history_view::template(&virtual_capture.commits)?,
         &receipt,
-        options.authoring.requires().as_ref(),
+        options
+            .authoring
+            .requires_for(field(map(&last["after"])?, "document")?)?
+            .as_ref(),
         &evidence_files(options)?,
     )?;
     require(A::archive(store)? == frozen, "concurrent_archive_edit")?;
@@ -871,7 +882,7 @@ mod tests {
                         by: s("writer"),
                         strict: version >= 3,
                         paths: crate::history_paths::Scheme::Hashed,
-                        receipt_version: None,
+                        receipt_version: Some(1),
                     },
                     receipt_version: version,
                     context: V::from_tagged(&case["context"]).unwrap(),

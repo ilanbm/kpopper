@@ -46,10 +46,23 @@ pub struct Options {
     pub by: V,
     pub strict: bool,
     pub paths: P::Scheme,
-    /// Retained direct receipts choose their original semantics. Fresh judgments use 7.
+    /// Retained direct receipts (or sequential batch children) choose their original
+    /// semantics. Fresh judgments use 7.
     pub receipt_version: Option<u8>,
 }
 impl Options {
+    pub(crate) fn requires_for(&self, document: &V) -> Result<Option<V>> {
+        let mut required = self
+            .requires()
+            .map(|v| list(&v).unwrap().to_vec())
+            .unwrap_or_default();
+        if !temporal_subjects(document)?.is_empty() {
+            required.push(s(A::TEMPORAL_APPLICABILITY));
+        }
+        required.sort_by(|a, b| text(a).unwrap().cmp(text(b).unwrap()));
+        required.dedup();
+        Ok((!required.is_empty()).then_some(V::List(required)))
+    }
     pub(crate) fn requires(&self) -> Option<V> {
         let mut requires = BTreeSet::new();
         if self.strict {
@@ -158,12 +171,6 @@ pub(crate) fn pins(capture: &Capture, deps: &[V], missing: bool) -> Result<(V, V
     Ok((V::Map(pins), V::Map(gaps)))
 }
 pub(crate) fn evidence(doc: &V, world: &mut World<'_>, audit: Option<&ReplayAudit>) -> Result<V> {
-    for (_, body) in entries(doc)?.values() {
-        require(
-            !map(body).is_ok_and(|b| b.contains_key("temporal")),
-            "temporal_authoring_unsupported",
-        )?;
-    }
     let report = if let Some(audit) = audit {
         audit.assessment(world)?
     } else {
@@ -174,6 +181,68 @@ pub(crate) fn evidence(doc: &V, world: &mut World<'_>, audit: Option<&ReplayAudi
         ("document", doc.clone()),
         ("assessment", report),
     ]))
+}
+fn temporal_subjects(doc: &V) -> Result<BTreeSet<String>> {
+    Ok(entries(doc)?
+        .into_iter()
+        .filter_map(|(subject, (_, body))| {
+            map(&body)
+                .ok()
+                .and_then(|b| b.get("temporal"))
+                .is_some_and(|v| matches!(v, V::Map(_)))
+                .then_some(subject)
+        })
+        .collect())
+}
+pub(crate) fn accepted_versions(capture: &Capture) -> Result<Map> {
+    let mut versions = Map::new();
+    for (subject, state) in map(field(map(&capture.state)?, "subjects")?)? {
+        let state = map(state)?;
+        if state
+            .get("acceptance")
+            .is_some_and(|v| string_is(v, "accepted"))
+            && let Some(head) = state.get("head")
+        {
+            versions.insert(subject.clone(), head.clone());
+        }
+    }
+    Ok(versions)
+}
+pub(crate) fn attach_temporal_replay(
+    evidence: &mut V,
+    doc: &V,
+    world: &World<'_>,
+    versions: &Map,
+) -> Result<()> {
+    let claims = temporal_subjects(doc)?
+        .into_iter()
+        .filter_map(|subject| {
+            versions
+                .get(&subject)
+                .map(|version| (subject, version.clone()))
+        })
+        .collect::<Map>();
+    if !claims.is_empty() {
+        map_mut(evidence)?.insert(
+            "temporal_replay".into(),
+            obj([
+                ("version", n("1")),
+                ("snapshot", s(&world.snapshot().to_json()?)),
+                ("claims", V::Map(claims)),
+            ]),
+        );
+    }
+    Ok(())
+}
+pub(crate) fn evidence_with_versions(
+    doc: &V,
+    world: &mut World<'_>,
+    audit: Option<&ReplayAudit>,
+    versions: &Map,
+) -> Result<V> {
+    let mut value = evidence(doc, world, audit)?;
+    attach_temporal_replay(&mut value, doc, world, versions)?;
+    Ok(value)
 }
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn make_object(
@@ -527,7 +596,13 @@ pub(crate) fn prepare_inner(
     }
     let template = template(capture, &doc)?;
     let mut after_world = World::new(&doc, None, runtime, OperationalBounds::default())?;
-    let mut before = evidence(&before_doc, &mut before_world, audit)?;
+    let before_versions = accepted_versions(capture)?;
+    let mut after_versions = before_versions.clone();
+    if kind != "review" {
+        after_versions.insert(subject.into(), map(&new[0])?["id"].clone());
+    }
+    let mut before =
+        evidence_with_versions(&before_doc, &mut before_world, audit, &before_versions)?;
     map_mut(&mut before)?.insert(
         "authoring".into(),
         obj([
@@ -539,7 +614,7 @@ pub(crate) fn prepare_inner(
             ("baseline", capture.baseline.clone()),
         ]),
     );
-    let mut after = evidence(&doc, &mut after_world, audit)?;
+    let mut after = evidence_with_versions(&doc, &mut after_world, audit, &after_versions)?;
     let ids = new
         .iter()
         .map(|o| text(&map(o)?["id"]).map(str::to_owned))
@@ -555,7 +630,7 @@ pub(crate) fn prepare_inner(
         &new,
         &template,
         &receipt,
-        options.requires().as_ref(),
+        options.requires_for(&doc)?.as_ref(),
     )?;
     candidate(capture, &mutation)?;
     require(archive(store)? == frozen_archive, "concurrent_archive_edit")?;
@@ -666,7 +741,7 @@ fn prepare_act_inner(
     )?];
     let placeholder = T::semantic_receipt(profile, &cap, &empty(), &empty())?;
     let initial_template = View::template(&capture.commits)?;
-    let requires = options.requires();
+    let requires = options.requires_for(&before_doc)?;
     let draft = Preparation::prepare_commit(
         capture,
         &options.operation,
@@ -677,6 +752,7 @@ fn prepare_act_inner(
     )?;
     let projected = destination(&document(&candidate(capture, &draft)?)?)?;
     let template = template(capture, &projected)?;
+    let requires = options.requires_for(&projected)?;
     let draft = Preparation::prepare_commit(
         capture,
         &options.operation,
@@ -690,7 +766,12 @@ fn prepare_act_inner(
     let cap = F::capabilities(&after_doc, Some(profile))?;
     let mut before_world = World::new(&before_doc, None, runtime, OperationalBounds::default())?;
     let mut after_world = World::new(&after_doc, None, runtime, OperationalBounds::default())?;
-    let mut before = evidence(&before_doc, &mut before_world, audit)?;
+    let mut before = evidence_with_versions(
+        &before_doc,
+        &mut before_world,
+        audit,
+        &accepted_versions(capture)?,
+    )?;
     map_mut(&mut before)?.insert(
         "authoring".into(),
         obj([
@@ -703,7 +784,12 @@ fn prepare_act_inner(
             ("baseline", capture.baseline.clone()),
         ]),
     );
-    let mut after = evidence(&after_doc, &mut after_world, audit)?;
+    let mut after = evidence_with_versions(
+        &after_doc,
+        &mut after_world,
+        audit,
+        &accepted_versions(&projected)?,
+    )?;
     map_mut(&mut after)?.insert(
         "authoring".into(),
         obj([
@@ -722,7 +808,7 @@ fn prepare_act_inner(
         &new,
         &template,
         &receipt,
-        requires.as_ref(),
+        options.requires_for(&after_doc)?.as_ref(),
     )?;
     require(
         mutation
@@ -889,8 +975,9 @@ pub(crate) fn prepare_proposal_inner(
         selected.insert(text(&map(o)?["id"])?.into(), o.clone());
     }
     validate_closure(&selected)?;
+    let versions = accepted_versions(capture)?;
     let mut before_world = World::new(&doc, None, runtime, OperationalBounds::default())?;
-    let mut before = evidence(&doc, &mut before_world, audit)?;
+    let mut before = evidence_with_versions(&doc, &mut before_world, audit, &versions)?;
     map_mut(&mut before)?.insert(
         "authoring".into(),
         obj([
@@ -908,10 +995,10 @@ pub(crate) fn prepare_proposal_inner(
         ]),
     );
     let mut after_world = World::new(&doc, None, runtime, OperationalBounds::default())?;
-    let mut after = evidence(&doc, &mut after_world, audit)?;
+    let mut after = evidence_with_versions(&doc, &mut after_world, audit, &versions)?;
     map_mut(&mut after)?.insert(
         "proposal".into(),
-        evidence(&hypothetical, &mut hypothetical_world, audit)?,
+        evidence_with_versions(&hypothetical, &mut hypothetical_world, audit, &versions)?,
     );
     let ids = new
         .iter()
@@ -936,7 +1023,7 @@ pub(crate) fn prepare_proposal_inner(
         &new,
         &template,
         &receipt,
-        options.requires().as_ref(),
+        options.requires_for(&hypothetical)?.as_ref(),
     )?;
     candidate(capture, &mutation)?;
     require(archive(store)? == frozen_archive, "concurrent_archive_edit")?;
@@ -1061,12 +1148,32 @@ pub fn verify_prepared(
                 ))
             })
             .collect::<Result<_>>()?;
-        let batch = crate::history_authoring_batch::BatchOptions {
+        let mut batch = crate::history_authoring_batch::BatchOptions {
             authoring: options,
             receipt_version: version,
             context: field(intent, "context")?.clone(),
             evidence,
         };
+        if [2, 3].contains(&version) {
+            batch.authoring.receipt_version = None;
+            let current = crate::history_authoring_batch::prepare_inner(
+                store,
+                &captured,
+                actions,
+                &batch,
+                runtime,
+                Some(&audit),
+            );
+            if let Ok(current) = current
+                && current.to_bytes()? == mutation.to_bytes()?
+            {
+                return Ok(());
+            }
+            // Old sequential envelopes did not capture typed seen values. The
+            // compatibility candidate is independently evaluated and must match
+            // the complete immutable mutation; caller evidence grants no result.
+            batch.authoring.receipt_version = Some(1);
+        }
         crate::history_authoring_batch::prepare_inner(
             store,
             &captured,
@@ -1131,10 +1238,14 @@ pub fn commit(
 }
 
 #[cfg(test)]
+#[path = "../tests/support/history_temporal_authoring.rs"]
+mod temporal_tests;
+
+#[cfg(test)]
 mod tests {
     use super::*;
     use serde_json::Value as J;
-    fn runtime(cache: &std::path::Path) -> Runtime {
+    pub(super) fn runtime(cache: &std::path::Path) -> Runtime {
         let archive = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
             .join("../scripts/reasoning/native")
             .join(format!(
@@ -1143,14 +1254,14 @@ mod tests {
             ));
         Runtime::open(&archive, cache, OperationalBounds::default()).unwrap()
     }
-    fn write(root: &std::path::Path, case: &J) {
+    pub(super) fn write(root: &std::path::Path, case: &J) {
         for (name, raw) in case["files"].as_object().unwrap() {
             let path = root.join(name);
             std::fs::create_dir_all(path.parent().unwrap()).unwrap();
             std::fs::write(path, raw.as_str().unwrap()).unwrap();
         }
     }
-    fn options(case: &J) -> Options {
+    pub(super) fn options(case: &J) -> Options {
         Options {
             operation: "write-1".into(),
             recorded_at: "2026-09-19T09:30:00+00:00".into(),

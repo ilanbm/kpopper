@@ -789,6 +789,12 @@ sources:
     name: "Continue the approved native migration"
     asked: "Continue the approved kpopper Rust migration autonomously until the full planned native
             outcome is verified."
+  s.2026_09_19_native_temporal_authoring:
+    name: "Native temporal authoring and final scenario continuation"
+    asked: "Continue the approved kpopper Rust migration autonomously until the FULL planned native
+            outcome is verified."
+    at: "task 01a0b8af-4bc8-7212-8b0e-7a5b7dee6db3; accepted continuation from task
+         01a0b897-a244-78b2-807e-e5209ea88125"
   s.2026_09_19_native_temporal_continuation:
     name: "Native temporal contract and captured history continuation"
     asked: "Continue the approved kpopper Rust migration autonomously until the full planned native
@@ -996,6 +1002,18 @@ sources:
          evidence forgeries, 12 rehashed outer-context boolean and basis forgeries, seven actual
          Lean-backed applicability and roundtrip scenarios. Fresh runtime identity remains explicit;
          deserialization performs no source read or evaluation. Temporal authoring remains unported."
+    read: "2026-09-19"
+  s.native_temporal_authoring:
+    name: "Native temporal authoring and independent replay conformance"
+    from: s.2026_09_19_native_temporal_authoring
+    file: "native/tests/support/history_temporal_authoring.rs"
+    at: "Final Python 1.7.0 reference 5acfd0f: 24 exact authoring cases, 22 accepted native
+         publications and committed retries, 24 rehashed replay/capability forgery refusals. Direct,
+         act, proposal and sequential/final batch evidence binds accepted versions to computational
+         Snapshots with null time preserved. Fresh sequential judgment children use v7; retained v1
+         children require independent whole-mutation replay. 17 authoring tests and all-target Clippy
+         pass. Public CLI remains experimental; ordinary authoring, final scenario/watch and full
+         migration remain open."
     read: "2026-09-19"
   s.native_temporal_capture:
     name: "Native temporal capability and causal capture conformance"
