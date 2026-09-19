@@ -1036,6 +1036,16 @@ sources:
          tests, actual bundled ordinary and core Lean CLI execution"
     scope: "Actual assess command only on macOS arm64. Remaining public commands, MCP/hooks, browser
             and supported-platform distribution remain pending."
+  s.native_public_history_authoring:
+    name: "Native public history and first-write checkpoints"
+    file: "/Users/ilanbm/docs/kpopper/rust-migration/R4-AUTHORING-PUBLIC-RESULT.md"
+    from: s.2026_09_19_native_import_continuation
+    read: "2026-09-19"
+    at: "Task 01a0b9d7-9fca-7301-ba63-580bfc152fb9; commits 02a711a, fdadfdc and 0e25621; linked
+         R4-HISTORY-PUBLIC-RESULT.md and retained final-source logs"
+    scope: "Public history maintenance, acts/proposals and recovery; unannotated add/set/review on
+            active history; implicit first-add bootstrap and recovery. Actual execution: macOS arm64
+            only."
   s.native_public_readers:
     name: "Native public reader and core page conformance"
     file: "/Users/ilanbm/docs/kpopper/rust-migration/R4-PUBLIC-READERS-RESULT.md"
@@ -2187,6 +2197,15 @@ known:
         CLI."
     from: s.native_prospective
     at: "history_prospective and history_hypothesis_authoring fold APIs, fixtures and tests"
+  p.native_public_remaining_scope:
+    name: "Remaining migration scope after the public authoring checkpoint"
+    quoted: "Legacy-record rewriting, named hypotheses/consolidation, explicit contribution routing,
+             remaining argument/error conformance, adoption/runtime declarations, other recovery
+             dispatch, session mark/stop-gate, MCP/hooks/operations/watch, R5 browser, and R6
+             supported-platform/distribution execution remain."
+    from: s.native_public_history_authoring
+    at: "R4-AUTHORING-PUBLIC-RESULT.md, remaining scope at 0e25621"
+    of: "2026-09-19"
   p.native_python_reference:
     name: "Final Python commit targeted by native conformance"
     v: "5acfd0f9c7f4d839bb6930b8e1d0a5d1fd315ce4"
@@ -2381,6 +2400,35 @@ known:
     from: s.native_ordinary_authoring
     at: "R3-ordinary-full-tests.txt; full native suite, zero failures; final source fingerprint;
          macOS arm64"
+  m.native_public_authoring_release_cases:
+    name: "Copied native release authoring command executions"
+    v: 6
+    from: s.native_public_history_authoring
+    at: "R4-authoring-release-smoke.json: adjacent core archive, only Git on PATH, macOS arm64;
+         release SHA256 5f8500c0fd8aaf4f3f79d5bff7036434a5c8ea8f88f7fc1929b6000f3239a9fb"
+    of: "2026-09-19"
+  m.native_public_authoring_tests:
+    name: "Full native regression suite at the public authoring checkpoint"
+    v: 247
+    from: s.native_public_history_authoring
+    at: "0e25621; R4-authoring-native-suite.log: 247 passed, 2 opt-in managed-launcher tests
+         ignored. Clippy and release also passed."
+    of: "2026-09-19"
+  m.native_public_history_maintenance_cases:
+    name: "Public history maintenance comparisons with final Python"
+    v: 81
+    from: s.native_public_history_authoring
+    at: "R4-HISTORY-PUBLIC-RESULT.md; R4-history-maintenance-parity.json: exact exit status, full
+         output and resulting record bytes"
+    of: "2026-09-19"
+  m.native_public_history_recovery_cases:
+    name: "Public recovery comparisons over final-Python direct journals"
+    v: 36
+    from: s.native_public_history_authoring
+    at: "R4-HISTORY-PUBLIC-RESULT.md; R4-history-recovery-parity.json: prepared, partial and
+         committed states in both directions; exact output and files, excluding only empty native
+         policy lock"
+    of: "2026-09-19"
   m.native_public_read_cli_cases:
     name: "Actual native public reader CLI comparisons with final Python"
     v: 136
