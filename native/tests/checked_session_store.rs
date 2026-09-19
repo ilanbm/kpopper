@@ -70,7 +70,7 @@ fn identity_and_collision_are_fail_closed() {
         Encoding::O200kBase,
     );
     assert!(foreign.is_err());
-    let path = store.context_path(&revision);
+    let path = store.context_path(&revision).unwrap();
     let mut payload: J = serde_json::from_slice(&fs::read(&path).unwrap()).unwrap();
     payload["project"] = json!("forged");
     fs::write(&path, serde_json::to_vec(&payload).unwrap()).unwrap();
