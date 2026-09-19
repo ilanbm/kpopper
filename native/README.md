@@ -60,10 +60,11 @@ envelope. Findings keep the executing adapter's fingerprint, so a Rust result an
 a Python result can carry different revision identities even when their semantic
 findings match.
 
-Ordinary `open`, `check` and `pull --history` remain unconnected. Existing
-feasibility-store workspaces retain their explicitly marked experimental opener.
-The writer commands below, MCP, hooks, browser and distribution integration remain
-in progress.
+Ordinary `open`, `check` and `pull --history` use the captured record and retained
+replacement file. They preserve namespace ordering, review flags, page-serving
+notices, historical decisions and final source revalidation. Existing feasibility-
+store workspaces retain their explicitly marked experimental opener. The writer
+commands below, MCP, hooks, browser and distribution integration remain in progress.
 
 For the experimental writer, supply an absolute path to an existing **empty** directory:
 
