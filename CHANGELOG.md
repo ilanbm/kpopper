@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.8.1 — 2026-09-19
+
+- Fix Claude plugin installation with packaged runtimes (#144) — patch
+
+Decisions recorded: d.claude_plugin_has_no_nested_zip
+
 ## 1.8.0 — 2026-09-19
 
 - Guide readers through three expandable README paths (#142) — patch
