@@ -85,9 +85,11 @@ operation refuses. Optional `--expected-revision` compares the revision returned
 by `open`. Each new observation requires a new operation and an explicit recorded time.
 
 `session-start` consumes a host JSON payload containing an absolute `cwd` on stdin.
-It reports supported readings and an executable `KPOPPER_AGENT_CONTEXT.command`.
-It ignores subagent payloads, and reports failed opening visibly without blocking
-the host. This command does not register hooks or establish host trust.
+For ordinary public records it runs the same captured opener and returns an executable
+`KPOPPER_AGENT_CONTEXT.command`; explicitly marked feasibility stores retain their
+older private opener. It ignores subagent payloads, and reports failed opening visibly
+without blocking the host. This command does not install hooks, write the stop-gate
+baseline, or establish host trust.
 
 ## Supported history boundary
 

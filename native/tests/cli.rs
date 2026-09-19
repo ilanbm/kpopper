@@ -321,6 +321,64 @@ fn hook_uses_absolute_native_command_and_handles_subagents_and_errors() {
 }
 
 #[test]
+fn public_session_start_opens_an_ordinary_record_and_returns_its_native_route() {
+    let temp = tempfile::tempdir().unwrap();
+    let root = temp.path().canonicalize().unwrap();
+    let record = "schema: {deps: rests_on, snapshot: seen, predicate: wrong_if}\nknown:\n  p.load: {v: 61}\njudgments:\n  d.work:\n    verdict: continue\n    rests_on: [p.load]\n    seen: {p.load: 61}\n    reopened_by: a different load reopens this decision\n";
+    fs::write(root.join("GROUNDING.yaml"), record).unwrap();
+    let before = fs::read(root.join("GROUNDING.yaml")).unwrap();
+    let mut child = Command::new(binary())
+        .arg("session-start")
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .unwrap();
+    child
+        .stdin
+        .take()
+        .unwrap()
+        .write_all(
+            &serde_json::to_vec(&json!({"cwd":root,"session_id":"ordinary-session"})).unwrap(),
+        )
+        .unwrap();
+    let output = child.wait_with_output().unwrap();
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let stdout = String::from_utf8(output.stdout).unwrap();
+    assert!(
+        stdout.starts_with("2 entries, 1 judgments"),
+        "stdout={stdout:?} stderr={}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let context: Value = serde_json::from_str(
+        stdout
+            .lines()
+            .find_map(|line| line.strip_prefix("KPOPPER_AGENT_CONTEXT "))
+            .unwrap(),
+    )
+    .unwrap();
+    assert_eq!(
+        context["command"],
+        json!([
+            Path::new(binary()).canonicalize().unwrap(),
+            "--workspace",
+            root
+        ])
+    );
+    assert_eq!(
+        context["environment"]["KPOPPER_AGENT_SESSION"],
+        "ordinary-session"
+    );
+    assert_eq!(context["profile"], "native-public/v1");
+    assert!(stdout.contains("For mapping, pass this session environment to the CLI"));
+    assert_eq!(fs::read(root.join("GROUNDING.yaml")).unwrap(), before);
+}
+
+#[test]
 fn yaml_metadata_is_supported_but_duplicate_keys_tags_and_aliases_refuse() {
     let (_temp, root) = fixture();
     let marker = root.join(".kpopper/native-feasibility.json");

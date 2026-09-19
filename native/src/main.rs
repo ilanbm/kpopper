@@ -131,13 +131,32 @@ fn session() -> Result<()> {
             .as_str()
             .ok_or_else(|| kpop_native::Error("missing_workspace".into()))?,
     );
-    let result = Store::open(&root)?;
     let command = std::env::current_exe()?.canonicalize()?;
-    println!(
-        "Native feasibility record: {} committed operations; linear readings only; semantic assessment not performed.\n{}",
-        result["commits"],
-        serde_json::to_string(&result["document"]["readings"])?
-    );
+    let feasibility = root.join(".kpopper/native-feasibility.json").is_file();
+    if feasibility {
+        let result = Store::open(&root)?;
+        println!(
+            "Native feasibility record: {} committed operations; linear readings only; semantic assessment not performed.\n{}",
+            result["commits"],
+            serde_json::to_string(&result["document"]["readings"])?
+        );
+    } else {
+        let mode = if std::env::var("KPOPPER_READ_MODE").as_deref() == Ok("frozen") {
+            kpop_native::source_capture::ReadMode::Frozen
+        } else {
+            kpop_native::source_capture::ReadMode::Live
+        };
+        let runtime = kpop_native::public_workspace::runtime()?;
+        let opening = kpop_native::public_readers::run(
+            "open",
+            &kpop_native::public_readers::Options::default(),
+            &root,
+            mode,
+            false,
+            runtime.as_ref(),
+        )?;
+        print!("{}", opening.text);
+    }
     let sid = payload["session_id"].as_str().filter(|s| {
         !s.is_empty()
             && s.len() <= 200
@@ -149,8 +168,13 @@ fn session() -> Result<()> {
         .unwrap_or_else(|| json!({}));
     println!(
         "KPOPPER_AGENT_CONTEXT {}",
-        json!({"command":[command,"--workspace",root],"workspace":root,"environment":environment,"profile":"native-feasibility/v1"})
+        json!({"command":[command,"--workspace",root],"workspace":root,"environment":environment,"profile":if feasibility{"native-feasibility/v1"}else{"native-public/v1"}})
     );
+    if !feasibility {
+        println!(
+            "For mapping, pass this session environment to the CLI and execute the returned task. The identity routes work back to this session; it grants no source access."
+        );
+    }
     Ok(())
 }
 fn run(args: Args) -> Result<Value> {

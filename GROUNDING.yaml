@@ -998,6 +998,11 @@ sources:
     scope: "Native ordinary profile retains legacy comparisons and the verified ordinary Lean
             program; no core assessment or profile promotion is fabricated; public activation and
             supported-platform distribution remain pending"
+  s.native_ordinary_public_reads:
+    name: "Native ordinary open check and retained-history conformance"
+    file: "/Users/ilanbm/docs/kpopper/rust-migration/R4-ORDINARY-OPEN-HISTORY-RESULT.md"
+    read: "2026-09-19"
+    at: "Task 01a0b990; commit af76e3d and final Python 1.7 example parity"
   s.native_preserved_import:
     name: "Native preserved-authored import and managed launcher validation"
     from: s.2026_09_19_native_import_continuation
@@ -2350,6 +2355,11 @@ known:
     name: "Native live comparison field-role cases"
     v: 113
     from: s.native_live_capture
+  m.native_ordinary_open_check_cases:
+    name: "Actual ordinary open and check CLI comparisons with final Python"
+    v: 16
+    from: s.native_ordinary_public_reads
+    at: "All ordinary examples, frozen stdout stderr and exit status"
   m.native_ordinary_read_cases:
     name: "Native ordinary pull and affects conformance cases including expected refusals"
     v: 560
@@ -2367,6 +2377,11 @@ known:
     from: s.native_public_readers
     at: "Conformance: 72 exact ordinary CLI outputs and 64 core comparisons preserving actual
          adapter identities"
+  m.native_public_reader_tests:
+    name: "Native public reader integration tests after ordinary history routing"
+    v: 6
+    from: s.native_ordinary_public_reads
+    at: "native/tests/public_readers.rs"
   m.native_runtime_declarations:
     name: "Managed launcher declaration conformance cases"
     v: 18
