@@ -27,6 +27,8 @@ pub(crate) static EXPR: LazyLock<regex::Regex> =
     LazyLock::new(|| regex::Regex::new(r"[<>=!+\-*/()]|\b(?:or|and|not)\b").unwrap());
 static SECOND: LazyLock<regex::Regex> =
     LazyLock::new(|| regex::Regex::new(r"[<>=!]=?|\b(?:or|and)\b").unwrap());
+static REPLACED_DAY: LazyLock<regex::Regex> =
+    LazyLock::new(|| regex::Regex::new(r" on ([0-9]{4}-[0-9]{2}-[0-9]{2})$").unwrap());
 fn s(v: &str) -> V {
     V::Text(v.into())
 }
@@ -37,6 +39,59 @@ pub(crate) fn predicate_refs(v: &V) -> Vec<String> {
         ID.find_iter(&if truth(v) { py(v) } else { String::new() })
             .map(|m| m.as_str().into())
             .collect()
+    }
+}
+
+/// Return the unresolved replacement day, matching Python's reversal_pending helper.
+pub(crate) fn reversal_pending(body: &V) -> Option<String> {
+    let fields = map(body).ok()?;
+    let trail = fields.get("replaced")?;
+    let last = match trail {
+        V::List(values) => values.last().map(py)?,
+        V::Text(value) => value.clone(),
+        _ => return None,
+    };
+    let day = REPLACED_DAY.captures(&last)?.get(1)?.as_str().to_owned();
+    let reviewed = fields.get("reviewed").map(py);
+    let reviewed_day = reviewed
+        .as_deref()
+        .map(|value| {
+            value.trim_start_matches(|c: char| {
+                c.is_whitespace() || ('\u{1c}'..='\u{1f}').contains(&c)
+            })
+        })
+        .and_then(|value| value.get(..10))
+        .filter(|value| crate::value::Date::new(value).is_ok());
+    if reviewed_day.is_some_and(|value| value >= day.as_str()) {
+        None
+    } else {
+        Some(day)
+    }
+}
+
+#[cfg(test)]
+mod reversal_tests {
+    use super::*;
+
+    #[test]
+    fn a_reversal_is_acknowledged_only_by_a_valid_review_day() {
+        for (reviewed, pending) in [
+            (V::Null, true),
+            (s("unknown"), true),
+            (s("2026-09-31"), true),
+            (s("2026-09-15"), true),
+            (s(" 2026-09-16 after reading"), false),
+            (s("2026-09-17T12:30:00Z"), false),
+        ] {
+            let body = V::Map(Map::from([
+                (
+                    "replaced".into(),
+                    V::List(vec![s("its condition fired on 2026-09-16")]),
+                ),
+                ("reviewed".into(), reviewed.clone()),
+            ]));
+            assert_eq!(reversal_pending(&body).is_some(), pending, "{reviewed:?}");
+        }
     }
 }
 pub(crate) fn predicate_of(body: &V, fields: &Map) -> V {

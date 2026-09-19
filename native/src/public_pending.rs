@@ -33,6 +33,8 @@ pub struct Options {
 pub enum Command {
     /// Inspect local capture and cached publication state without remote reads.
     Status(StatusOptions),
+    /// Reconcile and attempt one authorized publication cycle.
+    Publish(PublishOptions),
     /// Retain an exact local publication scope and permission.
     Configure(ConfigureOptions),
     /// Pause local publication attempts.
@@ -50,7 +52,18 @@ pub enum Command {
 }
 
 #[derive(Clone, Debug, Default, clap::Args)]
-pub struct StatusOptions {}
+pub struct StatusOptions {
+    #[arg(long)]
+    pub verify: bool,
+}
+
+#[derive(Clone, Debug, Default, clap::Args)]
+pub struct PublishOptions {
+    #[arg(long)]
+    pub authorize: bool,
+    #[arg(long)]
+    pub retry: bool,
+}
 
 #[derive(Clone, Debug, Default, clap::Args)]
 pub struct ConfigureOptions {
@@ -144,12 +157,50 @@ pub fn status(workspace: &Path, _options: &StatusOptions) -> Result<V> {
             s("advanced")
         },
     );
+    if _options.verify {
+        fields.insert(
+            "verification".into(),
+            crate::pending_publication::verify(project)?,
+        );
+    }
     Ok(result)
+}
+
+pub fn status_with_provider<P: crate::publication_provider::Provider>(
+    workspace: &Path,
+    options: &StatusOptions,
+    provider: &mut P,
+    clock: fn() -> f64,
+) -> Result<V> {
+    let project = Project::open(workspace)?;
+    let mut result = status(workspace, &StatusOptions { verify: false })?;
+    if options.verify && project.is_git() {
+        map_mut(&mut result)?.insert(
+            "verification".into(),
+            crate::pending_publication::Publisher::with_clock(project, provider, clock).verify()?,
+        );
+    }
+    Ok(result)
+}
+
+pub fn publish_with_provider<P: crate::publication_provider::Provider>(
+    workspace: &Path,
+    options: &PublishOptions,
+    provider: &mut P,
+    clock: fn() -> f64,
+) -> Result<V> {
+    crate::pending_publication::Publisher::with_clock(Project::open(workspace)?, provider, clock)
+        .run(options.authorize, options.retry)
 }
 
 pub fn run(options: &Options, workspace: &Path) -> Result<V> {
     match &options.command {
         Command::Status(status_options) => status(workspace, status_options),
+        Command::Publish(options) => crate::pending_publication::publish(
+            Project::open(workspace)?,
+            options.authorize,
+            options.retry,
+        ),
         Command::Configure(options) => {
             let project = Project::open(workspace)?;
             crate::pending_control::configure(

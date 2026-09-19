@@ -106,27 +106,6 @@ fn ordinary_public_open_read_sources_keys_and_stale_inputs() {
         .unwrap());
     assert!(open.contains("d.keep"));
     let rev = revision(&open);
-    for (operation, arguments, message) in [
-        ("search", vec!["--query", "p.a"], "ordinary session search"),
-        (
-            "context",
-            vec!["--id", "p.a", "--direction", "support"],
-            "ordinary session context",
-        ),
-        (
-            "propose",
-            vec!["--kind", "question", "--text", "Later?"],
-            "ordinary session proposals",
-        ),
-    ] {
-        let output = command(root, operation)
-            .args(["--revision", &rev])
-            .args(arguments)
-            .output()
-            .unwrap();
-        assert_eq!(output.status.code(), Some(2));
-        assert!(String::from_utf8_lossy(&output.stderr).contains(message));
-    }
     let node = ok(command(root, "read")
         .args([
             "--ref",
@@ -227,6 +206,95 @@ fn ordinary_verify_claims_returns_acceptance_and_rejected_checks() {
             .unwrap()
             .contains("accepted")
     );
+}
+
+#[test]
+fn ordinary_search_context_and_proposals_are_revision_bound_and_idempotent() {
+    let temp = fixture();
+    let root = temp.path();
+    let revision = revision(&ok(command(root, "open")
+        .args(["--tokens", "8000"])
+        .output()
+        .unwrap()));
+    let search: J = serde_json::from_str(&ok(command(root, "search")
+        .args([
+            "--query",
+            "p.a",
+            "--revision",
+            &revision,
+            "--tokens",
+            "8000",
+        ])
+        .output()
+        .unwrap()))
+    .unwrap();
+    assert_eq!(search["hits"][0]["id"], "p.a");
+    let context: J = serde_json::from_str(&ok(command(root, "context")
+        .args([
+            "--id",
+            "d.keep",
+            "--direction",
+            "support",
+            "--revision",
+            &revision,
+            "--tokens",
+            "8000",
+        ])
+        .output()
+        .unwrap()))
+    .unwrap();
+    assert_eq!(context["reads"].as_array().unwrap().len(), 2);
+    let proposal_args = [
+        "--revision",
+        &revision,
+        "--kind",
+        "question",
+        "--text",
+        "Later?",
+    ];
+    let first = ok(command(root, "propose")
+        .args(proposal_args)
+        .output()
+        .unwrap());
+    let first: J = serde_json::from_str(&first).unwrap();
+    let proposal = root
+        .join("state")
+        .join(format!("proposal-{}.json", first["id"].as_str().unwrap()));
+    let held = fs::read(&proposal).unwrap();
+    let second: J = serde_json::from_str(&ok(command(root, "propose")
+        .args(proposal_args)
+        .output()
+        .unwrap()))
+    .unwrap();
+    assert_eq!(second, first);
+    assert_eq!(fs::read(&proposal).unwrap(), held);
+    let retained: J = serde_json::from_str(&ok(command(root, "read")
+        .args([
+            "--ref",
+            first["read"].as_str().unwrap(),
+            "--revision",
+            &revision,
+            "--tokens",
+            "8000",
+        ])
+        .output()
+        .unwrap()))
+    .unwrap();
+    assert_eq!(retained["value"]["id"], first["id"]);
+    assert_eq!(retained["value"]["stale_base"], false);
+    let before = fs::read_dir(root.join("state")).unwrap().count();
+    fs::write(
+        root.join("GROUNDING.yaml"),
+        RECORD.replace("v: 12", "v: 13"),
+    )
+    .unwrap();
+    let stale = command(root, "propose")
+        .args(proposal_args)
+        .output()
+        .unwrap();
+    assert_eq!(stale.status.code(), Some(2));
+    assert!(String::from_utf8_lossy(&stale.stderr).contains("reopen"));
+    assert_eq!(fs::read_dir(root.join("state")).unwrap().count(), before);
 }
 
 #[test]
@@ -341,6 +409,60 @@ fn pinned_python_oracle_matches_native_open_read_and_verify_packets() {
     expected["revision"] = json!("REVISION");
     assert_eq!(native, expected);
 
+    let native_search_text = ok(command(root, "search")
+        .args([
+            "--query",
+            "p.a",
+            "--revision",
+            &revision,
+            "--tokens",
+            "65536",
+        ])
+        .output()
+        .unwrap());
+    let mut native_search: J = serde_json::from_str(&native_search_text).unwrap();
+    native_search["revision"] = json!("REVISION");
+    let mut expected_search = oracle["search"].clone();
+    expected_search["revision"] = json!("REVISION");
+    assert_eq!(native_search, expected_search);
+    let native_context_text = ok(command(root, "context")
+        .args([
+            "--id",
+            "d.keep",
+            "--direction",
+            "support",
+            "--revision",
+            &revision,
+            "--tokens",
+            "65536",
+        ])
+        .output()
+        .unwrap());
+    let mut native_context: J = serde_json::from_str(&native_context_text).unwrap();
+    native_context["revision"] = json!("REVISION");
+    let mut expected_context = oracle["context"].clone();
+    expected_context["revision"] = json!("REVISION");
+    assert_eq!(native_context, expected_context);
+    let native_proposal_text = ok(command(root, "propose")
+        .args([
+            "--revision",
+            &revision,
+            "--kind",
+            "question",
+            "--text",
+            "Later?",
+        ])
+        .output()
+        .unwrap());
+    let native_proposal: J = serde_json::from_str(&native_proposal_text).unwrap();
+    let mut normalized_proposal = native_proposal.clone();
+    normalized_proposal["id"] = json!("PROPOSAL");
+    normalized_proposal["read"] = json!("proposal:PROPOSAL");
+    let mut expected_proposal = oracle["proposal"].clone();
+    expected_proposal["id"] = json!("PROPOSAL");
+    expected_proposal["read"] = json!("proposal:PROPOSAL");
+    assert_eq!(normalized_proposal, expected_proposal);
+
     let input=[json!({"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"test","version":"1"}}}),json!({"jsonrpc":"2.0","method":"notifications/initialized"}),json!({"jsonrpc":"2.0","id":"accepted","method":"tools/call","params":{"name":"kpopper_verify_claims","arguments":{"judgment":"d.keep","revision":revision,"assertions":[{"kind":"current","id":"p.a","expected":12}]}}}),json!({"jsonrpc":"2.0","id":"rejected","method":"tools/call","params":{"name":"kpopper_verify_claims","arguments":{"judgment":"d.keep","revision":revision,"assertions":[{"kind":"current","id":"p.a","expected":99}]}}})].into_iter().map(|value|value.to_string()+"\n").collect::<String>();
     let mut child = command(root, "serve")
         .stdin(Stdio::piped())
@@ -378,4 +500,57 @@ fn pinned_python_oracle_matches_native_open_read_and_verify_packets() {
         .unwrap(),
         oracle["rejected"]
     );
+
+    let input=[json!({"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"test","version":"1"}}}),json!({"jsonrpc":"2.0","method":"notifications/initialized"}),json!({"jsonrpc":"2.0","id":"search","method":"tools/call","params":{"name":"kpopper_search","arguments":{"query":"p.a","tokens":65536,"revision":revision}}}),json!({"jsonrpc":"2.0","id":"context","method":"tools/call","params":{"name":"kpopper_context","arguments":{"ids":["d.keep"],"direction":"support","tokens":65536,"revision":revision}}}),json!({"jsonrpc":"2.0","id":"propose","method":"tools/call","params":{"name":"kpopper_propose","arguments":{"revision":revision,"kind":"question","text":"Later?","basis":[],"revisit":""}}})].into_iter().map(|value|value.to_string()+"\n").collect::<String>();
+    let mut child = command(root, "serve")
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .spawn()
+        .unwrap();
+    child
+        .stdin
+        .take()
+        .unwrap()
+        .write_all(input.as_bytes())
+        .unwrap();
+    let output = ok(child.wait_with_output().unwrap());
+    let messages = output
+        .lines()
+        .map(|line| serde_json::from_str::<J>(line).unwrap())
+        .collect::<Vec<_>>();
+    assert_eq!(
+        messages[1]["result"],
+        json!({"content":[{"type":"text","text":native_search_text}],"isError":false})
+    );
+    assert_eq!(
+        messages[2]["result"],
+        json!({"content":[{"type":"text","text":native_context_text}],"isError":false})
+    );
+    assert_eq!(
+        messages[3]["result"],
+        json!({"content":[{"type":"text","text":native_proposal_text.trim_end_matches('\n')}],"isError":false})
+    );
+    let mut mcp_search: J = serde_json::from_str(
+        messages[1]["result"]["content"][0]["text"]
+            .as_str()
+            .unwrap(),
+    )
+    .unwrap();
+    mcp_search["revision"] = json!("REVISION");
+    assert_eq!(mcp_search, native_search);
+    let mut mcp_context: J = serde_json::from_str(
+        messages[2]["result"]["content"][0]["text"]
+            .as_str()
+            .unwrap(),
+    )
+    .unwrap();
+    mcp_context["revision"] = json!("REVISION");
+    assert_eq!(mcp_context, native_context);
+    let mcp_proposal: J = serde_json::from_str(
+        messages[3]["result"]["content"][0]["text"]
+            .as_str()
+            .unwrap(),
+    )
+    .unwrap();
+    assert_eq!(mcp_proposal, native_proposal);
 }

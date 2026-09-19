@@ -373,6 +373,306 @@ pub fn validate(bundle: &V, files: &Files) -> Result<V> {
 pub fn validate_archival(bundle: &V, files: &Files) -> Result<V> {
     validate_options(bundle, files, false)
 }
+
+fn meaning_capabilities(document: &V) -> Result<V> {
+    let capabilities = map(&C::document_capabilities(document)?)?.clone();
+    Ok(V::Map(
+        ["profile", "requires"]
+            .into_iter()
+            .map(|key| {
+                Ok((
+                    key.into(),
+                    capabilities
+                        .get(key)
+                        .cloned()
+                        .ok_or_else(|| error("invalid_capability"))?,
+                ))
+            })
+            .collect::<Result<Map>>()?,
+    ))
+}
+
+/// Content-based acceptance for an already captured target. Extra target IDs
+/// are allowed; source bytes and history are supplied explicitly by the caller.
+pub fn equivalent(
+    bundle: &V,
+    files: &Files,
+    document: &V,
+    evidence: &Files,
+    history: Option<&crate::history_capture::Capture>,
+) -> Result<bool> {
+    validate(bundle, files)?;
+    let manifest = map(field(map(bundle)?, "manifest")?)?;
+    if is_int(&manifest["version"], "3") {
+        let Some(target) = history else {
+            return Ok(false);
+        };
+        H::validate_contribution(bundle, files)?;
+        let rendered = crate::history_view::render_document(
+            target,
+            &target.objects,
+            &target.object_bytes,
+            &target.commits,
+        )?;
+        let target_adapted = crate::history_adapter::from_store_capture(target)?;
+        let expected_document = document.digest()?;
+        if ![
+            target.document.digest()?,
+            rendered.digest()?,
+            target_adapted.document().digest()?,
+        ]
+        .contains(&expected_document)
+        {
+            return Ok(false);
+        }
+        let binding = map(field(manifest, "history")?)?;
+        let artifact = map(field(binding, "manifest")?)?;
+        if is_int(field(artifact, "version")?, "2") {
+            let mut source_objects = BTreeMap::new();
+            let expected = V::Map(
+                files
+                    .iter()
+                    .filter(|(path, _)| path.starts_with("history-closure/objects/"))
+                    .map(|(_, raw)| {
+                        let value = Y::decode_document(raw)?;
+                        let fields = map(&value)?;
+                        let subject = text(field(fields, "subject")?)?.to_owned();
+                        let id = text(field(fields, "id")?)?.to_owned();
+                        source_objects.insert((subject.clone(), id.clone()), raw.clone());
+                        Ok((
+                            id,
+                            obj([("subject", s(&subject)), ("sha256", s(&sha256(raw)))]),
+                        ))
+                    })
+                    .collect::<Result<Map>>()?,
+            );
+            let artifact_revision = field(binding, "revision")?;
+            let mut adopted = false;
+            for raw in target.commits.values() {
+                let commit = Y::decode_document(raw)?;
+                let commit = map(&commit)?;
+                crate::history_transaction::validate_receipt(field(commit, "receipt")?)?;
+                let Some(adoption) = map(field(commit, "receipt")?)?
+                    .get("after")
+                    .and_then(|value| map(value).ok())
+                    .and_then(|value| value.get("history_adoption"))
+                    .and_then(|value| map(value).ok())
+                else {
+                    continue;
+                };
+                if adoption
+                    .get("version")
+                    .is_some_and(|value| is_int(value, "1"))
+                    && adoption.get("artifact_revision") == Some(artifact_revision)
+                    && adoption
+                        .get("objects")
+                        .is_some_and(|objects| objects.digest().ok() == expected.digest().ok())
+                {
+                    let inventory = list(field(commit, "objects")?)?
+                        .iter()
+                        .map(|value| {
+                            let value = map(value)?;
+                            Ok((
+                                text(field(value, "id")?)?.to_owned(),
+                                obj([
+                                    ("subject", field(value, "subject")?.clone()),
+                                    ("sha256", field(value, "sha256")?.clone()),
+                                ]),
+                            ))
+                        })
+                        .collect::<Result<Map>>()?;
+                    adopted = map(&expected)?.iter().all(|(id, item)| {
+                        let Ok(item_fields) = map(item) else {
+                            return false;
+                        };
+                        let Some(V::Text(subject)) = item_fields.get("subject") else {
+                            return false;
+                        };
+                        inventory.get(id) == Some(item)
+                            && source_objects
+                                .get(&(subject.clone(), id.clone()))
+                                .is_some_and(|raw| {
+                                    target.object_bytes.get(&(subject.clone(), id.clone()))
+                                        == Some(raw)
+                                })
+                    });
+                    break;
+                }
+            }
+            if !adopted {
+                return Ok(false);
+            }
+        } else {
+            let authority = files
+                .get("history-closure/authority.yaml")
+                .ok_or_else(|| error("invalid_history_contribution"))?;
+            if Y::decode_document(authority)?.digest()? != target.marker.digest()?
+                || field(artifact, "rules")?.digest()? != map(&target.state)?["rules"].digest()?
+            {
+                return Ok(false);
+            }
+            for (generation, retained) in artifact
+                .get("inactive_generations")
+                .and_then(|value| map(value).ok())
+                .into_iter()
+                .flatten()
+            {
+                if target
+                    .inactive_generations
+                    .get(generation)
+                    .map(|value| s(&value.digest))
+                    != Some(retained.clone())
+                {
+                    return Ok(false);
+                }
+            }
+            for (path, raw) in files {
+                if let Some(operation) = path
+                    .strip_prefix("history-closure/commits/")
+                    .and_then(|name| name.strip_suffix(".yaml"))
+                    && target.commits.get(operation) != Some(raw)
+                {
+                    return Ok(false);
+                }
+                if path.starts_with("history-closure/objects/") {
+                    let value = Y::decode_document(raw)?;
+                    let fields = map(&value)?;
+                    let key = (
+                        text(field(fields, "subject")?)?.to_owned(),
+                        text(field(fields, "id")?)?.to_owned(),
+                    );
+                    if target.object_bytes.get(&key) != Some(raw) {
+                        return Ok(false);
+                    }
+                }
+            }
+        }
+        return Ok(map(field(manifest, "evidence")?)?
+            .iter()
+            .all(|(path, digest)| {
+                path.starts_with("history-closure/")
+                    || evidence
+                        .get(path)
+                        .is_some_and(|raw| *digest == s(&sha256(raw)))
+            }));
+    }
+
+    if meaning_capabilities(field(manifest, "document")?)? != meaning_capabilities(document)? {
+        return Ok(false);
+    }
+    let expected_document = field(manifest, "document")?;
+    let expected_entries = entries(expected_document)?;
+    if string_is(
+        &map(&meaning_capabilities(expected_document)?)?["profile"],
+        "core/v1",
+    ) {
+        for (_, body) in expected_entries.values() {
+            let Some(definition) = map(body)
+                .ok()
+                .and_then(|value| value.get("collection_scope"))
+            else {
+                continue;
+            };
+            let collection = text(field(map(definition)?, "collection")?)?;
+            if map(expected_document)?
+                .get(collection)
+                .map(V::digest)
+                .transpose()?
+                != map(document)?.get(collection).map(V::digest).transpose()?
+            {
+                return Ok(false);
+            }
+        }
+    }
+    let actual = entries(document)?;
+    for root in names(field(manifest, "roots")?)? {
+        let Some((_, body)) = actual.get(&root) else {
+            return Ok(false);
+        };
+        if map(body)
+            .ok()
+            .and_then(|value| value.get("scope"))
+            .map(V::digest)
+            .transpose()?
+            != Some(field(manifest, "scope")?.digest()?)
+        {
+            return Ok(false);
+        }
+    }
+    let expected_schema = V::Map(
+        map(expected_document)?
+            .get("schema")
+            .map(|value| [("schema".into(), value.clone())].into_iter().collect())
+            .unwrap_or_default(),
+    );
+    let actual_schema = V::Map(
+        map(document)?
+            .get("schema")
+            .map(|value| [("schema".into(), value.clone())].into_iter().collect())
+            .unwrap_or_default(),
+    );
+    if expected_schema.digest()? != actual_schema.digest()? {
+        return Ok(false);
+    }
+    for (name, expected) in &expected_entries {
+        if actual
+            .get(name)
+            .map(|value| V::List(vec![s(&value.0), value.1.clone()]).digest())
+            .transpose()?
+            != Some(V::List(vec![s(&expected.0), expected.1.clone()]).digest()?)
+        {
+            return Ok(false);
+        }
+    }
+    let source_roles = F::semantic_roles(expected_document)?;
+    let target_roles = F::semantic_roles(document)?;
+    let (Some((source_judgments, source_fields)), Some((target_judgments, target_fields))) =
+        (source_roles, target_roles)
+    else {
+        return Ok(false);
+    };
+    for name in expected_entries.keys() {
+        let source_judgment = source_judgments.contains(name);
+        if source_judgment != target_judgments.contains(name)
+            || source_judgment
+                && V::Map(source_fields.clone()).digest()?
+                    != V::Map(target_fields.clone()).digest()?
+        {
+            return Ok(false);
+        }
+    }
+    Ok(map(field(manifest, "evidence")?)?
+        .iter()
+        .all(|(path, digest)| {
+            evidence
+                .get(path)
+                .is_some_and(|raw| *digest == s(&sha256(raw)))
+        }))
+}
+
+/// Reconstruct the validated historical source carried by a v3 contribution.
+pub(crate) fn contribution_history(
+    bundle: &V,
+    files: &Files,
+) -> Result<crate::history_capture::Capture> {
+    validate(bundle, files)?;
+    let manifest = map(field(map(bundle)?, "manifest")?)?;
+    require(
+        is_int(field(manifest, "version")?, "3"),
+        "invalid_history_contribution",
+    )?;
+    let binding = map(field(manifest, "history")?)?;
+    let artifact = map(field(binding, "manifest")?)?;
+    let history_files = map(field(artifact, "files")?)?
+        .keys()
+        .filter_map(|path| {
+            files
+                .get(&format!("history-closure/{path}"))
+                .map(|raw| (path.clone(), raw.clone()))
+        })
+        .collect::<Files>();
+    H::capture(&history_files, Some(field(artifact, "rules")?))
+}
 fn validate_options(bundle: &V, files: &Files, supported: bool) -> Result<V> {
     Y::validate_value(bundle, 16 * 1024 * 1024)?;
     let b = map(bundle)?;
@@ -589,5 +889,71 @@ mod tests {
             validate(&bundle, &Files::new()).unwrap_err().0,
             "incomplete_contribution_closure"
         );
+    }
+
+    #[test]
+    fn content_equivalence_matches_python_for_v2_and_v3_history() {
+        let cases: J = serde_json::from_str(include_str!(
+            "../tests/fixtures/pending-equivalence-oracle.json"
+        ))
+        .unwrap();
+        for case in cases.as_array().unwrap() {
+            let bundle = V::from_tagged(&case["bundle"]).unwrap();
+            let source_files = case["files"]
+                .as_object()
+                .unwrap()
+                .iter()
+                .map(|(path, raw)| {
+                    (
+                        path.clone(),
+                        STANDARD.decode(raw.as_str().unwrap()).unwrap(),
+                    )
+                })
+                .collect::<Files>();
+            let evidence = case["evidence"]
+                .as_object()
+                .map(|files| {
+                    files
+                        .iter()
+                        .map(|(path, raw)| {
+                            (
+                                path.clone(),
+                                STANDARD.decode(raw.as_str().unwrap()).unwrap(),
+                            )
+                        })
+                        .collect::<Files>()
+                })
+                .unwrap_or_default();
+            let document = V::from_tagged(&case["document"]).unwrap();
+            let target_files = case.get("target_history").map(|files| {
+                files
+                    .as_object()
+                    .unwrap()
+                    .iter()
+                    .map(|(path, raw)| {
+                        (
+                            path.clone(),
+                            STANDARD.decode(raw.as_str().unwrap()).unwrap(),
+                        )
+                    })
+                    .collect::<Files>()
+            });
+            let target = target_files
+                .as_ref()
+                .map(|files| H::capture(files, None).unwrap());
+            assert_eq!(
+                equivalent(
+                    &bundle,
+                    &source_files,
+                    &document,
+                    &evidence,
+                    target.as_ref(),
+                )
+                .unwrap(),
+                case["expected"].as_bool().unwrap(),
+                "{}",
+                case["name"]
+            );
+        }
     }
 }

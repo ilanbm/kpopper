@@ -120,7 +120,7 @@ pub(crate) fn flags(reader: &Reader<'_>, body: &V) -> Result<BTreeSet<&'static s
     } else {
         None
     };
-    if !named && !blocked && (truth(&pred) || reopened_text(body).is_empty()) {
+    if !named && (truth(&pred) || reopened_text(body).is_empty()) {
         flags.insert("no_predicate");
     } else if named && verdict == Some(true) {
         flags.insert("falsified");
@@ -176,17 +176,7 @@ pub(crate) fn flags(reader: &Reader<'_>, body: &V) -> Result<BTreeSet<&'static s
             flags.insert("moved");
         }
     }
-    let trail = match b.get("replaced") {
-        Some(V::Text(s)) => Some(s.clone()),
-        Some(V::List(a)) => a.last().map(py),
-        _ => None,
-    };
-    if let Some(trail) = trail
-        && let Some((_, stamp)) = trail.rsplit_once(" on ")
-        && crate::value::Date::new(stamp).is_ok()
-    {
-        let reviewed = py(get(b, "reviewed"));
-        let reviewed = reviewed.get(..10).unwrap_or("");
+    if crate::ordinary_reader::reversal_pending(body).is_some() {
         let arrangement = deps.iter().any(|d| {
             reader
                 .raw
@@ -197,7 +187,7 @@ pub(crate) fn flags(reader: &Reader<'_>, body: &V) -> Result<BTreeSet<&'static s
             || predicate_refs(&pred)
                 .iter()
                 .any(|d| F::BUILTINS.contains(&d.as_str())));
-        if reviewed < stamp && !arrangement {
+        if !arrangement {
             flags.insert("reversed");
         }
     }

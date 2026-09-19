@@ -40,6 +40,7 @@ fn iterable(v: &V) -> Result<Vec<String>> {
         _ => Err(error("dependency declaration is not iterable")),
     }
 }
+
 pub(crate) fn cut(s: &str, n: usize) -> String {
     if s.chars().count() < n {
         s.into()
@@ -2177,6 +2178,12 @@ impl Projection<'_> {
             let pred = self.base.pred(id);
             let blocked = blocked_text(body);
             let reopened = reopened_text(body);
+            let page_predicate = py(&pred).contains("page.");
+            if page_predicate {
+                note.push(format!(
+                    "{id}: wrong_if reads page.unserved, which is counted when the page is built - `kpop experimental hub --verify` decides it"
+                ));
+            }
             let dependencies = self.base.deps(id)?;
             if flags.contains("broken") {
                 for dep in dependencies
@@ -2230,10 +2237,24 @@ impl Projection<'_> {
                 ));
             }
             if flags.contains("no_predicate") {
-                if !blocked.is_empty() {
+                let page_refs = R::predicate_refs(&pred)
+                    .into_iter()
+                    .filter(|reference| reference.starts_with("page."))
+                    .collect::<BTreeSet<_>>();
+                let page_refs = if page_refs.is_empty() && py(&pred).contains("page.") {
+                    BTreeSet::from(["page.unserved".to_owned()])
+                } else {
+                    page_refs
+                };
+                if !page_refs.is_empty() && !page_predicate {
+                    note.push(format!(
+                        "{id}: wrong_if reads {}, which is counted when the page is built - `kpop experimental hub --verify` decides it",
+                        page_refs.into_iter().collect::<Vec<_>>().join(", ")
+                    ));
+                } else if !blocked.is_empty() {
                     note.push(format!(
                         "{id}: no predicate at all (declared: {})",
-                        cut(&blocked, 90)
+                        blocked.chars().take(90).collect::<String>()
                     ));
                 } else {
                     fail.push(format!("{id}: no predicate at all - and nothing says why not, so it can never be re-checked"));
@@ -2250,6 +2271,37 @@ impl Projection<'_> {
                     moved.push(format!("{id}: {dep} differs from its snapshot ({old} -> {now}) - re-review, or refresh seen"));
                 }
             }
+            if let Some(day) = R::reversal_pending(body) {
+                note.push(format!(
+                    "{id}: reversed on {day} - the verdict under this id changed; review it once read, or pull {id} --history"
+                ));
+            }
+        }
+        let mut prior_judgments = 0usize;
+        let mut high_priors = 0usize;
+        for id in self.base.judgments.keys() {
+            let priors = self
+                .base
+                .deps(id)?
+                .into_iter()
+                .filter(|dep| dep.starts_with("prior."))
+                .collect::<Vec<_>>();
+            if !priors.is_empty() {
+                prior_judgments += 1;
+                high_priors += priors
+                    .iter()
+                    .filter(|dep| {
+                        py(&self.base.reader.value(dep).unwrap_or(V::Null))
+                            .parse::<f64>()
+                            .is_ok_and(|value| value >= 0.8)
+                    })
+                    .count();
+            }
+        }
+        if prior_judgments > 0 {
+            note.push(format!(
+                "{prior_judgments} judgments rest on prior.* claims, {high_priors} of them on a prior at 0.8 or above"
+            ));
         }
         for (id, asked, hint) in self.page_unserved(brief)? {
             note.push(format!("{id} is served by no tab - asked: {asked}"));

@@ -201,10 +201,29 @@ impl CheckedSessionStore {
         request: &ProposalRequest,
     ) -> Result<J> {
         let session = self.load(revision, freshness)?;
-        let project = self.project()?;
-        let core = proposal_core(project, revision, request, |reference| {
+        self.propose_revision(revision, request, |reference| {
             session.validate_reference(reference)
-        })?;
+        })
+    }
+
+    /// Persist a proposal after a non-core session has freshly rebuilt and
+    /// validated its own revision and exact reference space.
+    pub fn propose_revision<F>(
+        &self,
+        revision: &str,
+        request: &ProposalRequest,
+        validate_reference: F,
+    ) -> Result<J>
+    where
+        F: Fn(&str) -> Result<()>,
+    {
+        require(
+            revision.len() == 64 && revision.bytes().all(|byte| byte.is_ascii_hexdigit()),
+            "invalid session revision",
+        )?;
+        self.validate_root()?;
+        let project = self.project()?;
+        let core = proposal_core(project, revision, request, validate_reference)?;
         let id = sha256(&serde_json::to_vec(&core)?);
         let external = core["basis"]
             .as_array()

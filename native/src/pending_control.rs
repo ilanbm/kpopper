@@ -160,6 +160,11 @@ pub(crate) fn load_state(path: &Path) -> Result<V> {
 pub(crate) struct PublisherLock {
     _file: File,
 }
+impl Drop for PublisherLock {
+    fn drop(&mut self) {
+        let _ = FileExt::unlock(&self._file);
+    }
+}
 impl PublisherLock {
     pub(crate) fn acquire(project: &Project) -> Result<Self> {
         #[cfg(unix)]

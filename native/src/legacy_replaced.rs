@@ -10,6 +10,7 @@ use crate::{
     history_contract::{error, map},
     history_yaml::{self as Y, SourceValue},
     require,
+    source_clock::python_equal,
     value::TypedValue as V,
 };
 
@@ -99,23 +100,6 @@ fn verdict(value: &V) -> Option<V> {
 
 fn same(left: &V, right: &V) -> bool {
     crate::ordinary_reader::same_legacy(left, right)
-}
-
-fn python_equal(left: &V, right: &V) -> bool {
-    match (left, right) {
-        (V::Map(a), V::Map(b)) => {
-            a.len() == b.len()
-                && a.iter()
-                    .all(|(k, v)| b.get(k).is_some_and(|other| python_equal(v, other)))
-        }
-        (V::List(a), V::List(b)) => {
-            a.len() == b.len() && a.iter().zip(b).all(|(a, b)| python_equal(a, b))
-        }
-        _ => Y::OrdinaryKey::new(left.clone())
-            .ok()
-            .zip(Y::OrdinaryKey::new(right.clone()).ok())
-            .is_some_and(|(a, b)| a.python_eq(&b)),
-    }
 }
 
 fn core(value: &V) -> V {

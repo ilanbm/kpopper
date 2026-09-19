@@ -312,7 +312,8 @@ impl Service {
             &runtime,
             &self.project,
             self.navigation.as_ref(),
-        )?;
+        )?
+        .with_proposals(self.store.proposals()?)?;
         capture.verify()?;
         Ok((capture, runtime, session))
     }
@@ -410,9 +411,11 @@ impl Service {
     }
     pub fn searching(&self, revision: &str, request: &SearchRequest) -> Result<String> {
         if self.ordinary()? {
-            return Err(error(
-                "unsupported_capability: native ordinary session search is not yet available",
-            ));
+            let (capture, _, session) = self.ordinary_session()?;
+            let result = session.search(revision, request, |s| self.store.encoding().count(s))?;
+            capture.verify()?;
+            self.inputs.verify()?;
+            return Ok(result);
         }
         let capture = source_capture::capture_source(
             std::slice::from_ref(&self.input),
@@ -429,9 +432,18 @@ impl Service {
 
     pub fn proposing(&self, revision: &str, request: &ProposalRequest) -> Result<String> {
         if self.ordinary()? {
-            return Err(error(
-                "unsupported_capability: native ordinary session proposals are not yet available",
-            ));
+            let (capture, _, session) = self.ordinary_session()?;
+            session.expect(revision)?;
+            capture.verify()?;
+            self.inputs.verify()?;
+            let result = self
+                .store
+                .propose_revision(revision, request, |reference| {
+                    session.validate_reference(reference)
+                })?;
+            capture.verify()?;
+            self.inputs.verify()?;
+            return Ok(serde_json::to_string(&result)?);
         }
         let capture = source_capture::capture_source(
             std::slice::from_ref(&self.input),
@@ -486,9 +498,12 @@ impl Service {
         options: &ContextOptions,
     ) -> Result<String> {
         if self.ordinary()? {
-            return Err(error(
-                "unsupported_capability: native ordinary session context is not yet available",
-            ));
+            let (capture, _, session) = self.ordinary_session()?;
+            let result = session
+                .contextualize(ids, revision, options, |s| self.store.encoding().count(s))?;
+            capture.verify()?;
+            self.inputs.verify()?;
+            return Ok(result);
         }
         let capture = source_capture::capture_source(
             std::slice::from_ref(&self.input),

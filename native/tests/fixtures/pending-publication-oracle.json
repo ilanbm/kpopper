@@ -1,0 +1,69 @@
+{
+  "revision": "5746ca52696175818f041cc946a382a68115fc0e68579f1e16556a8ae730256f",
+  "proposed": {
+    "states": {
+      "5746ca52696175818f041cc946a382a68115fc0e68579f1e16556a8ae730256f": "proposed"
+    },
+    "decisions": {},
+    "paused": false,
+    "pr": "1",
+    "expected_head": "3b455f594e185f32439fa4b6ddbe60e765d3d650",
+    "ledger_ref": "5275a09543c93988273ea1824331a9bd9d835599",
+    "retry_at": 0,
+    "failures": 0,
+    "intent": null,
+    "verified": false,
+    "last_verified": {
+      "target": "4b686708e7607b0921738be451facd1150827a51",
+      "head": null,
+      "ledger_ref": "5275a09543c93988273ea1824331a9bd9d835599",
+      "scope": "$SCOPE",
+      "at": 123.5
+    },
+    "outcome": "proposed"
+  },
+  "proposed_state": "{\"cycle\":1,\"decisions\":{},\"expected_head\":\"3b455f594e185f32439fa4b6ddbe60e765d3d650\",\"failures\":0,\"intent\":null,\"paused\":false,\"pr\":\"1\",\"proposed\":[\"5746ca52696175818f041cc946a382a68115fc0e68579f1e16556a8ae730256f\"],\"receipts\":[{\"at\":123.5,\"event\":\"reconciled\",\"head\":null,\"ledger_ref\":\"5275a09543c93988273ea1824331a9bd9d835599\",\"scope\":\"$SCOPE\",\"target\":\"4b686708e7607b0921738be451facd1150827a51\"},{\"at\":123.5,\"commit\":\"3b455f594e185f32439fa4b6ddbe60e765d3d650\",\"event\":\"push_intended\",\"expected\":null,\"kind\":\"push\",\"revisions\":[\"5746ca52696175818f041cc946a382a68115fc0e68579f1e16556a8ae730256f\"]},{\"at\":123.5,\"event\":\"pushed\",\"head\":\"3b455f594e185f32439fa4b6ddbe60e765d3d650\",\"revisions\":[\"5746ca52696175818f041cc946a382a68115fc0e68579f1e16556a8ae730256f\"]},{\"at\":123.5,\"event\":\"create_intended\",\"kind\":\"create\",\"marker\":\"<!-- kpopper-publication:$SCOPE -->\\n<!-- cycle:1 -->\",\"request_id\":\"11111111111111111111111111111111\",\"revisions\":[\"5746ca52696175818f041cc946a382a68115fc0e68579f1e16556a8ae730256f\"]},{\"at\":123.5,\"event\":\"created\",\"pr\":\"1\"},{\"at\":123.5,\"event\":\"attempt_complete\"}],\"retry_at\":0,\"scope\":\"$SCOPE\",\"states\":{\"5746ca52696175818f041cc946a382a68115fc0e68579f1e16556a8ae730256f\":\"proposed\"},\"verified\":{\"at\":123.5,\"head\":null,\"ledger_ref\":\"5275a09543c93988273ea1824331a9bd9d835599\",\"scope\":\"$SCOPE\",\"target\":\"4b686708e7607b0921738be451facd1150827a51\"},\"version\":1}\n",
+  "proposed_refs": {
+    "trunk": "4b686708e7607b0921738be451facd1150827a51",
+    "pending_grounding": "3b455f594e185f32439fa4b6ddbe60e765d3d650"
+  },
+  "unresolved": {
+    "verified": true,
+    "ledger_ref": "5275a09543c93988273ea1824331a9bd9d835599",
+    "scope": "$SCOPE",
+    "generation": 1,
+    "target": "4b686708e7607b0921738be451facd1150827a51",
+    "terminal": {},
+    "unresolved": [
+      "5746ca52696175818f041cc946a382a68115fc0e68579f1e16556a8ae730256f"
+    ],
+    "checked_at": 123.5
+  },
+  "unresolved_state": "{\"cycle\":1,\"decisions\":{},\"expected_head\":\"3b455f594e185f32439fa4b6ddbe60e765d3d650\",\"failures\":0,\"intent\":null,\"paused\":false,\"pr\":\"1\",\"proposed\":[\"5746ca52696175818f041cc946a382a68115fc0e68579f1e16556a8ae730256f\"],\"receipts\":[{\"at\":123.5,\"event\":\"reconciled\",\"head\":null,\"ledger_ref\":\"5275a09543c93988273ea1824331a9bd9d835599\",\"scope\":\"$SCOPE\",\"target\":\"4b686708e7607b0921738be451facd1150827a51\"},{\"at\":123.5,\"commit\":\"3b455f594e185f32439fa4b6ddbe60e765d3d650\",\"event\":\"push_intended\",\"expected\":null,\"kind\":\"push\",\"revisions\":[\"5746ca52696175818f041cc946a382a68115fc0e68579f1e16556a8ae730256f\"]},{\"at\":123.5,\"event\":\"pushed\",\"head\":\"3b455f594e185f32439fa4b6ddbe60e765d3d650\",\"revisions\":[\"5746ca52696175818f041cc946a382a68115fc0e68579f1e16556a8ae730256f\"]},{\"at\":123.5,\"event\":\"create_intended\",\"kind\":\"create\",\"marker\":\"<!-- kpopper-publication:$SCOPE -->\\n<!-- cycle:1 -->\",\"request_id\":\"11111111111111111111111111111111\",\"revisions\":[\"5746ca52696175818f041cc946a382a68115fc0e68579f1e16556a8ae730256f\"]},{\"at\":123.5,\"event\":\"created\",\"pr\":\"1\"},{\"at\":123.5,\"event\":\"attempt_complete\"},{\"at\":123.5,\"event\":\"reconciled\",\"head\":\"3b455f594e185f32439fa4b6ddbe60e765d3d650\",\"ledger_ref\":\"5275a09543c93988273ea1824331a9bd9d835599\",\"scope\":\"$SCOPE\",\"target\":\"4b686708e7607b0921738be451facd1150827a51\"}],\"retry_at\":0,\"scope\":\"$SCOPE\",\"states\":{\"5746ca52696175818f041cc946a382a68115fc0e68579f1e16556a8ae730256f\":\"proposed\"},\"verified\":{\"at\":123.5,\"head\":\"3b455f594e185f32439fa4b6ddbe60e765d3d650\",\"ledger_ref\":\"5275a09543c93988273ea1824331a9bd9d835599\",\"scope\":\"$SCOPE\",\"target\":\"4b686708e7607b0921738be451facd1150827a51\"},\"version\":1}\n",
+  "verified": {
+    "verified": true,
+    "ledger_ref": "5275a09543c93988273ea1824331a9bd9d835599",
+    "scope": "$SCOPE",
+    "generation": 1,
+    "target": "8fef1f30b39af7108f3dca438743557663c7c405",
+    "terminal": {
+      "5746ca52696175818f041cc946a382a68115fc0e68579f1e16556a8ae730256f": "accepted"
+    },
+    "unresolved": [],
+    "checked_at": 123.5
+  },
+  "verified_state": "{\"cycle\":1,\"decisions\":{},\"expected_head\":null,\"failures\":0,\"intent\":null,\"paused\":false,\"pr\":null,\"proposed\":[],\"receipts\":[{\"at\":123.5,\"event\":\"reconciled\",\"head\":null,\"ledger_ref\":\"5275a09543c93988273ea1824331a9bd9d835599\",\"scope\":\"$SCOPE\",\"target\":\"4b686708e7607b0921738be451facd1150827a51\"},{\"at\":123.5,\"commit\":\"3b455f594e185f32439fa4b6ddbe60e765d3d650\",\"event\":\"push_intended\",\"expected\":null,\"kind\":\"push\",\"revisions\":[\"5746ca52696175818f041cc946a382a68115fc0e68579f1e16556a8ae730256f\"]},{\"at\":123.5,\"event\":\"pushed\",\"head\":\"3b455f594e185f32439fa4b6ddbe60e765d3d650\",\"revisions\":[\"5746ca52696175818f041cc946a382a68115fc0e68579f1e16556a8ae730256f\"]},{\"at\":123.5,\"event\":\"create_intended\",\"kind\":\"create\",\"marker\":\"<!-- kpopper-publication:$SCOPE -->\\n<!-- cycle:1 -->\",\"request_id\":\"11111111111111111111111111111111\",\"revisions\":[\"5746ca52696175818f041cc946a382a68115fc0e68579f1e16556a8ae730256f\"]},{\"at\":123.5,\"event\":\"created\",\"pr\":\"1\"},{\"at\":123.5,\"event\":\"attempt_complete\"},{\"at\":123.5,\"event\":\"reconciled\",\"head\":\"3b455f594e185f32439fa4b6ddbe60e765d3d650\",\"ledger_ref\":\"5275a09543c93988273ea1824331a9bd9d835599\",\"scope\":\"$SCOPE\",\"target\":\"4b686708e7607b0921738be451facd1150827a51\"},{\"at\":123.5,\"event\":\"reconciled\",\"head\":null,\"ledger_ref\":\"5275a09543c93988273ea1824331a9bd9d835599\",\"scope\":\"$SCOPE\",\"target\":\"8fef1f30b39af7108f3dca438743557663c7c405\"}],\"retry_at\":0,\"scope\":\"$SCOPE\",\"states\":{\"5746ca52696175818f041cc946a382a68115fc0e68579f1e16556a8ae730256f\":\"accepted\"},\"verified\":{\"at\":123.5,\"head\":null,\"ledger_ref\":\"5275a09543c93988273ea1824331a9bd9d835599\",\"scope\":\"$SCOPE\",\"target\":\"8fef1f30b39af7108f3dca438743557663c7c405\"},\"version\":1}\n",
+  "verified_refs": {
+    "trunk": "8fef1f30b39af7108f3dca438743557663c7c405",
+    "pending_grounding": null
+  },
+  "provider_rows": [
+    {
+      "id": "1",
+      "state": "merged",
+      "body": "<!-- kpopper-publication:$SCOPE -->\n<!-- cycle:1 -->\n\nPortable contributions for review:\n- `5746ca52696175818f041cc946a382a68115fc0e68579f1e16556a8ae730256f`\n",
+      "url": "fixture://pr/1",
+      "head": "3b455f594e185f32439fa4b6ddbe60e765d3d650"
+    }
+  ]
+}

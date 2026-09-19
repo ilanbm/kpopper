@@ -40,6 +40,20 @@ fn contested_check_uses_the_reference_forty_character_claim_width() {
 }
 
 #[test]
+fn ordinary_check_note_families_match_python_fixture() {
+    let tmp = tempfile::tempdir().unwrap();
+    let root = tmp.path();
+    fs::write(
+        root.join("GROUNDING.yaml"),
+        include_str!("fixtures/ordinary-note-parity.yaml"),
+    )
+    .unwrap();
+    let output = cli(root, &["--frozen", "check"], &root.join("private"));
+    assert_eq!(output.status.code(), Some(1));
+    assert_eq!(output.stdout, include_bytes!("fixtures/ordinary-note-parity.stdout"));
+}
+
+#[test]
 fn ordinary_check_rejects_manual_expression_and_dependency_bypasses() {
     let tmp = tempfile::tempdir().unwrap();
     let root = tmp.path();

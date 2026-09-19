@@ -32,6 +32,7 @@ pub struct OrdinarySession {
     scan: J,
     groups: BTreeMap<String, BTreeSet<String>>,
     leaves: BTreeMap<String, String>,
+    proposals: BTreeMap<String, J>,
 }
 
 fn canonical(value: &J) -> Result<String> {
@@ -196,11 +197,42 @@ impl OrdinarySession {
             scan,
             groups,
             leaves,
+            proposals: BTreeMap::new(),
         })
     }
 
     pub fn revision(&self) -> &str {
         &self.revision
+    }
+    pub fn expect(&self, revision: &str) -> Result<()> {
+        require(
+            revision == self.revision,
+            "project record changed or revision belongs elsewhere; reopen",
+        )
+    }
+    pub fn with_proposals(mut self, proposals: BTreeMap<String, J>) -> Result<Self> {
+        for (id, proposal) in &proposals {
+            crate::checked_session_store::validate_stored_proposal(
+                &format!("proposal-{id}.json"),
+                &self.project,
+                proposal,
+            )?;
+        }
+        self.proposals = proposals;
+        Ok(self)
+    }
+
+    fn pending(&self) -> J {
+        J::Object(
+            self.proposals
+                .iter()
+                .map(|(id, proposal)| {
+                    let mut value = proposal.clone();
+                    value["stale_base"] = json!(value["base_revision"] != self.revision);
+                    (id.clone(), value)
+                })
+                .collect(),
+        )
     }
 
     pub fn opening<F>(&self, tokens: usize, count: F) -> Result<Opening>
@@ -352,6 +384,77 @@ impl OrdinarySession {
         )
     }
 
+    pub fn search<F>(
+        &self,
+        revision: &str,
+        request: &crate::session_search::SearchRequest,
+        count: F,
+    ) -> Result<String>
+    where
+        F: Fn(&str) -> usize,
+    {
+        require(
+            revision == self.revision,
+            "project record changed or revision belongs elsewhere; reopen",
+        )?;
+        let nodes = self.graph["nodes"]
+            .as_object()
+            .ok_or_else(|| Error("invalid ordinary session graph".into()))?
+            .iter()
+            .map(|(id, node)| (id.clone(), node.clone()))
+            .collect::<BTreeMap<_, _>>();
+        crate::session_search::search_checked_session(
+            &self.project,
+            &self.revision,
+            &nodes,
+            &self.groups,
+            request,
+            count,
+            None,
+        )
+        .map(|response| response.text)
+        .map_err(|error| Error(error.0))
+    }
+
+    pub fn contextualize<F>(
+        &self,
+        ids: &[String],
+        revision: &str,
+        options: &crate::checked_session::ContextOptions,
+        count: F,
+    ) -> Result<String>
+    where
+        F: Fn(&str) -> usize,
+    {
+        let node_ids = self.graph["nodes"]
+            .as_object()
+            .ok_or_else(|| Error("invalid ordinary session graph".into()))?
+            .keys()
+            .cloned()
+            .collect();
+        let edges = self.graph["edges"]
+            .as_array()
+            .ok_or_else(|| Error("invalid ordinary session graph".into()))?;
+        crate::checked_session::contextualize_graph(
+            crate::checked_session::ContextGraph {
+                project: &self.project,
+                revision: &self.revision,
+                node_ids: &node_ids,
+                edges,
+                revision_error: "project record changed or revision belongs elsewhere; reopen",
+            },
+            ids,
+            revision,
+            options,
+            |id| self.read_value(&format!("node:{id}")),
+            count,
+        )
+    }
+
+    pub fn validate_reference(&self, reference: &str) -> Result<()> {
+        self.read_value(reference).map(|_| ())
+    }
+
     fn assessment(&self, id: &str) -> Option<&J> {
         self.scan["assessments"]
             .as_array()?
@@ -413,6 +516,13 @@ impl OrdinarySession {
             source
         } else if base == "native" {
             self.graph["native_hypotheses"].clone()
+        } else if base == "pending" {
+            self.pending()
+        } else if let Some(id) = base.strip_prefix("proposal:") {
+            self.pending()
+                .get(id)
+                .cloned()
+                .ok_or_else(|| Error("unknown proposal".into()))?
         } else if base == "alerts" {
             J::Object(
                 nodes
@@ -544,8 +654,13 @@ impl OrdinarySession {
             .keys()
             .map(|id| self.cell(id))
             .collect::<Result<Vec<_>>>()?;
+        let stale = self
+            .proposals
+            .values()
+            .filter(|proposal| proposal["base_revision"] != self.revision)
+            .count();
         Ok(
-            json!({"schema":"kpopper.epistemic-view.v3","project":self.project,"revision":self.revision,"counts":self.scan["counts"],"cells":cells,"conditions_ref":"conditions:/","events":self.scan["events"],"orientation":self.graph.get("orientation").cloned().unwrap_or_else(||json!({})),"rules":RULES,"links":self.graph["edges"],"pending":0,"stale_pending":0,"native_hypotheses":self.graph["native_hypotheses"].as_object().map(|m|m.values().filter(|h|h["kind"]!="contribution").count()).unwrap_or(0),"contributions":self.graph["contributions"],"read_mode":self.graph["read_mode"],"events_expanded":!events.is_empty()}),
+            json!({"schema":"kpopper.epistemic-view.v3","project":self.project,"revision":self.revision,"counts":self.scan["counts"],"cells":cells,"conditions_ref":"conditions:/","events":self.scan["events"],"orientation":self.graph.get("orientation").cloned().unwrap_or_else(||json!({})),"rules":RULES,"links":self.graph["edges"],"pending":self.proposals.len(),"stale_pending":stale,"native_hypotheses":self.graph["native_hypotheses"].as_object().map(|m|m.values().filter(|h|h["kind"]!="contribution").count()).unwrap_or(0),"contributions":self.graph["contributions"],"read_mode":self.graph["read_mode"],"events_expanded":!events.is_empty()}),
         )
     }
     fn cell(&self, id: &str) -> Result<J> {
@@ -599,6 +714,15 @@ impl OrdinarySession {
                 self.scan["events"].as_object().unwrap().len()
             ),
         ];
+        if !self.proposals.is_empty() {
+            lines.insert(
+                lines.len() - 1,
+                format!(
+                    "pending={} stale={}; native hypotheses={}",
+                    packet["pending"], packet["stale_pending"], packet["native_hypotheses"]
+                ),
+            );
+        }
         if expanded {
             for (key, event) in self.scan["events"].as_object().unwrap() {
                 lines.push(format!(

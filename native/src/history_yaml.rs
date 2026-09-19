@@ -114,7 +114,7 @@ fn numeric_key(key: &TypedValue) -> Option<BigInt> {
 }
 
 impl OrdinaryKey {
-    pub(crate) fn new(value: TypedValue) -> Result<Self> {
+    fn new(value: TypedValue) -> Result<Self> {
         require(
             !matches!(value, TypedValue::Map(_) | TypedValue::List(_)),
             "invalid_yaml_key",
