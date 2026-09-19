@@ -825,22 +825,22 @@ own setup; it is optional alongside the default reasoning engine.
 Carry the reasoning into the next session, check it against recorded inputs, and keep
 the earlier evidence available when the work changes.
 
-| What you want to do | What kpopper provides |
-|---|---|
-| Resume work with its context | Open the project's standing decisions and attention items, then retrieve the facts and reasons relevant to a question. [Before the first answer](#example-2-claude-cowork-and-chatgpt-work). |
-| Trace why a decision was made | Follow its sources, declared dependencies and the values used at its last review. [The knowledge record](#how-it-works). |
-| Keep earlier decisions inspectable | History-backed records retain immutable claim versions and explicit acceptance, review, correction and refutation acts as the current record evolves. [History](docs/history-contract.md). |
-| Calculate and check explicit rules | Evaluate exact arithmetic, compound Boolean conditions and conditional expressions with the packaged Lean runtime. Missing inputs and execution errors remain visible. [Deterministic reasoning](#how-it-works). |
-| Ask questions over a recorded collection | Filter, select, count or sum within a declared scope, or test whether all/any members meet a condition. The result retains scope evidence and diagnostics. [Collection queries](docs/query.md). |
-| Catch a changed basis behind an unchanged answer | Compare the recorded inputs, rules and collection membership with the last review, even when the numeric result stays equal. [Five selected papers, a different basis](examples/dark-matter/advanced/README.md). |
-| Reproduce an earlier computation | Replay a retained Snapshot through the public API to recover its earlier result and basis after the live record changes. [Source-free replay example](examples/dark-matter/advanced/README.md#run-it). |
-| Notice which decisions need another look | Trace changed premises, evaluate declared breaking conditions and explicitly rerun configured measurement recipes. [Checks and measurements](docs/reference.md#what-check-means). |
-| Test alternatives and reconcile branch work | Keep named hypotheses, inspect the proposed combination and retain conflicts or refutations. Worktrees keep their code-specific context, with checks available before a merge and in CI. [Two working modes](#example-1-coding-agent). |
-| Keep useful findings across sessions and branches | Capture explicit reports in the background and retain scoped project contributions with their sources and pending/accepted status. [Background capture](#keep-the-conversation-moving) · [Shared contributions](docs/project-modes.md). |
-| Return to work when its conditions change | Tie followups to dates, changed recorded inputs or earlier work, with scheduling and delivery configured in the host. [Followups](#followups-and-background-checks). |
-| Share a focused piece of the reasoning | Export selected entries as Markdown, with earlier/current readings, omitted values marked and optional Mermaid diagrams. [Focused exports](docs/graph-export.md). |
-| Build a tool on structured findings | Read versioned assessment JSON with computational results, review comparisons, contention, integrity and history evidence kept distinct. [Assessment contract](docs/assessment.md). |
-| Let the record fit the work | Add domain-specific subjects and vocabulary while preserving explicit sources, dependencies and review conditions. [Evolving structure](#how-it-works). |
+| What you want to do | What kpopper provides | Example |
+| --- | --- | --- |
+| Resume work with its context | Open the project's standing decisions and attention items, then retrieve the facts and reasons relevant to a question. [Before the first answer](#example-2-claude-cowork-and-chatgpt-work). | Resume a job search and recover why three roles were shortlisted. |
+| Trace why a decision was made | Follow its sources, declared dependencies and the values used at its last review. [The knowledge record](#how-it-works). | Trace the upload queue decision back to the test that exposed request timeouts. |
+| Keep earlier decisions inspectable | History-backed records retain immutable claim versions and explicit acceptance, review, correction and refutation acts as the current record evolves. [History](docs/history-contract.md). | See why a trip moved from July to August, without losing the original constraints. |
+| Calculate and check explicit rules | Evaluate exact arithmetic, compound Boolean conditions and conditional expressions with the packaged Lean runtime. Missing inputs and execution errors remain visible. [Deterministic reasoning](#how-it-works). | Check whether 24 guests fit a venue with 18 seats. |
+| Ask questions over a recorded collection | Filter, select, count or sum within a declared scope, or test whether all/any members meet a condition. The result retains scope evidence and diagnostics. [Collection queries](docs/query.md). | Find apartments below $2,000 with an elevator and a lease that allows pets. |
+| Catch a changed basis behind an unchanged answer | Compare the recorded inputs, rules and collection membership with the last review, even when the numeric result stays equal. [Five selected papers, a different basis](examples/dark-matter/advanced/README.md). | The pass rate is still 100%, but the tests behind the release decision have changed. |
+| Reproduce an earlier computation | Replay a retained Snapshot through the public API to recover its earlier result and basis after the live record changes. [Source-free replay example](examples/dark-matter/advanced/README.md#run-it). | Reproduce last quarter's server cost estimate using the prices and traffic assumptions saved then. |
+| Notice which decisions need another look | Trace changed premises, evaluate declared breaking conditions and explicitly rerun configured measurement recipes. [Checks and measurements](docs/reference.md#what-check-means). | Record a babysitter's cancellation and surface the evening plans that depended on it. |
+| Test alternatives and reconcile branch work | Keep named hypotheses, inspect the proposed combination and retain conflicts or refutations. Worktrees keep their code-specific context, with checks available before a merge and in CI. [Two working modes](#example-1-coding-agent). | One branch removes password login; another adds a feature that still requires it. |
+| Keep useful findings across sessions and branches | Capture explicit reports in the background and retain scoped project contributions with their sources and pending/accepted status. [Background capture](#keep-the-conversation-moving) · [Shared contributions](docs/project-modes.md). | A discarded prototype's documented API limit remains available to the next integration task. |
+| Return to work when its conditions change | Tie followups to dates, changed recorded inputs or earlier work, with scheduling and delivery configured in the host. [Followups](#followups-and-background-checks). | Resume tax preparation once the missing bank statement has been recorded. |
+| Share a focused piece of the reasoning | Export selected entries as Markdown, with earlier/current readings, omitted values marked and optional Mermaid diagrams. [Focused exports](docs/graph-export.md). | Share why you chose a school, including the commute times and fee comparisons. |
+| Build a tool on structured findings | Read versioned assessment JSON with computational results, review comparisons, contention, integrity and history evidence kept distinct. [Assessment contract](docs/assessment.md). | Build a grant dashboard that separates budget overruns from missing receipts. |
+| Let the record fit the work | Add domain-specific subjects and vocabulary while preserving explicit sources, dependencies and review conditions. [Evolving structure](#how-it-works). | Organize a garden plan around plants, watering schedules and frost precautions. |
 
 New records use `core/v1` and immutable history by default; existing legacy records
 require explicit adoption. Collection queries use the declared `query/v1` capability.
@@ -849,11 +849,12 @@ and makes judgments. Your existing documents, tools and memory stay where they a
 
 **Optional experimental tools**
 
-| What you want to do | Tool and scope |
-|---|---|
-| Browse the record visually | **kpopper Hub:** a rendered snapshot with project layouts, source links and an interactive graph. Requires the optional HTML runtime. [Applications](#experimental-applications). |
-| Share a document with inspectable evidence | **Annotated Documents:** standalone HTML with selected source snapshots and reviewable copy updates. Requires the optional HTML runtime. [Document workflow](docs/documents.md). |
-| Bind an agent's reads to a known revision | **Checked sessions:** a revision-bound view and optional MCP transport, with their own setup and session checks. [Checked-session integration](docs/checked-sessions.md). |
+| What you want to do | Tool and scope | Example |
+| --- | --- | --- |
+| Browse the record visually | **kpopper Hub:** a rendered snapshot with project layouts, source links and an interactive graph. Requires the optional HTML runtime. [Applications](#experimental-applications). | Open a visual overview of a renovation's quotes, decisions and unresolved questions. |
+| Share a document with inspectable evidence | **Annotated Documents:** standalone HTML with selected source snapshots and reviewable copy updates. Requires the optional HTML runtime. [Document workflow](docs/documents.md). | Produce a client report with the source invoices beside each expense total. |
+| Bind an agent's reads to a known revision | **Checked sessions:** a revision-bound view and optional MCP transport, with their own setup and session checks. [Checked-session integration](docs/checked-sessions.md). | An agent refreshes its view after another session changes the recorded API contract. |
+
 
 ## Go deeper
 
