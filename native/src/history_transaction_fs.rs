@@ -299,7 +299,9 @@ impl DirectoryGuard {
         }
         #[cfg(windows)]
         {
+            require(windows_local_path(root), "network_locking_unavailable")?;
             let path = root.canonicalize()?;
+            require(windows_local_path(&path), "network_locking_unavailable")?;
             let stat = fs::metadata(&path)?;
             require(stat.is_dir(), "invalid_path")?;
             let identity = directory_identity(&path)?;
@@ -411,6 +413,15 @@ fn directory_identity(root: &Path) -> Result<DirectoryIdentity> {
         directory: same_file::Handle::from_path(root)?,
         process: std::process::id(),
     })
+}
+#[cfg(windows)]
+fn windows_local_path(path: &Path) -> bool {
+    use std::path::{Component, Prefix};
+    !matches!(
+        path.components().next(),
+        Some(Component::Prefix(prefix))
+            if matches!(prefix.kind(), Prefix::UNC(_, _) | Prefix::VerbatimUNC(_, _))
+    )
 }
 fn guards(paths: Vec<PathBuf>) -> Result<Vec<DirectoryGuard>> {
     let paths = paths

@@ -183,6 +183,27 @@ fn windows_alias_child() {
     let _guard = DirectoryGuard::acquire(Path::new(&root), true).unwrap();
 }
 
+#[cfg(windows)]
+#[test]
+fn windows_network_roots_refuse_without_claiming_cross_host_locking() {
+    assert_eq!(
+        code(DirectoryGuard::acquire(
+            Path::new(r"\\example.invalid\share\record"),
+            true,
+        ))
+        .as_deref(),
+        Some("network_locking_unavailable")
+    );
+    assert_eq!(
+        code(DirectoryGuard::acquire(
+            Path::new(r"\\?\UNC\example.invalid\share\record"),
+            false,
+        ))
+        .as_deref(),
+        Some("network_locking_unavailable")
+    );
+}
+
 fn tree(root: &Path) -> Vec<(String, Vec<u8>)> {
     let mut result = Vec::new();
     for item in fs::read_dir(root).unwrap() {
