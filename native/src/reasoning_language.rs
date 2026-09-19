@@ -272,6 +272,171 @@ pub fn lower(value: &V) -> Result<J> {
     }
     structured(value, 0)
 }
+/// Legacy claim selection normalizes only the arithmetic grammar from
+/// expressions.lower. Core grammar extensions must not change conflict identity.
+pub(crate) fn legacy_rule(value: &V) -> Result<V> {
+    legacy_expression(value, false)
+}
+pub(crate) fn legacy_references(value: &V) -> Vec<String> {
+    legacy_expression(value, false)
+        .or_else(|_| legacy_expression(value, true))
+        .and_then(|v| v.to_json())
+        .map(|v| references(&v))
+        .unwrap_or_default()
+}
+fn legacy_expression(value: &V, predicate: bool) -> Result<V> {
+    fn legacy_visit(source: &str, node: &ast::Expr, depth: usize) -> Result<J> {
+        require(depth < 64, "invalid_legacy_expression")?;
+        Ok(match node {
+            ast::Expr::Name(_) | ast::Expr::Attribute(_) => {
+                let name = segment(source, node)?;
+                require(name.split('.').all(name_part), "invalid_legacy_expression")?;
+                match name {
+                    "true" | "True" => json!({"bool":true}),
+                    "false" | "False" => json!({"bool":false}),
+                    _ => json!({"ref":name}),
+                }
+            }
+            ast::Expr::Constant(c) => match &c.value {
+                ast::Constant::Bool(v) => json!({"bool":v}),
+                ast::Constant::Str(v) => json!({"text":v}),
+                ast::Constant::Int(_) | ast::Constant::Float(_) => {
+                    json!({"num":segment(source,node)?})
+                }
+                _ => return Err(err("invalid_legacy_expression")),
+            },
+            ast::Expr::UnaryOp(u) if u.op == ast::UnaryOp::USub => {
+                let child = legacy_visit(source, &u.operand, depth + 1)?;
+                if let Some(number) = child.get("num").and_then(J::as_str) {
+                    json!({"num":format!("-{number}")})
+                } else {
+                    op("sub", vec![json!({"num":"0"}), child])
+                }
+            }
+            ast::Expr::BinOp(b) => {
+                let operator = match b.op {
+                    ast::Operator::Add => "add",
+                    ast::Operator::Sub => "sub",
+                    ast::Operator::Mult => "mul",
+                    ast::Operator::Div => "div",
+                    _ => return Err(err("invalid_legacy_expression")),
+                };
+                op(
+                    operator,
+                    vec![
+                        legacy_visit(source, &b.left, depth + 1)?,
+                        legacy_visit(source, &b.right, depth + 1)?,
+                    ],
+                )
+            }
+            ast::Expr::Compare(c) if c.ops.len() == 1 && c.comparators.len() == 1 => {
+                let operator = match c.ops[0] {
+                    ast::CmpOp::Eq => "eq",
+                    ast::CmpOp::NotEq => "ne",
+                    ast::CmpOp::Lt => "lt",
+                    ast::CmpOp::LtE => "le",
+                    ast::CmpOp::Gt => "gt",
+                    ast::CmpOp::GtE => "ge",
+                    _ => return Err(err("invalid_legacy_expression")),
+                };
+                op(
+                    operator,
+                    vec![
+                        legacy_visit(source, &c.left, depth + 1)?,
+                        legacy_visit(source, &c.comparators[0], depth + 1)?,
+                    ],
+                )
+            }
+            ast::Expr::Call(c)
+                if c.args.len() == 1
+                    && c.keywords.is_empty()
+                    && matches!(c.func.as_ref(), ast::Expr::Name(_))
+                    && segment(source, c.func.as_ref())?.nfkc().collect::<String>() == "ref" =>
+            {
+                json!({"ref":string_literal(&c.args[0]).ok_or_else(|| err("invalid_legacy_expression"))?})
+            }
+            _ => return Err(err("invalid_legacy_expression")),
+        })
+    }
+    fn validate(value: &V, depth: usize, predicate: bool) -> Result<()> {
+        require(depth < 64, "invalid_legacy_expression")?;
+        let V::Map(m) = value else {
+            return Err(err("invalid_legacy_expression"));
+        };
+        if keys(m, &["op", "args"]) {
+            let operators = if predicate {
+                &["eq", "ne", "lt", "le", "gt", "ge"][..]
+            } else {
+                &["add", "sub", "mul", "div"][..]
+            };
+            require(
+                text(&m["op"]).is_some_and(|v| operators.contains(&v)),
+                "invalid_legacy_expression",
+            )?;
+            let V::List(args) = &m["args"] else {
+                return Err(err("invalid_legacy_expression"));
+            };
+            require(args.len() == 2, "invalid_legacy_expression")?;
+            for child in args {
+                validate(child, depth + 1, false)?;
+            }
+            if predicate {
+                require(
+                    !references(&value.to_json()?).is_empty(),
+                    "invalid_legacy_expression",
+                )?;
+            }
+        } else if predicate {
+            return Err(err("invalid_legacy_expression"));
+        } else if keys(m, &["ref"]) {
+            require(
+                text(&m["ref"]).is_some_and(|v| !v.is_empty() && v.chars().count() <= 500),
+                "invalid_legacy_expression",
+            )?;
+        } else if keys(m, &["num"]) {
+            static NUMBER: std::sync::LazyLock<regex::Regex> = std::sync::LazyLock::new(|| {
+                regex::Regex::new(r"^-?(?:0|[1-9][0-9]*)(?:\.[0-9]+)?(?:[eE][+-]?[0-9]+)?$")
+                    .unwrap()
+            });
+            let n = text(&m["num"]).ok_or_else(|| err("invalid_legacy_expression"))?;
+            require(
+                n.len() <= 512 && NUMBER.is_match(n),
+                "invalid_legacy_expression",
+            )?;
+            let (mantissa, exponent) = n.split_once(['e', 'E']).unwrap_or((n, "0"));
+            let exponent = exponent
+                .parse::<i32>()
+                .map_err(|_| err("invalid_legacy_expression"))?;
+            let fraction = mantissa.split_once('.').map_or(0, |(_, v)| v.len() as i32);
+            require(
+                (-256..=256).contains(&exponent) && fraction - exponent <= 256,
+                "invalid_legacy_expression",
+            )?;
+        } else if keys(m, &["text"]) {
+            require(text(&m["text"]).is_some(), "invalid_legacy_expression")?;
+        } else if keys(m, &["bool"]) {
+            require(matches!(m["bool"], V::Bool(_)), "invalid_legacy_expression")?;
+        } else {
+            return Err(err("invalid_legacy_expression"));
+        }
+        Ok(())
+    }
+    let lowered = if let V::Map(m) = value
+        && keys(m, &["expr"])
+    {
+        let source = text(&m["expr"])
+            .filter(|s| !trim(s).is_empty() && s.chars().count() <= 4000)
+            .ok_or_else(|| err("invalid_legacy_expression"))?;
+        let source = trim(source);
+        let ast = ast::Expr::parse(&parser_source(source)?, "<expression>")
+            .map_err(|_| err("invalid_legacy_expression"))?;
+        V::from_json(&legacy_visit(source, &ast, 0)?)?
+    } else {
+        value.clone()
+    };
+    validate(&lowered, 0, predicate)?;
+    Ok(lowered)
+}
 pub fn literal(value: &V) -> Result<J> {
     fn convert(v: &V, depth: usize) -> Result<J> {
         require(

@@ -202,19 +202,23 @@ pub enum TypedValue {
 }
 struct Budget {
     visits: usize,
+    maximum: usize,
 }
 impl Budget {
     fn visit(&mut self, depth: usize) -> Result<()> {
         self.visits += 1;
         require(
-            depth <= MAX_DEPTH && self.visits <= MAX_VALUES,
+            depth <= MAX_DEPTH && self.visits <= self.maximum,
             "value_limit",
         )
     }
 }
 impl TypedValue {
     pub fn from_json(value: &Value) -> Result<Self> {
-        Self::json_inner(value, 0, &mut Budget { visits: 0 })
+        Self::from_json_bounded(value, MAX_VALUES)
+    }
+    pub(crate) fn from_json_bounded(value: &Value, maximum: usize) -> Result<Self> {
+        Self::json_inner(value, 0, &mut Budget { visits: 0, maximum })
     }
     fn json_inner(value: &Value, depth: usize, budget: &mut Budget) -> Result<Self> {
         budget.visit(depth)?;
@@ -249,7 +253,10 @@ impl TypedValue {
         })
     }
     pub fn from_tagged(value: &Value) -> Result<Self> {
-        Self::tagged_inner(value, 0, &mut Budget { visits: 0 })
+        Self::from_tagged_bounded(value, MAX_VALUES)
+    }
+    pub(crate) fn from_tagged_bounded(value: &Value, maximum: usize) -> Result<Self> {
+        Self::tagged_inner(value, 0, &mut Budget { visits: 0, maximum })
     }
     fn tagged_inner(value: &Value, depth: usize, budget: &mut Budget) -> Result<Self> {
         budget.visit(depth)?;
@@ -311,21 +318,24 @@ impl TypedValue {
         })
     }
     pub fn validate(&self) -> Result<()> {
+        self.validate_bounded(MAX_VALUES)
+    }
+    pub(crate) fn validate_bounded(&self, maximum: usize) -> Result<()> {
         let mut pending = vec![(self, 0)];
-        let mut budget = Budget { visits: 0 };
+        let mut budget = Budget { visits: 0, maximum };
         while let Some((v, depth)) = pending.pop() {
             budget.visit(depth)?;
             match v {
                 Self::List(v) => {
                     require(
-                        v.len() + pending.len() <= MAX_VALUES - budget.visits,
+                        v.len() + pending.len() <= maximum - budget.visits,
                         "value_limit",
                     )?;
                     pending.extend(v.iter().map(|v| (v, depth + 1)));
                 }
                 Self::Map(v) => {
                     require(
-                        v.len() + pending.len() <= MAX_VALUES - budget.visits,
+                        v.len() + pending.len() <= maximum - budget.visits,
                         "value_limit",
                     )?;
                     pending.extend(v.values().map(|v| (v, depth + 1)));
@@ -336,7 +346,10 @@ impl TypedValue {
         Ok(())
     }
     pub fn to_tagged(&self) -> Result<Value> {
-        self.validate()?;
+        self.to_tagged_bounded(MAX_VALUES)
+    }
+    pub(crate) fn to_tagged_bounded(&self, maximum: usize) -> Result<Value> {
+        self.validate_bounded(maximum)?;
         Ok(self.tagged_unchecked())
     }
     fn tagged_unchecked(&self) -> Value {

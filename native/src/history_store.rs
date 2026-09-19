@@ -113,7 +113,7 @@ impl Store {
             &capture.commits,
         )
     }
-    fn known_view(&self, capture: &Capture) -> Result<bool> {
+    pub(crate) fn known_view(capture: &Capture) -> Result<bool> {
         let manifests = manifests(&capture.commits)?;
         let hash = s(&sha256(&capture.entry_bytes));
         if manifests
@@ -418,7 +418,7 @@ impl Store {
             )?;
         } else {
             require(
-                self.known_view(&live)?
+                Self::known_view(&live)?
                     || live.document.digest()? == Y::decode_document(&rendered)?.digest()?,
                 "unresolved_view_edit",
             )?;

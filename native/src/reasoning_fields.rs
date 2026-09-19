@@ -16,7 +16,7 @@ static EXPR: LazyLock<regex::Regex> = LazyLock::new(|| {
     regex::Regex::new(r"[<>=!+\-*/()]|(?:^|[^\p{L}\p{N}_])(?:or|and|not)(?:$|[^\p{L}\p{N}_])")
         .unwrap()
 });
-const BUILTINS: &[&str] = &[
+pub(crate) const BUILTINS: &[&str] = &[
     "graph.entries",
     "graph.judgments",
     "graph.open",

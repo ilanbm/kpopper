@@ -849,6 +849,11 @@ sources:
     read: "2026-09-16"
     recorded_for: "Update p.reasoning_core_contract, m.scope_basis_collision_cases from this
                    captured report."
+  s.native_snapshot_verification:
+    name: "Native snapshot and evaluator conformance"
+    of: "2026-09-19 local macOS arm64 verification of Snapshot replay, scope grants, input identity
+         and actual Lean evaluation envelopes"
+    read: "2026-09-19"
   s.query_candidate_report_2026_09_18:
     name: "Finite-query candidate verification packet"
     from: s.2026_09_18_continue_reasoning_core
@@ -1784,6 +1789,19 @@ known:
     at: "hypothesis_line - age and reach printed as facts; the only comparison is a falsifier's own"
     of: "2026-09-04"
     measure: hypothesis_thresholds
+  p.native_batch_budget_refusal:
+    name: "Native evaluator refuses an over-budget batch"
+    v: "Input and output budget overruns refuse the complete evaluation batch, including a bound
+        crossed during actual Lean transport; they do not become runtime-unavailable result
+        envelopes."
+    from: s.native_snapshot_verification
+    at: "native/tests/reasoning_evaluate.rs; actual wire input and stdout bounds regressions"
+  p.native_snapshot_byte_boundary:
+    name: "Native snapshot identity and byte concurrency evidence"
+    v: "Normalized snapshot identity excludes authored_revision; replay independently validates the
+        exact source-file inventory digest."
+    from: s.native_snapshot_verification
+    at: "native/tests/reasoning_snapshot.rs; byte-only revision and stale revision cases"
   p.pointer_home:
     v: "<git common dir>/kpopper-record"
     name: "Where a record the tree cannot hold registers its path"

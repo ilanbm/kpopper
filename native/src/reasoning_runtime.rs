@@ -490,6 +490,23 @@ impl Runtime {
         Ok(implementation)
     }
     pub fn request_many(&self, requests: &[J]) -> Result<Vec<J>> {
+        self.request_many_bounded(requests, &self.bounds)
+    }
+    pub fn bounds(&self) -> &OperationalBounds {
+        &self.bounds
+    }
+    pub fn request_many_bounded(
+        &self,
+        requests: &[J],
+        requested: &OperationalBounds,
+    ) -> Result<Vec<J>> {
+        requested.validate()?;
+        let bounds = OperationalBounds {
+            timeout: requested.timeout.min(self.bounds.timeout),
+            batch_requests: requested.batch_requests.min(self.bounds.batch_requests),
+            input_bytes: requested.input_bytes.min(self.bounds.input_bytes),
+            output_bytes: requested.output_bytes.min(self.bounds.output_bytes),
+        };
         if requests.is_empty() {
             return Ok(Vec::new());
         }
@@ -500,10 +517,7 @@ impl Runtime {
         let mut payload = Vec::new();
         let mut protocols = Vec::new();
         for (request_index, request) in requests.iter().enumerate() {
-            require(
-                request_index < self.bounds.batch_requests,
-                "batch_request_limit",
-            )?;
+            require(request_index < bounds.batch_requests, "batch_request_limit")?;
             let implementation = self.implementation_for(request)?;
             let encoded = reasoning_transport::encode_request(request)?;
             let mut line = encoded.into_bytes();
@@ -511,8 +525,7 @@ impl Runtime {
                 line.push(b'\n');
             }
             require(
-                line.len() <= MAX_REQUEST_BYTES
-                    && payload.len() + line.len() <= self.bounds.input_bytes,
+                line.len() <= MAX_REQUEST_BYTES && payload.len() + line.len() <= bounds.input_bytes,
                 "batch_input_limit",
             )?;
             payload.extend(line);
@@ -528,8 +541,8 @@ impl Runtime {
             &self.binary,
             &[],
             payload,
-            self.bounds.timeout,
-            self.bounds.output_bytes,
+            bounds.timeout,
+            bounds.output_bytes,
         )?;
         require(
             self.verify_files()? == self.observed,

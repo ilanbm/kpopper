@@ -50,7 +50,7 @@ fn authored(obj: &V) -> Result<&Map> {
     )?;
     Ok(a)
 }
-fn adapt_body(value: &V) -> Result<V> {
+pub(crate) fn adapt_body(value: &V) -> Result<V> {
     let a = authored(value)?;
     let o = map(value)?;
     let mut body = o["body"].clone();
