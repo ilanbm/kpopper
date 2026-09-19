@@ -8,10 +8,12 @@ use crate::{
     require,
     value::TypedValue as V,
 };
-#[cfg(unix)]
+#[cfg(any(unix, windows))]
 use fs2::FileExt;
 #[cfg(unix)]
 use std::os::unix::fs::{MetadataExt, PermissionsExt};
+#[cfg(windows)]
+use std::os::windows::{ffi::OsStrExt, fs::MetadataExt};
 use std::{
     cell::RefCell,
     collections::BTreeSet,
@@ -40,15 +42,14 @@ pub struct AuxiliaryOwner {
     _permit: Rc<AuxiliaryPermit>,
 }
 fn exclusive_owned(root: &Path) -> Result<Option<Rc<Held>>> {
-    #[cfg(not(unix))]
+    #[cfg(not(any(unix, windows)))]
     {
         let _ = root;
         Ok(None)
     }
-    #[cfg(unix)]
+    #[cfg(any(unix, windows))]
     {
-        let stat = fs::metadata(root)?;
-        let identity = (stat.dev(), stat.ino(), std::process::id());
+        let identity = directory_identity(root)?;
         Ok(LOCKS.with(|locks| {
             locks
                 .borrow()
@@ -235,7 +236,7 @@ pub struct DirectoryGuard {
 }
 impl DirectoryGuard {
     pub fn acquire(root: &Path, exclusive: bool) -> Result<Self> {
-        #[cfg(not(unix))]
+        #[cfg(not(any(unix, windows)))]
         {
             let _ = root;
             require(!exclusive, "locking_unavailable")?;
@@ -280,7 +281,87 @@ impl DirectoryGuard {
             LOCKS.with(|locks| locks.borrow_mut().push(Rc::downgrade(&held)));
             Ok(Self { _held: Some(held) })
         }
+        #[cfg(windows)]
+        {
+            let path = root.canonicalize()?;
+            let stat = fs::metadata(&path)?;
+            require(stat.is_dir(), "invalid_path")?;
+            let identity = windows_identity(&stat)?;
+            let held = LOCKS.with(|locks| -> Result<Option<Rc<Held>>> {
+                let mut locks = locks.borrow_mut();
+                locks.retain(|l| l.strong_count() > 0);
+                let active: Vec<_> = locks
+                    .iter()
+                    .filter_map(Weak::upgrade)
+                    .filter(|l| l.identity.2 == identity.2)
+                    .collect();
+                if let Some(existing) = active.iter().find(|l| l.identity == identity) {
+                    require(existing.exclusive || !exclusive, "lock_upgrade_refused")?;
+                    return Ok(Some(existing.clone()));
+                }
+                require(active.iter().all(|l| l.path <= path), "lock_order_refused")?;
+                Ok(None)
+            })?;
+            if let Some(held) = held {
+                return Ok(Self { _held: Some(held) });
+            }
+            let lock_home = std::env::temp_dir().join("kpopper-native-locks");
+            fs::create_dir_all(&lock_home)?;
+            let mut key = Vec::new();
+            for unit in path.as_os_str().encode_wide() {
+                key.extend_from_slice(&unit.to_le_bytes());
+            }
+            let lock_path = lock_home.join(format!("{}.lock", sha256(&key)));
+            let file = fs::OpenOptions::new()
+                .read(true)
+                .write(true)
+                .create(true)
+                .open(&lock_path)?;
+            if exclusive {
+                FileExt::lock_exclusive(&file)?;
+            } else {
+                FileExt::lock_shared(&file)?;
+            }
+            require(path == root.canonicalize()?, "directory_replaced")?;
+            require(directory_identity(&path)? == identity, "directory_replaced")?;
+            require(
+                windows_file_identity(&file.metadata()?)?
+                    == windows_file_identity(&fs::metadata(&lock_path)?)?,
+                "lock_replaced",
+            )?;
+            let held = Rc::new(Held {
+                _file: file,
+                path,
+                identity,
+                exclusive,
+            });
+            LOCKS.with(|locks| locks.borrow_mut().push(Rc::downgrade(&held)));
+            Ok(Self { _held: Some(held) })
+        }
     }
+}
+#[cfg(unix)]
+fn directory_identity(root: &Path) -> Result<(u64, u64, u32)> {
+    let stat = fs::metadata(root)?;
+    Ok((stat.dev(), stat.ino(), std::process::id()))
+}
+#[cfg(windows)]
+fn windows_file_identity(stat: &fs::Metadata) -> Result<(u64, u64)> {
+    Ok((
+        stat.volume_serial_number()
+            .ok_or_else(|| error("locking_unavailable"))? as u64,
+        stat.file_index()
+            .ok_or_else(|| error("locking_unavailable"))?,
+    ))
+}
+#[cfg(windows)]
+fn windows_identity(stat: &fs::Metadata) -> Result<(u64, u64, u32)> {
+    let (volume, file) = windows_file_identity(stat)?;
+    Ok((volume, file, std::process::id()))
+}
+#[cfg(windows)]
+fn directory_identity(root: &Path) -> Result<(u64, u64, u32)> {
+    windows_identity(&fs::metadata(root)?)
 }
 fn guards(paths: Vec<PathBuf>) -> Result<Vec<DirectoryGuard>> {
     let paths = paths
@@ -295,6 +376,18 @@ fn guards(paths: Vec<PathBuf>) -> Result<Vec<DirectoryGuard>> {
 pub fn target(root: &Path, relative: &str) -> Result<PathBuf> {
     A::relative_path(relative)?;
     let mut path = root.canonicalize()?;
+    #[cfg(windows)]
+    LOCKS.with(|locks| -> Result<()> {
+        for held in locks.borrow().iter().filter_map(Weak::upgrade) {
+            if held.path == path {
+                require(
+                    directory_identity(&path)? == held.identity,
+                    "directory_replaced",
+                )?;
+            }
+        }
+        Ok(())
+    })?;
     for segment in relative.split('/') {
         path.push(segment);
         match fs::symlink_metadata(&path) {
