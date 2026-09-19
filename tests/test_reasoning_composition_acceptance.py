@@ -127,6 +127,12 @@ class InstalledOperationalCLI(unittest.TestCase):
             self.assertEqual(judgment.returncode, 0, judgment.stdout + judgment.stderr)
             record = yaml.safe_load((root / "GROUNDING.yaml").read_text())
             self.assertIn("p.input", record["judgments"]["d.ready"]["seen"])
+            question = subprocess.run([sys.executable, str(self.cli_path()), "add", "q.support",
+                "Does the enterprise tier include support?"], cwd=root, text=True,
+                capture_output=True, check=False)
+            self.assertEqual(question.returncode, 0, question.stdout + question.stderr)
+            record = yaml.safe_load((root / "GROUNDING.yaml").read_text())
+            self.assertEqual(record["open"]["q.support"], "Does the enterprise tier include support?")
             for command in (["open", "--json"], ["check"], ["pull", "p.input"],
                             ["affects", "p.input"], ["assess", "p.input"],
                             ["export", "p.input"], ["search", "input"],

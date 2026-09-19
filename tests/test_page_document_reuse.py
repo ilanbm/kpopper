@@ -439,11 +439,14 @@ class TheCoreProfileIsNotDrawnByTheLegacyPage(unittest.TestCase):
         self.assert_no_builtin_reference([str(CORE_FIXTURE)])
         self.assert_no_builtin_reference(self.layered_record())
 
-    def test_a_reading_of_its_own_refuses_a_core_record(self):
-        # the control: the refusal the supplied-document path has to reproduce
-        with self.assertRaises(SystemExit) as refused:
-            R.build([str(CORE_FIXTURE)], read_mode="frozen")
-        self.assertIn("unsupported_capability", str(refused.exception))
+    def test_a_reading_of_its_own_selects_the_core_renderer(self):
+        # A fresh reading selects the core renderer; supplying a plain document
+        # below must still not bypass the legacy renderer's interpretation guard.
+        with mock.patch.object(R, 'core_build', wraps=R.core_build) as core:
+            built = R.build([str(CORE_FIXTURE)], read_mode="frozen")
+        core.assert_called_once()
+        self.assertEqual(built[-1]['profile'], 'core/v1')
+        self.assertIn('data-profile="core/v1"', built[0])
 
     def test_a_supplied_core_document_is_refused_as_its_own_reading_would_be(self):
         doc = self.core_document([str(CORE_FIXTURE)])

@@ -323,7 +323,8 @@ def prepare(entry, action, *, by=None, operation=None, recorded_at=None, capture
             body[fields['snapshot']] = P._snapshot(
                 list(deps), raw, ids, judgments, [], None)
             action['body'] = copy.deepcopy(body)
-        pins, gaps = _pins_and_gaps(captured, deps, allow_missing=bool(P._blocked_text(body)))
+        pins, gaps = _pins_and_gaps(captured, deps,
+            allow_missing=is_judgment and bool(P._blocked_text(body)))
         claim = C.make_object(subject=subject, kind='judgment' if is_judgment else 'reading',
                               by=by, on=recorded_at, operation=operation, body=body, saw=saw,
                               pins=pins, pin_gaps=gaps or None, authored=authored)

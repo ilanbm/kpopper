@@ -62,6 +62,16 @@ class Authoring(unittest.TestCase):
         self.publish(second)
         self.assertEqual(len(self.store.capture().commits), 3)
 
+    def test_bare_open_question_keeps_its_scalar_body_and_replays(self):
+        body = 'Does the enterprise tier include support?'
+        mutation = self.prepare({'kind': 'add', 'id': 'q.support', 'body': body})
+        self.publish(T.PreparedMutation.from_bytes(mutation.to_bytes()))
+        captured = self.store.capture()
+        question = captured.objects[captured.state['subjects']['q.support']['head']]
+        self.assertEqual(question['body'], body)
+        self.assertEqual(question['pins'], {})
+        self.assertEqual(captured.document['open']['q.support'], body)
+
     def test_new_judgment_pins_real_dependencies_and_captures_typed_seen(self):
         mutation = self.prepare({'kind': 'add', 'id': 'p.ready', 'into': 'judgments',
             'body': {'verdict': 'ready', 'rests_on': ['p.input'], 'wrong_if': {'expr': 'p.input > 5'}}})

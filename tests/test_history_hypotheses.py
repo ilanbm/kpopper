@@ -47,6 +47,15 @@ class NamedHypotheses(unittest.TestCase):
             replay = Snapshot.from_json(snapshot.to_json())
         self.assertEqual(replay.snapshot_id, snapshot.snapshot_id)
 
+    def test_bare_open_question_stays_in_its_named_hypothesis(self):
+        body = 'Does the enterprise tier include support?'
+        mutation = self.prepare('add', 'q.support', action={'body': body})
+        self.commit(T.PreparedMutation.from_bytes(mutation.to_bytes()))
+        captured = self.store.capture()
+        self.assertEqual(captured.state['subjects']['q.support']['acceptance'], 'proposed')
+        self.assertEqual(self.groups()[0]['alternative']['doc']['open']['q.support'], body)
+        self.assertNotIn('q.support', captured.document.get('open', {}))
+
     def test_new_root_proposal_and_edit_never_auto_accept(self):
         self.commit(self.prepare('add', 'p.new', action={'body': {'v': 4}, 'into': 'readings'}))
         original = self.groups()[1]['groups']['alternative']['p.new'][0]

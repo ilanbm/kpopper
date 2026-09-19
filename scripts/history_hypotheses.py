@@ -296,7 +296,8 @@ def prepare(entry, name, action, *, head=None, by=None, operation=None, recorded
             normalized['body'] = copy.deepcopy(body)
         authored['hypothesis'] = {'version': 1, 'name': name, 'head': copy.deepcopy(head)}
         deps = body.get(fields['deps'], []) if isinstance(body, dict) else []
-        pins, gaps = _pins(captured, index, name, deps, blocked=bool(P._blocked_text(body)))
+        pins, gaps = _pins(captured, index, name, deps,
+                          blocked=isinstance(body, dict) and bool(P._blocked_text(body)))
         claim = C.make_object(subject=subject, kind='judgment' if isinstance(body, dict) and fields['deps'] in body else 'reading',
             by=by, on=recorded_at, operation=operation, body=body, authored=authored, pins=pins,
             pin_gaps=gaps or None, saw=sorted(vid for vid, obj in captured.objects.items() if obj['subject'] == subject))
