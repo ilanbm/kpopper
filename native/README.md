@@ -99,9 +99,19 @@ without writing:
 kpop-native --workspace /absolute/workspace history status
 ```
 
-Other public history operations remain unconnected; the old subject-oriented
-`history <subject>` command is available only inside an explicitly marked feasibility
-store.
+`history reconcile` describes differences between the rendered history and the
+editable record. `history rebuild` replaces a view only when reconciliation proves
+that no unrecorded edits would be lost. Both retain the existing immutable evidence.
+
+`history migrate` previews an import; `history migrate --to /abs/absent-directory`
+materializes and verifies a separate copy. It preserves source bytes and does not
+activate the source record. `--record` selects an explicit record and `--read-mode`
+selects live or frozen migration capture. The default is frozen in Simple mode and
+live in Advanced mode; global `--frozen` also selects frozen capture.
+
+Explicit history acts, adoption and edited-view proposal routing remain unconnected.
+The old subject-oriented `history <subject>` command is available only inside an
+explicitly marked feasibility store.
 
 ## Supported history boundary
 

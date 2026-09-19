@@ -44,9 +44,7 @@ enum Command {
     Affects(kpop_native::public_readers::Options),
     Add(WriteArgs),
     Set(WriteArgs),
-    History {
-        subject: Option<String>,
-    },
+    History(kpop_native::public_history::Options),
     Recover,
     /// Consume a SessionStart JSON payload; never installs a hook or runtime.
     SessionStart,
@@ -177,42 +175,6 @@ fn session() -> Result<()> {
     }
     Ok(())
 }
-fn public_history_status(root: &std::path::Path) -> Result<Value> {
-    let records = kpop_native::public_workspace::records(root)?;
-    require(records.len() == 1, "choose one logical record entry")?;
-    let entry = &records[0];
-    let capture = kpop_native::history_capture::capture(entry, None, None)?;
-    let kpop_native::value::TypedValue::Map(state) = &capture.state else {
-        return Err(kpop_native::Error("invalid history state".into()));
-    };
-    let Some(kpop_native::value::TypedValue::Map(subjects)) = state.get("subjects") else {
-        return Err(kpop_native::Error("invalid history subjects".into()));
-    };
-    let subjects = subjects
-        .iter()
-        .map(|(subject, value)| {
-            let kpop_native::value::TypedValue::Map(value) = value else {
-                return Err(kpop_native::Error("invalid history subject".into()));
-            };
-            Ok((
-                subject.clone(),
-                json!({
-                    "acceptance": value["acceptance"].to_json()?,
-                    "heads": value["heads"].to_json()?,
-                }),
-            ))
-        })
-        .collect::<Result<serde_json::Map<String, Value>>>()?;
-    capture.verify_current()?;
-    Ok(json!({
-        "state":"captured",
-        "record":entry,
-        "authority":capture.marker.to_json()?,
-        "commits":capture.commits.len(),
-        "objects":capture.objects.len(),
-        "subjects":subjects,
-    }))
-}
 fn run(args: Args) -> Result<Value> {
     if let Command::HistoryCapture { entry } = args.command {
         let captured = kpop_native::history_capture::capture(&entry, None, None)?;
@@ -294,15 +256,11 @@ fn run(args: Args) -> Result<Value> {
     match args.command {
         Command::Init { record_id } => Store::init(&root, &record_id),
         Command::Open(_) => Store::open(&root),
-        Command::History { subject } => {
+        Command::History(options) => {
             if root.join(".kpopper/native-feasibility.json").is_file() {
-                Store::history(&root, subject.as_deref())
+                Store::history(&root, options.operation.as_deref())
             } else {
-                require(
-                    subject.as_deref() == Some("status"),
-                    "history operation unsupported",
-                )?;
-                public_history_status(&root)
+                unreachable!()
             }
         }
         Command::Recover => Store::recover(&root),
@@ -344,6 +302,35 @@ fn run(args: Args) -> Result<Value> {
 }
 fn main() {
     let args = Args::parse();
+    if let Command::History(options) = &args.command {
+        let result = (|| {
+            let cwd = args
+                .workspace
+                .clone()
+                .map(Ok)
+                .unwrap_or_else(std::env::current_dir)?;
+            if cwd.join(".kpopper/native-feasibility.json").is_file() {
+                require(
+                    options.record.is_none() && options.to.is_none() && options.read_mode.is_none(),
+                    "public history options require a public record",
+                )?;
+                return Store::history(&cwd, options.operation.as_deref());
+            }
+            kpop_native::public_history::run(
+                options,
+                &cwd,
+                args.frozen || std::env::var("KPOPPER_READ_MODE").as_deref() == Ok("frozen"),
+            )
+        })();
+        match result {
+            Ok(value) => println!("{value}"),
+            Err(error) => {
+                println!("{}", kpop_native::public_history::refusal(&error));
+                std::process::exit(1);
+            }
+        }
+        return;
+    }
     let read = match &args.command {
         Command::Open(o) => Some(("open", o)),
         Command::Check(o) => Some(("check", o)),
