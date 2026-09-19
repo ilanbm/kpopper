@@ -66,6 +66,7 @@ pub mod ordinary_hub;
 pub mod ordinary_reader;
 pub mod ordinary_runtime;
 pub mod pending_bundle;
+pub mod pending_control;
 pub mod pending_state;
 pub mod project_modes;
 pub mod public_annotated_document;

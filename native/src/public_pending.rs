@@ -33,10 +33,37 @@ pub struct Options {
 pub enum Command {
     /// Inspect local capture and cached publication state without remote reads.
     Status(StatusOptions),
+    /// Retain an exact local publication scope and permission.
+    Configure(ConfigureOptions),
+    /// Pause local publication attempts.
+    Pause(ControlOptions),
+    /// Resume local publication attempts and optionally selected revisions.
+    Resume(ControlOptions),
 }
 
 #[derive(Clone, Debug, Default, clap::Args)]
 pub struct StatusOptions {}
+
+#[derive(Clone, Debug, Default, clap::Args)]
+pub struct ConfigureOptions {
+    #[arg(long)]
+    pub remote: Option<String>,
+    #[arg(long)]
+    pub target: Option<String>,
+    #[arg(long)]
+    pub branch: Option<String>,
+    #[arg(long, conflicts_with = "revoke")]
+    pub grant: bool,
+    #[arg(long, conflicts_with = "grant")]
+    pub revoke: bool,
+}
+
+#[derive(Clone, Debug, Default, clap::Args)]
+pub struct ControlOptions {
+    pub revisions: Vec<String>,
+    #[arg(long, default_value = "")]
+    pub reason: String,
+}
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct CommandOutput {
@@ -106,6 +133,32 @@ pub fn status(workspace: &Path, _options: &StatusOptions) -> Result<V> {
 pub fn run(options: &Options, workspace: &Path) -> Result<V> {
     match &options.command {
         Command::Status(status_options) => status(workspace, status_options),
+        Command::Configure(options) => {
+            let project = Project::open(workspace)?;
+            crate::pending_control::configure(
+                &project,
+                &crate::pending_control::Configure {
+                    remote: options.remote.as_deref(),
+                    target: options.target.as_deref(),
+                    branch: options.branch.as_deref(),
+                    grant: options.grant,
+                    revoke: options.revoke,
+                },
+            )
+        }
+        Command::Pause(options) => {
+            let project = Project::open(workspace)?;
+            crate::pending_control::decision(&project, "pause", &options.revisions, &options.reason)
+        }
+        Command::Resume(options) => {
+            let project = Project::open(workspace)?;
+            crate::pending_control::decision(
+                &project,
+                "resume",
+                &options.revisions,
+                &options.reason,
+            )
+        }
     }
 }
 
