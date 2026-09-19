@@ -2119,6 +2119,8 @@ def core_check(paths):
         return 1
     report = context.assessment
     failures, notes = _core_check_findings(paths, context)
+    if paths and _brief_beside(paths[0]):
+        print("NOTE page layout not checked; use kpop experimental hub --verify")
     for line in notes:
         print('NOTE ' + line)
     for line in failures:
@@ -3204,20 +3206,6 @@ def _page_or_error(paths, read_mode=None, *, doc=None):
     except (Exception, SystemExit) as e:
         return {"error": str(e)}
 
-
-def _coverage(paths):
-    """The page's coverage report, or None: without a brief, or when the brief cannot be
-    built."""
-    info = _page_or_error(paths)
-    if info and "error" in info:
-        return info
-    return info["coverage"] if info and info.get("coverage") else None
-
-
-def _unserved(paths):
-    """Intents no tab of the page serves, newest first."""
-    cov = _coverage(paths)
-    return [r["id"] for r in cov["rows"] if r["unserved"]] if cov and "rows" in cov else []
 
 
 def snapshot_value(dep, raw, ids, jud, page):
@@ -5962,8 +5950,8 @@ def _marked(state_path):
 def gate(state_path, paths, turns=0, host=None, nudged_at=None, *, _recording_context=None,
          _session_id=None, _issues=None):
     """What a session hears before it can finish, against the mark its opener left: the
-    record failing worse than it found it; an intent the session left unserved; entries it
-    wrote with no intent recorded; and, once, real work that left the record untouched.
+    record failing worse than it found it; entries it wrote with no intent recorded;
+    and, once, real work that left the record untouched. Page coverage is checked by Hub.
     Printed, and 2 when there is anything - the hook bounces once and yields."""
     base = _marked(state_path)
     issues = _issues if _issues is not None else []

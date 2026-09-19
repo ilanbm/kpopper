@@ -13,6 +13,10 @@ opening. Configured followups still require their named timezone to be available
 
 ## Setup and diagnosis
 
+When upgrading from the runtime that required HTML libraries at startup, rerun
+`plugin_runtime.py setup` once. The smaller dependency set selects a new private
+environment; the previous environment is retained.
+
 Use an absolute path to a checkout or the active installed plugin, quoted for spaces:
 
 ```sh

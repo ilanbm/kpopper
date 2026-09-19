@@ -40,7 +40,7 @@ class Selection(unittest.TestCase):
         self.assertTrue(all(CI.select(["SECURITY.md", "scripts/reasoning/lean/Kernel.lean"]).values()))
 
     def test_documents_run_python_and_dom_document_tests(self):
-        for path in ("scripts/documents.py", "scripts/applications/annotated_doc.py", "scripts/document/layer.js", "scripts/document-guide.md",
+        for path in ("scripts/documents.py", "scripts/document/layer.js", "scripts/document-guide.md",
                      "tests/test_document_cli.py", "tests/test_documents.py", "tests/document_ui_fixture.py",
                      "tests/document-support/package-lock.json"):
             with self.subTest(path=path):
@@ -48,6 +48,8 @@ class Selection(unittest.TestCase):
 
     def test_shared_reader_and_cli_run_all_consumers_without_recompiling(self):
         for path in ("scripts/provenance.py", "scripts/cli.py", "scripts/session/core.py",
+                     "scripts/applications/hub.py", "scripts/applications/annotated_doc.py",
+                     "scripts/applications/document.py", "scripts/applications/__init__.py",
                      "scripts/reasoning/evaluate.py", "tests/test_session.py", "tests/fixtures/page/PROVENANCE.yaml",
                      "examples/scoped-query/exercise.py", "examples/scoped-query/record.yaml"):
             with self.subTest(path=path):

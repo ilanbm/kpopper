@@ -2313,10 +2313,11 @@ known:
   p.skills_shipped:
     v: 10
     # set 2026-09-18: Eight canonical skills and two compatibility aliases after the application rename.
-    name: "Skill directories the plugin ships, each one occasion with its own SKILL.md"
+    name: "Shipped skill entry-point directories, including compatibility aliases, each with SKILL.md"
     from: "skills/*/SKILL.md"
-    at: "one directory per skill"
+    at: "one directory per canonical skill or compatibility alias"
     of: "2026-09-18"
+    scope: {kind: code, environment: kpopper skill entry points, commit: 9f1415584430ad3536a6eef0dd19b657a1aa034c, working_tree: false}
     measure: skills_shipped
   p.supersede_doors:
     v: 1
@@ -2431,7 +2432,7 @@ known:
     # set 2026-09-17: Measured after the recording example changed src to canonical from; largest skill is skills/record/SKILL.md on branch 89f46e8
     # set 2026-09-16: measured by skill_bytes_largest at a566286 with the working tree changed
     # Measured on the integrated source at 2218aa3; earlier same-day values describe its parents.
-    scope: {kind: code, environment: kpopper skill sources, commit: 536341e651186a28feeecb06d55ddbd147e35d7f, working_tree: true}
+    scope: {kind: code, environment: kpopper skill sources, commit: 9f1415584430ad3536a6eef0dd19b657a1aa034c, working_tree: false}
     # set 2026-09-14: Measured by skill_bytes_largest after the recording guidance update
     # set 2026-09-14: measured by skill_bytes_largest after updating the project-mode guidance
     # set 2026-09-12: measured by skill_bytes_largest after the skills learned the entry file and the directory beside it
@@ -5045,14 +5046,14 @@ judgments:
               five thousand tokens of a skill return, which in that file was the philosophy while the
               commands began at line 688. A precise description triggers - the activation A/B of
               2026-09-09 - and a body cut to the occasion costs the occasion: {{p.skills_shipped}}
-              skills now, the largest {{m.skill_bytes_largest}} bytes. The opener keeps the same
+              shipped entry points now (including compatibility aliases), the largest {{m.skill_bytes_largest}} bytes. The opener keeps the same
               discipline for the record ({{d.open_is_a_slot}}): what is read is what the moment asks
               for."
     wrong_if: "m.skill_bytes_largest > 32000"
     seen:
       s.2026_09_10_skills_split: "read 2026-09-10"
-      p.skills_shipped: 8
-      m.skill_bytes_largest: 19067
+      p.skills_shipped: 10
+      m.skill_bytes_largest: 22629
       m.skill_bytes_before: 64011
       d.open_is_a_slot: "the session opener fills a fixed character slot, highest value per
                          character first; values never preload"

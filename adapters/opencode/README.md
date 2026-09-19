@@ -1,5 +1,9 @@
 # kpopper for OpenCode
 
+The verification below predates the application rename. The current bundle has eight
+canonical skills plus the `page` and `document` compatibility aliases; the application
+skills are now `hub` and `annotated-doc`.
+
 Use OpenCode's native skills loader with the shared Python CLI. This adapter provides
 instructions, not an OpenCode JavaScript plugin: it does not install automatic session
 hooks, a blocking stop gate, or background delivery.

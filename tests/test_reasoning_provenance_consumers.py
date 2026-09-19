@@ -127,6 +127,7 @@ class CoreProvenanceConsumers(unittest.TestCase):
                 'experimental', 'hub', '--verify', str(path)], capture_output=True, text=True)
         self.assertEqual(code, 0, output)
         self.assertNotIn('page selectors unresolved', output)
+        self.assertIn('page layout not checked; use kpop experimental hub --verify', output)
         self.assertEqual(hub.returncode, 1, hub.stdout + hub.stderr)
         self.assertIn('core page selectors unresolved: missing.prefix', hub.stdout)
 

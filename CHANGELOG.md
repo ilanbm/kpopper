@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Plugin users upgrading from the earlier HTML-dependent runtime should run
+  `plugin_runtime.py setup` once to prepare the new private environment.
+
 - Probe only PyYAML before opening a session; normal setup retains timezone data for followups.
 - Separate the optional experimental hub and document applications from the core CLI.
   Install their runtime with `kpopper[html]` or plugin setup's `--applications html`,

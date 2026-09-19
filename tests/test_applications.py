@@ -1,5 +1,7 @@
 """HTML applications are explicit, optional consumers of the record."""
 import json
+import contextlib
+import io
 import os
 from pathlib import Path
 import subprocess
@@ -134,6 +136,7 @@ sys.meta_path.insert(0, Block())
         hypothesis = {'doc': proposed, 'raw': C.P.bodies(proposed)}
         facts = {'v.new': {'fired': False}}
         with mock.patch.object(C.P, 'load', return_value=base), \
+                mock.patch.object(C.P, 'brief_for', return_value='view.yaml'), \
                 mock.patch.object(C.P, '_page_side', return_value=({}, None, facts)) as page:
             self.assertEqual(C.page_of(['unused.yaml'], [hypothesis]), facts)
             page.assert_called_once()
@@ -166,6 +169,63 @@ sys.meta_path.insert(0, Block())
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         self.assertEqual(json.loads(result.stdout)['command'], 'page')
         self.assertIn('kpop experimental hub', result.stderr)
+
+    def test_graph_only_hypothesis_without_brief_never_loads_the_hub(self):
+        record = self.root / 'GROUNDING.yaml'
+        record.write_text(RECORD.replace('name: Source,', 'name: Source, asked: Check the graph,'))
+        (self.root / '.kpopper/view.yaml').unlink()
+        hypotheses = self.root / '.kpopper/hypotheses'
+        hypotheses.mkdir()
+        (hypotheses / 'graph-only.yaml').write_text('''judgments:
+  v.graph_guard:
+    rests_on: [s.source, graph.flagged]
+    verdict: Few flagged judgments
+    wrong_if: graph.flagged > 3
+    seen: {s.source: "read 2026-09-17", graph.flagged: 0}
+''')
+        result = self.cli('consolidate', '--dry-run', blocked=('render_page', 'html5lib', 'tinycss2'))
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertFalse((self.root / 'optional-imports').exists())
+
+    def test_legacy_presentation_review_does_not_require_document_libraries(self):
+        record = self.root / 'GROUNDING.yaml'
+        record.write_text(RECORD.replace('name: Source,', 'name: Source, asked: Check the graph,') + '''  v.graph_guard:
+    rests_on: [s.source, graph.flagged]
+    verdict: Few flagged judgments
+    wrong_if: graph.flagged > 3
+    seen: {s.source: "read 2026-09-17", graph.flagged: 0}
+''')
+        (self.root / '.kpopper/view.yaml').write_text('title: View\nsections:\n  - title: Values\n    pick: all\n')
+        result = self.cli('review', 'v.graph_guard', blocked=('html5lib', 'tinycss2'))
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertFalse((self.root / 'optional-imports').exists())
+
+    def test_graph_only_hypothesis_does_not_validate_an_unrelated_brief(self):
+        self.test_graph_only_hypothesis_without_brief_never_loads_the_hub()
+        (self.root / '.kpopper/view.yaml').write_text('tabs: [invalid presentation]\n')
+        result = self.cli('consolidate', '--dry-run', blocked=('render_page', 'html5lib', 'tinycss2'))
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertFalse((self.root / 'optional-imports').exists())
+
+    def test_unreadable_guide_returns_a_clean_error(self):
+        from scripts.applications import annotated_doc
+        for error in (OSError(5, 'Input/output error'), UnicodeError('invalid guide encoding')):
+            output = io.StringIO()
+            with mock.patch.object(annotated_doc.Path, 'read_text', side_effect=error), \
+                    contextlib.redirect_stderr(output):
+                self.assertEqual(annotated_doc.main(['guide']), 2)
+            self.assertIn('document:', output.getvalue())
+
+    def test_new_application_names_require_the_explicit_namespace(self):
+        for name in ('hub', 'annotated-doc'):
+            result = self.cli(name, '--help')
+            self.assertEqual(result.returncode, 2, result.stdout + result.stderr)
+            self.assertIn('kpop experimental ' + name, result.stderr)
+
+    def test_group_json_flag_works_before_the_application_name(self):
+        result = self.cli('experimental', '--json', 'hub', '--help')
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertEqual(json.loads(result.stdout)['command'], 'hub')
 
 
 if __name__ == '__main__':

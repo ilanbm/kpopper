@@ -121,7 +121,8 @@ def main(args):
 
 def page_info(paths, read_mode=None, *, reader=None, doc=None):
     """Project an explicitly requested record, reusing the caller's captured reading."""
-    require_html()
+    # Legacy record writes also use these derived counts. The renderer itself
+    # needs no document libraries, so application installation must not gate them.
     if reader is None:
         sys.path.insert(0, str(HERE))
         import provenance as reader

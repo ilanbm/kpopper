@@ -212,6 +212,8 @@ def page_of(paths, hyps=None, *, doc=None):
     Ordinary record consolidation has no renderer dependency. Layout proposals keep
     the same optional application validation as a direct presentation write.
     """
+    if not P.brief_for(paths):
+        return {}
     if hyps is not None:
         doc = P.load(paths) if doc is None else doc
         if P._peer('reasoning.operations').selected(doc):
@@ -225,9 +227,17 @@ def page_of(paths, hyps=None, *, doc=None):
             candidate = P.layered(candidate, hypothesis)
         _, _, candidate_fields = P.infer(candidate)
         candidate_raw = P.bodies(candidate)
+        def reads_page(body, roles):
+            if not isinstance(body, dict):
+                return False
+            dependencies = body.get(roles['deps'], []) if roles['deps'] else []
+            dependencies = dependencies if isinstance(dependencies, list) else []
+            return any(isinstance(name, str) and name in P.PAGE for name in dependencies) or \
+                any(name in P.PAGE for name in P.predicate_refs(P.predicate_of(body, roles)))
         relevant = any(isinstance(body, dict) and body != raw.get(nid) and
                        (P._arrangement_shaped(body, candidate_fields, candidate_raw) or
-                        (nid in jud and P.is_arrangement(jud[nid], raw)))
+                        (nid in jud and P.is_arrangement(jud[nid], raw))) and
+                       (reads_page(body, candidate_fields) or reads_page(raw.get(nid), fields))
                        for hypothesis in hyps for nid, body in hypothesis.get('raw', {}).items())
         if not relevant:
             return {}

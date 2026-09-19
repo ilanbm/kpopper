@@ -165,16 +165,20 @@ def main():
     cmd, rest = options.command, options.args
     explicit = cmd == "experimental"
     if explicit:
+        while rest and rest[0] == "--json":
+            options.json, rest = True, rest[1:]
         if not rest or all(arg in ("--help", "-h", "--json") for arg in rest):
             show_catalog(options.json or "--json" in rest)
             sys.exit(0)
         cmd, rest = rest[0], rest[1:]
         if cmd not in APPLICATIONS and cmd not in ALIASES:
             root.error("unknown experimental application: " + cmd)
+    elif cmd in APPLICATIONS:
+        root.error("use kpop experimental " + cmd + " for this application")
     requested = cmd
     cmd = ALIASES.get(cmd, cmd)
     application = cmd in APPLICATIONS
-    if application and (not explicit or requested != cmd):
+    if application and requested != cmd:
         invocation = "kpop " + ("experimental " if explicit else "") + requested
         print("%s is a compatibility alias; use kpop experimental %s (experimental application)."
               % (invocation, cmd), file=sys.stderr)

@@ -1,5 +1,9 @@
 # kpopper for OpenClaw
 
+The verification below predates the application rename. The current bundle has eight
+canonical skills plus the `page` and `document` compatibility aliases; the application
+skills are now `hub` and `annotated-doc`.
+
 **Status: bundle installation, all eight skills and a live record workflow were
 verified with OpenClaw 2026.9.4. The live tests used its Claude CLI backend with
 Fable 5.1 and explicit tool approvals. A follow-up excluded native user/project

@@ -56,9 +56,11 @@ Help works without installing HTML dependencies; commands never install them imp
   Projects using a page should run that explicit check in addition to `kpop check`.
 - Page measurements are not ordinary recorded facts. A condition depending on an
   unavailable `page.*` value remains unevaluated; it is not reported as having passed.
-- Explicit legacy arrangement and section authoring uses the optional page application.
-  Page-specific writes and consolidation of layout proposals preserve their snapshot
-  and validation guarantees; they require the optional runtime.
+- Legacy arrangement and section authoring can compute page counts with the shipped
+  renderer, which needs only PyYAML and the standard library. These write helpers do
+  not require the optional document libraries.
+- Consolidation consults presentation facts only when a brief exists and a changed
+  judgment references `page.*`. Graph-only conditions remain core checks.
 - The page renders a snapshot of the record. Standalone document refresh and review
   affect a document copy, never the source record. Core findings retain their original
   identity when displayed by either application.

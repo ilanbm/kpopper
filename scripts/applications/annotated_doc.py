@@ -29,7 +29,11 @@ def parser():
 def main(argv=None):
     options = parser().parse_args(argv)
     if options.command == "guide":
-        print((Path(__file__).resolve().parent.parent / "document-guide.md").read_text(encoding="utf-8"))
+        try:
+            print((Path(__file__).resolve().parent.parent / "document-guide.md").read_text(encoding="utf-8"))
+        except (OSError, UnicodeError) as error:
+            print("document: " + str(error), file=sys.stderr)
+            return 2
         return 0
     try:
         require_html()
