@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.7.1 — 2026-09-19
+
+- Fix session attribution and repeated Stop reminders (#135) — patch
+
 ## 1.7.0 — 2026-09-19
 
 - Default new records to history-backed reasoning and complete temporal observers (#134) — minor
