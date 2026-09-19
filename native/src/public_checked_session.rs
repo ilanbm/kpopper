@@ -2,7 +2,7 @@
 use crate::{
     Result,
     checked_session::{ContextDirection, ContextOptions},
-    checked_session_store::CheckedSessionStore,
+    checked_session_store::{CheckedSessionStore, ProposalRequest},
     history_contract::*,
     project_modes::{self, Project},
     public_workspace as W,
@@ -23,6 +23,7 @@ pub enum Operation {
     Read,
     Context,
     Search,
+    Propose,
     Serve,
 }
 
@@ -70,6 +71,14 @@ pub struct Options {
     pub search_mode: SearchMode,
     #[arg(long)]
     pub cursor: Option<String>,
+    #[arg(long, value_parser = ["observed", "inferred", "assumed", "question"])]
+    pub kind: Option<String>,
+    #[arg(long)]
+    pub text: Option<String>,
+    #[arg(long)]
+    pub basis: Vec<String>,
+    #[arg(long, default_value = "")]
+    pub revisit: String,
 }
 
 fn home() -> Result<PathBuf> {
@@ -279,7 +288,10 @@ impl Service {
             None,
         )?;
         let revision = self.store.save(&context, capture.snapshot()?)?;
-        let session = self.store.load(&revision, capture.snapshot()?)?;
+        let session = self
+            .store
+            .load(&revision, capture.snapshot()?)?
+            .with_proposals(self.store.proposals()?)?;
         let result = session
             .opening(tokens, |s| self.store.encoding().count(s))?
             .text;
@@ -304,6 +316,19 @@ impl Service {
             None,
         )?;
         let session = self.store.load(revision, capture.snapshot()?)?;
+        let base = reference.split('#').next().unwrap_or(reference);
+        let session = if reference.starts_with('/')
+            || base.starts_with("links:")
+            || base.starts_with("conditions:")
+            || base.starts_with("proposal:")
+            || base.starts_with("source:")
+            || base.starts_with("edges:")
+            || ["pending", "native", "alerts"].contains(&base)
+        {
+            session.with_proposals(self.store.proposals()?)?
+        } else {
+            session
+        };
         let result = session.read(reference, revision, tokens, offset, |s| {
             self.store.encoding().count(s)
         })?;
@@ -323,6 +348,19 @@ impl Service {
         capture.verify()?;
         self.inputs.verify()?;
         Ok(result)
+    }
+
+    pub fn proposing(&self, revision: &str, request: &ProposalRequest) -> Result<String> {
+        let capture = source_capture::capture_source(
+            std::slice::from_ref(&self.input),
+            &self.cwd,
+            self.mode,
+            None,
+        )?;
+        let result = self.store.propose(revision, capture.snapshot()?, request)?;
+        capture.verify()?;
+        self.inputs.verify()?;
+        Ok(serde_json::to_string(&result)?)
     }
 
     pub fn contextualizing(
@@ -391,6 +429,24 @@ pub fn run(options: &Options, cwd: &Path, mode: ReadMode) -> Result<String> {
                 cursor: options.cursor.clone(),
             },
         ),
+        Operation::Propose => service.proposing(
+            options
+                .revision
+                .as_deref()
+                .ok_or_else(|| error("propose requires --revision, --kind and --text"))?,
+            &ProposalRequest {
+                kind: options
+                    .kind
+                    .clone()
+                    .ok_or_else(|| error("propose requires --revision, --kind and --text"))?,
+                text: options
+                    .text
+                    .clone()
+                    .ok_or_else(|| error("propose requires --revision, --kind and --text"))?,
+                basis: options.basis.clone(),
+                revisit: options.revisit.clone(),
+            },
+        ),
         Operation::Serve => {
             let tools = crate::session_mcp::declared_tools()
                 .into_iter()
@@ -400,6 +456,7 @@ pub fn run(options: &Options, cwd: &Path, mode: ReadMode) -> Result<String> {
                         "kpopper_read",
                         "kpopper_context",
                         "kpopper_search",
+                        "kpopper_propose",
                     ]
                     .contains(&t.name.as_str())
                 })
@@ -438,6 +495,37 @@ pub fn run(options: &Options, cwd: &Path, mode: ReadMode) -> Result<String> {
                                     .ok_or_else(|| error("missing revision"))?,
                                 token_count(1600)?,
                                 offset,
+                            )
+                        }
+                        "kpopper_propose" => {
+                            let required = |name: &str| {
+                                args[name]
+                                    .as_str()
+                                    .map(str::to_owned)
+                                    .ok_or_else(|| error(&format!("missing {name}")))
+                            };
+                            let basis = args["basis"]
+                                .as_array()
+                                .ok_or_else(|| error("invalid basis"))?
+                                .iter()
+                                .map(|v| {
+                                    v.as_str()
+                                        .map(str::to_owned)
+                                        .ok_or_else(|| error("invalid basis"))
+                                })
+                                .collect::<Result<Vec<_>>>()?;
+                            service.proposing(
+                                &required("revision")?,
+                                &ProposalRequest {
+                                    kind: required("kind")?,
+                                    text: required("text")?,
+                                    basis,
+                                    revisit: args
+                                        .get("revisit")
+                                        .and_then(J::as_str)
+                                        .unwrap_or("")
+                                        .into(),
+                                },
                             )
                         }
                         "kpopper_search" => {

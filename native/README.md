@@ -120,6 +120,7 @@ kpop-native session open --no-settings --input GROUNDING.yaml --project example 
 kpop-native session read --no-settings --input GROUNDING.yaml --project example --state /absolute/private-state --ref / --revision REVISION
 kpop-native session context --no-settings --input GROUNDING.yaml --project example --state /absolute/private-state --id d.decision --direction support --revision REVISION
 kpop-native session search --no-settings --input GROUNDING.yaml --project example --state /absolute/private-state --query "decision" --revision REVISION
+kpop-native session propose --no-settings --input GROUNDING.yaml --project example --state /absolute/private-state --revision REVISION --kind inferred --text "A proposed reading" --basis node:p.input --revisit "Recheck when the input changes"
 kpop-native session serve --no-settings --input GROUNDING.yaml --project example --state /absolute/private-state
 ```
 
@@ -137,7 +138,11 @@ vary its floating-point score sums across processes. Unicode folding retains the
 Python 3.14 Unicode 16 mappings. Semantic/hybrid requests explicitly report lexical
 fallback when local embeddings are unconfigured; this CLI does not yet load E5 assets.
 The stdio MCP server exposes `kpopper_open`, `kpopper_read`, `kpopper_context`
-and `kpopper_search`. Ordinary checked sessions, proposals, setup and hook
+and `kpopper_search`, plus `kpopper_propose` for private pending proposals.
+Proposals retain their base revision, recorded references and unverified external
+locators without changing the canonical record. Repeated identical proposals retain
+their first bytes and timestamp; `pending` and `proposal:ID` reads show stale bases.
+Ordinary checked sessions, setup and hook
 activation are still unconnected. Session-state storage has been exercised on Unix
 and Windows, including physical identity, no-clobber creation and changed-source checks.
 

@@ -606,7 +606,7 @@ fn validate_stored_metadata(map: &serde_json::Map<String, J>, core: &J) -> Resul
     )
 }
 
-fn validate_stored_proposal(name: &str, project: &str, proposal: &J) -> Result<String> {
+pub(crate) fn validate_stored_proposal(name: &str, project: &str, proposal: &J) -> Result<String> {
     let core = proposal_core_from_stored(proposal)?;
     let id = sha256(&serde_json::to_vec(&core)?);
     require(name == proposal_name(&id)?, "proposal identity mismatch")?;

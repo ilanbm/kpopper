@@ -73,6 +73,7 @@ pub struct CheckedSession {
     scope: String,
     orientation: J,
     opening_depth: usize,
+    proposals: BTreeMap<String, J>,
 }
 
 impl CheckedSession {
@@ -228,6 +229,7 @@ impl CheckedSession {
             scope,
             orientation,
             opening_depth,
+            proposals: BTreeMap::new(),
         })
     }
 
@@ -241,6 +243,32 @@ impl CheckedSession {
     /// Validate an exact recorded reference without adding a presentation budget.
     pub fn validate_reference(&self, reference: &str) -> Result<()> {
         self.read_value(reference).map(|_| ())
+    }
+
+    /// Attach validated private proposals without changing the captured revision.
+    pub fn with_proposals(mut self, proposals: BTreeMap<String, J>) -> Result<Self> {
+        for (id, proposal) in &proposals {
+            crate::checked_session_store::validate_stored_proposal(
+                &format!("proposal-{id}.json"),
+                &self.project,
+                proposal,
+            )?;
+        }
+        self.proposals = proposals;
+        Ok(self)
+    }
+
+    fn pending(&self) -> J {
+        J::Object(
+            self.proposals
+                .iter()
+                .map(|(id, value)| {
+                    let mut value = value.clone();
+                    value["stale_base"] = json!(value["base_revision"] != self.revision);
+                    (id.clone(), value)
+                })
+                .collect(),
+        )
     }
 
     /// Reject a stale or foreign handle. The caller supplies the freshly
@@ -745,7 +773,12 @@ impl CheckedSession {
             let snapshot = vmap(&snapshot_data, "invalid captured snapshot")?;
             ordinary(&snapshot["hypotheses"], "invalid captured snapshot")?
         } else if base == "pending" {
-            json!({})
+            self.pending()
+        } else if let Some(id) = base.strip_prefix("proposal:") {
+            self.pending()
+                .get(id)
+                .cloned()
+                .ok_or_else(|| Error("unknown proposal".into()))?
         } else if base == "alerts" {
             let mut alerts = JsonMap::new();
             for (id, node) in &self.nodes {
@@ -791,13 +824,45 @@ impl CheckedSession {
             "invalid captured assessment",
         )?
         .len();
+        let snapshot = self.context.snapshot().to_data();
+        let snapshot = vmap(&snapshot, "invalid captured snapshot")?;
+        let capture_context = vmap(&snapshot["context"], "invalid captured snapshot")?;
+        let native_hypotheses = vmap(&snapshot["hypotheses"], "invalid captured hypotheses")?
+            .values()
+            .filter(|h| {
+                vmap(h, "").ok().and_then(|h| h.get("kind"))
+                    != Some(&V::Text("contribution".into()))
+            })
+            .count();
+        let contributions = capture_context
+            .get("pending")
+            .and_then(|v| vmap(v, "").ok())
+            .and_then(|v| v.get("contributions"))
+            .map(|v| ordinary(v, "invalid captured contributions"))
+            .transpose()?
+            .unwrap_or_else(|| json!([]));
+        let read_mode = capture_context
+            .get("read_mode")
+            .and_then(|v| {
+                if let V::Text(s) = v {
+                    Some(s.as_str())
+                } else {
+                    None
+                }
+            })
+            .unwrap_or("frozen");
+        let stale = self
+            .proposals
+            .values()
+            .filter(|p| p["base_revision"] != self.revision)
+            .count();
         Ok(
             json!({"schema":"kpopper.epistemic-view.v3","project":self.project,"revision":self.revision,
             "counts":{"nodes":self.nodes.len(),"findings":self.nodes.len(),"errors":errors,"unknown":unknown},
             "cells":frontier.iter().map(|e|self.cell(e)).collect::<Result<Vec<_>>>()?,
             "conditions_ref":"conditions:/","events":{},"orientation":self.orientation,"rules":RULES,
-            "links":self.edges,"pending":0,"stale_pending":0,"native_hypotheses":0,
-            "contributions":[],"read_mode":"frozen","history_subjects":history_count}),
+            "links":self.edges,"pending":self.proposals.len(),"stale_pending":stale,"native_hypotheses":native_hypotheses,
+            "contributions":contributions,"read_mode":read_mode,"history_subjects":history_count}),
         )
     }
 
@@ -811,7 +876,7 @@ impl CheckedSession {
                 self.context.snapshot_id(),self.context.findings_revision(),reasoning_projection::VERSION),
             format!("purpose={} @orientation", canonical_json(&J::String(purpose.into()))?),
             format!("record: {} ids; {} captured findings; errors={}; unknown={}",counts["nodes"],counts["findings"],counts["errors"],counts["unknown"]),
-            format!("history_subjects={}; pending=0; stale_pending=0",packet["history_subjects"]),
+            format!("history_subjects={}; pending={}; stale_pending={}",packet["history_subjects"],packet["pending"],packet["stale_pending"]),
             "Findings are retained from one immutable capture. Follow-up reads only recapture inputs to reject a stale handle.".into(),
             "MAP / — declared navigation; names do not establish claims:".into()];
         lines.extend(

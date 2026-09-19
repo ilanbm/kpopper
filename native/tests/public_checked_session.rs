@@ -180,7 +180,7 @@ fn mcp_stdio_and_cli_return_the_same_retained_read_without_runtime() {
         .collect::<Vec<_>>();
     assert_eq!(messages.len(), 5);
     assert_eq!(messages[0]["result"]["protocolVersion"], "2025-06-18");
-    assert_eq!(messages[1]["result"]["tools"].as_array().unwrap().len(), 4);
+    assert_eq!(messages[1]["result"]["tools"].as_array().unwrap().len(), 5);
     assert_eq!(messages[2]["id"], "read");
     assert_eq!(messages[2]["result"]["isError"], false);
     assert_eq!(messages[3]["result"]["isError"], false);
@@ -208,4 +208,109 @@ fn mcp_stdio_and_cli_return_the_same_retained_read_without_runtime() {
         fs::read_to_string(root.join("GROUNDING.yaml")).unwrap(),
         RECORD
     );
+}
+
+#[test]
+fn pending_proposals_are_idempotent_readable_and_stale_after_source_changes() {
+    let temp = fixture();
+    let root = temp.path();
+    ok(command(root, "open", true).output().unwrap());
+    let (revision, _) = saved(root);
+    let args = [
+        "--revision",
+        &revision,
+        "--kind",
+        "inferred",
+        "--text",
+        "The plan may hold",
+        "--basis",
+        "node:p.a",
+        "--revisit",
+        "Recheck when p.a changes",
+    ];
+    let first = ok(command(root, "propose", false).args(args).output().unwrap());
+    let result: Value = serde_json::from_str(&first).unwrap();
+    assert_eq!(result["canonical_record_changed"], false);
+    let id = result["id"].as_str().unwrap();
+    let file = root.join("state").join(format!("proposal-{id}.json"));
+    let before = fs::read(&file).unwrap();
+    assert_eq!(
+        ok(command(root, "propose", false).args(args).output().unwrap()),
+        first
+    );
+    assert_eq!(fs::read(&file).unwrap(), before);
+    let input = [serde_json::json!({"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18"}}),
+        serde_json::json!({"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"kpopper_propose","arguments":{"revision":revision,"kind":"inferred","text":"The plan may hold","basis":["node:p.a"],"revisit":"Recheck when p.a changes"}}})]
+        .into_iter().map(|v|v.to_string()+"\n").collect::<String>();
+    let mut child = command(root, "serve", false)
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .unwrap();
+    child
+        .stdin
+        .take()
+        .unwrap()
+        .write_all(input.as_bytes())
+        .unwrap();
+    let output = ok(child.wait_with_output().unwrap());
+    let result: Value = serde_json::from_str(output.lines().last().unwrap()).unwrap();
+    assert_eq!(result["result"]["isError"], false);
+    assert_eq!(
+        result["result"]["content"][0]["text"].as_str().unwrap(),
+        first.trim_end_matches('\n')
+    );
+    assert_eq!(fs::read(&file).unwrap(), before);
+    let pending = ok(command(root, "read", false)
+        .args([
+            "--ref",
+            "pending",
+            "--revision",
+            &revision,
+            "--tokens",
+            "8000",
+        ])
+        .output()
+        .unwrap());
+    let pending: Value = serde_json::from_str(&pending).unwrap();
+    assert_eq!(pending["value"][id]["stale_base"], false);
+    assert_eq!(
+        fs::read_to_string(root.join("GROUNDING.yaml")).unwrap(),
+        RECORD
+    );
+    fs::write(
+        root.join("GROUNDING.yaml"),
+        RECORD.replace("v: 12", "v: 13"),
+    )
+    .unwrap();
+    let opened = ok(command(root, "open", true).output().unwrap());
+    assert!(opened.contains("pending=1; stale_pending=1"));
+    let current = fs::read_dir(root.join("state"))
+        .unwrap()
+        .map(|p| p.unwrap().path())
+        .filter(|p| {
+            p.file_name()
+                .unwrap()
+                .to_string_lossy()
+                .starts_with("core-context-")
+        })
+        .map(|p| serde_json::from_slice::<Value>(&fs::read(p).unwrap()).unwrap())
+        .find(|v| v["revision"] != revision)
+        .unwrap();
+    let current = current["revision"].as_str().unwrap();
+    let stale = ok(command(root, "read", false)
+        .args([
+            "--ref",
+            &format!("proposal:{id}#/stale_base"),
+            "--revision",
+            current,
+        ])
+        .output()
+        .unwrap());
+    assert_eq!(
+        serde_json::from_str::<Value>(&stale).unwrap()["value"],
+        true
+    );
+    assert_eq!(fs::read(&file).unwrap(), before);
 }
