@@ -91,3 +91,130 @@ pub fn runtime() -> Result<Option<Runtime>> {
     let ordinary = crate::ordinary_runtime::Program::open(&root.join("ordinary").join(target))?;
     Ok(Some(runtime.with_ordinary_program(ordinary)))
 }
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Location {
+    pub workspace: PathBuf,
+    pub record: PathBuf,
+    pub status: String,
+    pub reason: String,
+    pub key: String,
+}
+/// Public orientation keeps the deliberate subproject boundary used for host state.
+pub fn locate(cwd: &Path, mode: crate::source_capture::ReadMode) -> Result<Location> {
+    let cwd = cwd.canonicalize()?;
+    let project = Project::open(&cwd)?;
+    let mut workspace = if project.is_git() {
+        project.root.clone()
+    } else {
+        cwd.clone()
+    };
+    let home = std::env::var_os("HOME")
+        .map(PathBuf::from)
+        .and_then(|p| p.canonicalize().ok());
+    let mut current = cwd.clone();
+    let mut record = None;
+    let mut status = "missing";
+    let mut reason = String::new();
+    loop {
+        if let Some(path) = ["GROUNDING.yaml", "PROVENANCE.yaml"]
+            .iter()
+            .map(|n| current.join(n))
+            .find(|p| p.symlink_metadata().is_ok())
+        {
+            workspace = current.clone();
+            status = if path.is_file() {
+                "found"
+            } else {
+                "unavailable"
+            };
+            if status == "unavailable" {
+                reason = "The record path exists but is not an accessible file.".into();
+            }
+            record = Some(path);
+            break;
+        }
+        let Some(parent) = current.parent() else {
+            break;
+        };
+        if project.is_git() && current == project.root
+            || home.as_ref() == Some(&current)
+            || home.as_deref() == Some(parent)
+            || parent.parent().is_none()
+        {
+            break;
+        }
+        current = parent.into();
+    }
+    if record.is_none()
+        && let Some(common) = &project.common
+    {
+        let pointer = common.join("kpopper-record");
+        if pointer.symlink_metadata().is_ok() {
+            let path = project.record(None)?;
+            status = if path.is_file() {
+                "found"
+            } else {
+                "unavailable"
+            };
+            if status == "unavailable" {
+                reason="The registered record is unavailable. Restore its location before creating another.".into();
+            }
+            record = Some(path);
+        }
+    }
+    let config = project.config()?;
+    if project.config_path.exists() {
+        let path = project.record(Some(&config))?;
+        status = if path.is_file() {
+            "found"
+        } else if path.exists() {
+            "unavailable"
+        } else {
+            "missing"
+        };
+        reason = if status == "unavailable" {
+            "The configured record is unavailable.".into()
+        } else {
+            String::new()
+        };
+        record = Some(path);
+    }
+    if status == "missing"
+        && mode == crate::source_capture::ReadMode::Live
+        && project.is_git()
+        && crate::history_contract::string_is(
+            &crate::history_contract::map(&config)?["mode"],
+            "advanced",
+        )
+        && crate::pending_state::Ledger::capture(&project)?
+            .head
+            .is_some()
+    {
+        record = Some(project.record(Some(&config))?);
+        status = "pending";
+    }
+    let identity = if let Some(common) = &project.common {
+        let relative = workspace
+            .strip_prefix(&project.root)
+            .map_err(|_| error("workspace outside project"))?;
+        format!(
+            "{}\0{}",
+            common.display(),
+            if relative.as_os_str().is_empty() {
+                ".".into()
+            } else {
+                relative.to_string_lossy().into_owned()
+            }
+        )
+    } else {
+        workspace.to_string_lossy().into_owned()
+    };
+    Ok(Location {
+        record: record.unwrap_or_else(|| workspace.join("GROUNDING.yaml")),
+        workspace,
+        status: status.into(),
+        reason,
+        key: crate::identity::sha256(identity.as_bytes()),
+    })
+}

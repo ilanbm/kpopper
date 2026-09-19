@@ -100,7 +100,7 @@ fn computation_error(reader: &Reader<'_>, pred: &V) -> String {
 }
 /// Exact ordinary output numbers, without interpreting strings or authored maps
 /// which merely resemble the rational output shape.
-fn number(v: &V) -> Option<(num_bigint::BigInt, num_bigint::BigInt)> {
+pub(crate) fn number(v: &V) -> Option<(num_bigint::BigInt, num_bigint::BigInt)> {
     if let V::Map(m) = v {
         if m.len() != 1 {
             return None;
@@ -138,7 +138,7 @@ fn number(v: &V) -> Option<(num_bigint::BigInt, num_bigint::BigInt)> {
         text(m.get("denominator")?).ok()?.parse().ok()?,
     ))
 }
-fn equal_value(a: &V, b: &V) -> bool {
+pub(crate) fn equal_value(a: &V, b: &V) -> bool {
     match (number(a), number(b)) {
         (Some((a, b)), Some((c, d))) => a * d == c * b,
         _ => python_equal(a, b),

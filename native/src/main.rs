@@ -12,7 +12,7 @@ use std::{
 #[derive(Parser)]
 #[command(
     version,
-    about = "Experimental opt-in native history CLI; linear readings only"
+    about = "Experimental native assessment, readers and history tools"
 )]
 struct Args {
     #[arg(long, global = true)]
@@ -34,7 +34,14 @@ enum Command {
         #[arg(long)]
         record_id: String,
     },
-    Open,
+    /// Open the current knowledge context.
+    Open(kpop_native::public_readers::Options),
+    /// Check the record and its page arrangement.
+    Check(kpop_native::public_readers::Options),
+    /// Read entries, their sources and findings.
+    Pull(kpop_native::public_readers::Options),
+    /// Trace the consequences of changed entries.
+    Affects(kpop_native::public_readers::Options),
     Add(WriteArgs),
     Set(WriteArgs),
     History {
@@ -226,7 +233,7 @@ fn run(args: Args) -> Result<Value> {
         .ok_or_else(|| kpop_native::Error("workspace_required".into()))?;
     match args.command {
         Command::Init { record_id } => Store::init(&root, &record_id),
-        Command::Open => Store::open(&root),
+        Command::Open(_) => Store::open(&root),
         Command::History { subject } => Store::history(&root, subject.as_deref()),
         Command::Recover => Store::recover(&root),
         command @ (Command::Add(_) | Command::Set(_)) => {
@@ -260,11 +267,80 @@ fn run(args: Args) -> Result<Value> {
         | Command::SessionStart => {
             unreachable!()
         }
-        Command::Assess(_) => unreachable!(),
+        Command::Assess(_) | Command::Check(_) | Command::Pull(_) | Command::Affects(_) => {
+            unreachable!()
+        }
     }
 }
 fn main() {
     let args = Args::parse();
+    let read = match &args.command {
+        Command::Open(o) => Some(("open", o)),
+        Command::Check(o) => Some(("check", o)),
+        Command::Pull(o) => Some(("pull", o)),
+        Command::Affects(o) => Some(("affects", o)),
+        _ => None,
+    };
+    if let Some((command, options)) = read {
+        let result = (|| {
+            let cwd = args
+                .workspace
+                .clone()
+                .map(Ok)
+                .unwrap_or_else(std::env::current_dir)?;
+            // Preserve the explicitly opted-in feasibility store until its public
+            // authoring commands are replaced. Regular records never enter it.
+            if command == "open"
+                && options.subjects.is_empty()
+                && options.profile.is_none()
+                && cwd.join(".kpopper/native-feasibility.json").is_file()
+            {
+                return Ok(kpop_native::public_core_readers::Output {
+                    text: Store::open(&cwd)?.to_string() + "\n",
+                    code: 0,
+                });
+            }
+            let mode =
+                if args.frozen || std::env::var("KPOPPER_READ_MODE").as_deref() == Ok("frozen") {
+                    kpop_native::source_capture::ReadMode::Frozen
+                } else {
+                    kpop_native::source_capture::ReadMode::Live
+                };
+            let runtime = kpop_native::public_workspace::runtime()?;
+            kpop_native::public_readers::run(
+                command,
+                options,
+                &cwd,
+                mode,
+                args.json,
+                runtime.as_ref(),
+            )
+        })();
+        match result {
+            Ok(output) => {
+                print!("{}", output.text);
+                if output.code != 0 {
+                    std::process::exit(output.code);
+                }
+            }
+            Err(error) => {
+                if error
+                    .0
+                    .contains("is not an entry or a prefix in this record.")
+                {
+                    eprintln!("{error}");
+                    std::process::exit(1);
+                }
+                if args.json {
+                    eprintln!("{}", json!({"error":error.to_string()}));
+                } else {
+                    eprintln!("kpop-native {command}: {error}");
+                }
+                std::process::exit(2);
+            }
+        }
+        return;
+    }
     if let Command::Assess(options) = &args.command {
         let result = (|| {
             let cwd = args

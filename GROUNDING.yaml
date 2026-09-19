@@ -1031,6 +1031,11 @@ sources:
          tests, actual bundled ordinary and core Lean CLI execution"
     scope: "Actual assess command only on macOS arm64. Remaining public commands, MCP/hooks, browser
             and supported-platform distribution remain pending."
+  s.native_public_readers:
+    name: "Native public reader and core page conformance"
+    file: "/Users/ilanbm/docs/kpopper/rust-migration/R4-PUBLIC-READERS-RESULT.md"
+    read: "2026-09-19"
+    at: "Task 01a0b961-13a4-7033-afc7-e5bb48720e14; actual CLI and final Python fixture conformance"
   s.native_scenario_watch:
     name: "Native captured scenarios and pure history watch conformance"
     from: s.2026_09_19_native_temporal_authoring
@@ -2318,6 +2323,11 @@ known:
          ignored by default, native activation with the actual configured final Python launcher
          passed separately; Clippy all-targets with warnings denied passed"
     of: "2026-09-19"
+  m.native_core_page_cases:
+    name: "Native core page conformance cases including expected refusals"
+    v: 1235
+    from: s.native_public_readers
+    at: "Conformance: 1144 complete envelopes and 91 expected refusals"
   m.native_import_runtime_tests:
     name: "Full native regression gate after record import and launcher probes"
     v: 201
@@ -2340,12 +2350,23 @@ known:
     name: "Native live comparison field-role cases"
     v: 113
     from: s.native_live_capture
+  m.native_ordinary_read_cases:
+    name: "Native ordinary pull and affects conformance cases including expected refusals"
+    v: 560
+    from: s.native_public_readers
+    at: "Conformance: 336 complete outputs and 224 expected refusals"
   m.native_ordinary_tests:
     name: "Full native regression gate with ordinary authoring"
     v: 191
     from: s.native_ordinary_authoring
     at: "R3-ordinary-full-tests.txt; full native suite, zero failures; final source fingerprint;
          macOS arm64"
+  m.native_public_read_cli_cases:
+    name: "Actual native public reader CLI comparisons with final Python"
+    v: 136
+    from: s.native_public_readers
+    at: "Conformance: 72 exact ordinary CLI outputs and 64 core comparisons preserving actual
+         adapter identities"
   m.native_runtime_declarations:
     name: "Managed launcher declaration conformance cases"
     v: 18

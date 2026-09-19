@@ -1,0 +1,4594 @@
+[
+  {
+    "case": "base",
+    "command": "pull",
+    "seeds": [
+      "p"
+    ],
+    "code": 0,
+    "text": "p.backup: True\np.load: 61 <- s.note\n+ d.work: Keep the current format\n    holds\n    wrong_if: p.load > 80\n    moved since review: p.load 44 -> 61 - within wrong_if\n\naffects <entry> shows what a change reaches\n"
+  },
+  {
+    "case": "base",
+    "command": "pull",
+    "seeds": [
+      "d"
+    ],
+    "code": 0,
+    "text": "p.backup: True\np.load: 61 <- s.note\n+ d.work: Keep the current format\n    holds\n    wrong_if: p.load > 80\n    moved since review: p.load 44 -> 61 - within wrong_if\n\naffects <entry> shows what a change reaches\n"
+  },
+  {
+    "case": "base",
+    "command": "pull",
+    "seeds": [
+      "p.a"
+    ],
+    "refused": "p.a is not an entry or a prefix in this record. Run `open` to see what it holds."
+  },
+  {
+    "case": "base",
+    "command": "pull",
+    "seeds": [
+      "unknown"
+    ],
+    "refused": "unknown is not an entry or a prefix in this record. Run `open` to see what it holds."
+  },
+  {
+    "case": "base",
+    "command": "pull",
+    "seeds": [],
+    "code": 0,
+    "text": "\naffects <entry> shows what a change reaches\n"
+  },
+  {
+    "case": "base",
+    "command": "affects",
+    "seeds": [
+      "p"
+    ],
+    "code": 0,
+    "text": "# p -> 2 entries: p.backup, p.load\nd.work\n    via p.load -> evaluate the predicate against p.load\n    predicate: p.load > 80\n\n1 judgments reached\n"
+  },
+  {
+    "case": "base",
+    "command": "affects",
+    "seeds": [
+      "d"
+    ],
+    "code": 0,
+    "text": "# d -> 1 entries: d.work\nnothing rests on that\n"
+  },
+  {
+    "case": "base",
+    "command": "affects",
+    "seeds": [
+      "p.a"
+    ],
+    "refused": "p.a is not an entry or a prefix in this record. Run `open` to see what it holds."
+  },
+  {
+    "case": "base",
+    "command": "affects",
+    "seeds": [
+      "unknown"
+    ],
+    "refused": "unknown is not an entry or a prefix in this record. Run `open` to see what it holds."
+  },
+  {
+    "case": "base",
+    "command": "affects",
+    "seeds": [],
+    "code": 0,
+    "text": "nothing rests on that\n"
+  },
+  {
+    "case": "crossed",
+    "command": "pull",
+    "seeds": [
+      "p"
+    ],
+    "code": 0,
+    "text": "p.backup: True\np.load: 61 <- s.note\n+ d.work: Keep the current format\n    broken: wrong_if holds (p.load > 60)\n    wrong_if: p.load > 60\n    moved since review: p.load 44 -> 61 - across wrong_if\n\naffects <entry> shows what a change reaches\n"
+  },
+  {
+    "case": "crossed",
+    "command": "pull",
+    "seeds": [
+      "d"
+    ],
+    "code": 0,
+    "text": "p.backup: True\np.load: 61 <- s.note\n+ d.work: Keep the current format\n    broken: wrong_if holds (p.load > 60)\n    wrong_if: p.load > 60\n    moved since review: p.load 44 -> 61 - across wrong_if\n\naffects <entry> shows what a change reaches\n"
+  },
+  {
+    "case": "crossed",
+    "command": "pull",
+    "seeds": [
+      "p.a"
+    ],
+    "refused": "p.a is not an entry or a prefix in this record. Run `open` to see what it holds."
+  },
+  {
+    "case": "crossed",
+    "command": "pull",
+    "seeds": [
+      "unknown"
+    ],
+    "refused": "unknown is not an entry or a prefix in this record. Run `open` to see what it holds."
+  },
+  {
+    "case": "crossed",
+    "command": "pull",
+    "seeds": [],
+    "code": 0,
+    "text": "\naffects <entry> shows what a change reaches\n"
+  },
+  {
+    "case": "crossed",
+    "command": "affects",
+    "seeds": [
+      "p"
+    ],
+    "code": 0,
+    "text": "# p -> 2 entries: p.backup, p.load\nd.work\n    via p.load -> evaluate the predicate against p.load\n    predicate: p.load > 60\n\n1 judgments reached\n"
+  },
+  {
+    "case": "crossed",
+    "command": "affects",
+    "seeds": [
+      "d"
+    ],
+    "code": 0,
+    "text": "# d -> 1 entries: d.work\nnothing rests on that\n"
+  },
+  {
+    "case": "crossed",
+    "command": "affects",
+    "seeds": [
+      "p.a"
+    ],
+    "refused": "p.a is not an entry or a prefix in this record. Run `open` to see what it holds."
+  },
+  {
+    "case": "crossed",
+    "command": "affects",
+    "seeds": [
+      "unknown"
+    ],
+    "refused": "unknown is not an entry or a prefix in this record. Run `open` to see what it holds."
+  },
+  {
+    "case": "crossed",
+    "command": "affects",
+    "seeds": [],
+    "code": 0,
+    "text": "nothing rests on that\n"
+  },
+  {
+    "case": "missing",
+    "command": "pull",
+    "seeds": [
+      "p"
+    ],
+    "code": 0,
+    "text": "p.load: 61 <- s.note\n+ d.work: Keep the current format\n    broken: rests on p.backup, which is not an entry\n    wrong_if: p.load > 80\n    moved since review: p.load 44 -> 61 - within wrong_if\n\naffects <entry> shows what a change reaches\n"
+  },
+  {
+    "case": "missing",
+    "command": "pull",
+    "seeds": [
+      "d"
+    ],
+    "code": 0,
+    "text": "p.load: 61 <- s.note\n+ d.work: Keep the current format\n    broken: rests on p.backup, which is not an entry\n    wrong_if: p.load > 80\n    moved since review: p.load 44 -> 61 - within wrong_if\n\naffects <entry> shows what a change reaches\n"
+  },
+  {
+    "case": "missing",
+    "command": "pull",
+    "seeds": [
+      "p.a"
+    ],
+    "refused": "p.a is not an entry or a prefix in this record. Run `open` to see what it holds."
+  },
+  {
+    "case": "missing",
+    "command": "pull",
+    "seeds": [
+      "unknown"
+    ],
+    "refused": "unknown is not an entry or a prefix in this record. Run `open` to see what it holds."
+  },
+  {
+    "case": "missing",
+    "command": "pull",
+    "seeds": [],
+    "code": 0,
+    "text": "\naffects <entry> shows what a change reaches\n"
+  },
+  {
+    "case": "missing",
+    "command": "affects",
+    "seeds": [
+      "p"
+    ],
+    "code": 0,
+    "text": "# p -> 1 entries: p.load\nd.work\n    via p.load -> evaluate the predicate against p.load\n    predicate: p.load > 80\n\n1 judgments reached\n"
+  },
+  {
+    "case": "missing",
+    "command": "affects",
+    "seeds": [
+      "d"
+    ],
+    "code": 0,
+    "text": "# d -> 1 entries: d.work\nnothing rests on that\n"
+  },
+  {
+    "case": "missing",
+    "command": "affects",
+    "seeds": [
+      "p.a"
+    ],
+    "refused": "p.a is not an entry or a prefix in this record. Run `open` to see what it holds."
+  },
+  {
+    "case": "missing",
+    "command": "affects",
+    "seeds": [
+      "unknown"
+    ],
+    "refused": "unknown is not an entry or a prefix in this record. Run `open` to see what it holds."
+  },
+  {
+    "case": "missing",
+    "command": "affects",
+    "seeds": [],
+    "code": 0,
+    "text": "nothing rests on that\n"
+  },
+  {
+    "case": "baseline-missing",
+    "command": "pull",
+    "seeds": [
+      "p"
+    ],
+    "code": 0,
+    "text": "p.backup: True\np.load: 61 <- s.note\n+ d.work: Keep the current format\n    unchecked: never checked against p.load, p.backup\n    wrong_if: p.load > 80\n\naffects <entry> shows what a change reaches\n"
+  },
+  {
+    "case": "baseline-missing",
+    "command": "pull",
+    "seeds": [
+      "d"
+    ],
+    "code": 0,
+    "text": "p.backup: True\np.load: 61 <- s.note\n+ d.work: Keep the current format\n    unchecked: never checked against p.load, p.backup\n    wrong_if: p.load > 80\n\naffects <entry> shows what a change reaches\n"
+  },
+  {
+    "case": "baseline-missing",
+    "command": "pull",
+    "seeds": [
+      "p.a"
+    ],
+    "refused": "p.a is not an entry or a prefix in this record. Run `open` to see what it holds."
+  },
+  {
+    "case": "baseline-missing",
+    "command": "pull",
+    "seeds": [
+      "unknown"
+    ],
+    "refused": "unknown is not an entry or a prefix in this record. Run `open` to see what it holds."
+  },
+  {
+    "case": "baseline-missing",
+    "command": "pull",
+    "seeds": [],
+    "code": 0,
+    "text": "\naffects <entry> shows what a change reaches\n"
+  },
+  {
+    "case": "baseline-missing",
+    "command": "affects",
+    "seeds": [
+      "p"
+    ],
+    "code": 0,
+    "text": "# p -> 2 entries: p.backup, p.load\nd.work\n    via p.load -> evaluate the predicate against p.load\n    predicate: p.load > 80\n\n1 judgments reached\n"
+  },
+  {
+    "case": "baseline-missing",
+    "command": "affects",
+    "seeds": [
+      "d"
+    ],
+    "code": 0,
+    "text": "# d -> 1 entries: d.work\nnothing rests on that\n"
+  },
+  {
+    "case": "baseline-missing",
+    "command": "affects",
+    "seeds": [
+      "p.a"
+    ],
+    "refused": "p.a is not an entry or a prefix in this record. Run `open` to see what it holds."
+  },
+  {
+    "case": "baseline-missing",
+    "command": "affects",
+    "seeds": [
+      "unknown"
+    ],
+    "refused": "unknown is not an entry or a prefix in this record. Run `open` to see what it holds."
+  },
+  {
+    "case": "baseline-missing",
+    "command": "affects",
+    "seeds": [],
+    "code": 0,
+    "text": "nothing rests on that\n"
+  },
+  {
+    "case": "no-condition",
+    "command": "pull",
+    "seeds": [
+      "p"
+    ],
+    "code": 0,
+    "text": "p.backup: True\np.load: 61 <- s.note\n+ d.work: Keep the current format\n    holds\n    reopened by: Organizer withdraws approval\n    moved since review: p.load 44 -> 61\n\naffects <entry> shows what a change reaches\n"
+  },
+  {
+    "case": "no-condition",
+    "command": "pull",
+    "seeds": [
+      "d"
+    ],
+    "code": 0,
+    "text": "p.backup: True\np.load: 61 <- s.note\n+ d.work: Keep the current format\n    holds\n    reopened by: Organizer withdraws approval\n    moved since review: p.load 44 -> 61\n\naffects <entry> shows what a change reaches\n"
+  },
+  {
+    "case": "no-condition",
+    "command": "pull",
+    "seeds": [
+      "p.a"
+    ],
+    "refused": "p.a is not an entry or a prefix in this record. Run `open` to see what it holds."
+  },
+  {
+    "case": "no-condition",
+    "command": "pull",
+    "seeds": [
+      "unknown"
+    ],
+    "refused": "unknown is not an entry or a prefix in this record. Run `open` to see what it holds."
+  },
+  {
+    "case": "no-condition",
+    "command": "pull",
+    "seeds": [],
+    "code": 0,
+    "text": "\naffects <entry> shows what a change reaches\n"
+  },
+  {
+    "case": "no-condition",
+    "command": "affects",
+    "seeds": [
+      "p"
+    ],
+    "code": 0,
+    "text": "# p -> 2 entries: p.backup, p.load\nd.work\n    via p.load -> flagged only\n\n1 judgments reached\n"
+  },
+  {
+    "case": "no-condition",
+    "command": "affects",
+    "seeds": [
+      "d"
+    ],
+    "code": 0,
+    "text": "# d -> 1 entries: d.work\nnothing rests on that\n"
+  },
+  {
+    "case": "no-condition",
+    "command": "affects",
+    "seeds": [
+      "p.a"
+    ],
+    "refused": "p.a is not an entry or a prefix in this record. Run `open` to see what it holds."
+  },
+  {
+    "case": "no-condition",
+    "command": "affects",
+    "seeds": [
+      "unknown"
+    ],
+    "refused": "unknown is not an entry or a prefix in this record. Run `open` to see what it holds."
+  },
+  {
+    "case": "no-condition",
+    "command": "affects",
+    "seeds": [],
+    "code": 0,
+    "text": "nothing rests on that\n"
+  },
+  {
+    "case": "unsupported",
+    "command": "pull",
+    "seeds": [
+      "p"
+    ],
+    "code": 0,
+    "text": "p.backup: True\np.load: 61 <- s.note\n+ d.work: Keep the current format\n    holds\n    wrong_if: p.load > 80 or p.backup == true\n    moved since review: p.load 44 -> 61\n\naffects <entry> shows what a change reaches\n"
+  },
+  {
+    "case": "unsupported",
+    "command": "pull",
+    "seeds": [
+      "d"
+    ],
+    "code": 0,
+    "text": "p.backup: True\np.load: 61 <- s.note\n+ d.work: Keep the current format\n    holds\n    wrong_if: p.load > 80 or p.backup == true\n    moved since review: p.load 44 -> 61\n\naffects <entry> shows what a change reaches\n"
+  },
+  {
+    "case": "unsupported",
+    "command": "pull",
+    "seeds": [
+      "p.a"
+    ],
+    "refused": "p.a is not an entry or a prefix in this record. Run `open` to see what it holds."
+  },
+  {
+    "case": "unsupported",
+    "command": "pull",
+    "seeds": [
+      "unknown"
+    ],
+    "refused": "unknown is not an entry or a prefix in this record. Run `open` to see what it holds."
+  },
+  {
+    "case": "unsupported",
+    "command": "pull",
+    "seeds": [],
+    "code": 0,
+    "text": "\naffects <entry> shows what a change reaches\n"
+  },
+  {
+    "case": "unsupported",
+    "command": "affects",
+    "seeds": [
+      "p"
+    ],
+    "code": 0,
+    "text": "# p -> 2 entries: p.backup, p.load\nd.work\n    via p.load -> evaluate the predicate against p.load, p.backup\n    predicate: p.load > 80 or p.backup == true\n\n1 judgments reached\n"
+  },
+  {
+    "case": "unsupported",
+    "command": "affects",
+    "seeds": [
+      "d"
+    ],
+    "code": 0,
+    "text": "# d -> 1 entries: d.work\nnothing rests on that\n"
+  },
+  {
+    "case": "unsupported",
+    "command": "affects",
+    "seeds": [
+      "p.a"
+    ],
+    "refused": "p.a is not an entry or a prefix in this record. Run `open` to see what it holds."
+  },
+  {
+    "case": "unsupported",
+    "command": "affects",
+    "seeds": [
+      "unknown"
+    ],
+    "refused": "unknown is not an entry or a prefix in this record. Run `open` to see what it holds."
+  },
+  {
+    "case": "unsupported",
+    "command": "affects",
+    "seeds": [],
+    "code": 0,
+    "text": "nothing rests on that\n"
+  },
+  {
+    "case": "quoted",
+    "command": "pull",
+    "seeds": [
+      "p"
+    ],
+    "code": 0,
+    "text": "p.backup: True\np.load: 61 <- s.note\n+ d.work: Keep the current format\n    holds\n    wrong_if: p.backup != 'p.load'\n    moved since review: p.load 44 -> 61\n\naffects <entry> shows what a change reaches\n"
+  },
+  {
+    "case": "quoted",
+    "command": "pull",
+    "seeds": [
+      "d"
+    ],
+    "code": 0,
+    "text": "p.backup: True\np.load: 61 <- s.note\n+ d.work: Keep the current format\n    holds\n    wrong_if: p.backup != 'p.load'\n    moved since review: p.load 44 -> 61\n\naffects <entry> shows what a change reaches\n"
+  },
+  {
+    "case": "quoted",
+    "command": "pull",
+    "seeds": [
+      "p.a"
+    ],
+    "refused": "p.a is not an entry or a prefix in this record. Run `open` to see what it holds."
+  },
+  {
+    "case": "quoted",
+    "command": "pull",
+    "seeds": [
+      "unknown"
+    ],
+    "refused": "unknown is not an entry or a prefix in this record. Run `open` to see what it holds."
+  },
+  {
+    "case": "quoted",
+    "command": "pull",
+    "seeds": [],
+    "code": 0,
+    "text": "\naffects <entry> shows what a change reaches\n"
+  },
+  {
+    "case": "quoted",
+    "command": "affects",
+    "seeds": [
+      "p"
+    ],
+    "code": 0,
+    "text": "# p -> 2 entries: p.backup, p.load\nd.work\n    via p.load -> evaluate the predicate against p.load, p.backup\n    predicate: p.backup != 'p.load'\n\n1 judgments reached\n"
+  },
+  {
+    "case": "quoted",
+    "command": "affects",
+    "seeds": [
+      "d"
+    ],
+    "code": 0,
+    "text": "# d -> 1 entries: d.work\nnothing rests on that\n"
+  },
+  {
+    "case": "quoted",
+    "command": "affects",
+    "seeds": [
+      "p.a"
+    ],
+    "refused": "p.a is not an entry or a prefix in this record. Run `open` to see what it holds."
+  },
+  {
+    "case": "quoted",
+    "command": "affects",
+    "seeds": [
+      "unknown"
+    ],
+    "refused": "unknown is not an entry or a prefix in this record. Run `open` to see what it holds."
+  },
+  {
+    "case": "quoted",
+    "command": "affects",
+    "seeds": [],
+    "code": 0,
+    "text": "nothing rests on that\n"
+  },
+  {
+    "case": "bad-deps",
+    "command": "pull",
+    "seeds": [
+      "p"
+    ],
+    "code": 0,
+    "text": "p.backup: True\np.load: 61 <- s.note\n\naffects <entry> shows what a change reaches\n"
+  },
+  {
+    "case": "bad-deps",
+    "command": "pull",
+    "seeds": [
+      "d"
+    ],
+    "code": 0,
+    "text": "+ d.work: Keep the current format\n    broken: rests on p, ., l, o, a, d, which is not an entry\n    wrong_if: p.load > 80\n    moved since review: p.load 44 -> 61 - within wrong_if\n\naffects <entry> shows what a change reaches\n"
+  },
+  {
+    "case": "bad-deps",
+    "command": "pull",
+    "seeds": [
+      "p.a"
+    ],
+    "refused": "p.a is not an entry or a prefix in this record. Run `open` to see what it holds."
+  },
+  {
+    "case": "bad-deps",
+    "command": "pull",
+    "seeds": [
+      "unknown"
+    ],
+    "refused": "unknown is not an entry or a prefix in this record. Run `open` to see what it holds."
+  },
+  {
+    "case": "bad-deps",
+    "command": "pull",
+    "seeds": [],
+    "code": 0,
+    "text": "\naffects <entry> shows what a change reaches\n"
+  },
+  {
+    "case": "bad-deps",
+    "command": "affects",
+    "seeds": [
+      "p"
+    ],
+    "code": 0,
+    "text": "# p -> 2 entries: p.backup, p.load\nnothing rests on that\n"
+  },
+  {
+    "case": "bad-deps",
+    "command": "affects",
+    "seeds": [
+      "d"
+    ],
+    "code": 0,
+    "text": "# d -> 1 entries: d.work\nnothing rests on that\n"
+  },
+  {
+    "case": "bad-deps",
+    "command": "affects",
+    "seeds": [
+      "p.a"
+    ],
+    "refused": "p.a is not an entry or a prefix in this record. Run `open` to see what it holds."
+  },
+  {
+    "case": "bad-deps",
+    "command": "affects",
+    "seeds": [
+      "unknown"
+    ],
+    "refused": "unknown is not an entry or a prefix in this record. Run `open` to see what it holds."
+  },
+  {
+    "case": "bad-deps",
+    "command": "affects",
+    "seeds": [],
+    "code": 0,
+    "text": "nothing rests on that\n"
+  },
+  {
+    "case": "bad-snapshot",
+    "command": "pull",
+    "seeds": [
+      "p"
+    ],
+    "code": 0,
+    "text": "p.backup: True\np.load: 61 <- s.note\n+ d.work: Keep the current format\n    unchecked: never checked against p.load, p.backup\n    wrong_if: p.load > 80\n\naffects <entry> shows what a change reaches\n"
+  },
+  {
+    "case": "bad-snapshot",
+    "command": "pull",
+    "seeds": [
+      "d"
+    ],
+    "code": 0,
+    "text": "p.backup: True\np.load: 61 <- s.note\n+ d.work: Keep the current format\n    unchecked: never checked against p.load, p.backup\n    wrong_if: p.load > 80\n\naffects <entry> shows what a change reaches\n"
+  },
+  {
+    "case": "bad-snapshot",
+    "command": "pull",
+    "seeds": [
+      "p.a"
+    ],
+    "refused": "p.a is not an entry or a prefix in this record. Run `open` to see what it holds."
+  },
+  {
+    "case": "bad-snapshot",
+    "command": "pull",
+    "seeds": [
+      "unknown"
+    ],
+    "refused": "unknown is not an entry or a prefix in this record. Run `open` to see what it holds."
+  },
+  {
+    "case": "bad-snapshot",
+    "command": "pull",
+    "seeds": [],
+    "code": 0,
+    "text": "\naffects <entry> shows what a change reaches\n"
+  },
+  {
+    "case": "bad-snapshot",
+    "command": "affects",
+    "seeds": [
+      "p"
+    ],
+    "code": 0,
+    "text": "# p -> 2 entries: p.backup, p.load\nd.work\n    via p.load -> evaluate the predicate against p.load\n    predicate: p.load > 80\n\n1 judgments reached\n"
+  },
+  {
+    "case": "bad-snapshot",
+    "command": "affects",
+    "seeds": [
+      "d"
+    ],
+    "code": 0,
+    "text": "# d -> 1 entries: d.work\nnothing rests on that\n"
+  },
+  {
+    "case": "bad-snapshot",
+    "command": "affects",
+    "seeds": [
+      "p.a"
+    ],
+    "refused": "p.a is not an entry or a prefix in this record. Run `open` to see what it holds."
+  },
+  {
+    "case": "bad-snapshot",
+    "command": "affects",
+    "seeds": [
+      "unknown"
+    ],
+    "refused": "unknown is not an entry or a prefix in this record. Run `open` to see what it holds."
+  },
+  {
+    "case": "bad-snapshot",
+    "command": "affects",
+    "seeds": [],
+    "code": 0,
+    "text": "nothing rests on that\n"
+  },
+  {
+    "case": "null",
+    "command": "pull",
+    "seeds": [
+      "p"
+    ],
+    "code": 0,
+    "text": "p.backup: \np.load: 61 <- s.note\n+ d.work: Keep the current format\n    holds\n    wrong_if: p.load > 80\n    moved since review: p.load 44 -> 61 - within wrong_if\n\naffects <entry> shows what a change reaches\n"
+  },
+  {
+    "case": "null",
+    "command": "pull",
+    "seeds": [
+      "d"
+    ],
+    "code": 0,
+    "text": "p.backup: \np.load: 61 <- s.note\n+ d.work: Keep the current format\n    holds\n    wrong_if: p.load > 80\n    moved since review: p.load 44 -> 61 - within wrong_if\n\naffects <entry> shows what a change reaches\n"
+  },
+  {
+    "case": "null",
+    "command": "pull",
+    "seeds": [
+      "p.a"
+    ],
+    "refused": "p.a is not an entry or a prefix in this record. Run `open` to see what it holds."
+  },
+  {
+    "case": "null",
+    "command": "pull",
+    "seeds": [
+      "unknown"
+    ],
+    "refused": "unknown is not an entry or a prefix in this record. Run `open` to see what it holds."
+  },
+  {
+    "case": "null",
+    "command": "pull",
+    "seeds": [],
+    "code": 0,
+    "text": "\naffects <entry> shows what a change reaches\n"
+  },
+  {
+    "case": "null",
+    "command": "affects",
+    "seeds": [
+      "p"
+    ],
+    "code": 0,
+    "text": "# p -> 2 entries: p.backup, p.load\nd.work\n    via p.load -> evaluate the predicate against p.load\n    predicate: p.load > 80\n\n1 judgments reached\n"
+  },
+  {
+    "case": "null",
+    "command": "affects",
+    "seeds": [
+      "d"
+    ],
+    "code": 0,
+    "text": "# d -> 1 entries: d.work\nnothing rests on that\n"
+  },
+  {
+    "case": "null",
+    "command": "affects",
+    "seeds": [
+      "p.a"
+    ],
+    "refused": "p.a is not an entry or a prefix in this record. Run `open` to see what it holds."
+  },
+  {
+    "case": "null",
+    "command": "affects",
+    "seeds": [
+      "unknown"
+    ],
+    "refused": "unknown is not an entry or a prefix in this record. Run `open` to see what it holds."
+  },
+  {
+    "case": "null",
+    "command": "affects",
+    "seeds": [],
+    "code": 0,
+    "text": "nothing rests on that\n"
+  },
+  {
+    "case": "false",
+    "command": "pull",
+    "seeds": [
+      "p"
+    ],
+    "code": 0,
+    "text": "p.backup: False\np.load: 61 <- s.note\n+ d.work: Keep the current format\n    holds\n    wrong_if: p.load > 80\n    moved since review: p.backup True -> False\n    moved since review: p.load 44 -> 61 - within wrong_if\n\naffects <entry> shows what a change reaches\n"
+  },
+  {
+    "case": "false",
+    "command": "pull",
+    "seeds": [
+      "d"
+    ],
+    "code": 0,
+    "text": "p.backup: False\np.load: 61 <- s.note\n+ d.work: Keep the current format\n    holds\n    wrong_if: p.load > 80\n    moved since review: p.backup True -> False\n    moved since review: p.load 44 -> 61 - within wrong_if\n\naffects <entry> shows what a change reaches\n"
+  },
+  {
+    "case": "false",
+    "command": "pull",
+    "seeds": [
+      "p.a"
+    ],
+    "refused": "p.a is not an entry or a prefix in this record. Run `open` to see what it holds."
+  },
+  {
+    "case": "false",
+    "command": "pull",
+    "seeds": [
+      "unknown"
+    ],
+    "refused": "unknown is not an entry or a prefix in this record. Run `open` to see what it holds."
+  },
+  {
+    "case": "false",
+    "command": "pull",
+    "seeds": [],
+    "code": 0,
+    "text": "\naffects <entry> shows what a change reaches\n"
+  },
+  {
+    "case": "false",
+    "command": "affects",
+    "seeds": [
+      "p"
+    ],
+    "code": 0,
+    "text": "# p -> 2 entries: p.backup, p.load\nd.work\n    via p.load -> evaluate the predicate against p.load\n    predicate: p.load > 80\n\n1 judgments reached\n"
+  },
+  {
+    "case": "false",
+    "command": "affects",
+    "seeds": [
+      "d"
+    ],
+    "code": 0,
+    "text": "# d -> 1 entries: d.work\nnothing rests on that\n"
+  },
+  {
+    "case": "false",
+    "command": "affects",
+    "seeds": [
+      "p.a"
+    ],
+    "refused": "p.a is not an entry or a prefix in this record. Run `open` to see what it holds."
+  },
+  {
+    "case": "false",
+    "command": "affects",
+    "seeds": [
+      "unknown"
+    ],
+    "refused": "unknown is not an entry or a prefix in this record. Run `open` to see what it holds."
+  },
+  {
+    "case": "false",
+    "command": "affects",
+    "seeds": [],
+    "code": 0,
+    "text": "nothing rests on that\n"
+  },
+  {
+    "case": "zero",
+    "command": "pull",
+    "seeds": [
+      "p"
+    ],
+    "code": 0,
+    "text": "p.backup: 0\np.load: 61 <- s.note\n+ d.work: Keep the current format\n    holds\n    wrong_if: p.load > 80\n    moved since review: p.backup True -> 0\n    moved since review: p.load 44 -> 61 - within wrong_if\n\naffects <entry> shows what a change reaches\n"
+  },
+  {
+    "case": "zero",
+    "command": "pull",
+    "seeds": [
+      "d"
+    ],
+    "code": 0,
+    "text": "p.backup: 0\np.load: 61 <- s.note\n+ d.work: Keep the current format\n    holds\n    wrong_if: p.load > 80\n    moved since review: p.backup True -> 0\n    moved since review: p.load 44 -> 61 - within wrong_if\n\naffects <entry> shows what a change reaches\n"
+  },
+  {
+    "case": "zero",
+    "command": "pull",
+    "seeds": [
+      "p.a"
+    ],
+    "refused": "p.a is not an entry or a prefix in this record. Run `open` to see what it holds."
+  },
+  {
+    "case": "zero",
+    "command": "pull",
+    "seeds": [
+      "unknown"
+    ],
+    "refused": "unknown is not an entry or a prefix in this record. Run `open` to see what it holds."
+  },
+  {
+    "case": "zero",
+    "command": "pull",
+    "seeds": [],
+    "code": 0,
+    "text": "\naffects <entry> shows what a change reaches\n"
+  },
+  {
+    "case": "zero",
+    "command": "affects",
+    "seeds": [
+      "p"
+    ],
+    "code": 0,
+    "text": "# p -> 2 entries: p.backup, p.load\nd.work\n    via p.load -> evaluate the predicate against p.load\n    predicate: p.load > 80\n\n1 judgments reached\n"
+  },
+  {
+    "case": "zero",
+    "command": "affects",
+    "seeds": [
+      "d"
+    ],
+    "code": 0,
+    "text": "# d -> 1 entries: d.work\nnothing rests on that\n"
+  },
+  {
+    "case": "zero",
+    "command": "affects",
+    "seeds": [
+      "p.a"
+    ],
+    "refused": "p.a is not an entry or a prefix in this record. Run `open` to see what it holds."
+  },
+  {
+    "case": "zero",
+    "command": "affects",
+    "seeds": [
+      "unknown"
+    ],
+    "refused": "unknown is not an entry or a prefix in this record. Run `open` to see what it holds."
+  },
+  {
+    "case": "zero",
+    "command": "affects",
+    "seeds": [],
+    "code": 0,
+    "text": "nothing rests on that\n"
+  },
+  {
+    "case": "list",
+    "command": "pull",
+    "seeds": [
+      "p"
+    ],
+    "code": 0,
+    "text": "p.backup: [1, True]\np.load: 61 <- s.note\n+ d.work: Keep the current format\n    holds\n    wrong_if: p.load > 80\n    moved since review: p.load 44 -> 61 - within wrong_if\n\naffects <entry> shows what a change reaches\n"
+  },
+  {
+    "case": "list",
+    "command": "pull",
+    "seeds": [
+      "d"
+    ],
+    "code": 0,
+    "text": "p.backup: [1, True]\np.load: 61 <- s.note\n+ d.work: Keep the current format\n    holds\n    wrong_if: p.load > 80\n    moved since review: p.load 44 -> 61 - within wrong_if\n\naffects <entry> shows what a change reaches\n"
+  },
+  {
+    "case": "list",
+    "command": "pull",
+    "seeds": [
+      "p.a"
+    ],
+    "refused": "p.a is not an entry or a prefix in this record. Run `open` to see what it holds."
+  },
+  {
+    "case": "list",
+    "command": "pull",
+    "seeds": [
+      "unknown"
+    ],
+    "refused": "unknown is not an entry or a prefix in this record. Run `open` to see what it holds."
+  },
+  {
+    "case": "list",
+    "command": "pull",
+    "seeds": [],
+    "code": 0,
+    "text": "\naffects <entry> shows what a change reaches\n"
+  },
+  {
+    "case": "list",
+    "command": "affects",
+    "seeds": [
+      "p"
+    ],
+    "code": 0,
+    "text": "# p -> 2 entries: p.backup, p.load\nd.work\n    via p.load -> evaluate the predicate against p.load\n    predicate: p.load > 80\n\n1 judgments reached\n"
+  },
+  {
+    "case": "list",
+    "command": "affects",
+    "seeds": [
+      "d"
+    ],
+    "code": 0,
+    "text": "# d -> 1 entries: d.work\nnothing rests on that\n"
+  },
+  {
+    "case": "list",
+    "command": "affects",
+    "seeds": [
+      "p.a"
+    ],
+    "refused": "p.a is not an entry or a prefix in this record. Run `open` to see what it holds."
+  },
+  {
+    "case": "list",
+    "command": "affects",
+    "seeds": [
+      "unknown"
+    ],
+    "refused": "unknown is not an entry or a prefix in this record. Run `open` to see what it holds."
+  },
+  {
+    "case": "list",
+    "command": "affects",
+    "seeds": [],
+    "code": 0,
+    "text": "nothing rests on that\n"
+  },
+  {
+    "case": "date",
+    "command": "pull",
+    "seeds": [
+      "p"
+    ],
+    "code": 0,
+    "text": "p.backup: 2026-01-02\np.load: 61 <- s.note\n+ d.work: Keep the current format\n    holds\n    wrong_if: p.load > 80\n    moved since review: p.backup True -> 2026-01-02\n    moved since review: p.load 44 -> 61 - within wrong_if\n\naffects <entry> shows what a change reaches\n"
+  },
+  {
+    "case": "date",
+    "command": "pull",
+    "seeds": [
+      "d"
+    ],
+    "code": 0,
+    "text": "p.backup: 2026-01-02\np.load: 61 <- s.note\n+ d.work: Keep the current format\n    holds\n    wrong_if: p.load > 80\n    moved since review: p.backup True -> 2026-01-02\n    moved since review: p.load 44 -> 61 - within wrong_if\n\naffects <entry> shows what a change reaches\n"
+  },
+  {
+    "case": "date",
+    "command": "pull",
+    "seeds": [
+      "p.a"
+    ],
+    "refused": "p.a is not an entry or a prefix in this record. Run `open` to see what it holds."
+  },
+  {
+    "case": "date",
+    "command": "pull",
+    "seeds": [
+      "unknown"
+    ],
+    "refused": "unknown is not an entry or a prefix in this record. Run `open` to see what it holds."
+  },
+  {
+    "case": "date",
+    "command": "pull",
+    "seeds": [],
+    "code": 0,
+    "text": "\naffects <entry> shows what a change reaches\n"
+  },
+  {
+    "case": "date",
+    "command": "affects",
+    "seeds": [
+      "p"
+    ],
+    "code": 0,
+    "text": "# p -> 2 entries: p.backup, p.load\nd.work\n    via p.load -> evaluate the predicate against p.load\n    predicate: p.load > 80\n\n1 judgments reached\n"
+  },
+  {
+    "case": "date",
+    "command": "affects",
+    "seeds": [
+      "d"
+    ],
+    "code": 0,
+    "text": "# d -> 1 entries: d.work\nnothing rests on that\n"
+  },
+  {
+    "case": "date",
+    "command": "affects",
+    "seeds": [
+      "p.a"
+    ],
+    "refused": "p.a is not an entry or a prefix in this record. Run `open` to see what it holds."
+  },
+  {
+    "case": "date",
+    "command": "affects",
+    "seeds": [
+      "unknown"
+    ],
+    "refused": "unknown is not an entry or a prefix in this record. Run `open` to see what it holds."
+  },
+  {
+    "case": "date",
+    "command": "affects",
+    "seeds": [],
+    "code": 0,
+    "text": "nothing rests on that\n"
+  },
+  {
+    "case": "datetime",
+    "command": "pull",
+    "seeds": [
+      "p"
+    ],
+    "code": 0,
+    "text": "p.backup: 2026-01-02 03:04:05.123456+00:00\np.load: 61 <- s.note\n+ d.work: Keep the current format\n    holds\n    wrong_if: p.load > 80\n    moved since review: p.backup True -> 2026-01-02 03:04:05.123456+00:00\n    moved since review: p.load 44 -> 61 - within wrong_if\n\naffects <entry> shows what a change reaches\n"
+  },
+  {
+    "case": "datetime",
+    "command": "pull",
+    "seeds": [
+      "d"
+    ],
+    "code": 0,
+    "text": "p.backup: 2026-01-02 03:04:05.123456+00:00\np.load: 61 <- s.note\n+ d.work: Keep the current format\n    holds\n    wrong_if: p.load > 80\n    moved since review: p.backup True -> 2026-01-02 03:04:05.123456+00:00\n    moved since review: p.load 44 -> 61 - within wrong_if\n\naffects <entry> shows what a change reaches\n"
+  },
+  {
+    "case": "datetime",
+    "command": "pull",
+    "seeds": [
+      "p.a"
+    ],
+    "refused": "p.a is not an entry or a prefix in this record. Run `open` to see what it holds."
+  },
+  {
+    "case": "datetime",
+    "command": "pull",
+    "seeds": [
+      "unknown"
+    ],
+    "refused": "unknown is not an entry or a prefix in this record. Run `open` to see what it holds."
+  },
+  {
+    "case": "datetime",
+    "command": "pull",
+    "seeds": [],
+    "code": 0,
+    "text": "\naffects <entry> shows what a change reaches\n"
+  },
+  {
+    "case": "datetime",
+    "command": "affects",
+    "seeds": [
+      "p"
+    ],
+    "code": 0,
+    "text": "# p -> 2 entries: p.backup, p.load\nd.work\n    via p.load -> evaluate the predicate against p.load\n    predicate: p.load > 80\n\n1 judgments reached\n"
+  },
+  {
+    "case": "datetime",
+    "command": "affects",
+    "seeds": [
+      "d"
+    ],
+    "code": 0,
+    "text": "# d -> 1 entries: d.work\nnothing rests on that\n"
+  },
+  {
+    "case": "datetime",
+    "command": "affects",
+    "seeds": [
+      "p.a"
+    ],
+    "refused": "p.a is not an entry or a prefix in this record. Run `open` to see what it holds."
+  },
+  {
+    "case": "datetime",
+    "command": "affects",
+    "seeds": [
+      "unknown"
+    ],
+    "refused": "unknown is not an entry or a prefix in this record. Run `open` to see what it holds."
+  },
+  {
+    "case": "datetime",
+    "command": "affects",
+    "seeds": [],
+    "code": 0,
+    "text": "nothing rests on that\n"
+  },
+  {
+    "case": "whitespace",
+    "command": "pull",
+    "seeds": [
+      "p"
+    ],
+    "code": 0,
+    "text": "p.backup:  a   b \np.load: 61 <- s.note\n+ d.work: Keep the current format\n    holds\n    wrong_if: p.load > 80\n    moved since review: p.load 44 -> 61 - within wrong_if\n\naffects <entry> shows what a change reaches\n"
+  },
+  {
+    "case": "whitespace",
+    "command": "pull",
+    "seeds": [
+      "d"
+    ],
+    "code": 0,
+    "text": "p.backup:  a   b \np.load: 61 <- s.note\n+ d.work: Keep the current format\n    holds\n    wrong_if: p.load > 80\n    moved since review: p.load 44 -> 61 - within wrong_if\n\naffects <entry> shows what a change reaches\n"
+  },
+  {
+    "case": "whitespace",
+    "command": "pull",
+    "seeds": [
+      "p.a"
+    ],
+    "refused": "p.a is not an entry or a prefix in this record. Run `open` to see what it holds."
+  },
+  {
+    "case": "whitespace",
+    "command": "pull",
+    "seeds": [
+      "unknown"
+    ],
+    "refused": "unknown is not an entry or a prefix in this record. Run `open` to see what it holds."
+  },
+  {
+    "case": "whitespace",
+    "command": "pull",
+    "seeds": [],
+    "code": 0,
+    "text": "\naffects <entry> shows what a change reaches\n"
+  },
+  {
+    "case": "whitespace",
+    "command": "affects",
+    "seeds": [
+      "p"
+    ],
+    "code": 0,
+    "text": "# p -> 2 entries: p.backup, p.load\nd.work\n    via p.load -> evaluate the predicate against p.load\n    predicate: p.load > 80\n\n1 judgments reached\n"
+  },
+  {
+    "case": "whitespace",
+    "command": "affects",
+    "seeds": [
+      "d"
+    ],
+    "code": 0,
+    "text": "# d -> 1 entries: d.work\nnothing rests on that\n"
+  },
+  {
+    "case": "whitespace",
+    "command": "affects",
+    "seeds": [
+      "p.a"
+    ],
+    "refused": "p.a is not an entry or a prefix in this record. Run `open` to see what it holds."
+  },
+  {
+    "case": "whitespace",
+    "command": "affects",
+    "seeds": [
+      "unknown"
+    ],
+    "refused": "unknown is not an entry or a prefix in this record. Run `open` to see what it holds."
+  },
+  {
+    "case": "whitespace",
+    "command": "affects",
+    "seeds": [],
+    "code": 0,
+    "text": "nothing rests on that\n"
+  },
+  {
+    "case": "large-integer",
+    "command": "pull",
+    "seeds": [
+      "p"
+    ],
+    "code": 0,
+    "text": "p.backup: 9007199254740993\np.load: 61 <- s.note\n+ d.work: Keep the current format\n    holds\n    wrong_if: p.load > 80\n    moved since review: p.backup 9007199254740992 -> 9007199254740993\n    moved since review: p.load 44 -> 61 - within wrong_if\n\naffects <entry> shows what a change reaches\n"
+  },
+  {
+    "case": "large-integer",
+    "command": "pull",
+    "seeds": [
+      "d"
+    ],
+    "code": 0,
+    "text": "p.backup: 9007199254740993\np.load: 61 <- s.note\n+ d.work: Keep the current format\n    holds\n    wrong_if: p.load > 80\n    moved since review: p.backup 9007199254740992 -> 9007199254740993\n    moved since review: p.load 44 -> 61 - within wrong_if\n\naffects <entry> shows what a change reaches\n"
+  },
+  {
+    "case": "large-integer",
+    "command": "pull",
+    "seeds": [
+      "p.a"
+    ],
+    "refused": "p.a is not an entry or a prefix in this record. Run `open` to see what it holds."
+  },
+  {
+    "case": "large-integer",
+    "command": "pull",
+    "seeds": [
+      "unknown"
+    ],
+    "refused": "unknown is not an entry or a prefix in this record. Run `open` to see what it holds."
+  },
+  {
+    "case": "large-integer",
+    "command": "pull",
+    "seeds": [],
+    "code": 0,
+    "text": "\naffects <entry> shows what a change reaches\n"
+  },
+  {
+    "case": "large-integer",
+    "command": "affects",
+    "seeds": [
+      "p"
+    ],
+    "code": 0,
+    "text": "# p -> 2 entries: p.backup, p.load\nd.work\n    via p.load -> evaluate the predicate against p.load\n    predicate: p.load > 80\n\n1 judgments reached\n"
+  },
+  {
+    "case": "large-integer",
+    "command": "affects",
+    "seeds": [
+      "d"
+    ],
+    "code": 0,
+    "text": "# d -> 1 entries: d.work\nnothing rests on that\n"
+  },
+  {
+    "case": "large-integer",
+    "command": "affects",
+    "seeds": [
+      "p.a"
+    ],
+    "refused": "p.a is not an entry or a prefix in this record. Run `open` to see what it holds."
+  },
+  {
+    "case": "large-integer",
+    "command": "affects",
+    "seeds": [
+      "unknown"
+    ],
+    "refused": "unknown is not an entry or a prefix in this record. Run `open` to see what it holds."
+  },
+  {
+    "case": "large-integer",
+    "command": "affects",
+    "seeds": [],
+    "code": 0,
+    "text": "nothing rests on that\n"
+  },
+  {
+    "case": "source",
+    "command": "pull",
+    "seeds": [
+      "p"
+    ],
+    "code": 0,
+    "text": "p.backup: True\np.load: 61 <- s.note\n\naffects <entry> shows what a change reaches\n"
+  },
+  {
+    "case": "source",
+    "command": "pull",
+    "seeds": [
+      "d"
+    ],
+    "code": 0,
+    "text": "s.note:  as of 2026-01-01\n+ d.work: Keep the current format\n    holds\n    wrong_if: p.load > 80\n\naffects <entry> shows what a change reaches\n"
+  },
+  {
+    "case": "source",
+    "command": "pull",
+    "seeds": [
+      "p.a"
+    ],
+    "refused": "p.a is not an entry or a prefix in this record. Run `open` to see what it holds."
+  },
+  {
+    "case": "source",
+    "command": "pull",
+    "seeds": [
+      "unknown"
+    ],
+    "refused": "unknown is not an entry or a prefix in this record. Run `open` to see what it holds."
+  },
+  {
+    "case": "source",
+    "command": "pull",
+    "seeds": [],
+    "code": 0,
+    "text": "\naffects <entry> shows what a change reaches\n"
+  },
+  {
+    "case": "source",
+    "command": "affects",
+    "seeds": [
+      "p"
+    ],
+    "code": 0,
+    "text": "# p -> 2 entries: p.backup, p.load\nnothing rests on that\n"
+  },
+  {
+    "case": "source",
+    "command": "affects",
+    "seeds": [
+      "d"
+    ],
+    "code": 0,
+    "text": "# d -> 1 entries: d.work\nnothing rests on that\n"
+  },
+  {
+    "case": "source",
+    "command": "affects",
+    "seeds": [
+      "p.a"
+    ],
+    "refused": "p.a is not an entry or a prefix in this record. Run `open` to see what it holds."
+  },
+  {
+    "case": "source",
+    "command": "affects",
+    "seeds": [
+      "unknown"
+    ],
+    "refused": "unknown is not an entry or a prefix in this record. Run `open` to see what it holds."
+  },
+  {
+    "case": "source",
+    "command": "affects",
+    "seeds": [],
+    "code": 0,
+    "text": "nothing rests on that\n"
+  },
+  {
+    "case": "judgment",
+    "command": "pull",
+    "seeds": [
+      "p"
+    ],
+    "code": 0,
+    "text": "p.backup: True\np.load: 61 <- s.note\n\naffects <entry> shows what a change reaches\n"
+  },
+  {
+    "case": "judgment",
+    "command": "pull",
+    "seeds": [
+      "d"
+    ],
+    "code": 0,
+    "text": "+ d.work: Keep the current format\n    holds\n    wrong_if: p.load > 80\n\naffects <entry> shows what a change reaches\n"
+  },
+  {
+    "case": "judgment",
+    "command": "pull",
+    "seeds": [
+      "p.a"
+    ],
+    "refused": "p.a is not an entry or a prefix in this record. Run `open` to see what it holds."
+  },
+  {
+    "case": "judgment",
+    "command": "pull",
+    "seeds": [
+      "unknown"
+    ],
+    "refused": "unknown is not an entry or a prefix in this record. Run `open` to see what it holds."
+  },
+  {
+    "case": "judgment",
+    "command": "pull",
+    "seeds": [],
+    "code": 0,
+    "text": "\naffects <entry> shows what a change reaches\n"
+  },
+  {
+    "case": "judgment",
+    "command": "affects",
+    "seeds": [
+      "p"
+    ],
+    "code": 0,
+    "text": "# p -> 2 entries: p.backup, p.load\nnothing rests on that\n"
+  },
+  {
+    "case": "judgment",
+    "command": "affects",
+    "seeds": [
+      "d"
+    ],
+    "code": 0,
+    "text": "# d -> 1 entries: d.work\nd.work\n    via d.work -> flagged only\n    predicate: p.load > 80\n\n1 judgments reached\n"
+  },
+  {
+    "case": "judgment",
+    "command": "affects",
+    "seeds": [
+      "p.a"
+    ],
+    "refused": "p.a is not an entry or a prefix in this record. Run `open` to see what it holds."
+  },
+  {
+    "case": "judgment",
+    "command": "affects",
+    "seeds": [
+      "unknown"
+    ],
+    "refused": "unknown is not an entry or a prefix in this record. Run `open` to see what it holds."
+  },
+  {
+    "case": "judgment",
+    "command": "affects",
+    "seeds": [],
+    "code": 0,
+    "text": "nothing rests on that\n"
+  },
+  {
+    "case": "text-formula",
+    "command": "pull",
+    "seeds": [
+      "p"
+    ],
+    "code": 0,
+    "text": "p.backup: = p.load + 1\np.load: 61 <- s.note\n+ d.work: Keep the current format\n    holds\n    wrong_if: p.load > 80\n    moved since review: p.load 44 -> 61 - within wrong_if\n\naffects <entry> shows what a change reaches\n"
+  },
+  {
+    "case": "text-formula",
+    "command": "pull",
+    "seeds": [
+      "d"
+    ],
+    "code": 0,
+    "text": "p.backup: = p.load + 1\np.load: 61 <- s.note\n+ d.work: Keep the current format\n    holds\n    wrong_if: p.load > 80\n    moved since review: p.load 44 -> 61 - within wrong_if\n\naffects <entry> shows what a change reaches\n"
+  },
+  {
+    "case": "text-formula",
+    "command": "pull",
+    "seeds": [
+      "p.a"
+    ],
+    "refused": "p.a is not an entry or a prefix in this record. Run `open` to see what it holds."
+  },
+  {
+    "case": "text-formula",
+    "command": "pull",
+    "seeds": [
+      "unknown"
+    ],
+    "refused": "unknown is not an entry or a prefix in this record. Run `open` to see what it holds."
+  },
+  {
+    "case": "text-formula",
+    "command": "pull",
+    "seeds": [],
+    "code": 0,
+    "text": "\naffects <entry> shows what a change reaches\n"
+  },
+  {
+    "case": "text-formula",
+    "command": "affects",
+    "seeds": [
+      "p"
+    ],
+    "code": 0,
+    "text": "# p -> 2 entries: p.backup, p.load\nd.work\n    via p.load -> evaluate the predicate against p.load\n    predicate: p.load > 80\n\n1 judgments reached\n"
+  },
+  {
+    "case": "text-formula",
+    "command": "affects",
+    "seeds": [
+      "d"
+    ],
+    "code": 0,
+    "text": "# d -> 1 entries: d.work\nnothing rests on that\n"
+  },
+  {
+    "case": "text-formula",
+    "command": "affects",
+    "seeds": [
+      "p.a"
+    ],
+    "refused": "p.a is not an entry or a prefix in this record. Run `open` to see what it holds."
+  },
+  {
+    "case": "text-formula",
+    "command": "affects",
+    "seeds": [
+      "unknown"
+    ],
+    "refused": "unknown is not an entry or a prefix in this record. Run `open` to see what it holds."
+  },
+  {
+    "case": "text-formula",
+    "command": "affects",
+    "seeds": [],
+    "code": 0,
+    "text": "nothing rests on that\n"
+  },
+  {
+    "case": "no-reading",
+    "command": "pull",
+    "seeds": [
+      "p"
+    ],
+    "code": 0,
+    "text": "p.backup:  (Backup system)\np.load: 61 <- s.note\n+ d.work: Keep the current format\n    holds\n    wrong_if: p.load > 80\n    moved since review: p.load 44 -> 61 - within wrong_if\n\naffects <entry> shows what a change reaches\n"
+  },
+  {
+    "case": "no-reading",
+    "command": "pull",
+    "seeds": [
+      "d"
+    ],
+    "code": 0,
+    "text": "p.backup:  (Backup system)\np.load: 61 <- s.note\n+ d.work: Keep the current format\n    holds\n    wrong_if: p.load > 80\n    moved since review: p.load 44 -> 61 - within wrong_if\n\naffects <entry> shows what a change reaches\n"
+  },
+  {
+    "case": "no-reading",
+    "command": "pull",
+    "seeds": [
+      "p.a"
+    ],
+    "refused": "p.a is not an entry or a prefix in this record. Run `open` to see what it holds."
+  },
+  {
+    "case": "no-reading",
+    "command": "pull",
+    "seeds": [
+      "unknown"
+    ],
+    "refused": "unknown is not an entry or a prefix in this record. Run `open` to see what it holds."
+  },
+  {
+    "case": "no-reading",
+    "command": "pull",
+    "seeds": [],
+    "code": 0,
+    "text": "\naffects <entry> shows what a change reaches\n"
+  },
+  {
+    "case": "no-reading",
+    "command": "affects",
+    "seeds": [
+      "p"
+    ],
+    "code": 0,
+    "text": "# p -> 2 entries: p.backup, p.load\nd.work\n    via p.load -> evaluate the predicate against p.load\n    predicate: p.load > 80\n\n1 judgments reached\n"
+  },
+  {
+    "case": "no-reading",
+    "command": "affects",
+    "seeds": [
+      "d"
+    ],
+    "code": 0,
+    "text": "# d -> 1 entries: d.work\nnothing rests on that\n"
+  },
+  {
+    "case": "no-reading",
+    "command": "affects",
+    "seeds": [
+      "p.a"
+    ],
+    "refused": "p.a is not an entry or a prefix in this record. Run `open` to see what it holds."
+  },
+  {
+    "case": "no-reading",
+    "command": "affects",
+    "seeds": [
+      "unknown"
+    ],
+    "refused": "unknown is not an entry or a prefix in this record. Run `open` to see what it holds."
+  },
+  {
+    "case": "no-reading",
+    "command": "affects",
+    "seeds": [],
+    "code": 0,
+    "text": "nothing rests on that\n"
+  },
+  {
+    "case": "bad-predicate-bool",
+    "command": "pull",
+    "seeds": [
+      "p"
+    ],
+    "code": 0,
+    "text": "p.backup: True\np.load: 61 <- s.note\n+ d.work: Keep the current format\n    holds\n    moved since review: p.load 44 -> 61\n\naffects <entry> shows what a change reaches\n"
+  },
+  {
+    "case": "bad-predicate-bool",
+    "command": "pull",
+    "seeds": [
+      "d"
+    ],
+    "code": 0,
+    "text": "p.backup: True\np.load: 61 <- s.note\n+ d.work: Keep the current format\n    holds\n    moved since review: p.load 44 -> 61\n\naffects <entry> shows what a change reaches\n"
+  },
+  {
+    "case": "bad-predicate-bool",
+    "command": "pull",
+    "seeds": [
+      "p.a"
+    ],
+    "refused": "p.a is not an entry or a prefix in this record. Run `open` to see what it holds."
+  },
+  {
+    "case": "bad-predicate-bool",
+    "command": "pull",
+    "seeds": [
+      "unknown"
+    ],
+    "refused": "unknown is not an entry or a prefix in this record. Run `open` to see what it holds."
+  },
+  {
+    "case": "bad-predicate-bool",
+    "command": "pull",
+    "seeds": [],
+    "code": 0,
+    "text": "\naffects <entry> shows what a change reaches\n"
+  },
+  {
+    "case": "bad-predicate-bool",
+    "command": "affects",
+    "seeds": [
+      "p"
+    ],
+    "code": 0,
+    "text": "# p -> 2 entries: p.backup, p.load\nd.work\n    via p.load -> flagged only\n\n1 judgments reached\n"
+  },
+  {
+    "case": "bad-predicate-bool",
+    "command": "affects",
+    "seeds": [
+      "d"
+    ],
+    "code": 0,
+    "text": "# d -> 1 entries: d.work\nnothing rests on that\n"
+  },
+  {
+    "case": "bad-predicate-bool",
+    "command": "affects",
+    "seeds": [
+      "p.a"
+    ],
+    "refused": "p.a is not an entry or a prefix in this record. Run `open` to see what it holds."
+  },
+  {
+    "case": "bad-predicate-bool",
+    "command": "affects",
+    "seeds": [
+      "unknown"
+    ],
+    "refused": "unknown is not an entry or a prefix in this record. Run `open` to see what it holds."
+  },
+  {
+    "case": "bad-predicate-bool",
+    "command": "affects",
+    "seeds": [],
+    "code": 0,
+    "text": "nothing rests on that\n"
+  },
+  {
+    "case": "bad-predicate-list",
+    "command": "pull",
+    "seeds": [
+      "p"
+    ],
+    "code": 0,
+    "text": "p.backup: True\np.load: 61 <- s.note\n+ d.work: Keep the current format\n    holds\n    wrong_if: ['p.load']\n    moved since review: p.load 44 -> 61\n\naffects <entry> shows what a change reaches\n"
+  },
+  {
+    "case": "bad-predicate-list",
+    "command": "pull",
+    "seeds": [
+      "d"
+    ],
+    "code": 0,
+    "text": "p.backup: True\np.load: 61 <- s.note\n+ d.work: Keep the current format\n    holds\n    wrong_if: ['p.load']\n    moved since review: p.load 44 -> 61\n\naffects <entry> shows what a change reaches\n"
+  },
+  {
+    "case": "bad-predicate-list",
+    "command": "pull",
+    "seeds": [
+      "p.a"
+    ],
+    "refused": "p.a is not an entry or a prefix in this record. Run `open` to see what it holds."
+  },
+  {
+    "case": "bad-predicate-list",
+    "command": "pull",
+    "seeds": [
+      "unknown"
+    ],
+    "refused": "unknown is not an entry or a prefix in this record. Run `open` to see what it holds."
+  },
+  {
+    "case": "bad-predicate-list",
+    "command": "pull",
+    "seeds": [],
+    "code": 0,
+    "text": "\naffects <entry> shows what a change reaches\n"
+  },
+  {
+    "case": "bad-predicate-list",
+    "command": "affects",
+    "seeds": [
+      "p"
+    ],
+    "code": 0,
+    "text": "# p -> 2 entries: p.backup, p.load\nd.work\n    via p.load -> evaluate the predicate against p.load\n    predicate: ['p.load']\n\n1 judgments reached\n"
+  },
+  {
+    "case": "bad-predicate-list",
+    "command": "affects",
+    "seeds": [
+      "d"
+    ],
+    "code": 0,
+    "text": "# d -> 1 entries: d.work\nnothing rests on that\n"
+  },
+  {
+    "case": "bad-predicate-list",
+    "command": "affects",
+    "seeds": [
+      "p.a"
+    ],
+    "refused": "p.a is not an entry or a prefix in this record. Run `open` to see what it holds."
+  },
+  {
+    "case": "bad-predicate-list",
+    "command": "affects",
+    "seeds": [
+      "unknown"
+    ],
+    "refused": "unknown is not an entry or a prefix in this record. Run `open` to see what it holds."
+  },
+  {
+    "case": "bad-predicate-list",
+    "command": "affects",
+    "seeds": [],
+    "code": 0,
+    "text": "nothing rests on that\n"
+  },
+  {
+    "case": "empty-predicate",
+    "command": "pull",
+    "seeds": [
+      "p"
+    ],
+    "code": 0,
+    "text": "p.backup: True\np.load: 61 <- s.note\n+ d.work: Keep the current format\n    holds\n    moved since review: p.load 44 -> 61\n\naffects <entry> shows what a change reaches\n"
+  },
+  {
+    "case": "empty-predicate",
+    "command": "pull",
+    "seeds": [
+      "d"
+    ],
+    "code": 0,
+    "text": "p.backup: True\np.load: 61 <- s.note\n+ d.work: Keep the current format\n    holds\n    moved since review: p.load 44 -> 61\n\naffects <entry> shows what a change reaches\n"
+  },
+  {
+    "case": "empty-predicate",
+    "command": "pull",
+    "seeds": [
+      "p.a"
+    ],
+    "refused": "p.a is not an entry or a prefix in this record. Run `open` to see what it holds."
+  },
+  {
+    "case": "empty-predicate",
+    "command": "pull",
+    "seeds": [
+      "unknown"
+    ],
+    "refused": "unknown is not an entry or a prefix in this record. Run `open` to see what it holds."
+  },
+  {
+    "case": "empty-predicate",
+    "command": "pull",
+    "seeds": [],
+    "code": 0,
+    "text": "\naffects <entry> shows what a change reaches\n"
+  },
+  {
+    "case": "empty-predicate",
+    "command": "affects",
+    "seeds": [
+      "p"
+    ],
+    "code": 0,
+    "text": "# p -> 2 entries: p.backup, p.load\nd.work\n    via p.load -> flagged only\n\n1 judgments reached\n"
+  },
+  {
+    "case": "empty-predicate",
+    "command": "affects",
+    "seeds": [
+      "d"
+    ],
+    "code": 0,
+    "text": "# d -> 1 entries: d.work\nnothing rests on that\n"
+  },
+  {
+    "case": "empty-predicate",
+    "command": "affects",
+    "seeds": [
+      "p.a"
+    ],
+    "refused": "p.a is not an entry or a prefix in this record. Run `open` to see what it holds."
+  },
+  {
+    "case": "empty-predicate",
+    "command": "affects",
+    "seeds": [
+      "unknown"
+    ],
+    "refused": "unknown is not an entry or a prefix in this record. Run `open` to see what it holds."
+  },
+  {
+    "case": "empty-predicate",
+    "command": "affects",
+    "seeds": [],
+    "code": 0,
+    "text": "nothing rests on that\n"
+  },
+  {
+    "case": "duplicate-deps",
+    "command": "pull",
+    "seeds": [
+      "p"
+    ],
+    "code": 0,
+    "text": "p.backup: True\np.load: 61 <- s.note\n+ d.work: Keep the current format\n    holds\n    wrong_if: p.load > 80\n    moved since review: p.load 44 -> 61 - within wrong_if\n\naffects <entry> shows what a change reaches\n"
+  },
+  {
+    "case": "duplicate-deps",
+    "command": "pull",
+    "seeds": [
+      "d"
+    ],
+    "code": 0,
+    "text": "p.backup: True\np.load: 61 <- s.note\n+ d.work: Keep the current format\n    holds\n    wrong_if: p.load > 80\n    moved since review: p.load 44 -> 61 - within wrong_if\n\naffects <entry> shows what a change reaches\n"
+  },
+  {
+    "case": "duplicate-deps",
+    "command": "pull",
+    "seeds": [
+      "p.a"
+    ],
+    "refused": "p.a is not an entry or a prefix in this record. Run `open` to see what it holds."
+  },
+  {
+    "case": "duplicate-deps",
+    "command": "pull",
+    "seeds": [
+      "unknown"
+    ],
+    "refused": "unknown is not an entry or a prefix in this record. Run `open` to see what it holds."
+  },
+  {
+    "case": "duplicate-deps",
+    "command": "pull",
+    "seeds": [],
+    "code": 0,
+    "text": "\naffects <entry> shows what a change reaches\n"
+  },
+  {
+    "case": "duplicate-deps",
+    "command": "affects",
+    "seeds": [
+      "p"
+    ],
+    "code": 0,
+    "text": "# p -> 2 entries: p.backup, p.load\nd.work\n    via p.load -> evaluate the predicate against p.load, p.load\n    predicate: p.load > 80\n\n1 judgments reached\n"
+  },
+  {
+    "case": "duplicate-deps",
+    "command": "affects",
+    "seeds": [
+      "d"
+    ],
+    "code": 0,
+    "text": "# d -> 1 entries: d.work\nnothing rests on that\n"
+  },
+  {
+    "case": "duplicate-deps",
+    "command": "affects",
+    "seeds": [
+      "p.a"
+    ],
+    "refused": "p.a is not an entry or a prefix in this record. Run `open` to see what it holds."
+  },
+  {
+    "case": "duplicate-deps",
+    "command": "affects",
+    "seeds": [
+      "unknown"
+    ],
+    "refused": "unknown is not an entry or a prefix in this record. Run `open` to see what it holds."
+  },
+  {
+    "case": "duplicate-deps",
+    "command": "affects",
+    "seeds": [],
+    "code": 0,
+    "text": "nothing rests on that\n"
+  },
+  {
+    "case": "metadata",
+    "command": "pull",
+    "seeds": [
+      "p"
+    ],
+    "code": 0,
+    "text": "p.backup: True\np.load: 61 <- s.note\n+ d.work: Keep the current format\n    broken: rests on prefixes, which is not an entry\n    wrong_if: p.load > 80\n    moved since review: p.load 44 -> 61 - within wrong_if\n\naffects <entry> shows what a change reaches\n"
+  },
+  {
+    "case": "metadata",
+    "command": "pull",
+    "seeds": [
+      "d"
+    ],
+    "code": 0,
+    "text": "p.backup: True\np.load: 61 <- s.note\n+ d.work: Keep the current format\n    broken: rests on prefixes, which is not an entry\n    wrong_if: p.load > 80\n    moved since review: p.load 44 -> 61 - within wrong_if\n\naffects <entry> shows what a change reaches\n"
+  },
+  {
+    "case": "metadata",
+    "command": "pull",
+    "seeds": [
+      "p.a"
+    ],
+    "refused": "p.a is not an entry or a prefix in this record. Run `open` to see what it holds."
+  },
+  {
+    "case": "metadata",
+    "command": "pull",
+    "seeds": [
+      "unknown"
+    ],
+    "refused": "unknown is not an entry or a prefix in this record. Run `open` to see what it holds."
+  },
+  {
+    "case": "metadata",
+    "command": "pull",
+    "seeds": [],
+    "code": 0,
+    "text": "\naffects <entry> shows what a change reaches\n"
+  },
+  {
+    "case": "metadata",
+    "command": "affects",
+    "seeds": [
+      "p"
+    ],
+    "code": 0,
+    "text": "# p -> 2 entries: p.backup, p.load\nd.work\n    via p.load -> evaluate the predicate against p.load\n    predicate: p.load > 80\n\n1 judgments reached\n"
+  },
+  {
+    "case": "metadata",
+    "command": "affects",
+    "seeds": [
+      "d"
+    ],
+    "code": 0,
+    "text": "# d -> 1 entries: d.work\nnothing rests on that\n"
+  },
+  {
+    "case": "metadata",
+    "command": "affects",
+    "seeds": [
+      "p.a"
+    ],
+    "refused": "p.a is not an entry or a prefix in this record. Run `open` to see what it holds."
+  },
+  {
+    "case": "metadata",
+    "command": "affects",
+    "seeds": [
+      "unknown"
+    ],
+    "refused": "unknown is not an entry or a prefix in this record. Run `open` to see what it holds."
+  },
+  {
+    "case": "metadata",
+    "command": "affects",
+    "seeds": [],
+    "code": 0,
+    "text": "nothing rests on that\n"
+  },
+  {
+    "case": "counter",
+    "command": "pull",
+    "seeds": [
+      "p"
+    ],
+    "code": 0,
+    "text": "p.backup: True\np.load: 61 <- s.note\n+ d.work: Keep the current format\n    holds\n    wrong_if: p.load > 80\n    moved since review: graph.entries 0 -> 3\n    moved since review: p.load 44 -> 61 - within wrong_if\n\naffects <entry> shows what a change reaches\n"
+  },
+  {
+    "case": "counter",
+    "command": "pull",
+    "seeds": [
+      "d"
+    ],
+    "code": 0,
+    "text": "graph.entries: 3 (entries the record holds) <- counted from the record each time it is read\np.backup: True\np.load: 61 <- s.note\n+ d.work: Keep the current format\n    holds\n    wrong_if: p.load > 80\n    moved since review: graph.entries 0 -> 3\n    moved since review: p.load 44 -> 61 - within wrong_if\n\naffects <entry> shows what a change reaches\n"
+  },
+  {
+    "case": "counter",
+    "command": "pull",
+    "seeds": [
+      "p.a"
+    ],
+    "refused": "p.a is not an entry or a prefix in this record. Run `open` to see what it holds."
+  },
+  {
+    "case": "counter",
+    "command": "pull",
+    "seeds": [
+      "unknown"
+    ],
+    "refused": "unknown is not an entry or a prefix in this record. Run `open` to see what it holds."
+  },
+  {
+    "case": "counter",
+    "command": "pull",
+    "seeds": [],
+    "code": 0,
+    "text": "\naffects <entry> shows what a change reaches\n"
+  },
+  {
+    "case": "counter",
+    "command": "affects",
+    "seeds": [
+      "p"
+    ],
+    "code": 0,
+    "text": "# p -> 2 entries: p.backup, p.load\nd.work\n    via p.load -> evaluate the predicate against p.load\n    predicate: p.load > 80\n\n1 judgments reached\n"
+  },
+  {
+    "case": "counter",
+    "command": "affects",
+    "seeds": [
+      "d"
+    ],
+    "code": 0,
+    "text": "# d -> 1 entries: d.work\nnothing rests on that\n"
+  },
+  {
+    "case": "counter",
+    "command": "affects",
+    "seeds": [
+      "p.a"
+    ],
+    "refused": "p.a is not an entry or a prefix in this record. Run `open` to see what it holds."
+  },
+  {
+    "case": "counter",
+    "command": "affects",
+    "seeds": [
+      "unknown"
+    ],
+    "refused": "unknown is not an entry or a prefix in this record. Run `open` to see what it holds."
+  },
+  {
+    "case": "counter",
+    "command": "affects",
+    "seeds": [],
+    "code": 0,
+    "text": "nothing rests on that\n"
+  },
+  {
+    "case": "custom",
+    "command": "pull",
+    "seeds": [
+      "p"
+    ],
+    "code": 0,
+    "text": "p.backup: True\np.load: 61 <- s.note\n+ d.work: Keep the current format\n    holds\n    wrong_if: p.load > 80\n    moved since review: p.load 44 -> 61 - within wrong_if\n\naffects <entry> shows what a change reaches\n"
+  },
+  {
+    "case": "custom",
+    "command": "pull",
+    "seeds": [
+      "d"
+    ],
+    "code": 0,
+    "text": "p.backup: True\np.load: 61 <- s.note\n+ d.work: Keep the current format\n    holds\n    wrong_if: p.load > 80\n    moved since review: p.load 44 -> 61 - within wrong_if\n\naffects <entry> shows what a change reaches\n"
+  },
+  {
+    "case": "custom",
+    "command": "pull",
+    "seeds": [
+      "p.a"
+    ],
+    "refused": "p.a is not an entry or a prefix in this record. Run `open` to see what it holds."
+  },
+  {
+    "case": "custom",
+    "command": "pull",
+    "seeds": [
+      "unknown"
+    ],
+    "refused": "unknown is not an entry or a prefix in this record. Run `open` to see what it holds."
+  },
+  {
+    "case": "custom",
+    "command": "pull",
+    "seeds": [],
+    "code": 0,
+    "text": "\naffects <entry> shows what a change reaches\n"
+  },
+  {
+    "case": "custom",
+    "command": "affects",
+    "seeds": [
+      "p"
+    ],
+    "code": 0,
+    "text": "# p -> 2 entries: p.backup, p.load\nd.work\n    via p.load -> evaluate the predicate against p.load\n    predicate: p.load > 80\n\n1 judgments reached\n"
+  },
+  {
+    "case": "custom",
+    "command": "affects",
+    "seeds": [
+      "d"
+    ],
+    "code": 0,
+    "text": "# d -> 1 entries: d.work\nnothing rests on that\n"
+  },
+  {
+    "case": "custom",
+    "command": "affects",
+    "seeds": [
+      "p.a"
+    ],
+    "refused": "p.a is not an entry or a prefix in this record. Run `open` to see what it holds."
+  },
+  {
+    "case": "custom",
+    "command": "affects",
+    "seeds": [
+      "unknown"
+    ],
+    "refused": "unknown is not an entry or a prefix in this record. Run `open` to see what it holds."
+  },
+  {
+    "case": "custom",
+    "command": "affects",
+    "seeds": [],
+    "code": 0,
+    "text": "nothing rests on that\n"
+  },
+  {
+    "case": "computed",
+    "command": "pull",
+    "seeds": [
+      "p"
+    ],
+    "code": 0,
+    "text": "p.backup: True\np.load: 61 <- s.note\np.total: 61 = p.load + 0\n+ d.work: Keep the current format\n    holds\n    wrong_if: p.total > 80\n\naffects <entry> shows what a change reaches\n"
+  },
+  {
+    "case": "computed",
+    "command": "pull",
+    "seeds": [
+      "d"
+    ],
+    "code": 0,
+    "text": "p.total: 61 = p.load + 0\n+ d.work: Keep the current format\n    holds\n    wrong_if: p.total > 80\n\naffects <entry> shows what a change reaches\n"
+  },
+  {
+    "case": "computed",
+    "command": "pull",
+    "seeds": [
+      "p.a"
+    ],
+    "refused": "p.a is not an entry or a prefix in this record. Run `open` to see what it holds."
+  },
+  {
+    "case": "computed",
+    "command": "pull",
+    "seeds": [
+      "unknown"
+    ],
+    "refused": "unknown is not an entry or a prefix in this record. Run `open` to see what it holds."
+  },
+  {
+    "case": "computed",
+    "command": "pull",
+    "seeds": [],
+    "code": 0,
+    "text": "\naffects <entry> shows what a change reaches\n"
+  },
+  {
+    "case": "computed",
+    "command": "affects",
+    "seeds": [
+      "p"
+    ],
+    "code": 0,
+    "text": "# p -> 3 entries: p.backup, p.load, p.total\nd.work\n    via p.total -> evaluate the predicate against p.total\n    predicate: p.total > 80\n\n1 judgments reached\n"
+  },
+  {
+    "case": "computed",
+    "command": "affects",
+    "seeds": [
+      "d"
+    ],
+    "code": 0,
+    "text": "# d -> 1 entries: d.work\nnothing rests on that\n"
+  },
+  {
+    "case": "computed",
+    "command": "affects",
+    "seeds": [
+      "p.a"
+    ],
+    "refused": "p.a is not an entry or a prefix in this record. Run `open` to see what it holds."
+  },
+  {
+    "case": "computed",
+    "command": "affects",
+    "seeds": [
+      "unknown"
+    ],
+    "refused": "unknown is not an entry or a prefix in this record. Run `open` to see what it holds."
+  },
+  {
+    "case": "computed",
+    "command": "affects",
+    "seeds": [],
+    "code": 0,
+    "text": "nothing rests on that\n"
+  },
+  {
+    "case": "formula-change",
+    "command": "pull",
+    "seeds": [
+      "p"
+    ],
+    "code": 0,
+    "text": "p.backup: True\np.load: 61 <- s.note\np.total: 61 = p.load + 0\n+ d.work: Keep the current format\n    holds\n    wrong_if: p.total > 80\n    moved since review: p.total 61 -> 61\n\naffects <entry> shows what a change reaches\n"
+  },
+  {
+    "case": "formula-change",
+    "command": "pull",
+    "seeds": [
+      "d"
+    ],
+    "code": 0,
+    "text": "p.total: 61 = p.load + 0\n+ d.work: Keep the current format\n    holds\n    wrong_if: p.total > 80\n    moved since review: p.total 61 -> 61\n\naffects <entry> shows what a change reaches\n"
+  },
+  {
+    "case": "formula-change",
+    "command": "pull",
+    "seeds": [
+      "p.a"
+    ],
+    "refused": "p.a is not an entry or a prefix in this record. Run `open` to see what it holds."
+  },
+  {
+    "case": "formula-change",
+    "command": "pull",
+    "seeds": [
+      "unknown"
+    ],
+    "refused": "unknown is not an entry or a prefix in this record. Run `open` to see what it holds."
+  },
+  {
+    "case": "formula-change",
+    "command": "pull",
+    "seeds": [],
+    "code": 0,
+    "text": "\naffects <entry> shows what a change reaches\n"
+  },
+  {
+    "case": "formula-change",
+    "command": "affects",
+    "seeds": [
+      "p"
+    ],
+    "code": 0,
+    "text": "# p -> 3 entries: p.backup, p.load, p.total\nd.work\n    via p.total -> evaluate the predicate against p.total\n    predicate: p.total > 80\n\n1 judgments reached\n"
+  },
+  {
+    "case": "formula-change",
+    "command": "affects",
+    "seeds": [
+      "d"
+    ],
+    "code": 0,
+    "text": "# d -> 1 entries: d.work\nnothing rests on that\n"
+  },
+  {
+    "case": "formula-change",
+    "command": "affects",
+    "seeds": [
+      "p.a"
+    ],
+    "refused": "p.a is not an entry or a prefix in this record. Run `open` to see what it holds."
+  },
+  {
+    "case": "formula-change",
+    "command": "affects",
+    "seeds": [
+      "unknown"
+    ],
+    "refused": "unknown is not an entry or a prefix in this record. Run `open` to see what it holds."
+  },
+  {
+    "case": "formula-change",
+    "command": "affects",
+    "seeds": [],
+    "code": 0,
+    "text": "nothing rests on that\n"
+  },
+  {
+    "case": "formula-only",
+    "command": "pull",
+    "seeds": [
+      "p"
+    ],
+    "code": 0,
+    "text": "p.backup: True\np.load: 61 <- s.note\np.total: 61 = p.load + 0\n+ d.work: Keep the current format\n    holds\n    wrong_if: p.total > 80\n\naffects <entry> shows what a change reaches\n"
+  },
+  {
+    "case": "formula-only",
+    "command": "pull",
+    "seeds": [
+      "d"
+    ],
+    "code": 0,
+    "text": "p.total: 61 = p.load + 0\n+ d.work: Keep the current format\n    holds\n    wrong_if: p.total > 80\n\naffects <entry> shows what a change reaches\n"
+  },
+  {
+    "case": "formula-only",
+    "command": "pull",
+    "seeds": [
+      "p.a"
+    ],
+    "refused": "p.a is not an entry or a prefix in this record. Run `open` to see what it holds."
+  },
+  {
+    "case": "formula-only",
+    "command": "pull",
+    "seeds": [
+      "unknown"
+    ],
+    "refused": "unknown is not an entry or a prefix in this record. Run `open` to see what it holds."
+  },
+  {
+    "case": "formula-only",
+    "command": "pull",
+    "seeds": [],
+    "code": 0,
+    "text": "\naffects <entry> shows what a change reaches\n"
+  },
+  {
+    "case": "formula-only",
+    "command": "affects",
+    "seeds": [
+      "p"
+    ],
+    "code": 0,
+    "text": "# p -> 3 entries: p.backup, p.load, p.total\nd.work\n    via p.total -> evaluate the predicate against p.total\n    predicate: p.total > 80\n\n1 judgments reached\n"
+  },
+  {
+    "case": "formula-only",
+    "command": "affects",
+    "seeds": [
+      "d"
+    ],
+    "code": 0,
+    "text": "# d -> 1 entries: d.work\nnothing rests on that\n"
+  },
+  {
+    "case": "formula-only",
+    "command": "affects",
+    "seeds": [
+      "p.a"
+    ],
+    "refused": "p.a is not an entry or a prefix in this record. Run `open` to see what it holds."
+  },
+  {
+    "case": "formula-only",
+    "command": "affects",
+    "seeds": [
+      "unknown"
+    ],
+    "refused": "unknown is not an entry or a prefix in this record. Run `open` to see what it holds."
+  },
+  {
+    "case": "formula-only",
+    "command": "affects",
+    "seeds": [],
+    "code": 0,
+    "text": "nothing rests on that\n"
+  },
+  {
+    "case": "formula-only-change",
+    "command": "pull",
+    "seeds": [
+      "p"
+    ],
+    "code": 0,
+    "text": "p.backup: True\np.load: 61 <- s.note\np.total: 61 = p.load + 0\n+ d.work: Keep the current format\n    holds\n    wrong_if: p.total > 80\n    moved since review: p.total p.load * 1 -> p.load + 0\n\naffects <entry> shows what a change reaches\n"
+  },
+  {
+    "case": "formula-only-change",
+    "command": "pull",
+    "seeds": [
+      "d"
+    ],
+    "code": 0,
+    "text": "p.total: 61 = p.load + 0\n+ d.work: Keep the current format\n    holds\n    wrong_if: p.total > 80\n    moved since review: p.total p.load * 1 -> p.load + 0\n\naffects <entry> shows what a change reaches\n"
+  },
+  {
+    "case": "formula-only-change",
+    "command": "pull",
+    "seeds": [
+      "p.a"
+    ],
+    "refused": "p.a is not an entry or a prefix in this record. Run `open` to see what it holds."
+  },
+  {
+    "case": "formula-only-change",
+    "command": "pull",
+    "seeds": [
+      "unknown"
+    ],
+    "refused": "unknown is not an entry or a prefix in this record. Run `open` to see what it holds."
+  },
+  {
+    "case": "formula-only-change",
+    "command": "pull",
+    "seeds": [],
+    "code": 0,
+    "text": "\naffects <entry> shows what a change reaches\n"
+  },
+  {
+    "case": "formula-only-change",
+    "command": "affects",
+    "seeds": [
+      "p"
+    ],
+    "code": 0,
+    "text": "# p -> 3 entries: p.backup, p.load, p.total\nd.work\n    via p.total -> evaluate the predicate against p.total\n    predicate: p.total > 80\n\n1 judgments reached\n"
+  },
+  {
+    "case": "formula-only-change",
+    "command": "affects",
+    "seeds": [
+      "d"
+    ],
+    "code": 0,
+    "text": "# d -> 1 entries: d.work\nnothing rests on that\n"
+  },
+  {
+    "case": "formula-only-change",
+    "command": "affects",
+    "seeds": [
+      "p.a"
+    ],
+    "refused": "p.a is not an entry or a prefix in this record. Run `open` to see what it holds."
+  },
+  {
+    "case": "formula-only-change",
+    "command": "affects",
+    "seeds": [
+      "unknown"
+    ],
+    "refused": "unknown is not an entry or a prefix in this record. Run `open` to see what it holds."
+  },
+  {
+    "case": "formula-only-change",
+    "command": "affects",
+    "seeds": [],
+    "code": 0,
+    "text": "nothing rests on that\n"
+  },
+  {
+    "case": "computed-null",
+    "command": "pull",
+    "seeds": [
+      "p"
+    ],
+    "code": 0,
+    "text": "p.backup: True\np.load: 61 <- s.note\np.total: 61 = p.load + 0\n+ d.work: Keep the current format\n    holds\n    wrong_if: p.total > 80\n\naffects <entry> shows what a change reaches\n"
+  },
+  {
+    "case": "computed-null",
+    "command": "pull",
+    "seeds": [
+      "d"
+    ],
+    "code": 0,
+    "text": "p.total: 61 = p.load + 0\n+ d.work: Keep the current format\n    holds\n    wrong_if: p.total > 80\n\naffects <entry> shows what a change reaches\n"
+  },
+  {
+    "case": "computed-null",
+    "command": "pull",
+    "seeds": [
+      "p.a"
+    ],
+    "refused": "p.a is not an entry or a prefix in this record. Run `open` to see what it holds."
+  },
+  {
+    "case": "computed-null",
+    "command": "pull",
+    "seeds": [
+      "unknown"
+    ],
+    "refused": "unknown is not an entry or a prefix in this record. Run `open` to see what it holds."
+  },
+  {
+    "case": "computed-null",
+    "command": "pull",
+    "seeds": [],
+    "code": 0,
+    "text": "\naffects <entry> shows what a change reaches\n"
+  },
+  {
+    "case": "computed-null",
+    "command": "affects",
+    "seeds": [
+      "p"
+    ],
+    "code": 0,
+    "text": "# p -> 3 entries: p.backup, p.load, p.total\nd.work\n    via p.total -> evaluate the predicate against p.total\n    predicate: p.total > 80\n\n1 judgments reached\n"
+  },
+  {
+    "case": "computed-null",
+    "command": "affects",
+    "seeds": [
+      "d"
+    ],
+    "code": 0,
+    "text": "# d -> 1 entries: d.work\nnothing rests on that\n"
+  },
+  {
+    "case": "computed-null",
+    "command": "affects",
+    "seeds": [
+      "p.a"
+    ],
+    "refused": "p.a is not an entry or a prefix in this record. Run `open` to see what it holds."
+  },
+  {
+    "case": "computed-null",
+    "command": "affects",
+    "seeds": [
+      "unknown"
+    ],
+    "refused": "unknown is not an entry or a prefix in this record. Run `open` to see what it holds."
+  },
+  {
+    "case": "computed-null",
+    "command": "affects",
+    "seeds": [],
+    "code": 0,
+    "text": "nothing rests on that\n"
+  },
+  {
+    "case": "computed-extra",
+    "command": "pull",
+    "seeds": [
+      "p"
+    ],
+    "code": 0,
+    "text": "p.backup: True\np.load: 61 <- s.note\np.total: 61 = p.load + 0\n+ d.work: Keep the current format\n    holds\n    wrong_if: p.total > 80\n\naffects <entry> shows what a change reaches\n"
+  },
+  {
+    "case": "computed-extra",
+    "command": "pull",
+    "seeds": [
+      "d"
+    ],
+    "code": 0,
+    "text": "p.total: 61 = p.load + 0\n+ d.work: Keep the current format\n    holds\n    wrong_if: p.total > 80\n\naffects <entry> shows what a change reaches\n"
+  },
+  {
+    "case": "computed-extra",
+    "command": "pull",
+    "seeds": [
+      "p.a"
+    ],
+    "refused": "p.a is not an entry or a prefix in this record. Run `open` to see what it holds."
+  },
+  {
+    "case": "computed-extra",
+    "command": "pull",
+    "seeds": [
+      "unknown"
+    ],
+    "refused": "unknown is not an entry or a prefix in this record. Run `open` to see what it holds."
+  },
+  {
+    "case": "computed-extra",
+    "command": "pull",
+    "seeds": [],
+    "code": 0,
+    "text": "\naffects <entry> shows what a change reaches\n"
+  },
+  {
+    "case": "computed-extra",
+    "command": "affects",
+    "seeds": [
+      "p"
+    ],
+    "code": 0,
+    "text": "# p -> 3 entries: p.backup, p.load, p.total\nd.work\n    via p.total -> evaluate the predicate against p.total\n    predicate: p.total > 80\n\n1 judgments reached\n"
+  },
+  {
+    "case": "computed-extra",
+    "command": "affects",
+    "seeds": [
+      "d"
+    ],
+    "code": 0,
+    "text": "# d -> 1 entries: d.work\nnothing rests on that\n"
+  },
+  {
+    "case": "computed-extra",
+    "command": "affects",
+    "seeds": [
+      "p.a"
+    ],
+    "refused": "p.a is not an entry or a prefix in this record. Run `open` to see what it holds."
+  },
+  {
+    "case": "computed-extra",
+    "command": "affects",
+    "seeds": [
+      "unknown"
+    ],
+    "refused": "unknown is not an entry or a prefix in this record. Run `open` to see what it holds."
+  },
+  {
+    "case": "computed-extra",
+    "command": "affects",
+    "seeds": [],
+    "code": 0,
+    "text": "nothing rests on that\n"
+  },
+  {
+    "case": "bad-formula",
+    "command": "pull",
+    "seeds": [
+      "p"
+    ],
+    "code": 0,
+    "text": "p.backup: True\np.load: 61 <- s.note\np.total: = p.missing + 1\n+ d.work: Keep the current format\n    holds\n    wrong_if: p.total > 80\n    moved since review: p.total 61 -> None\n\naffects <entry> shows what a change reaches\n"
+  },
+  {
+    "case": "bad-formula",
+    "command": "pull",
+    "seeds": [
+      "d"
+    ],
+    "code": 0,
+    "text": "p.total: = p.missing + 1\n+ d.work: Keep the current format\n    holds\n    wrong_if: p.total > 80\n    moved since review: p.total 61 -> None\n\naffects <entry> shows what a change reaches\n"
+  },
+  {
+    "case": "bad-formula",
+    "command": "pull",
+    "seeds": [
+      "p.a"
+    ],
+    "refused": "p.a is not an entry or a prefix in this record. Run `open` to see what it holds."
+  },
+  {
+    "case": "bad-formula",
+    "command": "pull",
+    "seeds": [
+      "unknown"
+    ],
+    "refused": "unknown is not an entry or a prefix in this record. Run `open` to see what it holds."
+  },
+  {
+    "case": "bad-formula",
+    "command": "pull",
+    "seeds": [],
+    "code": 0,
+    "text": "\naffects <entry> shows what a change reaches\n"
+  },
+  {
+    "case": "bad-formula",
+    "command": "affects",
+    "seeds": [
+      "p"
+    ],
+    "code": 0,
+    "text": "# p -> 3 entries: p.backup, p.load, p.total\nd.work\n    via p.total -> evaluate the predicate against p.total\n    predicate: p.total > 80\n\n1 judgments reached\n"
+  },
+  {
+    "case": "bad-formula",
+    "command": "affects",
+    "seeds": [
+      "d"
+    ],
+    "code": 0,
+    "text": "# d -> 1 entries: d.work\nnothing rests on that\n"
+  },
+  {
+    "case": "bad-formula",
+    "command": "affects",
+    "seeds": [
+      "p.a"
+    ],
+    "refused": "p.a is not an entry or a prefix in this record. Run `open` to see what it holds."
+  },
+  {
+    "case": "bad-formula",
+    "command": "affects",
+    "seeds": [
+      "unknown"
+    ],
+    "refused": "unknown is not an entry or a prefix in this record. Run `open` to see what it holds."
+  },
+  {
+    "case": "bad-formula",
+    "command": "affects",
+    "seeds": [],
+    "code": 0,
+    "text": "nothing rests on that\n"
+  },
+  {
+    "case": "rational",
+    "command": "pull",
+    "seeds": [
+      "p"
+    ],
+    "code": 0,
+    "text": "p.backup: True\np.load: 61 <- s.note\np.total: 61/3 = p.load / 3\n+ d.work: Keep the current format\n    holds\n    wrong_if: p.total > 80\n    moved since review: p.total {'rational': ['61', '3']} -> {'rational': ['61', '3']}\n\naffects <entry> shows what a change reaches\n"
+  },
+  {
+    "case": "rational",
+    "command": "pull",
+    "seeds": [
+      "d"
+    ],
+    "code": 0,
+    "text": "p.total: 61/3 = p.load / 3\n+ d.work: Keep the current format\n    holds\n    wrong_if: p.total > 80\n    moved since review: p.total {'rational': ['61', '3']} -> {'rational': ['61', '3']}\n\naffects <entry> shows what a change reaches\n"
+  },
+  {
+    "case": "rational",
+    "command": "pull",
+    "seeds": [
+      "p.a"
+    ],
+    "refused": "p.a is not an entry or a prefix in this record. Run `open` to see what it holds."
+  },
+  {
+    "case": "rational",
+    "command": "pull",
+    "seeds": [
+      "unknown"
+    ],
+    "refused": "unknown is not an entry or a prefix in this record. Run `open` to see what it holds."
+  },
+  {
+    "case": "rational",
+    "command": "pull",
+    "seeds": [],
+    "code": 0,
+    "text": "\naffects <entry> shows what a change reaches\n"
+  },
+  {
+    "case": "rational",
+    "command": "affects",
+    "seeds": [
+      "p"
+    ],
+    "code": 0,
+    "text": "# p -> 3 entries: p.backup, p.load, p.total\nd.work\n    via p.total -> evaluate the predicate against p.total\n    predicate: p.total > 80\n\n1 judgments reached\n"
+  },
+  {
+    "case": "rational",
+    "command": "affects",
+    "seeds": [
+      "d"
+    ],
+    "code": 0,
+    "text": "# d -> 1 entries: d.work\nnothing rests on that\n"
+  },
+  {
+    "case": "rational",
+    "command": "affects",
+    "seeds": [
+      "p.a"
+    ],
+    "refused": "p.a is not an entry or a prefix in this record. Run `open` to see what it holds."
+  },
+  {
+    "case": "rational",
+    "command": "affects",
+    "seeds": [
+      "unknown"
+    ],
+    "refused": "unknown is not an entry or a prefix in this record. Run `open` to see what it holds."
+  },
+  {
+    "case": "rational",
+    "command": "affects",
+    "seeds": [],
+    "code": 0,
+    "text": "nothing rests on that\n"
+  },
+  {
+    "case": "rational-old",
+    "command": "pull",
+    "seeds": [
+      "p"
+    ],
+    "code": 0,
+    "text": "p.backup: True\np.load: 61 <- s.note\np.total: 61/3 = p.load / 3\n+ d.work: Keep the current format\n    holds\n    wrong_if: p.total > 80\n    moved since review: p.total {'rational': [61, 3]} -> {'rational': ['61', '3']}\n\naffects <entry> shows what a change reaches\n"
+  },
+  {
+    "case": "rational-old",
+    "command": "pull",
+    "seeds": [
+      "d"
+    ],
+    "code": 0,
+    "text": "p.total: 61/3 = p.load / 3\n+ d.work: Keep the current format\n    holds\n    wrong_if: p.total > 80\n    moved since review: p.total {'rational': [61, 3]} -> {'rational': ['61', '3']}\n\naffects <entry> shows what a change reaches\n"
+  },
+  {
+    "case": "rational-old",
+    "command": "pull",
+    "seeds": [
+      "p.a"
+    ],
+    "refused": "p.a is not an entry or a prefix in this record. Run `open` to see what it holds."
+  },
+  {
+    "case": "rational-old",
+    "command": "pull",
+    "seeds": [
+      "unknown"
+    ],
+    "refused": "unknown is not an entry or a prefix in this record. Run `open` to see what it holds."
+  },
+  {
+    "case": "rational-old",
+    "command": "pull",
+    "seeds": [],
+    "code": 0,
+    "text": "\naffects <entry> shows what a change reaches\n"
+  },
+  {
+    "case": "rational-old",
+    "command": "affects",
+    "seeds": [
+      "p"
+    ],
+    "code": 0,
+    "text": "# p -> 3 entries: p.backup, p.load, p.total\nd.work\n    via p.total -> evaluate the predicate against p.total\n    predicate: p.total > 80\n\n1 judgments reached\n"
+  },
+  {
+    "case": "rational-old",
+    "command": "affects",
+    "seeds": [
+      "d"
+    ],
+    "code": 0,
+    "text": "# d -> 1 entries: d.work\nnothing rests on that\n"
+  },
+  {
+    "case": "rational-old",
+    "command": "affects",
+    "seeds": [
+      "p.a"
+    ],
+    "refused": "p.a is not an entry or a prefix in this record. Run `open` to see what it holds."
+  },
+  {
+    "case": "rational-old",
+    "command": "affects",
+    "seeds": [
+      "unknown"
+    ],
+    "refused": "unknown is not an entry or a prefix in this record. Run `open` to see what it holds."
+  },
+  {
+    "case": "rational-old",
+    "command": "affects",
+    "seeds": [],
+    "code": 0,
+    "text": "nothing rests on that\n"
+  },
+  {
+    "case": "history-list",
+    "command": "pull",
+    "seeds": [
+      "p"
+    ],
+    "code": 0,
+    "text": "p.backup: True\np.load: 61 <- s.note\np.total: 61 = p.load + 0\n+ d.work: Keep the current format\n    holds\n    wrong_if: p.total > 80\n    moved since review: p.total [61] -> 61 - within wrong_if\n\naffects <entry> shows what a change reaches\n"
+  },
+  {
+    "case": "history-list",
+    "command": "pull",
+    "seeds": [
+      "d"
+    ],
+    "code": 0,
+    "text": "p.total: 61 = p.load + 0\n+ d.work: Keep the current format\n    holds\n    wrong_if: p.total > 80\n    moved since review: p.total [61] -> 61 - within wrong_if\n\naffects <entry> shows what a change reaches\n"
+  },
+  {
+    "case": "history-list",
+    "command": "pull",
+    "seeds": [
+      "p.a"
+    ],
+    "refused": "p.a is not an entry or a prefix in this record. Run `open` to see what it holds."
+  },
+  {
+    "case": "history-list",
+    "command": "pull",
+    "seeds": [
+      "unknown"
+    ],
+    "refused": "unknown is not an entry or a prefix in this record. Run `open` to see what it holds."
+  },
+  {
+    "case": "history-list",
+    "command": "pull",
+    "seeds": [],
+    "code": 0,
+    "text": "\naffects <entry> shows what a change reaches\n"
+  },
+  {
+    "case": "history-list",
+    "command": "affects",
+    "seeds": [
+      "p"
+    ],
+    "code": 0,
+    "text": "# p -> 3 entries: p.backup, p.load, p.total\nd.work\n    via p.total -> evaluate the predicate against p.total\n    predicate: p.total > 80\n\n1 judgments reached\n"
+  },
+  {
+    "case": "history-list",
+    "command": "affects",
+    "seeds": [
+      "d"
+    ],
+    "code": 0,
+    "text": "# d -> 1 entries: d.work\nnothing rests on that\n"
+  },
+  {
+    "case": "history-list",
+    "command": "affects",
+    "seeds": [
+      "p.a"
+    ],
+    "refused": "p.a is not an entry or a prefix in this record. Run `open` to see what it holds."
+  },
+  {
+    "case": "history-list",
+    "command": "affects",
+    "seeds": [
+      "unknown"
+    ],
+    "refused": "unknown is not an entry or a prefix in this record. Run `open` to see what it holds."
+  },
+  {
+    "case": "history-list",
+    "command": "affects",
+    "seeds": [],
+    "code": 0,
+    "text": "nothing rests on that\n"
+  },
+  {
+    "case": "agree",
+    "command": "pull",
+    "seeds": [
+      "p"
+    ],
+    "code": 0,
+    "text": "p.backup: True\np.load: 61 <- s.note\n    proposes 61 -> 70, from a\n    proposes 61 -> 70.0, from b\n+ d.work: Keep the current format\n    holds\n    wrong_if: p.load > 80\n    moved since review: p.load 44 -> 61 - within wrong_if\n\naffects <entry> shows what a change reaches\n"
+  },
+  {
+    "case": "agree",
+    "command": "pull",
+    "seeds": [
+      "d"
+    ],
+    "code": 0,
+    "text": "p.backup: True\np.load: 61 <- s.note\n    proposes 61 -> 70, from a\n    proposes 61 -> 70.0, from b\n+ d.work: Keep the current format\n    holds\n    wrong_if: p.load > 80\n    moved since review: p.load 44 -> 61 - within wrong_if\n\naffects <entry> shows what a change reaches\n"
+  },
+  {
+    "case": "agree",
+    "command": "pull",
+    "seeds": [
+      "p.a"
+    ],
+    "refused": "p.a is not an entry or a prefix in this record. Run `open` to see what it holds."
+  },
+  {
+    "case": "agree",
+    "command": "pull",
+    "seeds": [
+      "unknown"
+    ],
+    "refused": "unknown is not an entry or a prefix in this record. Run `open` to see what it holds."
+  },
+  {
+    "case": "agree",
+    "command": "pull",
+    "seeds": [],
+    "code": 0,
+    "text": "\naffects <entry> shows what a change reaches\n"
+  },
+  {
+    "case": "agree",
+    "command": "affects",
+    "seeds": [
+      "p"
+    ],
+    "code": 0,
+    "text": "# p -> 2 entries: p.backup, p.load\nd.work\n    via p.load -> evaluate the predicate against p.load\n    predicate: p.load > 80\n\n1 judgments reached\n"
+  },
+  {
+    "case": "agree",
+    "command": "affects",
+    "seeds": [
+      "d"
+    ],
+    "code": 0,
+    "text": "# d -> 1 entries: d.work\nnothing rests on that\n"
+  },
+  {
+    "case": "agree",
+    "command": "affects",
+    "seeds": [
+      "p.a"
+    ],
+    "refused": "p.a is not an entry or a prefix in this record. Run `open` to see what it holds."
+  },
+  {
+    "case": "agree",
+    "command": "affects",
+    "seeds": [
+      "unknown"
+    ],
+    "refused": "unknown is not an entry or a prefix in this record. Run `open` to see what it holds."
+  },
+  {
+    "case": "agree",
+    "command": "affects",
+    "seeds": [],
+    "code": 0,
+    "text": "nothing rests on that\n"
+  },
+  {
+    "case": "conflict",
+    "command": "pull",
+    "seeds": [
+      "p"
+    ],
+    "code": 0,
+    "text": "p.backup: True\np.load: 61 <- s.note\n    proposes 61 -> 70, from a\n    proposes 61 -> 90, from b\n    CONTESTED: a says 70, b says 90\n+ d.work: Keep the current format\n    holds\n    wrong_if: p.load > 80\n    moved since review: p.load 44 -> 61 - within wrong_if\n\naffects <entry> shows what a change reaches\n"
+  },
+  {
+    "case": "conflict",
+    "command": "pull",
+    "seeds": [
+      "d"
+    ],
+    "code": 0,
+    "text": "p.backup: True\np.load: 61 <- s.note\n    proposes 61 -> 70, from a\n    proposes 61 -> 90, from b\n    CONTESTED: a says 70, b says 90\n+ d.work: Keep the current format\n    holds\n    wrong_if: p.load > 80\n    moved since review: p.load 44 -> 61 - within wrong_if\n\naffects <entry> shows what a change reaches\n"
+  },
+  {
+    "case": "conflict",
+    "command": "pull",
+    "seeds": [
+      "p.a"
+    ],
+    "refused": "p.a is not an entry or a prefix in this record. Run `open` to see what it holds."
+  },
+  {
+    "case": "conflict",
+    "command": "pull",
+    "seeds": [
+      "unknown"
+    ],
+    "refused": "unknown is not an entry or a prefix in this record. Run `open` to see what it holds."
+  },
+  {
+    "case": "conflict",
+    "command": "pull",
+    "seeds": [],
+    "code": 0,
+    "text": "\naffects <entry> shows what a change reaches\n"
+  },
+  {
+    "case": "conflict",
+    "command": "affects",
+    "seeds": [
+      "p"
+    ],
+    "code": 0,
+    "text": "# p -> 2 entries: p.backup, p.load\nd.work\n    via p.load -> evaluate the predicate against p.load\n    predicate: p.load > 80\n\n1 judgments reached\n"
+  },
+  {
+    "case": "conflict",
+    "command": "affects",
+    "seeds": [
+      "d"
+    ],
+    "code": 0,
+    "text": "# d -> 1 entries: d.work\nnothing rests on that\n"
+  },
+  {
+    "case": "conflict",
+    "command": "affects",
+    "seeds": [
+      "p.a"
+    ],
+    "refused": "p.a is not an entry or a prefix in this record. Run `open` to see what it holds."
+  },
+  {
+    "case": "conflict",
+    "command": "affects",
+    "seeds": [
+      "unknown"
+    ],
+    "refused": "unknown is not an entry or a prefix in this record. Run `open` to see what it holds."
+  },
+  {
+    "case": "conflict",
+    "command": "affects",
+    "seeds": [],
+    "code": 0,
+    "text": "nothing rests on that\n"
+  },
+  {
+    "case": "skipped",
+    "command": "pull",
+    "seeds": [
+      "p"
+    ],
+    "code": 0,
+    "text": "! hypothesis b could not be read: unreadable\np.backup: True\np.load: 61 <- s.note\n    proposes 61 -> 70, from a\n+ d.work: Keep the current format\n    holds\n    wrong_if: p.load > 80\n    moved since review: p.load 44 -> 61 - within wrong_if\n\naffects <entry> shows what a change reaches\n"
+  },
+  {
+    "case": "skipped",
+    "command": "pull",
+    "seeds": [
+      "d"
+    ],
+    "code": 0,
+    "text": "! hypothesis b could not be read: unreadable\np.backup: True\np.load: 61 <- s.note\n    proposes 61 -> 70, from a\n+ d.work: Keep the current format\n    holds\n    wrong_if: p.load > 80\n    moved since review: p.load 44 -> 61 - within wrong_if\n\naffects <entry> shows what a change reaches\n"
+  },
+  {
+    "case": "skipped",
+    "command": "pull",
+    "seeds": [
+      "p.a"
+    ],
+    "refused": "p.a is not an entry or a prefix in this record. Run `open` to see what it holds."
+  },
+  {
+    "case": "skipped",
+    "command": "pull",
+    "seeds": [
+      "unknown"
+    ],
+    "refused": "unknown is not an entry or a prefix in this record. Run `open` to see what it holds."
+  },
+  {
+    "case": "skipped",
+    "command": "pull",
+    "seeds": [],
+    "code": 0,
+    "text": "! hypothesis b could not be read: unreadable\n\naffects <entry> shows what a change reaches\n"
+  },
+  {
+    "case": "skipped",
+    "command": "affects",
+    "seeds": [
+      "p"
+    ],
+    "code": 0,
+    "text": "# p -> 2 entries: p.backup, p.load\nd.work\n    via p.load -> evaluate the predicate against p.load\n    predicate: p.load > 80\n\n1 judgments reached\n"
+  },
+  {
+    "case": "skipped",
+    "command": "affects",
+    "seeds": [
+      "d"
+    ],
+    "code": 0,
+    "text": "# d -> 1 entries: d.work\nnothing rests on that\n"
+  },
+  {
+    "case": "skipped",
+    "command": "affects",
+    "seeds": [
+      "p.a"
+    ],
+    "refused": "p.a is not an entry or a prefix in this record. Run `open` to see what it holds."
+  },
+  {
+    "case": "skipped",
+    "command": "affects",
+    "seeds": [
+      "unknown"
+    ],
+    "refused": "unknown is not an entry or a prefix in this record. Run `open` to see what it holds."
+  },
+  {
+    "case": "skipped",
+    "command": "affects",
+    "seeds": [],
+    "code": 0,
+    "text": "nothing rests on that\n"
+  },
+  {
+    "case": "contribution",
+    "command": "pull",
+    "seeds": [
+      "p"
+    ],
+    "code": 0,
+    "text": "p.backup: True\np.load: 61 <- s.note\n    proposes 61 -> 70, from a\n    proposes 61 -> 90, from b\n    CONTESTED: a says 70, b says 90\n+ d.work: Keep the current format\n    holds\n    wrong_if: p.load > 80\n    moved since review: p.load 44 -> 61 - within wrong_if\n\naffects <entry> shows what a change reaches\n"
+  },
+  {
+    "case": "contribution",
+    "command": "pull",
+    "seeds": [
+      "d"
+    ],
+    "code": 0,
+    "text": "p.backup: True\np.load: 61 <- s.note\n    proposes 61 -> 70, from a\n    proposes 61 -> 90, from b\n    CONTESTED: a says 70, b says 90\n+ d.work: Keep the current format\n    holds\n    wrong_if: p.load > 80\n    moved since review: p.load 44 -> 61 - within wrong_if\n\naffects <entry> shows what a change reaches\n"
+  },
+  {
+    "case": "contribution",
+    "command": "pull",
+    "seeds": [
+      "p.a"
+    ],
+    "refused": "p.a is not an entry or a prefix in this record. Run `open` to see what it holds."
+  },
+  {
+    "case": "contribution",
+    "command": "pull",
+    "seeds": [
+      "unknown"
+    ],
+    "refused": "unknown is not an entry or a prefix in this record. Run `open` to see what it holds."
+  },
+  {
+    "case": "contribution",
+    "command": "pull",
+    "seeds": [],
+    "code": 0,
+    "text": "\naffects <entry> shows what a change reaches\n"
+  },
+  {
+    "case": "contribution",
+    "command": "affects",
+    "seeds": [
+      "p"
+    ],
+    "code": 0,
+    "text": "# p -> 2 entries: p.backup, p.load\nd.work\n    via p.load -> evaluate the predicate against p.load\n    predicate: p.load > 80\n\n1 judgments reached\n"
+  },
+  {
+    "case": "contribution",
+    "command": "affects",
+    "seeds": [
+      "d"
+    ],
+    "code": 0,
+    "text": "# d -> 1 entries: d.work\nnothing rests on that\n"
+  },
+  {
+    "case": "contribution",
+    "command": "affects",
+    "seeds": [
+      "p.a"
+    ],
+    "refused": "p.a is not an entry or a prefix in this record. Run `open` to see what it holds."
+  },
+  {
+    "case": "contribution",
+    "command": "affects",
+    "seeds": [
+      "unknown"
+    ],
+    "refused": "unknown is not an entry or a prefix in this record. Run `open` to see what it holds."
+  },
+  {
+    "case": "contribution",
+    "command": "affects",
+    "seeds": [],
+    "code": 0,
+    "text": "nothing rests on that\n"
+  },
+  {
+    "case": "typed-conflict",
+    "command": "pull",
+    "seeds": [
+      "p"
+    ],
+    "code": 0,
+    "text": "CONFLICT p.load: local, remote\np.backup: True\np.load: 61 <- s.note\n    proposes 61 -> 70, from a\n    proposes 61 -> 90, from b\n    CONTESTED: local says 1, remote says True\n+ d.work: Keep the current format\n    holds\n    wrong_if: p.load > 80\n    moved since review: p.load 44 -> 61 - within wrong_if\n\naffects <entry> shows what a change reaches\n"
+  },
+  {
+    "case": "typed-conflict",
+    "command": "pull",
+    "seeds": [
+      "d"
+    ],
+    "code": 0,
+    "text": "CONFLICT p.load: local, remote\np.backup: True\np.load: 61 <- s.note\n    proposes 61 -> 70, from a\n    proposes 61 -> 90, from b\n    CONTESTED: local says 1, remote says True\n+ d.work: Keep the current format\n    holds\n    wrong_if: p.load > 80\n    moved since review: p.load 44 -> 61 - within wrong_if\n\naffects <entry> shows what a change reaches\n"
+  },
+  {
+    "case": "typed-conflict",
+    "command": "pull",
+    "seeds": [
+      "p.a"
+    ],
+    "refused": "p.a is not an entry or a prefix in this record. Run `open` to see what it holds."
+  },
+  {
+    "case": "typed-conflict",
+    "command": "pull",
+    "seeds": [
+      "unknown"
+    ],
+    "refused": "unknown is not an entry or a prefix in this record. Run `open` to see what it holds."
+  },
+  {
+    "case": "typed-conflict",
+    "command": "pull",
+    "seeds": [],
+    "code": 0,
+    "text": "CONFLICT p.load: local, remote\n\naffects <entry> shows what a change reaches\n"
+  },
+  {
+    "case": "typed-conflict",
+    "command": "affects",
+    "seeds": [
+      "p"
+    ],
+    "code": 0,
+    "text": "# p -> 2 entries: p.backup, p.load\nd.work\n    via p.load -> evaluate the predicate against p.load\n    predicate: p.load > 80\n\n1 judgments reached\n"
+  },
+  {
+    "case": "typed-conflict",
+    "command": "affects",
+    "seeds": [
+      "d"
+    ],
+    "code": 0,
+    "text": "# d -> 1 entries: d.work\nnothing rests on that\n"
+  },
+  {
+    "case": "typed-conflict",
+    "command": "affects",
+    "seeds": [
+      "p.a"
+    ],
+    "refused": "p.a is not an entry or a prefix in this record. Run `open` to see what it holds."
+  },
+  {
+    "case": "typed-conflict",
+    "command": "affects",
+    "seeds": [
+      "unknown"
+    ],
+    "refused": "unknown is not an entry or a prefix in this record. Run `open` to see what it holds."
+  },
+  {
+    "case": "typed-conflict",
+    "command": "affects",
+    "seeds": [],
+    "code": 0,
+    "text": "nothing rests on that\n"
+  },
+  {
+    "case": "target-missing",
+    "command": "pull",
+    "seeds": [
+      "p"
+    ],
+    "code": 0,
+    "text": "TARGET UNVERIFIED: not fetched\np.backup: True\np.load: 61 <- s.note\n    proposes 61 -> 70, from a\n    proposes 61 -> 90, from b\n    CONTESTED: a says 70, b says 90\n+ d.work: Keep the current format\n    holds\n    wrong_if: p.load > 80\n    moved since review: p.load 44 -> 61 - within wrong_if\n\naffects <entry> shows what a change reaches\n"
+  },
+  {
+    "case": "target-missing",
+    "command": "pull",
+    "seeds": [
+      "d"
+    ],
+    "code": 0,
+    "text": "TARGET UNVERIFIED: not fetched\np.backup: True\np.load: 61 <- s.note\n    proposes 61 -> 70, from a\n    proposes 61 -> 90, from b\n    CONTESTED: a says 70, b says 90\n+ d.work: Keep the current format\n    holds\n    wrong_if: p.load > 80\n    moved since review: p.load 44 -> 61 - within wrong_if\n\naffects <entry> shows what a change reaches\n"
+  },
+  {
+    "case": "target-missing",
+    "command": "pull",
+    "seeds": [
+      "p.a"
+    ],
+    "refused": "p.a is not an entry or a prefix in this record. Run `open` to see what it holds."
+  },
+  {
+    "case": "target-missing",
+    "command": "pull",
+    "seeds": [
+      "unknown"
+    ],
+    "refused": "unknown is not an entry or a prefix in this record. Run `open` to see what it holds."
+  },
+  {
+    "case": "target-missing",
+    "command": "pull",
+    "seeds": [],
+    "code": 0,
+    "text": "TARGET UNVERIFIED: not fetched\n\naffects <entry> shows what a change reaches\n"
+  },
+  {
+    "case": "target-missing",
+    "command": "affects",
+    "seeds": [
+      "p"
+    ],
+    "code": 0,
+    "text": "# p -> 2 entries: p.backup, p.load\nd.work\n    via p.load -> evaluate the predicate against p.load\n    predicate: p.load > 80\n\n1 judgments reached\n"
+  },
+  {
+    "case": "target-missing",
+    "command": "affects",
+    "seeds": [
+      "d"
+    ],
+    "code": 0,
+    "text": "# d -> 1 entries: d.work\nnothing rests on that\n"
+  },
+  {
+    "case": "target-missing",
+    "command": "affects",
+    "seeds": [
+      "p.a"
+    ],
+    "refused": "p.a is not an entry or a prefix in this record. Run `open` to see what it holds."
+  },
+  {
+    "case": "target-missing",
+    "command": "affects",
+    "seeds": [
+      "unknown"
+    ],
+    "refused": "unknown is not an entry or a prefix in this record. Run `open` to see what it holds."
+  },
+  {
+    "case": "target-missing",
+    "command": "affects",
+    "seeds": [],
+    "code": 0,
+    "text": "nothing rests on that\n"
+  },
+  {
+    "case": "target-observed",
+    "command": "pull",
+    "seeds": [
+      "p"
+    ],
+    "code": 0,
+    "text": "p.backup: True\np.load: 61 <- s.note\n    proposes 61 -> 70, from a\n    proposes 61 -> 90, from b\n    CONTESTED: a says 70, b says 90\n+ d.work: Keep the current format\n    holds\n    wrong_if: p.load > 80\n    moved since review: p.load 44 -> 61 - within wrong_if\n\naffects <entry> shows what a change reaches\n"
+  },
+  {
+    "case": "target-observed",
+    "command": "pull",
+    "seeds": [
+      "d"
+    ],
+    "code": 0,
+    "text": "p.backup: True\np.load: 61 <- s.note\n    proposes 61 -> 70, from a\n    proposes 61 -> 90, from b\n    CONTESTED: a says 70, b says 90\n+ d.work: Keep the current format\n    holds\n    wrong_if: p.load > 80\n    moved since review: p.load 44 -> 61 - within wrong_if\n\naffects <entry> shows what a change reaches\n"
+  },
+  {
+    "case": "target-observed",
+    "command": "pull",
+    "seeds": [
+      "p.a"
+    ],
+    "refused": "p.a is not an entry or a prefix in this record. Run `open` to see what it holds."
+  },
+  {
+    "case": "target-observed",
+    "command": "pull",
+    "seeds": [
+      "unknown"
+    ],
+    "refused": "unknown is not an entry or a prefix in this record. Run `open` to see what it holds."
+  },
+  {
+    "case": "target-observed",
+    "command": "pull",
+    "seeds": [],
+    "code": 0,
+    "text": "\naffects <entry> shows what a change reaches\n"
+  },
+  {
+    "case": "target-observed",
+    "command": "affects",
+    "seeds": [
+      "p"
+    ],
+    "code": 0,
+    "text": "# p -> 2 entries: p.backup, p.load\nd.work\n    via p.load -> evaluate the predicate against p.load\n    predicate: p.load > 80\n\n1 judgments reached\n"
+  },
+  {
+    "case": "target-observed",
+    "command": "affects",
+    "seeds": [
+      "d"
+    ],
+    "code": 0,
+    "text": "# d -> 1 entries: d.work\nnothing rests on that\n"
+  },
+  {
+    "case": "target-observed",
+    "command": "affects",
+    "seeds": [
+      "p.a"
+    ],
+    "refused": "p.a is not an entry or a prefix in this record. Run `open` to see what it holds."
+  },
+  {
+    "case": "target-observed",
+    "command": "affects",
+    "seeds": [
+      "unknown"
+    ],
+    "refused": "unknown is not an entry or a prefix in this record. Run `open` to see what it holds."
+  },
+  {
+    "case": "target-observed",
+    "command": "affects",
+    "seeds": [],
+    "code": 0,
+    "text": "nothing rests on that\n"
+  },
+  {
+    "case": "invalid-structured-0",
+    "command": "pull",
+    "seeds": [
+      "p"
+    ],
+    "code": 0,
+    "text": "p.backup: True\np.load: 61 <- s.note\n+ d.work: Keep the current format\n    holds\n    wrong_if: <invalid expression: unsupported arithmetic operator>\n    moved since review: p.load 44 -> 61\n\naffects <entry> shows what a change reaches\n"
+  },
+  {
+    "case": "invalid-structured-0",
+    "command": "pull",
+    "seeds": [
+      "d"
+    ],
+    "code": 0,
+    "text": "p.backup: True\np.load: 61 <- s.note\n+ d.work: Keep the current format\n    holds\n    wrong_if: <invalid expression: unsupported arithmetic operator>\n    moved since review: p.load 44 -> 61\n\naffects <entry> shows what a change reaches\n"
+  },
+  {
+    "case": "invalid-structured-0",
+    "command": "pull",
+    "seeds": [
+      "p.a"
+    ],
+    "refused": "p.a is not an entry or a prefix in this record. Run `open` to see what it holds."
+  },
+  {
+    "case": "invalid-structured-0",
+    "command": "pull",
+    "seeds": [
+      "unknown"
+    ],
+    "refused": "unknown is not an entry or a prefix in this record. Run `open` to see what it holds."
+  },
+  {
+    "case": "invalid-structured-0",
+    "command": "pull",
+    "seeds": [],
+    "code": 0,
+    "text": "\naffects <entry> shows what a change reaches\n"
+  },
+  {
+    "case": "invalid-structured-0",
+    "command": "affects",
+    "seeds": [
+      "p"
+    ],
+    "code": 0,
+    "text": "# p -> 2 entries: p.backup, p.load\nd.work\n    via p.load -> flagged only\n    predicate: <invalid expression: unsupported arithmetic operator>\n\n1 judgments reached\n"
+  },
+  {
+    "case": "invalid-structured-0",
+    "command": "affects",
+    "seeds": [
+      "d"
+    ],
+    "code": 0,
+    "text": "# d -> 1 entries: d.work\nnothing rests on that\n"
+  },
+  {
+    "case": "invalid-structured-0",
+    "command": "affects",
+    "seeds": [
+      "p.a"
+    ],
+    "refused": "p.a is not an entry or a prefix in this record. Run `open` to see what it holds."
+  },
+  {
+    "case": "invalid-structured-0",
+    "command": "affects",
+    "seeds": [
+      "unknown"
+    ],
+    "refused": "unknown is not an entry or a prefix in this record. Run `open` to see what it holds."
+  },
+  {
+    "case": "invalid-structured-0",
+    "command": "affects",
+    "seeds": [],
+    "code": 0,
+    "text": "nothing rests on that\n"
+  },
+  {
+    "case": "invalid-structured-1",
+    "command": "pull",
+    "seeds": [
+      "p"
+    ],
+    "code": 0,
+    "text": "p.backup: True\np.load: 61 <- s.note\n+ d.work: Keep the current format\n    holds\n    wrong_if: <invalid expression: an operator requires exactly two arguments>\n    moved since review: p.load 44 -> 61\n\naffects <entry> shows what a change reaches\n"
+  },
+  {
+    "case": "invalid-structured-1",
+    "command": "pull",
+    "seeds": [
+      "d"
+    ],
+    "code": 0,
+    "text": "p.backup: True\np.load: 61 <- s.note\n+ d.work: Keep the current format\n    holds\n    wrong_if: <invalid expression: an operator requires exactly two arguments>\n    moved since review: p.load 44 -> 61\n\naffects <entry> shows what a change reaches\n"
+  },
+  {
+    "case": "invalid-structured-1",
+    "command": "pull",
+    "seeds": [
+      "p.a"
+    ],
+    "refused": "p.a is not an entry or a prefix in this record. Run `open` to see what it holds."
+  },
+  {
+    "case": "invalid-structured-1",
+    "command": "pull",
+    "seeds": [
+      "unknown"
+    ],
+    "refused": "unknown is not an entry or a prefix in this record. Run `open` to see what it holds."
+  },
+  {
+    "case": "invalid-structured-1",
+    "command": "pull",
+    "seeds": [],
+    "code": 0,
+    "text": "\naffects <entry> shows what a change reaches\n"
+  },
+  {
+    "case": "invalid-structured-1",
+    "command": "affects",
+    "seeds": [
+      "p"
+    ],
+    "code": 0,
+    "text": "# p -> 2 entries: p.backup, p.load\nd.work\n    via p.load -> flagged only\n    predicate: <invalid expression: an operator requires exactly two arguments>\n\n1 judgments reached\n"
+  },
+  {
+    "case": "invalid-structured-1",
+    "command": "affects",
+    "seeds": [
+      "d"
+    ],
+    "code": 0,
+    "text": "# d -> 1 entries: d.work\nnothing rests on that\n"
+  },
+  {
+    "case": "invalid-structured-1",
+    "command": "affects",
+    "seeds": [
+      "p.a"
+    ],
+    "refused": "p.a is not an entry or a prefix in this record. Run `open` to see what it holds."
+  },
+  {
+    "case": "invalid-structured-1",
+    "command": "affects",
+    "seeds": [
+      "unknown"
+    ],
+    "refused": "unknown is not an entry or a prefix in this record. Run `open` to see what it holds."
+  },
+  {
+    "case": "invalid-structured-1",
+    "command": "affects",
+    "seeds": [],
+    "code": 0,
+    "text": "nothing rests on that\n"
+  },
+  {
+    "case": "invalid-structured-2",
+    "command": "pull",
+    "seeds": [
+      "p"
+    ],
+    "code": 0,
+    "text": "p.backup: True\np.load: 61 <- s.note\n+ d.work: Keep the current format\n    holds\n    wrong_if: <invalid expression: predicate_needs_a_reference>\n    moved since review: p.load 44 -> 61\n\naffects <entry> shows what a change reaches\n"
+  },
+  {
+    "case": "invalid-structured-2",
+    "command": "pull",
+    "seeds": [
+      "d"
+    ],
+    "code": 0,
+    "text": "p.backup: True\np.load: 61 <- s.note\n+ d.work: Keep the current format\n    holds\n    wrong_if: <invalid expression: predicate_needs_a_reference>\n    moved since review: p.load 44 -> 61\n\naffects <entry> shows what a change reaches\n"
+  },
+  {
+    "case": "invalid-structured-2",
+    "command": "pull",
+    "seeds": [
+      "p.a"
+    ],
+    "refused": "p.a is not an entry or a prefix in this record. Run `open` to see what it holds."
+  },
+  {
+    "case": "invalid-structured-2",
+    "command": "pull",
+    "seeds": [
+      "unknown"
+    ],
+    "refused": "unknown is not an entry or a prefix in this record. Run `open` to see what it holds."
+  },
+  {
+    "case": "invalid-structured-2",
+    "command": "pull",
+    "seeds": [],
+    "code": 0,
+    "text": "\naffects <entry> shows what a change reaches\n"
+  },
+  {
+    "case": "invalid-structured-2",
+    "command": "affects",
+    "seeds": [
+      "p"
+    ],
+    "code": 0,
+    "text": "# p -> 2 entries: p.backup, p.load\nd.work\n    via p.load -> flagged only\n    predicate: <invalid expression: predicate_needs_a_reference>\n\n1 judgments reached\n"
+  },
+  {
+    "case": "invalid-structured-2",
+    "command": "affects",
+    "seeds": [
+      "d"
+    ],
+    "code": 0,
+    "text": "# d -> 1 entries: d.work\nnothing rests on that\n"
+  },
+  {
+    "case": "invalid-structured-2",
+    "command": "affects",
+    "seeds": [
+      "p.a"
+    ],
+    "refused": "p.a is not an entry or a prefix in this record. Run `open` to see what it holds."
+  },
+  {
+    "case": "invalid-structured-2",
+    "command": "affects",
+    "seeds": [
+      "unknown"
+    ],
+    "refused": "unknown is not an entry or a prefix in this record. Run `open` to see what it holds."
+  },
+  {
+    "case": "invalid-structured-2",
+    "command": "affects",
+    "seeds": [],
+    "code": 0,
+    "text": "nothing rests on that\n"
+  },
+  {
+    "case": "invalid-structured-3",
+    "command": "pull",
+    "seeds": [
+      "p"
+    ],
+    "code": 0,
+    "text": "p.backup: True\np.load: 61 <- s.note\n+ d.work: Keep the current format\n    holds\n    wrong_if: <invalid expression: ref must be an entry ID>\n    moved since review: p.load 44 -> 61\n\naffects <entry> shows what a change reaches\n"
+  },
+  {
+    "case": "invalid-structured-3",
+    "command": "pull",
+    "seeds": [
+      "d"
+    ],
+    "code": 0,
+    "text": "p.backup: True\np.load: 61 <- s.note\n+ d.work: Keep the current format\n    holds\n    wrong_if: <invalid expression: ref must be an entry ID>\n    moved since review: p.load 44 -> 61\n\naffects <entry> shows what a change reaches\n"
+  },
+  {
+    "case": "invalid-structured-3",
+    "command": "pull",
+    "seeds": [
+      "p.a"
+    ],
+    "refused": "p.a is not an entry or a prefix in this record. Run `open` to see what it holds."
+  },
+  {
+    "case": "invalid-structured-3",
+    "command": "pull",
+    "seeds": [
+      "unknown"
+    ],
+    "refused": "unknown is not an entry or a prefix in this record. Run `open` to see what it holds."
+  },
+  {
+    "case": "invalid-structured-3",
+    "command": "pull",
+    "seeds": [],
+    "code": 0,
+    "text": "\naffects <entry> shows what a change reaches\n"
+  },
+  {
+    "case": "invalid-structured-3",
+    "command": "affects",
+    "seeds": [
+      "p"
+    ],
+    "code": 0,
+    "text": "# p -> 2 entries: p.backup, p.load\nd.work\n    via p.load -> flagged only\n    predicate: <invalid expression: ref must be an entry ID>\n\n1 judgments reached\n"
+  },
+  {
+    "case": "invalid-structured-3",
+    "command": "affects",
+    "seeds": [
+      "d"
+    ],
+    "code": 0,
+    "text": "# d -> 1 entries: d.work\nnothing rests on that\n"
+  },
+  {
+    "case": "invalid-structured-3",
+    "command": "affects",
+    "seeds": [
+      "p.a"
+    ],
+    "refused": "p.a is not an entry or a prefix in this record. Run `open` to see what it holds."
+  },
+  {
+    "case": "invalid-structured-3",
+    "command": "affects",
+    "seeds": [
+      "unknown"
+    ],
+    "refused": "unknown is not an entry or a prefix in this record. Run `open` to see what it holds."
+  },
+  {
+    "case": "invalid-structured-3",
+    "command": "affects",
+    "seeds": [],
+    "code": 0,
+    "text": "nothing rests on that\n"
+  },
+  {
+    "case": "invalid-structured-4",
+    "command": "pull",
+    "seeds": [
+      "p"
+    ],
+    "code": 0,
+    "text": "p.backup: True\np.load: 61 <- s.note\n+ d.work: Keep the current format\n    holds\n    wrong_if: <invalid expression: numeric exponent exceeds 256>\n    moved since review: p.load 44 -> 61\n\naffects <entry> shows what a change reaches\n"
+  },
+  {
+    "case": "invalid-structured-4",
+    "command": "pull",
+    "seeds": [
+      "d"
+    ],
+    "code": 0,
+    "text": "p.backup: True\np.load: 61 <- s.note\n+ d.work: Keep the current format\n    holds\n    wrong_if: <invalid expression: numeric exponent exceeds 256>\n    moved since review: p.load 44 -> 61\n\naffects <entry> shows what a change reaches\n"
+  },
+  {
+    "case": "invalid-structured-4",
+    "command": "pull",
+    "seeds": [
+      "p.a"
+    ],
+    "refused": "p.a is not an entry or a prefix in this record. Run `open` to see what it holds."
+  },
+  {
+    "case": "invalid-structured-4",
+    "command": "pull",
+    "seeds": [
+      "unknown"
+    ],
+    "refused": "unknown is not an entry or a prefix in this record. Run `open` to see what it holds."
+  },
+  {
+    "case": "invalid-structured-4",
+    "command": "pull",
+    "seeds": [],
+    "code": 0,
+    "text": "\naffects <entry> shows what a change reaches\n"
+  },
+  {
+    "case": "invalid-structured-4",
+    "command": "affects",
+    "seeds": [
+      "p"
+    ],
+    "code": 0,
+    "text": "# p -> 2 entries: p.backup, p.load\nd.work\n    via p.load -> flagged only\n    predicate: <invalid expression: numeric exponent exceeds 256>\n\n1 judgments reached\n"
+  },
+  {
+    "case": "invalid-structured-4",
+    "command": "affects",
+    "seeds": [
+      "d"
+    ],
+    "code": 0,
+    "text": "# d -> 1 entries: d.work\nnothing rests on that\n"
+  },
+  {
+    "case": "invalid-structured-4",
+    "command": "affects",
+    "seeds": [
+      "p.a"
+    ],
+    "refused": "p.a is not an entry or a prefix in this record. Run `open` to see what it holds."
+  },
+  {
+    "case": "invalid-structured-4",
+    "command": "affects",
+    "seeds": [
+      "unknown"
+    ],
+    "refused": "unknown is not an entry or a prefix in this record. Run `open` to see what it holds."
+  },
+  {
+    "case": "invalid-structured-4",
+    "command": "affects",
+    "seeds": [],
+    "code": 0,
+    "text": "nothing rests on that\n"
+  },
+  {
+    "case": "invalid-structured-5",
+    "command": "pull",
+    "seeds": [
+      "p"
+    ],
+    "code": 0,
+    "text": "p.backup: True\np.load: 61 <- s.note\n+ d.work: Keep the current format\n    holds\n    wrong_if: <invalid expression: expr must be nonempty text within 4000 characters>\n    moved since review: p.load 44 -> 61\n\naffects <entry> shows what a change reaches\n"
+  },
+  {
+    "case": "invalid-structured-5",
+    "command": "pull",
+    "seeds": [
+      "d"
+    ],
+    "code": 0,
+    "text": "p.backup: True\np.load: 61 <- s.note\n+ d.work: Keep the current format\n    holds\n    wrong_if: <invalid expression: expr must be nonempty text within 4000 characters>\n    moved since review: p.load 44 -> 61\n\naffects <entry> shows what a change reaches\n"
+  },
+  {
+    "case": "invalid-structured-5",
+    "command": "pull",
+    "seeds": [
+      "p.a"
+    ],
+    "refused": "p.a is not an entry or a prefix in this record. Run `open` to see what it holds."
+  },
+  {
+    "case": "invalid-structured-5",
+    "command": "pull",
+    "seeds": [
+      "unknown"
+    ],
+    "refused": "unknown is not an entry or a prefix in this record. Run `open` to see what it holds."
+  },
+  {
+    "case": "invalid-structured-5",
+    "command": "pull",
+    "seeds": [],
+    "code": 0,
+    "text": "\naffects <entry> shows what a change reaches\n"
+  },
+  {
+    "case": "invalid-structured-5",
+    "command": "affects",
+    "seeds": [
+      "p"
+    ],
+    "code": 0,
+    "text": "# p -> 2 entries: p.backup, p.load\nd.work\n    via p.load -> flagged only\n    predicate: <invalid expression: expr must be nonempty text within 4000 characters>\n\n1 judgments reached\n"
+  },
+  {
+    "case": "invalid-structured-5",
+    "command": "affects",
+    "seeds": [
+      "d"
+    ],
+    "code": 0,
+    "text": "# d -> 1 entries: d.work\nnothing rests on that\n"
+  },
+  {
+    "case": "invalid-structured-5",
+    "command": "affects",
+    "seeds": [
+      "p.a"
+    ],
+    "refused": "p.a is not an entry or a prefix in this record. Run `open` to see what it holds."
+  },
+  {
+    "case": "invalid-structured-5",
+    "command": "affects",
+    "seeds": [
+      "unknown"
+    ],
+    "refused": "unknown is not an entry or a prefix in this record. Run `open` to see what it holds."
+  },
+  {
+    "case": "invalid-structured-5",
+    "command": "affects",
+    "seeds": [],
+    "code": 0,
+    "text": "nothing rests on that\n"
+  },
+  {
+    "case": "invalid-structured-6",
+    "command": "pull",
+    "seeds": [
+      "p"
+    ],
+    "code": 0,
+    "text": "p.backup: True\np.load: 61 <- s.note\n+ d.work: Keep the current format\n    holds\n    wrong_if: <invalid expression: expr must be nonempty text within 4000 characters>\n    moved since review: p.load 44 -> 61\n\naffects <entry> shows what a change reaches\n"
+  },
+  {
+    "case": "invalid-structured-6",
+    "command": "pull",
+    "seeds": [
+      "d"
+    ],
+    "code": 0,
+    "text": "p.backup: True\np.load: 61 <- s.note\n+ d.work: Keep the current format\n    holds\n    wrong_if: <invalid expression: expr must be nonempty text within 4000 characters>\n    moved since review: p.load 44 -> 61\n\naffects <entry> shows what a change reaches\n"
+  },
+  {
+    "case": "invalid-structured-6",
+    "command": "pull",
+    "seeds": [
+      "p.a"
+    ],
+    "refused": "p.a is not an entry or a prefix in this record. Run `open` to see what it holds."
+  },
+  {
+    "case": "invalid-structured-6",
+    "command": "pull",
+    "seeds": [
+      "unknown"
+    ],
+    "refused": "unknown is not an entry or a prefix in this record. Run `open` to see what it holds."
+  },
+  {
+    "case": "invalid-structured-6",
+    "command": "pull",
+    "seeds": [],
+    "code": 0,
+    "text": "\naffects <entry> shows what a change reaches\n"
+  },
+  {
+    "case": "invalid-structured-6",
+    "command": "affects",
+    "seeds": [
+      "p"
+    ],
+    "code": 0,
+    "text": "# p -> 2 entries: p.backup, p.load\nd.work\n    via p.load -> flagged only\n    predicate: <invalid expression: expr must be nonempty text within 4000 characters>\n\n1 judgments reached\n"
+  },
+  {
+    "case": "invalid-structured-6",
+    "command": "affects",
+    "seeds": [
+      "d"
+    ],
+    "code": 0,
+    "text": "# d -> 1 entries: d.work\nnothing rests on that\n"
+  },
+  {
+    "case": "invalid-structured-6",
+    "command": "affects",
+    "seeds": [
+      "p.a"
+    ],
+    "refused": "p.a is not an entry or a prefix in this record. Run `open` to see what it holds."
+  },
+  {
+    "case": "invalid-structured-6",
+    "command": "affects",
+    "seeds": [
+      "unknown"
+    ],
+    "refused": "unknown is not an entry or a prefix in this record. Run `open` to see what it holds."
+  },
+  {
+    "case": "invalid-structured-6",
+    "command": "affects",
+    "seeds": [],
+    "code": 0,
+    "text": "nothing rests on that\n"
+  },
+  {
+    "case": "invalid-structured-7",
+    "command": "pull",
+    "seeds": [
+      "p"
+    ],
+    "code": 0,
+    "text": "p.backup: True\np.load: 61 <- s.note\n+ d.work: Keep the current format\n    holds\n    wrong_if: <invalid expression: unsupported legacy expression; it was not converted>\n    moved since review: p.load 44 -> 61\n\naffects <entry> shows what a change reaches\n"
+  },
+  {
+    "case": "invalid-structured-7",
+    "command": "pull",
+    "seeds": [
+      "d"
+    ],
+    "code": 0,
+    "text": "p.backup: True\np.load: 61 <- s.note\n+ d.work: Keep the current format\n    holds\n    wrong_if: <invalid expression: unsupported legacy expression; it was not converted>\n    moved since review: p.load 44 -> 61\n\naffects <entry> shows what a change reaches\n"
+  },
+  {
+    "case": "invalid-structured-7",
+    "command": "pull",
+    "seeds": [
+      "p.a"
+    ],
+    "refused": "p.a is not an entry or a prefix in this record. Run `open` to see what it holds."
+  },
+  {
+    "case": "invalid-structured-7",
+    "command": "pull",
+    "seeds": [
+      "unknown"
+    ],
+    "refused": "unknown is not an entry or a prefix in this record. Run `open` to see what it holds."
+  },
+  {
+    "case": "invalid-structured-7",
+    "command": "pull",
+    "seeds": [],
+    "code": 0,
+    "text": "\naffects <entry> shows what a change reaches\n"
+  },
+  {
+    "case": "invalid-structured-7",
+    "command": "affects",
+    "seeds": [
+      "p"
+    ],
+    "code": 0,
+    "text": "# p -> 2 entries: p.backup, p.load\nd.work\n    via p.load -> flagged only\n    predicate: <invalid expression: unsupported legacy expression; it was not converted>\n\n1 judgments reached\n"
+  },
+  {
+    "case": "invalid-structured-7",
+    "command": "affects",
+    "seeds": [
+      "d"
+    ],
+    "code": 0,
+    "text": "# d -> 1 entries: d.work\nnothing rests on that\n"
+  },
+  {
+    "case": "invalid-structured-7",
+    "command": "affects",
+    "seeds": [
+      "p.a"
+    ],
+    "refused": "p.a is not an entry or a prefix in this record. Run `open` to see what it holds."
+  },
+  {
+    "case": "invalid-structured-7",
+    "command": "affects",
+    "seeds": [
+      "unknown"
+    ],
+    "refused": "unknown is not an entry or a prefix in this record. Run `open` to see what it holds."
+  },
+  {
+    "case": "invalid-structured-7",
+    "command": "affects",
+    "seeds": [],
+    "code": 0,
+    "text": "nothing rests on that\n"
+  },
+  {
+    "case": "invalid-structured-8",
+    "command": "pull",
+    "seeds": [
+      "p"
+    ],
+    "code": 0,
+    "text": "p.backup: True\np.load: 61 <- s.note\n+ d.work: Keep the current format\n    holds\n    wrong_if: <invalid expression: unsupported expression syntax>\n    moved since review: p.load 44 -> 61\n\naffects <entry> shows what a change reaches\n"
+  },
+  {
+    "case": "invalid-structured-8",
+    "command": "pull",
+    "seeds": [
+      "d"
+    ],
+    "code": 0,
+    "text": "p.backup: True\np.load: 61 <- s.note\n+ d.work: Keep the current format\n    holds\n    wrong_if: <invalid expression: unsupported expression syntax>\n    moved since review: p.load 44 -> 61\n\naffects <entry> shows what a change reaches\n"
+  },
+  {
+    "case": "invalid-structured-8",
+    "command": "pull",
+    "seeds": [
+      "p.a"
+    ],
+    "refused": "p.a is not an entry or a prefix in this record. Run `open` to see what it holds."
+  },
+  {
+    "case": "invalid-structured-8",
+    "command": "pull",
+    "seeds": [
+      "unknown"
+    ],
+    "refused": "unknown is not an entry or a prefix in this record. Run `open` to see what it holds."
+  },
+  {
+    "case": "invalid-structured-8",
+    "command": "pull",
+    "seeds": [],
+    "code": 0,
+    "text": "\naffects <entry> shows what a change reaches\n"
+  },
+  {
+    "case": "invalid-structured-8",
+    "command": "affects",
+    "seeds": [
+      "p"
+    ],
+    "code": 0,
+    "text": "# p -> 2 entries: p.backup, p.load\nd.work\n    via p.load -> flagged only\n    predicate: <invalid expression: unsupported expression syntax>\n\n1 judgments reached\n"
+  },
+  {
+    "case": "invalid-structured-8",
+    "command": "affects",
+    "seeds": [
+      "d"
+    ],
+    "code": 0,
+    "text": "# d -> 1 entries: d.work\nnothing rests on that\n"
+  },
+  {
+    "case": "invalid-structured-8",
+    "command": "affects",
+    "seeds": [
+      "p.a"
+    ],
+    "refused": "p.a is not an entry or a prefix in this record. Run `open` to see what it holds."
+  },
+  {
+    "case": "invalid-structured-8",
+    "command": "affects",
+    "seeds": [
+      "unknown"
+    ],
+    "refused": "unknown is not an entry or a prefix in this record. Run `open` to see what it holds."
+  },
+  {
+    "case": "invalid-structured-8",
+    "command": "affects",
+    "seeds": [],
+    "code": 0,
+    "text": "nothing rests on that\n"
+  },
+  {
+    "case": "invalid-structured-9",
+    "command": "pull",
+    "seeds": [
+      "p"
+    ],
+    "code": 0,
+    "text": "p.backup: True\np.load: 61 <- s.note\n+ d.work: Keep the current format\n    holds\n    wrong_if: <invalid expression: unsupported legacy expression; it was not converted>\n    moved since review: p.load 44 -> 61\n\naffects <entry> shows what a change reaches\n"
+  },
+  {
+    "case": "invalid-structured-9",
+    "command": "pull",
+    "seeds": [
+      "d"
+    ],
+    "code": 0,
+    "text": "p.backup: True\np.load: 61 <- s.note\n+ d.work: Keep the current format\n    holds\n    wrong_if: <invalid expression: unsupported legacy expression; it was not converted>\n    moved since review: p.load 44 -> 61\n\naffects <entry> shows what a change reaches\n"
+  },
+  {
+    "case": "invalid-structured-9",
+    "command": "pull",
+    "seeds": [
+      "p.a"
+    ],
+    "refused": "p.a is not an entry or a prefix in this record. Run `open` to see what it holds."
+  },
+  {
+    "case": "invalid-structured-9",
+    "command": "pull",
+    "seeds": [
+      "unknown"
+    ],
+    "refused": "unknown is not an entry or a prefix in this record. Run `open` to see what it holds."
+  },
+  {
+    "case": "invalid-structured-9",
+    "command": "pull",
+    "seeds": [],
+    "code": 0,
+    "text": "\naffects <entry> shows what a change reaches\n"
+  },
+  {
+    "case": "invalid-structured-9",
+    "command": "affects",
+    "seeds": [
+      "p"
+    ],
+    "code": 0,
+    "text": "# p -> 2 entries: p.backup, p.load\nd.work\n    via p.load -> flagged only\n    predicate: <invalid expression: unsupported legacy expression; it was not converted>\n\n1 judgments reached\n"
+  },
+  {
+    "case": "invalid-structured-9",
+    "command": "affects",
+    "seeds": [
+      "d"
+    ],
+    "code": 0,
+    "text": "# d -> 1 entries: d.work\nnothing rests on that\n"
+  },
+  {
+    "case": "invalid-structured-9",
+    "command": "affects",
+    "seeds": [
+      "p.a"
+    ],
+    "refused": "p.a is not an entry or a prefix in this record. Run `open` to see what it holds."
+  },
+  {
+    "case": "invalid-structured-9",
+    "command": "affects",
+    "seeds": [
+      "unknown"
+    ],
+    "refused": "unknown is not an entry or a prefix in this record. Run `open` to see what it holds."
+  },
+  {
+    "case": "invalid-structured-9",
+    "command": "affects",
+    "seeds": [],
+    "code": 0,
+    "text": "nothing rests on that\n"
+  },
+  {
+    "case": "ordered-reasons",
+    "command": "pull",
+    "seeds": [
+      "p"
+    ],
+    "code": 0,
+    "text": "p.backup: False\np.load: 61 <- s.note\n+ d.work: Keep the current format\n    holds\n    moved since review: p.backup True -> False\n    moved since review: p.load 44 -> 61\n\naffects <entry> shows what a change reaches\n"
+  },
+  {
+    "case": "ordered-reasons",
+    "command": "pull",
+    "seeds": [
+      "d"
+    ],
+    "code": 0,
+    "text": "p.backup: False\np.load: 61 <- s.note\n+ d.work: Keep the current format\n    holds\n    moved since review: p.backup True -> False\n    moved since review: p.load 44 -> 61\n\naffects <entry> shows what a change reaches\n"
+  },
+  {
+    "case": "ordered-reasons",
+    "command": "pull",
+    "seeds": [
+      "p.a"
+    ],
+    "refused": "p.a is not an entry or a prefix in this record. Run `open` to see what it holds."
+  },
+  {
+    "case": "ordered-reasons",
+    "command": "pull",
+    "seeds": [
+      "unknown"
+    ],
+    "refused": "unknown is not an entry or a prefix in this record. Run `open` to see what it holds."
+  },
+  {
+    "case": "ordered-reasons",
+    "command": "pull",
+    "seeds": [],
+    "code": 0,
+    "text": "\naffects <entry> shows what a change reaches\n"
+  },
+  {
+    "case": "ordered-reasons",
+    "command": "affects",
+    "seeds": [
+      "p"
+    ],
+    "code": 0,
+    "text": "# p -> 2 entries: p.backup, p.load\nd.work\n    via p.load -> flagged only\n\n1 judgments reached\n"
+  },
+  {
+    "case": "ordered-reasons",
+    "command": "affects",
+    "seeds": [
+      "d"
+    ],
+    "code": 0,
+    "text": "# d -> 1 entries: d.work\nnothing rests on that\n"
+  },
+  {
+    "case": "ordered-reasons",
+    "command": "affects",
+    "seeds": [
+      "p.a"
+    ],
+    "refused": "p.a is not an entry or a prefix in this record. Run `open` to see what it holds."
+  },
+  {
+    "case": "ordered-reasons",
+    "command": "affects",
+    "seeds": [
+      "unknown"
+    ],
+    "refused": "unknown is not an entry or a prefix in this record. Run `open` to see what it holds."
+  },
+  {
+    "case": "ordered-reasons",
+    "command": "affects",
+    "seeds": [],
+    "code": 0,
+    "text": "nothing rests on that\n"
+  }
+]

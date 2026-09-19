@@ -1,0 +1,175 @@
+use serde_json::Value as J;
+use std::{fs, path::Path, process::Command};
+fn cli(root: &Path, args: &[&str], private: &Path) -> std::process::Output {
+    Command::new(env!("CARGO_BIN_EXE_kpop-native"))
+        .current_dir(root)
+        .args(args)
+        .env_remove("KPOPPER_NATIVE_RESOURCES")
+        .env_remove("KPOPPER_READ_MODE")
+        .env("KPOPPER_PRIVATE_HOME", private)
+        .env("XDG_STATE_HOME", root.join("private-state"))
+        .output()
+        .unwrap()
+}
+const ORDINARY: &str = "schema: {deps: rests_on, snapshot: seen, predicate: wrong_if}\nknown:\n  p.load: {v: 61, from: s.note}\n  s.note: {name: source}\njudgments:\n  d.work:\n    verdict: continue\n    rests_on: [p.load]\n    seen: {p.load: 44}\n    wrong_if: p.load > 80\n";
+#[test]
+fn actual_ordinary_cli_reads_physical_hypotheses_and_private_metadata_without_writes() {
+    let tmp = tempfile::tempdir().unwrap();
+    let root = tmp.path().canonicalize().unwrap();
+    let private = root.join("private");
+    fs::write(root.join("GROUNDING.yaml"), ORDINARY).unwrap();
+    fs::create_dir_all(root.join(".kpopper/hypotheses")).unwrap();
+    let hyp = "known: {p.load: {v: 75}}\n";
+    fs::write(root.join(".kpopper/hypotheses/a.yaml"), hyp).unwrap();
+    let project = kpop_native::project_modes::Project::open(&root).unwrap();
+    let key = kpop_native::identity::sha256(
+        project
+            .common
+            .as_ref()
+            .unwrap_or(&project.root)
+            .to_string_lossy()
+            .as_bytes(),
+    );
+    let dir = private.join(key);
+    fs::create_dir_all(&dir).unwrap();
+    // Only the retained obligation is public; its malformed body is never read.
+    fs::write(dir.join("retained.json"), b"PRIVATE: not JSON").unwrap();
+    fs::create_dir(dir.join("directory.json")).unwrap();
+    let output = cli(&root, &["pull", "p"], &private);
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let text = String::from_utf8(output.stdout).unwrap();
+    assert!(text.starts_with("1 private drafts retained; inspect `kpop knowledge status`\n"));
+    assert!(text.contains("p.load: 61 <- s.note\n    proposes 61 -> 75, from a\n"));
+    assert!(text.contains("moved since review: p.load 44 -> 61 - within wrong_if"));
+    let frozen = cli(&root, &["--frozen", "pull", "p"], &private);
+    assert!(frozen.status.success());
+    assert!(!String::from_utf8_lossy(&frozen.stdout).contains("private drafts"));
+    let affects = cli(&root, &["affects", "p"], &private);
+    assert!(affects.status.success());
+    assert_eq!(
+        String::from_utf8(affects.stdout).unwrap(),
+        "# p -> 1 entries: p.load\nd.work\n    via p.load -> evaluate the predicate against p.load\n    predicate: p.load > 80\n\n1 judgments reached\n"
+    );
+    assert_eq!(
+        fs::read_to_string(root.join("GROUNDING.yaml")).unwrap(),
+        ORDINARY
+    );
+    assert_eq!(
+        fs::read_to_string(root.join(".kpopper/hypotheses/a.yaml")).unwrap(),
+        hyp
+    );
+    assert_eq!(
+        fs::read(dir.join("retained.json")).unwrap(),
+        b"PRIVATE: not JSON"
+    );
+}
+#[test]
+fn actual_core_cli_opens_exact_history_and_checks_the_captured_brief() {
+    let tmp = tempfile::tempdir().unwrap();
+    let root = tmp.path().canonicalize().unwrap();
+    let record = format!(
+        "meta:\n  name: תיעוד\n  reasoning: {{version: 1, profile: core/v1, requires: [arithmetic/v1]}}\n{ORDINARY}\n"
+    );
+    fs::write(root.join("GROUNDING.yaml"), &record).unwrap();
+    let open = cli(
+        &root,
+        &["--frozen", "open", "--json"],
+        &root.join("private"),
+    );
+    assert!(
+        open.status.success(),
+        "{}",
+        String::from_utf8_lossy(&open.stderr)
+    );
+    let value: J = serde_json::from_slice(&open.stdout).unwrap();
+    assert_eq!(value["assessment_profile"], "core/v1");
+    assert_eq!(value["nodes"], 3);
+    let pull = cli(&root, &["--frozen", "pull", "p"], &root.join("private"));
+    assert!(
+        pull.status.success(),
+        "{}",
+        String::from_utf8_lossy(&pull.stderr)
+    );
+    let pulled: J = serde_json::from_slice(&pull.stdout).unwrap();
+    assert_eq!(pulled["snapshot_id"], value["snapshot_id"]);
+    assert_eq!(pulled["findings_revision"], value["findings_revision"]);
+    assert_eq!(pulled["selection"], serde_json::json!(["p.load"]));
+    fs::create_dir(root.join(".kpopper")).unwrap();
+    fs::write(
+        root.join(".kpopper/view.yaml"),
+        "sections: [{pick: missing}]\n",
+    )
+    .unwrap();
+    let check = cli(&root, &["--frozen", "check"], &root.join("private"));
+    assert_eq!(check.status.code(), Some(1));
+    assert!(
+        String::from_utf8_lossy(&check.stdout).contains("FAIL page selectors unresolved (missing)")
+    );
+    let unsupported = cli(&root, &["pull", "p", "--history"], &root.join("private"));
+    assert!(!unsupported.status.success());
+    assert!(
+        String::from_utf8_lossy(&unsupported.stderr).contains("core_profile_option_unsupported")
+    );
+    assert_eq!(
+        fs::read_to_string(root.join("GROUNDING.yaml")).unwrap(),
+        record
+    );
+}
+#[test]
+fn actual_open_reports_an_empty_workspace_and_explicit_missing_record() {
+    let tmp = tempfile::tempdir().unwrap();
+    let root = tmp.path().canonicalize().unwrap();
+    let open = cli(&root, &["open", "--json"], &root.join("private"));
+    assert!(open.status.success());
+    let data: J = serde_json::from_slice(&open.stdout).unwrap();
+    assert_eq!(data["status"], "missing");
+    assert!(!root.join("GROUNDING.yaml").exists());
+    let missing = cli(
+        &root,
+        &["open", "missing.yaml", "--json"],
+        &root.join("private"),
+    );
+    assert_eq!(missing.status.code(), Some(1));
+    let data: J = serde_json::from_slice(&missing.stdout).unwrap();
+    assert_eq!(data["status"], "unavailable");
+}
+
+#[test]
+fn actual_seed_case_and_legacy_negative_budget_remain_distinct_from_filenames() {
+    let tmp = tempfile::tempdir().unwrap();
+    let root = tmp.path().canonicalize().unwrap();
+    let body = ORDINARY.replace("known:\n", "known:\n  p.YAML: {v: 7}\n");
+    fs::write(root.join("GROUNDING.yaml"), &body).unwrap();
+    let output = cli(
+        &root,
+        &["--frozen", "pull", "p.YAML"],
+        &root.join("private"),
+    );
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert_eq!(
+        String::from_utf8(output.stdout).unwrap(),
+        "p.YAML: 7\n\naffects <entry> shows what a change reaches\n"
+    );
+    let output = cli(
+        &root,
+        &["--frozen", "pull", "p.YAML", "--budget", "-1"],
+        &root.join("private"),
+    );
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert_eq!(
+        String::from_utf8(output.stdout).unwrap(),
+        "... 2 more lines - raise the budget\n\naffects <entry> shows what a change reaches\n"
+    );
+}

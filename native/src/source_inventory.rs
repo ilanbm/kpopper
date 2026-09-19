@@ -97,6 +97,7 @@ pub(crate) enum Observation {
     Unreadable(String),
     Exists(bool),
     Directory(bool),
+    File(bool),
     Glob(Vec<PathBuf>),
 }
 #[derive(Clone, Debug, Default)]
@@ -133,6 +134,11 @@ impl Inventory {
     pub fn exists(&mut self, path: &Path) -> Result<bool> {
         let value = path.exists();
         self.event("exists", path, Observation::Exists(value))?;
+        Ok(value)
+    }
+    pub fn file(&mut self, path: &Path) -> Result<bool> {
+        let value = path.is_file();
+        self.event("file", path, Observation::File(value))?;
         Ok(value)
     }
     pub fn directory(&mut self, path: &Path) -> Result<bool> {
@@ -192,6 +198,7 @@ impl Inventory {
                 },
                 Observation::Exists(_) => Observation::Exists(path.exists()),
                 Observation::Directory(_) => Observation::Directory(path.is_dir()),
+                Observation::File(_) => Observation::File(path.is_file()),
                 Observation::Glob(_) => Observation::Glob(glob(path)?),
             };
             require(actual == *expected, "snapshot_changed")?;

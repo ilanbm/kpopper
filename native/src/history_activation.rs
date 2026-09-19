@@ -421,7 +421,7 @@ fn reads(inventory: &Inventory) -> Result<V> {
             .map(|((kind, path), value)| {
                 let value = match value {
                     Observation::Bytes(hash) => s(hash),
-                    Observation::Unreadable(_) => {
+                    Observation::Unreadable(_) | Observation::File(_) => {
                         return Err(error("unsupported_transition_observation"));
                     }
                     Observation::Exists(b) | Observation::Directory(b) => V::Bool(*b),

@@ -22,7 +22,7 @@ pub(crate) static CMP: LazyLock<regex::Regex> = LazyLock::new(|| {
     )
     .unwrap()
 });
-static EXPR: LazyLock<regex::Regex> =
+pub(crate) static EXPR: LazyLock<regex::Regex> =
     LazyLock::new(|| regex::Regex::new(r"[<>=!+\-*/()]|\b(?:or|and|not)\b").unwrap());
 static SECOND: LazyLock<regex::Regex> =
     LazyLock::new(|| regex::Regex::new(r"[<>=!]=?|\b(?:or|and)\b").unwrap());

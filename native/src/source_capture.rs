@@ -415,6 +415,41 @@ impl CapturedSource {
             ),
         ])
     }
+    /// Original contribution labels accompany ordinary reads without portable
+    /// path rewriting or a new observation of pending state.
+    pub(crate) fn reader_lines(&self) -> Result<Vec<String>> {
+        let Some(overlay) = &self.document.overlay else {
+            return Ok(vec![]);
+        };
+        let mut lines = vec![];
+        for contribution in &overlay.contributions {
+            let c = map(contribution)?;
+            let scope = map(&c["scope"])?;
+            let roots = crate::history_view::list(&c["roots"])?
+                .iter()
+                .map(text)
+                .collect::<Result<Vec<_>>>()?;
+            lines.push(format!(
+                "PENDING {} · {} · {}: {} · {}",
+                text(&c["revision"])?.chars().take(12).collect::<String>(),
+                text(&c["state"])?,
+                text(&scope["kind"])?,
+                text(&scope["environment"])?,
+                roots.join(", ")
+            ));
+        }
+        for (id, variants) in map(&overlay.conflicts)? {
+            let names = crate::history_view::list(variants)?
+                .iter()
+                .map(|v| text(&crate::history_view::list(v)?[0]))
+                .collect::<Result<Vec<_>>>()?;
+            lines.push(format!("CONFLICT {id}: {}", names.join(", ")));
+        }
+        if let Some(reason) = &overlay.unavailable {
+            lines.push(format!("TARGET UNVERIFIED: {reason}"));
+        }
+        Ok(lines)
+    }
     pub fn origins(&self) -> &BTreeMap<String, BTreeMap<String, PathBuf>> {
         &self.document.origins
     }

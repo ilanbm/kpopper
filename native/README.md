@@ -43,8 +43,27 @@ that resource directory and `KPOPPER_NATIVE_CACHE` can select its extraction cac
 Absent programs produce unavailable computation findings; invalid selected resources
 refuse. Reads do not build programs, install dependencies, or search PATH for a substitute.
 
-The other public commands below still use the experimental history store. Full CLI,
-MCP, hooks, browser and distribution integration remain in progress.
+### Read findings and impact
+
+Ordinary records support seeded reads and transitive impact, including physical
+hypotheses, pending contributions, source labels and private-draft counts:
+
+```sh
+kpop-native --frozen pull p.input d.decision
+kpop-native affects p.input
+```
+
+Core records also support `open --json` and `check`. They share one captured
+schema-v3 assessment with `pull` and `affects`. Check includes page selectors,
+renderer suitability, recorded layout shape and the bounded page-secondary
+envelope. Findings keep the executing adapter's fingerprint, so a Rust result and
+a Python result can carry different revision identities even when their semantic
+findings match.
+
+Ordinary `open`, `check` and `pull --history` remain unconnected. Existing
+feasibility-store workspaces retain their explicitly marked experimental opener.
+The writer commands below, MCP, hooks, browser and distribution integration remain
+in progress.
 
 For the experimental writer, supply an absolute path to an existing **empty** directory:
 
