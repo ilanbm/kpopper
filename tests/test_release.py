@@ -116,6 +116,35 @@ class TheChangelog(unittest.TestCase):
 
 
 class WhatIsPublished(unittest.TestCase):
+    def test_release_targets_the_exact_commit_that_was_built(self):
+        calls = []
+        commit = 'a' * 40
+        def command(*args):
+            calls.append(args)
+            return commit if args == ('git', 'rev-parse', 'HEAD') else ''
+        with patch.object(P, 'previous_version', return_value='0.0.0'), \
+             patch.object(P, 'published', return_value=False), \
+             patch.object(P, 'tag_elsewhere', return_value=None), \
+             patch.object(P, 'build', return_value=[pathlib.Path('candidate.whl')]), \
+             patch.object(P.release, 'sh', side_effect=command):
+            self.assertEqual(P.main([]), 0)
+        published = next(call for call in calls if call[:3] == ('gh', 'release', 'create'))
+        self.assertEqual(published[published.index('--target') + 1], commit)
+
+    def test_moving_checkout_cannot_publish_mismatched_release_assets(self):
+        calls, heads = [], iter(['a' * 40, 'b' * 40])
+        def command(*args):
+            calls.append(args)
+            return next(heads) if args == ('git', 'rev-parse', 'HEAD') else ''
+        with patch.object(P, 'previous_version', return_value='0.0.0'), \
+             patch.object(P, 'published', return_value=False), \
+             patch.object(P, 'tag_elsewhere', return_value=None), \
+             patch.object(P, 'build', return_value=[pathlib.Path('candidate.whl')]), \
+             patch.object(P.release, 'sh', side_effect=command):
+            with self.assertRaisesRegex(SystemExit, 'checkout changed'):
+                P.main([])
+        self.assertFalse(any(call[:3] == ('gh', 'release', 'create') for call in calls))
+
     def test_bundle_refusal_stops_build_before_output_is_touched(self):
         with tempfile.TemporaryDirectory() as directory:
             dist = pathlib.Path(directory) / "dist"

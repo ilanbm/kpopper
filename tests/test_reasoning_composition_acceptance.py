@@ -121,6 +121,12 @@ class InstalledOperationalCLI(unittest.TestCase):
             self.assertEqual(record["meta"]["reasoning"]["profile"], "core/v1")
             self.assertEqual(marker["authority"], "history")
             self.assertEqual(record["meta"]["history"]["record_id"], marker["record_id"])
+            judgment = subprocess.run([sys.executable, str(self.cli_path()), "add", "d.ready",
+                "verdict=ready", "rests_on=[p.input]", "wrong_if={expr: p.input > 5}",
+                "--as-of", "2026-09-01"], cwd=root, text=True, capture_output=True, check=False)
+            self.assertEqual(judgment.returncode, 0, judgment.stdout + judgment.stderr)
+            record = yaml.safe_load((root / "GROUNDING.yaml").read_text())
+            self.assertIn("p.input", record["judgments"]["d.ready"]["seen"])
             for command in (["open", "--json"], ["check"], ["pull", "p.input"],
                             ["affects", "p.input"], ["assess", "p.input"],
                             ["export", "p.input"], ["search", "input"],
@@ -331,6 +337,7 @@ suite.addTests(unittest.defaultTestLoader.loadTestsFromTestCase(InstalledOperati
 
 for filename, classname in (("test_core_composition.py", "CoreComposition"),
                             ("test_computational_scenario.py", "ComputationalScenario"),
+                            ("test_temporal_operational_consumers.py", "TemporalOperationalConsumers"),
                             ("test_core_operational_acceptance.py", "CoreOperationalAcceptance"),
                             ("test_core_consolidate_cli.py", "CoreConsolidateCLI"),
                             ("test_history_direct_integration.py", "DirectHistory.test_public_cli_shows_captured_history_preview"),
