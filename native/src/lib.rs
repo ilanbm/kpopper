@@ -20,6 +20,7 @@ pub mod history_view;
 pub mod history_yaml;
 pub mod identity;
 mod python_identifiers;
+pub mod reasoning_assessment;
 pub mod reasoning_basis;
 pub mod reasoning_capabilities;
 pub mod reasoning_evaluate;

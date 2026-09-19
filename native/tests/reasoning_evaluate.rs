@@ -67,15 +67,53 @@ fn actual_lean_evaluator_preserves_complete_envelopes_across_all_protocols() {
         .join(format!("{}.zip", target_name().unwrap()));
     let cache = tempfile::tempdir().unwrap();
     let runtime = Runtime::open(&archive, cache.path(), OperationalBounds::default()).unwrap();
-    let empty = Snapshot::from_data(&V::from_json(&serde_json::json!({})).unwrap(), Default::default()).unwrap();
+    let empty = Snapshot::from_data(
+        &V::from_json(&serde_json::json!({})).unwrap(),
+        Default::default(),
+    )
+    .unwrap();
     // Hex wire strings exceed their compact authored JSON charge. The runtime
     // limit remains a whole-batch refusal after preparation has succeeded.
-    let mut wire_bound = Evaluator::new(&empty, Some(&runtime), None,
-        OperationalBounds { input_bytes: 1500, ..Default::default() }).unwrap();
-    assert_eq!(wire_bound.evaluate(V::from_json(&serde_json::json!({"text":"x".repeat(1000)})).unwrap(), vec![]).unwrap_err().0, "batch_input_limit");
-    let mut output_bound = Evaluator::new(&empty, Some(&runtime), None,
-        OperationalBounds { output_bytes: 12000, ..Default::default() }).unwrap();
-    assert_eq!(output_bound.evaluate(V::from_json(&serde_json::json!({"text":"x".repeat(10000)})).unwrap(), vec![]).unwrap_err().0, "output_limit");
+    let mut wire_bound = Evaluator::new(
+        &empty,
+        Some(&runtime),
+        None,
+        OperationalBounds {
+            input_bytes: 1500,
+            ..Default::default()
+        },
+    )
+    .unwrap();
+    assert_eq!(
+        wire_bound
+            .evaluate(
+                V::from_json(&serde_json::json!({"text":"x".repeat(1000)})).unwrap(),
+                vec![]
+            )
+            .unwrap_err()
+            .0,
+        "batch_input_limit"
+    );
+    let mut output_bound = Evaluator::new(
+        &empty,
+        Some(&runtime),
+        None,
+        OperationalBounds {
+            output_bytes: 12000,
+            ..Default::default()
+        },
+    )
+    .unwrap();
+    assert_eq!(
+        output_bound
+            .evaluate(
+                V::from_json(&serde_json::json!({"text":"x".repeat(10000)})).unwrap(),
+                vec![]
+            )
+            .unwrap_err()
+            .0,
+        "output_limit"
+    );
     let corpus: J = serde_json::from_str(include_str!("fixtures/reasoning-evaluate.json")).unwrap();
     let mut failures = Vec::new();
     for c in corpus["cases"].as_array().unwrap() {

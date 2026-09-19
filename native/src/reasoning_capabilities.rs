@@ -96,7 +96,7 @@ pub fn compare_basis(current: &V, historical: &V) -> Result<&'static str> {
         "changed"
     })
 }
-fn historical_envelope(computed: &Map, document: &V) -> Result<()> {
+pub(crate) fn historical_envelope(computed: &Map, document: &V) -> Result<()> {
     require(is_int(&computed["version"], "2"), "unsupported_history")?;
     let declaration = map(document)?
         .get("meta")

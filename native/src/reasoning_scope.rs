@@ -371,7 +371,7 @@ impl<'a> ScopeCapture<'a> {
         ))
     }
 }
-fn query_value(value: &V, depth: usize) -> Result<V> {
+pub(crate) fn query_value(value: &V, depth: usize) -> Result<V> {
     use num_bigint::BigInt;
     require(depth <= 128, "invalid_value")?;
     if let V::Map(m) = value

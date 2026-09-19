@@ -115,6 +115,15 @@ impl<'a> Evaluator<'a> {
     pub fn basis(&mut self, id: &str) -> Result<V> {
         self.input_basis()?.basis(id)
     }
+    pub fn snapshot_id(&self) -> &str {
+        self.snapshot.snapshot_id()
+    }
+    pub(crate) fn bounds(&self) -> &OperationalBounds {
+        &self.bounds
+    }
+    pub(crate) fn limits(&self) -> &J {
+        &self.limits
+    }
     fn operations(&self) -> J {
         json!({"timeout_seconds":self.bounds.timeout.as_secs(),"batch_requests":self.bounds.batch_requests,"input_bytes":self.bounds.input_bytes,"output_bytes":self.bounds.output_bytes})
     }
@@ -500,7 +509,9 @@ impl<'a> Evaluator<'a> {
             })();
             match executed {
                 Err(e) => {
-                    if ["batch_request_limit", "batch_input_limit", "output_limit"].contains(&e.0.as_str()) {
+                    if ["batch_request_limit", "batch_input_limit", "output_limit"]
+                        .contains(&e.0.as_str())
+                    {
                         return Err(e);
                     }
                     let code = if e.0 == "runtime_timeout" {
