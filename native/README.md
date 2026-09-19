@@ -107,6 +107,7 @@ Inspection validates embedded evidence without executing authored scripts.
 kpop-native session open --no-settings --input GROUNDING.yaml --project example --state /absolute/private-state
 kpop-native session read --no-settings --input GROUNDING.yaml --project example --state /absolute/private-state --ref / --revision REVISION
 kpop-native session context --no-settings --input GROUNDING.yaml --project example --state /absolute/private-state --id d.decision --direction support --revision REVISION
+kpop-native session search --no-settings --input GROUNDING.yaml --project example --state /absolute/private-state --query "decision" --revision REVISION
 kpop-native session serve --no-settings --input GROUNDING.yaml --project example --state /absolute/private-state
 ```
 
@@ -117,8 +118,14 @@ identity, navigation profiles or retained bytes require reopening. Budgets use t
 real `o200k_base` or `cl100k_base` tokenizer; records and workspace discovery require Git.
 `context` follows declared support or impact edges within explicit depth, node and
 token limits. It returns exact complete node reads and lists omitted values and
-unread incident edges. The stdio MCP server exposes `kpopper_open`, `kpopper_read`
-and `kpopper_context`. Ordinary checked sessions, search/proposals, setup and hook
+unread incident edges. `search` ranks candidate references, prioritizes known IDs,
+and binds continuation cursors to the exact query, revision and ranking. Branch
+hints only break ties. Native term ordering is deterministic; legacy Python can
+vary its floating-point score sums across processes. Unicode folding retains the
+Python 3.14 Unicode 16 mappings. Semantic/hybrid requests explicitly report lexical
+fallback when local embeddings are unconfigured; this CLI does not yet load E5 assets.
+The stdio MCP server exposes `kpopper_open`, `kpopper_read`, `kpopper_context`
+and `kpopper_search`. Ordinary checked sessions, proposals, setup and hook
 activation are still unconnected. Session-state storage has been exercised on Unix
 and Windows, including physical identity, no-clobber creation and changed-source checks.
 

@@ -238,6 +238,11 @@ impl CheckedSession {
         &self.project_identity
     }
 
+    /// Validate an exact recorded reference without adding a presentation budget.
+    pub fn validate_reference(&self, reference: &str) -> Result<()> {
+        self.read_value(reference).map(|_| ())
+    }
+
     /// Reject a stale or foreign handle. The caller supplies the freshly
     /// recaptured snapshot id; no source path is accepted by this module.
     pub fn expect(&self, revision: &str, current_snapshot_id: &str) -> Result<()> {
@@ -363,6 +368,38 @@ impl CheckedSession {
                 .filter(|e| matches!(e, Entry::Node(_)))
                 .count(),
         })
+    }
+
+    /// Rank discovery references in this retained graph; exact reads supply evidence.
+    pub fn search<F>(
+        &self,
+        revision: &str,
+        request: &crate::session_search::SearchRequest,
+        count: F,
+    ) -> Result<String>
+    where
+        F: Fn(&str) -> usize,
+    {
+        require(
+            revision == self.revision,
+            "unknown core session revision; reopen",
+        )?;
+        let nodes = self
+            .nodes
+            .iter()
+            .map(|(id, node)| (id.clone(), json!({"body":node.body})))
+            .collect();
+        crate::session_search::search_checked_session(
+            &self.project,
+            &self.revision,
+            &nodes,
+            &self.groups,
+            request,
+            count,
+            None,
+        )
+        .map(|response| response.text)
+        .map_err(|e| Error(e.0))
     }
 
     /// Read exact selected nodes along declared edges with an explicit unread frontier.

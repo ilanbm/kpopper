@@ -140,12 +140,26 @@ fn mcp_stdio_and_cli_return_the_same_retained_read_without_runtime() {
         .unwrap());
     let packet: Value = serde_json::from_str(&context).unwrap();
     assert_eq!(packet["reads"].as_array().unwrap().len(), 2);
+    let search = ok(command(root, "search", false)
+        .args([
+            "--query",
+            "p.a",
+            "--tokens",
+            "8000",
+            "--revision",
+            &revision,
+        ])
+        .output()
+        .unwrap());
+    let packet: Value = serde_json::from_str(&search).unwrap();
+    assert_eq!(packet["hits"][0]["id"], "p.a");
     let input = [
         json!({"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"test","version":"1"}}}),
         json!({"jsonrpc":"2.0","method":"notifications/initialized"}),
         json!({"jsonrpc":"2.0","id":"list","method":"tools/list"}),
         json!({"jsonrpc":"2.0","id":"read","method":"tools/call","params":{"name":"kpopper_read","arguments":{"ref":"/","revision":revision}}}),
         json!({"jsonrpc":"2.0","id":"context","method":"tools/call","params":{"name":"kpopper_context","arguments":{"ids":["d.keep"],"direction":"support","tokens":8000,"revision":revision}}}),
+        json!({"jsonrpc":"2.0","id":"search","method":"tools/call","params":{"name":"kpopper_search","arguments":{"query":"p.a","tokens":8000,"revision":revision}}}),
     ].into_iter().map(|v| v.to_string()+"\n").collect::<String>();
     let mut child = command(root, "serve", false)
         .stdin(Stdio::piped())
@@ -164,12 +178,19 @@ fn mcp_stdio_and_cli_return_the_same_retained_read_without_runtime() {
         .lines()
         .map(|line| serde_json::from_str::<Value>(line).unwrap())
         .collect::<Vec<_>>();
-    assert_eq!(messages.len(), 4);
+    assert_eq!(messages.len(), 5);
     assert_eq!(messages[0]["result"]["protocolVersion"], "2025-06-18");
-    assert_eq!(messages[1]["result"]["tools"].as_array().unwrap().len(), 3);
+    assert_eq!(messages[1]["result"]["tools"].as_array().unwrap().len(), 4);
     assert_eq!(messages[2]["id"], "read");
     assert_eq!(messages[2]["result"]["isError"], false);
     assert_eq!(messages[3]["result"]["isError"], false);
+    assert_eq!(messages[4]["result"]["isError"], false);
+    assert_eq!(
+        messages[4]["result"]["content"][0]["text"]
+            .as_str()
+            .unwrap(),
+        search
+    );
     assert_eq!(
         messages[3]["result"]["content"][0]["text"]
             .as_str()

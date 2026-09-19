@@ -1,5 +1,4 @@
-#[path = "../src/session_search.rs"]
-mod session_search;
+use kpop_native::session_search;
 
 use serde_json::{Map, Value};
 use session_search::{
@@ -18,31 +17,6 @@ fn nodes(value: &Value) -> BTreeMap<String, Value> {
         .iter()
         .map(|(key, value)| (key.clone(), value.clone()))
         .collect()
-}
-
-#[test]
-fn casefold_matches_every_python_3_14_unicode_16_mapping() {
-    let root: Value = serde_json::from_str(ORACLE).unwrap();
-    assert_eq!(root["casefold_oracle"]["python"], "3.14.5");
-    assert_eq!(root["casefold_oracle"]["unicode"], "16.0.0");
-    for (source, expected) in object(&root["casefold_oracle"]["mappings"]) {
-        let source = char::from_u32(u32::from_str_radix(source, 16).unwrap()).unwrap();
-        let expected: String = expected
-            .as_array()
-            .unwrap()
-            .iter()
-            .map(|codepoint| {
-                char::from_u32(u32::from_str_radix(codepoint.as_str().unwrap(), 16).unwrap())
-                    .unwrap()
-            })
-            .collect();
-        assert_eq!(
-            session_search::casefold_for_oracle(&source.to_string()),
-            expected,
-            "U+{:04X}",
-            source as u32
-        );
-    }
 }
 
 fn groups(root: &Value, pages: bool) -> BTreeMap<String, BTreeSet<String>> {

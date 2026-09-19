@@ -8,6 +8,7 @@ use crate::{
     public_workspace as W,
     reasoning_context::CapturedAssessment,
     reasoning_runtime::OperationalBounds,
+    session_search::{SearchMode, SearchRequest},
     source_capture::{self, ReadMode},
     source_inventory::Inventory,
     tokenizer::Encoding,
@@ -21,6 +22,7 @@ pub enum Operation {
     Open,
     Read,
     Context,
+    Search,
     Serve,
 }
 
@@ -58,6 +60,16 @@ pub struct Options {
     pub depth: usize,
     #[arg(long, default_value_t = 16)]
     pub max_nodes: usize,
+    #[arg(long, default_value = "")]
+    pub query: String,
+    #[arg(long, default_value_t = 8)]
+    pub limit: usize,
+    #[arg(long)]
+    pub branch: Option<String>,
+    #[arg(long, value_enum, default_value = "hybrid")]
+    pub search_mode: SearchMode,
+    #[arg(long)]
+    pub cursor: Option<String>,
 }
 
 fn home() -> Result<PathBuf> {
@@ -298,6 +310,20 @@ impl Service {
         self.inputs.verify()?;
         Ok(result)
     }
+    pub fn searching(&self, revision: &str, request: &SearchRequest) -> Result<String> {
+        let capture = source_capture::capture_source(
+            std::slice::from_ref(&self.input),
+            &self.cwd,
+            self.mode,
+            None,
+        )?;
+        let session = self.store.load(revision, capture.snapshot())?;
+        let result = session.search(revision, request, |s| self.store.encoding().count(s))?;
+        capture.verify()?;
+        self.inputs.verify()?;
+        Ok(result)
+    }
+
     pub fn contextualizing(
         &self,
         ids: &[String],
@@ -349,11 +375,32 @@ pub fn run(options: &Options, cwd: &Path, mode: ReadMode) -> Result<String> {
                 max_nodes: options.max_nodes,
             },
         ),
+        Operation::Search => service.searching(
+            options
+                .revision
+                .as_deref()
+                .ok_or_else(|| error("search requires --revision from open"))?,
+            &SearchRequest {
+                query: options.query.clone(),
+                ids: Some(options.ids.clone()),
+                tokens: options.tokens.unwrap_or(1000),
+                limit: options.limit,
+                branch: options.branch.clone(),
+                mode: options.search_mode,
+                cursor: options.cursor.clone(),
+            },
+        ),
         Operation::Serve => {
             let tools = crate::session_mcp::declared_tools()
                 .into_iter()
                 .filter(|t| {
-                    ["kpopper_open", "kpopper_read", "kpopper_context"].contains(&t.name.as_str())
+                    [
+                        "kpopper_open",
+                        "kpopper_read",
+                        "kpopper_context",
+                        "kpopper_search",
+                    ]
+                    .contains(&t.name.as_str())
                 })
                 .collect::<Vec<_>>();
             crate::session_mcp::server(
@@ -390,6 +437,57 @@ pub fn run(options: &Options, cwd: &Path, mode: ReadMode) -> Result<String> {
                                     .ok_or_else(|| error("missing revision"))?,
                                 token_count(1600)?,
                                 offset,
+                            )
+                        }
+                        "kpopper_search" => {
+                            let ids = match args.get("ids") {
+                                None | Some(J::Null) => None,
+                                Some(v) => Some(
+                                    v.as_array()
+                                        .ok_or_else(|| error("invalid IDs"))?
+                                        .iter()
+                                        .map(|v| {
+                                            v.as_str()
+                                                .map(str::to_owned)
+                                                .ok_or_else(|| error("invalid ID"))
+                                        })
+                                        .collect::<Result<Vec<_>>>()?,
+                                ),
+                            };
+                            let limit = args.get("limit").map_or(Ok(8), |v| {
+                                v.as_u64()
+                                    .and_then(|n| usize::try_from(n).ok())
+                                    .ok_or_else(|| error("limit must be1..32"))
+                            })?;
+                            let mode =
+                                match args.get("mode").and_then(J::as_str).unwrap_or("hybrid") {
+                                    "lexical" => SearchMode::Lexical,
+                                    "semantic" => SearchMode::Semantic,
+                                    "hybrid" => SearchMode::Hybrid,
+                                    _ => return Err(error("unknown search mode")),
+                                };
+                            service.searching(
+                                args["revision"]
+                                    .as_str()
+                                    .ok_or_else(|| error("missing revision"))?,
+                                &SearchRequest {
+                                    query: args["query"]
+                                        .as_str()
+                                        .ok_or_else(|| error("missing query"))?
+                                        .into(),
+                                    ids,
+                                    tokens: token_count(1000)?,
+                                    limit,
+                                    branch: args
+                                        .get("branch")
+                                        .and_then(J::as_str)
+                                        .map(str::to_owned),
+                                    mode,
+                                    cursor: args
+                                        .get("cursor")
+                                        .and_then(J::as_str)
+                                        .map(str::to_owned),
+                                },
                             )
                         }
                         "kpopper_context" => {

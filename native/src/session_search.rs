@@ -15,7 +15,7 @@ use unicode_casefold::UnicodeCaseFold;
 const MIN_TOKENS: usize = 64;
 const MAX_TOKENS: usize = 65_536;
 
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, clap::ValueEnum)]
 pub enum SearchMode {
     Lexical,
     Semantic,
@@ -180,11 +180,6 @@ fn python_casefold(text: &str) -> String {
         }
     }
     folded
-}
-
-#[cfg(test)]
-pub(crate) fn casefold_for_oracle(text: &str) -> String {
-    python_casefold(text)
 }
 
 fn terms(text: &str) -> Vec<String> {
@@ -687,5 +682,36 @@ pub fn search_checked_session(
             ));
         }
         ranked.hits.pop();
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[test]
+    fn casefold_matches_every_python_3_14_unicode_16_mapping() {
+        let root: Value =
+            serde_json::from_str(include_str!("../tests/fixtures/session_search_oracle.json"))
+                .unwrap();
+        assert_eq!(root["casefold_oracle"]["python"], "3.14.5");
+        assert_eq!(root["casefold_oracle"]["unicode"], "16.0.0");
+        for (source, expected) in root["casefold_oracle"]["mappings"].as_object().unwrap() {
+            let source = char::from_u32(u32::from_str_radix(source, 16).unwrap()).unwrap();
+            let expected: String = expected
+                .as_array()
+                .unwrap()
+                .iter()
+                .map(|codepoint| {
+                    char::from_u32(u32::from_str_radix(codepoint.as_str().unwrap(), 16).unwrap())
+                        .unwrap()
+                })
+                .collect();
+            assert_eq!(
+                python_casefold(&source.to_string()),
+                expected,
+                "U+{:04X}",
+                source as u32
+            );
+        }
     }
 }

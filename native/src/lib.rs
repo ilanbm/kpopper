@@ -105,6 +105,7 @@ pub mod recording_receipt;
 pub mod session_activity;
 pub mod session_gate;
 pub mod session_mcp;
+pub mod session_search;
 pub mod source_capture;
 pub mod source_clock;
 mod source_document;
