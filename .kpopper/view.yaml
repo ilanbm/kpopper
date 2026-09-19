@@ -138,6 +138,8 @@ tabs:
       - title: History and core integration
         why: the record's history rules and the executable findings that can invalidate them are kept together for the next implementation session
         pick: [p.history_capture_contract, p.prepared_legacy_recovery,
+               p.history_default_authoring, p.history_watch_scenarios,
+               p.history_temporal_applicability,
                p.history_activation_cancellation, p.history_branch_adoption,
                p.history_replay_audit_evidence, p.history_writer_compatibility,
                d.history_authority_is_explicit,

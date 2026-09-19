@@ -62,9 +62,11 @@ def _prepare(entry, captured, *, because, by, operation, recorded_at, subjects):
     for index, subject in enumerate(subjects):
         collection, body = authored[subject]
         step = 'edit-step-' + identity({'operation': operation, 'index': index})
+        # Edited-view v1 retains the complete authored body, including old seen;
+        # it is not a fresh review under the v9 proposal-authoring contract.
         mutation = A.prepare_proposal(entry, subject, copy.deepcopy(body), collection,
             because=because, by=by, operation=step,
-            recorded_at=recorded_at, capture=canonical)
+            recorded_at=recorded_at, capture=canonical, _receipt_version=5)
         receipt = mutation.to_data()['receipt']
         first_receipt = first_receipt or receipt
         steps.append({'operation': step, 'receipt_digest': receipt['digest']})

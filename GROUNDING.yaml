@@ -1612,6 +1612,7 @@ known:
     of: "2026-09-17"
   p.core_observer_boundary:
     name: "Core observer support and the remaining history boundary"
+    scope: "Historical source at 446321d, before history observer integration; current behavior is recorded in p.history_watch_scenarios and p.history_default_authoring"
     v: "Ordinary core watch and remeasure retain captured context. New history folds check the
         prepared candidate for introduced falsified conditions or holes; older prepared receipts
         retain prior recovery semantics. Active-history observers remain refused pending integration,
@@ -1702,6 +1703,19 @@ known:
     from: "s.2026_09_17_history_reasoning_integration"
     at: "docs/history-contract.md, History store and Capture and replay; scripts/history_contract.py and scripts/reasoning/snapshot.py at d9857cdb184d1daf4df37c09e71be804e1c46c37"
     of: "2026-09-17"
+  p.history_default_authoring:
+    name: "New records use immutable history and automatic core readers"
+    v: "The first add creates an atomic recoverable core/v1 history record. Ordinary readers select
+        its declared interpretation automatically; existing legacy records retain their
+        interpretation. New judgments capture typed dependency observations without rewriting earlier
+        judgments."
+    from: s.2026_09_17_history_reasoning_integration
+    at: "docs/reasoning-core.md opening; scripts/history_bootstrap.py; scripts/history_authoring.py
+         at 69038902f97b31c9a7e00f800eef8ee8c25590aa"
+    of: "2026-09-19"
+    fidelity: paraphrase
+    scope: "Source contract at 69038902f97b31c9a7e00f800eef8ee8c25590aa; not a published-release or
+            canonical-record migration claim"
   p.history_operation_context:
     name: "History previews retain independent pending and target observations"
     v: "A prepared history preview uses the private Store Capture retained from the same bracketed
@@ -1724,6 +1738,31 @@ known:
     at: "docs/history-contract.md; scripts/history_authoring.py; tests/test_history_batch_final_world.py"
     scope: "Source replay admission contract; recorded provenance is not proof of external source
             truth"
+  p.history_temporal_applicability:
+    name: "Explicit temporal applicability preserves claim-version counterexamples"
+    v: "Opt-in current claims may recover when their current falsifier clears while retaining prior
+        fired episodes. Anchored and general claims retain verified counterexamples for the exact
+        claim version. Missing or unreplayable evidence remains unknown; no date window or historical
+        value is inferred from prose or timestamps."
+    from: s.2026_09_17_history_reasoning_integration
+    at: "docs/history-contract.md temporal-applicability/v1; scripts/history_assessment.py at
+         69038902f97b31c9a7e00f800eef8ee8c25590aa"
+    of: "2026-09-19"
+    fidelity: paraphrase
+    scope: "Source contract at 69038902f97b31c9a7e00f800eef8ee8c25590aa; applicability is evidence
+            persistence, not inferred time-window semantics"
+  p.history_watch_scenarios:
+    name: "Hypothetical history watch computes without accepting claims"
+    v: "Watch combines compatible committed histories canonically and evaluates captured
+        hypothesis/shared scenarios separately, including never-folding hypotheses. Scenario findings
+        retain source identity and do not establish acceptance or permission to fold; remeasure
+        assesses the final measured world without publishing it."
+    from: s.2026_09_17_history_reasoning_integration
+    at: "docs/reasoning-core.md Watch compatibility; scripts/reasoning/scenario.py at
+         69038902f97b31c9a7e00f800eef8ee8c25590aa"
+    of: "2026-09-19"
+    fidelity: paraphrase
+    scope: "Source contract at 69038902f97b31c9a7e00f800eef8ee8c25590aa"
   p.history_writer_compatibility:
     name: "History writer compatibility"
     v: "History batch receipt v6 validates the final staged world while retaining per-action

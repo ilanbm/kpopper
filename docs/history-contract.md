@@ -4,8 +4,10 @@
 callable history store, pure capture adapter, and prepared legacy writes. These
 interfaces do not activate history for an existing record. Direct history writes, local source reports, copied migration and captured Simple/Advanced
 reads use these interfaces. Guarded authority transitions are callable for explicitly
-selected records. Public combined assessment and default consumer policy remain
-separate integration work.
+selected records. New records start with immutable history and `core/v1`;
+ordinary readers select declared core records automatically. Combined assessment
+retains computational, historical and operational findings separately. See
+[reasoning and history](reasoning-core.md) for the public consumer contract.
 
 ## Objects and identity
 

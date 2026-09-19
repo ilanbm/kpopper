@@ -533,7 +533,7 @@ def prepare_proposal(entry, subject, body=None, collection=None, *, because=None
     deps = body.get(fields['deps'], []) if isinstance(body, dict) else []
     C._require(isinstance(deps, list) and all(isinstance(dep, str) for dep in deps), 'invalid_proposal_dependencies')
     C._require(_receipt_version in (5, 9), 'invalid_authoring_receipt')
-    if isinstance(body, dict) and fields['deps'] in body:
+    if _receipt_version == 9 and isinstance(body, dict) and fields['deps'] in body:
         C._require(fields['snapshot'] not in body, 'authored_snapshot_forbidden')
     authored = {'collection': collection, 'fields': fields, 'profile': cap['profile']}
     if hypothesis is not None:
