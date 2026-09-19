@@ -1,0 +1,131 @@
+meta:
+  name: Dark-matter research — finite collection and retained history
+  scope: A prepared literature exercise, not a complete review or a combined likelihood.
+  reasoning:
+    version: 2
+    profile: core/v1
+    requires: [arithmetic/v1, composition/v1, query/v1]
+sources:
+  paper.rotation:
+    name: Rubin, Ford & Thonnard (1980)
+    url: https://articles.adsabs.harvard.edu/pdf/1980ApJ...238..471R
+    read: '2026-09-19'
+  paper.sparc:
+    name: Lelli, McGaugh & Schombert (2016), SPARC, v1
+    url: https://arxiv.org/abs/1606.09251v1
+    read: '2026-09-19'
+  paper.rar:
+    name: McGaugh, Lelli & Schombert (2016), radial acceleration relation, v1
+    url: https://arxiv.org/abs/1609.05917v1
+    read: '2026-09-19'
+  paper.lensing:
+    name: Clowe et al. (2006), Bullet Cluster, v1
+    url: https://arxiv.org/abs/astro-ph/0608407v1
+    read: '2026-09-19'
+  paper.cmb:
+    name: Planck 2018 VI, cosmological parameters, v4
+    url: https://arxiv.org/abs/1807.06209v4
+    read: '2026-09-19'
+  paper.lz:
+    name: LZ first search, v4
+    url: https://arxiv.org/abs/2207.03764v4
+    read: '2026-09-19'
+  research.protocol:
+    name: Collection choices and limits of this continuation
+    file: README.md
+    read: '2026-09-19'
+studies:
+  study.rotation:
+    domain: astronomy
+    in_review: true
+    from: paper.rotation
+    at: p. 471, abstract
+    note: Outer rotation curves; extended mass requires gravitational interpretation.
+  study.sparc:
+    domain: astronomy
+    in_review: true
+    from: paper.sparc
+    at: Abstract
+    note: A catalog and mass-model resource; stellar mass-to-light ratios are assumptions.
+  study.rar:
+    domain: astronomy
+    in_review: true
+    from: paper.rar
+    at: p. 1, Galaxy Sample; pp. 4–5, Results/Discussion
+    note: Reuses SPARC; not a second independent observational catalog.
+  study.lensing:
+    domain: astronomy
+    in_review: true
+    from: paper.lensing
+    at: Abstract
+    note: Mass and gas offset interpreted under the adopted lensing framework.
+  study.cmb:
+    domain: astronomy
+    in_review: true
+    from: paper.cmb
+    at: Abstract, combined analysis
+    note: A fit within base Lambda-CDM; model assumptions and lensing tension remain.
+scopes:
+  scope.studies:
+    collection_scope:
+      collection: studies
+      fields: [domain, in_review, particle_identity]
+known:
+  cmb.omega_c_h2:
+    v: 0.12
+    from: paper.cmb
+    at: Abstract, combined analysis
+    fidelity: quoted
+    uncertainty: 0.001
+    confidence: 68%
+  cmb.omega_b_h2:
+    v: 0.0224
+    from: paper.cmb
+    at: Abstract, combined analysis
+    fidelity: quoted
+    uncertainty: 0.0001
+    confidence: 68%
+  research.framework:
+    v: Adopt standard gravitational mass inference and base Lambda-CDM for the CMB interpretation.
+    from: research.protocol
+    at: Scientific limits
+  research.shared_data:
+    v: The RAR analysis selects from SPARC, so the two papers are related evidence.
+    from: paper.rar
+    at: p. 1, Galaxy Sample
+    fidelity: paraphrase
+calculations:
+  m.astronomy_count:
+    rule:
+      query:
+        version: 1
+        scope: scope.studies
+        op: count
+        where:
+          op: and
+          args:
+          - {column: in_review}
+          - {op: eq, args: [{column: domain}, {text: astronomy}]}
+  m.astronomy_members:
+    rule:
+      query:
+        version: 1
+        scope: scope.studies
+        op: filter
+        where:
+          op: and
+          args:
+          - {column: in_review}
+          - {op: eq, args: [{column: domain}, {text: astronomy}]}
+  m.particle_identities:
+    rule:
+      query:
+        version: 1
+        scope: scope.studies
+        op: project
+        value: {column: particle_identity}
+    blocked_on: No particle_identity field was supplied for any study; a scattering limit is not an identification.
+  cmb.dark_to_baryon_density:
+    rule: {expr: 'cmb.omega_c_h2 / cmb.omega_b_h2'}
+    note: Ratio of rounded central values from one fit; no uncertainty propagation or independent observation.
+judgments: {}

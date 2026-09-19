@@ -17,10 +17,13 @@ depend on, and records what would make them worth revisiting. When a recorded pr
 changes, kpopper traces its reach through the record and surfaces what needs another look.
 
 > [!IMPORTANT]
-> **TL;DR: Add kpopper to make your work easier to pick up, easier to check, and harder to lose track of.**
+> **TL;DR: kpopper makes your AI sessions less forgetful and your work easier to pick up, check, and build on.**
+>
+> [**Try it and see for yourself →**](#get-started)
 
 **[Get started](#get-started)** · [Examples](#example-1-coding-agent) ·
 [Capabilities](#what-you-can-do-with-kpopper) · [Record format](#the-knowledge-record) ·
+[Commands](#quick-reference) ·
 [Contributing](CONTRIBUTING.md) · [Why the name?](#popper-give-a-conclusion-a-way-to-fail)
 
 [![Meet GROUNDING.yaml, with a handwritten your new friend note. An earlier conversation creates an email with a 30-day promise and records the supporting reason; a later conversation updates a draft retention policy and its recorded value to seven days. Blue arrows connect the conversations to the saved conclusion and changed reading. The YAML retains its 30/30 review snapshot. A pink arrow follows wrong_if to the deterministic check: seven is less than thirty, so the promise is no longer supported. Actual CLI output returns FAIL downloads.availability to the agent, with a caller-measured 0.24-second local-run badge. The closing line reads Deterministic Reasoning that outlives the conversation, with a blue underline pointing to the returned result. The phone layout presents consecutive excerpts from the same file.](assets/diagrams/reasoning-check.png)](assets/diagrams/reasoning-check.png)
@@ -35,6 +38,7 @@ changes, kpopper traces its reach through the record and surfaces what needs ano
 - [Example 2: Claude Cowork / ChatGPT Work (freshness)](#example-2-claude-cowork-and-chatgpt-work)
 - [Example 3: Research (evidence synthesis)](#example-3-research)
 - [Installation and first use](#get-started)
+- [CLI and plugin quick reference](#quick-reference)
 - [What you can do with kpopper](#what-you-can-do-with-kpopper)
 - [One project, across your existing tools](#one-project-across-your-existing-tools)
 - [Past, present and future](#past-present-future)
@@ -545,6 +549,31 @@ writer records each judgment's review snapshot. A proposed change of framework
 then reopens several interpretations and the synthesis. No model call or claim of
 live independent research is part of that replay.
 
+### The collection changes; the answer stays five
+
+The [advanced continuation](examples/dark-matter/advanced/README.md) starts with
+the five astronomical papers and an explicit selection rule: include a study
+when it is in this review and classified as astronomy. Adding the existing LZ
+laboratory paper grows the captured collection while leaving that selection equal.
+
+| Reading | Before LZ | After LZ | Replay of the earlier Snapshot |
+|---|---:|---:|---:|
+| Papers in the scope | 5 | 6 | 5 |
+| Selected astronomical papers | 5 | 5 | 5 |
+| Query basis | Earlier basis | Changed basis | Earlier basis recovered |
+| Particle identities | Unknown | Unknown | Unknown |
+
+The `core/v1` record uses `composition/v1` for the inclusion condition and
+`query/v1` for selection. Its basis includes nonmatching members, so an equal
+numeric answer does not hide a changed collection. The retained Snapshot
+recovers the earlier inputs and result even with the source files unavailable.
+
+These are scripted CLI and public API results, checked without model calls.
+The [runnable exercise and captured output](examples/dark-matter/advanced/README.md#run-it)
+also preserve the exact `75/14` density ratio and an unchanged qualitative
+review judgment. Five papers is a coverage count: RAR still reuses SPARC, model
+assumptions remain explicit, and neither the count nor replay proves the synthesis.
+
 ## Get started
 
 Install kpopper where your agent works. The guides below cover coding agents and
@@ -564,7 +593,7 @@ python3 "$HOME/kpopper/scripts/plugin_runtime.py" doctor
 ```
 
 If you already have a checkout, use its absolute path instead. `setup` explicitly
-downloads the four [package dependencies](pyproject.toml) from PyPI into a private
+installs the [core dependencies](pyproject.toml) from PyPI into a private
 virtualenv under `~/.local/share/kpopper/runtimes/`. It works with externally managed
 Python installations: system packages are not modified. On Linux distributions that
 package `venv` separately, install that Python's `venv` support first.
@@ -690,24 +719,126 @@ explicit read-only instructions.
 For a standalone CLI installation and a walkthrough of the launch-party example, see
 [Try it from the command line](docs/reference.md#try-it-from-the-command-line).
 
+## Quick reference
+
+Use the CLI in a terminal, or ask your agent to follow a plugin skill. A skill guides
+a workflow and may use several CLI commands. You can also describe what you need in
+ordinary language.
+
+### CLI
+
+These commands assume an installed `kpop`. From a source checkout with its dependencies
+installed, use `python3 scripts/kpopper` instead. For plugin work, use the command supplied
+by the session's `KPOPPER_AGENT_CONTEXT`. `<id>` names a record entry, such as
+`workshop.ingredient_plan`; `kpop --help` lists command groups.
+
+| Command | What you need |
+| --- | --- |
+| `kpop where` | Locate this project's record |
+| `kpop open` | Open the current context and attention items |
+| `kpop pull <id>` | Retrieve a subject, its sources and reasons |
+| `kpop search "terms"` | Find matching claims and local source passages |
+| `kpop affects <id>` | Trace what depends on a premise |
+| `kpop check` | Check recorded conditions and changed premises |
+| `kpop assess <id>` | Inspect findings and scoped attention as JSON |
+| `kpop export <id>` | Share a focused Markdown excerpt |
+
+<details>
+<summary>Writing, history and background commands</summary>
+
+These commands can record decisions, update project state or configure work. The linked
+guides describe their arguments and review steps.
+
+| Command or command group | What you need |
+| --- | --- |
+| `kpop add <id> field=value ...` | Add a finding or judgment |
+| `kpop set <id> <value> --why "reason" --as-of YYYY-MM-DD` | Update a reading with its reason and date |
+| `kpop update --file report.json` | Apply one prepared source report |
+| `kpop review <id>` | Record a completed review |
+| `kpop same <a> <b>` · `kpop distinct <a> <b> "reason"` | Resolve whether two IDs name the same subject |
+| `kpop consolidate --dry-run` · `kpop consolidate --from <ref> --dry-run` | Test hypotheses or another branch before folding |
+| `kpop consolidate` · `kpop consolidate --refute <name> "reason"` | Fold eligible hypotheses or retain a refutation |
+| `kpop history status` | Inspect committed history acceptance |
+| `kpop remeasure --run` | Rerun the record's configured measurement recipes |
+| `kpop map` | Begin a guided mapping of existing material |
+| `kpop ingest` | Capture and process reports in the background |
+| `kpop watch` | Configure branch checks or inspect shared findings |
+| `kpop followups` | Manage deferred work and its recorded outcomes |
+| `kpop config` | Inspect or change workspace guidance |
+
+See the [command reference](docs/reference.md), [history commands](docs/history-contract.md#history-commands-and-portable-contributions),
+[background capture](skills/kpopper/INGESTION.md) and [followups](skills/kpopper/FOLLOWUPS.md).
+`review` records your assessment; it does not make that assessment for you.
+
+</details>
+
+### Plugin skills
+
+| Command | Skill | What happens in practice · possible CLI calls |
+| --- | --- | --- |
+| `/kpopper:kpopper` | [kpopper](skills/kpopper/SKILL.md) | Explains the method and chooses the workflow that fits the task. CLI calls follow the selected workflow. |
+| `/kpopper:ground` | [ground](skills/ground/SKILL.md) | Retrieves relevant claims, sources and dependencies before answering, and checks what needs review.<br>May use `kpop pull <id>`, `kpop affects <id>`, `kpop check` or `kpop search "terms"`. |
+| `/kpopper:record` | [record](skills/record/SKILL.md) | Saves findings, their sources and reasons; records decisions, open questions and completed reviews.<br>May use `kpop update --file report.json`, `kpop add`, `kpop set` or `kpop review`. |
+| `/kpopper:map` | [map](skills/map/SKILL.md) | Examines the agreed materials, builds a sourced record and reports coverage and gaps.<br>Starts with `kpop map --json` or `kpop map --deep --json`, then follows the returned workflow. |
+| `/kpopper:consolidate` | [consolidate](skills/consolidate/SKILL.md) | Compares proposals with the record, surfaces disagreements and guides folding or refuting them.<br>May use `kpop consolidate --dry-run`, `kpop consolidate` or `kpop remeasure --run`. |
+| `/kpopper:watch` | [watch](skills/watch/SKILL.md) | Inspects branch checks and shared findings; configures background checks or daily review when requested.<br>May use `kpop watch status`, `kpop watch setup`, `kpop watch shared` or `kpop followups daily install`, plus the host's scheduler. |
+
+The agent chooses the calls for the task and the record's state, using its
+source-reading tools as needed.
+
+For example, `/kpopper:ground workshop.ingredient_plan` asks the agent to retrieve that plan and
+its basis. **`ground` is a skill; the CLI reads use `open`, `pull`, `affects` and `check`.**
+Other hosts expose skills through their [adapters](adapters/README.md).
+
+**Experimental — optional HTML applications**
+
+These skills require the [optional HTML setup](#experimental-applications) and explicit
+selection. Their interfaces and artifact formats may change.
+
+| Command | Application | What happens in practice · possible CLI calls |
+| --- | --- | --- |
+| `/kpopper:hub` | [kpopper Hub](skills/hub/SKILL.md) | Builds a browsable snapshot of the record and checks its layout and coverage.<br>Uses `kpop experimental hub`, for example with `--open` or `--verify`. |
+| `/kpopper:annotated-doc` | [Annotated Documents](skills/annotated-doc/SKILL.md) | Authors or refreshes a standalone HTML document with selected evidence and reviewable copy updates.<br>Uses `kpop experimental annotated-doc` with operations such as `guide`, `build` and `refresh`. |
+
+The CLI entry points are `kpop experimental hub` and `kpop experimental annotated-doc`.
+`page` and `document` remain compatibility aliases. The separate experimental
+[checked-session integration](docs/checked-sessions.md) uses `kpop session` and has its
+own setup; it is optional alongside the default reasoning engine.
+
 ## What you can do with kpopper
 
-| In your work | What kpopper keeps or connects |
-|---|---|
-| Pick up a project in a later session | Relevant facts, goals, decisions, reasons and open questions, with bounded orientation and focused retrieval. [Reading the record](docs/reference.md#find-and-read-the-record). |
-| Trace a recommendation | Sources, their dates and locations, the premises used, and the values seen at the last review. [Record format](#the-knowledge-record). |
-| Notice when a decision needs another look | Changed recorded premises and declared breaking conditions, including facts connected to reviewed measurement recipes. [Checking rules](docs/reference.md#what-check-means). |
-| Keep competing claims in view | Hypotheses, explicit reconciliation and retained refutations. [Consolidation](skills/consolidate/SKILL.md). |
-| Work across branches | Combined-record checks in CI and optional background compatibility checks while work continues. [Coding and CI](docs/coding-and-ci.md). |
-| Return to deferred work | Followups tied to dates, recorded changes or preceding work, with configured host scheduling. [Followups](#followups-and-background-checks). |
-| Try an HTML application | Optional, experimental kpopper Hub and Annotated Documents. [Applications](#experimental-applications). |
-| Share part of the record | A bounded Markdown excerpt with historical and current readings, omitted values marked, and optional Mermaid diagrams. [Focused exports](docs/graph-export.md). |
-| Let the structure grow with the project | Domain-specific subjects and vocabulary within a small set of explicit relationships and checks. [Evolving structure](#a-structure-that-grows-with-the-project). |
-| Build a tool on the record | Versioned assessment JSON with independent findings, explicit scope and task-specific attention policies. [Assessment contract](docs/assessment.md). |
-| Bind a session's reads to a known version | An experimental, optional Lean-backed view checks selected session contracts and rejects reads against an outdated record revision. [Checked sessions](docs/checked-sessions.md). |
+Carry the reasoning into the next session, check it against recorded inputs, and keep
+the earlier evidence available when the work changes.
 
-Use the parts your project needs. Existing documents, tools and memory remain where
-they are; the agent records the relevant connections between them.
+| What you want to do | What kpopper provides |
+|---|---|
+| Resume work with its context | Open the project's standing decisions and attention items, then retrieve the facts and reasons relevant to a question. [Before the first answer](#before-the-first-answer). |
+| Trace why a decision was made | Follow its sources, declared dependencies and the values used at its last review. [The knowledge record](#the-knowledge-record). |
+| Keep earlier decisions inspectable | History-backed records retain immutable claim versions and explicit acceptance, review, correction and refutation acts as the current record evolves. [History](docs/history-contract.md). |
+| Calculate and check explicit rules | Evaluate exact arithmetic, compound Boolean conditions and conditional expressions with the packaged Lean runtime. Missing inputs and execution errors remain visible. [Deterministic reasoning](#what-deterministic-reasoning-means-here). |
+| Ask questions over a recorded collection | Filter, select, count or sum within a declared scope, or test whether all/any members meet a condition. The result retains scope evidence and diagnostics. [Collection queries](docs/query.md). |
+| Catch a changed basis behind an unchanged answer | Compare the recorded inputs, rules and collection membership with the last review, even when the numeric result stays equal. [Five selected papers, a different basis](examples/dark-matter/advanced/README.md). |
+| Reproduce an earlier computation | Replay a retained Snapshot through the public API to recover its earlier result and basis after the live record changes. [Source-free replay example](examples/dark-matter/advanced/README.md#run-it). |
+| Notice which decisions need another look | Trace changed premises, evaluate declared breaking conditions and explicitly rerun configured measurement recipes. [Checks and measurements](docs/reference.md#what-check-means). |
+| Test alternatives and reconcile branch work | Keep named hypotheses, inspect the proposed combination and retain conflicts or refutations. Worktrees keep their code-specific context, with checks available before a merge and in CI. [Two working modes](#two-working-modes). |
+| Keep useful findings across sessions and branches | Capture explicit reports in the background and retain scoped project contributions with their sources and pending/accepted status. [Background capture](#keep-the-conversation-moving) · [Shared contributions](docs/project-modes.md). |
+| Return to work when its conditions change | Tie followups to dates, changed recorded inputs or earlier work, with scheduling and delivery configured in the host. [Followups](#followups-and-background-checks). |
+| Share a focused piece of the reasoning | Export selected entries as Markdown, with earlier/current readings, omitted values marked and optional Mermaid diagrams. [Focused exports](docs/graph-export.md). |
+| Build a tool on structured findings | Read versioned assessment JSON with computational results, review comparisons, contention, integrity and history evidence kept distinct. [Assessment contract](docs/assessment.md). |
+| Let the record fit the work | Add domain-specific subjects and vocabulary while preserving explicit sources, dependencies and review conditions. [Evolving structure](#a-structure-that-grows-with-the-project). |
+
+New records use `core/v1` and immutable history by default; existing legacy records
+require explicit adoption. Collection queries use the declared `query/v1` capability.
+The checks cover recorded inputs and supported rules. The agent still interprets sources
+and makes judgments. Your existing documents, tools and memory stay where they are.
+
+**Optional experimental tools**
+
+| What you want to do | Tool and scope |
+|---|---|
+| Browse the record visually | **kpopper Hub:** a rendered snapshot with project layouts, source links and an interactive graph. Requires the optional HTML runtime. [Applications](#experimental-applications). |
+| Share a document with inspectable evidence | **Annotated Documents:** standalone HTML with selected source snapshots and reviewable copy updates. Requires the optional HTML runtime. [Document workflow](docs/documents.md). |
+| Bind an agent's reads to a known revision | **Checked sessions:** a revision-bound view and optional MCP transport, with their own setup and session checks. [Checked-session integration](docs/checked-sessions.md). |
 
 <a id="start-with-the-work"></a>
 
@@ -790,13 +921,49 @@ evaluation of the same inputs and rules gives the same result.**
 
 In kpopper, this means:
 
-- **Repeatable checks.** With seven days of retention and a 30-day promise,
-  `files.days < link.days` evaluates to `true` each time those values are checked.
+- **Repeatable checks.** A $1,200 plan exceeds a $1,000 budget:
+  `total_cost > budget` evaluates to `true` each time those values are checked.
   No fresh model response is needed to decide that comparison.
 - **Explicit assumptions.** The record names what a conclusion depends on and
   the condition that would make it fail or deserve another look.
 - **Traceable support.** Follow a result through its recorded inputs, rule,
   source references and last-review snapshot.
+
+**The same answer can rest on different evidence.** Consider this illustrative
+exchange after adding LZ to the [research example](examples/dark-matter/advanced/README.md):
+
+> **User:** “Include the LZ paper. Does our selection of astronomy studies change?”
+>
+> **Agent:** “I'll apply the recorded selection rule and compare its evidence basis
+> with the last review.”
+
+The selection rule requires `in_review` **and** `domain == "astronomy"`.
+The agent runs the following against the generated history-backed record.
+`jq` selects four fields from the actual CLI assessment for display:
+
+```sh
+kpop assess m.astronomy_count m.particle_identities d.review_scope \
+  --record /tmp/dark-matter-query/history/GROUNDING.yaml --history |
+  jq -f examples/dark-matter/advanced/assessment-summary.jq
+```
+
+```json
+{
+  "studies_scanned": 6,
+  "astronomy_studies_selected": 5,
+  "particle_identity_status": "unknown",
+  "review_basis": "changed"
+}
+```
+
+Five studies matched before; five still match. LZ is recorded as laboratory evidence,
+so it joins the scope without entering that selection. The retained review still names
+the earlier basis, and missing particle-identity readings stay unknown.
+
+The agent can now explain: **“The selection is unchanged, but the evidence considered
+has changed. The saved review needs another look.”** The runnable example also replays
+the earlier Snapshot after removing access to the source files, recovering its original
+five-paper scope and basis. [Run it and inspect the full responses](examples/dark-matter/advanced/README.md#run-it).
 
 Agents still interpret sources, choose which assumptions to record and make
 judgments. The reliability of a conclusion depends on that evidence and those
