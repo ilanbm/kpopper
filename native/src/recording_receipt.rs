@@ -37,6 +37,90 @@ fn load(inventory: &mut Inventory, path: &Path) -> Result<Value> {
     }
     Ok(serde_json::from_slice(&inventory.read(path)?)?)
 }
+
+/// Read one durably applied ingestion receipt while revalidating its owner and
+/// immutable captured inputs. This is the read-only boundary used by consumers
+/// that bind a saved result to current record evidence.
+pub fn applied_event_binding(
+    event_id: &str,
+    record: &Path,
+    state_dir: Option<&Path>,
+) -> Result<Value> {
+    crate::require(
+        !event_id.is_empty()
+            && event_id.len() <= 128
+            && event_id
+                .bytes()
+                .all(|b| b.is_ascii_alphanumeric() || b"_-".contains(&b)),
+        "invalid_ingestion_event_id",
+    )?;
+    let record = resolved(record)?;
+    let state = match state_dir {
+        Some(path) => resolved(path)?,
+        None => {
+            let base = std::env::var_os("XDG_STATE_HOME")
+                .filter(|value| !value.is_empty())
+                .map(PathBuf::from)
+                .or_else(|| {
+                    std::env::var_os("HOME").map(|value| PathBuf::from(value).join(".local/state"))
+                })
+                .ok_or_else(|| crate::Error("home_directory_unavailable".into()))?;
+            resolved(
+                &base
+                    .join("kpopper/ingestion")
+                    .join(sha256(record.to_string_lossy().as_bytes())),
+            )?
+        }
+    };
+    let mut inventory = Inventory::default();
+    crate::require(
+        load(&mut inventory, &state.join("record.json"))?
+            == json!({"record":record.to_string_lossy()}),
+        "ingestion_state_owner_mismatch",
+    )?;
+    let event = load(
+        &mut inventory,
+        &state.join("events").join(format!("{event_id}.json")),
+    )?;
+    crate::require(
+        event.is_object() && event["event_id"] == event_id,
+        "ingestion_event_unavailable",
+    )?;
+    let source = event["source_file"]
+        .as_str()
+        .map(PathBuf::from)
+        .ok_or_else(|| crate::Error("ingestion_event_evidence_mismatch".into()))?;
+    crate::require(
+        source.is_absolute()
+            && source.parent() == Some(state.join("sources").as_path())
+            && source.file_name().and_then(|v| v.to_str()) == Some(&format!("{event_id}.txt")),
+        "ingestion_event_evidence_mismatch",
+    )?;
+    let envelope = inventory.read(&state.join("envelopes").join(format!("{event_id}.json")))?;
+    let source_bytes = inventory.read(&source)?;
+    crate::require(
+        event["source_sha256"] == sha256(&source_bytes)
+            && event["envelope_sha256"] == sha256(&envelope)
+            && serde_json::from_slice::<Value>(&envelope).is_ok(),
+        "ingestion_event_evidence_mismatch",
+    )?;
+    let receipt = load(
+        &mut inventory,
+        &state.join("receipts").join(format!("{event_id}.json")),
+    )?;
+    crate::require(
+        receipt.is_object()
+            && receipt["state"] == "applied"
+            && receipt["event_id"] == event_id
+            && receipt["source"] == format!("s.ingest_{event_id}")
+            && ["source_file", "source_sha256", "envelope_sha256"]
+                .iter()
+                .all(|key| receipt[*key] == event[*key]),
+        "ingestion_event_not_applied",
+    )?;
+    inventory.verify()?;
+    Ok(receipt)
+}
 fn valid(
     id: &str,
     body: &TypedValue,
@@ -242,6 +326,44 @@ mod tests {
         fs::write(state.join("receipts/test.json"), "{}").unwrap();
         assert!(proof.verify().is_err());
         assert!(capture(&source(&record), None).unwrap().ids().is_empty());
+    }
+
+    #[test]
+    fn applied_event_api_rejects_changed_wrong_owner_and_queued_state() {
+        let (_temp, record, state) = setup();
+        let receipt = applied_event_binding("test", &record, Some(&state)).unwrap();
+        assert_eq!(receipt["state"], "applied");
+        fs::write(state.join("sources/test.txt"), "changed").unwrap();
+        assert_eq!(
+            applied_event_binding("test", &record, Some(&state))
+                .unwrap_err()
+                .0,
+            "ingestion_event_evidence_mismatch"
+        );
+        fs::write(state.join("sources/test.txt"), "observed").unwrap();
+        fs::write(
+            state.join("record.json"),
+            json!({"record":"wrong"}).to_string(),
+        )
+        .unwrap();
+        assert_eq!(
+            applied_event_binding("test", &record, Some(&state))
+                .unwrap_err()
+                .0,
+            "ingestion_state_owner_mismatch"
+        );
+        fs::write(
+            state.join("record.json"),
+            json!({"record":record}).to_string(),
+        )
+        .unwrap();
+        fs::remove_file(state.join("receipts/test.json")).unwrap();
+        assert_eq!(
+            applied_event_binding("test", &record, Some(&state))
+                .unwrap_err()
+                .0,
+            "ingestion_event_not_applied"
+        );
     }
 
     #[test]

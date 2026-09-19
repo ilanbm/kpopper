@@ -2,6 +2,8 @@
 
 pub mod authoring_source;
 pub mod checked_session;
+pub mod annotated_document;
+mod annotated_document_html;
 pub mod core_html;
 pub mod direct_history;
 pub mod history_activation;
