@@ -11,6 +11,18 @@ use std::{
 
 const SCHEMA: &str = "schema: {deps: rests_on, snapshot: seen, predicate: wrong_if}\n";
 
+fn oracle() -> (PathBuf, PathBuf) {
+    (
+        PathBuf::from(
+            std::env::var_os("KPOP_SESSION_ORACLE_PYTHON").expect("set explicit oracle Python"),
+        ),
+        PathBuf::from(
+            std::env::var_os("KPOP_SESSION_ORACLE_ROOT").expect("set immutable oracle root"),
+        )
+        .join("scripts/provenance.py"),
+    )
+}
+
 fn cli(root: &Path, args: &[&str]) -> std::process::Output {
     Command::new(env!("CARGO_BIN_EXE_kpop-native"))
         .current_dir(root)
@@ -159,9 +171,7 @@ fn collection_only_physical_hypothesis_inherits_base_roles() {
 #[test]
 #[ignore = "uses the supplied immutable Python 1.8 oracle"]
 fn collection_only_physical_hypothesis_matches_python() {
-    let python = "/Users/ilanbm/.local/share/kpopper/runtimes/bf4942511207a39e/bin/python";
-    let oracle =
-        "/Users/ilanbm/docs/kpopper/rust-runtime-spike/baseline-f480ea6/scripts/provenance.py";
+    let (python, oracle) = oracle();
     let tmp = tempfile::tempdir().unwrap();
     let record = tmp.path().join("GROUNDING.yaml");
     fs::write(&record, format!("{SCHEMA}known:\n  p.a: {{v: 1}}\n")).unwrap();
@@ -172,8 +182,8 @@ fn collection_only_physical_hypothesis_matches_python() {
     )
     .unwrap();
     let native = cli(tmp.path(), &["--frozen", "check"]);
-    let legacy = Command::new(python)
-        .arg(oracle)
+    let legacy = Command::new(&python)
+        .arg(&oracle)
         .arg("--frozen")
         .arg("check")
         .arg(&record)
@@ -187,9 +197,7 @@ fn collection_only_physical_hypothesis_matches_python() {
 #[test]
 #[ignore = "uses the supplied immutable Python 1.8 oracle"]
 fn ordinary_key_matrix_matches_python_check_pull_and_mark() {
-    let python = "/Users/ilanbm/.local/share/kpopper/runtimes/bf4942511207a39e/bin/python";
-    let oracle =
-        "/Users/ilanbm/docs/kpopper/rust-runtime-spike/baseline-f480ea6/scripts/provenance.py";
+    let (python, oracle) = oracle();
     let cases = [
         format!("{SCHEMA}known:\n  p.a: {{v: 1, on: note}}\n"),
         format!(
@@ -211,8 +219,8 @@ fn ordinary_key_matrix_matches_python_check_pull_and_mark() {
         fs::write(&record, text).unwrap();
         for command in ["check", "pull"] {
             let native = cli(tmp.path(), &["--frozen", command]);
-            let legacy = Command::new(python)
-                .arg(oracle)
+            let legacy = Command::new(&python)
+                .arg(&oracle)
                 .arg("--frozen")
                 .arg(command)
                 .arg(&record)
@@ -225,8 +233,8 @@ fn ordinary_key_matrix_matches_python_check_pull_and_mark() {
         let native_state = tmp.path().join("native-mark.json");
         let python_state = tmp.path().join("python-mark.json");
         session_gate::mark(&options(&native_state, &record, tmp.path())).unwrap();
-        let legacy = Command::new(python)
-            .arg(oracle)
+        let legacy = Command::new(&python)
+            .arg(&oracle)
             .arg("mark")
             .arg(&python_state)
             .arg(&record)
