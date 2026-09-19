@@ -177,8 +177,11 @@ fn publish(
     let path = F::target(&store.root, &relative)?;
     require(F::read(&path)?.is_none(), "recovery_required")?;
     route.verify()?;
-    let parent = Path::new(&relative).parent().unwrap().join(".gitignore");
-    F::publish_immutable(&store.root, parent.to_str().unwrap(), b"*\n")?;
+    let parent = relative
+        .rsplit_once('/')
+        .map(|(parent, _)| parent)
+        .ok_or_else(|| error("invalid_history_journal"))?;
+    F::publish_immutable(&store.root, &format!("{parent}/.gitignore"), b"*\n")?;
     F::publish_immutable(&store.root, &relative, &raw)?;
     probe("journal")?;
     commit(store, mutation, runtime, &mut |_| {

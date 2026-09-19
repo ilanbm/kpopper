@@ -8,10 +8,12 @@ use crate::{
     require,
     value::TypedValue as V,
 };
-#[cfg(unix)]
+#[cfg(any(unix, windows))]
 use fs2::FileExt;
 #[cfg(unix)]
 use std::os::unix::fs::{MetadataExt, PermissionsExt};
+#[cfg(windows)]
+use std::os::windows::{ffi::OsStrExt, fs::OpenOptionsExt};
 use std::{
     cell::RefCell,
     collections::BTreeSet,
@@ -21,10 +23,26 @@ use std::{
     rc::{Rc, Weak},
 };
 
+#[cfg(unix)]
+type DirectoryIdentity = (u64, u64, u32);
+#[cfg(windows)]
+struct DirectoryIdentity {
+    directory: same_file::Handle,
+    process: u32,
+}
+#[cfg(windows)]
+impl PartialEq for DirectoryIdentity {
+    fn eq(&self, other: &Self) -> bool {
+        self.process == other.process && self.directory == other.directory
+    }
+}
+
 struct Held {
     _file: File,
+    #[cfg(windows)]
+    _namespace_file: File,
     path: PathBuf,
-    identity: (u64, u64, u32),
+    identity: DirectoryIdentity,
     exclusive: bool,
 }
 thread_local! {static LOCKS: RefCell<Vec<Weak<Held>>> = const {RefCell::new(Vec::new())};}
@@ -40,15 +58,14 @@ pub struct AuxiliaryOwner {
     _permit: Rc<AuxiliaryPermit>,
 }
 fn exclusive_owned(root: &Path) -> Result<Option<Rc<Held>>> {
-    #[cfg(not(unix))]
+    #[cfg(not(any(unix, windows)))]
     {
         let _ = root;
         Ok(None)
     }
-    #[cfg(unix)]
+    #[cfg(any(unix, windows))]
     {
-        let stat = fs::metadata(root)?;
-        let identity = (stat.dev(), stat.ino(), std::process::id());
+        let identity = directory_identity(root)?;
         Ok(LOCKS.with(|locks| {
             locks
                 .borrow()
@@ -235,7 +252,7 @@ pub struct DirectoryGuard {
 }
 impl DirectoryGuard {
     pub fn acquire(root: &Path, exclusive: bool) -> Result<Self> {
-        #[cfg(not(unix))]
+        #[cfg(not(any(unix, windows)))]
         {
             let _ = root;
             require(!exclusive, "locking_unavailable")?;
@@ -280,7 +297,131 @@ impl DirectoryGuard {
             LOCKS.with(|locks| locks.borrow_mut().push(Rc::downgrade(&held)));
             Ok(Self { _held: Some(held) })
         }
+        #[cfg(windows)]
+        {
+            require(windows_local_path(root), "network_locking_unavailable")?;
+            let path = root.canonicalize()?;
+            require(windows_local_path(&path), "network_locking_unavailable")?;
+            let stat = fs::metadata(&path)?;
+            require(stat.is_dir(), "invalid_path")?;
+            let identity = directory_identity(&path)?;
+            let held = LOCKS.with(|locks| -> Result<Option<Rc<Held>>> {
+                let mut locks = locks.borrow_mut();
+                locks.retain(|l| l.strong_count() > 0);
+                let active: Vec<_> = locks
+                    .iter()
+                    .filter_map(Weak::upgrade)
+                    .filter(|l| l.identity.process == identity.process)
+                    .collect();
+                if let Some(existing) = active.iter().find(|l| l.identity == identity) {
+                    require(existing.exclusive || !exclusive, "lock_upgrade_refused")?;
+                    return Ok(Some(existing.clone()));
+                }
+                require(active.iter().all(|l| l.path != path), "directory_replaced")?;
+                require(active.iter().all(|l| l.path <= path), "lock_order_refused")?;
+                Ok(None)
+            })?;
+            if let Some(held) = held {
+                return Ok(Self { _held: Some(held) });
+            }
+            let lock_home = std::env::temp_dir().join("kpopper-native-locks");
+            fs::create_dir_all(&lock_home)?;
+            let mut key = Vec::new();
+            for unit in path.as_os_str().encode_wide() {
+                key.extend_from_slice(&unit.to_le_bytes());
+            }
+            let namespace_path = lock_home.join(format!("path-{}.lock", sha256(&key)));
+            let namespace_file = windows_lock_file(&namespace_path)?;
+            if exclusive {
+                FileExt::lock_exclusive(&namespace_file)?;
+            } else {
+                FileExt::lock_shared(&namespace_file)?;
+            }
+            verify_windows_lock_file(&namespace_file, &namespace_path)?;
+            let identity_path =
+                lock_home.join(format!("identity-{}.lock", windows_identity_key(&identity)));
+            let file = windows_lock_file(&identity_path)?;
+            if exclusive {
+                FileExt::lock_exclusive(&file)?;
+            } else {
+                FileExt::lock_shared(&file)?;
+            }
+            verify_windows_lock_file(&file, &identity_path)?;
+            require(path == root.canonicalize()?, "directory_replaced")?;
+            require(directory_identity(&path)? == identity, "directory_replaced")?;
+            let held = Rc::new(Held {
+                _file: file,
+                _namespace_file: namespace_file,
+                path,
+                identity,
+                exclusive,
+            });
+            LOCKS.with(|locks| locks.borrow_mut().push(Rc::downgrade(&held)));
+            Ok(Self { _held: Some(held) })
+        }
     }
+}
+#[cfg(unix)]
+fn directory_identity(root: &Path) -> Result<(u64, u64, u32)> {
+    let stat = fs::metadata(root)?;
+    Ok((stat.dev(), stat.ino(), std::process::id()))
+}
+#[cfg(windows)]
+fn windows_identity_key(identity: &DirectoryIdentity) -> String {
+    use std::hash::{Hash, Hasher};
+    // same-file 1.0.6 hashes its retained Windows handle as the optional
+    // (volume serial, file index) pair. Cargo.lock pins that protocol. Length
+    // framing makes the collected Hash writes unambiguous; SHA-256 collisions
+    // can only add false contention and cannot split one directory's lock.
+    struct Bytes(Vec<u8>);
+    impl Hasher for Bytes {
+        fn finish(&self) -> u64 {
+            0
+        }
+        fn write(&mut self, bytes: &[u8]) {
+            self.0
+                .extend_from_slice(&(bytes.len() as u64).to_le_bytes());
+            self.0.extend_from_slice(bytes);
+        }
+    }
+    let mut state = Bytes(Vec::new());
+    identity.directory.hash(&mut state);
+    sha256(&state.0)
+}
+#[cfg(windows)]
+fn windows_lock_file(path: &Path) -> Result<File> {
+    // Denying FILE_SHARE_DELETE keeps the named kernel-lock handle from being
+    // replaced while it fences this directory namespace or identity.
+    Ok(fs::OpenOptions::new()
+        .read(true)
+        .write(true)
+        .create(true)
+        .share_mode(0x0000_0001 | 0x0000_0002)
+        .open(path)?)
+}
+#[cfg(windows)]
+fn verify_windows_lock_file(file: &File, path: &Path) -> Result<()> {
+    let opened = same_file::Handle::from_file(file.try_clone()?)?;
+    require(
+        opened == same_file::Handle::from_path(path)?,
+        "lock_replaced",
+    )
+}
+#[cfg(windows)]
+fn directory_identity(root: &Path) -> Result<DirectoryIdentity> {
+    Ok(DirectoryIdentity {
+        directory: same_file::Handle::from_path(root)?,
+        process: std::process::id(),
+    })
+}
+#[cfg(windows)]
+fn windows_local_path(path: &Path) -> bool {
+    use std::path::{Component, Prefix};
+    !matches!(
+        path.components().next(),
+        Some(Component::Prefix(prefix))
+            if matches!(prefix.kind(), Prefix::UNC(_, _) | Prefix::VerbatimUNC(_, _))
+    )
 }
 fn guards(paths: Vec<PathBuf>) -> Result<Vec<DirectoryGuard>> {
     let paths = paths
@@ -295,6 +436,18 @@ fn guards(paths: Vec<PathBuf>) -> Result<Vec<DirectoryGuard>> {
 pub fn target(root: &Path, relative: &str) -> Result<PathBuf> {
     A::relative_path(relative)?;
     let mut path = root.canonicalize()?;
+    #[cfg(windows)]
+    LOCKS.with(|locks| -> Result<()> {
+        for held in locks.borrow().iter().filter_map(Weak::upgrade) {
+            if held.path == path {
+                require(
+                    directory_identity(&path)? == held.identity,
+                    "directory_replaced",
+                )?;
+            }
+        }
+        Ok(())
+    })?;
     for segment in relative.split('/') {
         path.push(segment);
         match fs::symlink_metadata(&path) {
@@ -322,6 +475,19 @@ pub(crate) fn read(path: &Path) -> Result<Option<Vec<u8>>> {
     Ok(Some(bytes))
 }
 fn sync(path: &Path) -> Result<()> {
+    #[cfg(windows)]
+    {
+        // Rust's ordinary File::open omits FILE_FLAG_BACKUP_SEMANTICS and
+        // therefore cannot open a directory. A write-capable directory handle
+        // lets FlushFileBuffers retain the transaction's metadata durability.
+        fs::OpenOptions::new()
+            .access_mode(0x4000_0000) // GENERIC_WRITE
+            .share_mode(0x0000_0001 | 0x0000_0002 | 0x0000_0004)
+            .custom_flags(0x0200_0000) // FILE_FLAG_BACKUP_SEMANTICS
+            .open(path)?
+            .sync_all()?;
+    }
+    #[cfg(not(windows))]
     File::open(path)?.sync_all()?;
     Ok(())
 }
@@ -416,12 +582,16 @@ pub(crate) fn journal_path(root: &Path, journal: &str, m: &PreparedMutation) -> 
 }
 fn private_home(root: &Path, journal: &str, m: &PreparedMutation) -> Result<()> {
     if journal == Layout::for_entry(&mutation_entry(m)?)?.journal {
-        let ignore = Path::new(journal).parent().unwrap().join(".gitignore");
-        let path = target(root, to_str(&ignore)?)?;
+        let parent = journal
+            .rsplit_once('/')
+            .map(|(parent, _)| parent)
+            .ok_or_else(|| error("invalid_journal_path"))?;
+        let ignore = format!("{parent}/.gitignore");
+        let path = target(root, &ignore)?;
         if let Some(raw) = read(&path)? {
             require(raw == b"*\n", "journal_ignore_mismatch")?;
         } else {
-            publish_immutable(root, to_str(&ignore)?, b"*\n")?;
+            publish_immutable(root, &ignore, b"*\n")?;
         }
     }
     Ok(())
@@ -429,11 +599,18 @@ fn private_home(root: &Path, journal: &str, m: &PreparedMutation) -> Result<()> 
 fn to_str(path: &Path) -> Result<&str> {
     path.to_str().ok_or_else(|| error("invalid_path"))
 }
-fn relative<'a>(root: &Path, path: &'a Path) -> Result<&'a str> {
-    to_str(
-        path.strip_prefix(root.canonicalize()?)
-            .map_err(|_| error("invalid_path"))?,
-    )
+fn relative(root: &Path, path: &Path) -> Result<String> {
+    let relative = path
+        .strip_prefix(root.canonicalize()?)
+        .map_err(|_| error("invalid_path"))?;
+    relative
+        .components()
+        .map(|part| match part {
+            std::path::Component::Normal(name) => to_str(Path::new(name)),
+            _ => Err(error("invalid_path")),
+        })
+        .collect::<Result<Vec<_>>>()
+        .map(|parts| parts.join("/"))
 }
 pub(crate) fn replicas(root: &Path, journal: &str, m: &PreparedMutation) -> Result<Vec<PathBuf>> {
     let value = data(m);
@@ -492,7 +669,7 @@ fn prepare_replicas(root: &Path, journal: &str, m: &PreparedMutation) -> Result<
     let mut images = Vec::new();
     for p in &paths {
         let raw = member_guard(root, m, p.parent().unwrap().parent().unwrap())?;
-        let checked = journal_path(root, relative(root, p)?, m)?;
+        let checked = journal_path(root, &relative(root, p)?, m)?;
         require(
             read(&checked)?.is_none_or(|existing| existing == raw),
             "journal_replica_mismatch",
@@ -502,10 +679,10 @@ fn prepare_replicas(root: &Path, journal: &str, m: &PreparedMutation) -> Result<
     for (path, raw) in paths.iter().zip(images) {
         publish_immutable(
             root,
-            relative(root, &path.parent().unwrap().join(".gitignore"))?,
+            &relative(root, &path.parent().unwrap().join(".gitignore"))?,
             b"*\n",
         )?;
-        publish_immutable(root, relative(root, path)?, &raw)?;
+        publish_immutable(root, &relative(root, path)?, &raw)?;
     }
     Ok(paths)
 }
@@ -600,7 +777,7 @@ pub fn publish_legacy(
     let mut copies = prepare_replicas(root, journal, m)?;
     if !copies.is_empty() {
         let ready = ready_path(&primary, m)?;
-        publish_immutable(root, relative(root, &ready)?, digest(m)?.as_bytes())?;
+        publish_immutable(root, &relative(root, &ready)?, digest(m)?.as_bytes())?;
         copies.push(ready);
     }
     apply(m, &paths, Direction::After)?;
@@ -674,7 +851,7 @@ pub fn recover_legacy(
     verify(&data(&m))?;
     let mut copies = prepare_replicas(root, journal, &m)?;
     if !copies.is_empty() {
-        publish_immutable(root, relative(root, &ready)?, digest.as_bytes())?;
+        publish_immutable(root, &relative(root, &ready)?, digest.as_bytes())?;
         copies.push(ready);
     }
     apply(&m, &paths, direction)?;
@@ -791,7 +968,7 @@ pub fn publish_transition(
     let mut copies = prepare_replicas(root, journal, m)?;
     if !copies.is_empty() {
         let ready = ready_path(&primary, m)?;
-        publish_immutable(root, relative(root, &ready)?, digest(m)?.as_bytes())?;
+        publish_immutable(root, &relative(root, &ready)?, digest(m)?.as_bytes())?;
         copies.push(ready);
     }
     apply_transition(root, m, &paths, Direction::After)?;
@@ -915,7 +1092,7 @@ fn recover_transition_inner(
         "invalid_ready_marker",
     )?;
     if !copies.is_empty() {
-        publish_immutable(root, relative(root, &ready)?, digest.as_bytes())?;
+        publish_immutable(root, &relative(root, &ready)?, digest.as_bytes())?;
         copies.push(ready);
     }
     apply_transition(root, &m, &paths, direction)?;
