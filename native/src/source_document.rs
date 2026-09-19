@@ -21,6 +21,7 @@ pub(crate) struct Document {
     pub history: Option<crate::history_capture::Capture>,
     pub history_projection: Option<V>,
     pub history_view: Option<V>,
+    pub overlay: Option<crate::source_overlay::Overlay>,
 }
 fn parse(inventory: &mut Inventory, path: &Path) -> Result<S> {
     let value = Y::decode_source_value(&inventory.read(path)?)?;
@@ -205,7 +206,11 @@ fn physical(directory: &Path, inventory: &mut Inventory) -> Result<V> {
     }
     Ok(V::Map(out))
 }
-pub(crate) fn load(paths: &[PathBuf], inventory: &mut Inventory) -> Result<Document> {
+pub(crate) fn load(
+    paths: &[PathBuf],
+    inventory: &mut Inventory,
+    allow_missing: bool,
+) -> Result<Document> {
     let entries = expanded(paths, inventory, true)?;
     require(!entries.is_empty(), "invalid_snapshot")?;
     let active = entries
@@ -267,6 +272,7 @@ pub(crate) fn load(paths: &[PathBuf], inventory: &mut Inventory) -> Result<Docum
         history: None,
         history_projection: None,
         history_view: None,
+        overlay: None,
     };
     if has_history {
         let store = crate::history_store::Store::new(first)?;
@@ -352,7 +358,14 @@ pub(crate) fn load(paths: &[PathBuf], inventory: &mut Inventory) -> Result<Docum
             let mut pending = vec![entry.clone()];
             while let Some(path) = pending.pop() {
                 let path = absolute(&path)?;
-                require(inventory.exists(&path)?, "missing_record")?;
+                if !inventory.exists(&path)? {
+                    require(allow_missing, "missing_record")?;
+                    let S::Map(source) = &mut document.source else {
+                        unreachable!()
+                    };
+                    update(source, "meta", S::Map(vec![]));
+                    continue;
+                }
                 let value = parse(inventory, &path)?;
                 let typed = value.typed();
                 let declared = map(&typed)?

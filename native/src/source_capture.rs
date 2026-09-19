@@ -47,6 +47,7 @@ struct Routing {
     root: PathBuf,
     record: PathBuf,
     selected: Vec<PathBuf>,
+    pending: Option<crate::pending_state::Observation>,
 }
 fn policy_bytes(path: &Path) -> Result<Option<Vec<u8>>> {
     use std::io::Read;
@@ -65,14 +66,16 @@ fn observation(paths: &[PathBuf], cwd: &Path, mode: ReadMode) -> Result<Routing>
     let project = M::project_for(paths, cwd)?;
     let config_bytes = policy_bytes(&project.config_path)?;
     let config = project.config()?;
-    // Advanced reads require actual ledger and publisher observations, including
-    // when an explicit unrelated artifact does not receive an overlay.
-    require(
-        mode != ReadMode::Live
-            || !project.is_git()
-            || !string_is(&map(&config)?["mode"], "advanced"),
-        "pending_capture_required",
-    )?;
+    let pending = if mode == ReadMode::Live
+        && project.is_git()
+        && string_is(&map(&config)?["mode"], "advanced")
+    {
+        Some(crate::pending_state::Observation::capture(
+            &project, &config,
+        )?)
+    } else {
+        None
+    };
     let record = project.record(Some(&config))?;
     let selected = if mode == ReadMode::Live {
         M::write_paths(paths, cwd)?
@@ -89,6 +92,7 @@ fn observation(paths: &[PathBuf], cwd: &Path, mode: ReadMode) -> Result<Routing>
         root: project.root,
         record,
         selected,
+        pending,
     })
 }
 fn origin(base: &Path, path: &Path) -> Result<String> {
@@ -129,6 +133,17 @@ fn portable(value: &V, base: &Path, authored: bool) -> Result<V> {
         V::Text(v) if !authored && Path::new(v).is_absolute() => s(&origin(base, Path::new(v))?),
         _ => value.clone(),
     })
+}
+fn publication_context(value: &V) -> Result<V> {
+    let mut value = value.clone();
+    let m = map_mut(&mut value)?;
+    for key in ["retry_at", "failures"] {
+        m.remove(key);
+    }
+    if let Some(V::Map(verified)) = m.get_mut("last_verified") {
+        verified.remove("at");
+    }
+    Ok(value)
 }
 fn snapshot(
     doc: &Document,
@@ -199,6 +214,82 @@ fn snapshot(
         map_mut(&mut context)?.insert("history".into(), history.clone());
         map_mut(&mut context)?.insert("history_view".into(), doc.history_view.clone().unwrap());
     }
+    if let Some(overlay) = &doc.overlay {
+        let mut pending = portable(&overlay.pending, &base, false)?;
+        map_mut(&mut pending)?.insert(
+            "observations".into(),
+            portable(&publication_context(&overlay.publication)?, &base, false)?,
+        );
+        map_mut(&mut pending)?.insert(
+            "contributions".into(),
+            portable(
+                &V::List(
+                    overlay
+                        .contributions
+                        .iter()
+                        .map(publication_context)
+                        .collect::<Result<Vec<_>>>()?,
+                ),
+                &base,
+                false,
+            )?,
+        );
+        map_mut(&mut context)?.insert("pending".into(), pending);
+        map_mut(&mut context)?.insert(
+            "conflicts".into(),
+            portable(&overlay.conflicts, &base, true)?,
+        );
+        if !map(&overlay.history_contributions)?.is_empty() {
+            map_mut(&mut context)?.insert(
+                "history_contributions".into(),
+                overlay.history_contributions.clone(),
+            );
+        }
+        let mut target = overlay.target.clone().unwrap_or_else(empty);
+        let observed = map(&target)?
+            .get("revision")
+            .is_some_and(crate::history_view::truth);
+        let target_map = map_mut(&mut target)?;
+        target_map.insert(
+            "status".into(),
+            s(if overlay.unavailable.is_some() {
+                "unavailable"
+            } else if observed {
+                "observed"
+            } else {
+                "unassessed"
+            }),
+        );
+        target_map.insert(
+            "reason".into(),
+            overlay
+                .unavailable
+                .as_ref()
+                .map(|v| s(v))
+                .unwrap_or(V::Null),
+        );
+        target_map.entry("ref".into()).or_insert(V::Null);
+        target_map.entry("revision".into()).or_insert(V::Null);
+        if let Some(snapshot) = &overlay.target_snapshot {
+            target_map.insert("snapshot".into(), snapshot.clone());
+        }
+        map_mut(&mut context)?.insert("target".into(), portable(&target, &base, false)?);
+    } else if let Some(pending) = &initial.pending {
+        // An unrelated artifact receives no contribution layers, but its capture
+        // still binds the same project publisher and locally resolved target.
+        let context_map = map_mut(&mut context)?;
+        map_mut(context_map.get_mut("pending").unwrap())?.insert(
+            "observations".into(),
+            portable(&publication_context(&pending.publication)?, &base, false)?,
+        );
+        if let Some(target) = &pending.target {
+            let mut target = target.clone();
+            let m = map_mut(&mut target)?;
+            m.insert("status".into(), s("unassessed"));
+            m.insert("reason".into(), V::Null);
+            context_map.insert("target".into(), portable(&target, &base, false)?);
+        }
+    }
     let mut files = BTreeMap::new();
     for ((_, path), event) in &inventory.events {
         if let Some(history) = &doc.history
@@ -229,11 +320,22 @@ fn snapshot(
     let mut revision = object([("files", V::List(files.into_values().collect()))]);
     let digest = S::digest(&revision)?;
     map_mut(&mut revision)?.insert("digest".into(), s(&digest));
+    let mut hypotheses = doc.hypotheses.clone();
+    for hypothesis in map_mut(&mut hypotheses)?.values_mut() {
+        if map(hypothesis)?
+            .get("kind")
+            .is_some_and(|v| string_is(v, "contribution"))
+            && let Some(head) = map_mut(hypothesis)?.get_mut("head")
+            && let Some(publication) = map_mut(head)?.get_mut("publication")
+        {
+            *publication = publication_context(publication)?;
+        }
+    }
     Snapshot::from_data(
         &doc.source.typed(),
         CaptureOptions {
             context: Some(context),
-            hypotheses: Some(portable(&doc.hypotheses, &base, false)?),
+            hypotheses: Some(portable(&hypotheses, &base, false)?),
             as_of,
             authored_revision: Some(revision),
         },
@@ -278,7 +380,9 @@ impl CapturedSource {
         if let Some(history) = &self.document.history {
             history.verify_current()?;
         }
-        crate::history_transaction_fs::check_member_journals(&self.document.members)?;
+        let mut members = self.document.members.clone();
+        members.extend(self.routing.selected.iter().cloned());
+        crate::history_transaction_fs::check_member_journals(&members)?;
         require(
             self.routing == observation(&self.paths, &self.cwd, self.mode)?,
             "snapshot_changed",
@@ -291,7 +395,17 @@ pub fn capture_source(
     mode: ReadMode,
     as_of: Option<V>,
 ) -> Result<CapturedSource> {
-    capture_with(paths, cwd, mode, as_of, &mut |_, _| Ok(()))
+    capture_source_with_runtime(paths, cwd, mode, as_of, None)
+}
+/// Supply a verified runtime when a committed core target requires computation.
+pub fn capture_source_with_runtime(
+    paths: &[PathBuf],
+    cwd: &Path,
+    mode: ReadMode,
+    as_of: Option<V>,
+    runtime: Option<&crate::reasoning_runtime::Runtime>,
+) -> Result<CapturedSource> {
+    capture_with(paths, cwd, mode, as_of, &mut |_, _| Ok(()), runtime)
 }
 fn capture_with(
     paths: &[PathBuf],
@@ -299,6 +413,7 @@ fn capture_with(
     mode: ReadMode,
     as_of: Option<V>,
     after_load: &mut dyn FnMut(usize, &Document) -> Result<()>,
+    runtime: Option<&crate::reasoning_runtime::Runtime>,
 ) -> Result<CapturedSource> {
     require(!paths.is_empty(), "invalid_snapshot")?;
     S::normalize_as_of(as_of.as_ref().unwrap_or(&V::Null))?;
@@ -312,7 +427,25 @@ fn capture_with(
     let mut final_load = None;
     for pass in 0..2 {
         let mut inventory = Inventory::default();
-        let doc = D::load(&initial.selected, &mut inventory)?;
+        let canonical = initial.selected[0]
+            .canonicalize()
+            .unwrap_or_else(|_| initial.selected[0].clone())
+            == initial.record;
+        let allow_missing = canonical
+            && initial
+                .pending
+                .as_ref()
+                .is_some_and(|p| p.ledger.head.is_some());
+        let mut doc = D::load(&initial.selected, &mut inventory, allow_missing)?;
+        if canonical && let Some(pending) = &initial.pending {
+            doc.overlay = Some(crate::source_overlay::apply(
+                &mut doc,
+                pending,
+                &initial.root,
+                text(&map(&initial.config)?["record"])?,
+                runtime,
+            )?);
+        }
         after_load(pass, &doc)?;
         inventory.verify()?;
         if let Some(history) = &doc.history {
@@ -383,6 +516,7 @@ mod tests {
                     }
                     Ok(())
                 },
+                None,
             );
             assert!(result.is_err(), "accepted mutation {mutation}");
         }

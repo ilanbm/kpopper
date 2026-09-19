@@ -921,6 +921,13 @@ sources:
     at: "Exact Python fixture comparisons, immutable replay and storage recovery regressions;
          source-aware merge module and current local/UTC date checks"
     read: "2026-09-19"
+  s.native_live_capture:
+    name: "Native pending and committed target capture evidence"
+    file: "native/tests/fixtures/pending-state.json"
+    at: "15 actual Git fixtures against final Python 1.7.0 commit 5acfd0f; 14 exact complete
+         snapshots and one core-target comparison retaining the verified native runtime fingerprint;
+         semantic-roles.json has 113 role cases"
+    read: "2026-09-19"
   s.native_named_authoring:
     name: "Native named hypothesis preparation and replay"
     file: "native/src/history_hypothesis_authoring.rs"
@@ -2136,6 +2143,14 @@ known:
     from: doc.host_compatibility
     at: "Scope before launch / initial pre-fix observation on baseline 5c2062b"
     of: "2026-09-17"
+  m.native_live_capture_cases:
+    name: "Native live pending and target capture cases"
+    v: 15
+    from: s.native_live_capture
+  m.native_live_role_cases:
+    name: "Native live comparison field-role cases"
+    v: 113
+    from: s.native_live_capture
   m.native_source_capture_cases:
     name: "Native source capture differential cases"
     v: 45

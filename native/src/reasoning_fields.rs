@@ -88,10 +88,44 @@ fn choose(
     Ok(found.into_iter().next())
 }
 pub fn snapshot_fields(document: &V) -> Result<Map> {
+    inferred_fields(document, false)
+}
+/// Comparison roles follow the ordinary reader, including an explicit unreadable
+/// result when no unique dependency role can be established.
+pub(crate) fn semantic_roles(document: &V) -> Result<Option<(BTreeSet<String>, Map)>> {
+    let fields = match inferred_fields(document, true) {
+        Ok(fields) => fields,
+        Err(e) if e.0 == "invalid_snapshot" => return Ok(None),
+        Err(e) => return Err(e),
+    };
+    if fields.is_empty() {
+        return Ok(Some((BTreeSet::new(), fields)));
+    }
+    let dependency = text(&fields["deps"])?;
+    let judgments = collections(document)?
+        .values()
+        .flat_map(|m| m.iter())
+        .filter_map(|(id, body)| {
+            map(body)
+                .ok()
+                .filter(|m| m.contains_key(dependency))
+                .map(|_| id.clone())
+        })
+        .collect();
+    Ok(Some((judgments, fields)))
+}
+
+fn inferred_fields(document: &V, semantic: bool) -> Result<Map> {
     let doc = map(document)?;
     let empty = V::Map(Map::new());
     let schema = doc.get("schema").filter(|v| truth(v)).unwrap_or(&empty);
-    let schema = map(schema).map_err(|_| error("invalid_snapshot"))?;
+    let schema = map(schema).map_err(|_| {
+        error(if semantic {
+            "invalid_comparison_roles"
+        } else {
+            "invalid_snapshot"
+        })
+    })?;
     let mut roles = Map::from([
         ("deps".into(), s("rests_on")),
         ("snapshot".into(), s("seen")),
@@ -99,6 +133,12 @@ pub fn snapshot_fields(document: &V) -> Result<Map> {
     ]);
     for role in ["deps", "snapshot", "predicate"] {
         if let Some(value) = schema.get(role) {
+            if semantic {
+                if truth(value) {
+                    roles.insert(role.into(), value.clone());
+                }
+                continue;
+            }
             require(text(value).is_ok_and(|s| !s.is_empty()), "invalid_snapshot")?;
             roles.insert(role.into(), value.clone());
         }
@@ -131,6 +171,7 @@ pub fn snapshot_fields(document: &V) -> Result<Map> {
         }
     }
     let mut deps = BTreeMap::new();
+    let mut unresolved = BTreeSet::new();
     let mut present = BTreeSet::new();
     for (name, body) in collections.values().flat_map(|m| m.iter()) {
         let V::Map(body) = body else {
@@ -147,9 +188,13 @@ pub fn snapshot_fields(document: &V) -> Result<Map> {
             }
             if let V::List(a) = value
                 && !a.is_empty()
-                && a.iter().all(|v| text(v).is_ok_and(|s| ids.contains(s)))
+                && a.iter().all(|v| text(v).is_ok())
             {
-                *deps.entry(field.clone()).or_insert(0) += 1;
+                if a.iter().all(|v| text(v).is_ok_and(|s| ids.contains(s))) {
+                    *deps.entry(field.clone()).or_insert(0) += 1;
+                } else {
+                    unresolved.insert(field.clone());
+                }
             }
         }
     }
@@ -157,9 +202,105 @@ pub fn snapshot_fields(document: &V) -> Result<Map> {
         .get("deps")
         .is_some_and(|v| truth(v) && text(v).is_ok_and(|v| !present.contains(v)))
     {
+        if semantic {
+            let mut judgment_fields = [
+                "rests_on",
+                "wrong_if",
+                "seen",
+                "verdict",
+                "reopened_by",
+                "blocked_on",
+            ]
+            .into_iter()
+            .map(str::to_owned)
+            .collect::<BTreeSet<_>>();
+            judgment_fields.extend(
+                ["deps", "snapshot", "predicate"]
+                    .iter()
+                    .filter_map(|k| schema.get(*k))
+                    .filter_map(|v| text(v).ok())
+                    .map(str::to_owned),
+            );
+            let core = doc
+                .get("meta")
+                .and_then(|v| map(v).ok())
+                .and_then(|m| m.get("reasoning"))
+                .and_then(|v| map(v).ok())
+                .is_some_and(|m| m.get("profile").is_some_and(|v| string_is(v, "core/v1")));
+            let shaped = collections
+                .values()
+                .flat_map(|m| m.values())
+                .filter_map(|v| map(v).ok())
+                .any(|m| {
+                    let matched = judgment_fields
+                        .iter()
+                        .filter(|k| m.contains_key(*k))
+                        .map(String::as_str)
+                        .collect::<Vec<_>>();
+                    !matched.is_empty()
+                        && !(matched == ["blocked_on"]
+                            && core
+                            && m.get("rule").is_some_and(|v| map(v).is_ok()))
+                });
+            let portable = !collections.is_empty()
+                && collections
+                    .keys()
+                    .all(|k| ["known", "sources", "open", "questions"].contains(&k.as_str()))
+                && ["deps", "snapshot", "predicate"]
+                    .iter()
+                    .all(|k| schema.get(*k).is_some_and(truth))
+                && deps.is_empty()
+                && unresolved
+                    .iter()
+                    .all(|k| ["labels", "tags", "v", "quoted"].contains(&k.as_str()))
+                && !shaped;
+            if !portable {
+                return Ok(Map::new());
+            }
+        }
         return Ok(roles);
     }
     let Some(dep) = choose(schema, "deps", &deps)? else {
+        if semantic {
+            let newborn = !doc.is_empty() && doc.keys().all(|k| k == "meta");
+            let core = doc
+                .get("meta")
+                .and_then(|v| map(v).ok())
+                .and_then(|m| m.get("reasoning"))
+                .and_then(|v| map(v).ok())
+                .is_some_and(|m| m.get("profile").is_some_and(|v| string_is(v, "core/v1")));
+            let shaped = collections
+                .values()
+                .flat_map(|m| m.values())
+                .filter_map(|v| map(v).ok())
+                .any(|m| {
+                    let matched = [
+                        "rests_on",
+                        "wrong_if",
+                        "seen",
+                        "verdict",
+                        "reopened_by",
+                        "blocked_on",
+                    ]
+                    .into_iter()
+                    .filter(|k| m.contains_key(*k))
+                    .collect::<Vec<_>>();
+                    !matched.is_empty()
+                        && !(matched == ["blocked_on"]
+                            && core
+                            && m.get("rule").is_some_and(|v| map(v).is_ok()))
+                });
+            require(
+                (newborn
+                    || !collections.is_empty()
+                        && collections.keys().all(|k| {
+                            ["known", "sources", "open", "questions"].contains(&k.as_str())
+                        }))
+                    && unresolved.is_empty()
+                    && !shaped,
+                "invalid_snapshot",
+            )?;
+        }
         return Ok(roles);
     };
     roles.insert("deps".into(), s(&dep));
@@ -174,7 +315,11 @@ pub fn snapshot_fields(document: &V) -> Result<Map> {
         let dep_value = &body[&dep];
         require(
             !truth(dep_value) || matches!(dep_value, V::Map(_) | V::List(_) | V::Text(_)),
-            "invalid_snapshot",
+            if semantic {
+                "invalid_comparison_roles"
+            } else {
+                "invalid_snapshot"
+            },
         )?;
         for (field, value) in body {
             if ["reopened_by", "request", "replaced", "also"].contains(&field.as_str()) {
@@ -205,8 +350,12 @@ pub fn snapshot_fields(document: &V) -> Result<Map> {
         }
     }
     for (role, candidates) in [("snapshot", snapshots), ("predicate", predicates)] {
-        if let Some(name) = choose(schema, role, &candidates)? {
+        if semantic && let Some(value) = schema.get(role).filter(|v| truth(v)) {
+            roles.insert(role.into(), value.clone());
+        } else if let Some(name) = choose(schema, role, &candidates)? {
             roles.insert(role.into(), s(&name));
+        } else if semantic {
+            roles.insert(role.into(), V::Null);
         }
     }
     Ok(roles)
@@ -330,4 +479,37 @@ pub fn capabilities(document: &V, profile: Option<&str>) -> Result<V> {
         }
     }
     Ok(V::Map(result))
+}
+
+#[cfg(test)]
+mod semantic_tests {
+    use super::*;
+    #[test]
+    fn comparison_roles_match_python() {
+        let cases: serde_json::Value =
+            serde_json::from_str(include_str!("../tests/fixtures/semantic-roles.json")).unwrap();
+        for case in cases.as_array().unwrap() {
+            let document = V::from_tagged(&case["document"]).unwrap();
+            let result = semantic_roles(&document).map(|value| {
+                value
+                    .map(|(ids, fields)| {
+                        V::List(vec![
+                            V::List(ids.into_iter().map(V::Text).collect()),
+                            V::Map(fields),
+                        ])
+                    })
+                    .unwrap_or(V::Null)
+            });
+            if let Some(expected) = case.get("output") {
+                assert_eq!(
+                    result.unwrap(),
+                    V::from_tagged(expected).unwrap(),
+                    "{}",
+                    case["name"]
+                );
+            } else {
+                assert!(result.is_err(), "{}", case["name"]);
+            }
+        }
+    }
 }

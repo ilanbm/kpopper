@@ -367,6 +367,13 @@ pub fn prepare(
 }
 /// Validate v1 archival identity, complete v2 closures, or retained v3 history.
 pub fn validate(bundle: &V, files: &Files) -> Result<V> {
+    validate_options(bundle, files, true)
+}
+/// Read immutable evidence without interpreting an unknown archival profile.
+pub fn validate_archival(bundle: &V, files: &Files) -> Result<V> {
+    validate_options(bundle, files, false)
+}
+fn validate_options(bundle: &V, files: &Files, supported: bool) -> Result<V> {
     Y::validate_value(bundle, 16 * 1024 * 1024)?;
     let b = map(bundle)?;
     let manifest = field(b, "manifest")?;
@@ -400,6 +407,9 @@ pub fn validate(bundle: &V, files: &Files) -> Result<V> {
                 .all(|(p, b)| evidence.get(p) == Some(&s(&sha256(b)))),
         "contribution_evidence_mismatch",
     )?;
+    if !supported {
+        return Ok(cap);
+    }
     let cap = C::document_capabilities(document)?;
     if is_int(version, "2") {
         let expected = prepare_version(
