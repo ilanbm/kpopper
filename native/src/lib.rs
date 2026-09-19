@@ -57,6 +57,7 @@ pub mod history_view;
 pub mod history_watch;
 pub mod history_yaml;
 pub mod identity;
+pub mod json_ingress;
 pub mod ordinary_assessment;
 mod ordinary_assessment_report;
 mod ordinary_counts;
