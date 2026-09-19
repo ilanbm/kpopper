@@ -137,6 +137,15 @@ residue. Callers supply captured membership, which cannot be established by a ha
 read-only envelope boundary with YAML or `--typed` input. These detached interfaces
 do not activate a record or expand the store operations listed below.
 
+`history-capture <entry>` captures active history in either record layout, checks
+the journal guard and exact inventory, and reduces claims and acts into acceptance
+evidence. It retains raw object bytes, source mapping order, legacy identities,
+inactive generations and cancellations. Its tagged result preserves scalar types.
+Source clocks follow the retained reader's day, timestamp, revision and commit
+rules; commit ancestry is supplied explicitly to the library. Capture does not
+evaluate conditions or review sufficiency, reconcile conflicted YAML, or publish a
+transaction. `Capture::verify_current` rechecks the captured bytes and membership.
+
 - No judgments, dependency pins, formulas, competing histories, review/refutation,
   temporal semantics, Lean evaluation, MCP, UI, migration or production activation.
 - No authority v2 cancellation metadata, legacy 40-hex storage operations or typed

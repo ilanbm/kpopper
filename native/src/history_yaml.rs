@@ -7,10 +7,7 @@ use crate::{
 use libyaml_safer::{EventData as Event, Parser, ScalarStyle, Scanner, TokenData};
 use num_bigint::BigInt;
 use regex::Regex;
-use std::{
-    collections::{BTreeMap, BTreeSet},
-    sync::LazyLock,
-};
+use std::{collections::BTreeSet, sync::LazyLock};
 
 pub const MAX_DOCUMENT_BYTES: usize = 16 * 1024 * 1024;
 static INT: LazyLock<Regex> = LazyLock::new(|| {
@@ -36,6 +33,42 @@ enum Node {
     Map(Vec<(Node, Node)>),
     Merge,
     ValueKey(String),
+}
+/// Source mapping order is distinct from canonical identity ordering. Some retained
+/// readers use the source's printed representation as a clock-group key.
+#[derive(Clone, Debug)]
+pub enum SourceValue {
+    Scalar(TypedValue),
+    List(Vec<SourceValue>),
+    Map(Vec<(String, SourceValue)>),
+}
+impl SourceValue {
+    pub fn from_typed(value: &TypedValue) -> Self {
+        match value {
+            TypedValue::List(a) => Self::List(a.iter().map(Self::from_typed).collect()),
+            TypedValue::Map(m) => Self::Map(
+                m.iter()
+                    .map(|(k, v)| (k.clone(), Self::from_typed(v)))
+                    .collect(),
+            ),
+            _ => Self::Scalar(value.clone()),
+        }
+    }
+    pub fn typed(&self) -> TypedValue {
+        match self {
+            Self::Scalar(v) => v.clone(),
+            Self::List(a) => TypedValue::List(a.iter().map(Self::typed).collect()),
+            Self::Map(a) => {
+                TypedValue::Map(a.iter().map(|(k, v)| (k.clone(), v.typed())).collect())
+            }
+        }
+    }
+    pub fn get(&self, key: &str) -> Option<&Self> {
+        let Self::Map(a) = self else {
+            return None;
+        };
+        a.iter().find(|(k, _)| k == key).map(|(_, v)| v)
+    }
 }
 struct Reader<'a> {
     parser: Parser<&'a [u8]>,
@@ -163,7 +196,7 @@ fn resolve(text: &str) -> &str {
 }
 // Decimal digits accepted by the pinned Python Unicode 16 database. Implicit YAML
 // resolution remains ASCII-only; these are used only by numeric constructors.
-fn numeric_text(text: &str) -> String {
+pub(crate) fn numeric_text(text: &str) -> String {
     const ZEROES: &[u32] = &[
         0x30, 0x660, 0x6f0, 0x7c0, 0x966, 0x9e6, 0xa66, 0xae6, 0xb66, 0xbe6, 0xc66, 0xce6, 0xd66,
         0xde6, 0xe50, 0xed0, 0xf20, 0x1040, 0x1090, 0x17e0, 0x1810, 0x1946, 0x19d0, 0x1a80, 0x1a90,
@@ -314,22 +347,23 @@ fn flatten(pairs: Vec<(Node, Node)>) -> Result<Vec<(Node, Node)>> {
     merged.extend(own);
     Ok(merged)
 }
-fn construct(node: Node) -> Result<TypedValue> {
+fn construct(node: Node) -> Result<SourceValue> {
     match node {
-        Node::Scalar(v) => Ok(v),
-        Node::List(values) => Ok(TypedValue::List(
+        Node::Scalar(v) => Ok(SourceValue::Scalar(v)),
+        Node::List(values) => Ok(SourceValue::List(
             values.into_iter().map(construct).collect::<Result<_>>()?,
         )),
         Node::Map(pairs) => {
-            let mut values = BTreeMap::new();
+            let mut values = Vec::new();
+            let mut keys = BTreeSet::new();
             for (key, value) in flatten(pairs)? {
                 let Node::Scalar(TypedValue::Text(key)) = key else {
                     return Err(Error("invalid_yaml_key".into()));
                 };
-                require(!values.contains_key(&key), "invalid_yaml_key")?;
-                values.insert(key, construct(value)?);
+                require(keys.insert(key.clone()), "invalid_yaml_key")?;
+                values.push((key, construct(value)?));
             }
-            Ok(TypedValue::Map(values))
+            Ok(SourceValue::Map(values))
         }
         _ => Err(invalid()),
     }
@@ -403,6 +437,10 @@ fn source_for_parser(raw: &[u8]) -> Result<Vec<u8>> {
 }
 
 pub fn decode_document(raw: &[u8]) -> Result<TypedValue> {
+    Ok(decode_source_document(raw)?.typed())
+}
+
+pub fn decode_source_document(raw: &[u8]) -> Result<SourceValue> {
     require(raw.len() <= MAX_DOCUMENT_BYTES, "history_limit")?;
     std::str::from_utf8(raw).map_err(|_| invalid())?;
     let source = source_for_parser(raw)?;
@@ -429,8 +467,8 @@ pub fn decode_document(raw: &[u8]) -> Result<TypedValue> {
         "invalid_history_yaml",
     )?;
     let value = construct(node)?;
-    require(matches!(value, TypedValue::Map(_)), "invalid_schema")?;
-    validate_value(&value, MAX_DOCUMENT_BYTES)?;
+    require(matches!(value, SourceValue::Map(_)), "invalid_schema")?;
+    validate_value(&value.typed(), MAX_DOCUMENT_BYTES)?;
     Ok(value)
 }
 

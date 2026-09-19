@@ -64,6 +64,10 @@ enum Command {
         #[arg(long)]
         typed: bool,
     },
+    /// Capture an active record's exact history and reduce acceptance, without writes.
+    HistoryCapture {
+        entry: PathBuf,
+    },
 }
 #[derive(Clone, clap::ValueEnum)]
 enum Envelope {
@@ -135,6 +139,13 @@ fn session() -> Result<()> {
     Ok(())
 }
 fn run(args: Args) -> Result<Value> {
+    if let Command::HistoryCapture { entry } = args.command {
+        let captured = kpop_native::history_capture::capture(&entry, None, None)?;
+        let evidence = captured.evidence();
+        return Ok(
+            json!({"status":"captured","semantic_assessment":"not_performed","evidence":evidence.to_tagged()?,"digest":evidence.digest()?}),
+        );
+    }
     if let Command::HistoryEnvelope { kind, typed } = args.command {
         use kpop_native::history_authority as contract;
         let mut value = if typed {
@@ -237,6 +248,7 @@ fn run(args: Args) -> Result<Value> {
         | Command::HistoryCodec { .. }
         | Command::HistoryValidate { .. }
         | Command::HistoryEnvelope { .. }
+        | Command::HistoryCapture { .. }
         | Command::SessionStart => {
             unreachable!()
         }

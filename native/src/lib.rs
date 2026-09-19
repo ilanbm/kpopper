@@ -1,10 +1,14 @@
 #![forbid(unsafe_code)]
 
 pub mod history_authority;
+pub mod history_capture;
 pub mod history_contract;
 pub mod history_paths;
+pub mod history_reduce;
 pub mod history_yaml;
 pub mod identity;
+pub mod source_clock;
+pub mod source_text;
 pub mod store;
 pub mod value;
 
