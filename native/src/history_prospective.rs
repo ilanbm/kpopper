@@ -21,6 +21,13 @@ use std::collections::BTreeSet;
 
 pub fn capture_after(captured: &Capture, mutation: &PreparedMutation) -> Result<Capture> {
     let data = mutation.to_data();
+    if mutation
+        .files()
+        .iter()
+        .any(|f| f.role == "history_evidence")
+    {
+        crate::history_branch_audit::audit_evidences(&data)?;
+    }
     let data = map(&data)?;
     require(
         data["authority"].digest()? == captured.marker.digest()?,
@@ -42,9 +49,7 @@ pub fn capture_after(captured: &Capture, mutation: &PreparedMutation) -> Result<
                 require(commit.replace(file).is_none(), "duplicate_mutation_role")?;
             }
             "history_object" => objects.push(file),
-            // Branch evidence requires the separate retained adoption audit.
-            // Refuse until that audit is available; a hash is not its substitute.
-            "history_evidence" => return Err(error("branch_adoption_audit_unsupported")),
+            "history_evidence" => {}
             _ => return Err(error("unsupported_mutation_role")),
         }
         require(

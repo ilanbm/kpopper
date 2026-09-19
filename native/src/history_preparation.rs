@@ -112,6 +112,30 @@ pub(crate) fn prepare_commit_with_files(
         .iter()
         .map(|o| E::encode_document(o).map(|raw| (o.clone(), raw)))
         .collect::<Result<Vec<_>>>()?;
+    prepare_commit_pairs(
+        capture,
+        operation,
+        pairs,
+        template,
+        receipt,
+        requires,
+        extra_files,
+    )
+}
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn prepare_commit_pairs(
+    capture: &Capture,
+    operation: &str,
+    pairs: Vec<(V, Vec<u8>)>,
+    template: &V,
+    receipt: &V,
+    requires: Option<&V>,
+    extra_files: &[FileImage],
+) -> Result<PreparedMutation> {
+    require(
+        !capture.commits.contains_key(operation),
+        "operation_already_prepared",
+    )?;
     let parents = A::commit_frontier(&capture.commits)?;
     let draft = make_commit(
         &capture.marker,

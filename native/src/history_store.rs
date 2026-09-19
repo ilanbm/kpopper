@@ -431,7 +431,7 @@ impl Store {
     }
     /// Mandatory verifier checks the operation's retained semantic and routing evidence.
     pub fn commit(&self, mutation: &PreparedMutation, verify: F::Verify<'_>) -> Result<V> {
-        self.commit_inner(mutation, verify, None, false, false)
+        self.commit_inner(mutation, verify, None, false, false, false)
     }
     /// Only the edit adapter selects this path; semantic replay is enforced here.
     pub(crate) fn commit_edits(
@@ -440,7 +440,7 @@ impl Store {
         runtime: Option<&crate::reasoning_runtime::Runtime>,
         verify: F::Verify<'_>,
     ) -> Result<V> {
-        self.commit_inner(mutation, verify, runtime, true, false)
+        self.commit_inner(mutation, verify, runtime, true, false, false)
     }
     /// Identity receipts are always replayed here, including receipts without a brief.
     pub(crate) fn commit_identity(
@@ -449,7 +449,14 @@ impl Store {
         runtime: Option<&crate::reasoning_runtime::Runtime>,
         verify: F::Verify<'_>,
     ) -> Result<V> {
-        self.commit_inner(mutation, verify, runtime, false, true)
+        self.commit_inner(mutation, verify, runtime, false, true, false)
+    }
+    pub(crate) fn commit_branch(
+        &self,
+        mutation: &PreparedMutation,
+        verify: F::Verify<'_>,
+    ) -> Result<V> {
+        self.commit_inner(mutation, verify, None, false, false, true)
     }
     pub fn recover_auxiliary(
         &self,
@@ -533,6 +540,7 @@ impl Store {
         runtime: Option<&crate::reasoning_runtime::Runtime>,
         edited: bool,
         identity: bool,
+        branch: bool,
     ) -> Result<V> {
         let _lock = F::DirectoryGuard::acquire(&self.root, true)?;
         let auxiliary = mutation.auxiliary_view()?;
@@ -586,10 +594,12 @@ impl Store {
             "operation_collision",
         )?;
         let receipt = map(&d["receipt"])?;
-        require(
-            !map(&receipt["after"])?.contains_key("history_branch_adoption"),
-            "unsupported_branch_adoption",
-        )?;
+        let has_branch = map(&receipt["after"])?.contains_key("history_branch_adoption");
+        require(branch == has_branch, "unsupported_branch_adoption")?;
+        if branch {
+            let evidence = crate::history_branch_adoption::live_evidence(self, mutation)?;
+            crate::history_branch_adoption::verify(&live, mutation, &evidence)?;
+        }
         let edit_receipt = map(&receipt["before"])?.get("history_edit");
         let identity_receipt = map(&receipt["before"])?.get("identity_authoring");
         if identity {
@@ -700,6 +710,9 @@ impl Store {
             )?;
         }
         verify(&data)?;
+        if branch {
+            crate::history_branch_adoption::live_evidence(self, mutation)?;
+        }
         if identity {
             crate::history_identity::sources(self, mutation)?;
         }

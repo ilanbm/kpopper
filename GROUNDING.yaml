@@ -877,6 +877,14 @@ sources:
     file: "native/src/history_authoring_batch.rs"
     of: "2026-09-19: batch preparation and causal-parent replay added after direct-authoring
          checkpoint 0c757063ab8a2e40f87c3d967dffdbbd3d621cbe"
+  s.native_branch_adoption:
+    name: "Native physical proposal import and branch adoption conformance"
+    from: s.2026_09_19_native_identity_continuation
+    file: "native/src/history_branch_adoption.rs"
+    at: "Exact single and atomic source-set envelopes, audit capsules, causal-parent replay, no-op
+         verifier forgery and partial publication recovery tests; physical import and preview
+         fixtures"
+    read: "2026-09-19"
   s.native_branch_audit:
     name: "Native committed branch capture and source-free audit evidence"
     from: s.2026_09_19_native_identity_continuation
@@ -1892,6 +1900,19 @@ known:
     at: "history_authoring_batch stage, final_world and sequential; reasoning_authoring
          World.batch_admission; exact batch conformance and
          native_batch_replay_preserves_final_pins_evidence_and_retry tests"
+  p.native_branch_adoption_boundary:
+    name: "Native branch adoption and physical proposal boundary"
+    v: "Physical hypothesis import preserves original bodies, heads, seen and explicit empty pin
+        gaps while recording new proposal provenance. Single-source and atomic source-set adoption
+        preserve original object bytes, bind complete audit capsules and explicit overlapping
+        choices, and replay against the exact causal parents. The Store requires its branch adapter,
+        independently verifies semantics before callbacks and rechecks target evidence after
+        callbacks. Rehashed intent forgery and partial publication regressions pass. There are 20
+        import cases with 9 exact outputs, 23 adoption cases with 15 exact envelopes, 92 previews and
+        a fresh full run of 148 native tests. Live project routing and public CLI integration remain
+        separate."
+    from: s.native_branch_adoption
+    at: "Native branch audit, adoption, preview, import, transaction and Store tests"
   p.native_branch_audit_boundary:
     name: "Native committed branch audit boundary"
     v: "Source-free branch validation binds exact Git blob identities, current and inactive

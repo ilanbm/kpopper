@@ -454,12 +454,6 @@ impl PreparedMutation {
             files.windows(2).all(|p| p[0].path != p[1].path),
             "duplicate_path",
         )?;
-        // Source-capsule auditing is a distinct downstream contract; never treat its
-        // presence as a validated adoption while that validator is unavailable.
-        require(
-            get(after, "history_branch_adoption").is_none(),
-            "unsupported_branch_adoption",
-        )?;
         if let Some(next) = next {
             require(
                 files.iter().all(|i| {
@@ -616,6 +610,7 @@ impl PreparedMutation {
                 "authority_transition_required",
             )?;
         }
+        let branch_adoption = get(after, "history_branch_adoption").is_some();
         let mut payload = object(&[
             ("version", n(if next.is_some() { "2" } else { "1" })),
             ("operation", s(operation)),
@@ -641,6 +636,9 @@ impl PreparedMutation {
             data: with_digest(payload)?,
             files,
         };
+        if branch_adoption {
+            crate::history_branch_audit::audit_evidences(&result.data)?;
+        }
         if history && next.is_none() {
             result.auxiliary_view()?;
         }
