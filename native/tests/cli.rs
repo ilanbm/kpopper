@@ -379,6 +379,38 @@ fn public_session_start_opens_an_ordinary_record_and_returns_its_native_route() 
 }
 
 #[test]
+fn public_history_status_reports_the_active_native_authority_without_writes() {
+    let data: Value = serde_json::from_str(include_str!("fixtures/history-capture.json")).unwrap();
+    let case = data["cases"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|case| case.get("output").is_some())
+        .unwrap();
+    let temp = tempfile::tempdir().unwrap();
+    let root = temp.path().canonicalize().unwrap();
+    for (name, raw) in case["files"].as_object().unwrap() {
+        let path = root.join(name);
+        fs::create_dir_all(path.parent().unwrap()).unwrap();
+        fs::write(path, raw.as_str().unwrap()).unwrap();
+    }
+    let before = fs::read(root.join("GROUNDING.yaml")).unwrap();
+    let output = Command::new(binary())
+        .args(["--workspace", root.to_str().unwrap(), "history", "status"])
+        .output()
+        .unwrap();
+    let value = ok(output);
+    assert_eq!(value["state"], "captured");
+    assert_eq!(
+        value["record"],
+        root.join("GROUNDING.yaml").to_string_lossy().as_ref()
+    );
+    assert!(value["commits"].as_u64().unwrap() > 0);
+    assert!(value["objects"].as_u64().unwrap() > 0);
+    assert_eq!(fs::read(root.join("GROUNDING.yaml")).unwrap(), before);
+}
+
+#[test]
 fn yaml_metadata_is_supported_but_duplicate_keys_tags_and_aliases_refuse() {
     let (_temp, root) = fixture();
     let marker = root.join(".kpopper/native-feasibility.json");
