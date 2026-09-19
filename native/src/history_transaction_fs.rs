@@ -464,6 +464,19 @@ pub(crate) fn read(path: &Path) -> Result<Option<Vec<u8>>> {
     Ok(Some(bytes))
 }
 fn sync(path: &Path) -> Result<()> {
+    #[cfg(windows)]
+    {
+        // Rust's ordinary File::open omits FILE_FLAG_BACKUP_SEMANTICS and
+        // therefore cannot open a directory. A write-capable directory handle
+        // lets FlushFileBuffers retain the transaction's metadata durability.
+        fs::OpenOptions::new()
+            .access_mode(0x4000_0000) // GENERIC_WRITE
+            .share_mode(0x0000_0001 | 0x0000_0002 | 0x0000_0004)
+            .custom_flags(0x0200_0000) // FILE_FLAG_BACKUP_SEMANTICS
+            .open(path)?
+            .sync_all()?;
+    }
+    #[cfg(not(windows))]
     File::open(path)?.sync_all()?;
     Ok(())
 }
