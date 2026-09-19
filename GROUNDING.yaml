@@ -981,6 +981,13 @@ sources:
          snapshots and one core-target comparison retaining the verified native runtime fingerprint;
          semantic-roles.json has 113 role cases"
     read: "2026-09-19"
+  s.native_main_bridge:
+    name: "Native bridge to merged main"
+    file: "/Users/ilanbm/docs/kpopper/rust-migration/R4-MAIN-BRIDGE-RESULT.md"
+    read: "2026-09-19"
+    at: "c54e51de5cc63aea93a544cb5669cbb1d2c295d9; task 01a0b9d7-9fca-7301-ba63-580bfc152fb9"
+    scope: "Core/application read separation, exact session publication receipts, private history
+            origins and runtime inventory; macOS arm64 only. Full migration remains open."
   s.native_named_authoring:
     name: "Native named hypothesis preparation and replay"
     file: "native/src/history_hypothesis_authoring.rs"
@@ -2112,6 +2119,12 @@ known:
     from: s.native_context_verification
     at: "native/src/reasoning_context.rs; reasoning_operations.rs; forged-view and
          no-second-runtime-call regressions"
+  p.native_current_main_reference:
+    name: "Current merged Python behavior for the native bridge"
+    v: ff0d02e1678099c4dae551d1d3f6f8f9812c2290
+    from: s.native_main_bridge
+    at: "Immutable baseline-ff0d02e; PR143 still OPEN on 2026-09-19. Historical final 1.7 reference
+         retained separately."
   p.native_edit_rewrite_boundary:
     name: "Native view edit and identity rewrite boundary"
     v: "Edited-view receipt1 captures every body change as proposal5, retains exact UTF-8 source and
@@ -2384,6 +2397,32 @@ known:
     name: "Native live comparison field-role cases"
     v: 113
     from: s.native_live_capture
+  m.native_main_bridge_core_cli_cases:
+    name: "Core CLI comparisons against merged main"
+    v: 64
+    from: s.native_main_bridge
+    at: "R4-main-read-public-parity.json; scoped oracle adapter normalization plus derived hash
+         checks"
+    of: "2026-09-19"
+  m.native_main_bridge_ordinary_cli_cases:
+    name: "Exact ordinary CLI comparisons against merged main"
+    v: 144
+    from: s.native_main_bridge
+    at: R4-main-ordinary-public-parity.json
+    of: "2026-09-19"
+  m.native_main_bridge_release_cases:
+    name: "Copied native bridge release scenarios"
+    v: 7
+    from: s.native_main_bridge
+    at: "R4-main-bridge-release-smoke.json; only Git on PATH; macOS arm64"
+    of: "2026-09-19"
+  m.native_main_bridge_tests:
+    name: "Native bridge passing tests"
+    v: 262
+    from: s.native_main_bridge
+    at: "106 library tests plus 156 integration tests; 2 opt-in ignored; see result for initial
+         wording assertion and corrected rerun"
+    of: "2026-09-19"
   m.native_ordinary_open_check_cases:
     name: "Actual ordinary open and check CLI comparisons with final Python"
     v: 16
