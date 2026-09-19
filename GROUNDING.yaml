@@ -878,6 +878,11 @@ sources:
     read: "2026-09-19"
     at: "b1b6019; native/tests/fixtures/history-hypothesis.json, history-hypothesis-candidate.json
          and history-hypothesis-retained.json"
+  s.native_prospective:
+    name: "Native proposed history and fold conformance"
+    file: "native/src/history_prospective.rs"
+    read: "2026-09-19"
+    at: "Native hypothesis fold and prospective regression tests and history-fold fixtures"
   s.native_snapshot_verification:
     name: "Native snapshot and evaluator conformance"
     from: s.2026_09_19_native_snapshot_continuation
@@ -1880,6 +1885,17 @@ known:
     from: s.native_authoring_envelopes
     at: "verify_prepared and commit; history_authoring_audit witnessed and ReplayAudit;
          native/README.md Library authoring"
+  p.native_prospective_fold_boundary:
+    name: "Native proposed history and fold boundary"
+    v: "Detached proposed history checks authority, baseline, complete causal closure, original
+        object bytes and renderer output. New named folds assess the proposed history and refuse
+        introduced falsifications or evidence holes; only retained replay supports the earlier
+        assessment version. Branch adoption evidence awaits its separate audit adapter. The
+        checkpoint passes 118 native tests; 84 differential fold scenarios include 30 exact accepted
+        envelopes and four exact Snapshot transports. This does not expand the public experimental
+        CLI."
+    from: s.native_prospective
+    at: "history_prospective and history_hypothesis_authoring fold APIs, fixtures and tests"
   p.native_retained_pin_evidence:
     name: "Historical pin evidence boundary"
     v: "A recorded pin exposes a historical computation only when its typed value and stored basis
