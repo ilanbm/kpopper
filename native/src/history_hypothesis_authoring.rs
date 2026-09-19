@@ -712,6 +712,248 @@ pub fn prepare_refute(
 ) -> Result<PreparedMutation> {
     refute_inner(store, captured, names, because, options, runtime, None)
 }
+
+#[derive(Clone)]
+pub struct Fold {
+    pub names: Vec<String>,
+    pub because: String,
+    pub take: Vec<String>,
+    pub drops: V,
+    /// Version zero is retained replay only; new folds assess the complete proposed history.
+    pub assessment_version: u8,
+}
+pub fn prepare_fold(
+    store: &Store,
+    captured: &Capture,
+    fold: &Fold,
+    options: &Options,
+    runtime: Option<&Runtime>,
+) -> Result<PreparedMutation> {
+    require(
+        fold.assessment_version == 1,
+        "new_fold_requires_prospective_assessment",
+    )?;
+    fold_inner(store, captured, fold, options, runtime, None)
+}
+fn physical_layers(store: &Store, active: &BTreeMap<String, String>) -> Result<V> {
+    let files = physical_files(store)?;
+    let mut layers = Map::new();
+    for (name, path) in active {
+        // Strict decoding retains uncertainty instead of selecting duplicate YAML keys.
+        let mut document = Y::decode_document(
+            files
+                .get(path)
+                .ok_or_else(|| error("concurrent_hypothesis_edit"))?,
+        )?;
+        let head = map_mut(&mut document)?
+            .remove("hypothesis")
+            .filter(|v| *v != V::Null)
+            .unwrap_or_else(empty);
+        map(&head).map_err(|_| error("invalid_hypothesis_head"))?;
+        layers.insert(
+            name.clone(),
+            obj([("doc", document), ("head", head), ("error", V::Null)]),
+        );
+    }
+    Ok(V::Map(layers))
+}
+fn fold_inner(
+    store: &Store,
+    captured: &Capture,
+    fold: &Fold,
+    options: &Options,
+    runtime: Option<&Runtime>,
+    audit: Option<&ReplayAudit>,
+) -> Result<PreparedMutation> {
+    require(
+        fold.assessment_version <= 1,
+        "unsupported_hypothesis_assessment",
+    )?;
+    let context = capture(store, captured, options)?;
+    require(options.strict, "explicit_root_disposition_required")?;
+    guard_names(&fold.names, &context.groups, &context.physical, true)?;
+    require(!fold.because.trim().is_empty(), "act_reason_required")?;
+    let mut names = fold.names.clone();
+    names.sort();
+    let mut chosen = BTreeMap::new();
+    for name in &names {
+        for (subject, versions) in map(&map(&map(&context.index)?["groups"])?[name])? {
+            require(
+                chosen.insert(subject.clone(), versions.clone()).is_none(),
+                "overlapping_hypothesis_selection",
+            )?;
+        }
+    }
+    require(
+        fold.take.iter().all(|v| chosen.contains_key(v)),
+        "invalid_hypothesis_take",
+    )?;
+    let after = layer(&context.base, &context.groups, &names)?;
+    let prospective = world(&after, Some(&context.groups), runtime)?;
+    for name in &names {
+        let head = map(&map(&map(&context.groups)?[name])?["head"])?;
+        require(
+            !head.get("folds").is_some_and(|v| string_is(v, "never")),
+            "hypothesis_never_folds",
+        )?;
+        if let Some(condition) = head.get("wrong_if").filter(|v| truth(v)) {
+            require(
+                prospective.predicate(condition, None)? != Some(true),
+                "hypothesis_head_falsified",
+            )?;
+        }
+    }
+    let base_world = world(&context.base, None, runtime)?;
+    let fields = base_world.fields();
+    let deps_field = text(&fields["deps"])?;
+    let predicate_field = text(&fields["predicate"])?;
+    let existing = entries(&context.base)?;
+    let states = map(&map(&captured.state)?["subjects"])?;
+    let stamp = options
+        .recorded_at
+        .get(..10)
+        .filter(|v| crate::value::Date::new(v).is_ok())
+        .or_else(|| (!options.recording_day.is_empty()).then_some(options.recording_day.as_str()))
+        .ok_or_else(|| error("missing_recording_time"))?;
+    let mut objects = vec![];
+    for (subject, versions) in &chosen {
+        let versions = list(versions)?;
+        let target = map(&captured.objects[text(
+            versions
+                .first()
+                .ok_or_else(|| error("missing_hypothesis_witness"))?,
+        )?])?;
+        let body = &target["body"];
+        if string_is(&target["kind"], "judgment")
+            && let Some(condition) = map(body)?
+                .get(text(&prospective.fields()["predicate"])?)
+                .filter(|v| truth(v))
+        {
+            require(
+                prospective.predicate(condition, None)? != Some(true),
+                "hypothesis_falsified",
+            )?;
+        }
+        let heads = states
+            .get(subject)
+            .map(map)
+            .transpose()?
+            .and_then(|v| v.get("heads"))
+            .cloned()
+            .unwrap_or(V::List(vec![]));
+        if truth(&heads) {
+            let old = &existing
+                .get(subject)
+                .ok_or_else(|| error("unresolved_history_subject"))?
+                .1;
+            if old.digest()? != body.digest()? {
+                let is_judgment = map(old).is_ok_and(|m| m.contains_key(deps_field));
+                let permitted = if is_judgment {
+                    let shaped = map(body)
+                        .ok()
+                        .and_then(|m| m.get(deps_field))
+                        .is_some_and(|v| {
+                            list(v)
+                                .is_ok_and(|v| !v.is_empty() && v.iter().all(|v| text(v).is_ok()))
+                        });
+                    let fired = base_world
+                        .predicate(map(old)?.get(predicate_field).unwrap_or(&V::Null), None)?;
+                    shaped && (fired == Some(true) || fold.take.contains(subject))
+                } else {
+                    crate::reasoning_authoring_guards::read_on(old, &base_world)
+                        .is_none_or(|when| stamp > when.as_str())
+                };
+                require(permitted, "hypothesis_fold_requires_resolution")?;
+                if is_judgment {
+                    let old_deps = map(old)?
+                        .get(deps_field)
+                        .map(list)
+                        .transpose()?
+                        .unwrap_or(&[]);
+                    let new_deps = map(body)?
+                        .get(deps_field)
+                        .map(list)
+                        .transpose()?
+                        .unwrap_or(&[]);
+                    for dep in old_deps.iter().filter(|d| !new_deps.contains(d)) {
+                        let reason = map(&fold.drops)
+                            .ok()
+                            .and_then(|d| text(dep).ok().and_then(|dep| d.get(dep)))
+                            .and_then(|v| text(v).ok());
+                        require(
+                            reason.is_some_and(|s| !s.trim().is_empty()),
+                            "hypothesis_drop_reason_required",
+                        )?;
+                    }
+                }
+            }
+        }
+        for version in versions {
+            objects.push(act(
+                captured,
+                &captured.objects[text(version)?],
+                "accept",
+                &fold.because,
+                heads.clone(),
+                &[],
+                None,
+                options,
+            )?);
+        }
+    }
+    let mut take = fold.take.clone();
+    take.sort();
+    let mut intent = obj([
+        ("version", n("1")),
+        ("kind", s("fold")),
+        ("names", strings(names)),
+        ("because", s(&fold.because)),
+        ("take", strings(take)),
+        (
+            "drops",
+            if truth(&fold.drops) {
+                fold.drops.clone()
+            } else {
+                empty()
+            },
+        ),
+        ("operation", s(&options.operation)),
+        ("recorded_at", s(&options.recorded_at)),
+        ("by", options.by.clone()),
+    ]);
+    if fold.assessment_version == 1 {
+        map_mut(&mut intent)?.insert("assessment_version".into(), n("1"));
+    }
+    let mutation = mutation(
+        store,
+        captured,
+        &objects,
+        intent,
+        &context.base,
+        &after,
+        None,
+        Some(&context.groups),
+        options,
+        runtime,
+        audit,
+    )?;
+    if fold.assessment_version == 1 {
+        let physical = physical_layers(store, &context.physical)?;
+        let assessment = crate::history_prospective::assess(
+            captured,
+            &mutation,
+            Some(&physical),
+            Some(&s(stamp)),
+            runtime,
+        )?;
+        let introduced = map(&assessment.introduced)?;
+        require(
+            !truth(&introduced["falsified"]) && !truth(&introduced["holes"]),
+            "hypothesis_candidate_not_clean",
+        )?;
+    }
+    Ok(mutation)
+}
 #[allow(clippy::too_many_arguments)]
 fn refute_inner(
     store: &Store,
@@ -903,6 +1145,31 @@ pub fn verify_prepared(
                 Some(&audit),
             )?
         }
+        "fold" => {
+            let names = list(field(intent, "names")?)?
+                .iter()
+                .map(|v| text(v).map(str::to_owned))
+                .collect::<Result<Vec<_>>>()?;
+            let take = list(field(intent, "take")?)?
+                .iter()
+                .map(|v| text(v).map(str::to_owned))
+                .collect::<Result<Vec<_>>>()?;
+            let assessment_version = intent.get("assessment_version").unwrap_or(&V::Null);
+            require(
+                *assessment_version == V::Null
+                    || is_int(assessment_version, "0")
+                    || is_int(assessment_version, "1"),
+                "unsupported_hypothesis_assessment",
+            )?;
+            let fold = Fold {
+                names,
+                because: text(field(intent, "because")?)?.into(),
+                take,
+                drops: field(intent, "drops")?.clone(),
+                assessment_version: u8::from(is_int(assessment_version, "1")),
+            };
+            fold_inner(store, &capture, &fold, &options, runtime, Some(&audit))?
+        }
         _ => return Err(error("invalid_hypothesis_receipt")),
     };
     require(
@@ -987,6 +1254,294 @@ mod tests {
             .find(|c| c["name"] == name)
             .unwrap()
             .clone()
+    }
+    fn fold(value: &V) -> Fold {
+        let value = map(value).unwrap();
+        Fold {
+            names: list(&value["names"])
+                .unwrap()
+                .iter()
+                .map(|v| text(v).unwrap().into())
+                .collect(),
+            because: text(&value["because"]).unwrap().into(),
+            take: list(&value["take"])
+                .unwrap()
+                .iter()
+                .map(|v| text(v).unwrap().into())
+                .collect(),
+            drops: value["drops"].clone(),
+            assessment_version: u8::from(is_int(&value["assessment_version"], "1")),
+        }
+    }
+    #[test]
+    fn fold_and_prospective_snapshots_match_both_python_contracts() {
+        let cache = tempfile::tempdir().unwrap();
+        let runtime = runtime(cache.path());
+        let mut failures = vec![];
+        for (family, raw) in [
+            (
+                "pinned",
+                include_str!("../tests/fixtures/history-fold.json"),
+            ),
+            (
+                "candidate",
+                include_str!("../tests/fixtures/history-fold-candidate.json"),
+            ),
+        ] {
+            let data: J = serde_json::from_str(raw).unwrap();
+            for case in data["cases"].as_array().unwrap() {
+                let root = tempfile::tempdir().unwrap();
+                write(root.path(), case);
+                let store = Store::new(&root.path().join("GROUNDING.yaml")).unwrap();
+                let capture = store.capture().unwrap();
+                let fold = fold(&V::from_tagged(&case["fold"]).unwrap());
+                let audit = case
+                    .get("receipt")
+                    .map(|r| ReplayAudit::oracle(&V::from_tagged(r).unwrap()).unwrap());
+                let mut options = options(1);
+                options.operation = "fold-1".into();
+                let result = fold_inner(
+                    &store,
+                    &capture,
+                    &fold,
+                    &options,
+                    Some(&runtime),
+                    audit.as_ref(),
+                );
+                let label = format!("{family}-{}", case["name"].as_str().unwrap());
+                match (case.get("output"), result) {
+                    (Some(expected), Ok(actual)) => {
+                        if actual.to_bytes().unwrap() != expected.as_str().unwrap().as_bytes() {
+                            std::fs::write(
+                                std::env::temp_dir().join(format!("fold-{label}-actual.json")),
+                                actual.to_bytes().unwrap(),
+                            )
+                            .unwrap();
+                            std::fs::write(
+                                std::env::temp_dir().join(format!("fold-{label}-expected.json")),
+                                expected.as_str().unwrap(),
+                            )
+                            .unwrap();
+                            failures.push(format!("{label}: byte mismatch"));
+                        }
+                        if let Some(expected) = case.get("snapshot") {
+                            let actual = crate::history_prospective::snapshot_after(
+                                &capture,
+                                &actual,
+                                CaptureOptions {
+                                    context: Some(obj([("purpose", s("proposed fold"))])),
+                                    as_of: Some(s("2026-09-19")),
+                                    ..Default::default()
+                                },
+                            )
+                            .unwrap();
+                            assert_eq!(
+                                actual.to_json().unwrap(),
+                                expected.as_str().unwrap(),
+                                "{label}: snapshot mismatch"
+                            );
+                        }
+                    }
+                    (Some(_), Err(e)) => failures.push(format!("{label}: {e}")),
+                    (None, Ok(_)) => failures.push(format!("{label}: unexpectedly accepted")),
+                    (None, Err(_)) => {}
+                }
+            }
+        }
+        assert!(failures.is_empty(), "{}", failures.join("\n"));
+    }
+    #[test]
+    fn fold_checks_the_actual_proposed_history_and_replays_without_accepting_preview() {
+        let case = case("new");
+        let root = tempfile::tempdir().unwrap();
+        write(root.path(), &case);
+        let cache = tempfile::tempdir().unwrap();
+        let runtime = runtime(cache.path());
+        let store = Store::new(&root.path().join("GROUNDING.yaml")).unwrap();
+        let mut options = options(2);
+        let mutation = prepare(
+            &store,
+            &store.capture().unwrap(),
+            "trial",
+            &V::from_tagged(&case["action"]).unwrap(),
+            None,
+            &options,
+            Some(&runtime),
+        )
+        .unwrap();
+        commit(&store, &mutation, Some(&runtime), &mut |_| Ok(())).unwrap();
+        let captured = store.capture().unwrap();
+        options.operation = "fold-1".into();
+        let fold = Fold {
+            names: vec!["trial".into()],
+            because: "verified proposal".into(),
+            take: vec![],
+            drops: empty(),
+            assessment_version: 1,
+        };
+        let mut legacy = fold.clone();
+        legacy.assessment_version = 0;
+        assert_eq!(
+            prepare_fold(&store, &captured, &legacy, &options, Some(&runtime))
+                .unwrap_err()
+                .0,
+            "new_fold_requires_prospective_assessment"
+        );
+        let prepared = prepare_fold(&store, &captured, &fold, &options, Some(&runtime)).unwrap();
+        let preview = crate::history_prospective::snapshot_after(
+            &captured,
+            &prepared,
+            CaptureOptions::default(),
+        )
+        .unwrap();
+        assert!(
+            entries(&map(preview.data()).unwrap()["document"])
+                .unwrap()
+                .contains_key("p.new")
+        );
+        assert!(
+            !entries(&A::document(&store.capture().unwrap()).unwrap())
+                .unwrap()
+                .contains_key("p.new")
+        );
+        let error = crate::history_prospective::snapshot_after(
+            &captured,
+            &prepared,
+            CaptureOptions {
+                context: Some(obj([("operation", empty())])),
+                ..Default::default()
+            },
+        )
+        .unwrap_err();
+        assert_eq!(error.0, "duplicate_prospective_context");
+        verify_prepared(&store, &prepared, Some(&runtime)).unwrap();
+        assert!(verify_prepared(&store, &prepared, None).is_err());
+        commit(&store, &prepared, Some(&runtime), &mut |_| Ok(())).unwrap();
+        commit(&store, &prepared, Some(&runtime), &mut |_| Ok(())).unwrap();
+        assert!(
+            entries(&A::document(&store.capture().unwrap()).unwrap())
+                .unwrap()
+                .contains_key("p.new")
+        );
+    }
+    #[test]
+    fn fold_prospective_assessment_rejects_unrelated_falsification_and_computation_holes() {
+        let data: J = serde_json::from_str(include_str!(
+            "../tests/fixtures/history-fold-prospective-effects.json"
+        ))
+        .unwrap();
+        let cache = tempfile::tempdir().unwrap();
+        let runtime = runtime(cache.path());
+        for case in data["cases"].as_array().unwrap() {
+            let root = tempfile::tempdir().unwrap();
+            write(root.path(), case);
+            let store = Store::new(&root.path().join("GROUNDING.yaml")).unwrap();
+            let capture = store.capture().unwrap();
+            let fold = fold(&V::from_tagged(&case["fold"]).unwrap());
+            let audit = case
+                .get("receipt")
+                .map(|r| ReplayAudit::oracle(&V::from_tagged(r).unwrap()).unwrap());
+            let mut options = options(1);
+            options.operation = "fold-1".into();
+            let result = fold_inner(
+                &store,
+                &capture,
+                &fold,
+                &options,
+                Some(&runtime),
+                audit.as_ref(),
+            );
+            if let Some(expected) = case.get("output") {
+                assert_eq!(
+                    result.unwrap().to_bytes().unwrap(),
+                    expected.as_str().unwrap().as_bytes(),
+                    "{}",
+                    case["name"]
+                );
+            } else {
+                assert_eq!(
+                    result.unwrap_err().0,
+                    "hypothesis_candidate_not_clean",
+                    "{}",
+                    case["name"]
+                );
+            }
+            assert_eq!(store.capture().unwrap().entry_bytes, capture.entry_bytes);
+        }
+    }
+    #[test]
+    fn prospective_capture_refuses_rehashed_view_forgery_and_cross_baseline() {
+        let case = case("new");
+        let root = tempfile::tempdir().unwrap();
+        write(root.path(), &case);
+        let cache = tempfile::tempdir().unwrap();
+        let runtime = runtime(cache.path());
+        let store = Store::new(&root.path().join("GROUNDING.yaml")).unwrap();
+        let capture = store.capture().unwrap();
+        let mutation = prepare(
+            &store,
+            &capture,
+            "trial",
+            &V::from_tagged(&case["action"]).unwrap(),
+            None,
+            &options(2),
+            Some(&runtime),
+        )
+        .unwrap();
+        let mut altered = capture.clone();
+        altered.baseline = empty();
+        assert_eq!(
+            crate::history_prospective::capture_after(&altered, &mutation)
+                .unwrap_err()
+                .0,
+            "baseline_mismatch"
+        );
+        let data = mutation.to_data();
+        let data = map(&data).unwrap();
+        let mut files = mutation.files().to_vec();
+        let mut view = Y::decode_document(
+            files
+                .iter()
+                .find(|f| f.role == "record")
+                .unwrap()
+                .after
+                .as_ref()
+                .unwrap(),
+        )
+        .unwrap();
+        map_mut(&mut view).unwrap().insert(
+            "forged_collection".into(),
+            obj([("p.forged", obj([("v", n("99"))]))]),
+        );
+        let view = crate::history_emit::encode_document(&view).unwrap();
+        for file in &mut files {
+            if file.role == "record" {
+                file.after = Some(view.clone());
+            }
+            if file.role == "history_commit" {
+                let mut manifest = Y::decode_document(file.after.as_ref().unwrap()).unwrap();
+                map_mut(&mut manifest)
+                    .unwrap()
+                    .insert("view_sha256".into(), s(&sha256(&view)));
+                file.after = Some(crate::history_emit::encode_document(&manifest).unwrap());
+            }
+        }
+        let forged = PreparedMutation::prepare(
+            "hypothesis-1",
+            &data["authority"],
+            &data["baseline"],
+            files,
+            &data["receipt"],
+            "GROUNDING.yaml",
+            None,
+        )
+        .unwrap();
+        assert_eq!(
+            crate::history_prospective::capture_after(&capture, &forged)
+                .unwrap_err()
+                .0,
+            "view_mismatch"
+        );
     }
     #[test]
     fn named_replay_preserves_base_and_originals_through_review_refutation_and_retry() {

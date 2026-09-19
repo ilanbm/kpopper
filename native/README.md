@@ -150,6 +150,16 @@ Receipt versions 2/3 retain sequential replay, version 6 retains the earlier fin
 world, and version 8 captures typed snapshots and declared missing-pin evidence.
 Attached report files remain part of the complete mutation and replay comparison.
 
+`history_hypothesis_authoring` prepares named proposals, reviews, refutations and
+folds without rewriting retained claims. It checks physical hypothesis names and
+imported-file hashes, and rechecks archive and physical evidence after caller
+verification. New folds assess the complete proposed history and refuse newly
+introduced falsifications or evidence holes. Earlier fold receipts retain their
+original replay semantics. `history_prospective` constructs detached snapshots
+only after validating the mutation's authority, causal parents, immutable object
+bytes and rendered view. Preview does not publish or accept a proposal; retained
+branch-adoption evidence still requires its separate audit adapter.
+
 These library interfaces remain separate from the experimental CLI. Identity/edit
 application adapters, temporal authoring and ordinary-profile authoring
 are not yet exposed through this preparation layer. The newer receipt contracts are

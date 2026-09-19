@@ -381,7 +381,7 @@ fn day(v: &V) -> Option<String> {
     let d = t.trim_start().get(..10)?;
     crate::value::Date::new(d).ok().map(|_| d.into())
 }
-fn read_on(body: &V, world: &World<'_>) -> Option<String> {
+pub(crate) fn read_on(body: &V, world: &World<'_>) -> Option<String> {
     let m = map(body).ok()?;
     for k in ["of", "read"] {
         if let Some(d) = m.get(k).and_then(day) {

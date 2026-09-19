@@ -16,6 +16,7 @@ pub mod history_hypothesis_authoring;
 pub mod history_paths;
 pub mod history_preparation;
 pub mod history_projection;
+pub mod history_prospective;
 pub mod history_reduce;
 pub mod history_sources;
 pub mod history_store;

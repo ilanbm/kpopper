@@ -470,6 +470,51 @@ pub struct CaptureOptions {
     pub as_of: Option<V>,
     pub authored_revision: Option<V>,
 }
+impl CapturedHistory {
+    /// Bind a validated retained history projection to a detached computational snapshot.
+    pub fn snapshot(&self, mut options: CaptureOptions) -> Result<Snapshot> {
+        let mut context = options
+            .context
+            .take()
+            .filter(|v| *v != V::Null)
+            .unwrap_or_else(empty);
+        let context_map = crate::history_view::map_mut(&mut context)?;
+        require(
+            !context_map.contains_key("history"),
+            "duplicate_history_context",
+        )?;
+        context_map.insert("history".into(), self.projection().clone());
+        let (named, index) = HH::layers(self.projection(), self.document())?;
+        if !map(&named)?.is_empty() {
+            require(
+                context_map
+                    .get("history_hypotheses")
+                    .is_none_or(|v| v.digest().ok() == index.digest().ok()),
+                "history_hypothesis_index_mismatch",
+            )?;
+            context_map.insert("history_hypotheses".into(), index);
+            let mut supplied = options
+                .hypotheses
+                .take()
+                .filter(|v| *v != V::Null)
+                .unwrap_or_else(empty);
+            let current = crate::history_view::map_mut(&mut supplied)?;
+            for (name, group) in map(&named)? {
+                if let Some(old) = current.get(name) {
+                    let wrap = |v: &V| V::Map(Map::from([(name.clone(), v.clone())]));
+                    require(
+                        hypotheses(&wrap(old))?.digest()? == hypotheses(&wrap(group))?.digest()?,
+                        "history_hypothesis_layer_mismatch",
+                    )?;
+                }
+                current.insert(name.clone(), group.clone());
+            }
+            options.hypotheses = Some(supplied);
+        }
+        options.context = Some(context);
+        Snapshot::from_data(self.document(), options)
+    }
+}
 impl Snapshot {
     pub fn from_data(document: &V, options: CaptureOptions) -> Result<Self> {
         code(document, "invalid_snapshot")?;
