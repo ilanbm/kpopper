@@ -774,14 +774,17 @@ See the [command reference](docs/reference.md), [history commands](docs/history-
 
 ### Plugin skills
 
-| Workflow | Claude Code | Codex |
-|---|---|---|
-| [Understand the method or choose a workflow](skills/kpopper/SKILL.md) | `/kpopper:kpopper` | `$kpopper` |
-| [Read the record before answering](skills/ground/SKILL.md) | `/kpopper:ground` | `$ground` |
-| [Preserve findings, decisions and open questions](skills/record/SKILL.md) | `/kpopper:record` | `$record` |
-| [Map selected existing materials](skills/map/SKILL.md) | `/kpopper:map` | `$map` |
-| [Reconcile hypotheses and branch records](skills/consolidate/SKILL.md) | `/kpopper:consolidate` | `$consolidate` |
-| [Configure background checks](skills/watch/SKILL.md) | `/kpopper:watch` | `$watch` |
+| Skill | What happens in practice · possible CLI calls | Claude Code | Codex |
+|---|---|---|---|
+| [kpopper](skills/kpopper/SKILL.md) | Explains the method and chooses the workflow that fits the task. CLI calls follow the selected workflow. | `/kpopper:kpopper` | `$kpopper` |
+| [ground](skills/ground/SKILL.md) | Retrieves relevant claims, sources and dependencies before answering, and checks what needs review.<br>May use `kpop pull <id>`, `kpop affects <id>`, `kpop check` or `kpop search "terms"`. | `/kpopper:ground` | `$ground` |
+| [record](skills/record/SKILL.md) | Saves findings, their sources and reasons; records decisions, open questions and completed reviews.<br>May use `kpop update --file report.json`, `kpop add`, `kpop set` or `kpop review`. | `/kpopper:record` | `$record` |
+| [map](skills/map/SKILL.md) | Examines the agreed materials, builds a sourced record and reports coverage and gaps.<br>Starts with `kpop map --json` or `kpop map --deep --json`, then follows the returned workflow. | `/kpopper:map` | `$map` |
+| [consolidate](skills/consolidate/SKILL.md) | Compares proposals with the record, surfaces disagreements and guides folding or refuting them.<br>May use `kpop consolidate --dry-run`, `kpop consolidate` or `kpop remeasure --run`. | `/kpopper:consolidate` | `$consolidate` |
+| [watch](skills/watch/SKILL.md) | Inspects branch checks and shared findings; configures background checks or daily review when requested.<br>May use `kpop watch status`, `kpop watch setup`, `kpop watch shared` or `kpop followups daily install`, plus the host's scheduler. | `/kpopper:watch` | `$watch` |
+
+The agent chooses the calls for the task and the record's state, using its
+source-reading tools as needed.
 
 For example, `$ground workshop.ingredient_plan` asks Codex to retrieve that plan and
 its basis. **`ground` is a skill; the CLI reads use `open`, `pull`, `affects` and `check`.**
@@ -792,10 +795,10 @@ Other hosts expose skills through their [adapters](adapters/README.md).
 These skills require the [optional HTML setup](#experimental-applications) and explicit
 selection. Their interfaces and artifact formats may change.
 
-| Application | Claude Code | Codex |
-|---|---|---|
-| [kpopper Hub](skills/hub/SKILL.md) | `/kpopper:hub` | `$hub` |
-| [Annotated Documents](skills/annotated-doc/SKILL.md) | `/kpopper:annotated-doc` | `$annotated-doc` |
+| Application | What happens in practice · possible CLI calls | Claude Code | Codex |
+|---|---|---|---|
+| [kpopper Hub](skills/hub/SKILL.md) | Builds a browsable snapshot of the record and checks its layout and coverage.<br>Uses `kpop experimental hub`, for example with `--open` or `--verify`. | `/kpopper:hub` | `$hub` |
+| [Annotated Documents](skills/annotated-doc/SKILL.md) | Authors or refreshes a standalone HTML document with selected evidence and reviewable copy updates.<br>Uses `kpop experimental annotated-doc` with operations such as `guide`, `build` and `refresh`. | `/kpopper:annotated-doc` | `$annotated-doc` |
 
 The CLI entry points are `kpop experimental hub` and `kpop experimental annotated-doc`.
 `page` and `document` remain compatibility aliases. The separate experimental
