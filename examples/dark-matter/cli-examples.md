@@ -24,7 +24,7 @@ kpop check examples/dark-matter/GROUNDING.yaml
 ```text
 NOTE cluster.mass_location: no predicate at all - decided; reopened by: The lensing reconstruction, gas-mass interpretation, line-of-sight structure or the gravit
 NOTE cosmology.cold_component: no predicate at all - decided; reopened by: The likelihood, data combination or cosmological model changes enough to alter the inferre
-NOTE evidence.shared_catalog: no predicate at all - decided; reopened by: A different catalog, sample selection or independently calibrated replication changes the 
+NOTE evidence.shared_catalog: no predicate at all - decided; reopened by: A different catalog, sample selection or independently calibrated replication changes the
 NOTE galaxy.baryon_coupling: no predicate at all - decided; reopened by: Revised distances, inclinations, stellar mass-to-light conversion or independent samples m
 NOTE galaxy.extended_mass: no predicate at all - decided; reopened by: The velocity readings, geometry, dynamical assumptions or an alternative explanation of th
 NOTE particle.search_scope: no predicate at all - decided; reopened by: A later exposure, revised calibration, different interaction model or positive signal chan
@@ -159,7 +159,7 @@ notices.
 - Captured at: `2026-09-19T09:51:55.735419+00:00`.
 - Reader: source `6ab9877` (after 1.7.0); checked-in legacy record.
 - Input SHA-256: `8b6a03d01392daa3f14a0aa6c1d4f3c30e9d55279cb8be99d288d08ef8d06c73`.
-- All five commands exited `0`; the output above is retained verbatim, including
-  abbreviations introduced by the CLI's budgets.
+- All five commands exited `0`; the output preserves the CLI's abbreviations.
+  Trailing spaces were removed for Markdown.
 
 </details>
