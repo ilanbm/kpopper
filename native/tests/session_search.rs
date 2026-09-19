@@ -7,6 +7,7 @@ use session_search::{
 use std::collections::{BTreeMap, BTreeSet};
 
 const ORACLE: &str = include_str!("fixtures/session_search_oracle.json");
+const UNICODE_ORACLE: &str = include_str!("fixtures/session_search_unicode_oracle.json");
 
 fn object(value: &Value) -> &Map<String, Value> {
     value.as_object().unwrap()
@@ -168,6 +169,33 @@ fn python_full_response_oracles_cover_unicode_ids_fallback_and_branch_ties() {
         ),
     ];
     for (name, request) in cases {
+        assert_oracle(&root, name, &graph_nodes, &graph_groups, &request, None);
+    }
+}
+
+#[test]
+fn python_word_classification_oracles_cover_marks_controls_and_newer_unicode() {
+    let root: Value = serde_json::from_str(UNICODE_ORACLE).unwrap();
+    let graph_nodes = nodes(&root["nodes"]);
+    let graph_groups = groups(&root, false);
+    for name in [
+        "hebrew_combining_is_separator",
+        "hebrew_tail_remains_searchable",
+        "latin_combining_is_separator",
+        "latin_split_terms_match",
+        "unicode17_scalar_is_not_python16_word",
+        "unicode17_scalar_separates_terms",
+        "control_separators_bound_literal_id",
+    ] {
+        let request = request(
+            root["cases"][name]["query"].as_str().unwrap(),
+            None,
+            1200,
+            8,
+            None,
+            SearchMode::Lexical,
+            None,
+        );
         assert_oracle(&root, name, &graph_nodes, &graph_groups, &request, None);
     }
 }

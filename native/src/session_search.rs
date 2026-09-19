@@ -9,6 +9,7 @@ use sha2::{Digest, Sha256};
 use std::{
     collections::{BTreeMap, BTreeSet},
     fmt,
+    sync::OnceLock,
 };
 use unicode_casefold::UnicodeCaseFold;
 
@@ -187,7 +188,7 @@ fn terms(text: &str) -> Vec<String> {
     let mut result = Vec::new();
     let mut current = String::new();
     for character in folded.chars() {
-        if character.is_alphanumeric() {
+        if python_alphanumeric(character) {
             current.push(character);
         } else if !current.is_empty() {
             result.push(std::mem::take(&mut current));
@@ -199,8 +200,29 @@ fn terms(text: &str) -> Vec<String> {
     result
 }
 
+fn python_alphanumeric(character: char) -> bool {
+    // Python 3.14's [^\W_] accepts Unicode 16 Letter or Number categories.
+    // Rust's char::is_alphanumeric uses the broader Alphabetic property and
+    // includes combining marks. regex 1.13.1's pinned category tables matched
+    // Python for every Unicode scalar in the 2026-09-20 oracle sweep.
+    if character.is_ascii() {
+        return character.is_ascii_alphanumeric();
+    }
+    static ALPHANUMERIC: OnceLock<regex::Regex> = OnceLock::new();
+    let alphanumeric = ALPHANUMERIC
+        .get_or_init(|| regex::Regex::new(r"^[\p{Letter}\p{Number}]$").expect("valid regex"));
+    let mut encoded = [0; 4];
+    alphanumeric.is_match(character.encode_utf8(&mut encoded))
+}
+
+fn python_whitespace(character: char) -> bool {
+    // Python's Unicode regex \s additionally includes the four information
+    // separators. Rust's char::is_whitespace matched every other scalar.
+    character.is_whitespace() || ('\u{1c}'..='\u{1f}').contains(&character)
+}
+
 fn identifier_atom(character: char) -> bool {
-    !character.is_whitespace()
+    !python_whitespace(character)
         && ![
             '"', '\'', '`', '(', ')', '[', ']', '{', '}', ',', ';', '<', '>', ':', '#', '/',
         ]
@@ -711,6 +733,61 @@ mod tests {
                 expected,
                 "U+{:04X}",
                 source as u32
+            );
+        }
+    }
+
+    #[test]
+    fn word_and_whitespace_classes_match_python_3_14_unicode_16() {
+        let oracle: Value = serde_json::from_str(include_str!(
+            "../tests/fixtures/session_search_unicode_oracle.json"
+        ))
+        .unwrap();
+        assert_eq!(oracle["python"], "3.14.5");
+        assert_eq!(oracle["unicode"], "16.0.0");
+        let ranges = |name: &str| {
+            oracle[name]
+                .as_array()
+                .unwrap()
+                .iter()
+                .map(|range| {
+                    let range = range.as_array().unwrap();
+                    (
+                        range[0].as_u64().unwrap() as u32,
+                        range[1].as_u64().unwrap() as u32,
+                    )
+                })
+                .collect::<Vec<_>>()
+        };
+        let alphanumeric = ranges("alphanumeric_ranges");
+        let whitespace = ranges("whitespace_ranges");
+        for codepoint in 0..=0x10ffff {
+            let Some(character) = char::from_u32(codepoint) else {
+                continue;
+            };
+            let expected_alphanumeric = alphanumeric
+                .binary_search_by(|(start, end)| {
+                    if codepoint < *start {
+                        std::cmp::Ordering::Greater
+                    } else if codepoint > *end {
+                        std::cmp::Ordering::Less
+                    } else {
+                        std::cmp::Ordering::Equal
+                    }
+                })
+                .is_ok();
+            let expected_whitespace = whitespace
+                .iter()
+                .any(|(start, end)| (*start..=*end).contains(&codepoint));
+            assert_eq!(
+                python_alphanumeric(character),
+                expected_alphanumeric,
+                "alphanumeric U+{codepoint:04X}"
+            );
+            assert_eq!(
+                python_whitespace(character),
+                expected_whitespace,
+                "whitespace U+{codepoint:04X}"
             );
         }
     }
