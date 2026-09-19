@@ -353,3 +353,72 @@ fn status_does_not_require_a_strict_snapshot_for_ordinary_metadata_keys() {
     assert_eq!(result["mode"], "simple");
     assert_eq!(result["contributions"], json!([]));
 }
+
+#[test]
+fn knowledge_status_passes_the_configured_runtime_to_a_computed_target() {
+    let (_, ledgers) = fixtures();
+    let temp = tempfile::tempdir().unwrap();
+    let root = temp.path().join("repo");
+    std::fs::create_dir(&root).unwrap();
+    fixture(&root, ledger_case(&ledgers, "target_core"));
+
+    let target = kpop_native::reasoning_runtime::target_name().unwrap();
+    let resources = temp.path().join("resources");
+    let reasoning = resources.join("reasoning");
+    std::fs::create_dir_all(&reasoning).unwrap();
+    std::fs::copy(
+        Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../scripts/reasoning/native")
+            .join(format!("{target}.zip")),
+        reasoning.join(format!("{target}.zip")),
+    )
+    .unwrap();
+    let result = Command::new(env!("CARGO_BIN_EXE_kpop-native"))
+        .args(["--workspace", root.to_str().unwrap(), "knowledge", "status"])
+        .env("KPOPPER_NATIVE_RESOURCES", &resources)
+        .env("KPOPPER_NATIVE_CACHE", temp.path().join("cache"))
+        .env("KPOPPER_PRIVATE_HOME", temp.path().join("private"))
+        .output()
+        .unwrap();
+    assert!(
+        result.status.success(),
+        "{}",
+        String::from_utf8_lossy(&result.stderr)
+    );
+    let actual: Value = serde_json::from_slice(&result.stdout).unwrap();
+    assert_eq!(actual["target_unavailable"], Value::Null, "{actual}");
+    assert_eq!(actual["contributions"].as_array().unwrap().len(), 1);
+}
+
+#[test]
+fn ordinary_live_status_does_not_open_a_broken_optional_runtime() {
+    let (oracle, ledgers) = fixtures();
+    let temp = tempfile::tempdir().unwrap();
+    let root = temp.path().join("repo");
+    std::fs::create_dir(&root).unwrap();
+    fixture(&root, ledger_case(&ledgers, "one"));
+    let result = Command::new(env!("CARGO_BIN_EXE_kpop-native"))
+        .args(["--workspace", root.to_str().unwrap(), "knowledge", "status"])
+        .env(
+            "KPOPPER_NATIVE_RESOURCES",
+            temp.path().join("missing-resources"),
+        )
+        .env("KPOPPER_PRIVATE_HOME", temp.path().join("private"))
+        .output()
+        .unwrap();
+    assert!(
+        result.status.success(),
+        "{}",
+        String::from_utf8_lossy(&result.stderr)
+    );
+    let actual: Value = serde_json::from_slice(&result.stdout).unwrap();
+    let expected_entry = oracle["status"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|entry| entry["name"] == "one_live")
+        .unwrap();
+    let mut wanted = expected(expected_entry, &[("$ROOT", &root)]);
+    wanted["private_drafts"] = json!([]);
+    assert_eq!(actual, wanted);
+}

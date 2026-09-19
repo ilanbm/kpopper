@@ -7,7 +7,7 @@ use crate::{
     pending_state::{self, Ledger},
     project_modes::{self, Project},
     require,
-    source_capture::{ReadMode, capture_source},
+    source_capture::{ReadMode, capture_source_with_runtime},
     value::TypedValue as V,
 };
 use clap::Subcommand;
@@ -128,7 +128,27 @@ pub fn status(workspace: &Path, mode: ReadMode, _options: &StatusOptions) -> Res
     if record.exists()
         || mode == ReadMode::Live && project.is_git() && Ledger::capture(&project)?.head.is_some()
     {
-        let capture = capture_source(std::slice::from_ref(&record), workspace, mode, None)?;
+        let mut capture = capture_source_with_runtime(
+            std::slice::from_ref(&record),
+            workspace,
+            mode,
+            None,
+            None,
+        )?;
+        let target_needs_runtime = map(&capture.knowledge_status_context())?["target_unavailable"]
+            == s("target_runtime_required");
+        if mode == ReadMode::Live
+            && target_needs_runtime
+            && let Some(runtime) = crate::public_workspace::core_runtime()?
+        {
+            capture = capture_source_with_runtime(
+                std::slice::from_ref(&record),
+                workspace,
+                mode,
+                None,
+                Some(&runtime),
+            )?;
+        }
         context = capture.knowledge_status_context();
         capture.verify()?;
     } else if mode == ReadMode::Live && project.is_git() && map(&config)?["mode"] == s("advanced") {
@@ -264,7 +284,13 @@ fn populate(
         )?,
     )?;
     if is_int(version, "3") {
-        let capture = capture_source(&[root.join("GROUNDING.yaml")], root, ReadMode::Frozen, None)?;
+        let capture = capture_source_with_runtime(
+            &[root.join("GROUNDING.yaml")],
+            root,
+            ReadMode::Frozen,
+            None,
+            None,
+        )?;
         require(
             capture.strict_document()?.digest()? == document.digest()?,
             "materialized history does not reproduce captured contribution",
