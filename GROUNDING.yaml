@@ -792,6 +792,13 @@ sources:
     of: "2026-09-19, request to merge current main into the applications branch and preserve
          optional HTML installation and canonical hub/annotated-doc commands"
     read: "2026-09-19"
+  s.2026_09_19_pr_and_plugin_descriptions:
+    name: "Review the application separation and align plugin descriptions with the README"
+    asked: "יש עוד merge קטן שנעשה לתוך main אז תבדוק. חוץ מזה תעבור על זה ותכין PR? אה אגב אולי
+            כדאי להחליף את התיאורים בplugin.json? תסתכל בreadme הנוכחי?"
+    of: "2026-09-19, request to incorporate latest main, review the changes, prepare a pull request
+         and refresh plugin descriptions from the current README"
+    read: "2026-09-19"
   s.background_ingestion:
     name: "Background capture and selective delivery contract"
     file: "skills/kpopper/INGESTION.md"
@@ -1033,6 +1040,10 @@ sources:
     name: "Explicit Python setup and runtime selection for plugin hooks"
     file: "docs/plugin-runtime.md"
     read: "2026-09-17"
+  doc.session_activity:
+    name: "Session write attribution and Stop delivery contract"
+    file: "docs/reference.md"
+    read: "2026-09-19"
   doc.session_test_gates:
     name: "Checked-session integration test readiness gates"
     file: "tests/test_predicate_literals.py"
@@ -2283,6 +2294,16 @@ known:
            to matter, and the page stays JS either way"
     from: s.2026_09_03_language
     reach: general
+  p.session_hook_contract:
+    name: "Session authorship and Stop delivery scope"
+    v: "The Claude/Codex Stop hook attributes entries and intents only from private successful-write
+        receipts matching the session, source file and current body. Imported and manual changes
+        alone leave authorship unknown. Each finding has a separate per-session delivery receipt;
+        repeated stops and resume do not repeat it. Delivery suppression never changes check or write
+        admission. Missing temporary state loses attribution and delivery history; unavailable
+        delivery storage makes Stop yield."
+    from: doc.session_activity
+    at: "The plugin hooks: session write attribution and delivery receipts"
   p.skills_shipped:
     v: 10
     # set 2026-09-18: Eight canonical skills and two compatibility aliases after the application rename.
@@ -2396,7 +2417,8 @@ known:
     of: "2026-09-10"
 
   m.skill_bytes_largest:
-    v: 22462
+    v: 22629
+    # Same-day correction measured after integrating session attribution from main.
     # set 2026-09-19: Measured after merging main plugin-qualified skill guidance with the application names and aliases.
     # Same-day working-tree correction after renaming the application skills.
     # set 2026-09-18: Remeasured after separating the optional HTML applications.
@@ -4155,6 +4177,28 @@ judgments:
       p.record_parsers: 1
       m.prompt_hook_10x_parsing: 1.3
       m.prompt_hook_10x_kept: 0.15
+  d.plugin_descriptions_lead_with_reasoning:
+    from: s.2026_09_19_pr_and_plugin_descriptions
+    rests_on: [s.2026_09_19_pr_and_plugin_descriptions, d.readme_opens_with_what_it_does, d.html_applications_are_optional]
+    verdict: "Plugin descriptions lead with explicit, persistent, deterministically checkable
+              reasoning, following the README. The extended description identifies Hub and Annotated
+              Documents as optional experimental applications."
+    because: "The listing should explain the core benefit and when a changed recorded premise needs
+              another look; installation details and optional applications should not obscure that
+              purpose."
+    reopened_by: "A plugin description diverges from the README, suggests all source truth is
+                  verified, or presents an optional application as necessary to use the core."
+    seen:
+      s.2026_09_19_pr_and_plugin_descriptions: "read 2026-09-19"
+      d.readme_opens_with_what_it_does: "Keep the hero, practical benefit, direct installation link
+                                         and opening reasoning illustration, followed by the concrete
+                                         code and non-code examples with visible recorded premises
+                                         and phone layouts. Omit the introductory caption and link to
+                                         the illustration-production guide. Introduce the third-brain
+                                         metaphor later."
+      d.html_applications_are_optional: "Page and standalone HTML documents are optional
+                                         experimental applications. Ordinary record checks and
+                                         session hooks do not render or validate their presentation."
   d.plugin_runtime_is_explicit:
     rests_on: [goal.portable, doc.plugin_runtime]
     verdict: "Prepare hook dependencies through an explicit private-virtualenv setup; Claude Code

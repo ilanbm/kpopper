@@ -2052,10 +2052,20 @@ def check(paths):
     return 1 if fail else 0
 
 
-def _core_context(paths):
+def _core_context(paths, *, _source_out=None):
     """One explicit core/v1 capture for read consumers; legacy callers never enter here."""
     context = _peer('reasoning.context')
     try:
+        if _source_out is not None:
+            stage = 'capture'
+            try:
+                source = _peer('reasoning.snapshot').capture_source(paths)
+                stage = 'assessment'
+                result = context.CapturedAssessment.from_snapshot(source.snapshot)
+            except (Exception, SystemExit) as error:
+                raise context.CaptureError(context.capture_failure(error, stage=stage)) from error
+            _source_out.append(source)
+            return result
         return context.CapturedAssessment.capture(paths)
     except context.CaptureError as error:
         failure = error.envelope
@@ -5401,6 +5411,7 @@ def _mutate_legacy(paths, action, callback, *, newborn=False):
         if action.get('kind') in ('same', 'distinct', 'consolidate', 'refute'):
             raise Refused('recovery_required: publication could not finish; run recover: ' + str(error)) from error
         raise
+    _peer('session_activity').published(sys.modules.get(__name__) or _Reader(), root, mutation.files)
     print(output.getvalue(), end='')
     return result
 
@@ -5929,7 +5940,8 @@ def mark(state_path, paths):
 
 def _marked(state_path):
     """The state the opener wrote - or, from an opener that wrote only the count, that."""
-    text = io.open(state_path, encoding="utf-8").read().strip()
+    with io.open(state_path, encoding="utf-8") as source:
+        text = source.read().strip()
     try:
         state = json.loads(text)
     except ValueError:
@@ -5947,16 +5959,22 @@ def _marked(state_path):
             "tree": state.get("tree"), "nudged": bool(state.get("nudged"))}
 
 
-def gate(state_path, paths, turns=0, host=None, nudged_at=None, *, _recording_context=None):
+def gate(state_path, paths, turns=0, host=None, nudged_at=None, *, _recording_context=None,
+         _session_id=None, _issues=None):
     """What a session hears before it can finish, against the mark its opener left: the
     record failing worse than it found it; an intent the session left unserved; entries it
     wrote with no intent recorded; and, once, real work that left the record untouched.
     Printed, and 2 when there is anything - the hook bounces once and yields."""
     base = _marked(state_path)
+    issues = _issues if _issues is not None else []
     if core_reader_selected(paths):
-        context = _core_context(paths)
+        source = [] if _session_id is not None else None
+        context = _core_context(paths, _source_out=source) if source is not None else _core_context(paths)
         if context is None:
             return 2
+        owned = (_peer('session_activity').owned(sys.modules.get(__name__) or _Reader(),
+                                                source[0].document, _session_id)
+                 if source is not None else None)
         fail, _ = _core_check_findings(paths, context)
         previous = set(base['failures'] or []) if base['profile'] == 'core/v1' else set()
         current_judgments = _core_gate_judgments(context.assessment)
@@ -5977,9 +5995,12 @@ def gate(state_path, paths, turns=0, host=None, nudged_at=None, *, _recording_co
             out.append(f"{paths[0]} fails core check with {len(fail)} problems "
                        f"({base['fails']} at session start).")
             out.extend('FAIL ' + item for item in added[:12])
+            issues.extend(('failure', item, 'FAIL ' + item) for item in added)
         now_ids = set(context.assessment['nodes']) | set(context.assessment['history_subjects'])
         if base['ids'] is not None:
             new = sorted(now_ids - set(base['ids']))
+            if owned is not None:
+                new = [identifier for identifier in new if identifier in owned]
             nodes = context.assessment['nodes']
             intents = {identifier for identifier, node in nodes.items()
                        if identifier not in current_judgments and isinstance(node.get('body'), dict)
@@ -5992,10 +6013,14 @@ def gate(state_path, paths, turns=0, host=None, nudged_at=None, *, _recording_co
                 names = ', '.join(new[:4]) + (f" and {len(new) - 4} more" if len(new) > 4 else '')
                 out.append(f"this session wrote {len(new)} {'entry' if len(new) == 1 else 'entries'} "
                            f"({names}); verify its recorded intent before finishing")
+                issues.extend(('unattributed', identifier,
+                    f'this session wrote 1 entry ({identifier}); verify its recorded intent before finishing')
+                    for identifier in new)
         if not out:
             nudge = untouched(base, paths, turns, host, nudged_at)
             if nudge:
                 out.append(nudge)
+                issues.append(('untouched', 'record', nudge))
                 _persist_nudge(state_path, turns)
         for line in out:
             print(line)
@@ -6007,6 +6032,8 @@ def gate(state_path, paths, turns=0, host=None, nudged_at=None, *, _recording_co
     fail, _, _, _, _ = check_lines(paths)
     doc = load(paths)
     ids, jud, fields = infer(doc)
+    owned = (_peer('session_activity').owned(sys.modules.get(__name__) or _Reader(), doc, _session_id)
+             if _session_id is not None else None)
     raw = with_builtins(doc, ids, jud, fields)
     now = _gate_judgments(ids, jud, raw)
     allowed = {}
@@ -6033,6 +6060,7 @@ def gate(state_path, paths, turns=0, host=None, nudged_at=None, *, _recording_co
                    f"session start).")
         out.append("Fix the record - or declare the hole with blocked_on - before finishing:")
         out += ["FAIL " + f for f in added[:12]]
+        issues.extend(('failure', f, 'FAIL ' + f) for f in added)
     if base["ids"] is not None:
         raw = bodies(doc)
         # what a hypothesis holds is the session's writing too, attributed the same way
@@ -6045,6 +6073,8 @@ def gate(state_path, paths, turns=0, host=None, nudged_at=None, *, _recording_co
         every = _every_id(doc, ids)
         was = set(base["ids"])
         new = sorted(k for k in every if k not in was)
+        if owned is not None:
+            new = [k for k in new if k in owned]
         intents = {k for k in every if k not in jud and isinstance(raw.get(k), dict)
                    and raw[k].get("asked")}
         # A captured external report records why its evidence entered the graph;
@@ -6074,10 +6104,14 @@ def gate(state_path, paths, turns=0, host=None, nudged_at=None, *, _recording_co
             out.append(f"this session wrote {len(new)} {'entry' if len(new) == 1 else 'entries'} "
                        f"({named_}) and recorded no intent: add s.<date>_<slug> asked=\"...\" "
                        f"name=\"...\", and from: it on what it wrote")
+            issues.extend(('unattributed', k,
+                f'this session wrote 1 entry ({k}) and recorded no intent: '
+                'add s.<date>_<slug> asked="..." name="...", and from: it on what it wrote') for k in new)
     if not out:
         nudge = untouched(base, paths, turns, host, nudged_at)
         if nudge:
             out.append(nudge)
+            issues.append(('untouched', 'record', nudge))
             _persist_nudge(state_path, turns)
     for l in out:
         print(l)
@@ -6371,6 +6405,8 @@ def _apply_first_add(action):
                 raise Refused(str(error)) from None
             bootstrap.publish(current, mutation, policy=policy,
                 verify=lambda prepared: _verify_newborn_route(current, project, policy))
+            _peer('session_activity').published(sys.modules.get(__name__) or _Reader(),
+                os.path.dirname(current), mutation.files, subjects={action['id']})
             print('history committed: ' + mutation.to_data()['operation'] +
                   ' (' + action['kind'] + ' ' + action['id'] + ')')
             return 0, [current]
@@ -6425,6 +6461,10 @@ if __name__ == "__main__":
         turns = int(rest[rest.index("--turns") + 1]) if "--turns" in rest else 0
         host = rest[rest.index("--host") + 1] if "--host" in rest else None
         at = int(rest[rest.index("--nudged-at") + 1]) if "--nudged-at" in rest else None
+        if '--session' in rest:
+            sid = rest[rest.index('--session') + 1]
+            sys.exit(_peer('session_activity').stop(sys.modules.get(__name__) or _Reader(),
+                rest[0], files, sid, turns, host, at))
         sys.exit(gate(rest[0], files, turns, host, at))
     if cmd in ("set", "add", "review"):
         sys.exit(write_command_cli(cmd, rest))

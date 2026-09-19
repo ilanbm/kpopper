@@ -135,11 +135,20 @@ class InstalledOperationalCLI(unittest.TestCase):
             self.assertEqual(record["open"]["q.support"], "Does the enterprise tier include support?")
             for command in (["open", "--json"], ["check"], ["pull", "p.input"],
                             ["affects", "p.input"], ["assess", "p.input"],
-                            ["export", "p.input"], ["search", "input"],
-                            ["page", "--out", str(root / "page.html")]):
+                            ["export", "p.input"], ["search", "input"]):
                 reopened = subprocess.run([sys.executable, str(self.cli_path()), *command],
                     cwd=root, text=True, capture_output=True, check=False)
                 self.assertEqual(reopened.returncode, 0, reopened.stdout + reopened.stderr)
+            page = root / "page.html"
+            hub = subprocess.run([sys.executable, str(self.cli_path()), "experimental", "hub",
+                "--out", str(page)], cwd=root, text=True, capture_output=True, check=False)
+            if all(importlib.util.find_spec(name) is not None for name in ("html5lib", "tinycss2")):
+                self.assertEqual(hub.returncode, 0, hub.stdout + hub.stderr)
+                self.assertIn('data-profile="core/v1"', page.read_text(encoding='utf-8'))
+            else:
+                self.assertEqual(hub.returncode, 2, hub.stdout + hub.stderr)
+                self.assertIn('kpopper[html]', hub.stderr)
+                self.assertFalse(page.exists())
             session = subprocess.run([sys.executable, str(self.cli_path()), "session", "open",
                 "--no-settings", "--tokens", "2000"], cwd=root, text=True,
                 capture_output=True, check=False)

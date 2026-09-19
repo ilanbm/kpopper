@@ -70,7 +70,8 @@ tabs:
 
   - title: What holds
     occasion: "you are about to write something here and need to know what this project already decided, and on what"
-    serves: [s.2026_09_19_main_integration, s.2026_09_18_application_names, s.2026_09_18_experimental_applications,
+    serves: [s.2026_09_19_pr_and_plugin_descriptions, s.2026_09_19_main_integration,
+             s.2026_09_18_application_names, s.2026_09_18_experimental_applications,
              s.2026_09_03_coverage, s.2026_09_03_written_layer, s.2026_09_03_hypotheses,
              s.2026_09_04_priors_count, s.2026_09_03_arrangements,
              s.2026_09_04_consolidate, s.2026_09_04_sameness, s.2026_09_04_calibration,

@@ -1,7 +1,7 @@
 {
   "name": "kpopper",
   "version": "1.7.0",
-  "description": "An epistemic record for work that gets revisited: what is known, how each piece is grounded, and what would make each judgment wrong. Keeps sources, dependencies and review conditions together. Optional experimental applications add kpopper Hub for browsing the record and Annotated Documents for standalone HTML with evidence; install their HTML runtime and invoke them explicitly.",
+  "description": "Make your agents' reasoning explicit, persistent, and deterministically checkable. Connect decisions to evidence and assumptions, and see what needs another look when a recorded premise changes.",
   "author": {
     "name": "Ilan Bar Magen"
   },
@@ -18,8 +18,8 @@
   "hooks": "./adapters/codex/plugin-hooks.json",
   "interface": {
     "displayName": "kpopper",
-    "shortDescription": "Keep sources, judgments, and important changes together.",
-    "longDescription": "An epistemic record for work that gets revisited: what is known, how each piece is grounded, and what would make each judgment wrong. Keeps sources, dependencies and review conditions together. Optional experimental applications add kpopper Hub for browsing the record and Annotated Documents for standalone HTML with evidence; install their HTML runtime and invoke them explicitly.",
+    "shortDescription": "Make your agents' reasoning persistent and checkable.",
+    "longDescription": "kpopper makes your agents' reasoning explicit, persistent, and deterministically checkable. It connects decisions to evidence, assumptions and earlier decisions, records what would make them worth revisiting, and traces what needs another look when a recorded premise changes. Optional experimental applications include kpopper Hub for exploring the record and Annotated Documents for sharing HTML with evidence.",
     "developerName": "Ilan Bar Magen",
     "category": "Productivity",
     "capabilities": [

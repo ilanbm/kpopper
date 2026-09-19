@@ -236,6 +236,8 @@ def apply(paths, action, *, project, original_paths):
     pending.unlink()
     T._sync(pending.parent)
     P.forget(entry)
+    # Only the explicitly authored subject belongs to this direct write.
+    P._peer('session_activity').published(P, entry.parent, mutation.files, subjects={action['id']})
     print('history committed: ' + mutation.to_data()['operation'] + ' (' + action['kind'] + ' ' + action['id'] + ')')
     return 0
 
