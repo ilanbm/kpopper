@@ -163,7 +163,7 @@ fn session() -> Result<()> {
     );
     if !feasibility {
         println!(
-            "For mapping, pass this session environment to the CLI and execute the returned task. The identity routes work back to this session; it grants no source access."
+            "Pass this session environment to record-writing and mapping commands. For mapping, execute the returned task. The identity routes work back to this session; it grants no source access."
         );
     }
     Ok(())

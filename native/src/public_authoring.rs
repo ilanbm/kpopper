@@ -287,6 +287,11 @@ pub fn run(kind: &str, options: &Options, cwd: &Path) -> Result<String> {
         runtime.as_ref(),
         &mut |_| route.verify(),
     )?;
+    crate::session_activity::published(
+        entry.parent().unwrap(),
+        mutation.files(),
+        Some(&std::collections::BTreeSet::from([options.subject.clone()])),
+    );
     Ok(format!(
         "history committed: {} ({kind} {})\ncreated {} - this workspace's record, born with its first entry\n",
         text(&map(&mutation.to_data())?["operation"])?,

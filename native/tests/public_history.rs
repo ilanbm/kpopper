@@ -270,3 +270,46 @@ fn private_historical_claim_stays_a_private_draft() {
     assert_eq!(fs::read(copy.join("GROUNDING.yaml")).unwrap(), entry);
     assert_eq!(ok(run(&copy, &["history", "status"]))["commits"], 1);
 }
+
+#[test]
+fn migration_read_mode_is_explicit_or_derived_from_project_mode() {
+    let tmp = tempfile::tempdir().unwrap();
+    let root = tmp.path().canonicalize().unwrap();
+    let git = |args: &[&str]| {
+        let output = Command::new("git")
+            .current_dir(&root)
+            .args([
+                "-c",
+                "core.hooksPath=/dev/null",
+                "-c",
+                "commit.gpgsign=false",
+                "-c",
+                "user.name=Fixture",
+                "-c",
+                "user.email=fixture@example.invalid",
+            ])
+            .args(args)
+            .output()
+            .unwrap();
+        assert!(
+            output.status.success(),
+            "{}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+    };
+    git(&["init", "-q", "-b", "main"]);
+    fs::write(root.join("GROUNDING.yaml"), "known: {p.x: {v: 1}}\n").unwrap();
+    git(&["add", "GROUNDING.yaml"]);
+    git(&["commit", "-qm", "fixture"]);
+    let project = kpop_native::project_modes::Project::open(&root).unwrap();
+    fs::create_dir_all(project.config_path.parent().unwrap()).unwrap();
+    fs::write(
+        project.config_path,
+        r#"{"version":1,"mode":"advanced","generation":1,"record":"GROUNDING.yaml"}"#,
+    )
+    .unwrap();
+    let implicit = ok(run(&root, &["--frozen", "history", "migrate"]));
+    assert_eq!(implicit["source_read_mode"], "live");
+    let explicit = ok(run(&root, &["history", "migrate", "--read-mode", "frozen"]));
+    assert_eq!(explicit["source_read_mode"], "frozen");
+}

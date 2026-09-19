@@ -23,6 +23,50 @@ fn runtime_declarations_match_final_python() {
         }
     }
 }
+
+#[test]
+fn current_main_application_inventory_is_supported_without_relaxing_its_manifest() {
+    let mut declaration: J =
+        serde_json::from_str(include_str!("fixtures/history-runtime-applications.json")).unwrap();
+    let temp = tempfile::tempdir().unwrap();
+    let root = temp.path().canonicalize().unwrap();
+    fs::write(root.join("cli.py"), b"fixture").unwrap();
+    setup(
+        &mut declaration,
+        &root,
+        &std::env::current_exe().unwrap().canonicalize().unwrap(),
+    );
+    let nonce = declaration["nonce"].as_str().unwrap().to_owned();
+    validate_declaration(&declaration, &nonce).unwrap();
+    for change in ["required", "files", "inclusion"] {
+        let mut altered = declaration.clone();
+        let source = altered["sources"].as_object_mut().unwrap();
+        match change {
+            "required" => source
+                .get_mut("required")
+                .unwrap()
+                .as_array_mut()
+                .unwrap()
+                .retain(|p| p != "applications/hub.py"),
+            "files" => source
+                .get_mut("files")
+                .unwrap()
+                .as_array_mut()
+                .unwrap()
+                .retain(|f| f["path"] != "applications/hub.py"),
+            _ => source
+                .get_mut("inclusion")
+                .unwrap()
+                .as_array_mut()
+                .unwrap()
+                .push(json!("unknown/*.py")),
+        }
+        source.remove("digest");
+        let digest = kpop_native::identity::sha256(&serde_json::to_vec(&source).unwrap());
+        source.insert("digest".into(), json!(digest));
+        assert!(validate_declaration(&altered, &nonce).is_err(), "{change}");
+    }
+}
 #[cfg(unix)]
 #[test]
 fn selected_launchers_nonce_digest_output_and_timeout_are_checked() {

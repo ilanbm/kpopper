@@ -68,7 +68,7 @@ fn actual_ordinary_cli_reads_physical_hypotheses_and_private_metadata_without_wr
     );
 }
 #[test]
-fn actual_core_cli_opens_exact_history_and_checks_the_captured_brief() {
+fn actual_core_cli_opens_exact_history_without_checking_the_optional_brief() {
     let tmp = tempfile::tempdir().unwrap();
     let root = tmp.path().canonicalize().unwrap();
     let record = format!(
@@ -106,9 +106,9 @@ fn actual_core_cli_opens_exact_history_and_checks_the_captured_brief() {
     .unwrap();
     let check = cli(&root, &["--frozen", "check"], &root.join("private"));
     assert_eq!(check.status.code(), Some(1));
-    assert!(
-        String::from_utf8_lossy(&check.stdout).contains("FAIL page selectors unresolved (missing)")
-    );
+    let text = String::from_utf8_lossy(&check.stdout);
+    assert!(!text.contains("FAIL page selectors"));
+    assert!(text.starts_with("NOTE page layout not checked; use kpop experimental hub --verify\n"));
     let unsupported = cli(&root, &["pull", "p", "--history"], &root.join("private"));
     assert!(!unsupported.status.success());
     assert!(
@@ -118,6 +118,92 @@ fn actual_core_cli_opens_exact_history_and_checks_the_captured_brief() {
         fs::read_to_string(root.join("GROUNDING.yaml")).unwrap(),
         record
     );
+}
+
+#[test]
+fn ordinary_and_core_reads_do_not_parse_or_render_optional_layouts() {
+    for profile in [
+        "",
+        "meta: {reasoning: {version: 1, profile: core/v1, requires: [arithmetic/v1]}}\n",
+    ] {
+        let tmp = tempfile::tempdir().unwrap();
+        let root = tmp.path().canonicalize().unwrap();
+        fs::write(root.join("GROUNDING.yaml"), format!("{profile}{ORDINARY}")).unwrap();
+        let mut original = Vec::new();
+        for args in [
+            vec!["--frozen", "open"],
+            vec!["--frozen", "check"],
+            vec!["--frozen", "pull", "p"],
+            vec!["--frozen", "affects", "p"],
+        ] {
+            original.push((args.clone(), cli(&root, &args, &root.join("private"))));
+        }
+        fs::create_dir(root.join(".kpopper")).unwrap();
+        for raw in [
+            "not: [valid YAML",
+            "sections: [{pick: missing, as: unknown}]\n",
+        ] {
+            fs::write(root.join(".kpopper/view.yaml"), raw).unwrap();
+            for (args, before) in &original {
+                let after = cli(&root, args, &root.join("private"));
+                assert_eq!(
+                    after.status.code(),
+                    before.status.code(),
+                    "{args:?}: {}",
+                    String::from_utf8_lossy(&after.stderr)
+                );
+                assert_eq!(after.stderr, before.stderr);
+                let expected = if args[1] == "check" {
+                    [
+                        b"NOTE page layout not checked; use kpop experimental hub --verify\n"
+                            .as_slice(),
+                        before.stdout.as_slice(),
+                    ]
+                    .concat()
+                } else {
+                    before.stdout.clone()
+                };
+                assert_eq!(after.stdout, expected, "{args:?}");
+            }
+        }
+    }
+}
+
+#[test]
+fn ordinary_open_reports_pointer_private_and_hypothesis_orientation_without_panicking() {
+    let tmp = tempfile::tempdir().unwrap();
+    let root = tmp.path().canonicalize().unwrap();
+    fs::write(root.join("GROUNDING.yaml"), "record: facts.yaml\n").unwrap();
+    fs::write(root.join("facts.yaml"), ORDINARY).unwrap();
+    let open = cli(&root, &["--frozen", "open"], &root.join("private"));
+    assert!(open.status.success());
+    assert!(String::from_utf8_lossy(&open.stdout).starts_with("  record: facts.yaml\n"));
+    fs::create_dir_all(root.join(".kpopper/hypotheses")).unwrap();
+    for (name, value) in [("a", 70), ("b", 90)] {
+        fs::write(
+            root.join(format!(".kpopper/hypotheses/{name}.yaml")),
+            format!("known: {{p.load: {{v: {value}}}}}\n"),
+        )
+        .unwrap();
+    }
+    let open = cli(&root, &["--frozen", "open"], &root.join("private"));
+    assert!(
+        open.status.success(),
+        "{}",
+        String::from_utf8_lossy(&open.stderr)
+    );
+    let text = String::from_utf8_lossy(&open.stdout);
+    assert!(
+        text.contains(
+            "2 hypotheses wait - a (undated, 1 rests on it) · b (undated, 1 rests on it)"
+        )
+    );
+    assert!(text.contains("p.load: CONTESTED - a says 70, b says 90"));
+    let check = cli(&root, &["--frozen", "check"], &root.join("private"));
+    assert!(check.status.success());
+    assert!(String::from_utf8_lossy(&check.stdout).contains(
+        "CONTESTED p.load: a says 70, b says 90 - one of them folds, or neither; a person decides"
+    ));
 }
 #[test]
 fn actual_open_reports_an_empty_workspace_and_explicit_missing_record() {

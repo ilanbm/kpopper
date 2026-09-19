@@ -6,6 +6,9 @@ use std::{
 };
 
 fn run(root: &Path, args: &[&str]) -> Output {
+    command(root).args(args).output().unwrap()
+}
+fn command(root: &Path) -> Command {
     let resources = root.join(".test-runtime");
     let target = kpop_native::reasoning_runtime::target_name().unwrap();
     fs::create_dir_all(resources.join("reasoning")).unwrap();
@@ -16,13 +19,14 @@ fn run(root: &Path, args: &[&str]) -> Output {
         resources.join("reasoning").join(format!("{target}.zip")),
     )
     .unwrap();
-    Command::new(env!("CARGO_BIN_EXE_kpop-native"))
+    let mut command = Command::new(env!("CARGO_BIN_EXE_kpop-native"));
+    command
         .current_dir(root)
+        .env_remove("KPOPPER_AGENT_SESSION")
+        .env_remove("CODEX_THREAD_ID")
         .env("KPOPPER_NATIVE_RESOURCES", resources)
-        .env("KPOPPER_NATIVE_CACHE", root.join(".test-cache"))
-        .args(args)
-        .output()
-        .unwrap()
+        .env("KPOPPER_NATIVE_CACHE", root.join(".test-cache"));
+    command
 }
 fn success(output: Output) -> String {
     assert!(
@@ -200,4 +204,150 @@ fn a_private_first_or_later_add_stays_outside_the_record() {
         );
         assert_eq!(fs::read(&path).ok(), before);
     }
+}
+
+#[test]
+fn explicit_core_acts_and_proposals_need_only_the_core_program() {
+    let temp = tempfile::tempdir().unwrap();
+    let root = temp.path().canonicalize().unwrap();
+    success(run(&root, &["add", "p.x", "v=1"]));
+    let state: Value = serde_json::from_str(&success(run(&root, &["history", "status"]))).unwrap();
+    let version = state["subjects"]["p.x"]["heads"][0].as_str().unwrap();
+    for action in ["retire", "accept"] {
+        let result: Value = serde_json::from_str(&success(run(
+            &root,
+            &[
+                "history",
+                action,
+                "--subject",
+                "p.x",
+                "--of",
+                version,
+                "--because",
+                "explicit test disposition",
+            ],
+        )))
+        .unwrap();
+        assert_eq!(result["state"], "committed");
+    }
+    let record = root.join("GROUNDING.yaml");
+    let text = fs::read_to_string(&record).unwrap();
+    assert!(text.contains("v: 1"));
+    fs::write(&record, text.replace("v: 1", "v: 8")).unwrap();
+    let result: Value = serde_json::from_str(&success(run(
+        &root,
+        &[
+            "history",
+            "reconcile",
+            "--record-proposals",
+            "--proposal-subject",
+            "p.x",
+            "--because",
+            "retain an edited reading",
+        ],
+    )))
+    .unwrap();
+    assert_eq!(result["state"], "proposed");
+    assert!(!root.join(".test-runtime/ordinary").exists());
+}
+
+#[test]
+fn unresolved_candidate_references_reach_the_authoring_diagnostic() {
+    let temp = tempfile::tempdir().unwrap();
+    let root = temp.path().canonicalize().unwrap();
+    success(run(&root, &["add", "p.seed", "v=1"]));
+    let before = fs::read(root.join("GROUNDING.yaml")).unwrap();
+    for (args, expected) in [
+        (
+            vec!["add", "d.bad", "verdict=stop", "rests_on=[p.missing]"],
+            "rests on p.missing, which is not an entry",
+        ),
+        (
+            vec!["add", "p.bad", "v={{p.missing}}"],
+            "v references p.missing, which is not an entry",
+        ),
+    ] {
+        let output = run(&root, &args);
+        assert!(!output.status.success());
+        let error = String::from_utf8_lossy(&output.stderr);
+        assert!(error.contains(expected), "{error}");
+        assert!(!error.contains("missing_contribution_dependency"));
+        assert_eq!(fs::read(root.join("GROUNDING.yaml")).unwrap(), before);
+    }
+}
+
+#[test]
+fn session_receipts_follow_successful_publication_and_cannot_break_a_write() {
+    let temp = tempfile::tempdir().unwrap();
+    let root = temp.path().canonicalize().unwrap();
+    let sessions = tempfile::tempdir().unwrap();
+    let call = |args: &[&str]| {
+        command(&root)
+            .env("KPOPPER_AGENT_SESSION", "publication-test")
+            .env("TMPDIR", sessions.path())
+            .args(args)
+            .output()
+            .unwrap()
+    };
+    success(call(&["add", "p.x", "v=1"]));
+    let record = root.join("GROUNDING.yaml");
+    let key = kpop_native::identity::sha256(record.to_str().unwrap().as_bytes());
+    let receipt = sessions
+        .path()
+        .join("kpopper-session-publication-test")
+        .join(format!("writes-{key}.json"));
+    let current =
+        kpop_native::history_yaml::decode_source_document(&fs::read(&record).unwrap()).unwrap();
+    let state: Value = serde_json::from_slice(&fs::read(&receipt).unwrap()).unwrap();
+    assert_eq!(
+        state["p.x"],
+        current
+            .get("known")
+            .unwrap()
+            .get("p.x")
+            .unwrap()
+            .typed()
+            .digest()
+            .unwrap()
+    );
+    let before = fs::read(&receipt).unwrap();
+    assert!(
+        !call(&["add", "d.bad", "rests_on=[missing]"])
+            .status
+            .success()
+    );
+    assert_eq!(fs::read(&receipt).unwrap(), before);
+    let captured = kpop_native::source_capture::capture_source(
+        std::slice::from_ref(&record),
+        &root,
+        kpop_native::source_capture::ReadMode::Frozen,
+        None,
+    )
+    .unwrap();
+    assert_eq!(captured.origins()["known"]["p.x"], record);
+    let status: Value = serde_json::from_str(&success(call(&["history", "status"]))).unwrap();
+    let version = status["subjects"]["p.x"]["heads"][0].as_str().unwrap();
+    success(call(&[
+        "history",
+        "retire",
+        "--subject",
+        "p.x",
+        "--of",
+        version,
+        "--because",
+        "explicitly retired",
+    ]));
+    let state: Value = serde_json::from_slice(&fs::read(&receipt).unwrap()).unwrap();
+    assert!(state.get("p.x").is_none());
+    // An unusable optional attribution directory never changes publication success.
+    let bad = sessions.path().join("kpopper-session-unavailable");
+    fs::write(&bad, b"not a directory").unwrap();
+    let output = command(&root)
+        .env("KPOPPER_AGENT_SESSION", "unavailable")
+        .env("TMPDIR", sessions.path())
+        .args(["add", "p.other", "v=2"])
+        .output()
+        .unwrap();
+    success(output);
+    assert_eq!(fs::read(bad).unwrap(), b"not a directory");
 }

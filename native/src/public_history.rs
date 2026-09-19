@@ -87,7 +87,7 @@ fn status(entry: &Path) -> Result<Value> {
         "objects":capture.objects.len(), "subjects":subjects}))
 }
 
-pub fn run(options: &Options, cwd: &Path, frozen: bool) -> Result<Value> {
+pub fn run(options: &Options, cwd: &Path, _frozen: bool) -> Result<Value> {
     let operation = options
         .operation
         .as_deref()
@@ -175,7 +175,6 @@ pub fn run(options: &Options, cwd: &Path, frozen: bool) -> Result<Value> {
             let mode = match options.read_mode.as_deref() {
                 Some("live") => ReadMode::Live,
                 Some("frozen") => ReadMode::Frozen,
-                _ if frozen => ReadMode::Frozen,
                 _ if string_is(&map(&project.config()?)?["mode"], "advanced") => ReadMode::Live,
                 _ => ReadMode::Frozen,
             };

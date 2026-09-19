@@ -91,6 +91,7 @@ mod reasoning_temporal;
 pub mod reasoning_transport;
 pub mod reasoning_values;
 mod recording_privacy;
+pub mod session_activity;
 pub mod source_capture;
 pub mod source_clock;
 mod source_document;

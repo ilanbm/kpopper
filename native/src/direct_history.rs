@@ -113,13 +113,21 @@ fn commit(
 fn journal(store: &Store) -> String {
     format!("{}.history", store.layout.journal)
 }
+fn retained_journal(error: crate::Error, journal: &Path) -> crate::Error {
+    crate::Error(format!(
+        "{}: recovery journal retained at {}. Preserve conflicting edits and inspect the recorded transaction before retrying recovery; do not discard the journal.",
+        error.0,
+        journal.display()
+    ))
+}
 fn finish(store: &Store, mutation: &PreparedMutation, path: &Path, raw: &[u8]) -> Result<()> {
     // No retained guard is released until all mutable and immutable after-images match.
     for file in mutation.files() {
         require(
             F::read(&F::target(&store.root, &file.path)?)? == file.after,
             "concurrent_edit",
-        )?;
+        )
+        .map_err(|e| retained_journal(e, path))?;
     }
     require(F::read(path)?.as_deref() == Some(raw), "concurrent_edit")?;
     F::remove(path)
@@ -164,7 +172,8 @@ fn publish(
     commit(store, mutation, runtime, &mut |_| {
         route.verify()?;
         require(F::read(&path)?.as_ref() == Some(&raw), "concurrent_edit")
-    })?;
+    })
+    .map_err(|e| retained_journal(e, &path))?;
     probe("committed")?;
     route.verify()?;
     finish(store, mutation, &path, &raw)
@@ -212,7 +221,7 @@ fn act_with_probe(
     if let Some(draft) = Privacy::selected_draft(route.project(), action, &document)? {
         return Ok(draft);
     }
-    let runtime = public_workspace::runtime()?;
+    let runtime = public_workspace::runtime_for_document(&document)?;
     let mutation = A::prepare_act(
         &store,
         &captured,
@@ -237,6 +246,13 @@ fn act_with_probe(
         );
     }
     publish(&store, &mutation, &route, original, runtime.as_ref(), probe)?;
+    crate::session_activity::published(
+        &store.root,
+        mutation.files(),
+        Some(&std::collections::BTreeSet::from([
+            text(&a["id"])?.to_owned()
+        ])),
+    );
     Ok(obj([
         ("state", s("committed")),
         ("act", a["kind"].clone()),
@@ -301,17 +317,10 @@ pub fn write(original: &[PathBuf], cwd: &Path, action: &V) -> Result<V> {
         }
         map_mut(map_mut(&mut candidate)?.get_mut(collection).unwrap())?.insert(id.into(), body);
     }
-    if let Some(draft) = Privacy::selected_draft(route.project(), action, &candidate)? {
+    if let Some(draft) = Privacy::candidate_draft(route.project(), action, &candidate)? {
         return Ok(draft);
     }
-    let runtime = if string_is(
-        &map(&crate::reasoning_fields::capabilities(&document, None)?)?["profile"],
-        "core/v1",
-    ) {
-        public_workspace::core_runtime()?
-    } else {
-        public_workspace::runtime()?
-    };
+    let runtime = public_workspace::runtime_for_document(&document)?;
     let mutation = A::prepare(
         &store,
         &captured,
@@ -343,6 +352,11 @@ pub fn write(original: &[PathBuf], cwd: &Path, action: &V) -> Result<V> {
         runtime.as_ref(),
         &mut |_| Ok(()),
     )?;
+    crate::session_activity::published(
+        &store.root,
+        mutation.files(),
+        Some(&std::collections::BTreeSet::from([id.to_owned()])),
+    );
     Ok(obj([
         ("state", s("committed")),
         ("operation", map(&mutation.to_data())?["operation"].clone()),
@@ -364,7 +378,8 @@ pub fn proposals(
         F::read(&F::target(&store.root, &journal(&store))?)?.is_none(),
         "recovery_required",
     )?;
-    let runtime = public_workspace::runtime()?;
+    let captured = store.capture_reconciliation(true)?;
+    let runtime = public_workspace::runtime_for_document(&captured.document)?;
     let mutation = E::prepare_proposals(
         &store,
         because,
@@ -478,7 +493,8 @@ pub fn recover(original: &[PathBuf], cwd: &Path, before: bool) -> Result<V> {
         commit(&store, &mutation, runtime.as_ref(), &mut |_| {
             route.verify()?;
             require(F::read(&path)?.as_ref() == Some(&raw), "concurrent_edit")
-        })?;
+        })
+        .map_err(|e| retained_journal(e, &path))?;
         route.verify()?;
         finish(&store, &mutation, &path, &raw)?;
     }
@@ -630,7 +646,9 @@ mod tests {
                 }
                 Ok(())
             });
-            assert_eq!(result.unwrap_err().0, "concurrent_edit");
+            let error = result.unwrap_err().0;
+            assert!(error.starts_with("concurrent_edit:"));
+            assert!(error.contains(path.to_str().unwrap()));
             assert_eq!(fs::read(&path).unwrap(), expected);
             assert!(recover(std::slice::from_ref(&entry), cwd, false).is_err());
             assert_eq!(fs::read(&path).unwrap(), expected);

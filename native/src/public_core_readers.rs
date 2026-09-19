@@ -132,6 +132,12 @@ fn codes(items: &J, field: &str, default: &str) -> String {
         .join(", ")
 }
 pub fn check_findings(context: &CapturedAssessment, page: Result<J>) -> Result<J> {
+    findings(context, Some(page))
+}
+pub fn record_findings(context: &CapturedAssessment) -> Result<J> {
+    findings(context, None)
+}
+fn findings(context: &CapturedAssessment, page: Option<Result<J>>) -> Result<J> {
     let report = json_value(context.assessment())?;
     let mut failures = vec![];
     let mut notes = vec![];
@@ -190,7 +196,7 @@ pub fn check_findings(context: &CapturedAssessment, page: Result<J>) -> Result<J
         }
     }
     match page {
-        Ok(page) => {
+        Some(Ok(page)) => {
             for (key, label, separator) in [
                 ("unresolved_selectors", "page selectors unresolved", ", "),
                 ("renderer_misfits", "page renderer mismatch", "; "),
@@ -210,12 +216,21 @@ pub fn check_findings(context: &CapturedAssessment, page: Result<J>) -> Result<J
                 }
             }
         }
-        Err(error) => failures.push(format!("page projection unavailable ({error})")),
+        Some(Err(error)) => failures.push(format!("page projection unavailable ({error})")),
+        None => {}
     }
     Ok(json!({"failures":failures,"notes":notes}))
 }
 pub fn check(context: &CapturedAssessment, page: Result<J>) -> Result<Output> {
     let findings = check_findings(context, page)?;
+    check_output(context, findings, false)
+}
+pub const LAYOUT_NOTICE: &str =
+    "NOTE page layout not checked; use kpop experimental hub --verify\n";
+pub fn record_check(context: &CapturedAssessment, has_brief: bool) -> Result<Output> {
+    check_output(context, record_findings(context)?, has_brief)
+}
+fn check_output(context: &CapturedAssessment, findings: J, has_brief: bool) -> Result<Output> {
     let failures = findings["failures"].as_array().unwrap();
     let mut lines = findings["notes"]
         .as_array()
@@ -238,7 +253,12 @@ pub fn check(context: &CapturedAssessment, page: Result<J>) -> Result<Output> {
         failures.len()
     ));
     Ok(Output {
-        text: lines.join("\n") + "\n",
+        text: if has_brief {
+            LAYOUT_NOTICE.to_string()
+        } else {
+            String::new()
+        } + &lines.join("\n")
+            + "\n",
         code: i32::from(!failures.is_empty()),
     })
 }

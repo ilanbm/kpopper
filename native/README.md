@@ -54,15 +54,16 @@ kpop-native affects p.input
 ```
 
 Core records also support `open --json` and `check`. They share one captured
-schema-v3 assessment with `pull` and `affects`. Check includes page selectors,
-renderer suitability, recorded layout shape and the bounded page-secondary
-envelope. Findings keep the executing adapter's fingerprint, so a Rust result and
+schema-v3 assessment with `pull` and `affects`. Ordinary and core reads do not
+parse or validate optional page layouts; `check` names the explicit application
+verification command when a layout exists. The bounded page-secondary envelope
+and its checks remain available to application consumers. Findings keep the executing adapter's fingerprint, so a Rust result and
 a Python result can carry different revision identities even when their semantic
 findings match.
 
 Ordinary `open`, `check` and `pull --history` use the captured record and retained
-replacement file. They preserve namespace ordering, review flags, page-serving
-notices, historical decisions and final source revalidation. Existing feasibility-
+replacement file. They preserve namespace ordering, review flags, pointer and
+hypothesis orientation, private-draft counts, historical decisions and final source revalidation. Existing feasibility-
 store workspaces retain their explicitly marked experimental opener. The writer
 commands below, MCP, hooks, browser and distribution integration remain in progress.
 
@@ -110,6 +111,12 @@ older private opener. It ignores subagent payloads, and reports failed opening v
 without blocking the host. This command does not install hooks, write the stop-gate
 baseline, or establish host trust.
 
+Successful direct and first-record writes retain optional private session receipts
+for their exact changed bodies. Failed writes, previews and private drafts receive
+no authorship receipt; an unavailable receipt store never changes a committed
+write's success. These receipts support session attribution and grant no source
+access or record-write permission.
+
 For a record whose native history authority is already active, `history status`
 captures and revalidates the authority, committed objects and reduced subject heads
 without writing:
@@ -126,7 +133,8 @@ that no unrecorded edits would be lost. Both retain the existing immutable evide
 materializes and verifies a separate copy. It preserves source bytes and does not
 activate the source record. `--record` selects an explicit record and `--read-mode`
 selects live or frozen migration capture. The default is frozen in Simple mode and
-live in Advanced mode; global `--frozen` also selects frozen capture.
+live in Advanced mode. Use `history migrate --read-mode frozen` to select frozen
+migration input explicitly; the general reader `--frozen` flag does not override it.
 
 Explicit history acts target an immutable version with a recorded reason:
 
@@ -145,6 +153,10 @@ retained as drafts outside the project. Edited-view proposals remain unaccepted.
 An exact, policy-bound journal is retained before publication. Recovery completes
 those bytes; rollback can cancel only an uncommitted operation with unchanged
 mutable before images. Interrupted immutable object publication is preserved.
+If an external edit prevents completion, the refusal identifies the retained
+journal. Preserve that edit and inspect the transaction's verified images before
+restoring the conflicting file and retrying `recover`. An already committed
+operation cannot be rolled back; deleting its journal bypasses the recovery guard.
 
 Adoption and runtime capability declarations remain unconnected. The old
 subject-oriented `history <subject>` command is available only inside an explicitly

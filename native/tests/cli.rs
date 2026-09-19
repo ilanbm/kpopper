@@ -374,7 +374,9 @@ fn public_session_start_opens_an_ordinary_record_and_returns_its_native_route() 
         "ordinary-session"
     );
     assert_eq!(context["profile"], "native-public/v1");
-    assert!(stdout.contains("For mapping, pass this session environment to the CLI"));
+    assert!(
+        stdout.contains("Pass this session environment to record-writing and mapping commands.")
+    );
     assert_eq!(fs::read(root.join("GROUNDING.yaml")).unwrap(), before);
 }
 

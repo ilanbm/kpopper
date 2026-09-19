@@ -331,6 +331,20 @@ pub(crate) fn load(
             }
         }
         document.source = S::from_typed(adapted.document());
+        // Active history projections belong to their authoritative entry for
+        // local session attribution. Origins remain outside portable Snapshots.
+        document.origins = crate::reasoning_fields::collections(adapted.document())?
+            .into_iter()
+            .map(|(section, members)| {
+                (
+                    section,
+                    members
+                        .into_keys()
+                        .map(|id| (id, first.to_owned()))
+                        .collect(),
+                )
+            })
+            .collect();
         document.history_projection = Some(adapted.projection().clone());
         document.history_view = Some(V::Map(Map::from([
             (

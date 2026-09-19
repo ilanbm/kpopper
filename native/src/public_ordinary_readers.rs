@@ -884,6 +884,92 @@ impl World<'_> {
     }
 }
 impl Projection<'_> {
+    fn hypothesis_line(&self) -> Result<Option<String>> {
+        let today = chrono::Local::now().date_naive();
+        let mut items = Vec::new();
+        for (name, hypothesis) in &self.hypotheses {
+            let h = map(hypothesis)?;
+            if string_is(get(h, "kind"), "contribution") {
+                continue;
+            }
+            if truth(get(h, "error")) {
+                items.push((
+                    (chrono::NaiveDate::MIN, name.clone()),
+                    format!("{name} (unreadable: {})", py(get(h, "error"))),
+                ));
+                continue;
+            }
+            let Some(world) = self.layers.get(name) else {
+                let prefix = format!("! hypothesis {name} cannot be read over the base: ");
+                let why = self
+                    .unread
+                    .iter()
+                    .find_map(|s| s.strip_prefix(&prefix))
+                    .unwrap_or("unavailable");
+                items.push((
+                    (chrono::NaiveDate::MIN, name.clone()),
+                    format!("{name} (unreadable over the base: {why})"),
+                ));
+                continue;
+            };
+            let head = map(get(h, "head")).ok();
+            let born = head.and_then(|h| h.get("born")).map(py).and_then(|s| {
+                s.get(..10)
+                    .and_then(|day| chrono::NaiveDate::parse_from_str(day, "%Y-%m-%d").ok())
+            });
+            let age = born
+                .map(|day| match (today - day).num_days() {
+                    n if n <= 0 => "today".into(),
+                    1 => "1 day".into(),
+                    n => format!("{n} days"),
+                })
+                .unwrap_or_else(|| "undated".into());
+            let ids = list(get(h, "ids"))?
+                .iter()
+                .filter_map(|v| text(v).ok())
+                .collect::<BTreeSet<_>>();
+            let mut count = 0;
+            for id in world.judgments.keys() {
+                if world.deps(id)?.iter().any(|d| ids.contains(d.as_str())) {
+                    count += 1;
+                }
+            }
+            let mut bits = vec![age];
+            if head
+                .and_then(|h| h.get("folds"))
+                .is_some_and(|v| string_is(v, "never"))
+            {
+                bits.push("never folds".into());
+            }
+            bits.push(format!(
+                "{count} rest{} on it",
+                if count == 1 { "s" } else { "" }
+            ));
+            items.push((
+                (born.unwrap_or(chrono::NaiveDate::MAX), name.clone()),
+                format!("{name} ({})", bits.join(", ")),
+            ));
+        }
+        if items.is_empty() {
+            return Ok(None);
+        }
+        items.sort_by(|a, b| a.0.cmp(&b.0));
+        let count = items.len();
+        let line = format!(
+            "{count} hypothes{} - {}",
+            if count == 1 { "is waits" } else { "es wait" },
+            items
+                .into_iter()
+                .map(|(_, s)| s)
+                .collect::<Vec<_>>()
+                .join(" · ")
+        );
+        Ok(Some(if line.chars().count() > 110 {
+            line.chars().take(110).collect::<String>() + " ..."
+        } else {
+            line
+        }))
+    }
     fn page_unserved(&self, brief: Option<&V>) -> Result<Vec<(String, String, String)>> {
         let Some(brief) = brief else {
             return Ok(vec![]);
@@ -1031,6 +1117,15 @@ impl Projection<'_> {
         brief: Option<&V>,
         prefix_order: &[String],
     ) -> Result<String> {
+        self.opening_with_orientation(budget, brief, prefix_order, &[])
+    }
+    pub fn opening_with_orientation(
+        &self,
+        budget: i64,
+        brief: Option<&V>,
+        prefix_order: &[String],
+        orientation: &[String],
+    ) -> Result<String> {
         crate::require(budget > 0, "--budget must be positive")?;
         let (held, judgments, prefixes, loose) = self.held_counts();
         let doc = map(&self.base.reader.document)?;
@@ -1042,6 +1137,7 @@ impl Projection<'_> {
         {
             head.push(cut(&py(scope), 300));
         }
+        head.extend_from_slice(orientation);
         let mut heavy = prefixes
             .iter()
             .filter(|(_, count)| **count > 1)
@@ -1102,6 +1198,10 @@ impl Projection<'_> {
             summary.push_str(&format!(", updated {}", py(updated)));
         }
         head.push(summary);
+        head.extend(self.knowledge.clone());
+        if let Some(waiting) = self.hypothesis_line()? {
+            head.push(waiting);
+        }
 
         let mut items = vec![];
         for (id, body) in &self.base.judgments {
@@ -1192,8 +1292,12 @@ impl Projection<'_> {
         for (_, id, why) in kept {
             needs.push(format!("  {id}: {why}"));
             if reasoned.insert(id.clone())
-                && let Some(because) = map(&self.base.judgments[&id])?
-                    .get("because")
+                && let Some(because) = self
+                    .base
+                    .judgments
+                    .get(&id)
+                    .and_then(|v| map(v).ok())
+                    .and_then(|b| b.get("because"))
                     .filter(|v| truth(v))
             {
                 let line = format!("      because: {}", self.base.said(because, 400)?[0]);
@@ -1290,7 +1394,6 @@ impl Projection<'_> {
         let (held, judgments, _, _) = self.held_counts();
         let mut fail = vec![];
         let mut note = self.knowledge.clone();
-        note.extend(self.unread.clone());
         let mut moved = vec![];
         for (id, body) in &self.base.judgments {
             let flags = crate::ordinary_counts::flags(&self.base.reader, body)?;
@@ -1358,10 +1461,28 @@ impl Projection<'_> {
             note.push(format!("{id} is served by no tab - asked: {asked}"));
             note.push(hint);
         }
+        fail.extend(
+            self.unread
+                .iter()
+                .map(|line| line.strip_prefix("! ").unwrap_or(line).to_owned()),
+        );
         let mut lines = vec![];
-        lines.extend(fail.iter().map(|line| format!("FAIL {line}")));
         lines.extend(note.iter().map(|line| format!("NOTE {line}")));
         lines.extend(moved.iter().map(|line| format!("MOVED {line}")));
+        for (id, variants) in &self.disputed {
+            let claims = variants
+                .iter()
+                .map(|(name, value)| format!("{name} says {}", short(value, 60)))
+                .collect::<Vec<_>>()
+                .join(", ");
+            let reason = if self.base.reader.knowledge_conflicts.contains(id) {
+                "contribution versions need explicit reconciliation"
+            } else {
+                "one of them folds, or neither; a person decides"
+            };
+            lines.push(format!("CONTESTED {id}: {claims} - {reason}"));
+        }
+        lines.extend(fail.iter().map(|line| format!("FAIL {line}")));
         let mut summary = format!(
             "{judgments} judgments, {held} entries, {} problems",
             fail.len()

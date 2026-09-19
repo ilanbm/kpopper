@@ -125,13 +125,36 @@ pub fn draft(project: &Project, action: &V, document: &V, reason: &str) -> Resul
 }
 
 pub fn selected_draft(project: &Project, action: &V, document: &V) -> Result<Option<V>> {
+    draft_for_selection(project, action, document, false)
+}
+
+/// Unannotated candidate writes retain the whole candidate on a closure failure.
+/// This keeps privacy conservative and lets authoring supply the actual diagnostic.
+pub fn candidate_draft(project: &Project, action: &V, document: &V) -> Result<Option<V>> {
+    draft_for_selection(project, action, document, true)
+}
+
+fn selection(document: &V, id: &str, candidate: bool) -> Result<V> {
     let all = crate::reasoning_snapshot::entries(document)?;
-    let id = text(field(map(action)?, "id")?)?;
-    let mut selected = if all.contains_key(id) {
-        crate::pending_bundle::closure(document, &[id.into()])?
+    if all.contains_key(id) {
+        match crate::pending_bundle::closure(document, &[id.into()]) {
+            Ok(selected) => Ok(selected),
+            Err(_) if candidate => Ok(document.clone()),
+            Err(error) => Err(error),
+        }
     } else {
-        empty()
-    };
+        Ok(empty())
+    }
+}
+
+fn draft_for_selection(
+    project: &Project,
+    action: &V,
+    document: &V,
+    candidate: bool,
+) -> Result<Option<V>> {
+    let id = text(field(map(action)?, "id")?)?;
+    let mut selected = selection(document, id, candidate)?;
     let controls = V::Map(
         map(document)?
             .iter()
@@ -161,4 +184,21 @@ pub fn selected_draft(project: &Project, action: &V, document: &V) -> Result<Opt
         .map(Some);
     }
     Ok(None)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[test]
+    fn an_unresolved_candidate_does_not_hide_unrelated_private_content() {
+        let doc = V::from_json(&serde_json::json!({
+            "known": {"s.private": {"v":"private evidence", "private":true}},
+            "judgments": {"d.new": {"verdict":"stop", "rests_on":["p.missing"]}}
+        }))
+        .unwrap();
+        assert!(selection(&doc, "d.new", false).is_err());
+        let selected = selection(&doc, "d.new", true).unwrap();
+        assert_eq!(selected, doc);
+        assert!(private_marker(&selected));
+    }
 }

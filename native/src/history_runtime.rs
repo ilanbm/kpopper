@@ -5,6 +5,17 @@ use serde_json::{Value as J, json};
 use std::{collections::BTreeSet, path::Path, process::Command, time::Duration};
 const MAX_OUTPUT: usize = 2 * 1024 * 1024;
 const INCLUSION: &[&str] = &["*.py", "reasoning/*.py", "session/*.py"];
+const APPLICATION_INCLUSION: &[&str] = &[
+    "*.py",
+    "reasoning/*.py",
+    "session/*.py",
+    "applications/*.py",
+];
+const APPLICATION_REQUIRED: &[&str] = &[
+    "applications/__init__.py",
+    "applications/hub.py",
+    "applications/annotated_doc.py",
+];
 const REQUIRED: &[&str] = &[
     "__init__.py",
     "cli.py",
@@ -38,8 +49,11 @@ const REQUIRED: &[&str] = &[
     "reasoning/runtime.py",
     "session/__init__.py",
 ];
-fn required() -> Vec<&'static str> {
+fn required(applications: bool) -> Vec<&'static str> {
     let mut names = REQUIRED.to_vec();
+    if applications {
+        names.extend(APPLICATION_REQUIRED);
+    }
     names.sort();
     names
 }
@@ -150,10 +164,12 @@ pub fn validate_declaration(value: &J, nonce: &str) -> Result<()> {
         ],
         "unsupported_source_manifest",
     )?;
+    let applications = source["inclusion"] == json!(APPLICATION_INCLUSION);
+    let required = required(applications);
     require(
         source["scheme"] == "product-python/v1"
-            && source["inclusion"] == json!(INCLUSION)
-            && source["required"] == json!(required())
+            && (applications || source["inclusion"] == json!(INCLUSION))
+            && source["required"] == json!(required)
             && source["files"].is_array(),
         "unsupported_source_manifest",
     )?;
@@ -172,7 +188,7 @@ pub fn validate_declaration(value: &J, nonce: &str) -> Result<()> {
     require(
         paths.len() <= 1024
             && paths.windows(2).all(|p| p[0] < p[1])
-            && REQUIRED.iter().all(|p| paths.contains(p)),
+            && required.iter().all(|p| paths.contains(p)),
         "invalid_source_manifest",
     )?;
     let schemas = &value["schemas"];

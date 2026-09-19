@@ -65,6 +65,17 @@ pub fn runtime() -> Result<Option<Runtime>> {
 pub fn core_runtime() -> Result<Option<Runtime>> {
     load_runtime(false)
 }
+pub fn runtime_for_document(document: &crate::value::TypedValue) -> Result<Option<Runtime>> {
+    let capabilities = crate::reasoning_fields::capabilities(document, None)?;
+    if crate::history_contract::string_is(
+        &crate::history_contract::map(&capabilities)?["profile"],
+        "core/v1",
+    ) {
+        core_runtime()
+    } else {
+        runtime()
+    }
+}
 fn load_runtime(ordinary: bool) -> Result<Option<Runtime>> {
     let configured = std::env::var_os("KPOPPER_NATIVE_RESOURCES").map(PathBuf::from);
     let root = configured.clone().unwrap_or(

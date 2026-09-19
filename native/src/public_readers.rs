@@ -140,31 +140,15 @@ fn private_draft_count(paths: &[PathBuf], cwd: &Path, inventory: &mut Inventory)
     }
     Ok(count)
 }
-fn brief(paths: &[PathBuf], cwd: &Path, inventory: &mut Inventory) -> Result<Option<Vec<u8>>> {
+fn has_brief(paths: &[PathBuf], inventory: &mut Inventory) -> Result<bool> {
     let first = paths.first().ok_or_else(|| error("record_required"))?;
-    let candidates = if first.file_name().is_some_and(|n| n == "GROUNDING.yaml") {
-        vec![first.parent().unwrap().join(".kpopper/view.yaml")]
-    } else {
-        paths
-            .iter()
-            .cloned()
-            .chain([cwd.join("PROVENANCE.yaml")])
-            .map(|p| {
-                let name = p.to_string_lossy();
-                let stem = name
-                    .strip_suffix(".yaml")
-                    .or_else(|| name.strip_suffix(".yml"))
-                    .unwrap_or(&name);
-                PathBuf::from(format!("{stem}.view.yaml"))
-            })
-            .collect()
-    };
-    for path in candidates {
-        if inventory.exists(&path)? {
-            return inventory.read(&path).map(Some);
-        }
-    }
-    Ok(None)
+    let layout = crate::history_transaction::Layout::for_entry(
+        first
+            .file_name()
+            .and_then(|s| s.to_str())
+            .ok_or_else(|| error("invalid_path"))?,
+    )?;
+    inventory.exists(&first.parent().unwrap().join(layout.view))
 }
 fn replaced(
     paths: &[PathBuf],
@@ -202,6 +186,50 @@ fn prefix_order(source: &crate::history_yaml::SourceValue) -> Vec<String> {
         return vec![];
     };
     prefixes.iter().map(|(key, _)| key.clone()).collect()
+}
+fn orientation(source: &crate::history_yaml::SourceValue) -> Vec<String> {
+    use crate::history_yaml::SourceValue as S;
+    let S::Map(fields) = source else {
+        return vec![];
+    };
+    let mut places = Vec::new();
+    for (key, value) in fields {
+        if !["record", "also", "skill", "entry"].contains(&key.as_str()) {
+            continue;
+        }
+        let name = if let S::Scalar(crate::value::TypedValue::Text(s)) = value {
+            s.clone()
+        } else {
+            let values = match value {
+                S::Map(m) => m.iter().map(|(_, v)| v).collect::<Vec<_>>(),
+                S::List(a) => a.iter().collect(),
+                _ => vec![],
+            };
+            values
+                .into_iter()
+                .filter_map(|v| match v {
+                    S::Scalar(crate::value::TypedValue::Text(s))
+                        if s.ends_with(".yaml") || s.ends_with(".yml") =>
+                    {
+                        Some(s.as_str())
+                    }
+                    _ => None,
+                })
+                .collect::<Vec<_>>()
+                .join(", ")
+        };
+        if !name.is_empty() {
+            places.push(format!(
+                "{key}: {}",
+                crate::public_ordinary_readers::cut(&name, 90)
+            ));
+        }
+    }
+    if places.is_empty() {
+        vec![]
+    } else {
+        vec![format!("  {}", places.join(" | "))]
+    }
 }
 pub fn run(
     command: &str,
@@ -290,16 +318,19 @@ pub fn run(
             knowledge,
             runtime,
         )?;
-        let page = brief(&paths, &cwd, &mut inventory)?
-            .map(|bytes| crate::history_yaml::decode_document(&bytes))
-            .transpose()?;
         let prefix_order = prefix_order(capture.source());
         let output = match command {
-            "open" => {
-                projection.opening(options.budget.unwrap_or(25), page.as_ref(), &prefix_order)?
-            }
+            "open" => projection.opening_with_orientation(
+                options.budget.unwrap_or(25),
+                None,
+                &prefix_order,
+                &orientation(capture.source()),
+            )?,
             "check" => {
-                let (text, code) = projection.check(page.as_ref())?;
+                let (mut text, code) = projection.check(None)?;
+                if has_brief(&paths, &mut inventory)? {
+                    text.insert_str(0, C::LAYOUT_NOTICE);
+                }
                 capture.verify()?;
                 inventory.verify()?;
                 crate::require(
@@ -390,11 +421,7 @@ pub fn run(
         }
         "pull" => C::pull(&context, &seeds)?,
         "affects" => C::affects(&context, &seeds)?,
-        "check" => {
-            let page = brief(&paths, &cwd, &mut inventory)
-                .and_then(|b| crate::core_page::project(&context, b.as_deref(), true));
-            C::check(&context, page)?
-        }
+        "check" => C::record_check(&context, has_brief(&paths, &mut inventory)?)?,
         _ => return Err(error("unknown read command")),
     };
     capture.verify()?;
@@ -410,22 +437,20 @@ pub fn run(
 mod tests {
     use super::*;
     #[test]
-    fn brief_absence_bytes_and_private_file_type_are_revalidated() {
+    fn brief_presence_and_private_file_type_are_revalidated_without_reading_bodies() {
         let tmp = tempfile::tempdir().unwrap();
         let root = tmp.path().canonicalize().unwrap();
         let paths = vec![root.join("GROUNDING.yaml")];
         let mut absent = Inventory::default();
-        assert!(brief(&paths, &root, &mut absent).unwrap().is_none());
+        assert!(!has_brief(&paths, &mut absent).unwrap());
         std::fs::create_dir(root.join(".kpopper")).unwrap();
         std::fs::write(root.join(".kpopper/view.yaml"), "title: first\n").unwrap();
         assert!(absent.verify().is_err());
         let mut captured = Inventory::default();
-        assert_eq!(
-            brief(&paths, &root, &mut captured).unwrap().unwrap(),
-            b"title: first\n"
-        );
+        assert!(has_brief(&paths, &mut captured).unwrap());
+        assert!(captured.files.is_empty());
         std::fs::write(root.join(".kpopper/view.yaml"), "title: changed\n").unwrap();
-        assert!(captured.verify().is_err());
+        captured.verify().unwrap();
         let path = root.join("draft.json");
         std::fs::write(&path, b"secret").unwrap();
         let mut draft = Inventory::default();
