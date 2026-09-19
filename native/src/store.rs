@@ -125,7 +125,7 @@ pub fn bytes(value: &Value) -> Result<Vec<u8>> {
 }
 
 // This visitor checks duplicate JSON keys before serde_json::Value can overwrite one.
-struct Unique;
+pub(crate) struct Unique;
 impl<'de> Deserialize<'de> for Unique {
     fn deserialize<D: serde::Deserializer<'de>>(d: D) -> std::result::Result<Self, D::Error> {
         struct Visitor;
