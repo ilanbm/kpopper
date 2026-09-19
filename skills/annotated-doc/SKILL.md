@@ -40,3 +40,5 @@ never imply that opening the HTML checks the network or writes back to a source.
 standalone choice controls affect the document copy only. When using ingestion-backed
 record readings, preserve the same event envelope/date on retries and inspect the durable
 outcome by event ID. Capture and an empty queue pass do not establish whether it applied.
+
+When mentioning this skill to the user, include the plugin name: `kpopper:annotated-doc` or "annotated-doc from the kpopper plugin". Use the user's language and fold it into the explanation of the action; no extra announcement is needed.

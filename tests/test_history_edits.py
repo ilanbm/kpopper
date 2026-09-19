@@ -77,7 +77,10 @@ class EditedProposals(unittest.TestCase):
                   'seen': {'p.input': {'unavailable': 'original'}}}, pins={'p.input': self.original['id']})
         self.fixture.publish([original], op='judgment')
         self.edit(lambda d: d['judgments']['p.ready'].update(verdict='candidate'))
-        self.commit_edit(self.prepare_edit())
+        mutation = self.prepare_edit()
+        restored = T.PreparedMutation.from_bytes(mutation.to_bytes())
+        self.assertEqual(restored.to_bytes(), mutation.to_bytes())
+        self.commit_edit(restored)
         captured = self.store.capture()
         state = captured.state['subjects']['p.ready']
         proposal = captured.objects[state['proposals'][0]]

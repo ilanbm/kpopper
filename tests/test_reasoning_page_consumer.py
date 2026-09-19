@@ -174,6 +174,11 @@ class CorePageConsumerTests(unittest.TestCase):
         self.assertIn('<html', page)
         self.assertNotIn('profile', info)
 
+    def test_captured_core_context_selects_core_without_a_redundant_profile(self):
+        with mock.patch.object(R, 'core_build', return_value='captured core') as build:
+            self.assertEqual(R.build(['record.yaml'], context=self.context), 'captured core')
+        build.assert_called_once_with(['record.yaml'], None, None, read_mode=None, context=self.context)
+
 
 if __name__ == '__main__':
     unittest.main()

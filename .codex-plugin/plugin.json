@@ -1,6 +1,6 @@
 {
   "name": "kpopper",
-  "version": "1.6.0",
+  "version": "1.7.0",
   "description": "An epistemic record for work that gets revisited: what is known, how each piece is grounded, and what would make each judgment wrong. Keeps sources, dependencies and review conditions together. Optional experimental applications add kpopper Hub for browsing the record and Annotated Documents for standalone HTML with evidence; install their HTML runtime and invoke them explicitly.",
   "author": {
     "name": "Ilan Bar Magen"

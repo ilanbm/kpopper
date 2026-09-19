@@ -6,6 +6,8 @@
   <a href="https://github.com/ilanbm/kpopper/actions/workflows/check.yml"><img src="https://github.com/ilanbm/kpopper/actions/workflows/check.yml/badge.svg?branch=main" alt="CI tests and record checks"></a>
   <a href="https://github.com/ilanbm/kpopper/releases/latest"><img src="https://img.shields.io/github/v/release/ilanbm/kpopper" alt="Latest release"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue" alt="License: MIT"></a>
+  <a href="docs/reasoning-core.md"><img src="https://img.shields.io/badge/reasoning--runtime-Lean%204-3B82F6" alt="reasoning-runtime: Lean 4"></a>
+  <a href="docs/history-contract.md"><img src="https://img.shields.io/badge/Versioned%20knowledge-experimental-8B5CF6" alt="Versioned knowledge: experimental"></a>
 </p>
 
 <p align="center">
@@ -997,6 +999,10 @@ explains the old-writer risk and the separate Lean setup requirement. On native 
 use individual `add`/`set` writes and deliberate judgment reviews; durable report batching
 requires POSIX file locking.
 
+New history-backed records also require POSIX locking for creation and writes.
+On native Windows, create and author history on a POSIX host such as WSL;
+read-only assessment and the packaged Windows reasoning runtime remain available.
+
 | Layer | Status | Capability |
 |---|---|---|
 | Core | Available | YAML records, source references, judgment checks, dependency tracing, review snapshots, hypotheses and consolidation. |
@@ -1006,7 +1012,7 @@ requires POSIX file locking.
 | Integration | Available within stated limits | Background processing of explicit reports and selective delivery of important findings. |
 | Integration | Platform import route documented; runtime not yet validated | ChatGPT Work installation and execution of this plugin. |
 | Integration | Experimental, opt-in | Lean-checked session views, revision-bound reads and a project-bound MCP server. |
-| Core | Experimental, opt-in | [Deterministic `core/v1` assessment](docs/reasoning-core.md) with a packaged arithmetic runtime; existing commands retain their legacy interpretation. |
+| Core | Default for new records | [Deterministic `core/v1` assessment](docs/reasoning-core.md) and [immutable history](docs/history-contract.md), with a packaged arithmetic runtime and automatic reader selection. Existing legacy records require explicit adoption. |
 | Integration | Available through the agent | Guided starting choices: learn during ordinary work, map selected existing materials, or investigate a defined subject and period in depth. |
 | Integration | Available within host limits | Optional first-use explanations, workspace guidance and the ability to skip or turn guidance off. |
 

@@ -1,5 +1,7 @@
 """Direct immutable authoring, exact evidence, and manifest crash replay."""
 import copy
+import contextlib
+import io
 from pathlib import Path
 import unittest
 from unittest import mock
@@ -60,7 +62,17 @@ class Authoring(unittest.TestCase):
         self.publish(second)
         self.assertEqual(len(self.store.capture().commits), 3)
 
-    def test_new_judgment_pins_real_dependencies_and_does_not_fabricate_seen(self):
+    def test_bare_open_question_keeps_its_scalar_body_and_replays(self):
+        body = 'Does the enterprise tier include support?'
+        mutation = self.prepare({'kind': 'add', 'id': 'q.support', 'body': body})
+        self.publish(T.PreparedMutation.from_bytes(mutation.to_bytes()))
+        captured = self.store.capture()
+        question = captured.objects[captured.state['subjects']['q.support']['head']]
+        self.assertEqual(question['body'], body)
+        self.assertEqual(question['pins'], {})
+        self.assertEqual(captured.document['open']['q.support'], body)
+
+    def test_new_judgment_pins_real_dependencies_and_captures_typed_seen(self):
         mutation = self.prepare({'kind': 'add', 'id': 'p.ready', 'into': 'judgments',
             'body': {'verdict': 'ready', 'rests_on': ['p.input'], 'wrong_if': {'expr': 'p.input > 5'}}})
         with mock.patch.object(V, '_evaluate', side_effect=AssertionError('prototype evaluator called')):
@@ -68,10 +80,84 @@ class Authoring(unittest.TestCase):
         captured = self.store.capture()
         obj = captured.objects[captured.state['subjects']['p.ready']['head']]
         self.assertEqual(obj['pins'], {'p.input': self.original['id']})
-        self.assertNotIn('seen', obj['body'])
+        self.assertEqual(obj['body']['seen']['p.input']['computed']['value'],
+                         {'type': 'number', 'numerator': '1', 'denominator': '1'})
+        self.assertEqual(obj['body']['seen']['p.input']['computed']['basis']['as_of'], None)
+        self.assertEqual(mutation.to_data()['receipt']['before']['authoring']['version'], 7)
         self.assertEqual(mutation.to_data()['receipt']['profile'], 'core/v1')
         result = mutation.to_data()['receipt']['after']['assessment']['nodes']['p.ready']['state']['falsifier']
         self.assertEqual(result['status'], 'does_not_hold')
+        original_seen = copy.deepcopy(obj['body']['seen'])
+        self.publish(self.prepare({'kind': 'set', 'id': 'p.input', 'value': 2,
+                                   'as_of': '2026-09-18'}))
+        self.assertEqual(self.store.capture().objects[obj['id']]['body']['seen'], original_seen)
+        with contextlib.redirect_stdout(io.StringIO()):
+            self.assertEqual(P.core_check([str(self.entry)]), 0)
+
+    def test_new_judgment_snapshot_retains_formula_value_and_basis(self):
+        formula = claim('p.ratio', op='formula-snapshot', body={
+            'rule': {'expr': 'p.input / 2'}})
+        self.fixture.publish([formula], op='formula-snapshot')
+        mutation = self.prepare({'kind': 'add', 'id': 'p.formula_ready', 'into': 'judgments',
+            'body': {'verdict': 'ready', 'rests_on': ['p.ratio'],
+                     'wrong_if': {'expr': 'p.ratio > 1'}}})
+        made = [C.decode_document(item['after']) for item in mutation.files
+                if item['role'] == 'history_object']
+        judgment = next(item for item in made if item['kind'] == 'judgment')
+        computed = judgment['body']['seen']['p.ratio']['computed']
+        self.assertEqual(computed['value'],
+                         {'type': 'number', 'numerator': '1', 'denominator': '2'})
+        self.assertEqual(computed['basis']['recipe'], 'merkle-inputs/v1')
+
+    def test_retained_version_one_judgment_receipt_replays_without_new_seen(self):
+        mutation = A.prepare(self.entry, {'kind': 'add', 'id': 'p.legacy_ready',
+            'into': 'judgments', 'body': {'verdict': 'ready', 'rests_on': ['p.input'],
+                'wrong_if': {'expr': 'p.input > 5'}}}, by='writer',
+            operation='retained-v1', _receipt_version=1)
+        self.assertEqual(mutation.to_data()['receipt']['before']['authoring']['version'], 1)
+        made = [C.decode_document(item['after']) for item in mutation.files
+                if item['role'] == 'history_object']
+        self.assertNotIn('seen', next(item for item in made if item['kind'] == 'judgment')['body'])
+        A.verify_prepared(self.entry, T.PreparedMutation.from_bytes(mutation.to_bytes()))
+
+    def test_retained_version_five_proposal_replays_without_new_seen(self):
+        mutation = A.prepare_proposal(self.entry, 'p.old_proposal', {
+            'verdict': 'ready', 'rests_on': ['p.input'],
+            'wrong_if': {'expr': 'p.input > 5'}}, 'judgments', because='retained',
+            by='writer', operation='retained-v5', _receipt_version=5)
+        self.assertEqual(mutation.to_data()['receipt']['before']['authoring']['version'], 5)
+        made = [C.decode_document(item['after']) for item in mutation.files
+                if item['role'] == 'history_object']
+        self.assertNotIn('seen', next(item for item in made if item['kind'] == 'judgment')['body'])
+        A.verify_prepared(self.entry, T.PreparedMutation.from_bytes(mutation.to_bytes()))
+
+    def test_public_add_then_core_check_has_no_missing_snapshot(self):
+        action = {'kind': 'add', 'id': 'p.public_ready', 'into': 'judgments',
+                  'as_of': '2026-09-01', 'body': {'verdict': 'ready',
+                  'rests_on': ['p.input'], 'wrong_if': {'expr': 'p.input > 5'}}}
+        with contextlib.redirect_stdout(io.StringIO()):
+            self.assertEqual(P.apply([str(self.entry)], action), 0)
+            self.assertEqual(P.core_check([str(self.entry)]), 0)
+
+    def test_user_supplied_seen_is_refused_before_automatic_capture(self):
+        before = self.store.capture().inventory
+        with self.assertRaises((P.Refused, SystemExit)):
+            self.prepare({'kind': 'add', 'id': 'p.bad_seen', 'into': 'judgments',
+                'body': {'verdict': 'ready', 'rests_on': ['p.input'],
+                         'wrong_if': {'expr': 'p.input > 5'}, 'seen': {'p.input': 99}}})
+        self.assertEqual(self.store.capture().inventory, before)
+
+    def test_blocked_missing_dependency_records_gap_without_fabricating_seen(self):
+        mutation = self.prepare({'kind': 'add', 'id': 'p.wait', 'into': 'judgments',
+            'body': {'verdict': 'pending', 'rests_on': ['p.missing'],
+                     'wrong_if': {'expr': 'p.missing > 5'},
+                     'blocked_on': {'missing': ['p.missing'], 'why': 'awaiting source'}}})
+        made = [C.decode_document(item['after']) for item in mutation.files
+                if item['role'] == 'history_object']
+        judgment = next(item for item in made if item['kind'] == 'judgment')
+        self.assertEqual(judgment['pins'], {})
+        self.assertEqual(judgment['pin_gaps'], {'p.missing': 'unavailable'})
+        self.assertEqual(judgment['body']['seen'], {})
 
     def test_review_records_current_pins_and_preserves_old_seen_and_formula(self):
         formula = claim('p.ratio', op='formula', body={'rule': {'expr': 'p.input / 3'}})
@@ -196,12 +282,15 @@ class Authoring(unittest.TestCase):
                      Path(self.store.layout['replaced']).write_bytes(b'changed during verification'))
         self.assertEqual(len(self.store.capture().commits), 1)
 
-    def test_missing_dependency_does_not_publish_uncapturable_pin(self):
-        before = self.store.capture().inventory
-        with self.assertRaisesRegex(C.HistoryError, 'unresolved_history_subject'):
-            self.prepare({'kind': 'add', 'id': 'p.wait', 'body': {'verdict': 'waiting',
-                'rests_on': ['p.missing'], 'blocked_on': 'source is unavailable'}})
-        self.assertEqual(self.store.capture().inventory, before)
+    def test_missing_dependency_is_retained_only_as_an_explicit_gap(self):
+        mutation = self.prepare({'kind': 'add', 'id': 'p.wait', 'body': {'verdict': 'waiting',
+            'rests_on': ['p.missing'], 'blocked_on': 'source is unavailable'}})
+        made = [C.decode_document(item['after']) for item in mutation.files
+                if item['role'] == 'history_object']
+        judgment = next(item for item in made if item['kind'] == 'judgment')
+        self.assertEqual(judgment['pins'], {})
+        self.assertEqual(judgment['pin_gaps'], {'p.missing': 'unavailable'})
+        self.assertEqual(judgment['body']['seen'], {})
 
     def test_named_legacy_profiles_are_not_promoted(self):
         for profile in ('ordinary-reader/v1', 'checked-reader/v1'):

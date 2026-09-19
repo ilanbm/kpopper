@@ -900,14 +900,40 @@ def tree_svg(ids, jud, E, J, flags, words=None, label=None):
     return "".join(o)
 
 
-def build(paths, brief_path=None, page_path=None, *, read_mode=None, profile=None, context=None):
+def build(paths, brief_path=None, page_path=None, *, read_mode=None, profile=None, context=None,
+          doc=None):
+    """The page, and what it counted. `doc` is the record already read for *these* paths in
+    this mode - what `P.load(record_paths(paths), read_mode=mode)` returns, nothing else: the
+    document carries no paths of its own, so the brief and the record root are still derived
+    from `paths` and handing over a document read from somewhere else draws that record under
+    this one's brief. A supplied document is refused for two things and neither is its paths:
+    a stated mode that disagrees with this one, and a dormant reasoning profile its own reading
+    would have refused. The reader's `_page_or_error` catches everything, so both reach a read
+    command as a note rather than a traceback."""
+    if profile is None and doc is None and (context is not None or P.core_reader_selected(paths)):
+        profile = 'core/v1'
     if profile == 'core/v1':
+        if doc is not None:
+            raise ValueError('the core page profile builds from its own reading')
         return core_build(paths, brief_path, page_path, read_mode=read_mode, context=context)
     if profile is not None:
         raise ValueError('unsupported page profile: ' + str(profile))
     mode = _read_mode(read_mode)
     paths = record_paths(paths, read_mode=mode)
-    doc = P.load(paths, read_mode=mode)
+    # A caller that has just read this record hands its document over instead of paying for a
+    # second reading of the same files in the same command - and a second reading is a second
+    # chance for the reader's view and the page's to disagree. The write path passes none, so
+    # every count it takes still sees the record as it stands at that moment.
+    if doc is None:
+        doc = P.load(paths, read_mode=mode)
+    else:
+        if getattr(doc, 'read_mode', mode) != mode:
+            raise ValueError('the page was given a record read in another mode: '
+                             + str(doc.read_mode) + ', not ' + mode)
+        # what `P.load` would have refused on the way in, refused here instead: a document
+        # read under the core permission must not be drawn by this renderer just because
+        # somebody else did the reading
+        P.refuse_dormant_profile(doc)
     record_root = os.path.dirname(P.layout_of(paths)["entry"])
     ids, jud, fields = P.infer(doc)
     meta = doc.get("meta") or {}
@@ -2270,6 +2296,8 @@ def core_verify(paths, brief_path=None, *, read_mode=None, context=None):
 
 def measured_build(paths, brief_path=None, page_path=None, *, profile=None, context=None):
     """Explicit page construction publishes counts for the exact inputs it read."""
+    if profile is None and (context is not None or P.core_reader_selected(paths)):
+        profile = 'core/v1'
     if profile == 'core/v1':
         # The core page has a page-secondary/v1 revision over its exact brief and
         # derived values.  It deliberately does not publish that presentation back
@@ -2298,6 +2326,8 @@ def measured_build(paths, brief_path=None, page_path=None, *, profile=None, cont
 
 def verify(paths, brief_path=None, *, profile=None, context=None):
     """Deterministic, no browser. What only looking can catch is a separate job."""
+    if profile is None and (context is not None or P.core_reader_selected(paths)):
+        profile = 'core/v1'
     if profile == 'core/v1':
         return core_verify(paths, brief_path, context=context)
     if profile is not None:
@@ -2414,6 +2444,8 @@ if __name__ == "__main__":
             sys.exit('unsupported page profile: ' + profile)
     brief = a[a.index("--brief") + 1] if "--brief" in a else None
     files = [x for x in a if x.endswith((".yaml", ".yml")) and x != brief] or P.default_paths()
+    if profile is None and P.core_reader_selected(files):
+        profile = 'core/v1'
     try:
         if "--verify" in a:
             sys.exit(verify(files, brief, profile=profile))

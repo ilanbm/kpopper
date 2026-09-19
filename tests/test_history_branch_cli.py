@@ -156,13 +156,19 @@ class BranchCLI(unittest.TestCase):
         selected, _ = fixture.second_source()
         command = [sys.executable, '-B', str(Path(S.__file__).with_name('cli.py')), 'consolidate',
                    '--from', 'incoming', '--from', 'incoming-two', str(fixture.entry)]
-        preview_run = subprocess.run([*command, '--dry-run'], capture_output=True, text=True, timeout=30)
+        # These two caps guard against a hang, not against slowness: the test is weighted at 46s
+        # in .github/test-durations.json, so a 30s cap on one of its subprocesses was inside the
+        # test's own expected runtime and failed whenever a CI worker ran it beside heavy
+        # neighbours. Which neighbours those are is decided by pytest-split, so any branch that
+        # adds tests can move it - this one timed out on three of four runs after a new module
+        # landed in the same shard.
+        preview_run = subprocess.run([*command, '--dry-run'], capture_output=True, text=True, timeout=120)
         self.assertEqual(preview_run.returncode, 0, preview_run.stdout + preview_run.stderr)
         preview = S.yaml.safe_load(preview_run.stdout.split('\n', 1)[1])
         self.assertEqual(len(preview['source_revisions']), 2)
         result = subprocess.run([*command, '--by', 'fixture operator', '--choose', 'p.value=' + selected,
                                  '--source-revision', preview['source_set_revision']],
-                                capture_output=True, text=True, timeout=30)
+                                capture_output=True, text=True, timeout=120)
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         captured = H.Store(fixture.entry).capture()
         self.assertEqual(captured.state['subjects']['p.value']['head'], selected)

@@ -212,6 +212,15 @@ def project_node_status(node):
                              if isinstance(item, dict) and isinstance(item.get('code'), str)}),
         },
     }
+    temporal = _dimension(node, state, 'temporal')
+    if temporal is not None:
+        temporal = _mapping(temporal, 'temporal')
+        result['temporal'] = {
+            'applicability': temporal.get('applicability'),
+            'status': temporal.get('status', 'unknown'),
+            'complete': temporal.get('complete') is True,
+            'counterexample_claim_ids': list(temporal.get('counterexample_claim_ids', [])),
+        }
     return result
 
 
@@ -221,7 +230,7 @@ def render_node_status(node):
     computation = status['computation']['status']
     if status['computation']['value_text'] is not None:
         computation += '=' + status['computation']['value_text']
-    return '; '.join((
+    parts = [
         'acceptance=' + status['acceptance'],
         'computation=' + computation,
         'basis=' + status['basis'],
@@ -233,7 +242,10 @@ def render_node_status(node):
         'support=' + status['support']['status']
         + (('[' + ','.join(status['support']['states']) + ']')
            if status['support']['states'] else ''),
-    ))
+    ]
+    if 'temporal' in status:
+        parts.append('temporal=' + status['temporal']['status'])
+    return '; '.join(parts)
 
 
 def _witness_ids(items, name):

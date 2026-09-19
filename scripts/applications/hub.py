@@ -119,8 +119,8 @@ def main(args):
     do_page(args)
 
 
-def page_side(paths, read_mode=None, reader=None):
-    """Derived counts and arrangement facts for an explicit presentation write."""
+def page_info(paths, read_mode=None, *, reader=None, doc=None):
+    """Project an explicitly requested record, reusing the caller's captured reading."""
     require_html()
     if reader is None:
         sys.path.insert(0, str(HERE))
@@ -131,7 +131,14 @@ def page_side(paths, read_mode=None, reader=None):
     paths = renderer.record_paths(paths, read_mode=mode)
     brief = renderer.find_brief(paths, read_mode=mode)
     if not brief:
+        return None
+    return renderer.build(paths, brief, read_mode=mode, doc=doc)[4]
+
+
+def page_side(paths, read_mode=None, *, reader=None):
+    """Derived counts and arrangement facts for an explicit presentation write."""
+    info = page_info(paths, read_mode=read_mode, reader=reader)
+    if info is None:
         return {}, None, {}
-    info = renderer.build(paths, brief, read_mode=mode)[4]
     return ({key: value for key, value in info['page'].items() if value is not None},
             info['shape'], info.get('arrangements') or {})

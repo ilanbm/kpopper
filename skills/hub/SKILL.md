@@ -41,3 +41,5 @@ sed -n '1,400p' "$(dirname "$R")/../skills/kpopper/PAGE.md"
 **Do not write this layer yourself.** It ships here for the same reason the reader does: it
 took a browser and six bugs to get right, and a session rebuilding it will produce something
 worse and not know. Write layout if you need layout; call this for the mechanism.
+
+When mentioning this skill to the user, include the plugin name: `kpopper:hub` or "hub from the kpopper plugin". Use the user's language and fold it into the explanation of the action; no extra announcement is needed.

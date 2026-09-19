@@ -75,7 +75,7 @@ the application boundary deliberately.
 |---|---|---|
 | kpopper Hub: record, layouts and interactive graph | Application | Experimental, optional HTML runtime |
 | Annotated Documents: HTML evidence and copy updates | Application | Experimental, optional HTML runtime |
-| Deterministic `core/v1` | Core profile | Experimental, explicitly selected |
+| Deterministic `core/v1` and immutable history | Core profile | Default for new records; existing legacy records require explicit adoption |
 | Checked sessions and their MCP transport | Integration | Experimental, opt-in |
 
 Promotion of an HTML application requires repeated independent use, a documented

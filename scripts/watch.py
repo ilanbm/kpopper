@@ -161,41 +161,80 @@ def _records(root, entry, sha=None, *, include_files=False):
             for pointer in C._pointers(body):
                 queue.append(_safe_path(posixpath.normpath(posixpath.join(posixpath.dirname(name), pointer))))
     history = None
+    operation_doc = None
     with tempfile.TemporaryDirectory() as directory:
         for name, raw in files.items():
             path = Path(directory) / name
             path.resolve().relative_to(Path(directory).resolve())
             path.parent.mkdir(parents=True, exist_ok=True)
             path.write_bytes(raw)
+        # The scratch directory may use a symlinked temp root (notably on
+        # macOS). Use its canonical location consistently with project routing
+        # so temporary path aliases never enter the portable capture identity.
+        captured_entry = (Path(directory) / entry).resolve()
         if active:
             S = P._peer('reasoning.snapshot')
             # Temporary target files are not observations of the checkout. Their
             # complete bytes are already pinned by this immutable Git tree.
             token = H.P._CAPTURE_READS.set(None)
             try:
-                snapshot = S.Snapshot.capture(Path(directory) / entry, read_mode='frozen')
-                captured = H.Store(Path(directory) / entry).capture()
+                snapshot = S.Snapshot.capture(captured_entry, read_mode='frozen')
+                captured = H.Store(captured_entry).capture()
                 history = P._peer('knowledge_views').history_evidence(captured)
             finally:
                 H.P._CAPTURE_READS.reset(token)
             data = snapshot.to_data()
             document = data['document']
-            hyps = [{'name': name, 'doc': hyp['document'], 'head': hyp['head']}
+            hyps = [{'name': name, 'doc': hyp['document'], 'head': hyp['head'],
+                     **({'kind': hyp['kind']} if hyp.get('kind') else {})}
                     for name, hyp in data['hypotheses'].items() if not hyp['error']]
             if any(hyp['error'] for hyp in data['hypotheses'].values()):
                 raise ValueError('unreadable target hypothesis')
         else:
-            doc = P.load([str(Path(directory) / entry)])
+            operation_doc = None
+            try:
+                doc = P.load([str(captured_entry)])
+            except P.Refused as error:
+                CoreOperations = P._peer('reasoning.operations')
+                if str(error) != CoreOperations.READER_REFUSAL:
+                    raise
+                operation_doc = CoreOperations.load([str(captured_entry)])
+                doc = operation_doc
             document, hyps = dict(doc), []
             for name, h in doc.hypotheses.items():
                 if h['error']:
                     raise ValueError('unreadable hypothesis ' + name + ': ' + h['error'])
                 hyps.append({'name': name, 'doc': h['doc'], 'head': h['head']})
+        core = None
+        reasoning = document.get('meta', {}).get('reasoning', {}) if isinstance(document, dict) else {}
+        if not active and isinstance(reasoning, dict) and reasoning.get('profile') == 'core/v1':
+            CoreOperations = P._peer('reasoning.operations')
+            if operation_doc is None:
+                operation_doc = CoreOperations.load([str(captured_entry)])
+            observed = CoreOperations.snapshot_for(operation_doc)
+            context = CoreOperations.world(operation_doc).context
+            report = context.base_assessment
+            core = {'snapshot': observed.to_json(), 'assessment': report,
+                    'findings': CoreOperations.findings(context)}
     result = {'doc': document, 'hypotheses': hyps,
               'hash': digest({name: HC.sha256(raw) for name, raw in files.items()}) if active else
                       digest({name: raw.decode('utf-8') for name, raw in files.items()})}
+    if core is not None:
+        result['core'] = core
+        result['snapshot'] = observed.to_data()
     if history is not None:
         result['history'] = history
+        # Keep the public, already validated observation.  The history-union
+        # consumer needs its exact temporal basis (including explicit None),
+        # and must not reconstruct that basis from private Store state.
+        result['snapshot'] = data
+    if 'snapshot' not in result:
+        # Retain literal legacy shared readings under their original declared
+        # interpretation. The scenario adapter refuses executable promotion.
+        Snapshot = P._peer('reasoning.snapshot').Snapshot
+        result['snapshot'] = Snapshot.from_data(document,
+            hypotheses={item['name']: {'doc': item['doc'], 'head': item['head']} for item in hyps},
+            context={'read_mode': 'supplied', 'watch_capture': {'hash': result['hash']}}).to_data()
     if include_files:
         result['files'] = {name: raw.decode('utf-8') for name, raw in files.items() if name not in raw_names}
     return result
@@ -244,7 +283,36 @@ def compare(snapshot):
     old = _entries(snapshot['ancestor']['doc'])
     local = _entries(snapshot['working']['doc'])
     main = _entries(snapshot['main']['doc'])
-    base = _doc(snapshot['main']['doc'])
+    core_records = [snapshot.get(name, {}).get('core') for name in ('ancestor', 'working', 'main')]
+    core_mode = all(core_records)
+    history_records = [snapshot.get(name, {}).get('history') for name in ('ancestor', 'working', 'main')]
+    if any(history_records):
+        if not all(history_records):
+            finding = {'kind': 'uncheckable', 'id': 'record',
+                       'reason': 'incompatible captured context: history evidence is missing on one branch'}
+            finding['fingerprint'] = digest(finding)
+            return {'state': 'attention', 'findings': [finding], 'changed': [],
+                    'versions': snapshot.get('versions'), 'identity': snapshot.get('identity')}
+        return P._peer('history_watch').compare(snapshot)
+    if any(core_records) and not core_mode:
+        finding = {'kind': 'uncheckable', 'id': 'record',
+                   'reason': 'incompatible captured context: core/v1 evidence is missing on one branch'}
+        finding['fingerprint'] = digest(finding)
+        return {'state': 'attention', 'findings': [finding], 'changed': [],
+                'versions': snapshot.get('versions'), 'identity': snapshot.get('identity')}
+    if core_mode:
+        CoreOperations = P._peer('reasoning.operations')
+        # provenance's peer loader owns the canonical module identity used by
+        # the history assessment validator.
+        CoreSnapshot = C.P._peer('reasoning.snapshot').Snapshot
+        observed = CoreSnapshot.from_json(snapshot['main']['core']['snapshot'])
+        main_bound = _doc(snapshot['main']['doc'])
+        CoreOperations.bind(main_bound, observed)
+        baseline = C._check_of(main_bound)
+        base = _doc(snapshot['main']['doc'])
+    else:
+        base = _doc(snapshot['main']['doc'])
+        baseline = C._check_of(_doc(snapshot['main']['doc']))
     findings, delta, changed = [], {}, []
 
     def finding(kind, key, reason):
@@ -268,7 +336,10 @@ def compare(snapshot):
             if key not in main:
                 base.setdefault(col, {})[key] = copy.deepcopy(body)
         fail_before, _ = C._check_of(_doc(snapshot['main']['doc']))
-        fail_shared, _ = C._check_of(base)
+        shared_base = base
+        if core_mode:
+            shared_base = CoreOperations.derive(_doc(base), main_bound)
+        fail_shared, _ = C._check_of(shared_base)
         for line in fail_shared:
             if line not in fail_before:
                 finding('shared', line.split(':', 1)[0], line)
@@ -303,12 +374,18 @@ def compare(snapshot):
         # authored entries did not change. Never replay its inherited values.
         hyps.append(C.hypothesis(h['name'], body, h['head']))
     # Compare deletion failures to untouched main, not to the already-deleted base.
-    baseline = C._check_of(_doc(snapshot['main']['doc']))
-    try:
-        union = C.union_of(base, hyps, base_check=baseline)
-    except (ValueError, SystemExit) as exc:
-        finding('uncheckable', 'record', str(exc))
+    if core_mode:
+        base = CoreOperations.derive(base, main_bound)
+    if core_mode and not changed and not shared:
+        # An unchanged captured core snapshot is clear for compatibility; its
+        # complete assessment remains available in the serialized input.
         union = C.Consolidation()
+    else:
+        try:
+            union = C.union_of(base, hyps, base_check=baseline)
+        except (ValueError, SystemExit) as exc:
+            finding('uncheckable', 'record', str(exc))
+            union = C.Consolidation()
     for kind, lines in [('falsified', union.falsified), ('uncheckable', union.holes)]:
         for line in lines:
             finding(kind, line.split(':', 1)[0], line)
@@ -319,10 +396,22 @@ def compare(snapshot):
     for h, predicate in union.head_falsified:
         finding('falsified', h['name'], h['name'] + ': ' + predicate)
     if union.doc is not None:
-        prior_uncertain = uncertain(_doc(snapshot['main']['doc']))
-        for key, reasons in uncertain(union.doc).items():
+        if core_mode:
+            prior_uncertain = snapshot['main']['core']['findings'].get('uncertain', {})
+            current_uncertain = CoreOperations.findings(CoreOperations.world(union.doc).context).get('uncertain', {})
+        else:
+            prior_uncertain = uncertain(_doc(snapshot['main']['doc']))
+            current_uncertain = uncertain(union.doc)
+        for key, reasons in current_uncertain.items():
             if prior_uncertain.get(key) != reasons:
                 finding('uncheckable', key, key + ': ' + '; '.join(reasons))
+    if core_mode and snapshot['working']['core']['snapshot'] != snapshot['ancestor']['core']['snapshot']:
+        projected = snapshot['working']['core']['findings']
+        for kind, lines in (('falsified', projected.get('falsified', [])),
+                            ('uncheckable', projected.get('holes', [])),
+                            ('uncheckable', projected.get('moved', []))):
+            for line in lines:
+                finding(kind, line.split(':', 1)[0], line)
     unique = {digest(f): dict(f, fingerprint=digest(f)) for f in findings}
     return {'state': 'attention' if unique else 'clear', 'findings': list(unique.values()),
             'changed': changed, 'versions': snapshot['versions'], 'identity': snapshot['identity']}
@@ -461,11 +550,14 @@ class Watch:
         main = git(self.tree, 'rev-parse', '--verify', config['base_ref'] + '^{commit}')
         head = git(self.tree, 'rev-parse', '--verify', 'HEAD^{commit}')
         ancestor = git(self.tree, 'merge-base', head, main)
-        working = _records(self.tree, self.entry)
         shared = None
         if config.get('shared_record'):
             p = Path(config['shared_record'])
-            shared = _records(p.parent, p.name)
+            token = P._CORE_READS.set(True)
+            try:
+                shared = _records(p.parent, p.name)
+            finally:
+                P._CORE_READS.reset(token)
             try:
                 from . import watch_shared as S
             except ImportError:
@@ -473,12 +565,24 @@ class Watch:
             inbox = digest(S.receipts(self))
         else:
             inbox = None
+        # `watch` is the public captured-history consumer.  Its comparison
+        # path validates and retains each revision before giving the pure
+        # history-union adapter any input; ordinary readers still receive the
+        # history refusal in `_records`.
+        token = P._CORE_READS.set(True)
+        try:
+            working = _records(self.tree, self.entry)
+            ancestor_record = _records(self.tree, self.entry, ancestor)
+            main_record = _records(self.tree, self.entry, main)
+        finally:
+            P._CORE_READS.reset(token)
         versions = {'base_ref': config['base_ref'], 'main': main, 'head': head, 'merge_base': ancestor,
+                    'comparison': 'history-scenarios/v1',
                     'working': working['hash'], 'shared': shared['hash'] if shared else None,
                     'inbox': inbox,
                     'config': digest(config), 'freshness': 'local Git objects; remote freshness not verified'}
-        return {'working': working, 'ancestor': _records(self.tree, self.entry, ancestor),
-                'main': _records(self.tree, self.entry, main), 'shared': shared,
+        return {'working': working, 'ancestor': ancestor_record,
+                'main': main_record, 'shared': shared,
                 'versions': versions, 'identity': digest(versions)}
 
     def request(self):

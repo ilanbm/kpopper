@@ -101,6 +101,27 @@ sys.meta_path.insert(0, Block())
         self.assertIn('counted when the page is built', result.stdout)
         self.assertFalse((self.root / 'optional-imports').exists())
 
+    def test_new_history_record_and_hub_help_work_without_html(self):
+        (self.root / 'GROUNDING.yaml').unlink()
+        (self.root / '.kpopper/view.yaml').unlink()
+        blocked = ('render_page', 'html5lib', 'tinycss2')
+        for args in [('add', 'm.value', 'v=2', 'name=Value'), ('open',), ('check',),
+                     ('pull', 'm.value'), ('experimental', 'hub', '--help')]:
+            result = self.cli(*args, blocked=blocked)
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertFalse((self.root / 'optional-imports').exists())
+        self.assertIn('core/v1', (self.root / 'GROUNDING.yaml').read_text())
+
+    def test_hub_selects_core_when_a_custom_brief_is_supplied(self):
+        (self.root / 'GROUNDING.yaml').unlink()
+        (self.root / '.kpopper/view.yaml').unlink()
+        created = self.cli('add', 'm.value', 'v=2', 'name=Value')
+        self.assertEqual(created.returncode, 0, created.stdout + created.stderr)
+        (self.root / 'custom.yaml').write_text('title: Hub\nsections:\n  - title: Values\n    pick: all\n')
+        result = self.cli('experimental', 'hub', '--brief', 'custom.yaml', '--out', 'hub.html')
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertIn('data-profile="core/v1"', (self.root / 'hub.html').read_text())
+
     def test_layout_proposal_with_its_own_new_source_requires_the_application(self):
         from scripts import consolidate as C
         base = C.P.Record({'known': {'m.value': {'v': 1}}})
