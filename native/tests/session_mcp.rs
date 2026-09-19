@@ -130,3 +130,28 @@ fn malformed_requests_get_null_id_but_notifications_stay_silent() {
             .all(|response| response["error"]["code"] == -32600)
     );
 }
+
+#[test]
+fn private_number_objects_cannot_impersonate_rpc_numbers() {
+    let wire = concat!(
+        r#"{"jsonrpc":"2.0","id":{"$serde_json::private::Number":"7"},"method":"ping"}"#,
+        "\n",
+        r#"{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"echo","arguments":{"x":{"$serde_json::private::Number":"3"}}}}"#,
+        "\n",
+    );
+    let mut output = Vec::new();
+    server(
+        &mut Cursor::new(wire),
+        &mut output,
+        &[tool()],
+        |_, _| unreachable!(),
+    )
+    .unwrap();
+    let responses: Vec<Value> = String::from_utf8(output)
+        .unwrap()
+        .lines()
+        .map(|line| serde_json::from_str(line).unwrap())
+        .collect();
+    assert_eq!(responses[0]["error"]["code"], -32600);
+    assert_eq!(responses[1]["error"]["code"], -32602);
+}

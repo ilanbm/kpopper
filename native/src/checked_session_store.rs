@@ -137,8 +137,12 @@ impl CheckedSessionStore {
             session.revision() == revision,
             "checked session revision mismatch",
         )?;
+        let encoded_context = context.to_json()?;
         let payload = json!({"version": VERSION, "project_identity": ordinary(&session_identity)?,
-            "revision": revision, "context": serde_json::from_str::<J>(&context.to_json()?)?});
+            "revision": revision, "context": crate::json_ingress::parse_str(
+                &encoded_context,
+                crate::json_ingress::DuplicateKeys::Reject,
+            )?});
         let name = context_name(&revision)?;
         let held = self.atomic_create(&name, &payload)?;
         require(held == payload, "core context identity collision")?;
@@ -936,5 +940,6 @@ fn read_json_file(mut file: File) -> Result<J> {
         bytes.len() as u64 <= MAX_FILE,
         "retained context exceeds limit",
     )?;
-    serde_json::from_slice(&bytes).map_err(|e| Error(format!("invalid retained core context: {e}")))
+    crate::json_ingress::parse_slice(&bytes, crate::json_ingress::DuplicateKeys::LastWins)
+        .map_err(|e| Error(format!("invalid retained core context: {e}")))
 }

@@ -11,7 +11,6 @@ use crate::{
     require,
     value::{Date, Integer, TypedValue as V},
 };
-use serde::Deserialize;
 use std::collections::BTreeMap;
 
 pub const MAX_REQUEST_BYTES: usize = 16 * 1024 * 1024;
@@ -669,11 +668,12 @@ impl Snapshot {
                 }
             }
         }
-        let mut decoder = serde_json::Deserializer::from_slice(bytes);
-        decoder.disable_recursion_limit();
-        let tagged = serde_json::Value::deserialize(&mut decoder)
-            .map_err(|_| error("invalid_snapshot_json"))?;
-        decoder.end().map_err(|_| error("invalid_snapshot_json"))?;
+        let tagged = crate::json_ingress::parse_slice_bounded(
+            bytes,
+            crate::json_ingress::DuplicateKeys::LastWins,
+            400,
+        )
+        .map_err(|_| error("invalid_snapshot_json"))?;
         check_digits(&tagged)?;
         let data = V::from_tagged_bounded(&tagged, MAX_VALUES).map_err(|e| {
             error(if e.0 == "value_limit" {

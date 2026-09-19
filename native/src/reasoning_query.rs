@@ -1,7 +1,6 @@
 //! Canonical query framing and validation; query meaning remains in Lean.
 use crate::{Error, Result, require};
 use num_bigint::BigInt;
-use serde::Deserialize;
 use serde_json::{Map, Value as J, json};
 use std::collections::BTreeSet;
 const MAX_BYTES: usize = 16 * 1024 * 1024;
@@ -168,60 +167,14 @@ pub fn decode_canonical_json(raw: &[u8]) -> Result<J> {
         }
         i += 1;
     }
-    let mut decoder = serde_json::Deserializer::from_slice(raw);
-    decoder.disable_recursion_limit();
-    crate::store::Unique::deserialize(&mut decoder).map_err(|_| err("malformed canonical JSON"))?;
-    decoder.end().map_err(|_| err("malformed canonical JSON"))?;
-    let mut decoder = serde_json::Deserializer::from_slice(raw);
-    decoder.disable_recursion_limit();
-    let raw_value = <&serde_json::value::RawValue>::deserialize(&mut decoder)
-        .map_err(|_| err("malformed canonical JSON"))?;
-    let value = raw_json_value(raw_value)?;
+    let value = crate::json_ingress::parse_slice_bounded(
+        raw,
+        crate::json_ingress::DuplicateKeys::Reject,
+        257,
+    )
+    .map_err(|_| err("malformed canonical JSON"))?;
     require(canonical_json_bytes(&value)? == raw, "noncanonical JSON")?;
     Ok(value)
-}
-
-// RawValue distinguishes an actual JSON object from serde's synthetic map used
-// for arbitrary-precision numbers. User keys never select a deserializer type.
-fn raw_json_value(raw: &serde_json::value::RawValue) -> Result<J> {
-    let text = raw.get();
-    let mut decoder = serde_json::Deserializer::from_str(text);
-    decoder.disable_recursion_limit();
-    match text.as_bytes()[0] {
-        b'{' => {
-            let fields =
-                std::collections::BTreeMap::<String, &serde_json::value::RawValue>::deserialize(
-                    &mut decoder,
-                )
-                .map_err(|_| err("malformed canonical JSON"))?;
-            Ok(J::Object(
-                fields
-                    .into_iter()
-                    .map(|(k, v)| raw_json_value(v).map(|v| (k, v)))
-                    .collect::<Result<_>>()?,
-            ))
-        }
-        b'[' => {
-            let items = Vec::<&serde_json::value::RawValue>::deserialize(&mut decoder)
-                .map_err(|_| err("malformed canonical JSON"))?;
-            Ok(J::Array(
-                items
-                    .into_iter()
-                    .map(raw_json_value)
-                    .collect::<Result<_>>()?,
-            ))
-        }
-        b'"' => String::deserialize(&mut decoder)
-            .map(J::String)
-            .map_err(|_| err("malformed canonical JSON")),
-        b'n' => Ok(J::Null),
-        b't' => Ok(J::Bool(true)),
-        b'f' => Ok(J::Bool(false)),
-        _ => text
-            .parse::<serde_json::Number>()
-            .map(J::Number)
-            .map_err(|_| err("malformed canonical JSON")),
-    }
 }
 pub fn encode_frame(v: &J, prefix: &str) -> Result<Vec<u8>> {
     require(

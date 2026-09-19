@@ -97,7 +97,10 @@ fn path(cwd: &Path, input: &Path) -> Result<PathBuf> {
     project_modes::resolved(&expanded)
 }
 fn json_file(inventory: &mut Inventory, path: &Path) -> Result<J> {
-    Ok(serde_json::from_slice(&inventory.read(path)?)?)
+    Ok(crate::json_ingress::parse_slice(
+        &inventory.read(path)?,
+        crate::json_ingress::DuplicateKeys::LastWins,
+    )?)
 }
 fn settings_file(inventory: &mut Inventory, path: &Path) -> Result<J> {
     if !inventory.exists(path)? {

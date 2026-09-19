@@ -107,7 +107,9 @@ fn read_state(path: &Path) -> Map<String, Value> {
     {
         return Map::new();
     }
-    let Ok(Value::Object(object)) = serde_json::from_slice(&raw) else {
+    let Ok(Value::Object(object)) =
+        crate::json_ingress::parse_slice(&raw, crate::json_ingress::DuplicateKeys::LastWins)
+    else {
         return Map::new();
     };
     object

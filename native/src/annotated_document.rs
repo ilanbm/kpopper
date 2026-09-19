@@ -5,7 +5,7 @@
 
 use chrono::{SecondsFormat, Utc};
 use num_bigint::BigInt;
-use serde_json::{Map, Number, Value, json};
+use serde_json::{Map, Value, json};
 use sha2::{Digest, Sha256};
 use std::{
     collections::{BTreeMap, BTreeSet},
@@ -111,69 +111,8 @@ fn safe_json(value: &Value) -> Result<String> {
 
 /// Strict JSON input with duplicate-key and non-finite rejection.
 pub fn read_json(raw: &str) -> Result<Value> {
-    use serde::{Deserialize, de};
-    use serde_json::value::RawValue;
-
-    fn decode(raw: &RawValue) -> Result<Value> {
-        struct ObjectVisitor;
-        impl<'de> de::Visitor<'de> for ObjectVisitor {
-            type Value = Map<String, Value>;
-            fn expecting(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-                f.write_str("a JSON object")
-            }
-            fn visit_map<A: de::MapAccess<'de>>(
-                self,
-                mut fields: A,
-            ) -> std::result::Result<Self::Value, A::Error> {
-                let mut result = Map::new();
-                while let Some(key) = fields.next_key::<String>()? {
-                    if result.contains_key(&key) {
-                        return Err(de::Error::custom(format!("Duplicate JSON key: {key}")));
-                    }
-                    let raw = fields.next_value::<Box<RawValue>>()?;
-                    let value = decode(&raw).map_err(de::Error::custom)?;
-                    result.insert(key, value);
-                }
-                Ok(result)
-            }
-        }
-
-        let text = raw.get().trim();
-        let mut decoder = serde_json::Deserializer::from_str(text);
-        let value = match text.as_bytes().first() {
-            Some(b'{') => {
-                serde::Deserializer::deserialize_map(&mut decoder, ObjectVisitor).map(Value::Object)
-            }
-            Some(b'[') => Vec::<Box<RawValue>>::deserialize(&mut decoder).and_then(|items| {
-                items
-                    .iter()
-                    .map(|item| decode(item).map_err(de::Error::custom))
-                    .collect::<std::result::Result<Vec<_>, _>>()
-                    .map(Value::Array)
-            }),
-            Some(b'"') => String::deserialize(&mut decoder).map(Value::String),
-            Some(b'n') => <()>::deserialize(&mut decoder).map(|()| Value::Null),
-            Some(b't' | b'f') => bool::deserialize(&mut decoder).map(Value::Bool),
-            Some(_) => Number::deserialize(&mut decoder).map(Value::Number),
-            None => unreachable!("RawValue cannot be empty"),
-        }
-        .map_err(|e| err(format!("Invalid JSON: {e}")))?;
-        decoder
-            .end()
-            .map_err(|e| err(format!("Invalid JSON: {e}")))?;
-        Ok(value)
-    }
-
-    // Parse once as a raw token tree. This preserves serde_json's nesting bound
-    // while letting the recursive decoder distinguish JSON number tokens from
-    // literal objects that use serde_json's private arbitrary-precision key.
-    let mut decoder = serde_json::Deserializer::from_str(raw);
-    let raw_value = Box::<RawValue>::deserialize(&mut decoder)
-        .map_err(|e| err(format!("Invalid JSON: {e}")))?;
-    decoder
-        .end()
-        .map_err(|e| err(format!("Invalid JSON: {e}")))?;
-    decode(&raw_value)
+    crate::json_ingress::parse_str(raw, crate::json_ingress::DuplicateKeys::Reject)
+        .map_err(|e| err(format!("Invalid JSON: {e}")))
 }
 fn read_limited(path: &Path, limit: usize) -> Result<Vec<u8>> {
     let data = fs::read(path)?;

@@ -371,9 +371,9 @@ pub fn probe_launchers(inventory: &J, expected: &J, nonce: &str, timeout: Durati
             MAX_OUTPUT,
         )
         .map_err(|_| error("launcher_probe_failed"))?;
-        serde_json::from_slice::<crate::store::Unique>(&raw)
-            .map_err(|_| error("invalid_runtime_json"))?;
-        let value: J = serde_json::from_slice(&raw).map_err(|_| error("invalid_runtime_json"))?;
+        let value =
+            crate::json_ingress::parse_slice(&raw, crate::json_ingress::DuplicateKeys::Reject)
+                .map_err(|_| error("invalid_runtime_json"))?;
         validate_declaration(&value, nonce)?;
         let resolution = &value["resolved"];
         require(

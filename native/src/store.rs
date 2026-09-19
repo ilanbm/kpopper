@@ -124,63 +124,9 @@ pub fn bytes(value: &Value) -> Result<Vec<u8>> {
     Ok(raw)
 }
 
-// This visitor checks duplicate JSON keys before serde_json::Value can overwrite one.
-pub(crate) struct Unique;
-impl<'de> Deserialize<'de> for Unique {
-    fn deserialize<D: serde::Deserializer<'de>>(d: D) -> std::result::Result<Self, D::Error> {
-        struct Visitor;
-        impl<'de> serde::de::Visitor<'de> for Visitor {
-            type Value = Unique;
-            fn expecting(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-                write!(f, "unique JSON keys")
-            }
-            fn visit_unit<E: serde::de::Error>(self) -> std::result::Result<Unique, E> {
-                Ok(Unique)
-            }
-            fn visit_bool<E: serde::de::Error>(self, _: bool) -> std::result::Result<Unique, E> {
-                Ok(Unique)
-            }
-            fn visit_i64<E: serde::de::Error>(self, _: i64) -> std::result::Result<Unique, E> {
-                Ok(Unique)
-            }
-            fn visit_u64<E: serde::de::Error>(self, _: u64) -> std::result::Result<Unique, E> {
-                Ok(Unique)
-            }
-            fn visit_f64<E: serde::de::Error>(self, _: f64) -> std::result::Result<Unique, E> {
-                Ok(Unique)
-            }
-            fn visit_str<E: serde::de::Error>(self, _: &str) -> std::result::Result<Unique, E> {
-                Ok(Unique)
-            }
-            fn visit_seq<A: serde::de::SeqAccess<'de>>(
-                self,
-                mut seq: A,
-            ) -> std::result::Result<Unique, A::Error> {
-                while seq.next_element::<Unique>()?.is_some() {}
-                Ok(Unique)
-            }
-            fn visit_map<A: serde::de::MapAccess<'de>>(
-                self,
-                mut map: A,
-            ) -> std::result::Result<Unique, A::Error> {
-                let mut keys = BTreeSet::new();
-                while let Some(key) = map.next_key::<String>()? {
-                    if !keys.insert(key) {
-                        return Err(serde::de::Error::custom("duplicate key"));
-                    }
-                    map.next_value::<Unique>()?;
-                }
-                Ok(Unique)
-            }
-        }
-        d.deserialize_any(Visitor)
-    }
-}
-
 pub fn json_input(raw: &[u8]) -> Result<Value> {
     require(raw.len() <= MAX_BYTES, "byte_limit")?;
-    serde_json::from_slice::<Unique>(raw)?;
-    let value = serde_json::from_slice(raw)?;
+    let value = crate::json_ingress::parse_slice(raw, crate::json_ingress::DuplicateKeys::Reject)?;
     identity(&value)?; // includes explicit depth/work and finite-value bounds
     Ok(value)
 }

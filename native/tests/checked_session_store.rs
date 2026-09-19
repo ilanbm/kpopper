@@ -102,6 +102,34 @@ fn identity_and_collision_are_fail_closed() {
 }
 
 #[test]
+fn retained_context_version_cannot_be_forged_with_a_private_number_object() {
+    let dir = tempfile::tempdir().unwrap();
+    let source = dir.path().join("input");
+    fs::write(&source, b"x").unwrap();
+    let context = context();
+    let snapshot = snapshot(&context);
+    let store = CheckedSessionStore::open(
+        dir.path().join("state"),
+        "fixture",
+        &source,
+        None,
+        Encoding::O200kBase,
+    )
+    .unwrap();
+    let revision = store.save(&context, &snapshot).unwrap();
+    let path = store.context_path(&revision).unwrap();
+    let raw = fs::read_to_string(&path).unwrap();
+    let forged = raw.replacen(
+        r#""version":1"#,
+        r#""version":{"$serde_json::private::Number":"1"}"#,
+        1,
+    );
+    assert_ne!(forged, raw);
+    fs::write(path, forged).unwrap();
+    assert!(store.load(&revision, &snapshot).is_err());
+}
+
+#[test]
 fn concurrent_identical_create_is_allowed_and_complete() {
     let dir = tempfile::tempdir().unwrap();
     let source = dir.path().join("input");

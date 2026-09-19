@@ -13,7 +13,6 @@ use crate::{
     value::TypedValue as V,
 };
 use serde::{Deserialize, Serialize};
-use serde_json::Value as J;
 use sha1::{Digest, Sha1};
 use std::{
     collections::{BTreeMap, BTreeSet},
@@ -444,7 +443,9 @@ fn safe_read(path: &Path) -> Result<Vec<u8>> {
 
 fn read_mark(path: &Path) -> Result<MarkState> {
     let bytes = safe_read(path)?;
-    if let Ok(value) = serde_json::from_slice::<J>(&bytes) {
+    if let Ok(value) =
+        crate::json_ingress::parse_slice(&bytes, crate::json_ingress::DuplicateKeys::LastWins)
+    {
         if value.is_object() {
             return serde_json::from_value(value).map_err(Into::into);
         }

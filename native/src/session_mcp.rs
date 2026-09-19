@@ -104,7 +104,10 @@ where
         if line.is_empty() {
             continue;
         }
-        let value: Value = match serde_json::from_slice(&line) {
+        let value = match crate::json_ingress::parse_slice(
+            &line,
+            crate::json_ingress::DuplicateKeys::LastWins,
+        ) {
             Ok(v) => v,
             Err(_) => {
                 write_error(writer, None, -32700, "Parse error")?;

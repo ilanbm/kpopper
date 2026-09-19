@@ -290,10 +290,11 @@ impl CapturedAssessment {
                 }
             }
         }
-        let mut de = serde_json::Deserializer::from_slice(bytes);
-        de.disable_recursion_limit();
-        let value: J = serde::Deserialize::deserialize(&mut de)?;
-        de.end()?;
+        let value = crate::json_ingress::parse_slice_bounded(
+            bytes,
+            crate::json_ingress::DuplicateKeys::LastWins,
+            400,
+        )?;
         Self::from_data(&value)
     }
 }

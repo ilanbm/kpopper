@@ -148,7 +148,8 @@ impl Reader<'_> {
 }
 fn json(raw: &[u8]) -> Result<V> {
     require(raw.len() <= MAX_FILE, "pending_limit")?;
-    let value: serde_json::Value = serde_json::from_slice(raw)?;
+    let value =
+        crate::json_ingress::parse_slice(raw, crate::json_ingress::DuplicateKeys::LastWins)?;
     V::from_json(&value)
 }
 fn typed_json(raw: &[u8]) -> Result<V> {

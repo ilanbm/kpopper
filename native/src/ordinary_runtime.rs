@@ -27,7 +27,10 @@ impl Program {
         let root = root.canonicalize()?;
         let manifest = fs::read(root.join("build.json"))?;
         require(manifest.len() <= 16384, "ordinary_manifest_limit")?;
-        let data: J = serde_json::from_slice(&manifest)?;
+        let data = crate::json_ingress::parse_slice(
+            &manifest,
+            crate::json_ingress::DuplicateKeys::LastWins,
+        )?;
         require(
             data["source_sha256"] == env!("KPOP_ORDINARY_SOURCE_SHA256"),
             "ordinary_source_changed",
@@ -81,7 +84,10 @@ impl Program {
             bounds.output_bytes,
         )?;
         self.verify()?;
-        let result: J = serde_json::from_slice(&output)?;
+        let result = crate::json_ingress::parse_slice(
+            &output,
+            crate::json_ingress::DuplicateKeys::LastWins,
+        )?;
         require(
             request["operation"] == "compute"
                 && result["values"].as_object().is_some_and(|values| {

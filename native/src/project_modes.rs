@@ -234,11 +234,8 @@ impl Project {
         let Some(raw) = raw else {
             return self.defaults();
         };
-        let mut de = serde_json::Deserializer::from_slice(raw);
-        use serde::Deserialize;
-        crate::store::Unique::deserialize(&mut de)?;
-        de.end()?;
-        let json: serde_json::Value = serde_json::from_slice(raw)?;
+        let json =
+            crate::json_ingress::parse_slice(raw, crate::json_ingress::DuplicateKeys::Reject)?;
         let value = V::from_json(&json)?;
         let m = map(&value)?;
         require(
@@ -513,6 +510,18 @@ mod tests {
                 assert!(result.is_err(), "accepted {}", c["name"]);
             }
         }
+    }
+
+    #[test]
+    fn private_number_object_cannot_forge_project_config_version() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path().canonicalize().unwrap();
+        let project = Project::open(&root).unwrap();
+        let raw = br#"{"version":{"$serde_json::private::Number":"1"},"mode":"simple","record":"GROUNDING.yaml","publication":null,"generation":0}"#;
+        assert_eq!(
+            project.decode_config(Some(raw)).unwrap_err().0,
+            "invalid_project_config"
+        );
     }
     #[test]
     fn common_policy_and_registered_record_are_shared_across_worktrees() {

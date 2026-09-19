@@ -70,7 +70,11 @@ fn mapping(location: &W::Location, inventory: &mut Inventory) -> Result<Option<J
     if !inventory.exists(&path)? {
         return Ok(None);
     }
-    let value: J = serde_json::from_slice(&inventory.read(&path)?).map_err(|_| {
+    let value: J = crate::json_ingress::parse_slice(
+        &inventory.read(&path)?,
+        crate::json_ingress::DuplicateKeys::LastWins,
+    )
+    .map_err(|_| {
         error(&format!(
             "Invalid first-use state; keep it for inspection: {}",
             path.display()

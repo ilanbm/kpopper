@@ -114,7 +114,10 @@ fn private_json(path: &Path) -> Result<Value> {
         .take(1024 * 1024 + 1)
         .read_to_end(&mut bytes)?;
     require(bytes.len() <= 1024 * 1024, "private session state limit")?;
-    Ok(serde_json::from_slice(&bytes)?)
+    Ok(crate::json_ingress::parse_slice(
+        &bytes,
+        crate::json_ingress::DuplicateKeys::LastWins,
+    )?)
 }
 fn empty_mark(path: &Path) -> Result<()> {
     if let Ok(meta) = fs::symlink_metadata(path) {

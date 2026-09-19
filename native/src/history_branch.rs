@@ -537,7 +537,6 @@ impl Observation {
         Ok(bytes)
     }
     pub fn from_bytes(raw: &[u8]) -> Result<Self> {
-        use serde::Deserialize;
         require(
             raw.len() <= 2 * MAX_BYTES + MAX_REQUEST_BYTES,
             "branch_capture_limit",
@@ -564,10 +563,11 @@ impl Observation {
                 }
             }
         }
-        let mut de = serde_json::Deserializer::from_slice(raw);
-        de.disable_recursion_limit();
-        let encoded = serde_json::Value::deserialize(&mut de)?;
-        de.end()?;
+        let encoded = crate::json_ingress::parse_slice_bounded(
+            raw,
+            crate::json_ingress::DuplicateKeys::LastWins,
+            520,
+        )?;
         let mut envelope = V::from_tagged(&encoded)?;
         require(envelope.to_tagged()? == encoded, "invalid_branch_capture")?;
         schema(&envelope, &["revision", "manifest", "files"], &[])?;

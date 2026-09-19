@@ -12,6 +12,7 @@ use std::{
     time::{Duration, Instant},
 };
 const MAX_REQUEST_BYTES: usize = 16 * 1024 * 1024;
+const MAX_ARCHIVE_MEMBER: u64 = 128 * 1024 * 1024;
 const PROTOCOLS: [&str; 3] = ["KP2", "KP3", "KP4"];
 const MODULES: [&str; 3] = ["arithmetic/v1", "composition/v1", "query/v1"];
 #[derive(Clone, Debug)]
@@ -286,7 +287,7 @@ impl Runtime {
             require(
                 !file.is_dir()
                     && !file.unix_mode().is_some_and(|m| m & 0o170000 == 0o120000)
-                    && file.size() <= 128 * 1024 * 1024,
+                    && file.size() <= MAX_ARCHIVE_MEMBER,
                 "unsupported runtime archive member",
             )?;
         }
@@ -294,9 +295,21 @@ impl Runtime {
             names.contains("manifest.json"),
             "invalid runtime archive inventory",
         )?;
-        let manifest: J = serde_json::from_reader(
-            zip.by_name("manifest.json")
-                .map_err(|_| Error("invalid runtime archive inventory".into()))?,
+        let mut manifest_file = zip
+            .by_name("manifest.json")
+            .map_err(|_| Error("invalid runtime archive inventory".into()))?;
+        let mut manifest_raw = Vec::with_capacity(manifest_file.size() as usize);
+        Read::by_ref(&mut manifest_file)
+            .take(MAX_ARCHIVE_MEMBER + 1)
+            .read_to_end(&mut manifest_raw)?;
+        drop(manifest_file);
+        require(
+            manifest_raw.len() as u64 <= MAX_ARCHIVE_MEMBER,
+            "unsupported runtime archive member",
+        )?;
+        let manifest = crate::json_ingress::parse_slice(
+            &manifest_raw,
+            crate::json_ingress::DuplicateKeys::LastWins,
         )
         .map_err(|_| Error("invalid packaged reasoning runtime".into()))?;
         Self::validate_manifest(&manifest, &target)?;

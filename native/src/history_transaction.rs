@@ -9,7 +9,6 @@ use crate::{
 };
 use base64::{Engine, engine::general_purpose::STANDARD};
 use num_bigint::BigInt;
-use serde::Deserialize;
 use std::path::Path;
 
 pub const MAX_TRANSACTION_BYTES: usize = 64 * 1024 * 1024;
@@ -863,10 +862,12 @@ pub(crate) fn parse_journal(raw: &[u8], code: &str) -> Result<V> {
             depth = depth.saturating_sub(1);
         }
     }
-    let mut de = serde_json::Deserializer::from_slice(raw);
-    de.disable_recursion_limit();
-    let encoded = serde_json::Value::deserialize(&mut de).map_err(|_| error(code))?;
-    de.end().map_err(|_| error(code))?;
+    let encoded = crate::json_ingress::parse_slice_bounded(
+        raw,
+        crate::json_ingress::DuplicateKeys::LastWins,
+        520,
+    )
+    .map_err(|_| error(code))?;
     V::from_tagged(&encoded).map_err(|_| error(code))
 }
 pub fn decode_auxiliary_envelope(raw: &[u8]) -> Result<PreparedMutation> {

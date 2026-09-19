@@ -318,8 +318,11 @@ fn parse_sections(values: &[V]) -> Vec<Section> {
         .collect()
 }
 fn json_value(v: &V) -> Result<J> {
-    serde_json::from_str(&crate::ordinary_assessment_report::legacy_json(v)?)
-        .map_err(|e| crate::Error(format!("ordinary Hub JSON projection: {e}")))
+    crate::json_ingress::parse_str(
+        &crate::ordinary_assessment_report::legacy_json(v)?,
+        crate::json_ingress::DuplicateKeys::LastWins,
+    )
+    .map_err(|e| crate::Error(format!("ordinary Hub JSON projection: {e}")))
 }
 fn url_path(value: &str) -> String {
     value

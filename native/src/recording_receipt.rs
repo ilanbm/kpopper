@@ -36,7 +36,10 @@ fn load(inventory: &mut Inventory, path: &Path) -> Result<Value> {
         return Ok(Value::Null);
     }
     crate::require(inventory.file(path)?, "ingestion_evidence_not_regular")?;
-    Ok(serde_json::from_slice(&inventory.read(path)?)?)
+    Ok(crate::json_ingress::parse_slice(
+        &inventory.read(path)?,
+        crate::json_ingress::DuplicateKeys::LastWins,
+    )?)
 }
 
 /// Read one durably applied ingestion receipt while revalidating its owner and
@@ -102,7 +105,11 @@ pub fn applied_event_binding(
     crate::require(
         event["source_sha256"] == sha256(&source_bytes)
             && event["envelope_sha256"] == sha256(&envelope)
-            && serde_json::from_slice::<Value>(&envelope).is_ok(),
+            && crate::json_ingress::parse_slice(
+                &envelope,
+                crate::json_ingress::DuplicateKeys::LastWins,
+            )
+            .is_ok(),
         "ingestion_event_evidence_mismatch",
     )?;
     let receipt = load(
@@ -193,7 +200,8 @@ fn valid(
     let source_bytes = inventory.read(&source)?;
     if event["source_sha256"] != sha256(&source_bytes)
         || event["envelope_sha256"] != sha256(&envelope)
-        || serde_json::from_slice::<Value>(&envelope).is_err()
+        || crate::json_ingress::parse_slice(&envelope, crate::json_ingress::DuplicateKeys::LastWins)
+            .is_err()
     {
         return Ok(false);
     }
