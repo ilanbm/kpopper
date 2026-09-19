@@ -20,7 +20,9 @@ jobs:
       matrix:
         include:
           - {runner: ubuntu-24.04, target: linux-x86_64, binary: kpop-native}
+          - {runner: ubuntu-24.04-arm, target: linux-aarch64, binary: kpop-native}
           - {runner: macos-14, target: darwin-arm64, binary: kpop-native}
+          - {runner: macos-15-intel, target: darwin-x86_64, binary: kpop-native}
           - {runner: windows-2022, target: windows-x86_64, binary: kpop-native.exe}
     runs-on: ${{ matrix.runner }}
     env:
