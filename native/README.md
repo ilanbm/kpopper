@@ -66,8 +66,20 @@ findings match.
 Ordinary `open`, `check` and `pull --history` use the captured record and retained
 replacement file. They preserve namespace ordering, review flags, pointer and
 hypothesis orientation, private-draft counts, historical decisions and final source revalidation. Existing feasibility-
-store workspaces retain their explicitly marked experimental opener. The writer
-commands below, MCP, hooks, browser and distribution integration remain in progress.
+store workspaces retain their explicitly marked experimental opener. Complete
+command compatibility and final distribution acceptance remain in progress.
+
+Core records can be exported as bounded, read-only Markdown or Mermaid excerpts:
+
+```sh
+kpop-native --frozen export d.decision --direction support --depth 2
+kpop-native --frozen export d.decision --format markdown-mermaid --details
+```
+
+The export uses the complete captured assessment before selecting nodes, keeps
+missing/potential/executed relationships distinct, and reports omitted nodes and
+boundary links. Ordinary export remains unconnected. `--json` wraps the text and
+exit status; it does not turn the excerpt into a new assessment schema.
 
 ### Build optional HTML applications
 

@@ -531,7 +531,10 @@ fn mark_overlaps_capture(path: &Path, capture: &CapturedSource, paths: &[PathBuf
                     layout.replaced,
                     layout.authority,
                     layout.journal,
-                    Path::new(&layout.home).join("project.json").to_string_lossy().into_owned(),
+                    Path::new(&layout.home)
+                        .join("project.json")
+                        .to_string_lossy()
+                        .into_owned(),
                     ".kpopper/project.json".into(),
                 ]
                 .into_iter()

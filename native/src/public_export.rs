@@ -15,13 +15,13 @@ const LABEL_CHARS: usize = 80;
 const PREMISE_ROWS: usize = 12;
 const CELL_CHARS: usize = 120;
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, clap::ValueEnum)]
 pub enum Format {
     Markdown,
     MarkdownMermaid,
     Mermaid,
 }
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, clap::ValueEnum)]
 pub enum Direction {
     Support,
     Impact,
@@ -44,6 +44,79 @@ impl Default for Options {
             format: Format::Markdown,
         }
     }
+}
+
+#[derive(Clone, Debug, clap::Args)]
+pub struct CommandOptions {
+    #[arg(required = true, num_args = 1..)]
+    pub ids: Vec<String>,
+    #[arg(long = "record")]
+    pub records: Vec<std::path::PathBuf>,
+    #[arg(long, value_enum, default_value = "markdown")]
+    pub format: Format,
+    #[arg(long, value_enum, default_value = "support")]
+    pub direction: Direction,
+    #[arg(long, default_value_t = 1)]
+    pub depth: usize,
+    #[arg(long, default_value_t = 12)]
+    pub max_nodes: usize,
+    #[arg(long)]
+    pub details: bool,
+    #[arg(long, value_parser = ["core/v1"])]
+    pub profile: Option<String>,
+}
+
+pub fn run(
+    options: &CommandOptions,
+    cwd: &std::path::Path,
+    mode: crate::source_capture::ReadMode,
+) -> Result<String> {
+    let paths = if options.records.is_empty() {
+        crate::public_workspace::records(cwd)?
+    } else {
+        options.records.clone()
+    };
+    let runtime =
+        crate::public_workspace::runtime_for_paths(&paths, cwd, options.profile.as_deref())?;
+    let capture = crate::source_capture::capture_source_with_runtime(
+        &paths,
+        cwd,
+        mode,
+        None,
+        runtime.as_ref(),
+    )?;
+    let capabilities = crate::reasoning_fields::capabilities(
+        capture.ordinary_document(),
+        options.profile.as_deref(),
+    )?;
+    crate::require(
+        crate::history_contract::string_is(
+            &crate::history_contract::map(&capabilities)?["profile"],
+            "core/v1",
+        ),
+        "unsupported_capability: native export currently requires core/v1",
+    )?;
+    let context = CapturedAssessment::from_snapshot(
+        capture.snapshot()?.clone(),
+        None,
+        "focused-review/v1",
+        runtime.as_ref(),
+        crate::reasoning_runtime::OperationalBounds::default(),
+        None,
+    )?;
+    let output = render(
+        &context,
+        &options.ids,
+        &Options {
+            direction: options.direction,
+            depth: options.depth,
+            max_nodes: options.max_nodes,
+            details: options.details,
+            format: options.format,
+        },
+    )?;
+    capture.verify()?;
+    Ok(output)
 }
 
 fn text<'a>(value: &'a J, message: &str) -> Result<&'a str> {

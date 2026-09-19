@@ -59,6 +59,8 @@ enum Command {
     Review(WriteArgs),
     /// Preview, fold or refute named hypotheses in active history.
     Consolidate(ConsolidateArgs),
+    /// Export a bounded core assessment as Markdown or Mermaid.
+    Export(kpop_native::public_export::CommandOptions),
     History(kpop_native::public_history::Options),
     Recover {
         #[arg(long)]
@@ -378,6 +380,7 @@ fn run(args: Args) -> Result<Value> {
         | Command::Where
         | Command::Session(_)
         | Command::Consolidate(_)
+        | Command::Export(_)
         | Command::Check(_)
         | Command::Pull(_)
         | Command::Affects(_)
@@ -390,6 +393,36 @@ fn run(args: Args) -> Result<Value> {
 }
 fn main() {
     let args = Args::parse();
+    if let Command::Export(options) = &args.command {
+        let result = (|| {
+            let cwd = args
+                .workspace
+                .clone()
+                .map(Ok)
+                .unwrap_or_else(std::env::current_dir)?;
+            let mode =
+                if args.frozen || std::env::var("KPOPPER_READ_MODE").as_deref() == Ok("frozen") {
+                    kpop_native::source_capture::ReadMode::Frozen
+                } else {
+                    kpop_native::source_capture::ReadMode::Live
+                };
+            kpop_native::public_export::run(options, &cwd, mode)
+        })();
+        let (output, error, code) = match result {
+            Ok(output) => (output, String::new(), 0),
+            Err(error) => (String::new(), format!("export: {error}\n"), 2),
+        };
+        if args.json {
+            println!(
+                "{}",
+                json!({"command":"export","exit_code":code,"output":output,"error":error})
+            );
+        } else {
+            print!("{output}");
+            eprint!("{error}");
+        }
+        std::process::exit(code);
+    }
     if matches!(args.command, Command::Where) {
         let result = (|| -> Result<Option<PathBuf>> {
             let cwd = args
