@@ -139,7 +139,7 @@ def prepare(entry, action, *, policy, operation=None, recorded_at=None, record_i
     deps = body.get(fields['deps'], []) if isinstance(body, dict) else []
     C._require(isinstance(deps, list) and all(isinstance(dep, str) for dep in deps),
                'invalid_bootstrap_dependencies')
-    blocked = bool(P._blocked_text(body))
+    blocked = isinstance(body, dict) and bool(P._blocked_text(body))
     C._require(not deps or (hypothesis is not None and blocked),
                'unresolved_history_subject', deps[0] if deps else '')
     gaps = {dependency: 'unavailable' for dependency in deps} if hypothesis is not None else {}

@@ -1,6 +1,6 @@
 # Deterministic reasoning and history
 
-The first `kpop add` in a workspace without a record creates a `core/v1` record
+On a POSIX host, the first `kpop add` in a workspace without a record creates a `core/v1` record
 with immutable history. Creation and recovery use one guarded transaction, so
 an interrupted first write cannot expose a partial record. Existing ordinary
 records keep their legacy interpretation; reading them never changes authority.
@@ -8,6 +8,11 @@ Ordinary open, check, pull, affects, assess, export, search, page and session re
 automatically select the declared core interpretation. No profile flag is needed
 for a newly created record. The profile can also be selected explicitly for the
 readers described below.
+
+History authoring and activation require POSIX file locking. On native Windows,
+use a supported POSIX host (for example WSL) for those writes, including first-record
+creation. Read-only assessment and the packaged Windows reasoning runtime remain
+separate supported capabilities; this release does not add a Windows history writer.
 
 ```sh
 kpop assess m.total d.order --profile core/v1 --record example.yaml

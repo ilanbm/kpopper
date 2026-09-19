@@ -62,6 +62,31 @@ class HistoryBootstrap(unittest.TestCase):
             adapted.projection, adapted.document)
         self.assertEqual(layers['candidate']['doc']['known']['p.option'], {'v': 2})
 
+    def test_first_bare_question_is_retained_and_replays(self):
+        body = 'Which source remains current?'
+        mutation = self.prepare({'kind': 'add', 'id': 'q.source', 'body': body})
+        self.publish(T.PreparedMutation.from_bytes(mutation.to_bytes()))
+        captured = H.Store(self.entry).capture()
+        self.assertEqual(captured.document['open']['q.source'], body)
+        self.assertEqual(captured.state['subjects']['q.source']['body'], body)
+
+    def test_first_bare_hypothesis_question_stays_proposed(self):
+        body = 'Which source remains current?'
+        mutation = self.prepare({'kind': 'add', 'id': 'q.source', 'body': body,
+                                 'hypothesis': 'candidate'})
+        self.publish(T.PreparedMutation.from_bytes(mutation.to_bytes()))
+        captured = H.Store(self.entry).capture()
+        self.assertEqual(captured.state['subjects']['q.source']['acceptance'], 'proposed')
+        self.assertNotIn('q.source', captured.document.get('open', {}))
+
+    def test_publication_without_posix_locks_refuses_without_creating_record(self):
+        mutation = self.prepare()
+        with mock.patch.dict(sys.modules, {'fcntl': None}):
+            with self.assertRaisesRegex(C.HistoryError, 'locking_unavailable'):
+                self.publish(mutation)
+        self.assertFalse(self.entry.exists())
+        self.assertFalse(Path(H.Store(self.entry).layout['history_authority']).exists())
+
     def test_prepared_intent_is_rederived(self):
         mutation = self.prepare()
         mutation._data['baseline']['bootstrap']['action']['body']['v'] = 9

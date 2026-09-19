@@ -1,5 +1,6 @@
 """Temporal applicability uses retained exact snapshots and one evaluator."""
 import copy
+import os
 import unittest
 from unittest import mock
 
@@ -17,6 +18,8 @@ class TemporalApplicability(unittest.TestCase):
     template = {'meta': {'reasoning': {'version': 2, 'profile': 'core/v1',
                                       'requires': ['arithmetic/v1']}}}
     def fixture(self):
+        if os.name == 'nt':
+            self.skipTest('history authoring fixtures require POSIX locks')
         fixture = authoring_fixtures.Authoring(
             'test_set_creates_claim_and_explicit_accept_without_mutating_original')
         fixture.setUp()

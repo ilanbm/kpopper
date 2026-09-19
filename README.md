@@ -1023,6 +1023,10 @@ explains the old-writer risk and the separate Lean setup requirement. On native 
 use individual `add`/`set` writes and deliberate judgment reviews; durable report batching
 requires POSIX file locking.
 
+New history-backed records also require POSIX locking for creation and writes.
+On native Windows, create and author history on a POSIX host such as WSL;
+read-only assessment and the packaged Windows reasoning runtime remain available.
+
 | Status | Capability |
 |---|---|
 | Available | YAML records, source references, judgment checks, dependency tracing, review snapshots, hypotheses and consolidation. |
