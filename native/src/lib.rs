@@ -12,6 +12,7 @@ pub mod history_contract;
 pub mod history_emit;
 pub mod history_group;
 pub mod history_hypotheses;
+pub mod history_hypothesis_authoring;
 pub mod history_paths;
 pub mod history_preparation;
 pub mod history_projection;

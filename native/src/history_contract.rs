@@ -110,7 +110,7 @@ fn pins(v: &V) -> Result<&Map> {
     }
     Ok(m)
 }
-fn hypothesis_name(value: &V) -> Result<()> {
+pub(crate) fn hypothesis_name(value: &V) -> Result<()> {
     let s = text(value)?;
     require(
         !s.is_empty()
