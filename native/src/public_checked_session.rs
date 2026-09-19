@@ -366,6 +366,25 @@ impl Service {
         Ok(serde_json::to_string(&result)?)
     }
 
+    pub fn verify_claims_boundary(&self, revision: &str, assertions: &[J]) -> Result<String> {
+        crate::require(
+            !assertions.is_empty(),
+            "no assertions supplied; nothing was checked",
+        )?;
+        let capture = source_capture::capture_source(
+            std::slice::from_ref(&self.input),
+            &self.cwd,
+            self.mode,
+            None,
+        )?;
+        self.store.load(revision, capture.snapshot()?)?;
+        capture.verify()?;
+        self.inputs.verify()?;
+        Err(error(
+            "unsupported_capability: kpopper_verify_claims belongs to checked-reader/v1; read the bound core finding instead",
+        ))
+    }
+
     pub fn contextualizing(
         &self,
         ids: &[String],
@@ -460,6 +479,7 @@ pub fn run(options: &Options, cwd: &Path, mode: ReadMode) -> Result<String> {
                         "kpopper_context",
                         "kpopper_search",
                         "kpopper_propose",
+                        "kpopper_verify_claims",
                     ]
                     .contains(&t.name.as_str())
                 })
@@ -500,6 +520,14 @@ pub fn run(options: &Options, cwd: &Path, mode: ReadMode) -> Result<String> {
                                 offset,
                             )
                         }
+                        "kpopper_verify_claims" => service.verify_claims_boundary(
+                            args["revision"]
+                                .as_str()
+                                .ok_or_else(|| error("missing revision"))?,
+                            args["assertions"]
+                                .as_array()
+                                .ok_or_else(|| error("invalid assertions"))?,
+                        ),
                         "kpopper_propose" => {
                             let required = |name: &str| {
                                 args[name]

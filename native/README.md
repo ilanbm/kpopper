@@ -88,13 +88,18 @@ kpop-native knowledge status
 kpop-native --frozen knowledge status
 kpop-native knowledge materialize REVISION --out /absolute/new-snapshot
 kpop-native pending status
+kpop-native pending configure --remote origin --target main --branch contributions --grant
+kpop-native pending pause --reason "review pending changes"
+kpop-native pending resume
 ```
 
 Status preserves live/frozen contributions, conflicts, cached publication state,
 private draft descriptors and unavailable targets. Materialization validates the
 complete portable evidence closure and atomically creates an absent destination;
-it refuses an existing output. Import and mutating pending operations remain
-unconnected.
+it refuses an existing output. Pending configure/pause/resume retain local scope,
+permission and decision receipts under publisher and project locks; these commands
+do not contact a remote. Import and the remaining publication operations are still
+being connected.
 
 ### Build optional HTML applications
 
@@ -154,6 +159,8 @@ Python 3.14 Unicode 16 mappings. Semantic/hybrid requests explicitly report lexi
 fallback when local embeddings are unconfigured; this CLI does not yet load E5 assets.
 The stdio MCP server exposes `kpopper_open`, `kpopper_read`, `kpopper_context`
 and `kpopper_search`, plus `kpopper_propose` for private pending proposals.
+The compatibility `kpopper_verify_claims` tool explicitly refuses the legacy
+assertion grammar on `core/v1`; its callers must read the bound core finding.
 Proposals retain their base revision, recorded references and unverified external
 locators without changing the canonical record. Repeated identical proposals retain
 their first bytes and timestamp; `pending` and `proposal:ID` reads show stale bases.
