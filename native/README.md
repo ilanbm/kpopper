@@ -178,8 +178,12 @@ text, while explicit YAML lists/maps retain their structure.
 
 Private writes are retained outside the project. `recover` also resumes or rolls
 back an interrupted first write. `--hypothesis NAME` supports named authoring during
-bootstrap and on active records, including recovery of its own receipts. Existing
-legacy-record writes and explicit contribution routing remain unconnected.
+bootstrap and on active records, including recovery of its own receipts.
+Existing Simple-mode ordinary records support byte-preserving `add`, `set` and
+`review`, including pointer/shard ownership, comments, quoted Unicode values,
+private-draft refusals and interrupted-write recovery. These writes preserve the
+existing record format. Named legacy hypotheses and advanced contribution routing
+remain unconnected.
 
 Named hypotheses on active native history can be previewed, folded or refuted:
 

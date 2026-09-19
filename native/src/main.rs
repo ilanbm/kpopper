@@ -698,7 +698,11 @@ fn main() {
                 Some(path) => vec![cwd.join(path)],
                 None => kpop_native::public_workspace::records(&cwd)?,
             };
-            kpop_native::direct_history::recover(&paths, &cwd, *rollback)?.to_json()
+            if kpop_native::legacy_authoring::recovery_pending(&paths, &cwd)? {
+                kpop_native::legacy_authoring::recover(&paths, &cwd, *rollback)?.to_json()
+            } else {
+                kpop_native::direct_history::recover(&paths, &cwd, *rollback)?.to_json()
+            }
         })();
         match result {
             Ok(value) => {
