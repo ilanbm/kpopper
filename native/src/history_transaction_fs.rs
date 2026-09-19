@@ -940,23 +940,42 @@ pub fn publish_transition(
     mut committed: Option<Verify<'_>>,
 ) -> Result<()> {
     refuse_group(m)?;
-    let _guards = guards(participant_directories(root, m)?)?;
+    let directories = participant_directories(root, m).map_err(|e| {
+        eprintln!("platform-trace: participant directories: {e}");
+        e
+    })?;
+    let _guards = guards(directories).map_err(|e| {
+        eprintln!("platform-trace: participant locks: {e}");
+        e
+    })?;
     let primary = journal_path(root, journal, m)?;
     require(read(&primary)?.is_none(), "recovery_required")?;
     let paths = transition_targets(root, m)?;
     mutable_before(m, &paths)?;
-    verify(&data(m))?;
+    verify(&data(m)).map_err(|e| {
+        eprintln!("platform-trace: transaction verifier: {e}");
+        e
+    })?;
     let paths = transition_targets(root, m)?;
     mutable_before(m, &paths)?;
-    private_home(root, journal, m)?;
-    publish_immutable(root, journal, &m.to_bytes()?)?;
+    private_home(root, journal, m).map_err(|e| {
+        eprintln!("platform-trace: private home: {e}");
+        e
+    })?;
+    publish_immutable(root, journal, &m.to_bytes()?).map_err(|e| {
+        eprintln!("platform-trace: primary journal: {e}");
+        e
+    })?;
     let mut copies = prepare_replicas(root, journal, m)?;
     if !copies.is_empty() {
         let ready = ready_path(&primary, m)?;
         publish_immutable(root, &relative(root, &ready)?, digest(m)?.as_bytes())?;
         copies.push(ready);
     }
-    apply_transition(root, m, &paths, Direction::After)?;
+    apply_transition(root, m, &paths, Direction::After).map_err(|e| {
+        eprintln!("platform-trace: apply transition: {e}");
+        e
+    })?;
     if let Some(callback) = committed.as_mut() {
         callback(&data(m))?;
     }
