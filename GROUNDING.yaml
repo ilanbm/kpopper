@@ -872,6 +872,12 @@ sources:
     at: "172 adaptations, 348 v2 and 288 v3 schema cases; companion reasoning-context.json has 43
          retained contexts and reasoning-operations.json has prospective-operation cases"
     read: "2026-09-19"
+  s.native_named_authoring:
+    name: "Native named hypothesis preparation and replay"
+    file: "native/src/history_hypothesis_authoring.rs"
+    read: "2026-09-19"
+    at: "b1b6019; native/tests/fixtures/history-hypothesis.json, history-hypothesis-candidate.json
+         and history-hypothesis-retained.json"
   s.native_snapshot_verification:
     name: "Native snapshot and evaluator conformance"
     from: s.2026_09_19_native_snapshot_continuation
@@ -1854,6 +1860,16 @@ known:
     from: s.native_snapshot_verification
     at: "native/tests/reasoning_assessment.rs; historical typed maps and snapshot identity
          regression cases"
+  p.native_named_hypothesis_boundary:
+    name: "Native named hypothesis authoring boundary"
+    v: "Core named add/set/review receipt1/2 and explicit refutation replay complete immutable
+        mutation bytes with fresh Lean. Active physical imports, name authority, archive and
+        post-verifier physical evidence are checked. The b1b6019 checkpoint has 90 differential
+        scenarios and 41 exact accepted envelopes. The old scalar crash is superseded by fixed
+        candidate receipt1/2 support. Fold/prospective and identity/edit remain outside this
+        checkpoint."
+    from: s.native_named_authoring
+    at: "Preparation, replay and test module; exact fixture envelopes at b1b6019"
   p.native_operation_replay_boundary:
     name: "Fresh semantic replay before history publication"
     v: "Supported direct, act and proposal mutations replay with fresh Lean against the original
