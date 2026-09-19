@@ -545,6 +545,31 @@ writer records each judgment's review snapshot. A proposed change of framework
 then reopens several interpretations and the synthesis. No model call or claim of
 live independent research is part of that replay.
 
+### The collection changes; the answer stays five
+
+The [advanced continuation](examples/dark-matter/advanced/README.md) starts with
+the five astronomical papers and an explicit selection rule: include a study
+when it is in this review and classified as astronomy. Adding the existing LZ
+laboratory paper grows the captured collection while leaving that selection equal.
+
+| Reading | Before LZ | After LZ | Replay of the earlier Snapshot |
+|---|---:|---:|---:|
+| Papers in the scope | 5 | 6 | 5 |
+| Selected astronomical papers | 5 | 5 | 5 |
+| Query basis | Earlier basis | Changed basis | Earlier basis recovered |
+| Particle identities | Unknown | Unknown | Unknown |
+
+The `core/v1` record uses `composition/v1` for the inclusion condition and
+`query/v1` for selection. Its basis includes nonmatching members, so an equal
+numeric answer does not hide a changed collection. The retained Snapshot
+recovers the earlier inputs and result even with the source files unavailable.
+
+These are scripted CLI and public API results, checked without model calls.
+The [runnable exercise and captured output](examples/dark-matter/advanced/README.md#run-it)
+also preserve the exact `75/14` density ratio and an unchanged qualitative
+review judgment. Five papers is a coverage count: RAR still reuses SPARC, model
+assumptions remain explicit, and neither the count nor replay proves the synthesis.
+
 ## Get started
 
 Install kpopper where your agent works. The guides below cover coding agents and

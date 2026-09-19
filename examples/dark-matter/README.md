@@ -230,6 +230,14 @@ python3 scripts/kpopper affects research.framework /tmp/kpopper-dark-matter-demo
 
 ## Continue the research
 
+For a runnable continuation using the current reasoning and history interfaces,
+see [The collection changes; the answer stays five](advanced/README.md).
+It selects the five astronomical papers with an explicit finite query, adds the
+existing LZ paper as a nonmatch, and verifies that the numeric result stays equal
+while the computational basis changes. A retained Snapshot recovers the previous
+scope and result; unrecorded particle identities remain unknown. This separate
+`core/v1` fixture leaves the legacy worked record and its walkthrough intact.
+
 Give research agents the same accessible record and the source links. Ask each to
 read the relevant existing entries before adding, keep source versions and exact
 locations, separate observation from interpretation, and identify shared inputs.
