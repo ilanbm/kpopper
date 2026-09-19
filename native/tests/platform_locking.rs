@@ -1,4 +1,6 @@
 use kpop_native::history_transaction_fs::DirectoryGuard;
+#[cfg(windows)]
+use std::path::PathBuf;
 use std::{fs, path::Path};
 
 fn code<T>(result: kpop_native::Result<T>) -> Option<String> {
@@ -99,6 +101,86 @@ fn waiting_writer_refuses_a_replaced_directory() {
         Some("directory_replaced")
     );
     contender.join().unwrap();
+}
+
+#[cfg(windows)]
+#[test]
+fn windows_directory_handle_serializes_path_aliases() {
+    use std::process::Command;
+
+    let temp = tempfile::tempdir().unwrap();
+    let root = temp.path().join("RecordRoot");
+    fs::create_dir(&root).unwrap();
+
+    let differently_cased = PathBuf::from(root.to_string_lossy().to_lowercase());
+    assert_alias_waits(&root, &differently_cased);
+
+    let extended = PathBuf::from(format!(r"\\?\{}", root.display()));
+    assert_alias_waits(&root, &extended);
+
+    let junction = temp.path().join("record-junction");
+    let linked = Command::new("cmd")
+        .args(["/C", "mklink", "/J"])
+        .arg(&junction)
+        .arg(&root)
+        .output()
+        .unwrap();
+    assert!(
+        linked.status.success(),
+        "{}",
+        String::from_utf8_lossy(&linked.stderr)
+    );
+    assert_alias_waits(&root, &junction);
+
+    let drive = (b'R'..=b'Z')
+        .rev()
+        .map(|letter| format!("{}:", letter as char))
+        .find(|candidate| !Path::new(&format!(r"{}\", candidate)).exists())
+        .unwrap();
+    let mounted = Command::new("subst")
+        .arg(&drive)
+        .arg(temp.path())
+        .output()
+        .unwrap();
+    assert!(
+        mounted.status.success(),
+        "{}",
+        String::from_utf8_lossy(&mounted.stderr)
+    );
+    assert_alias_waits(&root, &PathBuf::from(format!(r"{}\RecordRoot", drive)));
+    assert!(
+        Command::new("subst")
+            .arg(&drive)
+            .arg("/D")
+            .status()
+            .unwrap()
+            .success()
+    );
+}
+
+#[cfg(windows)]
+fn assert_alias_waits(root: &Path, alias: &Path) {
+    use std::{process::Command, thread, time::Duration};
+
+    let writer = DirectoryGuard::acquire(root, true).unwrap();
+    let mut contender = Command::new(std::env::current_exe().unwrap())
+        .args(["--exact", "windows_alias_child", "--nocapture"])
+        .env("KPOP_WINDOWS_ALIAS_CHILD", alias)
+        .spawn()
+        .unwrap();
+    thread::sleep(Duration::from_millis(200));
+    assert!(contender.try_wait().unwrap().is_none());
+    drop(writer);
+    assert!(contender.wait().unwrap().success());
+}
+
+#[cfg(windows)]
+#[test]
+fn windows_alias_child() {
+    let Some(root) = std::env::var_os("KPOP_WINDOWS_ALIAS_CHILD") else {
+        return;
+    };
+    let _guard = DirectoryGuard::acquire(Path::new(&root), true).unwrap();
 }
 
 fn tree(root: &Path) -> Vec<(String, Vec<u8>)> {

@@ -39,6 +39,8 @@ impl PartialEq for DirectoryIdentity {
 
 struct Held {
     _file: File,
+    #[cfg(windows)]
+    _namespace_file: File,
     path: PathBuf,
     identity: DirectoryIdentity,
     exclusive: bool,
@@ -334,15 +336,20 @@ impl DirectoryGuard {
                 FileExt::lock_shared(&namespace_file)?;
             }
             verify_windows_lock_file(&namespace_file, &namespace_path)?;
+            let identity_path =
+                lock_home.join(format!("identity-{}.lock", windows_identity_key(&identity)));
+            let file = windows_lock_file(&identity_path)?;
             if exclusive {
-                FileExt::lock_exclusive(identity.directory.as_file())?;
+                FileExt::lock_exclusive(&file)?;
             } else {
-                FileExt::lock_shared(identity.directory.as_file())?;
+                FileExt::lock_shared(&file)?;
             }
+            verify_windows_lock_file(&file, &identity_path)?;
             require(path == root.canonicalize()?, "directory_replaced")?;
             require(directory_identity(&path)? == identity, "directory_replaced")?;
             let held = Rc::new(Held {
-                _file: namespace_file,
+                _file: file,
+                _namespace_file: namespace_file,
                 path,
                 identity,
                 exclusive,
@@ -356,6 +363,28 @@ impl DirectoryGuard {
 fn directory_identity(root: &Path) -> Result<(u64, u64, u32)> {
     let stat = fs::metadata(root)?;
     Ok((stat.dev(), stat.ino(), std::process::id()))
+}
+#[cfg(windows)]
+fn windows_identity_key(identity: &DirectoryIdentity) -> String {
+    use std::hash::{Hash, Hasher};
+    // same-file 1.0.6 hashes its retained Windows handle as the optional
+    // (volume serial, file index) pair. Cargo.lock pins that protocol. Length
+    // framing makes the collected Hash writes unambiguous; SHA-256 collisions
+    // can only add false contention and cannot split one directory's lock.
+    struct Bytes(Vec<u8>);
+    impl Hasher for Bytes {
+        fn finish(&self) -> u64 {
+            0
+        }
+        fn write(&mut self, bytes: &[u8]) {
+            self.0
+                .extend_from_slice(&(bytes.len() as u64).to_le_bytes());
+            self.0.extend_from_slice(bytes);
+        }
+    }
+    let mut state = Bytes(Vec::new());
+    identity.directory.hash(&mut state);
+    sha256(&state.0)
 }
 #[cfg(windows)]
 fn windows_lock_file(path: &Path) -> Result<File> {
