@@ -1078,6 +1078,14 @@ sources:
          computational-only scenarios. Six focused tests and all-target Clippy pass. Full native
          regression suite is running; public CLI and final migration remain incomplete."
     read: "2026-09-19"
+  s.native_session_lifecycle:
+    name: "Native session lifecycle and source protection"
+    file: "/Users/ilanbm/docs/kpopper/rust-migration/R4-SESSION-LIFECYCLE-RESULT.md"
+    read: "2026-09-19"
+    at: "f852fc6; task 01a0b9d7-9fca-7301-ba63-580bfc152fb9"
+    scope: "Native SessionStart/Stop and mark/gate, Python mark compatibility, verified ingestion
+            purpose, core-only public resources and declared Hub source protection. macOS arm64 only;
+            new Opus review pending, full R4-R6 still open."
   s.native_session_read:
     name: "Native public session opening and corrected history composition"
     file: "/Users/ilanbm/docs/kpopper/rust-migration/R4-SESSION-READ-RESULT.md"
@@ -2534,11 +2542,44 @@ known:
          commit 07871d2, macOS arm64. All-target Clippy with warnings denied, release build and
          record check also passed. No installed activation or cross-platform acceptance is implied."
     of: "2026-09-19"
+  m.native_session_browser_checks:
+    name: "Passing final native page Chrome checks"
+    v: 16
+    from: s.native_session_lifecycle
+    at: "R4-session-final-browser.log; release binary
+         cde390b5488a87af8b609d2c31c119537a77b3a58dcd6c35bf8e65306d633233"
+    of: "2026-09-19"
+  m.native_session_purpose_cases:
+    name: "Passing ingestion receipt purpose comparisons"
+    v: 10
+    from: s.native_session_lifecycle
+    at: "R4-recording-receipt-parity.json; real ff0d02e Python comparison"
+    of: "2026-09-19"
+  m.native_session_python_mark_tests:
+    name: "Passing explicit Python-native mark interoperability tests"
+    v: 4
+    from: s.native_session_lifecycle
+    at: "R4-session-final-interop.log; these four were ignored by default and then explicitly run
+         against ff0d02e"
+    of: "2026-09-19"
   m.native_session_read_tests:
     name: "Native CLI integration tests after public session routing"
     v: 14
     from: s.native_session_read
     at: "native/tests/cli.rs"
+  m.native_session_release_commands:
+    name: "Passing copied release CLI and hook scenarios"
+    v: 16
+    from: s.native_session_lifecycle
+    at: "R4-session-release-smoke.json; only Git on PATH and core resources"
+    of: "2026-09-19"
+  m.native_session_tests:
+    name: "Passing normal native session integration tests"
+    v: 300
+    from: s.native_session_lifecycle
+    at: "R4-session-gate-summary.json; split completion documented in result; 6 default opt-ins
+         ignored"
+    of: "2026-09-19"
   m.native_source_capture_cases:
     name: "Native source capture differential cases"
     v: 45
