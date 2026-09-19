@@ -17,10 +17,13 @@ depend on, and records what would make them worth revisiting. When a recorded pr
 changes, kpopper traces its reach through the record and surfaces what needs another look.
 
 > [!IMPORTANT]
-> **TL;DR: Add kpopper to make your work easier to pick up, easier to check, and harder to lose track of.**
+> **TL;DR: kpopper makes your AI sessions less forgetful and your work easier to pick up, check, and build on.**
+>
+> [**Try it and see for yourself →**](#get-started)
 
 **[Get started](#get-started)** · [Examples](#example-1-coding-agent) ·
 [Capabilities](#what-you-can-do-with-kpopper) · [Record format](#the-knowledge-record) ·
+[Commands](#quick-reference) ·
 [Contributing](CONTRIBUTING.md) · [Why the name?](#popper-give-a-conclusion-a-way-to-fail)
 
 [![Meet GROUNDING.yaml, with a handwritten your new friend note. An earlier conversation creates an email with a 30-day promise and records the supporting reason; a later conversation updates a draft retention policy and its recorded value to seven days. Blue arrows connect the conversations to the saved conclusion and changed reading. The YAML retains its 30/30 review snapshot. A pink arrow follows wrong_if to the deterministic check: seven is less than thirty, so the promise is no longer supported. Actual CLI output returns FAIL downloads.availability to the agent, with a caller-measured 0.24-second local-run badge. The closing line reads Deterministic Reasoning that outlives the conversation, with a blue underline pointing to the returned result. The phone layout presents consecutive excerpts from the same file.](assets/diagrams/reasoning-check.png)](assets/diagrams/reasoning-check.png)
@@ -35,6 +38,7 @@ changes, kpopper traces its reach through the record and surfaces what needs ano
 - [Example 2: Claude Cowork / ChatGPT Work (freshness)](#example-2-claude-cowork-and-chatgpt-work)
 - [Example 3: Research (evidence synthesis)](#example-3-research)
 - [Installation and first use](#get-started)
+- [CLI and plugin quick reference](#quick-reference)
 - [What you can do with kpopper](#what-you-can-do-with-kpopper)
 - [One project, across your existing tools](#one-project-across-your-existing-tools)
 - [Past, present and future](#past-present-future)
@@ -589,7 +593,7 @@ python3 "$HOME/kpopper/scripts/plugin_runtime.py" doctor
 ```
 
 If you already have a checkout, use its absolute path instead. `setup` explicitly
-downloads the four [package dependencies](pyproject.toml) from PyPI into a private
+installs the [core dependencies](pyproject.toml) from PyPI into a private
 virtualenv under `~/.local/share/kpopper/runtimes/`. It works with externally managed
 Python installations: system packages are not modified. On Linux distributions that
 package `venv` separately, install that Python's `venv` support first.
@@ -714,6 +718,82 @@ explicit read-only instructions.
 
 For a standalone CLI installation and a walkthrough of the launch-party example, see
 [Try it from the command line](docs/reference.md#try-it-from-the-command-line).
+
+## Quick reference
+
+Use the CLI in a terminal, or ask your agent to follow a plugin skill. A skill guides
+a workflow and may use several CLI commands. You can also describe what you need in
+ordinary language.
+
+### CLI
+
+These commands assume an installed `kpop`. From a source checkout with its dependencies
+installed, use `python3 scripts/kpopper` instead. For plugin work, use the command supplied
+by the session's `KPOPPER_AGENT_CONTEXT`. `<id>` names a record entry, such as
+`workshop.ingredient_plan`; `kpop --help` lists command groups.
+
+| What you need | Command |
+|---|---|
+| Locate this project's record | `kpop where` |
+| Open the current context and attention items | `kpop open` |
+| Retrieve a subject, its sources and reasons | `kpop pull <id>` |
+| Find matching claims and local source passages | `kpop search "terms"` |
+| Trace what depends on a premise | `kpop affects <id>` |
+| Check recorded conditions and changed premises | `kpop check` |
+| Inspect findings and scoped attention as JSON | `kpop assess <id>` |
+| Share a focused Markdown excerpt | `kpop export <id>` |
+
+<details>
+<summary>Writing, history and background commands</summary>
+
+These commands can record decisions, update project state or configure work. The linked
+guides describe their arguments and review steps.
+
+| What you need | Command or command group |
+|---|---|
+| Add a finding or judgment | `kpop add <id> field=value ...` |
+| Update a reading with its reason and date | `kpop set <id> <value> --why "reason" --as-of YYYY-MM-DD` |
+| Apply one prepared source report | `kpop update --file report.json` |
+| Record a completed review | `kpop review <id>` |
+| Resolve whether two IDs name the same subject | `kpop same <a> <b>` · `kpop distinct <a> <b> "reason"` |
+| Test hypotheses or another branch before folding | `kpop consolidate --dry-run` · `kpop consolidate --from <ref> --dry-run` |
+| Fold eligible hypotheses or retain a refutation | `kpop consolidate` · `kpop consolidate --refute <name> "reason"` |
+| Inspect committed history acceptance | `kpop history status` |
+| Rerun the record's configured measurement recipes | `kpop remeasure --run` |
+| Begin a guided mapping of existing material | `kpop map` |
+| Capture and process reports in the background | `kpop ingest` |
+| Configure branch checks or inspect shared findings | `kpop watch` |
+| Manage deferred work and its recorded outcomes | `kpop followups` |
+| Inspect or change workspace guidance | `kpop config` |
+
+See the [command reference](docs/reference.md), [history commands](docs/history-contract.md#history-commands-and-portable-contributions),
+[background capture](skills/kpopper/INGESTION.md) and [followups](skills/kpopper/FOLLOWUPS.md).
+`review` records your assessment; it does not make that assessment for you.
+
+</details>
+
+### Plugin skills
+
+| Workflow | Claude Code | Codex |
+|---|---|---|
+| [Understand the method or choose a workflow](skills/kpopper/SKILL.md) | `/kpopper:kpopper` | `$kpopper` |
+| [Read the record before answering](skills/ground/SKILL.md) | `/kpopper:ground` | `$ground` |
+| [Preserve findings, decisions and open questions](skills/record/SKILL.md) | `/kpopper:record` | `$record` |
+| [Map selected existing materials](skills/map/SKILL.md) | `/kpopper:map` | `$map` |
+| [Reconcile hypotheses and branch records](skills/consolidate/SKILL.md) | `/kpopper:consolidate` | `$consolidate` |
+| [Configure background checks](skills/watch/SKILL.md) | `/kpopper:watch` | `$watch` |
+| [Use kpopper Hub](skills/hub/SKILL.md) | `/kpopper:hub` | `$hub` |
+| [Create Annotated Documents](skills/annotated-doc/SKILL.md) | `/kpopper:annotated-doc` | `$annotated-doc` |
+
+For example, `$ground workshop.ingredient_plan` asks Codex to retrieve that plan and
+its basis. **`ground` is a skill; the CLI reads use `open`, `pull`, `affects` and `check`.**
+Other hosts expose skills through their [adapters](adapters/README.md).
+
+Hub and Annotated Documents are [optional experimental applications](#experimental-applications),
+invoked from the CLI with `kpop experimental hub` and `kpop experimental annotated-doc`.
+`page` and `document` remain compatibility aliases. The separate
+[checked-session integration](docs/checked-sessions.md) uses `kpop session` and has its
+own setup; it is optional alongside the default reasoning engine.
 
 ## What you can do with kpopper
 
