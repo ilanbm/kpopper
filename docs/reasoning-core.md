@@ -4,7 +4,10 @@ The first `kpop add` in a workspace without a record creates a `core/v1` record
 with immutable history. Creation and recovery use one guarded transaction, so
 an interrupted first write cannot expose a partial record. Existing ordinary
 records keep their legacy interpretation; reading them never changes authority.
-The profile can also be selected explicitly for the readers described below.
+Ordinary open, check, pull, affects, assess, export, search, page and session reads
+automatically select the declared core interpretation. No profile flag is needed
+for a newly created record. The profile can also be selected explicitly for the
+readers described below.
 
 ```sh
 kpop assess m.total d.order --profile core/v1 --record example.yaml
