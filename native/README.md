@@ -126,6 +126,28 @@ at 4,300 decimal digits and recognize Unicode 16 decimal digits, matching the pi
 Python runtime. The CLI and experimental store retain their smaller 1 MiB file/input
 limit. These are bounded input contracts, not a claim to accept every PyYAML source.
 
+## Library authoring
+
+`history_authoring` prepares core `add`, `set`, `review`, targeted disposition acts
+and explicit proposals over a captured history store. Preparation creates a complete
+immutable mutation without publishing it. Direct receipt versions 1/7, act version 4
+and proposal versions 5/9 preserve their distinct snapshot semantics. Proposals carry
+a separate hypothetical assessment and leave accepted claims unchanged.
+
+Its commit entry point reruns the actual Lean evaluator against the original causal
+parents and compares the complete prepared mutation bytes. Historical adapter source
+fingerprints require a committed causal-parent witness; sibling commits and the
+incoming operation cannot establish that witness. Runtime identity, values, reads,
+bases, diagnostics and costs must still match. Caller verification adds routing and
+policy checks, followed by archive and imported-source revalidation before publication.
+The `history_sources` adapter bounds retained members, verifies their hashes and
+requires evidence for composite YAML pointers.
+
+These library interfaces remain separate from the experimental CLI. Batch authoring,
+identity/edit application adapters, temporal authoring and ordinary-profile authoring
+are not yet exposed through this preparation layer. The newer receipt contracts are
+checked against a Python 1.7 candidate; final release binding remains pending.
+
 ## Deliberate limits
 
 The detached `history_authority` library additionally validates authority v1/v2,

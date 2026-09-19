@@ -853,6 +853,12 @@ sources:
     read: "2026-09-16"
     recorded_for: "Update p.reasoning_core_contract, m.scope_basis_collision_cases from this
                    captured report."
+  s.native_authoring_envelopes:
+    name: "Native semantic authoring conformance"
+    from: s.2026_09_19_native_snapshot_continuation
+    file: "native/src/history_authoring.rs"
+    of: "2026-09-19: direct, act and proposal preparation with causal-parent replay; conformance
+         fixtures under native/tests/fixtures/history-authoring*.json"
   s.native_context_verification:
     name: "Native captured history and operation conformance"
     from: s.2026_09_19_native_snapshot_continuation
@@ -1831,6 +1837,16 @@ known:
     from: s.native_snapshot_verification
     at: "native/tests/reasoning_assessment.rs; historical typed maps and snapshot identity
          regression cases"
+  p.native_operation_replay_boundary:
+    name: "Fresh semantic replay before history publication"
+    v: "Supported direct, act and proposal mutations replay with fresh Lean against the original
+        causal parents and must reproduce every mutation byte. Only a witnessed historical adapter
+        source fingerprint may differ; incoming operations and siblings do not witness it. Batch,
+        identity/edit, temporal and ordinary-profile preparation remain outside this library
+        boundary."
+    from: s.native_authoring_envelopes
+    at: "verify_prepared and commit; history_authoring_audit witnessed and ReplayAudit;
+         native/README.md Library authoring"
   p.native_retained_pin_evidence:
     name: "Historical pin evidence boundary"
     v: "A recorded pin exposes a historical computation only when its typed value and stored basis

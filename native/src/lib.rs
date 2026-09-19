@@ -1,6 +1,8 @@
 #![forbid(unsafe_code)]
 
 pub mod history_adapter;
+pub mod history_authoring;
+mod history_authoring_audit;
 pub mod history_authority;
 pub mod history_bundle;
 pub mod history_cancellation;
@@ -13,6 +15,7 @@ pub mod history_paths;
 pub mod history_preparation;
 pub mod history_projection;
 pub mod history_reduce;
+pub mod history_sources;
 pub mod history_store;
 pub mod history_transaction;
 pub mod history_transaction_fs;
