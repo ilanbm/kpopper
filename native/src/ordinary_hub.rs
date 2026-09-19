@@ -122,71 +122,6 @@ fn deps(body: &Map, dep_field: &str) -> Vec<String> {
         })
         .unwrap_or_default()
 }
-fn flags(node: &Map, judgment: bool) -> BTreeSet<String> {
-    let mut out = BTreeSet::new();
-    let Ok(state) = map(&node["state"]) else {
-        out.insert("broken".into());
-        return out;
-    };
-    let basis = state.get("basis").and_then(|v| map(v).ok());
-    let falsifier = state.get("falsifier").and_then(|v| map(v).ok());
-    let integrity = state.get("integrity").and_then(|v| map(v).ok());
-    if integrity
-        .and_then(|m| m.get("status"))
-        .and_then(|v| text(v).ok())
-        .is_some_and(|s| !matches!(s, "assessed" | "unassessed"))
-    {
-        out.insert("broken".into());
-    }
-    if falsifier
-        .and_then(|m| m.get("status"))
-        .and_then(|v| text(v).ok())
-        == Some("holds")
-    {
-        out.insert("falsified".into());
-    }
-    if judgment
-        && falsifier
-            .and_then(|m| m.get("status"))
-            .and_then(|v| text(v).ok())
-            == Some("not_declared")
-    {
-        out.insert("no_predicate".into());
-    }
-    if matches!(
-        falsifier
-            .and_then(|m| m.get("status"))
-            .and_then(|v| text(v).ok()),
-        Some("unknown" | "error" | "unavailable")
-    ) {
-        out.insert("unknown".into());
-    }
-    if judgment
-        && !matches!(
-            basis
-                .and_then(|m| m.get("status"))
-                .and_then(|v| text(v).ok()),
-            Some("assessed" | "not_applicable")
-        )
-    {
-        out.insert("unchecked".into());
-    }
-    if basis
-        .and_then(|m| m.get("dependencies"))
-        .and_then(|v| map(v).ok())
-        .is_some_and(|ds| {
-            ds.values().any(|d| {
-                map(d).ok().is_some_and(|d| {
-                    d.get("comparison").and_then(|v| text(v).ok()) == Some("changed")
-                        || d.get("rule_changed").is_some_and(truth)
-                })
-            })
-        })
-    {
-        out.insert("moved".into());
-    }
-    out
-}
 fn selectors(v: Option<&V>) -> Vec<String> {
     match v {
         Some(V::List(a)) => a.iter().map(textish).collect(),
@@ -497,10 +432,6 @@ pub fn build(
         .filter(|id| body(nodes, id).is_ok_and(|b| b.contains_key(dep_field)))
         .cloned()
         .collect::<BTreeSet<_>>();
-    let states = ids
-        .iter()
-        .map(|id| Ok((id.clone(), flags(map(&nodes[id])?, judgments.contains(id)))))
-        .collect::<Result<BTreeMap<_, _>>>()?;
     let (brief, tabs) = parse_brief(brief_content)?;
     let context = capture.ordinary_context();
     let context = map(&context)?;
@@ -514,6 +445,10 @@ pub fn build(
         runtime,
     )?;
     let hub = projection.hub_data()?;
+    let states = ids
+        .iter()
+        .map(|id| (id.clone(), hub.flags.get(id).cloned().unwrap_or_default()))
+        .collect::<BTreeMap<_, _>>();
     let group_schemes = groups(&brief, &ids, &judgments, &states);
     let labels = brief
         .get("labels")
@@ -631,17 +566,22 @@ pub fn build(
         })
         .collect::<BTreeMap<_, _>>();
     let current_shape = BTreeMap::from([
-        ("entries", ids.len() - judgments.len()),
+        (
+            "entries",
+            ids.iter()
+                .filter(|id| {
+                    !judgments.contains(*id)
+                        && !crate::reasoning_fields::BUILTINS.contains(&id.as_str())
+                })
+                .count(),
+        ),
         ("judgments", judgments.len()),
         ("flagged", states.values().filter(|f| !f.is_empty()).count()),
         (
             "blocked",
-            ids.iter()
-                .filter(|id| {
-                    body(nodes, id).is_ok_and(|b| {
-                        field(b, &["blocked_on", "blocked", "waiting_for"]).is_some()
-                    })
-                })
+            states
+                .values()
+                .filter(|flags| flags.contains("blocked"))
                 .count(),
         ),
     ]);
@@ -839,15 +779,22 @@ pub fn build(
                 .collect::<Vec<_>>();
             if !moved.is_empty() {
                 let message = format!(
-                    "tab '{}': shape moved ({})",
-                    if tab.title.is_empty() {
-                        "Now"
+                    "{} recorded a different shape: {}",
+                    if tab.bare {
+                        "the brief".to_owned()
                     } else {
-                        &tab.title
+                        format!(
+                            "tab '{}'",
+                            if tab.title.is_empty() {
+                                "?"
+                            } else {
+                                &tab.title
+                            }
+                        )
                     },
                     moved.join("; ")
                 );
-                failures.push(message.clone());
+                notes.push(message.clone());
                 let drift = tab_drift
                     .iter()
                     .filter_map(|(id, value)| {
@@ -1071,7 +1018,7 @@ pub fn build(
         elements: ids.len(),
         entries: ids.len() - judgments.len(),
         judgments: judgments.len(),
-        tabs: tabs.len() + 2,
+        tabs: tabs.len() + 1,
         failures,
         notes,
     })

@@ -54,7 +54,7 @@ fn ordinary_hub_builds_arranged_typed_interactive_page_and_verifies_without_writ
     let verified = ok(root, &["--frozen", "page", "--verify"]);
     assert!(
         String::from_utf8_lossy(&verified.stdout)
-            .contains("4 elements, 3 entries, 1 judgments, 3 tabs, 0 problems")
+            .contains("4 elements, 3 entries, 1 judgments, 2 tabs, 0 problems")
     );
     assert!(!root.join("record.html").exists());
     ok(root, &["--frozen", "page", "--out", "site/page.html"]);
@@ -80,6 +80,100 @@ fn ordinary_hub_builds_arranged_typed_interactive_page_and_verifies_without_writ
     assert_eq!(
         fs::read_to_string(root.join("notes # %.html")).unwrap(),
         "source"
+    );
+}
+
+#[test]
+fn ordinary_hub_uses_reader_flags_for_muted_moves() {
+    let tmp = tempfile::tempdir().unwrap();
+    let root = tmp.path();
+    fs::write(
+        root.join("GROUNDING.yaml"),
+        "meta: {name: Muted move}\nknown:\n  p.load: {v: 61}\n  p.flagcount: {rule: graph.flagged}\njudgments:\n  d.work:\n    verdict: Keep the current format\n    rests_on: [p.load]\n    seen: {p.load: 44}\n    wrong_if: p.load > 80\n",
+    )
+    .unwrap();
+    fs::create_dir(root.join(".kpopper")).unwrap();
+    fs::write(
+        root.join(".kpopper/view.yaml"),
+        "title: Current view\nshape: {entries: 2, judgments: 1, flagged: 0, blocked: 0}\nsections:\n- {title: Inputs, why: input, pick: p, as: table}\n",
+    )
+    .unwrap();
+    let verified = cli(root, &["--frozen", "page", "--verify"]);
+    assert!(verified.status.success());
+    assert_eq!(
+        String::from_utf8(verified.stdout).unwrap(),
+        "4 elements, 3 entries, 1 judgments, 2 tabs, 0 problems\n"
+    );
+    ok(root, &["--frozen", "page", "--out", "page.html"]);
+    let html = fs::read_to_string(root.join("page.html")).unwrap();
+    assert!(!html.contains("data-review=\"moved\""));
+    assert!(!html.contains("Flagged outside the arrangement"));
+}
+
+#[test]
+fn ordinary_hub_selects_and_spills_blocked_judgments() {
+    let tmp = tempfile::tempdir().unwrap();
+    let root = tmp.path();
+    fs::write(
+        root.join("GROUNDING.yaml"),
+        "meta: {name: Declared hole}\nschema: {deps: rests_on, snapshot: seen, predicate: wrong_if}\nknown:\n  p.load: {v: 61}\njudgments:\n  d.wait:\n    verdict: Hold until the survey lands\n    rests_on: [p.load, p.survey]\n    seen: {p.load: 61}\n    wrong_if: p.load > 80\n    blocked_on: the survey has not been run\n",
+    )
+    .unwrap();
+    fs::create_dir(root.join(".kpopper")).unwrap();
+    let view = root.join(".kpopper/view.yaml");
+    fs::write(
+        &view,
+        "title: Holes\nsections:\n- {title: Declared holes, why: waiting, pick: blocked, as: cards}\n",
+    )
+    .unwrap();
+    let verified = cli(root, &["--frozen", "page", "--verify"]);
+    assert!(verified.status.success());
+    assert_eq!(
+        String::from_utf8(verified.stdout).unwrap(),
+        "2 elements, 1 entries, 1 judgments, 2 tabs, 0 problems\n"
+    );
+    ok(root, &["--frozen", "page", "--out", "selected.html"]);
+    let selected = fs::read_to_string(root.join("selected.html")).unwrap();
+    assert!(selected.contains("data-id=\"d.wait\""));
+    assert!(!selected.contains("Flagged outside the arrangement"));
+
+    fs::write(
+        &view,
+        "title: Inputs\nsections:\n- {title: Inputs, why: input, pick: p, as: table}\n",
+    )
+    .unwrap();
+    ok(root, &["--frozen", "page", "--out", "spilled.html"]);
+    let spilled = fs::read_to_string(root.join("spilled.html")).unwrap();
+    assert!(spilled.contains("Flagged outside the arrangement <span class=\"n\">1</span>"));
+    assert!(spilled.contains("data-id=\"d.wait\""));
+}
+
+#[test]
+fn ordinary_hub_reports_stale_shape_as_note_without_failure() {
+    let tmp = tempfile::tempdir().unwrap();
+    let root = tmp.path();
+    fs::write(
+        root.join("GROUNDING.yaml"),
+        "meta: {name: R}\nsources:\n  s.ask: {asked: 'What now?', read: '2026-09-03'}\nknown:\n  p.a: {v: 1, from: s.ask}\n  p.b: {v: 2}\n  dates.d: {v: 2026-12-31}\njudgments:\n  d.x: {verdict: Go, rests_on: [p.a], seen: {p.a: 1}, wrong_if: 'p.a > 9'}\n",
+    )
+    .unwrap();
+    fs::create_dir(root.join(".kpopper")).unwrap();
+    fs::write(
+        root.join(".kpopper/view.yaml"),
+        "shape: {entries: 3, judgments: 1, flagged: 0, blocked: 0}\nsections:\n- {title: In, why: w, pick: p, as: table}\n",
+    )
+    .unwrap();
+    let verified = cli(root, &["--frozen", "page", "--verify"]);
+    assert!(verified.status.success());
+    assert_eq!(
+        String::from_utf8(verified.stdout).unwrap(),
+        "NOTE no arrangement decision is recorded, so the brief is held against none\nNOTE the brief recorded a different shape: entries: 3 -> 4\n5 elements, 4 entries, 1 judgments, 2 tabs, 0 problems\n"
+    );
+    ok(root, &["--frozen", "page", "--out", "page.html"]);
+    assert!(
+        fs::read_to_string(root.join("page.html"))
+            .unwrap()
+            .contains("the brief recorded a different shape: entries: 3 -&gt; 4")
     );
 }
 

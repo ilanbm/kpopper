@@ -318,6 +318,7 @@ pub(crate) struct HubArrangement {
 #[derive(Clone, Debug, PartialEq)]
 pub(crate) struct HubData {
     pub arrangements: Vec<HubArrangement>,
+    pub flags: BTreeMap<String, BTreeSet<String>>,
     pub reader_lines: Vec<String>,
 }
 
@@ -667,6 +668,20 @@ impl<'a> Projection<'a> {
     }
 
     pub(crate) fn hub_data(&self) -> Result<HubData> {
+        let flags: BTreeMap<String, BTreeSet<String>> = self
+            .base
+            .judgments
+            .iter()
+            .map(|(id, body)| {
+                Ok((
+                    id.clone(),
+                    crate::ordinary_counts::flags(&self.base.reader, body)?
+                        .into_iter()
+                        .map(str::to_owned)
+                        .collect(),
+                ))
+            })
+            .collect::<Result<BTreeMap<_, _>>>()?;
         let mut arrangements = Vec::new();
         for (id, body) in &self.base.judgments {
             if !crate::reasoning_authoring_guards::arrangement(&self.base.reader, body) {
@@ -713,14 +728,14 @@ impl<'a> Projection<'a> {
                 born: b.get("born").filter(|v| truth(v)).map(py),
                 request,
                 predicate: predicate_text(&self.base.pred(id)),
-                fired: crate::ordinary_counts::flags(&self.base.reader, body)?
-                    .contains("falsified"),
+                fired: flags[id].contains("falsified"),
                 moved: self.base.moved(id)?,
                 contested,
             });
         }
         Ok(HubData {
             arrangements,
+            flags,
             reader_lines: self.knowledge.clone(),
         })
     }
@@ -2298,6 +2313,7 @@ mod tests {
         assert_eq!(data.arrangements[0].sources, vec!["s.request"]);
         assert_eq!(data.arrangements[0].request.as_deref(), Some("s.request"));
         assert_eq!(data.arrangements[0].born.as_deref(), Some("2026-09-03"));
+        assert!(data.flags["v.layout"].is_empty());
     }
     #[test]
     fn ordinary_pull_and_affects_match_final_python() {
