@@ -58,6 +58,17 @@ class NamedHypotheses(unittest.TestCase):
         self.assertEqual(captured.state['subjects']['p.new']['marks'][original], 'retired')
         self.assertEqual(self.groups()[0]['alternative']['doc']['readings']['p.new']['v'], 5)
 
+    def test_retained_version_one_judgment_proposal_replays_without_new_seen(self):
+        mutation = HH.prepare(self.entry, 'legacy', {'kind': 'add', 'id': 'd.legacy',
+            'into': 'decisions', 'body': {'verdict': 'ready', 'rests_on': ['p.input'],
+                                          'wrong_if': {'expr': 'p.input > 5'}}},
+            by='writer', operation='legacy-hypothesis', _receipt_version=1)
+        self.assertEqual(mutation.to_data()['receipt']['before']['hypothesis_authoring']['version'], 1)
+        made = [C.decode_document(item['after']) for item in mutation.files
+                if item['role'] == 'history_object']
+        self.assertNotIn('seen', next(item for item in made if item['kind'] == 'judgment')['body'])
+        HH.verify_prepared(self.entry, T.PreparedMutation.from_bytes(mutation.to_bytes()))
+
     def test_fold_all_selected_subjects_is_one_explicit_commit(self):
         self.commit(self.prepare())
         self.commit(self.prepare('add', 'p.new', action={'body': {'v': 4}, 'into': 'readings'}))
@@ -124,6 +135,9 @@ class NamedHypotheses(unittest.TestCase):
             'verdict': 'ready', 'rests_on': ['p.input'], 'wrong_if': {'expr': 'p.input > 5'}}, 'into': 'decisions'}))
         version = self.groups()[1]['groups']['alternative']['d.ready'][0]
         original = copy.deepcopy(self.store.capture().objects[version])
+        self.assertEqual(original['body']['seen']['p.input']['computed']['value'],
+                         {'type': 'number', 'numerator': '2', 'denominator': '1'})
+        self.assertNotIn('d.ready', self.store.capture().document.get('decisions', {}))
         self.commit(self.prepare('set', action={'value': 3}))
         new_input = self.groups()[1]['groups']['alternative']['p.input'][0]
         mutation = self.prepare('review', 'd.ready', action={})
@@ -131,7 +145,8 @@ class NamedHypotheses(unittest.TestCase):
         capture = self.store.capture()
         self.assertEqual(capture.objects[version], original)
         self.assertEqual(original['pins']['p.input'], group_input)
-        self.assertNotIn('seen', original['body'])
+        self.assertEqual(original['body']['seen']['p.input']['computed']['value'],
+                         {'type': 'number', 'numerator': '2', 'denominator': '1'})
         review = next(obj for obj in capture.objects.values() if obj['op'] == mutation.to_data()['operation'])
         self.assertEqual(review['body']['read'], {'p.input': new_input})
         snapshot = Snapshot.capture(self.entry, read_mode='frozen').to_data()
@@ -273,9 +288,14 @@ class NamedHypotheses(unittest.TestCase):
         new_body = {**old_body, 'wrong_if': {'expr': 'p.input > 10'}}
         self.commit(self.prepare('add', 'd.change', action={'body': new_body}))
         current = self.store.capture()
-        self.assertEqual(current.objects[old]['body'], old_body)
+        self.assertEqual({key: value for key, value in current.objects[old]['body'].items()
+                          if key != 'seen'}, old_body)
+        self.assertEqual(current.objects[old]['body']['seen']['p.input']['computed']['value'],
+                         {'type': 'number', 'numerator': '1', 'denominator': '1'})
         self.assertEqual(current.state['subjects']['d.change']['marks'][old], 'retired')
-        self.assertEqual(self.groups()[0]['alternative']['doc']['decisions']['d.change'], new_body)
+        current_body = self.groups()[0]['alternative']['doc']['decisions']['d.change']
+        self.assertEqual({key: value for key, value in current_body.items() if key != 'seen'},
+                         new_body)
         self.assertNotIn('d.change', current.document['decisions'])
 
 

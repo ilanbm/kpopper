@@ -258,6 +258,7 @@ class TemporalApplicability(unittest.TestCase):
     def test_same_body_new_claim_does_not_inherit_old_counterexample(self):
         fixture, _ = self.history('anchored')
         body = copy.deepcopy(fixture.store.state()['subjects']['p.ready']['body'])
+        body.pop('seen')
         old = fixture.store.state()['subjects']['p.ready']['head']
         proposal = A.prepare_proposal(fixture.entry, 'p.ready', body, 'judgments',
                                       because='fresh explicit claim', by='writer')

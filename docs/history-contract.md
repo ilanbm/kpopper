@@ -339,7 +339,15 @@ Direct history commands retain a private retry envelope binding their exact
 PreparedMutation and routing policy. `recover` completes the same operation after
 a crash; `recover --rollback` can cancel an uncommitted operation, but cannot
 delete committed knowledge. Original claim bodies and seen values stay immutable;
-a review adds a review act with current dependency pins. Computational receipts
+a review adds a review act with current dependency pins. New core judgment writes
+capture their dependency values and computational bases into reader-owned `seen`
+after validating that the caller did not supply that field. Direct receipt v7,
+final-world batch receipt v8 and proposal receipt v9 distinguish this behavior;
+older v1/v6/v5 receipts replay without retroactive snapshot synthesis. A batch
+captures all new judgments against its one final staged world, including forward
+references, while a named proposal captures only inside its proposed layer and
+does not write the base. Explicit blocked dependencies become `pin_gaps` and are
+omitted from `seen`; unblocked missing dependencies still refuse. Computational receipts
 assess a named document projection and separately bind history, avoiding a circular
 receipt/manifest identity. They are not the public combined assessment envelope.
 

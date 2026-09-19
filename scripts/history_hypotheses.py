@@ -215,7 +215,8 @@ def _mutation(store, captured, objects, intent, before_document, after_document)
                               files=files, receipt=receipt, entry=store.entry.name)
 
 
-def prepare(entry, name, action, *, head=None, by=None, operation=None, recorded_at=None, capture=None):
+def prepare(entry, name, action, *, head=None, by=None, operation=None, recorded_at=None, capture=None,
+            _receipt_version=2):
     """Prepare add/set/review in one named layer; nothing is accepted into base."""
     store, captured, base, groups, index, physical = _capture(entry, capture)
     _guard_names([name], groups, physical, required=False)
@@ -255,6 +256,8 @@ def prepare(entry, name, action, *, head=None, by=None, operation=None, recorded
     refusals = P.validate(normalized, validation_document, ids, judgments, fields, raw)
     if refusals:
         raise P.Refused('refused - ' + '; '.join(refusals))
+    C._require(_receipt_version in (1, 2), 'invalid_hypothesis_receipt')
+    receipt_version = 2 if _receipt_version == 2 and world is not None else 1
     subject = normalized['id']
     previous = index['groups'].get(name, {}).get(subject, [])
     known = entries(document)
@@ -287,6 +290,10 @@ def prepare(entry, name, action, *, head=None, by=None, operation=None, recorded
             if any('document_headers' in captured.objects[version].get('authored', {}).get('locator', {})
                    for versions in index['groups'].get(name, {}).values() for version in versions):
                 authored['locator'] = {'document_headers': group_headers}
+        if receipt_version == 2 and isinstance(body, dict) and fields['deps'] in body:
+            body[fields['snapshot']] = P._snapshot(
+                list(body[fields['deps']]), raw, ids, judgments, [], None)
+            normalized['body'] = copy.deepcopy(body)
         authored['hypothesis'] = {'version': 1, 'name': name, 'head': copy.deepcopy(head)}
         deps = body.get(fields['deps'], []) if isinstance(body, dict) else []
         pins, gaps = _pins(captured, index, name, deps, blocked=bool(P._blocked_text(body)))
@@ -299,7 +306,7 @@ def prepare(entry, name, action, *, head=None, by=None, operation=None, recorded
             objects.append(_act(captured, captured.objects[version], 'retire', operation, recorded_at, by,
                                  'superseded within hypothesis ' + name, extra=[claim['id']]))
         document.setdefault(collection, {})[subject] = copy.deepcopy(body)
-    intent = {'version': 1, 'kind': 'edit', 'name': name, 'head': head, 'action': action,
+    intent = {'version': receipt_version, 'kind': 'edit', 'name': name, 'head': head, 'action': action,
               'operation': operation, 'recorded_at': recorded_at, 'by': by}
     return _mutation(store, captured, objects, intent, before_document, document)
 
@@ -402,7 +409,8 @@ def verify_prepared(entry, mutation):
     live = store.capture()
     data = mutation.to_data()
     intent = data['receipt']['before'].get('hypothesis_authoring')
-    C._require(isinstance(intent, dict) and intent.get('version') == 1, 'invalid_hypothesis_receipt')
+    C._require(isinstance(intent, dict) and intent.get('version') in (1, 2),
+               'invalid_hypothesis_receipt')
     C._require(A._archive(store) == intent['archive'], 'concurrent_archive_edit')
     C._require(_physical_evidence(store) == intent['physical'], 'concurrent_hypothesis_edit')
     manifest = C.decode_document(next(item['after'] for item in mutation.files if item['role'] == 'history_commit'))
@@ -420,7 +428,8 @@ def verify_prepared(entry, mutation):
                        objects=objects, state=state, baseline=H.baseline(live.marker, commits, state))
     kwargs = {'capture': captured, 'operation': intent['operation'], 'recorded_at': intent['recorded_at'], 'by': intent['by']}
     if intent['kind'] == 'edit':
-        expected = prepare(entry, intent['name'], intent['action'], head=intent['head'], **kwargs)
+        expected = prepare(entry, intent['name'], intent['action'], head=intent['head'],
+                           _receipt_version=intent['version'], **kwargs)
     elif intent['kind'] == 'fold':
         expected = prepare_fold(entry, intent['names'], because=intent['because'], take=intent['take'], drops=intent['drops'],
                                 _assessment_version=intent.get('assessment_version', 0), **kwargs)

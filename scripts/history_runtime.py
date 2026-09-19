@@ -147,7 +147,7 @@ def _resolved(root, manifest):
 def _history_schemas():
     return {'authority': [1, 2], 'baseline': [1], 'commit': [1],
             'typed_object': [2], 'prepared_mutation': [1, 2], 'projection': [1], 'import': [1, 2],
-            'authoring_receipt': [1, 2, 3, 4, 5, 6], 'identity_receipt': [1, 2], 'history_auxiliary': [1],
+            'authoring_receipt': [1, 2, 3, 4, 5, 6, 7, 8, 9], 'identity_receipt': [1, 2], 'history_auxiliary': [1],
             'group_transition': [1], 'named_hypotheses': [1], 'physical_hypothesis_import': [1],
             'branch_capture': [1, 2], 'branch_adoption': [1, 2],
             'bundle': [1, 2, 3], 'contribution': [1, 2, 3], 'retained_generations': [1], 'cancellation': [1],
