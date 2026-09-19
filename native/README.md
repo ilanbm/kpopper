@@ -165,11 +165,16 @@ proposals. It retains exact edited UTF-8 bytes, including comments and historica
 snapshots, as immutable receipt-bound evidence. Partial selections, deletions,
 collection moves and header edits require separate dispositions. Its storage path
 enforces fresh semantic replay; an edit marker alone cannot authorize publication.
-Identity rewrite primitives preserve source-map order, provenance fields and
-expression literals while producing checked body and brief rewrites.
+`history_identity` prepares explicit `same` and `distinct` actions across accepted
+claims and named proposals. It preserves immutable originals, source-map order,
+provenance strings and historical snapshots, and rebuilds affected dependency pins.
+The storage adapter enforces fresh semantic replay and source revalidation. When
+the brief changes too, an owned journal blocks readers until both views are verified;
+recovery resumes the exact operation, or cancels it before its manifest is committed.
+Identity dates use the later of the current local and UTC day, independently of the
+operation's recording timestamp or the computational snapshot time.
 
-These library interfaces remain separate from the experimental CLI. Full identity
-action preparation/replay, temporal authoring and ordinary-profile authoring
+These library interfaces remain separate from the experimental CLI. Temporal authoring and ordinary-profile authoring
 are not yet exposed through this preparation layer. The newer receipt contracts are
 checked against a Python 1.7 candidate; final release binding remains pending.
 

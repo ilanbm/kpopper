@@ -774,6 +774,12 @@ sources:
             outcome is verified."
     at: "Opening delegated instruction for task 01a0b7f5-569b-7293-87e3-3bc50a7f29aa"
     read: "2026-09-19"
+  s.2026_09_19_native_identity_continuation:
+    name: "Native identity and remaining migration continuation"
+    asked: "Continue the approved kpopper Rust migration autonomously until the full planned native
+            outcome is verified."
+    at: "Opening delegated instruction for task 01a0b812-a326-77a2-8e09-64ff2fe3815f"
+    read: "2026-09-19"
   s.2026_09_19_native_snapshot_continuation:
     name: "Continue the approved native migration"
     asked: "Continue the approved kpopper Rust migration autonomously until the full planned native
@@ -885,6 +891,13 @@ sources:
     at: "history_edits; history_identity_rewrite, history_identity_text and history_identity_brief;
          their exact fixtures and tests"
     from: s.2026_09_19_native_hypothesis_edit_continuation
+  s.native_identity_conformance:
+    name: "Native identity actions and auxiliary recovery evidence"
+    from: s.2026_09_19_native_identity_continuation
+    file: "native/src/history_identity.rs"
+    at: "Exact Python fixture comparisons, immutable replay and storage recovery regressions;
+         source-aware merge module and current local/UTC date checks"
+    read: "2026-09-19"
   s.native_named_authoring:
     name: "Native named hypothesis preparation and replay"
     file: "native/src/history_hypothesis_authoring.rs"
@@ -1891,6 +1904,19 @@ known:
     from: s.native_snapshot_verification
     at: "native/tests/reasoning_assessment.rs; historical typed maps and snapshot identity
          regression cases"
+  p.native_identity_boundary:
+    name: "Native explicit identity migration boundary"
+    v: "Core same/distinct preparation preserves original objects, historical seen and protected
+        source strings across accepted claims and named proposals. Changed pins receive new dependent
+        versions. Storage requires fresh causal-parent semantic replay; an owned auxiliary journal
+        keeps readers blocked until record and brief publication verifies, and cancellation is
+        permitted only before the manifest commits. Dates are checked against current local/UTC days
+        on preparation and replay. The graph builder uses an iterative traversal with cycle refusal.
+        Temporal and ordinary profiles, public CLI integration and installed activation remain
+        outside this checkpoint."
+    from: s.native_identity_conformance
+    at: "history_identity, history_identity_merge, history_store
+         commit_identity/recover_auxiliary/cancel_auxiliary and source_clock latest_day"
   p.native_named_hypothesis_boundary:
     name: "Native named hypothesis authoring boundary"
     v: "Core named add/set/review receipt1/2 and explicit refutation replay complete immutable

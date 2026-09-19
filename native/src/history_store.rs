@@ -431,7 +431,7 @@ impl Store {
     }
     /// Mandatory verifier checks the operation's retained semantic and routing evidence.
     pub fn commit(&self, mutation: &PreparedMutation, verify: F::Verify<'_>) -> Result<V> {
-        self.commit_inner(mutation, verify, None, false)
+        self.commit_inner(mutation, verify, None, false, false)
     }
     /// Only the edit adapter selects this path; semantic replay is enforced here.
     pub(crate) fn commit_edits(
@@ -440,7 +440,91 @@ impl Store {
         runtime: Option<&crate::reasoning_runtime::Runtime>,
         verify: F::Verify<'_>,
     ) -> Result<V> {
-        self.commit_inner(mutation, verify, runtime, true)
+        self.commit_inner(mutation, verify, runtime, true, false)
+    }
+    /// Identity receipts are always replayed here, including receipts without a brief.
+    pub(crate) fn commit_identity(
+        &self,
+        mutation: &PreparedMutation,
+        runtime: Option<&crate::reasoning_runtime::Runtime>,
+        verify: F::Verify<'_>,
+    ) -> Result<V> {
+        self.commit_inner(mutation, verify, runtime, false, true)
+    }
+    pub fn recover_auxiliary(
+        &self,
+        direction: &str,
+        runtime: Option<&crate::reasoning_runtime::Runtime>,
+        verify: F::Verify<'_>,
+    ) -> Result<V> {
+        require(["before", "after"].contains(&direction), "invalid_recovery")?;
+        let _lock = F::DirectoryGuard::acquire(&self.root, true)?;
+        let path = F::target(&self.root, &self.layout.journal)?;
+        let raw = F::read(&path)?.ok_or_else(|| error("no_recovery_pending"))?;
+        let mutation = T::decode_auxiliary_envelope(&raw)?;
+        let data = mutation.to_data();
+        require(
+            string_is(&map(&data)?["entry"], &self.layout.entry),
+            "entry_mismatch",
+        )?;
+        require(F::read(&path)?.as_ref() == Some(&raw), "concurrent_edit")?;
+        if direction == "after" {
+            self.commit_identity(&mutation, runtime, verify)?;
+        } else {
+            self.cancel_auxiliary(&mutation, runtime, verify)?;
+        }
+        Ok(V::Map(Map::from([
+            ("state".into(), s("recovered")),
+            ("direction".into(), s(direction)),
+            ("operation".into(), map(&data)?["operation"].clone()),
+        ])))
+    }
+    pub fn cancel_auxiliary(
+        &self,
+        mutation: &PreparedMutation,
+        runtime: Option<&crate::reasoning_runtime::Runtime>,
+        verify: F::Verify<'_>,
+    ) -> Result<V> {
+        let auxiliary = mutation
+            .auxiliary_view()?
+            .ok_or_else(|| error("invalid_history_auxiliary"))?;
+        let _lock = F::DirectoryGuard::acquire(&self.root, true)?;
+        let _owner = F::auxiliary_owner(&self.root, &self.layout.journal, mutation)?;
+        let live = self.capture()?;
+        let data = mutation.to_data();
+        let d = map(&data)?;
+        require(
+            !live.commits.contains_key(text(&d["operation"])?),
+            "history_already_committed",
+        )?;
+        require(
+            d["authority"].digest()? == live.marker.digest()?
+                && d["baseline"].digest()? == live.baseline.digest()?,
+            "stale_baseline",
+        )?;
+        let record = mutation
+            .files()
+            .iter()
+            .find(|f| f.role == "record")
+            .ok_or_else(|| error("invalid_mutation"))?;
+        let view = F::target(&self.root, &auxiliary.path)?;
+        require(
+            record.before.as_ref() == Some(&live.entry_bytes)
+                && F::read(&view)? == auxiliary.before,
+            "concurrent_edit",
+        )?;
+        crate::history_identity::verify_prepared(self, mutation, runtime)?;
+        verify(&data)?;
+        crate::history_identity::sources(self, mutation)?;
+        require(
+            self.capture()?.inventory == live.inventory && F::read(&view)? == auxiliary.before,
+            "concurrent_edit",
+        )?;
+        F::clear_auxiliary_journal(&self.root, &self.layout.journal, mutation)?;
+        Ok(V::Map(Map::from([
+            ("state".into(), s("cancelled")),
+            ("operation".into(), d["operation"].clone()),
+        ])))
     }
     fn commit_inner(
         &self,
@@ -448,13 +532,17 @@ impl Store {
         verify: F::Verify<'_>,
         runtime: Option<&crate::reasoning_runtime::Runtime>,
         edited: bool,
+        identity: bool,
     ) -> Result<V> {
         let _lock = F::DirectoryGuard::acquire(&self.root, true)?;
-        // Auxiliary identity and adoption require their own replay preparers.
+        let auxiliary = mutation.auxiliary_view()?;
         require(
-            mutation.auxiliary_view()?.is_none(),
+            identity || auxiliary.is_none(),
             "unsupported_identity_replay",
         )?;
+        let _owner = auxiliary
+            .map(|_| F::auxiliary_owner(&self.root, &self.layout.journal, mutation))
+            .transpose()?;
         let data = mutation.to_data();
         let d = map(&data)?;
         require(string_is(&d["entry"], &self.layout.entry), "entry_mismatch")?;
@@ -503,6 +591,13 @@ impl Store {
             "unsupported_branch_adoption",
         )?;
         let edit_receipt = map(&receipt["before"])?.get("history_edit");
+        let identity_receipt = map(&receipt["before"])?.get("identity_authoring");
+        if identity {
+            require(identity_receipt.is_some(), "invalid_identity_receipt")?;
+            crate::history_identity::verify_prepared(self, mutation, runtime)?;
+        } else {
+            require(identity_receipt.is_none(), "unsupported_identity_replay")?;
+        }
         if edited {
             require(edit_receipt.is_some(), "invalid_edit_receipt")?;
             crate::history_edits::verify_prepared(self, mutation, runtime)?;
@@ -510,6 +605,16 @@ impl Store {
             require(edit_receipt.is_none(), "unsupported_view_edit_replay")?;
         }
         let prior = live.commits.get(op);
+        let current_brief = auxiliary
+            .map(|a| F::read(&F::target(&self.root, &a.path)?))
+            .transpose()?;
+        if let Some(auxiliary) = auxiliary {
+            let current = current_brief.as_ref().unwrap();
+            require(
+                *current == auxiliary.before || prior.is_some() && *current == auxiliary.after,
+                "concurrent_brief_edit",
+            )?;
+        }
         let after = manifest
             .after
             .as_ref()
@@ -595,10 +700,21 @@ impl Store {
             )?;
         }
         verify(&data)?;
+        if identity {
+            crate::history_identity::sources(self, mutation)?;
+        }
         require(
             self.capture()?.inventory == live.inventory,
             "stale_baseline",
         )?;
+        if let Some(auxiliary) = auxiliary {
+            require(
+                F::read(&F::target(&self.root, &auxiliary.path)?)?.as_ref()
+                    == current_brief.as_ref().unwrap().as_ref(),
+                "concurrent_brief_edit",
+            )?;
+            F::publish_auxiliary_journal(&self.root, &self.layout.journal, mutation)?;
+        }
         for f in files {
             if ["history_object", "history_evidence"].contains(&f.role.as_str()) {
                 F::publish_immutable(&self.root, &f.path, f.after.as_ref().unwrap())?;
@@ -613,6 +729,29 @@ impl Store {
         )?;
         if current != record.after {
             F::replace(&path, record.after.as_deref())?;
+        }
+        if let Some(auxiliary) = auxiliary {
+            let brief_path = F::target(&self.root, &auxiliary.path)?;
+            require(
+                F::read(&brief_path)?.as_ref() == current_brief.as_ref().unwrap().as_ref(),
+                "concurrent_brief_edit",
+            )?;
+            if current_brief.as_ref().unwrap() != &auxiliary.after {
+                F::replace(&brief_path, auxiliary.after.as_deref())?;
+            }
+            let terminal = self.capture()?;
+            crate::history_identity::verify_prepared(self, mutation, runtime)?;
+            verify(&data)?;
+            crate::history_identity::sources(self, mutation)?;
+            require(
+                self.capture()?.inventory == terminal.inventory,
+                "stale_baseline",
+            )?;
+            require(
+                F::read(&path)? == record.after && F::read(&brief_path)? == auxiliary.after,
+                "concurrent_edit",
+            )?;
+            F::clear_auxiliary_journal(&self.root, &self.layout.journal, mutation)?;
         }
         A::validate_commit(&commit)?;
         Ok(commit)

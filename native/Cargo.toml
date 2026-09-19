@@ -19,6 +19,7 @@ sha2 = "0.10"
 zip = { version = "6", default-features = false, features = ["deflate"] }
 rustpython-parser = { version = "0.4", default-features = false, features = ["num-bigint"] }
 unicode-normalization = "0.1"
+chrono = { version = "0.4.45", default-features = false, features = ["clock"] }
 
 [target.'cfg(unix)'.dependencies]
 nix = { version = "0.30", default-features = false, features = ["signal", "process"] }

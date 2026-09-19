@@ -192,6 +192,12 @@ fn time_parts(s: &str) -> Option<(i64, i64, i64, i64)> {
         .ok()?;
     Some((n("h", "h")?, n("m", "mc")?, n("s", "sc")?, micro))
 }
+/// The later of local and UTC calendar days, matching the writer's date boundary.
+pub fn latest_day() -> String {
+    let utc = chrono::Utc::now();
+    let local = utc.with_timezone(&chrono::Local);
+    utc.date_naive().max(local.date_naive()).to_string()
+}
 pub fn instant(value: &str) -> Option<i64> {
     let c = STAMP.captures(value)?;
     let day = date_ordinal(c.name("date")?.as_str())?;
