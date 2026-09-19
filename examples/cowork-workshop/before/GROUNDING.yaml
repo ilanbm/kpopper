@@ -1,23 +1,165 @@
 meta:
-  updated: 2026-09-13
-  scope: Fictional cooking-workshop plan before the client changes the format.
+  updated: 2026-09-19
+  scope: Cooking-workshop plan before the client changes the format.
 sources:
   s.original_brief:
-    name: Original workshop brief
+    name: Original onsite workshop brief
     file: ../sources/original-brief.md
     read: '2025-01-01'
+  s.session_plan:
+    name: Session-planning pass
+    file: ../sources/session-plan.md
+    read: '2025-01-01'
+  s.logistics_plan:
+    name: Logistics and safety pass
+    file: ../sources/logistics-plan.md
+    read: '2025-01-01'
 known:
+  planning.dietary_status:
+    name: "Dietary information collected"
+    v: "Not yet collected."
+    from: s.logistics_plan
+    at: "Still to ask"
+    fidelity: paraphrase
+  planning.group_size:
+    name: "Group size in the onsite plan"
+    v: 3
+    from: s.session_plan
+    at: "Onsite arrangement"
+    fidelity: paraphrase
+  planning.instructor_view:
+    name: "Supervision assumed by the onsite plan"
+    v: "The instructor can see all six workstations."
+    from: s.logistics_plan
+    at: "Instructor plan"
+    fidelity: paraphrase
+  planning.safety_topics:
+    name: "Safety topics in the onsite plan"
+    v: "knives; hot water; hob use"
+    from: s.logistics_plan
+    at: "Instructor plan"
+    fidelity: paraphrase
+  venue.equipment_supplied:
+    name: "Venue supplies cooking equipment"
+    v: true
+    from: s.logistics_plan
+    at: "Venue provision"
+    fidelity: paraphrase
+  venue.ingredients_supplied:
+    name: "Venue supplies ingredients"
+    v: true
+    from: s.logistics_plan
+    at: "Venue provision"
+    fidelity: paraphrase
+  venue.shared_kitchen:
+    name: "Kitchen available at the original venue"
+    v: true
+    from: s.original_brief
+    at: "Participants cook together in its shared kitchen"
+    fidelity: paraphrase
+  venue.workstations:
+    name: "Workstations at the venue"
+    v: 6
+    from: s.logistics_plan
+    at: "Venue provision"
+    fidelity: paraphrase
+  workshop.duration_minutes:
+    name: "Length of the agreed slot"
+    v: 90
+    from: s.session_plan
+    at: "Client constraints"
+    fidelity: paraphrase
   workshop.format:
+    name: "Workshop format"
     v: onsite
     from: s.original_brief
-    at: Workshop location and supplied kitchen
-    of: '2025-01-01'
+    at: "Workshop location and supplied kitchen"
+    of: "2025-01-01"
+  workshop.learning_goal:
+    name: "What participants should practise"
+    v: "Dough, shaping and sauce steps together."
+    from: s.session_plan
+    at: "Client constraints"
+    fidelity: paraphrase
+  workshop.participants:
+    name: "Participants in the client brief"
+    v: 18
+    from: s.session_plan
+    at: "Client constraints"
+    fidelity: paraphrase
+  workshop.recipe:
+    name: "Recipe for the workshop"
+    v: "Fresh pasta with tomato sauce."
+    from: s.session_plan
+    at: "Client constraints"
+    fidelity: paraphrase
 judgments:
   workshop.agenda:
-    rests_on: [workshop.format]
+    name: "Use the shared-kitchen agenda"
+    rests_on: [workshop.format, venue.shared_kitchen, workshop.duration_minutes, workshop.recipe]
     verdict: "Use the shared-kitchen agenda and provide ingredients at the venue."
-    because: "The onsite brief provides one kitchen, equipment and ingredients for participants to
-              use together."
-    reopened_by: "The workshop format or access to the kitchen changes; review the activities,
-                  equipment and ingredients participants need."
-    seen: {workshop.format: onsite}
+    because: "The original brief supplies a shared space; the planning pass assigns the 90-minute
+              recipe sequence to it."
+    reopened_by: "The format or access to the shared kitchen changes; review activities, equipment
+                  and preparation."
+    seen:
+      workshop.format: onsite
+      venue.shared_kitchen: true
+      workshop.duration_minutes: 90
+      workshop.recipe: "Fresh pasta with tomato sauce."
+  workshop.equipment_plan:
+    name: "Use the venue equipment"
+    rests_on: [workshop.format, venue.equipment_supplied, venue.workstations]
+    verdict: "Plan equipment around the six venue workstations."
+    because: "The onsite provision supports a common equipment list. Home setups have not been
+              confirmed."
+    reopened_by: "The format, supplied equipment or access to the workstations changes."
+    seen: {workshop.format: onsite, venue.equipment_supplied: true, venue.workstations: 6}
+  workshop.group_plan:
+    name: "Use six groups of three"
+    rests_on: [workshop.format, workshop.participants, planning.group_size, venue.workstations]
+    verdict: "Use six groups of three for the onsite practice steps."
+    because: "The selected arrangement fits 18 participants and six workstations; remote
+              participation may require a different arrangement."
+    reopened_by: "The format, attendance, group size or available workstations changes."
+    seen:
+      workshop.format: onsite
+      workshop.participants: 18
+      planning.group_size: 3
+      venue.workstations: 6
+  workshop.ingredient_plan:
+    name: "Prepare portions at the venue"
+    rests_on: [workshop.format, venue.ingredients_supplied, workshop.participants]
+    verdict: "Prepare ingredient portions at the venue for the 18 participants."
+    because: "The logistics pass assumes ingredients and participants meet in the same place."
+    reopened_by: "The format, ingredient provision or participant count changes; review purchasing,
+                  portions and distribution."
+    seen: {workshop.format: onsite, venue.ingredients_supplied: true, workshop.participants: 18}
+  workshop.safety_plan:
+    name: "Brief and supervise in the shared space"
+    rests_on: [workshop.format, planning.instructor_view, planning.safety_topics]
+    verdict: "Use a common safety demonstration with the instructor supervising the shared
+              workstations."
+    because: "The onsite plan assumes direct visibility of participants and shared equipment."
+    reopened_by: "The format, instructor visibility or cooking setup changes; reassess the safety
+                  briefing and supervision."
+    seen:
+      workshop.format: onsite
+      planning.instructor_view: "The instructor can see all six workstations."
+      planning.safety_topics: "knives; hot water; hob use"
+open:
+  workshop.dietary_needs:
+    name: "Collect dietary restrictions"
+    question: "Which dietary restrictions require changing the recipe or ingredient portions?"
+  workshop.home_equipment:
+    name: "Confirm home equipment"
+    question: "Which cooking tools and heat sources can each remote participant safely use?"
+
+  workshop.home_ingredients:
+    name: "Arrange ingredients for remote participants"
+    question: "Who purchases or supplies ingredients, and when must the list reach participants?"
+
+  workshop.remote_activities:
+    name: "Review the remote teaching format"
+    question: "Which demonstration, practice and supervision steps should change for participants
+               joining from home?"

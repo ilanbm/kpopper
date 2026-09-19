@@ -41,14 +41,21 @@ from the assembled example repository, not from the overlay directory alone.
 
 ### Search cache (assumption checks)
 
-<p align="center">
-  <a href="../../assets/stories/cache-privacy.png">
-    <picture>
-      <source media="(max-width: 600px)" srcset="../../assets/stories/cache-privacy-mobile.png">
-      <img src="../../assets/stories/cache-privacy.png" width="760" alt="Private search and shared caching pass their branch tests and merge cleanly. The combined behavior can send Alice's private result to Bob; the recorded public-results assumption fails.">
-    </picture>
-  </a>
-</p>
+[![Private search and shared caching pass their branch tests and merge cleanly. The combined behavior can send Alice's private result to Bob; the recorded public-results assumption fails.](../../assets/stories/cache-privacy.png)](../../assets/stories/cache-privacy.png)
+
+[Phone layout](../../assets/stories/cache-privacy-mobile.png)
+
+### The surrounding design record
+
+[![The cache record retains the query contract, cache hit behavior, isolated test coverage and operational questions. The public-results premise reaches the sharing decision and the authorization assumption of the hit path.](../../assets/stories/cache-privacy-record.png)](../../assets/stories/cache-privacy-record.png)
+
+[Phone layout](../../assets/stories/cache-privacy-record-mobile.png) · [Complete PR B record](cache/pr-b/GROUNDING.yaml) · [Design notes](cache/pr-b/cache-notes.md)
+
+The record has 13 readings, four judgments and two open questions. Sources include
+`search.py`, `cache.py`, the public-cache unit test and the design pass. They make
+visible that a cache hit does not run the access filter again, that the unit test
+uses a mocked public result, and that invalidation and multi-worker coordination
+are outside this fixture. The sharing condition remains the same executable one.
 
 The stored reading and the measured tree are deliberately separate:
 
@@ -78,30 +85,177 @@ flowchart TD
 
 ```yaml
 meta:
-  updated: 2026-09-13
-  scope: Fictional search service. Public-only search before private projects are
+  updated: 2026-09-19
+  scope: Fictional executable search-service design record on PR B, before private projects are
     enabled.
 sources:
   s.search:
-    name: Search visibility switch
+    name: Search implementation before private projects are enabled
     file: search.py
     read: '2025-01-01'
+  s.cache:
+    name: Query-keyed cache implementation
+    file: cache.py
+    read: '2025-01-01'
+  s.cache_tests:
+    name: Public cache unit test
+    file: test_cache.py
+    read: '2025-01-01'
+  s.cache_design:
+    name: Fictional cache design pass
+    file: cache-notes.md
+    read: '2025-01-01'
 known:
+  cache.goal:
+    name: Why the cache was added
+    v: Avoid a second search for the same public query across users.
+    from: s.cache_design
+    at: Goal
+    fidelity: paraphrase
+  cache.hit_reuses_result:
+    name: A hit returns the previously stored result
+    v: true
+    from: s.cache
+    at: 'lookup: return _CACHE[query]'
+    fidelity: paraphrase
+  cache.invalidation:
+    name: Invalidation implemented in this fixture
+    v: No expiration, invalidation or multi-worker coordination is implemented.
+    from: s.cache_design
+    at: Deliberate limits
+    fidelity: paraphrase
+  cache.key_fields:
+    name: Inputs used by the cache key
+    v: query
+    from: s.cache
+    at: 'lookup: query not in _CACHE; _CACHE[query]'
+    fidelity: paraphrase
+  cache.miss_delegate:
+    name: Search still receives the user on a miss
+    v: search(query, user)
+    from: s.cache
+    at: 'lookup: the cache-miss assignment'
+    fidelity: paraphrase
+  cache.release_scope:
+    name: Scope of the design pass
+    v: Small executable fixture; private-project use needs a separate combined-path review.
+    from: s.cache_design
+    at: Deliberate limits
+    fidelity: paraphrase
+  cache.scope:
+    name: Cache storage lifetime
+    v: A module-level in-memory dictionary.
+    from: s.cache
+    at: _CACHE = {}
+    fidelity: paraphrase
+  cache.test_call_count:
+    name: Search call count asserted by the unit test
+    v: 1
+    from: s.cache_tests
+    at: search.assert_called_once_with("public", "alice")
+    fidelity: paraphrase
+  cache.test_data:
+    name: Data used by the cache unit test
+    v: One mocked public project; no private-result fixture in that test.
+    from: s.cache_tests
+    at: test_public_query_is_served_once_across_users
+    fidelity: paraphrase
+  search.copies_rows:
+    name: Search constructs a fresh row dictionary
+    v: true
+    from: s.search
+    at: 'search: dict(project)'
+    fidelity: paraphrase
+  search.query_match:
+    name: Query matching contract
+    v: Case-sensitive substring matching on each project name.
+    from: s.search
+    at: 'search: query in project["name"]'
+    fidelity: paraphrase
+  search.result_fields:
+    name: Fields retained in each returned project
+    v: name; private; owner
+    from: s.search
+    at: PROJECTS and the dict(project) result copy
+    fidelity: paraphrase
   search.results_public:
+    name: All currently returned search results are public
     v: true
     from: s.search
     at: INCLUDE_PRIVATE_PROJECTS is false
     of: '2025-01-01'
     measure: search_results_public
 judgments:
+  cache.hit_authorization:
+    name: The hit path inherits the sharing assumption
+    rests_on:
+    - search.shared_cache
+    - cache.hit_reuses_result
+    - cache.miss_delegate
+    verdict: Treat cross-user cache hits as depending on the public-results decision, not as a fresh
+      authorization check.
+    because: The user reaches search on a miss; a hit returns saved data without repeating the search
+      filter.
+    reopened_by: The hit path, key scope or public-results decision changes; review the combined
+      path.
+    seen:
+      search.shared_cache: Search responses can share a cache keyed only by query because all results
+        are public.
+      cache.hit_reuses_result: true
+      cache.miss_delegate: search(query, user)
+  cache.operational_scope:
+    name: Keep production cache concerns visible
+    rests_on:
+    - cache.scope
+    - cache.invalidation
+    - cache.release_scope
+    verdict: Do not infer invalidation or multi-worker coherence from this in-memory example.
+    because: Those mechanisms are explicitly outside the fixture.
+    reopened_by: The cache gains expiration, invalidation, shared storage or a production-readiness
+      review.
+    seen:
+      cache.scope: A module-level in-memory dictionary.
+      cache.invalidation: No expiration, invalidation or multi-worker coordination is implemented.
+      cache.release_scope: Small executable fixture; private-project use needs a separate combined-path
+        review.
+  cache.test_boundary:
+    name: What the isolated cache test establishes
+    rests_on:
+    - cache.test_data
+    - cache.test_call_count
+    - cache.key_fields
+    verdict: The unit test establishes reuse for its mocked public case; it does not establish private-result
+      isolation.
+    because: The source test checks one call and equal results across two users against a public
+      mock.
+    reopened_by: The test adds real private-result cases or the combined search/cache behavior changes.
+    seen:
+      cache.test_data: One mocked public project; no private-result fixture in that test.
+      cache.test_call_count: 1
+      cache.key_fields: query
   search.shared_cache:
-    rests_on: [search.results_public]
-    verdict: "Search responses can share a cache keyed only by query because all results are
-              public."
-    because: "In this example public results are identical for everyone making the same query.
-              Private results require reconsidering the cache key and access checks."
-    wrong_if: "search.results_public == false"
-    seen: {search.results_public: true}
+    name: Share a cache only while results are public
+    rests_on:
+    - search.results_public
+    - cache.key_fields
+    - cache.goal
+    verdict: Search responses can share a cache keyed only by query because all results are public.
+    because: The query-only key can be reused across users under the public-results premise. Private
+      results require revisiting the key and access checks.
+    wrong_if: search.results_public == false
+    seen:
+      search.results_public: true
+      cache.key_fields: query
+      cache.goal: Avoid a second search for the same public query across users.
+open:
+  cache.lifecycle_review:
+    name: Review invalidation and deployment scope
+    question: What invalidates a cached response, and how would multiple workers share or isolate
+      it?
+  cache.private_key:
+    name: Choose a cache boundary for private results
+    question: Should private results use a principal-scoped key, avoid shared caching, or re-check
+      authorization on every hit?
 ```
 
 </details>
@@ -134,14 +288,9 @@ test could be added to the application's suite.
 
 ### Premature file deletion (consistency)
 
-<p align="center">
-  <a href="../../assets/stories/download-promise.png">
-    <picture>
-      <source media="(max-width: 600px)" srcset="../../assets/stories/download-promise-mobile.png">
-      <img src="../../assets/stories/download-promise.png" width="760" alt="One branch shortens storage retention to seven days; the other promises 30-day downloads. Both pass separately. Their clean merge leaves a download promise longer than the file's lifetime.">
-    </picture>
-  </a>
-</p>
+[![One branch shortens storage retention to seven days; the other promises 30-day downloads. Both pass separately. Their clean merge leaves a download promise longer than the file's lifetime.](../../assets/stories/download-promise.png)](../../assets/stories/download-promise.png)
+
+[Phone layout](../../assets/stories/download-promise-mobile.png)
 
 Each pair below is **retention / promised download days**:
 

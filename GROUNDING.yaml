@@ -728,6 +728,12 @@ sources:
     at: "User request in task 01a0b42e-d428-79a0-a6f7-03bf6195dde1"
     read: "2026-09-18"
     fidelity: quoted
+  s.2026_09_18_illustration_titles:
+    name: "Maintainer preference for process-first README illustrations"
+    asked: "אני חושב שלא צריך אותם, ובחלק מהם הם כן צריכים להיות אבל בחלק התחתון של התמונה כתוצאה או
+            כפאנץ׳ של התהליך"
+    of: "README illustration titles; item 2 in task 01a0b5cf-5be6-7ab1-9aef-85185dcd953e."
+    read: "2026-09-18"
   s.2026_09_18_experimental_applications:
     name: "Separate the optional experimental HTML applications from the core"
     asked: "מצויין אני בעד, גם להגדיר אותם כapplications עם התקנה אופציונלית וגם experimental"
@@ -785,6 +791,22 @@ sources:
     at: "PR #119 run 35285716254 attempt 1 and local forced-date and fixed-day test runs"
     of: "2026-09-18"
     read: "2026-09-18"
+  s.2026_09_19_readme_example_depth:
+    name: "Maintainer request for richer example records and mobile compatibility"
+    asked: "גם וגם"
+    of: "Approval to enrich both the README and the full example pages after requesting a shorter
+         link to the repeated download example, deeper source-backed records and images, and
+         investigation of broken images in the GitHub iPhone app. The maintainer also asked to remove
+         Fictional from the cooking-workshop descriptions."
+    read: "2026-09-19"
+  s.2026_09_19_reasoning_overview:
+    name: "Maintainer approval to polish the record-centered README overview"
+    asked: "סבבה תלטש את זה"
+    of: "Selected Meet GROUNDING.yaml illustration: two conversations point into the record, the
+         condition leads to an actual returned tool result, and the closing line is Deterministic
+         Reasoning that outlives the conversation. Polish readability and provide a dedicated phone
+         layout."
+    read: "2026-09-19"
   s.2026_09_19_main_integration:
     name: "Integrate main with the optional HTML applications"
     asked: "זה יפתר בגישה שלנו לא? אגב נכנסו המון שינויים לmain רוצה למזג אלינו ולתקן ולהתאים אצלנו
@@ -962,6 +984,12 @@ sources:
     of: "python3 ast over scripts/render_page.py - top-level string constants of three lines or more,
          at b47f7a0 and again after the move"
     read: "2026-09-03"
+  run.dark_matter_cli:
+    name: "CLI reads of the expanded research record"
+    file: "examples/dark-matter/cli-examples.md"
+    of: "Captured check, open, pull and affects responses on the six-paper record, with its input
+         hash and reader version. All five reads exited zero."
+    read: "2026-09-18"
   run.entry_name_eval:
     from: s.2026_09_12_layout
     name: "The entry file's name tried on the Codex host: the same record under five names -
@@ -2581,6 +2609,12 @@ open:
   q.followups_outcomes_to_graph: "Which nontrivial followup outcomes should be recorded as new
                                   project evidence, by which authorized writer, so that knowledge
                                   does not remain only in execution history?"
+  q.github_mobile_images:
+                  name: "Verify the revised images in the GitHub iPhone app"
+                  from: s.2026_09_19_readme_example_depth
+                  question: "Does the GitHub iPhone app load the Markdown images and their
+                             phone-layout links from the updated branch? Native-app rendering remains
+                             unverified."
   q.prefix_eval: "does a word prefix reach the right entry more often than a letter, and does a
                   legend close the gap? the three-arm eval on the page fixture - the same prompts and
                   trials as the grounding-line harness, under letters, under letters with
@@ -4377,6 +4411,41 @@ judgments:
       d.spill_on_every_tab: "what fell through the arrangement - flagged judgments nothing picked,
                              and what a session wrote for an intent no tab serves - is counted once
                              for the page and drawn on every tab"
+  d.readme_illustration_reading_order:
+    name: "Show the process before the takeaway"
+    from: s.2026_09_18_illustration_titles
+    rests_on: [s.2026_09_18_illustration_titles, d.readme_visual_identity]
+    verdict: "Begin explanatory README illustrations with their situation or process. Omit redundant
+              umbrella titles; place a useful takeaway or punchline after the process in both desktop
+              and phone layouts."
+    because: "The surrounding README supplies the topic. Keep panel labels and data needed to follow
+              the process, and retain an existing clear conclusion instead of adding another slogan.
+              This is a presentation choice, not a measured readability improvement."
+    reopened_by: "Readers need the removed title to understand the setup, mistake the closing line
+                  for another process step, or cannot follow the essential order at phone width."
+    seen:
+      s.2026_09_18_illustration_titles: "read 2026-09-18"
+      d.readme_visual_identity: "Use the large ink portrait of Karl Popper on the left, with a
+                                 restrained, faintly amused expression and a natural inward gaze
+                                 toward the lowercase kpopper wordmark and one-line lemma quotation
+                                 on the right. Keep the separate italic attribution without a final
+                                 period, the secondary Korean bubble and the white geometric k icon
+                                 on electric blue. Process overviews use ink illustrations and phone
+                                 layouts with separate editable schematic references. In the
+                                 conversation overview, show a person only in the main-session
+                                 scene."
+  d.readme_images_use_markdown:
+    name: "Use portable image embedding in repository guides"
+    from: s.2026_09_19_readme_example_depth
+    rests_on: [s.2026_09_19_readme_example_depth]
+    verdict: "Use ordinary Markdown images with relative asset paths and explicit phone-layout links
+              in the README and example guides."
+    because: "This avoids custom picture-element rendering while preserving branch-local assets. The
+              phone layouts remain directly accessible; native-app success still requires
+              verification."
+    reopened_by: "The GitHub mobile app still fails to load the images, phone links are not usable,
+                  or a verified responsive embedding works consistently across the target clients."
+    seen: {s.2026_09_19_readme_example_depth: "read 2026-09-19"}
   d.readme_layered_explanation:
     rests_on: [s.2026_09_13_readme_depth, d.readme_opens_with_what_it_does, d.readme_story_series, s.2026_09_13_reasoning_emphasis]
     verdict: "Lead with recorded dependencies between decisions, evidence and assumptions, and the
@@ -4458,36 +4527,61 @@ judgments:
       s.2026_09_13_readme_depth: "read 2026-09-13"
       s.2026_09_13_reasoning_overview: "read 2026-09-13"
       s.2026_09_13_remove_duplicate_overview: "read 2026-09-13"
+  d.readme_reasoning_overview:
+    name: "Introduce the record through a complete check"
+    from: s.2026_09_19_reasoning_overview
+    rests_on: [s.2026_09_19_reasoning_overview, d.readme_illustration_reading_order, d.readme_visual_identity]
+    verdict: "Use a file-centered Meet GROUNDING.yaml overview: conversations point to recorded
+              reasoning and changed inputs; wrong_if leads to a returned check result. Preserve the
+              same meaning in dedicated desktop and phone layouts."
+    because: "The selected composition connects capture, continuity and checking to one inspectable
+              artifact. The ending is Deterministic Reasoning that outlives the conversation. Any
+              timing badge cites the local sample in assets/diagrams/reasoning-check-run.json; it is
+              not a general latency claim."
+    reopened_by: "Readers mistake the drawing for automatic interpretation of unrecorded material,
+                  treat the measured time as a general performance guarantee, or cannot follow the
+                  source-to-record-to-check path at normal README or phone width."
+    seen:
+      s.2026_09_19_reasoning_overview: "read 2026-09-19"
+      d.readme_illustration_reading_order: "Begin explanatory README illustrations with their
+                                            situation or process. Omit redundant umbrella titles;
+                                            place a useful takeaway or punchline after the process in
+                                            both desktop and phone layouts."
+      d.readme_visual_identity: "Use the large ink portrait of Karl Popper on the left, with a
+                                 restrained, faintly amused expression and a natural inward gaze
+                                 toward the lowercase kpopper wordmark and one-line lemma quotation
+                                 on the right. Keep the separate italic attribution without a final
+                                 period, the secondary Korean bubble and the white geometric k icon
+                                 on electric blue. Process overviews use ink illustrations and phone
+                                 layouts with separate editable schematic references. In the
+                                 conversation overview, show a person only in the main-session
+                                 scene."
   d.readme_story_series:
-    rests_on: [s.2026_09_13_story_approval, d.readme_opens_with_what_it_does, d.readme_visual_identity, s.2026_09_13_worker_and_research]
-    verdict: "Open with the approved illustrated series: shared cache and private results, download
-              promise versus retention, the Cowork workshop, then a dark-matter research synthesis.
-              Provide desktop and phone layouts, visible record excerpts, source links and runnable
-              examples."
-    because: "Two code cases expose different dependencies: a visibility assumption and a promise
-              across policy and email. The workshop shows the same continuity problem when a changed
-              premise requires judgment rather than an executable failure. The two-input composition
-              and larger consequence scene preserve the narrative energy the maintainer preferred.
-              Published examples make the green branch tests, clean merges and failed recorded
-              conditions inspectable, and show that ordinary integration tests can also detect the
-              problems. The research case adds constructive synthesis across papers: distinct sourced
-              findings feed one judgment with its adopted framework and open questions. It uses
-              selected real abstracts with locators and a runnable replay of three concurrent CLI
-              writers; it does not claim live independent agent research or infer scientific truth
-              from agreement."
-    reopened_by: "An uncoached reader cannot identify the reason invalidated in either code story,
-                  treats the Cowork review notice as proof the plan is wrong, believes the tool
-                  discovers unrecorded assumptions automatically, or cannot read the essential
-                  content on a phone. Revisit the length if readers who want to try the tool cannot
-                  find installation. Revisit the research story if readers take schematic figures for
-                  measured data, the synthesis for a proof, or the prepared replay for a live model
-                  evaluation."
+    rests_on: [s.2026_09_13_story_approval, d.readme_opens_with_what_it_does, d.readme_visual_identity, s.2026_09_13_worker_and_research, s.2026_09_19_readme_example_depth]
+    verdict: "After the opening record overview, show the cache, workshop and six-paper research
+              examples with source-backed record close-ups and selected YAML. Keep the full download
+              merge example linked without repeating its whole story in the README."
+    because: "The opening overview already explains the 7-versus-30-day condition. The main examples
+              add distinct kinds of reasoning: a failed sharing premise, several plans reopened by a
+              format change, and a research synthesis with shared inputs and unresolved questions.
+              Richness comes from the complete runnable records and retrieved sources, not invented
+              background content."
+    reopened_by: "A reader cannot trace an illustrated result to its source and record; the added
+                  detail obscures the main example or installation; the workshop notice is mistaken
+                  for proof the plan fails; or the research replay is mistaken for live independent
+                  agent research or a scientific proof."
+    name: "Show rich working records behind three main examples"
+    from: s.2026_09_19_readme_example_depth
+    replaced: ["the standing judgment holds, and a person takes this over it by name on 2026-09-19"]
+    reviewed: "2026-09-19"
     seen:
       s.2026_09_13_story_approval: "read 2026-09-13"
-      d.readme_opens_with_what_it_does: "Keep the hero, explain the practical benefit immediately
-                                         below it, then show concrete code and non-code examples with
-                                         visible recorded premises and a direct route to
-                                         installation. Introduce the third-brain metaphor later."
+      d.readme_opens_with_what_it_does: "Keep the hero, practical benefit, direct installation link
+                                         and opening reasoning illustration, followed by the concrete
+                                         code and non-code examples with visible recorded premises
+                                         and phone layouts. Omit the introductory caption and link to
+                                         the illustration-production guide. Introduce the third-brain
+                                         metaphor later."
       d.readme_visual_identity: "Use the large ink portrait of Karl Popper on the left, with a
                                  restrained, faintly amused expression and a natural inward gaze
                                  toward the lowercase kpopper wordmark and one-line lemma quotation
@@ -4498,6 +4592,7 @@ judgments:
                                  conversation overview, show a person only in the main-session
                                  scene."
       s.2026_09_13_worker_and_research: "read 2026-09-13"
+      s.2026_09_19_readme_example_depth: "read 2026-09-19"
   d.readme_visual_identity:
     rests_on: [s.2026_09_13_readme_direction, s.2026_09_12_first_readings, s.2026_09_13_large_hero, s.gaze_direction_study, s.2026_09_13_reasoning_emphasis, s.2026_09_13_process_illustrations, s.2026_09_13_worker_and_research]
     verdict: "Use the large ink portrait of Karl Popper on the left, with a restrained, faintly

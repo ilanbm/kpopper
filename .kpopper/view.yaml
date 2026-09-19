@@ -96,6 +96,9 @@ tabs:
              s.2026_09_17_selective_ci, s.2026_09_17_history_reasoning_integration,
              s.2026_09_17_t3_integration, s.2026_09_18_ci_cost,
              s.2026_09_18_continue_reasoning_core, s.2026_09_18_remeasure_midnight,
+             s.2026_09_18_illustration_titles,
+             s.2026_09_19_reasoning_overview,
+             s.2026_09_19_readme_example_depth,
              s.ci_execution_evidence, s.2026_09_18_lane_b_load_once,
              s.2026_09_18_overlay_profile, s.2026_09_18_lane_a_hoist]
     sections:
