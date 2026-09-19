@@ -76,7 +76,7 @@ where
         };
         let (id, method, params) = match request_parts(&value) {
             Ok(parts) => parts,
-            Err((id, message)) => { if id.is_some() { write_error(writer, id, -32600, message)?; } continue; }
+            Err((id, message)) => { write_error(writer, id, -32600, message)?; continue; }
         };
         let Some(id) = id else {
             // Notifications, including initialized/cancelled, never receive a response.
@@ -94,7 +94,7 @@ fn request_parts(value: &Value) -> RequestParts<'_> {
     let id = match object.get("id") {
         None => None,
         Some(Value::String(_) | Value::Number(_)) => Some(object["id"].clone()),
-        Some(_) => return Err((None, "Invalid Request")),
+        Some(value) => return Err((Some(value.clone()), "Invalid Request")),
     };
     Ok((id, method.to_owned(), object.get("params").unwrap_or(&Value::Null)))
 }
@@ -140,6 +140,7 @@ where F: FnMut(&str, &Value) -> Result<String, String> {
 }
 
 fn validate_schema(value: &Value, schema: &Value) -> Result<(), String> {
+    validate_type(value, schema, "arguments")?;
     if let Some(required) = schema.get("required").and_then(Value::as_array) {
         let object = value.as_object().ok_or_else(|| "arguments must be an object".to_owned())?;
         for key in required { let key = key.as_str().ok_or_else(|| "invalid schema".to_owned())?; if !object.contains_key(key) { return Err(format!("missing required argument: {key}")); } }
@@ -158,9 +159,22 @@ fn validate_type(value: &Value, schema: &Value, key: &str) -> Result<(), String>
     }
     if let Some(values) = schema.get("enum").and_then(Value::as_array)
         && !values.iter().any(|candidate| candidate == value) { return Err(format!("argument {key} has invalid value")); }
-    let Some(kind) = schema.get("type").and_then(Value::as_str) else { return Ok(()); };
-    let valid = match kind { "string" => value.is_string(), "integer" => value.as_i64().is_some() || value.as_u64().is_some(), "boolean" => value.is_boolean(), "array" => value.is_array(), "object" => value.is_object(), "null" => value.is_null(), _ => true };
-    if valid { Ok(()) } else { Err(format!("argument {key} has invalid type")) }
+    let valid = match schema.get("type") {
+        Some(Value::String(kind)) => type_matches(value, kind),
+        Some(Value::Array(kinds)) => kinds.iter().filter_map(Value::as_str).any(|kind| type_matches(value, kind)),
+        Some(_) => false,
+        None => true,
+    };
+    if !valid { return Err(format!("argument {key} has invalid type")); }
+    if let Some(items) = schema.get("items")
+        && let Some(array) = value.as_array() {
+            for item in array { validate_type(item, items, key)?; }
+    }
+    Ok(())
+}
+
+fn type_matches(value: &Value, kind: &str) -> bool {
+    match kind { "string" => value.is_string(), "integer" => value.as_i64().is_some() || value.as_u64().is_some(), "boolean" => value.is_boolean(), "array" => value.is_array(), "object" => value.is_object(), "null" => value.is_null(), _ => false }
 }
 
 fn write_error<W: Write>(writer: &mut W, id: Option<RpcId>, code: i32, message: &str) -> Result<(), Error> { write_json(writer, &json!({"jsonrpc":"2.0","id":id,"error":{"code":code,"message":message}})) }

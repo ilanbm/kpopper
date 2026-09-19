@@ -53,3 +53,34 @@ fn malformed_and_notifications_follow_json_rpc_rules() {
     assert_eq!(responses[0]["error"]["code"], -32700);
     assert_eq!(responses[1]["error"]["code"], -32601);
 }
+
+#[test]
+fn nested_and_union_argument_types_are_strict() {
+    let wire = concat!(
+        r#"{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"echo","arguments":{"x":[1]}}}"#, "\n",
+        r#"{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"echo","arguments":{"x":true}}}"#, "\n",
+    );
+    let mut reader = Cursor::new(wire);
+    let mut output = Vec::new();
+    server(&mut reader, &mut output, &[tool()], |_, _| unreachable!()).unwrap();
+    let responses: Vec<Value> = String::from_utf8(output).unwrap().lines().map(|l| serde_json::from_str(l).unwrap()).collect();
+    assert_eq!(responses[0]["error"]["code"], -32602);
+    assert_eq!(responses[1]["error"]["code"], -32602);
+}
+
+#[test]
+fn malformed_requests_get_null_id_but_notifications_stay_silent() {
+    let wire = concat!(
+        "[1]\n",
+        "1\n",
+        r#"{"jsonrpc":"2.0","id":null,"method":"ping"}"#, "\n",
+        r#"{"jsonrpc":"2.0","method":"ping"}"#, "\n",
+    );
+    let mut reader = Cursor::new(wire);
+    let mut output = Vec::new();
+    server(&mut reader, &mut output, &[], |_, _| unreachable!()).unwrap();
+    let responses: Vec<Value> = String::from_utf8(output).unwrap().lines().map(|l| serde_json::from_str(l).unwrap()).collect();
+    assert_eq!(responses.len(), 3);
+    assert!(responses.iter().all(|response| response["id"].is_null()));
+    assert!(responses.iter().all(|response| response["error"]["code"] == -32600));
+}
