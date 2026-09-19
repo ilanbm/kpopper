@@ -1,6 +1,7 @@
 #![forbid(unsafe_code)]
 
 pub mod authoring_source;
+pub mod checked_session;
 pub mod core_html;
 pub mod direct_history;
 pub mod history_activation;
