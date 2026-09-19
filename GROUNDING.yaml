@@ -768,6 +768,10 @@ sources:
     at: "PR #119 run 35285716254 attempt 1 and local forced-date and fixed-day test runs"
     of: "2026-09-18"
     read: "2026-09-18"
+  s.2026_09_19_native_snapshot_continuation:
+    name: "Continue the approved native migration"
+    asked: "Continue the approved kpopper Rust migration autonomously until the full planned native
+            outcome is verified."
   s.2026_09_19_native_transactions:
     name: "Prepared native transactions and source-order compatibility"
     asked: "Continue the approved kpopper Rust migration autonomously through verified completion,
@@ -851,6 +855,7 @@ sources:
                    captured report."
   s.native_snapshot_verification:
     name: "Native snapshot and evaluator conformance"
+    from: s.2026_09_19_native_snapshot_continuation
     of: "2026-09-19 local macOS arm64 verification of Snapshot replay, scope grants, input identity
          and actual Lean evaluation envelopes"
     read: "2026-09-19"
