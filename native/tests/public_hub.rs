@@ -13,6 +13,23 @@ fn cli(root: &Path, args: &[&str]) -> std::process::Output {
         resources.join("reasoning").join(format!("{target}.zip")),
     )
     .unwrap();
+    if fs::read_to_string(root.join("GROUNDING.yaml"))
+        .is_ok_and(|record| !record.contains("profile: core/v1"))
+    {
+        let ordinary = resources.join("ordinary").join(&target);
+        fs::create_dir_all(&ordinary).unwrap();
+        let program = std::env::var_os("KPOP_TEST_ORDINARY_PROGRAM")
+            .map(std::path::PathBuf::from)
+            .unwrap_or_else(|| {
+                std::path::PathBuf::from(std::env::var_os("HOME").unwrap())
+                    .join(".cache/kpopper/lean")
+                    .join(&target)
+                    .join(env!("KPOP_ORDINARY_SOURCE_SHA256"))
+            });
+        for name in ["build.json", "epistemic-core"] {
+            fs::copy(program.join(name), ordinary.join(name)).unwrap();
+        }
+    }
     Command::new(env!("CARGO_BIN_EXE_kpop-native"))
         .current_dir(root)
         .args(args)
@@ -22,6 +39,48 @@ fn cli(root: &Path, args: &[&str]) -> std::process::Output {
         .env("XDG_STATE_HOME", root.join("private-state"))
         .output()
         .unwrap()
+}
+
+const ORDINARY: &str = "meta:\n  name: Ordinary <record>\nsources:\n  s.note: {name: 'Source & note', file: 'notes # %.html'}\nknown:\n  p.load: {v: 61, from: s.note}\n  p.enabled: {v: true}\njudgments:\n  d.work:\n    verdict: Keep the current format\n    rests_on: [p.load, p.enabled]\n    seen: {p.load: 44, p.enabled: true}\n    wrong_if: p.load > 80\n";
+
+#[test]
+fn ordinary_hub_builds_arranged_typed_interactive_page_and_verifies_without_writing() {
+    let tmp = tempfile::tempdir().unwrap();
+    let root = tmp.path();
+    fs::write(root.join("GROUNDING.yaml"), ORDINARY).unwrap();
+    fs::write(root.join("notes # %.html"), "source").unwrap();
+    fs::create_dir(root.join(".kpopper")).unwrap();
+    fs::write(root.join(".kpopper/view.yaml"), "title: Current view\nsections:\n- title: Decision\n  pick: judgments\n  as: cards\n- title: Inputs\n  pick: p\n  as: table\n").unwrap();
+    let verified = ok(root, &["--frozen", "page", "--verify"]);
+    assert!(
+        String::from_utf8_lossy(&verified.stdout)
+            .contains("4 elements, 3 entries, 1 judgments, 3 tabs, 0 problems")
+    );
+    assert!(!root.join("record.html").exists());
+    ok(root, &["--frozen", "page", "--out", "site/page.html"]);
+    let html = fs::read_to_string(root.join("site/page.html")).unwrap();
+    assert!(html.contains("Ordinary &lt;record&gt;"));
+    assert!(html.contains("data-tab=\"now\""));
+    assert!(html.contains("class=\"card\""));
+    assert!(html.contains("data-id=\"d.work\""));
+    assert!(html.contains("data-id=\"p.enabled\">True"));
+    assert!(html.contains("../notes%20%23%20%25.html"));
+    assert!(html.contains("window.__E="));
+    assert!(html.contains("window.__J="));
+    assert!(html.contains("<svg viewBox=\"0 0 960 700\""));
+    assert_eq!(
+        fs::read_to_string(root.join("GROUNDING.yaml")).unwrap(),
+        ORDINARY
+    );
+    assert!(
+        !cli(root, &["--frozen", "page", "--out", "notes # %.html"])
+            .status
+            .success()
+    );
+    assert_eq!(
+        fs::read_to_string(root.join("notes # %.html")).unwrap(),
+        "source"
+    );
 }
 fn ok(root: &Path, args: &[&str]) -> std::process::Output {
     let result = cli(root, args);

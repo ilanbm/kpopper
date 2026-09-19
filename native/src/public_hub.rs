@@ -50,7 +50,7 @@ fn destination(options: &Options, cwd: &Path, first: &Path) -> Result<PathBuf> {
     })
 }
 
-fn verify(page: &serde_json::Value) -> Result<Output> {
+fn verify_core(page: &serde_json::Value) -> Result<Output> {
     let values = &page["page_inputs"]["values"];
     let nodes = values["nodes"]
         .as_array()
@@ -298,23 +298,12 @@ pub fn run(options: &Options, cwd: &Path, mode: ReadMode) -> Result<Output> {
         paths
     };
     let first = paths.first().ok_or_else(|| error("record_required"))?;
-    let runtime = W::core_runtime()?;
+    let runtime = W::runtime_for_paths(&paths, &cwd, options.profile.as_deref())?;
     let captured =
         source_capture::capture_source_with_runtime(&paths, &cwd, mode, None, runtime.as_ref())?;
     let capabilities =
         crate::reasoning_fields::capabilities(&captured.document(), options.profile.as_deref())?;
-    require(
-        string_is(&map(&capabilities)?["profile"], "core/v1"),
-        "The native Hub currently supports core/v1 records; ordinary Hub rendering is not yet available",
-    )?;
-    let context = CapturedAssessment::from_snapshot(
-        captured.snapshot().clone(),
-        None,
-        "focused-review/v1",
-        runtime.as_ref(),
-        OperationalBounds::default(),
-        None,
-    )?;
+    let core = string_is(&map(&capabilities)?["profile"], "core/v1");
     let brief = match &options.brief {
         Some(path) => absolute(&cwd.join(path))?,
         None => first.parent().unwrap().join(
@@ -334,12 +323,54 @@ pub fn run(options: &Options, cwd: &Path, mode: ReadMode) -> Result<Output> {
         None
     };
     if options.verify {
-        let projection = core_page::project(&context, content.as_deref(), true)?;
-        let page = &projection["page_assessment"];
-        core_html::render(page, MAX_HTML).map_err(Error)?;
+        let output = if core {
+            let context = CapturedAssessment::from_snapshot(
+                captured.snapshot().clone(),
+                None,
+                "focused-review/v1",
+                runtime.as_ref(),
+                OperationalBounds::default(),
+                None,
+            )?;
+            let projection = core_page::project(&context, content.as_deref(), true)?;
+            let page = &projection["page_assessment"];
+            core_html::render(page, MAX_HTML).map_err(Error)?;
+            verify_core(page)?
+        } else {
+            let report = crate::ordinary_assessment_report::from_capture(
+                &captured,
+                runtime.as_ref(),
+                crate::ordinary_assessment::POLICY,
+            )?;
+            let destination = destination(options, &cwd, first)?;
+            let page = crate::ordinary_hub::build(
+                &captured,
+                &report,
+                content.as_deref(),
+                first,
+                &destination,
+                MAX_HTML,
+            )?;
+            let mut text = String::new();
+            for failure in &page.failures {
+                text.push_str(&format!("FAIL {failure}\n"));
+            }
+            text.push_str(&format!(
+                "{} elements, {} entries, {} judgments, {} tabs, {} problems\n",
+                page.elements,
+                page.entries,
+                page.judgments,
+                page.tabs,
+                page.failures.len()
+            ));
+            Output {
+                text,
+                code: i32::from(!page.failures.is_empty()),
+            }
+        };
         captured.verify()?;
         inventory.verify()?;
-        return verify(page);
+        return Ok(output);
     }
     let destination = destination(options, &cwd, first)?;
     let mut protected = captured.files().keys().cloned().collect::<Vec<_>>();
@@ -355,8 +386,34 @@ pub fn run(options: &Options, cwd: &Path, mode: ReadMode) -> Result<Output> {
     }
     protected.push(brief);
     let resolved = output_path(&destination, &protected)?;
-    let projection = core_page::project_for_page(&context, content.as_deref(), first, &resolved)?;
-    let html = core_html::render(&projection["page_assessment"], MAX_HTML).map_err(Error)?;
+    let html = if core {
+        let context = CapturedAssessment::from_snapshot(
+            captured.snapshot().clone(),
+            None,
+            "focused-review/v1",
+            runtime.as_ref(),
+            OperationalBounds::default(),
+            None,
+        )?;
+        let projection =
+            core_page::project_for_page(&context, content.as_deref(), first, &resolved)?;
+        core_html::render(&projection["page_assessment"], MAX_HTML).map_err(Error)?
+    } else {
+        let report = crate::ordinary_assessment_report::from_capture(
+            &captured,
+            runtime.as_ref(),
+            crate::ordinary_assessment::POLICY,
+        )?;
+        crate::ordinary_hub::build(
+            &captured,
+            &report,
+            content.as_deref(),
+            first,
+            &resolved,
+            MAX_HTML,
+        )?
+        .html
+    };
     captured.verify()?;
     inventory.verify()?;
     let parent = resolved

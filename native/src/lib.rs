@@ -57,6 +57,7 @@ pub mod identity;
 pub mod ordinary_assessment;
 mod ordinary_assessment_report;
 mod ordinary_counts;
+pub mod ordinary_hub;
 pub mod ordinary_reader;
 pub mod ordinary_runtime;
 pub mod pending_bundle;
