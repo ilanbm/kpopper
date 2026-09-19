@@ -887,6 +887,34 @@ fn collection_for(reader: &Reader<'_>, action: &Map) -> Result<String> {
         .ok_or_else(|| error("invalid_candidate"))
 }
 
+fn verify_untouched_document(before: &V, after: &V, collection: &str, id: &str) -> Result<()> {
+    let mut expected = before.clone();
+    let mut actual = after.clone();
+    for value in [&mut expected, &mut actual] {
+        let doc = map_mut(value)?;
+        if let Some(V::Map(entries)) = doc.get_mut(collection) {
+            entries.remove(id);
+        }
+        if let Some(V::Map(meta)) = doc.get_mut("meta") {
+            meta.remove("updated");
+        }
+    }
+    // An add may open its collection, and every write may create meta.updated.
+    for key in [collection, "meta"] {
+        if !map(before)?.contains_key(key)
+            && map(&actual)?
+                .get(key)
+                .is_some_and(|v| matches!(v, V::Map(m) if m.is_empty()))
+        {
+            map_mut(&mut actual)?.remove(key);
+        }
+    }
+    require(
+        authored_equal(&expected, &actual),
+        "the write broke the record and was undone: unrelated content changed",
+    )
+}
+
 fn owner_for(document: &source_document::Document, collection: &str, id: &str) -> Option<PathBuf> {
     document
         .origins
@@ -897,31 +925,57 @@ fn owner_for(document: &source_document::Document, collection: &str, id: &str) -
 
 fn choose_add_owner(
     document: &source_document::Document,
+    inventory: &Inventory,
     collection: &str,
     id: &str,
 ) -> Result<PathBuf> {
     let head = id.split('.').next().unwrap_or(id);
-    let origins = document.origins.get(collection);
-    if let Some(path) = origins.and_then(|origins| {
-        origins
-            .iter()
-            .find(|(candidate, _)| candidate.split('.').next() == Some(head))
-            .map(|(_, path)| path.clone())
-    }) {
-        return Ok(path);
-    }
-    if let Some(path) = origins.and_then(|origins| origins.values().next()).cloned() {
-        return Ok(path);
-    }
-    for collection in document.origins.values() {
-        if let Some(path) = collection.values().next() {
+    let (mut opened, mut own, mut held) = (None, None, None);
+    for path in &document.members {
+        let bytes = inventory
+            .files
+            .get(path)
+            .ok_or_else(|| error("snapshot_changed"))?;
+        let raw = std::str::from_utf8(bytes)
+            .map_err(|_| error("nontext_record_authoring_unsupported"))?;
+        let lines = raw.split('\n').map(str::to_owned).collect::<Vec<_>>();
+        if locate(&lines, id).is_some() {
             return Ok(path.clone());
         }
+        let mut theirs = Vec::new();
+        for group in collections(&lines) {
+            let entries = if group.name == "meta" {
+                Vec::new()
+            } else {
+                members(&lines, &group)
+                    .into_iter()
+                    .filter(|m| m.name.contains('.'))
+                    .collect::<Vec<_>>()
+            };
+            if group.name == collection {
+                if entries
+                    .iter()
+                    .any(|m| m.name.split('.').next() == Some(head))
+                {
+                    return Ok(path.clone());
+                }
+                opened.get_or_insert_with(|| path.clone());
+            }
+            theirs.extend(entries);
+        }
+        if !theirs.is_empty() {
+            held.get_or_insert_with(|| path.clone());
+            if theirs
+                .iter()
+                .all(|m| m.name.split('.').next() == Some(head))
+            {
+                own.get_or_insert_with(|| path.clone());
+            }
+        }
     }
-    document
-        .members
-        .first()
-        .cloned()
+    own.or(opened)
+        .or(held)
+        .or_else(|| document.members.first().cloned())
         .ok_or_else(|| error("missing_record"))
 }
 
@@ -935,7 +989,7 @@ fn update_review_candidate(
     id: &str,
     seen_field: &str,
     seen: &Map,
-    stamp: &str,
+    stamp: Option<&str>,
 ) -> Result<V> {
     let mut candidate = document.clone();
     let body = map_mut(
@@ -947,7 +1001,7 @@ fn update_review_candidate(
     .ok_or_else(|| error("invalid_candidate"))?;
     let body = map_mut(body)?;
     body.insert(seen_field.into(), V::Map(seen.clone()));
-    if body.contains_key("reviewed") {
+    if let Some(stamp) = stamp {
         body.insert("reviewed".into(), s(stamp));
     }
     Ok(candidate)
@@ -1042,15 +1096,30 @@ fn prepare(action: &V, route: &WriteRoute) -> Result<Preparation> {
     reader.for_action(action)?;
     let (normalized, notes) = reader.normalize(action)?;
     let mut action = map(&normalized)?.clone();
-    let refusals = reader.validate(&normalized)?;
+    let stamp = action_stamp(&action);
+    // The clock is captured once for guards and the candidate. Keep the original
+    // absence of --as-of for no-op and private-draft behavior.
+    let mut dated_action = action.clone();
+    if dated_action
+        .get("as_of")
+        .is_none_or(|value| *value == V::Null)
+    {
+        dated_action.insert("as_of".into(), s(&stamp));
+    }
+    let refusals = reader.validate(&V::Map(dated_action))?;
     require(
         refusals.is_empty(),
         &format!("refused - {}", refusals.join("\n          ")),
     )?;
     let kind = text(field(&action, "kind")?)?.to_owned();
     let id = text(field(&action, "id")?)?.to_owned();
-    let stamp = action_stamp(&action);
     let entries = crate::reasoning_snapshot::entries(&source)?;
+    // Supersession requires an atomic retained-verdict sidecar, not insertion of
+    // another YAML member. Refuse until that legacy operation is implemented.
+    require(
+        kind != "add" || !entries.contains_key(&id),
+        "legacy_existing_entry_replacement_unavailable: existing entry left unchanged",
+    )?;
     let mut collection = entries.get(&id).map(|(collection, _)| collection.clone());
     let mut seen = Map::new();
     if kind == "add" {
@@ -1080,6 +1149,12 @@ fn prepare(action: &V, route: &WriteRoute) -> Result<Preparation> {
     }
     let collection =
         collection.ok_or_else(|| error(&format!("refused - no file of the record holds {id}")))?;
+    let stamp_review = kind == "review"
+        && map(&entries[&id].1).is_ok_and(|body| {
+            body.contains_key("reviewed")
+                || body.contains_key("replaced")
+                    && !crate::reasoning_authoring_guards::arrangement(&reader, &entries[&id].1)
+        });
     let candidate = if kind == "review" {
         update_review_candidate(
             &source,
@@ -1087,10 +1162,14 @@ fn prepare(action: &V, route: &WriteRoute) -> Result<Preparation> {
             &id,
             text(&reader.fields()["snapshot"])?,
             &seen,
-            &stamp,
+            stamp_review.then_some(stamp.as_str()),
         )?
     } else {
-        reader.candidate(&V::Map(action.clone()))?
+        let mut candidate_action = action.clone();
+        if kind == "set" {
+            candidate_action.insert("as_of".into(), s(&stamp));
+        }
+        reader.candidate(&V::Map(candidate_action))?
     };
     if let Some(draft) =
         Privacy::candidate_draft(route.project(), &V::Map(action.clone()), &candidate)?
@@ -1111,7 +1190,7 @@ fn prepare(action: &V, route: &WriteRoute) -> Result<Preparation> {
         )));
     }
     let target = if kind == "add" {
-        choose_add_owner(&document, &collection, &id)?
+        choose_add_owner(&document, &inventory, &collection, &id)?
     } else {
         owner_for(&document, &collection, &id)
             .ok_or_else(|| error(&format!("refused - no file of the record holds {id}")))?
@@ -1165,15 +1244,26 @@ fn prepare(action: &V, route: &WriteRoute) -> Result<Preparation> {
                 .get(snapshot)
                 .unwrap_or(&V::Map(Map::new())))?
             .clone();
-            replace_field(&mut lines, &member, snapshot, &V::Map(seen.clone()))?;
-            let (_, member) = locate(&lines, &id).unwrap();
-            if field_span(&lines, &member, "reviewed").is_some() {
-                replace_date_field(&mut lines, &member, "reviewed", &stamp)?;
-            }
             let changed = old_seen.len() != seen.len()
                 || old_seen
                     .iter()
                     .any(|(key, value)| seen.get(key).is_none_or(|now| !same_legacy(value, now)));
+            if changed {
+                replace_field(&mut lines, &member, snapshot, &V::Map(seen.clone()))?;
+            }
+            let (_, member) = locate(&lines, &id).unwrap();
+            if stamp_review {
+                if field_span(&lines, &member, "reviewed").is_some() {
+                    replace_date_field(&mut lines, &member, "reviewed", &stamp)?;
+                } else {
+                    let after =
+                        field_span(&lines, &member, "replaced").map_or(member.end, |span| span.end);
+                    lines.insert(
+                        after,
+                        format!("{}reviewed: \"{stamp}\"", " ".repeat(member.indent + 2)),
+                    );
+                }
+            }
             output.push(format!(
                 "review {id}: {} ({stamp})",
                 if changed {
@@ -1215,6 +1305,21 @@ fn prepare(action: &V, route: &WriteRoute) -> Result<Preparation> {
         "direct_pointer_change: record membership needs a separate migration",
     )?;
     let after_projected = parsed.projected();
+    verify_untouched_document(
+        &parsed_before.projected(),
+        &after_projected,
+        &collection,
+        &id,
+    )?;
+    require(
+        collections(&lines)
+            .iter()
+            .flat_map(|group| members(&lines, group))
+            .filter(|member| member.name == id)
+            .count()
+            == 1,
+        "the write broke the record and was undone: duplicate entry",
+    )?;
     let after_body = crate::reasoning_fields::collections(&after_projected)?
         .get(&collection)
         .and_then(|members| members.get(&id))
@@ -1512,6 +1617,11 @@ pub fn recovery_pending(original: &[PathBuf], cwd: &Path) -> Result<bool> {
     let route = WriteRoute::capture(original, cwd)?;
     require(route.paths().len() == 1, "choose one logical record entry")?;
     let entry = &route.paths()[0];
+    // Advanced/bootstrap recovery belongs to the history dispatcher, including
+    // the window before its authority marker has been published.
+    if !string_is(field(map(route.config())?, "mode")?, "simple") {
+        return Ok(false);
+    }
     if self::route(entry, route.config())? != AuthorityRoute::Legacy {
         return Ok(false);
     }
@@ -1576,6 +1686,24 @@ pub(crate) fn write(action: &V, route: &WriteRoute) -> Result<String> {
 mod tests {
     use super::*;
     use std::fs;
+
+    #[test]
+    fn write_guard_checks_the_rest_of_the_record() {
+        let before = object([
+            ("known", object([("p.a", n("1")), ("p.b", n("2"))])),
+            ("meta", object([("updated", s("2026-09-01"))])),
+        ]);
+        let allowed = object([
+            ("known", object([("p.a", n("3")), ("p.b", n("2"))])),
+            ("meta", object([("updated", s("2026-09-19"))])),
+        ]);
+        verify_untouched_document(&before, &allowed, "known", "p.a").unwrap();
+        let lost_other = object([
+            ("known", object([("p.a", n("3"))])),
+            ("meta", object([("updated", s("2026-09-19"))])),
+        ]);
+        assert!(verify_untouched_document(&before, &lost_other, "known", "p.a").is_err());
+    }
 
     #[test]
     fn captured_source_change_refuses_before_publication() {

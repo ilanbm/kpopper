@@ -1,0 +1,17 @@
+meta:
+  updated: 2026-09-19
+known:
+  p.alpha:
+    v: 2
+    of: 2026-09-01
+  p.beta:
+    v: 3
+    of: 2026-09-01
+judgments:
+  d.keep:
+    verdict: continue
+    rests_on: [p.alpha, p.beta]
+    seen: {p.alpha: 2, p.beta: 3}
+    wrong_if: p.beta > 9
+    replaced: ["an older verdict fell on 2026-08-01"]
+    reviewed: "2026-09-19"
