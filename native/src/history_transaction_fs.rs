@@ -557,6 +557,15 @@ fn participants(m: &PreparedMutation) -> Result<BTreeSet<String>> {
             result.extend(map(v)?.keys().cloned());
         }
     }
+    // A legacy replacement publishes the mutable record and its retained
+    // sidecar together.  Include the sidecar in the participant fence so a
+    // concurrent edit cannot slip between preflight and journal publication.
+    result.extend(
+        m.files()
+            .iter()
+            .filter(|item| item.role == "replaced")
+            .map(|item| item.path.clone()),
+    );
     Ok(result)
 }
 pub fn participant_directories(root: &Path, m: &PreparedMutation) -> Result<Vec<PathBuf>> {

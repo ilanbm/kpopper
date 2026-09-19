@@ -33,7 +33,7 @@ fn success(output: Output) -> Vec<u8> {
 }
 
 #[test]
-fn unsupported_legacy_supersede_leaves_the_standing_judgment_intact() {
+fn legacy_supersede_replaces_in_place_and_keeps_the_old_body() {
     let temp = tempfile::tempdir().unwrap();
     let before = fixture("supersede-before.yaml");
     fs::write(temp.path().join("GROUNDING.yaml"), &before).unwrap();
@@ -51,15 +51,20 @@ fn unsupported_legacy_supersede_leaves_the_standing_judgment_intact() {
             "GROUNDING.yaml",
         ],
     );
+    let stdout = String::from_utf8(success(output)).unwrap();
     assert!(
-        !output.status.success(),
-        "an existing judgment must never be inserted as a second key"
+        stdout.contains("supersede d.keep: continue -> stop"),
+        "{stdout}"
     );
-    assert_eq!(
-        fs::read(temp.path().join("GROUNDING.yaml")).unwrap(),
-        before
-    );
-    assert!(!temp.path().join(".kpopper/replaced.yaml").exists());
+    let record = fs::read_to_string(temp.path().join("GROUNDING.yaml")).unwrap();
+    assert_eq!(record.matches("  d.keep:").count(), 1, "{record}");
+    assert!(record.contains("verdict: stop"), "{record}");
+    assert!(record.contains("replaced:"), "{record}");
+    let retained = fs::read_to_string(temp.path().join(".kpopper/replaced.yaml")).unwrap();
+    assert!(retained.contains("d.keep:"), "{retained}");
+    assert!(retained.contains("verdict: continue"), "{retained}");
+    assert!(retained.contains("ended:"), "{retained}");
+    assert!(retained.contains("day: '2026-09-19'"), "{retained}");
 }
 
 #[test]

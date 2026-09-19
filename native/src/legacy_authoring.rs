@@ -19,6 +19,9 @@ use std::{
     sync::LazyLock,
 };
 
+#[path = "legacy_replaced.rs"]
+mod legacy_replaced;
+
 static TOP: LazyLock<Regex> =
     LazyLock::new(|| Regex::new(r"^([A-Za-z_][A-Za-z0-9_]*):(?: |$)").unwrap());
 static MEMBER: LazyLock<Regex> =
@@ -483,6 +486,17 @@ fn insert_entry(
         if before { "before" } else { "after" },
         anchor.name
     ))
+}
+
+fn replace_entry(lines: &mut Vec<String>, id: &str, body: &Source) -> Result<()> {
+    let (_, member) = locate(lines, id).ok_or_else(|| error("entry_not_found"))?;
+    let flow = inline(&lines[member.start]).starts_with('{');
+    let field_indent = field_span(lines, &member, "v")
+        .or_else(|| field_span(lines, &member, "quoted"))
+        .map_or(member.indent + 2, |field| field.indent);
+    let replacement = entry_lines_ordered(id, body, member.indent, field_indent, flow)?;
+    lines.splice(member.start..member.end, replacement);
+    Ok(())
 }
 
 fn ensure_collection(lines: &mut Vec<String>, collection: &str) {
@@ -1266,15 +1280,12 @@ fn prepare(action: &V, route: &WriteRoute, source_body: Option<&Source>) -> Resu
     let kind = text(field(&action, "kind")?)?.to_owned();
     let id = text(field(&action, "id")?)?.to_owned();
     let entries = crate::reasoning_snapshot::entries(&source)?;
-    // Supersession requires an atomic retained-verdict sidecar, not insertion of
-    // another YAML member. Refuse until that legacy operation is implemented.
-    require(
-        kind != "add" || !entries.contains_key(&id),
-        "legacy_existing_entry_replacement_unavailable: existing entry left unchanged",
-    )?;
     let mut collection = entries.get(&id).map(|(collection, _)| collection.clone());
     let mut seen = Map::new();
     let mut seen_order = Source::Map(Vec::new());
+    let mut supersede = false;
+    let mut supersede_ended = None::<String>;
+    let mut supersede_old = None::<V>;
     if kind == "add" {
         collection = Some(collection_for(&reader, &action)?);
         if let Ok(body) = map(field(&action, "body")?) {
@@ -1285,6 +1296,31 @@ fn prepare(action: &V, route: &WriteRoute, source_body: Option<&Source>) -> Resu
                 let snapshot = text(&reader.fields()["snapshot"])?;
                 map_mut(action.get_mut("body").unwrap())?
                     .insert(snapshot.into(), V::Map(seen.clone()));
+            }
+        }
+        if let Some((_, old)) = entries.get(&id)
+            && let Ok(old_map) = map(old)
+            && let Ok(deps) = text(&reader.fields()["deps"])
+            && old_map.contains_key(deps)
+            && !crate::reasoning_authoring_guards::arrangement(&reader, old)
+            && map(field(&action, "body")?).is_ok_and(|body| body.contains_key(deps))
+        {
+            let predicate = text(&reader.fields()["predicate"])?;
+            if let Some(pred) = old_map.get(predicate)
+                && reader.predicate(pred)? == Some(true)
+            {
+                supersede = true;
+                supersede_ended = Some(format!(
+                    "its wrong_if holds ({})",
+                    crate::public_ordinary_readers::predicate_text(pred)
+                ));
+                supersede_old = Some(old.clone());
+                let renewed = legacy_replaced::judgment_renewal(
+                    old,
+                    field(&action, "body")?,
+                    &format!("{} on {}", supersede_ended.as_deref().unwrap(), stamp),
+                )?;
+                action.insert("body".into(), renewed);
             }
         }
     } else if kind == "review" {
@@ -1344,6 +1380,20 @@ fn prepare(action: &V, route: &WriteRoute, source_body: Option<&Source>) -> Resu
             scalar(field(&action, "value")?, Style::Bare)?
         )));
     }
+    let mut replaced_before = None::<Vec<u8>>;
+    let mut replaced_after = None::<Vec<u8>>;
+    let mut replaced_version = None::<usize>;
+    let mut return_to = None::<legacy_replaced::ReturnTo>;
+    if supersede {
+        let layout = entry_layout(entry)?;
+        let sidecar = entry
+            .parent()
+            .ok_or_else(|| error("invalid_path"))?
+            .join(layout.replaced);
+        if inventory.exists(&sidecar)? {
+            replaced_before = Some(inventory.read(&sidecar)?);
+        }
+    }
     let target = if kind == "add" {
         choose_add_owner(&document, &inventory, &collection, &id)?
     } else {
@@ -1361,10 +1411,30 @@ fn prepare(action: &V, route: &WriteRoute, source_body: Option<&Source>) -> Resu
         .split('\n')
         .map(str::to_owned)
         .collect::<Vec<_>>();
+    if supersede {
+        let old = supersede_old
+            .as_ref()
+            .ok_or_else(|| error("invalid_supersede"))?;
+        let old_source = legacy_replaced::old_body(&before, &id)?;
+        let (sidecar, version, back) = legacy_replaced::keep_replaced(
+            replaced_before.as_deref(),
+            &id,
+            &old_source,
+            field(&action, "body")?,
+            supersede_ended
+                .as_deref()
+                .ok_or_else(|| error("invalid_supersede"))?,
+            &stamp,
+            action.get("drops"),
+        )?;
+        replaced_after = Some(sidecar);
+        replaced_version = Some(version);
+        return_to = back;
+        let _ = old;
+    }
     let mut output = notes;
     match kind.as_str() {
         "add" => {
-            add_collection_if_needed(&mut lines, &collection);
             let mut body = preserve_order(field(&action, "body")?, source_body);
             if !seen.is_empty()
                 && let Source::Map(fields) = &mut body
@@ -1374,10 +1444,91 @@ fn prepare(action: &V, route: &WriteRoute, source_body: Option<&Source>) -> Resu
                     *value = seen_order.clone();
                 }
             }
-            output.push(format!(
-                "add {}",
-                insert_entry(&mut lines, &collection, &id, &body)?
-            ));
+            if supersede {
+                let old = supersede_old.as_ref().unwrap();
+                if let Source::Map(fields) = &mut body {
+                    let snapshot = text(&reader.fields()["snapshot"])?;
+                    fields.retain(|(key, _)| key != "replaced" && key != snapshot);
+                    fields.push((
+                        "replaced".into(),
+                        Source::from_typed(&map(field(&action, "body")?)?["replaced"]),
+                    ));
+                    fields.push((snapshot.into(), seen_order.clone()));
+                }
+                let old_body = map(old)?;
+                let old_verdict = old_body
+                    .get("verdict")
+                    .or_else(|| old_body.get("title"))
+                    .cloned()
+                    .unwrap_or_else(|| s(&id));
+                let new_body = map(field(&action, "body")?)?;
+                let new_verdict = new_body
+                    .get("verdict")
+                    .or_else(|| new_body.get("title"))
+                    .cloned()
+                    .unwrap_or_else(|| s(&id));
+                let why = supersede_ended.as_deref().unwrap();
+                if same_legacy(&old_verdict, &new_verdict) {
+                    output.push(format!(
+                        "supersede {id}: the same verdict on other grounds - {why}"
+                    ));
+                } else {
+                    output.push(format!(
+                        "supersede {id}: {} -> {} - {why}",
+                        crate::public_ordinary_readers::short(&old_verdict, 60),
+                        crate::public_ordinary_readers::short(&new_verdict, 60)
+                    ));
+                }
+                let layout = entry_layout(entry)?;
+                let side = layout.replaced;
+                let kept_fields = ["verdict", "because", "request"]
+                    .into_iter()
+                    .filter(|field| old_body.contains_key(*field))
+                    .collect::<Vec<_>>();
+                let kept_label = if kept_fields.is_empty() {
+                    "body".to_owned()
+                } else {
+                    kept_fields.join(", ")
+                };
+                output.push(format!(
+                    "  kept: the replaced {kept_label}, in {side} (version {})",
+                    replaced_version.ok_or_else(|| error("invalid_supersede"))?
+                ));
+                for (dependency, why) in legacy_replaced::dropped_dependencies(
+                    old,
+                    field(&action, "body")?,
+                    text(&reader.fields()["deps"])?,
+                    action.get("drops"),
+                )? {
+                    output.push(format!(
+                        "  no longer rests on {dependency}{}",
+                        why.as_ref()
+                            .map(|why| format!(": {}", display(why).unwrap_or_default()))
+                            .unwrap_or_default()
+                    ));
+                }
+                if let Some(back) = &return_to {
+                    output.push(format!(
+                        "  returns to {} {}{} - it stood until {} and fell because {}",
+                        if back.exact {
+                            "version"
+                        } else {
+                            "the verdict of version"
+                        },
+                        back.index,
+                        if back.exact { "" } else { ", on other grounds" },
+                        back.day,
+                        back.ended
+                    ));
+                }
+                replace_entry(&mut lines, &id, &body)?;
+            } else {
+                add_collection_if_needed(&mut lines, &collection);
+                output.push(format!(
+                    "add {}",
+                    insert_entry(&mut lines, &collection, &id, &body)?
+                ));
+            }
         }
         "set" => {
             let old = set_entry(
@@ -1559,16 +1710,30 @@ fn prepare(action: &V, route: &WriteRoute, source_body: Option<&Source>) -> Resu
     } else {
         "record_member"
     };
+    let mut files = vec![FileImage {
+        path: target_relative,
+        role: role.into(),
+        before: Some(before),
+        after: Some(after),
+    }];
+    if supersede {
+        let layout = entry_layout(entry)?;
+        let side_path = entry
+            .parent()
+            .ok_or_else(|| error("invalid_path"))?
+            .join(layout.replaced);
+        files.push(FileImage {
+            path: relative(&root, &side_path)?,
+            role: "replaced".into(),
+            before: replaced_before,
+            after: replaced_after,
+        });
+    }
     let mutation = PreparedMutation::prepare(
         &operation,
         &marker,
         &baseline,
-        vec![FileImage {
-            path: target_relative,
-            role: role.into(),
-            before: Some(before),
-            after: Some(after),
-        }],
+        files,
         &receipt,
         &entry_relative,
         None,
@@ -1604,6 +1769,14 @@ fn judgment_state(reader: &Reader<'_>, id: &str) -> Result<(String, String)> {
     let deps = text(&reader.fields()["deps"])?;
     let snapshot = text(&reader.fields()["snapshot"])?;
     let predicate = text(&reader.fields()["predicate"])?;
+    let pred = body.get(predicate).unwrap_or(&V::Null);
+    let predicate_text = crate::public_ordinary_readers::predicate_text(pred);
+    if reader.predicate(pred)? == Some(true) {
+        return Ok((
+            "FIRED".into(),
+            format!("wrong_if holds ({predicate_text}) - broken by its own condition"),
+        ));
+    }
     let seen = body.get(snapshot).and_then(|value| map(value).ok());
     let mut moved = Vec::new();
     if let Some(V::List(dependencies)) = body.get(deps) {
@@ -1627,19 +1800,18 @@ fn judgment_state(reader: &Reader<'_>, id: &str) -> Result<(String, String)> {
             format!("{} - if it still holds: review {id}", moved.join(", ")),
         ));
     }
-    let pred = body.get(predicate).unwrap_or(&V::Null);
     Ok(match reader.predicate(pred)? {
         Some(true) => (
             "FALSIFIED".into(),
-            format!("{predicate} holds ({})", display(pred)?),
+            format!("{predicate} holds ({predicate_text})"),
         ),
         Some(false) => (
             "HOLDS".into(),
-            format!("{predicate} does not hold ({})", display(pred)?),
+            format!("{predicate} does not hold ({predicate_text})"),
         ),
         None => (
             "UNKNOWN".into(),
-            format!("{predicate} is undecidable ({})", display(pred)?),
+            format!("{predicate} is undecidable ({predicate_text})"),
         ),
     })
 }
@@ -1689,16 +1861,15 @@ fn report_lines(kind: &str, id: &str, after: &Reader<'_>) -> Result<Vec<String>>
     }
     let mut moved = 0;
     let mut falsified = 0;
-    for (candidate, body) in after.raw() {
+    let mut flagged = 0;
+    for body in after.raw().values() {
         if map(body).is_ok_and(|body| body.contains_key(deps)) {
-            match judgment_state(after, candidate)?.0.as_str() {
-                "MOVED" => moved += 1,
-                "FALSIFIED" => falsified += 1,
-                _ => {}
-            }
+            let flags = crate::ordinary_counts::flags(after, body)?;
+            moved += usize::from(flags.contains("moved"));
+            falsified += usize::from(flags.contains("falsified"));
+            flagged += usize::from(!flags.is_empty());
         }
     }
-    let flagged = moved + falsified;
     let suffix = if flagged == 0 {
         String::new()
     } else {
@@ -1870,6 +2041,118 @@ pub(crate) fn write(
 mod tests {
     use super::*;
     use std::fs;
+
+    fn replacement(existing_sidecar: bool) -> (tempfile::TempDir, PathBuf, WriteRoute, Prepared) {
+        let temp = tempfile::tempdir().unwrap();
+        let entry = temp.path().join("GROUNDING.yaml");
+        fs::write(
+            &entry,
+            include_str!("../tests/fixtures/legacy-review/supersede-before.yaml"),
+        )
+        .unwrap();
+        if existing_sidecar {
+            fs::create_dir(temp.path().join(".kpopper")).unwrap();
+            fs::write(
+                temp.path().join(".kpopper/replaced.yaml"),
+                "d.other:\n- verdict: retained\n  ended: earlier evidence\n  day: '2026-09-01'\n",
+            )
+            .unwrap();
+        }
+        let route = WriteRoute::capture(std::slice::from_ref(&entry), temp.path()).unwrap();
+        let action = object([
+            ("kind", s("add")),
+            ("id", s("d.keep")),
+            (
+                "body",
+                object([
+                    ("verdict", s("stop")),
+                    ("rests_on", V::List(vec![s("p.alpha"), s("p.beta")])),
+                    ("wrong_if", s("p.alpha > 9")),
+                    ("because", s("new evidence")),
+                ]),
+            ),
+            ("as_of", s("2026-09-19")),
+            ("why", V::Null),
+            ("into", V::Null),
+            ("hypothesis", V::Null),
+            ("source", V::Null),
+            ("at", V::Null),
+        ]);
+        let Preparation::Mutation(prepared) = prepare(&action, &route, None).unwrap() else {
+            panic!("expected replacement")
+        };
+        assert_eq!(prepared.mutation.files().len(), 2);
+        (temp, entry, route, prepared)
+    }
+
+    #[test]
+    fn supersede_recovers_or_rolls_back_both_partial_images() {
+        for existing in [false, true] {
+            for before in [false, true] {
+                for partial_role in ["record", "replaced"] {
+                    let (temp, entry, route, prepared) = replacement(existing);
+                    let images = prepared.mutation.files().to_vec();
+                    let mut verify = |_: &V| {
+                        route.verify()?;
+                        prepared.inventory.verify()
+                    };
+                    let mut stop = |_: &V| Err(error("retained_after_write"));
+                    assert_eq!(
+                        F::publish_legacy(
+                            &prepared.root,
+                            &prepared.journal,
+                            &prepared.mutation,
+                            &mut verify,
+                            Some(&mut stop)
+                        )
+                        .unwrap_err()
+                        .0,
+                        "retained_after_write"
+                    );
+                    // One participant still has its preimage after an interrupted write.
+                    let image = images
+                        .iter()
+                        .find(|image| image.role == partial_role)
+                        .unwrap();
+                    let path = prepared.root.join(&image.path);
+                    if let Some(bytes) = &image.before {
+                        fs::write(&path, bytes).unwrap();
+                    } else {
+                        fs::remove_file(&path).unwrap();
+                    }
+                    drop(route);
+                    recover(std::slice::from_ref(&entry), temp.path(), before).unwrap();
+                    for image in &images {
+                        let expected = if before { &image.before } else { &image.after };
+                        assert_eq!(
+                            F::read(&prepared.root.join(&image.path)).unwrap(),
+                            *expected,
+                            "existing={existing} rollback={before} partial={partial_role} image={}",
+                            image.path
+                        );
+                    }
+                    assert!(!prepared.root.join(&prepared.journal).exists());
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn supersede_never_overwrites_a_sidecar_changed_after_preparation() {
+        for existing in [false, true] {
+            let (temp, entry, route, prepared) = replacement(existing);
+            let record_before = fs::read(&entry).unwrap();
+            let sidecar = temp.path().join(".kpopper/replaced.yaml");
+            fs::create_dir_all(sidecar.parent().unwrap()).unwrap();
+            fs::write(&sidecar, "d.user: [{verdict: preserve}]\n").unwrap();
+            assert!(publish(prepared, &route).is_err());
+            assert_eq!(fs::read(&entry).unwrap(), record_before);
+            assert_eq!(
+                fs::read_to_string(sidecar).unwrap(),
+                "d.user: [{verdict: preserve}]\n"
+            );
+        }
+    }
 
     #[test]
     fn write_guard_checks_the_rest_of_the_record() {
