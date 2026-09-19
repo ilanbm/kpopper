@@ -1,14 +1,6 @@
-<p align="center">
-  <img src="assets/kpopper-hero.png" width="760" alt="kpopper. An ink illustration of Karl Popper holds a microphone and makes a finger heart, looking toward the wordmark and fictional quotation: It really whips the lemma's ass! Logic symbols rise from the blue word lemma. A separate italic attribution reads Karl Popper, the father of K-pop. His speech bubble says OMG 이건 꼭 필요해! — roughly, OMG, I really need this!">
-</p>
+[![kpopper. An ink illustration of Karl Popper holds a microphone and makes a finger heart, looking toward the wordmark and fictional quotation: It really whips the lemma's ass! Logic symbols rise from the blue word lemma. A separate italic attribution reads - Karl Popper, the father of K-pop. His speech bubble says OMG 이건 꼭 필요해! — roughly, OMG, I really need this!](assets/kpopper-hero.png)](assets/kpopper-hero.png)
 
-<p align="center">
-  <a href="https://github.com/ilanbm/kpopper/actions/workflows/check.yml"><img src="https://github.com/ilanbm/kpopper/actions/workflows/check.yml/badge.svg?branch=main" alt="CI tests and record checks"></a>
-  <a href="https://github.com/ilanbm/kpopper/releases/latest"><img src="https://img.shields.io/github/v/release/ilanbm/kpopper" alt="Latest release"></a>
-  <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue" alt="License: MIT"></a>
-  <a href="docs/reasoning-core.md"><img src="https://img.shields.io/badge/reasoning--runtime-Lean%204-3B82F6" alt="reasoning-runtime: Lean 4"></a>
-  <a href="docs/history-contract.md"><img src="https://img.shields.io/badge/Versioned%20knowledge-experimental-8B5CF6" alt="Versioned knowledge: experimental"></a>
-</p>
+[![CI tests and record checks](https://github.com/ilanbm/kpopper/actions/workflows/check.yml/badge.svg?branch=main)](https://github.com/ilanbm/kpopper/actions/workflows/check.yml) [![Latest release](https://img.shields.io/github/v/release/ilanbm/kpopper)](https://github.com/ilanbm/kpopper/releases/latest) [![License: MIT](https://img.shields.io/badge/license-MIT-blue)](LICENSE) [![reasoning-runtime: Lean 4](https://img.shields.io/badge/reasoning--runtime-Lean%204-3B82F6)](docs/reasoning-core.md) [![Versioned knowledge: experimental](https://img.shields.io/badge/Versioned%20knowledge-experimental-8B5CF6)](docs/history-contract.md)
 
 <p align="center">
   <a href="#popper-give-a-conclusion-a-way-to-fail">What's going on? Who is this guy?</a>
@@ -18,37 +10,36 @@
 
 # Your project, more self-aware.
 
-**Your agents reason. kpopper makes that reasoning explicit, persistent, and deterministically checkable.**
+**Your agents reason. kpopper makes that reasoning explicit, persistent, and [deterministically checkable](#what-deterministic-reasoning-means-here).**
 
 kpopper connects decisions to the evidence, assumptions and earlier decisions they
 depend on, and records what would make them worth revisiting. When a recorded premise
 changes, kpopper traces its reach through the record and surfaces what needs another look.
 
-**[Get started](#get-started)** · [Examples](#example-1-private-data-exposure-assumption-checks) ·
+> [!IMPORTANT]
+> **TL;DR: Add kpopper to make your work easier to pick up, easier to check, and harder to lose track of.**
+
+**[Get started](#get-started)** · [Examples](#example-1-coding-agent) ·
 [Capabilities](#what-you-can-do-with-kpopper) · [Record format](#the-knowledge-record) ·
 [Contributing](CONTRIBUTING.md) · [Why the name?](#popper-give-a-conclusion-a-way-to-fail)
 
-<p align="center">
-  <a href="assets/diagrams/reasoning-check.png">
-    <picture>
-      <source media="(max-width: 600px)" srcset="assets/diagrams/reasoning-check-mobile.png">
-      <img src="assets/diagrams/reasoning-check.png" width="760" alt="More deterministic reasoning. An earlier conversation creates an email with a 30-day download window; an action annotation shows the decision and its grounds recorded. A later session drafts a seven-day retention policy and updates the recorded retention from thirty to seven. An Agent records arrow leads to Deterministic checks: YAML retains the conclusion that retention supports the promised window and its earlier 30/30 review snapshot. Below the YAML, seven less than thirty produces Promise no longer supported. The closing line reads Conversations move on. The reasoning stays checkable. The agent interprets the words; the checker evaluates the recorded condition.">
-    </picture>
-  </a>
-</p>
+[![Meet GROUNDING.yaml, with a handwritten your new friend note. An earlier conversation creates an email with a 30-day promise and records the supporting reason; a later conversation updates a draft retention policy and its recorded value to seven days. Blue arrows connect the conversations to the saved conclusion and changed reading. The YAML retains its 30/30 review snapshot. A pink arrow follows wrong_if to the deterministic check: seven is less than thirty, so the promise is no longer supported. Actual CLI output returns FAIL downloads.availability to the agent, with a caller-measured 0.24-second local-run badge. The closing line reads Deterministic Reasoning that outlives the conversation, with a blue underline pointing to the returned result. The phone layout presents consecutive excerpts from the same file.](assets/diagrams/reasoning-check.png)](assets/diagrams/reasoning-check.png)
+
+[Phone layout](assets/diagrams/reasoning-check-mobile.png)
 
 <details>
 <summary>Contents</summary>
 
-- [Example 1: Private data exposure (assumption checks)](#example-1-private-data-exposure-assumption-checks)
-- [Example 2: Premature file deletion (consistency)](#example-2-premature-file-deletion-consistency)
-- [Example 3: Outdated planning assumptions (freshness)](#example-3-outdated-planning-assumptions-freshness)
-- [Example 4: Dark matter across studies (evidence synthesis)](#example-4-dark-matter-across-studies-evidence-synthesis)
+- [Example 1: Coding Agent (assumption checks)](#example-1-coding-agent)
+  - [Two working modes](#two-working-modes)
+- [Example 2: Claude Cowork / ChatGPT Work (freshness)](#example-2-claude-cowork-and-chatgpt-work)
+- [Example 3: Research (evidence synthesis)](#example-3-research)
 - [Installation and first use](#get-started)
 - [What you can do with kpopper](#what-you-can-do-with-kpopper)
 - [One project, across your existing tools](#one-project-across-your-existing-tools)
 - [Past, present and future](#past-present-future)
 - [Background capture during a conversation](#keep-the-conversation-moving)
+- [What deterministic reasoning means here](#what-deterministic-reasoning-means-here)
 - [The record and its evolving structure](#the-knowledge-record)
 - [Review that needs judgment](#when-a-review-needs-judgment)
 - [Followups and background checks](#followups-and-background-checks)
@@ -67,37 +58,72 @@ changes, kpopper traces its reach through the record and surfaces what needs ano
 
 <a id="example-1-private-data-exposure"></a>
 
-## Example 1: Private data exposure (assumption checks)
+<a id="example-1-private-data-exposure-assumption-checks"></a>
+<a id="example-1-coding-agent"></a>
+
+## Example 1: Coding Agent (assumption checks)
+
+### Private data exposure
 
 Two agents start from a search service whose results are all public. PR A adds
 private projects and filters results for each user. PR B adds a shared cache keyed
 only by the query, relying on those results being public and identical for everyone.
 
-<p align="center">
-  <a href="assets/stories/cache-privacy.png">
-    <picture>
-      <source media="(max-width: 600px)" srcset="assets/stories/cache-privacy-mobile.png">
-      <img src="assets/stories/cache-privacy.png" width="760" alt="PR A adds private projects in search.py. PR B caches by query in cache.py because all results were public. Tests pass separately and Git merges cleanly. The combination risks serving Alice's private result to Bob. kpopper flags the failed recorded condition and points back to the cache decision.">
-    </picture>
-  </a>
-</p>
+[![PR A adds private projects in search.py. PR B caches by query in cache.py because all results were public. Tests pass separately and Git merges cleanly. The combination risks serving Alice's private result to Bob. kpopper flags the failed recorded condition and points back to the cache decision. The closing line reads Two green PRs. One data leak.](assets/stories/cache-privacy.png)](assets/stories/cache-privacy.png)
+
+[Phone layout](assets/stories/cache-privacy-mobile.png)
 
 The files merge cleanly. **The reason for sharing the cache no longer holds.**
 
-The relevant part of PR B's `GROUNDING.yaml`:
+The same record retains the surrounding design: query matching, cache behavior,
+test coverage, operational limits and open questions.
+
+[![A richer cache record connects the public-results premise to the query-only cache and its hit-path authorization assumption. The minimap is generated from the complete record.](assets/stories/cache-privacy-record.png)](assets/stories/cache-privacy-record.png)
+
+[Phone layout](assets/stories/cache-privacy-record-mobile.png) · [Full design record](examples/merge-assumptions/cache/pr-b/GROUNDING.yaml)
+
+A selected excerpt from PR B:
 
 ```yaml
 known:
-  search.results_public: {v: true, measure: search_results_public}
-
+  search.results_public:
+    v: true
+    from: s.search
+    at: INCLUDE_PRIVATE_PROJECTS is false
+    measure: search_results_public
+  cache.key_fields:
+    v: query
+    from: s.cache
+    at: 'lookup: query not in _CACHE; _CACHE[query]'
+  cache.hit_reuses_result:
+    v: true
+    from: s.cache
+    at: 'lookup: return _CACHE[query]'
+  cache.test_data:
+    v: One mocked public project; no private-result fixture in that test.
+    from: s.cache_tests
+    at: test_public_query_is_served_once_across_users
 judgments:
   search.shared_cache:
-    rests_on: [search.results_public]
-    verdict: >-
-      Search responses can share a cache keyed only by query
-      because all results are public.
-    wrong_if: "search.results_public == false"
-    seen: {search.results_public: true}
+    rests_on:
+    - search.results_public
+    - cache.key_fields
+    - cache.goal
+    verdict: Search responses can share a cache keyed only by query because all results are public.
+    wrong_if: search.results_public == false
+    seen:
+      search.results_public: true
+      cache.key_fields: query
+      cache.goal: Avoid a second search for the same public query across users.
+  cache.hit_authorization:
+    rests_on:
+    - search.shared_cache
+    - cache.hit_reuses_result
+    - cache.miss_delegate
+    verdict: Treat cross-user cache hits as depending on the public-results decision, not as a fresh
+      authorization check.
+    reopened_by: The hit path, key scope or public-results decision changes; review the combined
+      path.
 ```
 
 `rests_on` names the premise. `seen` keeps its value at the last review. When the
@@ -122,88 +148,178 @@ infer arbitrary security properties from code or replace behavioral tests.
 </details>
 
 <a id="download-promises-and-storage-retention"></a>
-
 <a id="example-2-unavailable-downloads"></a>
+<a id="example-2-premature-file-deletion-consistency"></a>
 
-## Example 2: Premature file deletion (consistency)
+The opening overview uses a download promise and a retention policy. The
+[complete merge example](examples/merge-assumptions/README.md#premature-file-deletion-consistency)
+shows the same 7-versus-30-day conflict across two branches, with executable code,
+measurement recipes and a separate integration probe.
 
-Exports stay for 30 days; download emails currently promise seven. PR A reduces
-storage retention to seven days. PR B extends the download promise to 30 days.
-Each change fits the other policy on its own branch.
+These are executable examples. Checks cover the assumptions the record
+declares and the inputs deliberately measured or recorded.
 
-<p align="center">
-  <a href="assets/stories/download-promise.png">
-    <picture>
-      <source media="(max-width: 600px)" srcset="assets/stories/download-promise-mobile.png">
-      <img src="assets/stories/download-promise.png" width="760" alt="PR A keeps exports for seven days in storage-policy.yaml. PR B promises 30-day downloads in download-email.html because files previously stayed for 30 days. Tests pass and Git merges cleanly. Together, a still-promised link can point to a file deleted on day seven. The recorded condition fails: seven days of storage is less than the 30 days promised.">
-    </picture>
-  </a>
-</p>
+### Two working modes
 
-**The email still says the link is available. The storage policy has already deleted
-the file.** The example's recipes read both the policy and the promise in the actual
-email template. [Run both merge stories](examples/merge-assumptions/README.md).
+The difference is **whether sessions share one project context or work against different
+versions of the code**. Both modes support several sessions and competing hypotheses.
 
-PR B records the promise against the retention period it sees:
+**`GROUNDING.yaml` is the project record shown below:** one shared file in Simple,
+and a version kept with each branch, including `main`, in Advanced.
 
-```yaml
-known:
-  exports.retention_days: {v: 30, measure: retention_days}
-  downloads.promised_days: {v: 30, measure: promised_days}
+[![Simple: sessions share one sourced project record labeled GROUNDING.yaml, with competing hypotheses beside it; consolidation compares and checks proposals, then folds them into the record, refutes them with a reason, or leaves them pending. Advanced: Branch A, Branch B and main each have a GROUNDING.yaml record for their version of the code. Branch records pass through consolidation before integration into main. A continuing Shared findings, pending review path captures feature-independent findings with their source, scope and status. Dashed arrows show local reading before merge. With permission, findings enter a knowledge PR, where consolidation reconciles them with the target record before acceptance. Both paths reach the same main record; the shared path continues for the next batch.](assets/diagrams/two-working-modes.png)](assets/diagrams/two-working-modes.png)
 
-judgments:
-  downloads.availability:
-    rests_on: [exports.retention_days, downloads.promised_days]
-    verdict: "Keep exports available for the full promised download window."
-    wrong_if: "exports.retention_days < downloads.promised_days"
-    seen: {exports.retention_days: 30, downloads.promised_days: 30}
-```
+[Phone layout](assets/diagrams/two-working-modes-mobile.png)
 
-After the merge, the measured values are seven days of retention and 30 days promised.
-The comparison fails. The [full record](examples/merge-assumptions/downloads/pr-b/GROUNDING.yaml)
-and recipes connect both readings to their files.
+[View the full-size illustration](assets/diagrams/two-working-modes.png) ·
+[View the vertical version](assets/diagrams/two-working-modes-mobile.png)
 
-These are fictional, executable examples. Checks cover the assumptions the record
-declares and the inputs deliberately measured or recorded. A changed premise can also
-prompt review without proving a decision wrong.
+**Simple — one shared context.** Sessions read and contribute to the same project graph.
+Competing ideas are named hypotheses beside it: several sessions can examine the same
+proposal, and one session can work on several. For a research project, for example, sessions
+can read different papers and compare explanations against the same sourced record.
+**Consolidation** is how those proposals become part of the shared record: compare them
+with what it already holds, check the combined dependencies and resolve conflicting claims.
+A proposal can be folded in, refuted with its reason retained, or left pending.
+
+**Advanced — branch contexts and shared findings.** Each branch's record describes its
+version of the code. A cache decision on one branch may depend on results being public,
+while another branch introduces private results. Keeping those premises with their branches
+lets review check whether the reasoning still holds when the changes are combined.
+Consolidation reconciles those records: it identifies overlapping subjects and conflicting
+claims, and checks which decisions need another look under the combined premises. Resolve
+what needs judgment before folding a proposal in; unresolved hypotheses remain explicit.
+
+Knowledge then follows two paths:
+
+- **Feature knowledge travels with its branch.** Its assumptions, measurements and
+  hypotheses stay attached to the code they describe. Consolidation tests their combination
+  with the target record as part of reviewing the change.
+- **Shared findings have a continuing path of their own.** Shareable findings that apply
+  independently of the feature enter `pending_grounding`, with their sources and scope.
+  They remain available even if the originating session closes or its worktree is removed.
+
+Suppose a session building an integration discovers a documented change to the vendor's
+API limit. **The feature may be abandoned; the finding can still help the project.** Other
+local worktrees can read it immediately, marked as pending, without waiting for the feature
+to merge. It appears alongside their branch record; reading it does not adopt it or replace
+their recorded premises.
+
+With the project's publication permission, shared findings accumulate in one knowledge PR.
+Consolidation reconciles the proposed knowledge with the target record before acceptance;
+conflicts and changed premises need resolution. Accepted contributions are then verified
+in the target branch, shown as `main` above. The same publication branch is reused for
+the next batch, while the local contribution history persists across review cycles. Local
+capture and reading also work without publication.
+
+A measurement of an unmerged commit can be a fact about that commit. A proposed conclusion
+remains a hypothesis. Merging means the team accepted the contribution; it does not prove
+the claim, increase confidence or refresh its last review. Private material and information
+whose sharing permission is unclear stay in a structured private draft.
+
+Projects without Git start in Simple; new Git projects start in Advanced, including those
+with only one checkout. Simple can also be configured for a Git project with one external
+shared record. Existing registered shared records keep their current location and behavior;
+changing mode requires explicit reconciliation.
+
+See [project modes and publication](docs/project-modes.md) for routing, reproducible reads
+and the publication lifecycle, and [consolidation](skills/consolidate/SKILL.md) for the
+dry run, folding and refutation commands.
+
+These project modes also apply to document and research work.
 
 <a id="revisiting-plans-when-the-brief-changes"></a>
 
 <a id="example-3-outdated-planning-assumptions"></a>
 
-## Example 3: Outdated planning assumptions (freshness)
+<a id="example-3-outdated-planning-assumptions-freshness"></a>
 
-In Claude Cowork, you're planning a cooking workshop around the venue's shared kitchen,
-equipment and ingredients. A later client brief moves the workshop entirely online.
+<a id="example-2-outdated-planning-assumptions-freshness"></a>
+<a id="example-2-claude-cowork-and-chatgpt-work"></a>
 
-<p align="center">
-  <a href="assets/stories/cowork-workshop.png">
-    <picture>
-      <source media="(max-width: 600px)" srcset="assets/stories/cowork-workshop-mobile.png">
-      <img src="assets/stories/cowork-workshop.png" width="760" alt="A later session records the client's change from an onsite cooking workshop to an online event. The saved plan still assumes one shared kitchen with equipment and ingredients provided. kpopper reports that the workshop format moved from onsite to remote. The agent needs to revisit equipment, ingredients and activities; this is a review notice, not an automatically failed conclusion.">
-    </picture>
-  </a>
-</p>
+## Example 2: Claude Cowork / ChatGPT Work (freshness)
+
+### Outdated planning assumptions
+
+A cooking workshop is planned around the venue's shared kitchen, equipment and
+ingredients. A later client brief moves it entirely online. For ChatGPT Work, see
+the [runtime requirements and current limits](docs/chatgpt-work.md).
+
+[![A later session records the client's change from an onsite cooking workshop to an online event. The saved plan still assumes one shared kitchen with equipment and ingredients provided. kpopper reports that the workshop format moved from onsite to remote. The agent needs to revisit equipment, ingredients and activities; this is a review notice, not an automatically failed conclusion.](assets/stories/cowork-workshop.png)](assets/stories/cowork-workshop.png)
+
+[Phone layout](assets/stories/cowork-workshop-mobile.png)
 
 Once the agent records the new format, kpopper flags the saved plan for review.
 **It does not decide whether the activities can work remotely.** The next session can
 recover the old reason, read the updated brief, and work out what participants need.
 [Try the Cowork example](examples/cowork-workshop/README.md).
 
-The after record retains the old decision and its review snapshot:
+The planning record connects 13 readings to five saved plans and four open questions.
+The format change reaches the agenda, equipment, ingredients, group arrangement and
+supervision; the earlier review snapshots remain visible.
+
+[![A complete planning record shows the remote format beside five plans last reviewed as onsite, with unchanged client constraints and unresolved home requirements.](assets/stories/cowork-workshop-record.png)](assets/stories/cowork-workshop-record.png)
+
+[Phone layout](assets/stories/cowork-workshop-record-mobile.png) · [Full planning record](examples/cowork-workshop/after/GROUNDING.yaml)
+
+Selected entries from the after record:
 
 ```yaml
 known:
-  workshop.format: {v: remote}
-
+  workshop.format:
+    v: remote
+    from: s.updated_brief
+    at: Participants join online from home
+  workshop.participants:
+    v: 18
+    from: s.session_plan
+    at: Client constraints
+  workshop.duration_minutes:
+    v: 90
+    from: s.session_plan
+    at: Client constraints
+  venue.workstations:
+    v: 6
+    from: s.logistics_plan
+    at: Venue provision
 judgments:
   workshop.agenda:
-    rests_on: [workshop.format]
-    verdict: "Use the shared-kitchen agenda and provide ingredients at the venue."
-    reopened_by: >-
-      The workshop format or access to the kitchen changes; review the
-      activities, equipment and ingredients participants need.
-    seen: {workshop.format: onsite}
+    rests_on:
+    - workshop.format
+    - venue.shared_kitchen
+    - workshop.duration_minutes
+    - workshop.recipe
+    verdict: Use the shared-kitchen agenda and provide ingredients at the venue.
+    reopened_by: The format or access to the shared kitchen changes; review activities, equipment
+      and preparation.
+    seen:
+      workshop.format: onsite
+      venue.shared_kitchen: true
+      workshop.duration_minutes: 90
+      workshop.recipe: Fresh pasta with tomato sauce.
+  workshop.equipment_plan:
+    rests_on:
+    - workshop.format
+    - venue.equipment_supplied
+    - venue.workstations
+    verdict: Plan equipment around the six venue workstations.
+    reopened_by: The format, supplied equipment or access to the workstations changes.
+    seen:
+      workshop.format: onsite
+      venue.equipment_supplied: true
+      venue.workstations: 6
+  workshop.ingredient_plan:
+    rests_on:
+    - workshop.format
+    - venue.ingredients_supplied
+    - workshop.participants
+    verdict: Prepare ingredient portions at the venue for the 18 participants.
+    reopened_by: The format, ingredient provision or participant count changes; review purchasing,
+      portions and distribution.
+    seen:
+      workshop.format: onsite
+      venue.ingredients_supplied: true
+      workshop.participants: 18
 ```
 
 The current value is `remote`; the decision was reviewed against `onsite`. That is a
@@ -215,50 +331,197 @@ The record links back to relevant evidence; there is no need to migrate your kno
 For another example that needs judgment, explore
 [a replacement offer with an uncertain deadline](examples/offer-review/README.md).
 
-## Example 4: Dark matter across studies (evidence synthesis)
+<a id="example-4-dark-matter-across-studies-evidence-synthesis"></a>
 
-Give three research agents different papers and the same knowledge record. One
-reads [galaxy rotation](https://articles.adsabs.harvard.edu/pdf/1980ApJ...238..471R),
-another [Bullet Cluster lensing](https://arxiv.org/abs/astro-ph/0608407v1), and a third
-[Planck's CMB results](https://arxiv.org/abs/1807.06209v4). Each adds sourced findings.
-A synthesis agent can follow all three contributions and build a connected argument,
-with its assumptions and open questions attached.
+<a id="example-3-dark-matter-across-studies-evidence-synthesis"></a>
+<a id="example-3-research"></a>
 
-<p align="center">
-  <a href="assets/stories/dark-matter.png">
-    <picture>
-      <source media="(max-width: 600px)" srcset="assets/stories/dark-matter-mobile.png">
-      <img src="assets/stories/dark-matter.png" width="760" alt="Three research agents contribute findings from galaxy rotation, gravitational lensing and the cosmic microwave background to one shared record. A synthesis agent connects the evidence under stated models. The graph retains the adopted assumptions and open questions about physical identity and alternative explanations; new evidence can prompt review.">
-    </picture>
-  </a>
-</p>
+## Example 3: Research (evidence synthesis)
 
-**The next session inherits the argument, including how it could fail.** This
-three-paper example connects different observations into a dark-matter account
-under stated models. It keeps that synthesis separate from what each paper reports.
-The illustration is schematic; the [guide](examples/dark-matter/README.md) links
-the readings to their exact source locations and explains their limits.
+### Dark matter across studies
 
-The synthesis declares its dependencies and a condition for further judgment:
+The original three-paper view shows the shared-record idea:
+
+[![Three research tasks connect galaxy rotation, Bullet Cluster lensing and the CMB in a shared record, with assumptions and open questions attached.](assets/stories/dark-matter-intro.png)](assets/stories/dark-matter-intro.png)
+
+[Phone layout](assets/stories/dark-matter-intro-mobile.png)
+
+A research record can connect observations across scales and retain the tensions
+between them. This worked example follows **six papers**: Rubin's galaxy rotation,
+SPARC's galaxy catalog, the radial acceleration relation, Bullet Cluster lensing,
+Planck's cosmological fit and the first LZ particle search.
+
+[![Six papers connect galaxy rotation and baryonic structure, cluster mass location, the CMB fit and a particle-search limit. Their assumptions and shared inputs remain attached to the synthesis.](assets/stories/dark-matter.png)](assets/stories/dark-matter.png)
+
+[Phone layout](assets/stories/dark-matter-mobile.png)
+
+The argument includes **36 source readings, two scope readings, one calculation,
+seven linked judgments and five open questions**. Its depth comes from the links:
+SPARC and the acceleration paper share data; the Planck density ratio comes from
+one model fit; a null WIMP search constrains specific interactions without settling
+the identity of the astronomical mass component.
+
+[![The research GROUNDING.yaml includes six paper sources, detailed readings, an exact density-ratio calculation, intermediate judgments and the final synthesis. A framework change reaches multiple interpretations.](assets/stories/dark-matter-record.png)](assets/stories/dark-matter-record.png)
+
+[Phone layout](assets/stories/dark-matter-record-mobile.png) · [Complete research record](examples/dark-matter/GROUNDING.yaml) · [Sources and exact locations](examples/dark-matter/README.md#the-six-sources)
+
+A source-grounded excerpt:
 
 ```yaml
-synthesis.dark_matter:
-  rests_on: [rotation.finding, lensing.finding, cmb.finding, research.framework]
-  verdict: Under the stated models, these findings support a dark-matter account across scales.
-  reopened_by: >-
-    A finding or its model assumptions are revised, or a worked alternative
-    accounts for these observations together. Reassess the synthesis and its scope.
+known:
+  sparc.sample_size:
+    v: 175
+    from: paper.sparc
+    at: Abstract
+    unit: galaxies
+  rar.sample_size:
+    v: 153
+    from: paper.rar
+    at: p. 1, Data / Galaxy Sample
+    unit: galaxies
+  rar.points:
+    v: 2693
+    from: paper.rar
+    at: 'p. 1, Galaxy Sample: velocity-precision cut'
+    unit: points
+  cmb.omega_c_h2:
+    v: 0.12
+    from: paper.cmb
+    at: Abstract, combined analysis
+    uncertainty: 0.001
+    confidence: 68%
+  cmb.omega_b_h2:
+    v: 0.0224
+    from: paper.cmb
+    at: Abstract, combined analysis
+    uncertainty: 0.0001
+    confidence: 68%
+  lz.si_limit:
+    v: 9.2e-48
+    from: paper.lz
+    at: 'Abstract, version 4: limit at 36 GeV/c^2'
+    unit: cm^2
+    confidence: 90%
+  lz.mass_at_limit:
+    v: 36
+    from: paper.lz
+    at: Abstract, version 4
+    unit: GeV/c^2
+  cmb.dark_to_baryon_density:
+    rule:
+      expr: cmb.omega_c_h2 / cmb.omega_b_h2
+judgments:
+  evidence.shared_catalog:
+    rests_on:
+    - sparc.sample_size
+    - sparc.inputs
+    - rar.catalog
+    - rar.selection
+    verdict: Treat SPARC and the RAR analysis as related evidence, not two independent observational
+      votes.
+    reopened_by: A different catalog, sample selection or independently calibrated replication changes
+      the dependence between these findings.
+  synthesis.dark_matter:
+    rests_on:
+    - galaxy.extended_mass
+    - galaxy.baryon_coupling
+    - cluster.mass_location
+    - cosmology.cold_component
+    - particle.search_scope
+    - research.framework
+    - research.selection
+    verdict: Under the stated models, the selected evidence supports a dark-matter account across
+      scales, while baryonic regularities and direct-search limits constrain its explanation.
+    reopened_by: A source finding or shared assumption is revised, or a worked alternative jointly
+      addresses the galaxy, cluster, cosmological and particle-search constraints. Reassess the
+      affected paths and the synthesis.
 ```
 
-The [full GROUNDING.yaml](examples/dark-matter/GROUNDING.yaml) includes the sources,
-readings, open questions and tool-filled `seen`. Agents make the scientific judgment;
-kpopper preserves and traces the declared reasoning. It does not turn agreement
-between agents into proof.
+**The next session inherits the argument, including its unresolved questions.**
+
+Run the checker on that same record:
+
+```sh
+kpop check examples/dark-matter/GROUNDING.yaml
+```
+
+Its final summary (exit `0`; the full response also lists the seven prose review
+conditions):
+
+```text
+7 judgments, 58 entries, 0 problems, 7 declared
+```
+
+For a starting overview use `open`; to inspect a subject use `pull`; to trace a
+premise use `affects`. The `ground` skill guides that workflow for an agent.
+
+<details>
+<summary>Read the context, inspect the calculation, and trace a change</summary>
+
+**Current context** — selected lines from the actual `open` response:
+
+```sh
+kpop open examples/dark-matter/GROUNDING.yaml --chars 1000
+```
+
+```text
+Six-paper worked example; selected source readings and an authored synthesis, not a complete review or live research-agent evaluation.
+holds: rar (8) · research (8) · cmb (7) · lz (6) · paper (6) · sparc (6) · lensing (5) · rotation (5)
+58 entries, 7 judgments, 5 open questions, updated 2026-09-19
+```
+
+**A computed reading and the judgment that uses it:**
+
+```sh
+kpop pull cmb.dark_to_baryon_density examples/dark-matter/GROUNDING.yaml --budget 1100
+```
+
+```text
+cmb.dark_to_baryon_density: 75/14 = cmb.omega_c_h2 / cmb.omega_b_h2 (Ratio of the abstract central physical de ...
++ cosmology.cold_component: Within base Lambda-CDM, the fitted physical cold-dark-matter density exceeds the b ...
+    holds
+    because: The density ratio connects two central values from the same fit. The model assumptions and
+             retained lensing-amplitude tension limit the interpretation.
+    reopened by: The likelihood, data combination or cosmological model changes enough to alter the inferred c ...
+
+affects <entry> shows what a change reaches
+```
+
+**The reach of the adopted framework:**
+
+```sh
+kpop affects research.framework examples/dark-matter/GROUNDING.yaml
+```
+
+```text
+cluster.mass_location
+    via research.framework -> flagged only
+cosmology.cold_component
+    via research.framework -> flagged only
+galaxy.extended_mass
+    via research.framework -> flagged only
+synthesis.dark_matter
+    via research.framework -> flagged only
+
+4 judgments reached
+```
+
+</details>
+
+[See all captured commands and responses](examples/dark-matter/cli-examples.md),
+including `pull synthesis.dark_matter`. Here `check` reports record consistency;
+the scientific review conditions still require judgment.
+
+The illustrations are schematics drawn from the record. The
+[full example](examples/dark-matter/README.md) distinguishes source readings,
+authored interpretations, shared assumptions and the computed `75/14` density ratio.
+That arithmetic does not establish the scientific synthesis.
 
 [Run the shared-record example](examples/dark-matter/README.md#run-the-shared-record-example):
-three concurrent CLI writers replay prepared readings, then a proposed change in
-the review framework flags the synthesis. It uses real papers and real record
-operations, without calling models or claiming a live research evaluation.
+three concurrent CLI writers retain the prepared six-paper contributions, and the
+writer records each judgment's review snapshot. A proposed change of framework
+then reopens several interpretations and the synthesis. No model call or claim of
+live independent research is part of that replay.
 
 ## Get started
 
@@ -461,14 +724,9 @@ make it part of the project.
 Keep the work connected across time: the sources and decisions behind it, what needs
 attention now, and the checks or actions to return to later.
 
-<p align="center">
-  <a href="assets/diagrams/work-across-time.png">
-    <picture>
-      <source media="(max-width: 600px)" srcset="assets/diagrams/work-across-time-mobile.png">
-      <img src="assets/diagrams/work-across-time.png" width="760" alt="Three ink panels connect past sources, evidence, decisions, reasons and last-review snapshots; present claims, changes, contradictions and new information; and future followups, daily reviews and time or event triggers when configured. A return loop explicitly says the agent records outcomes as evidence.">
-    </picture>
-  </a>
-</p>
+[![Three ink panels connect past sources, evidence, decisions, reasons and last-review snapshots; present claims, changes, contradictions and new information; and future followups, daily reviews and time or event triggers when configured. A return loop explicitly says the agent records outcomes as evidence.](assets/diagrams/work-across-time.png)](assets/diagrams/work-across-time.png)
+
+[Phone layout](assets/diagrams/work-across-time-mobile.png)
 
 The Future panel shows deferred work tracked by followups and scheduled reviews when
 configured in the host. The return arrow is the agent's step of recording useful outcomes
@@ -481,14 +739,9 @@ New information often arrives halfway through another task. kpopper can retain a
 report and process a supported update in a separate worker. Routine results stay quiet;
 important unresolved findings are available for delivery back to the conversation.
 
-<p align="center">
-  <a href="assets/diagrams/conversation-flow.png">
-    <picture>
-      <source media="(max-width: 600px)" srcset="assets/diagrams/conversation-flow-mobile.png">
-      <img src="assets/diagrams/conversation-flow.png" width="760" alt="Get notified only when something needs attention. The main agent captures an explicit venue-cancellation report and continues with the set list. A software worker in a separate process saves the dated source, records the change from confirmed to cancelled and checks the venue-to-announcement dependency. The announcement needs review; important findings return through the configured delivery route while routine updates stay quiet.">
-    </picture>
-  </a>
-</p>
+[![The main agent captures an explicit venue-cancellation report and continues with the set list. A software worker in a separate process saves the dated source, records the change from confirmed to cancelled and checks the venue-to-announcement dependency. The announcement needs review; important findings return through the configured delivery route while routine updates stay quiet. The closing line reads Get notified only when something needs attention.](assets/diagrams/conversation-flow.png)](assets/diagrams/conversation-flow.png)
+
+[Phone layout](assets/diagrams/conversation-flow-mobile.png)
 
 Today, that worker can update an **existing stored scalar value in a single record file**,
 using a supplied source quote, target, value and report date. It does not infer what an
@@ -503,70 +756,28 @@ where the conversation can safely continue without that result.
 
 ## How it works
 
-### Two working modes
+### What deterministic reasoning means here
 
-The difference is **whether sessions share one project context or work against different
-versions of the code**. Both modes support several sessions and competing hypotheses.
+**Deterministic reasoning applies fixed rules to explicit inputs. A completed
+evaluation of the same inputs and rules gives the same result.**
 
-<picture>
-  <source media="(max-width: 640px)" srcset="assets/diagrams/two-working-modes-mobile.png">
-  <img src="assets/diagrams/two-working-modes.png" alt="Two working modes. Simple: sessions share one sourced project record and competing hypotheses; consolidation compares and checks proposals, then folds them into the record, refutes them with a reason, or leaves them pending. Advanced: each branch keeps the assumptions and hypotheses for its code. Branch records pass through consolidation before integration into main. A continuing Shared findings, pending review path captures feature-independent findings with their source, scope and status. Dashed arrows show local reading before merge. With permission, findings enter a knowledge PR, where consolidation reconciles them with the target record before acceptance. Both paths reach the same main record; the shared path continues for the next batch.">
-</picture>
+In kpopper, this means:
 
-[View the full-size illustration](assets/diagrams/two-working-modes.png) ·
-[View the vertical version](assets/diagrams/two-working-modes-mobile.png)
+- **Repeatable checks.** With seven days of retention and a 30-day promise,
+  `files.days < link.days` evaluates to `true` each time those values are checked.
+  No fresh model response is needed to decide that comparison.
+- **Explicit assumptions.** The record names what a conclusion depends on and
+  the condition that would make it fail or deserve another look.
+- **Traceable support.** Follow a result through its recorded inputs, rule,
+  source references and last-review snapshot.
 
-**Simple — one shared context.** Sessions read and contribute to the same project graph.
-Competing ideas are named hypotheses beside it: several sessions can examine the same
-proposal, and one session can work on several. For a research project, for example, sessions
-can read different papers and compare explanations against the same sourced record.
-**Consolidation** is how those proposals become part of the shared record: compare them
-with what it already holds, check the combined dependencies and resolve conflicting claims.
-A proposal can be folded in, refuted with its reason retained, or left pending.
+Agents still interpret sources, choose which assumptions to record and make
+judgments. The reliability of a conclusion depends on that evidence and those
+choices. A free-text review condition remains a prompt for judgment; it is not
+silently treated as an executable rule.
 
-**Advanced — branch contexts and shared findings.** Each branch's record describes its
-version of the code. A cache decision on one branch may depend on results being public,
-while another branch introduces private results. Keeping those premises with their branches
-lets review check whether the reasoning still holds when the changes are combined.
-Consolidation reconciles those records: it identifies overlapping subjects and conflicting
-claims, and checks which decisions need another look under the combined premises. Resolve
-what needs judgment before folding a proposal in; unresolved hypotheses remain explicit.
-
-Knowledge then follows two paths:
-
-- **Feature knowledge travels with its branch.** Its assumptions, measurements and
-  hypotheses stay attached to the code they describe. Consolidation tests their combination
-  with the target record as part of reviewing the change.
-- **Shared findings have a continuing path of their own.** Shareable findings that apply
-  independently of the feature enter `pending_grounding`, with their sources and scope.
-  They remain available even if the originating session closes or its worktree is removed.
-
-Suppose a session building an integration discovers a documented change to the vendor's
-API limit. **The feature may be abandoned; the finding can still help the project.** Other
-local worktrees can read it immediately, marked as pending, without waiting for the feature
-to merge. It appears alongside their branch record; reading it does not adopt it or replace
-their recorded premises.
-
-With the project's publication permission, shared findings accumulate in one knowledge PR.
-Consolidation reconciles the proposed knowledge with the target record before acceptance;
-conflicts and changed premises need resolution. Accepted contributions are then verified
-in the target branch, shown as `main` above. The same publication branch is reused for
-the next batch, while the local contribution history persists across review cycles. Local
-capture and reading also work without publication.
-
-A measurement of an unmerged commit can be a fact about that commit. A proposed conclusion
-remains a hypothesis. Merging means the team accepted the contribution; it does not prove
-the claim, increase confidence or refresh its last review. Private material and information
-whose sharing permission is unclear stay in a structured private draft.
-
-Projects without Git start in Simple; new Git projects start in Advanced, including those
-with only one checkout. Simple can also be configured for a Git project with one external
-shared record. Existing registered shared records keep their current location and behavior;
-changing mode requires explicit reconciliation.
-
-See [project modes and publication](docs/project-modes.md) for routing, reproducible reads
-and the publication lifecycle, and [consolidation](skills/consolidate/SKILL.md) for the
-dry run, folding and refutation commands.
+See the [supported calculations and conditions](skills/kpopper/EXPRESSIONS.md)
+and the [reasoning core's formal scope](docs/reasoning-core.md).
 
 ### The knowledge record
 
@@ -855,11 +1066,7 @@ reads relevant material through its available tools and records the claims it re
 with links back to those sources, in `GROUNDING.yaml`. There is no need to migrate the
 existing notes or replace the agent's memory system.
 
-<p align="center">
-  <a href="assets/knowledge-sources.png">
-    <img src="assets/knowledge-sources.png" width="760" alt="Dense clusters of notes and memory, documents and research, conversations, plans and commitments, and code and data fill the left side. An agent selects relevant evidence. On the right, kpopper arranges claims, decisions and review conditions in GROUNDING.yaml. Sources stay put; reasoning stays connected.">
-  </a>
-</p>
+[![Dense clusters of notes and memory, documents and research, conversations, plans and commitments, and code and data fill the left side. An agent selects relevant evidence. On the right, kpopper arranges claims, decisions and review conditions in GROUNDING.yaml. Sources stay put; reasoning stays connected.](assets/knowledge-sources.png)](assets/knowledge-sources.png)
 
 | Role | Question it helps answer |
 |---|---|
@@ -953,11 +1160,7 @@ its explanation; click to keep it open. The card focuses on that passage, with a
 in ordinary language and technical details collapsed. Click outside or use the close button
 to return to the document.
 
-<p align="center">
-  <a href="assets/standalone-document-reasoning.png">
-    <img src="assets/standalone-document-reasoning.png" width="820" alt="The Autumn Garden Workshop report with its 16-day registration-window passage and a focused explanation visible together. The card marks the author's interpretation as Not checked, explains how it was derived from two dates, and links to the project notes offered as context.">
-  </a>
-</p>
+[![The Autumn Garden Workshop report with its 16-day registration-window passage and a focused explanation visible together. The card marks the author's interpretation as Not checked, explains how it was derived from two dates, and links to the project notes offered as context.](assets/standalone-document-reasoning.png)](assets/standalone-document-reasoning.png)
 
 <sub>The card distinguishes the author's interpretation from a fact stated in the source:
 the notes give two dates, but do not define a registration window. Its reasoning,

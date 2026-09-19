@@ -1,77 +1,480 @@
 meta:
-  updated: 2026-09-13
-  scope: Three-paper teaching example; prepared readings, not a complete literature
-    review.
+  updated: 2026-09-19
+  scope: Six-paper worked example; selected source readings and an authored synthesis,
+    not a complete review or live research-agent evaluation.
 sources:
   paper.rotation:
-    name: Rubin, Ford and Thonnard (1980), rotation of 21 Sc galaxies
+    name: 'Rubin, Ford & Thonnard (1980): 21 Sc galaxies'
     url: https://articles.adsabs.harvard.edu/pdf/1980ApJ...238..471R
-    read: '2026-09-13'
+    read: '2026-09-19'
+  paper.sparc:
+    name: 'Lelli, McGaugh & Schombert (2016): SPARC, 175 disk galaxies'
+    url: https://arxiv.org/abs/1606.09251v1
+    read: '2026-09-19'
+  paper.rar:
+    name: 'McGaugh, Lelli & Schombert (2016): radial acceleration relation'
+    url: https://arxiv.org/abs/1609.05917v1
+    read: '2026-09-19'
   paper.lensing:
-    name: Clowe et al. (2006), Bullet Cluster lensing
+    name: 'Clowe et al. (2006): Bullet Cluster weak lensing'
     url: https://arxiv.org/abs/astro-ph/0608407v1
-    read: '2026-09-13'
+    read: '2026-09-19'
   paper.cmb:
-    name: Planck 2018 results VI, cosmological parameters (2020; corrected 2021)
+    name: Planck 2018 VI, cosmological parameters, corrected 2021
     url: https://arxiv.org/abs/1807.06209v4
-    read: '2026-09-13'
+    read: '2026-09-19'
+  paper.lz:
+    name: 'LZ first search, 2023 version: 60 live days'
+    url: https://arxiv.org/abs/2207.03764v4
+    read: '2026-09-19'
   research.protocol:
-    name: Scope of this three-paper synthesis example
+    name: Scope and assumptions of this worked literature example
     file: README.md
-    read: '2026-09-13'
+    read: '2026-09-19'
 known:
+  cmb.dark_to_baryon_density:
+    name: "Ratio of the abstract central physical densities"
+    rule: {expr: "cmb.omega_c_h2 / cmb.omega_b_h2"}
+    unit: ratio
+    note: "A ratio of rounded central values from one fit, without uncertainty propagation; not an
+           independent observation."
   cmb.finding:
-    name: "Planck's result within its baseline cosmology"
-    v: "Planck reports a good fit to CMB observations with base Lambda-CDM, including a cold dark
-        matter component."
+    name: "Planck result within the baseline cosmology"
+    v: "Temperature, polarization and lensing give good consistency with the spatially flat
+        six-parameter base Lambda-CDM model."
     from: paper.cmb
-    at: "Abstract, baseline model and combined parameter analysis"
+    at: Abstract
     fidelity: paraphrase
+  cmb.h0:
+    name: "Inferred Hubble constant in base Lambda-CDM"
+    v: 67.4
+    from: paper.cmb
+    at: "Abstract, inferred late-Universe parameters"
+    fidelity: quoted
+    unit: "km/s/Mpc"
+    uncertainty: 0.5
+    confidence: "68%"
+  cmb.lensing_tension:
+    name: "A model-fit tension retained alongside the fit"
+    v: "The CMB spectra prefer a higher lensing amplitude at over two sigma, but the lensing
+        reconstruction and BAO do not support that preference."
+    from: paper.cmb
+    at: "Abstract; not a claim that the baseline model is refuted"
+    fidelity: paraphrase
+  cmb.omega_b_h2:
+    name: "Physical baryon density"
+    v: 0.0224
+    from: paper.cmb
+    at: "Abstract, combined analysis"
+    fidelity: quoted
+    uncertainty: 0.0001
+    confidence: "68%"
+  cmb.omega_c_h2:
+    name: "Physical cold-dark-matter density"
+    v: 0.12
+    from: paper.cmb
+    at: "Abstract, combined analysis"
+    fidelity: quoted
+    uncertainty: 0.001
+    confidence: "68%"
+  cmb.omega_m:
+    name: "Inferred matter density parameter"
+    v: 0.315
+    from: paper.cmb
+    at: "Abstract, inferred late-Universe parameters"
+    fidelity: quoted
+    uncertainty: 0.007
+    confidence: "68%"
   lensing.finding:
-    name: "Lensing mass and hot gas in the Bullet Cluster"
-    v: "The reconstructed lensing mass peaks are displaced from the dominant hot gas and lie near
-        the galaxies."
+    name: "Mass peaks and hot gas are displaced"
+    v: "The reconstructed gravitational-potential peaks approximately follow the galaxies rather
+        than the dominant plasma distribution."
     from: paper.lensing
-    at: "Abstract, lensing reconstruction and spatial offset"
+    at: Abstract
+    fidelity: paraphrase
+  lensing.gas:
+    name: "Dominant baryonic component in this merger"
+    v: "The X-ray-emitting plasma is the dominant baryonic mass component and is spatially separated
+        from the galaxies."
+    from: paper.lensing
+    at: Abstract
+    fidelity: paraphrase
+  lensing.inputs:
+    name: "Observations used for the lensing maps"
+    v: "Wide-field ground-based images and HST/ACS images of the cluster cores."
+    from: paper.lensing
+    at: Abstract
+    fidelity: paraphrase
+  lensing.offset_significance:
+    name: "Reported significance of the mass-baryon offset"
+    v: 8
+    from: paper.lensing
+    at: "Abstract: authors report an 8-sigma spatial offset"
+    fidelity: quoted
+    unit: sigma
+  lensing.redshift:
+    name: "Redshift of the Bullet Cluster"
+    v: 0.296
+    from: paper.lensing
+    at: Abstract
+    fidelity: quoted
+  lz.fiducial_mass:
+    name: "Fiducial mass for that exposure"
+    v: 5.5
+    from: paper.lz
+    at: Abstract
+    fidelity: quoted
+    unit: tonnes
+  lz.finding:
+    name: "LZ first-search outcome"
+    v: "The profile-likelihood analysis is consistent with a background-only hypothesis."
+    from: paper.lz
+    at: Abstract
+    fidelity: paraphrase
+  lz.limit_scope:
+    name: "What the direct-search limit constrains"
+    v: "Limits on specified WIMP-nucleon interactions, with the abstract reporting limits for masses
+        above 9 GeV/c^2; not a test of every possible dark component."
+    from: paper.lz
+    at: "Abstract; p. 7, limit interpretation"
+    fidelity: paraphrase
+  lz.live_days:
+    name: "Live exposure in the first LZ search"
+    v: 60
+    from: paper.lz
+    at: "Abstract, first-search exposure"
+    fidelity: quoted
+    unit: days
+  lz.mass_at_limit:
+    name: "WIMP mass at the quoted strongest limit"
+    v: 36
+    from: paper.lz
+    at: "Abstract, version 4"
+    fidelity: quoted
+    unit: "GeV/c^2"
+  lz.si_limit:
+    name: "Strongest reported spin-independent cross-section limit"
+    v: 9.2e-48
+    from: paper.lz
+    at: "Abstract, version 4: limit at 36 GeV/c^2"
+    fidelity: quoted
+    unit: "cm^2"
+    confidence: "90%"
+  rar.catalog:
+    name: "The acceleration analysis reuses SPARC"
+    v: "The 153-galaxy analysis selects from SPARC rather than observing an independent second
+        catalog."
+    from: paper.rar
+    at: "p. 1, Galaxy Sample; refers to the SPARC database"
+    fidelity: paraphrase
+  rar.finding:
+    name: "Observed and baryonic accelerations are closely related"
+    v: "The observed radial acceleration tracks that predicted from the baryonic distribution across
+        the selected galaxies."
+    from: paper.rar
+    at: "Abstract; p. 4, Results"
+    fidelity: paraphrase
+  rar.interpretation_scope:
+    name: "The relation does not select one theory by itself"
+    v: "The discussion considers galaxy formation, dark-sector physics and modified dynamics; it
+        distinguishes an empirical fit from MOND as a theory."
+    from: paper.rar
+    at: "p. 5, Discussion"
+    fidelity: paraphrase
+  rar.mass_model:
+    name: "Mass-to-light conversion is an input"
+    v: "Baryonic acceleration uses a stellar mass-to-light conversion and a Poisson-equation
+        calculation; the disk value adopted is 0.50 at 3.6 micrometres."
+    from: paper.rar
+    at: "p. 2, Gravitational Potentials of Baryons / Stellar Mass-to-Light Ratios"
+    fidelity: paraphrase
+  rar.observed_scatter:
+    name: "Observed rms scatter"
+    v: 0.13
+    from: paper.rar
+    at: "p. 4, Results; p. 5, distinction from intrinsic scatter"
+    fidelity: quoted
+    unit: dex
+  rar.points:
+    name: "Rotation-curve points retained"
+    v: 2693
+    from: paper.rar
+    at: "p. 1, Galaxy Sample: velocity-precision cut"
+    fidelity: quoted
+    unit: points
+  rar.sample_size:
+    name: "Galaxies retained for the acceleration relation"
+    v: 153
+    from: paper.rar
+    at: "p. 1, Data / Galaxy Sample"
+    fidelity: quoted
+    unit: galaxies
+  rar.selection:
+    name: "The stated quality cuts"
+    v: "Ten galaxies with inclination below 30 degrees and twelve with asymmetric rotation curves
+        are excluded; retained points require 10% velocity precision."
+    from: paper.rar
+    at: "p. 1, Galaxy Sample"
     fidelity: paraphrase
   research.framework:
-    name: "Adopted frame for the synthesis"
+    name: "Adopted synthesis framework"
     v: "Standard gravitational mass inference; base Lambda-CDM for the CMB result."
     from: research.protocol
     at: "Synthesis scope"
     fidelity: paraphrase
+  research.selection:
+    name: "Scope of the selected literature"
+    v: "Six source papers, selected findings and an authored synthesis. Not a complete review, a
+        statistically combined likelihood, or a claim to run live research agents."
+    from: research.protocol
+    at: "Synthesis scope"
+    fidelity: paraphrase
+  rotation.author_inference:
+    name: "Mass beyond the optical image, as the authors infer it"
+    v: "The authors infer significant mass beyond the optical image across the sampled Sc
+        luminosities."
+    from: paper.rotation
+    at: "p. 471, abstract; distinguish inference from the measured velocities"
+    fidelity: paraphrase
   rotation.finding:
-    name: "Outer rotation in the sampled Sc galaxies"
-    v: "The sampled galaxies have non-falling outer rotation curves; most still rise at the last
-        measured point."
+    name: "Non-falling outer rotation curves"
+    v: "Neither high- nor low-luminosity Sc galaxies in the sample have falling rotation curves;
+        most still rise slowly at the farthest measured point."
     from: paper.rotation
     at: "p. 471, abstract"
     fidelity: paraphrase
+  rotation.method:
+    name: "How the rotation curves were obtained"
+    v: "Major-axis spectra of high-inclination Sc galaxies, extending to faint outer regions."
+    from: paper.rotation
+    at: "p. 471, abstract"
+    fidelity: paraphrase
+  rotation.radial_range:
+    name: "Reported galaxy radius range"
+    v: "4–122 kpc, using H0 = 50 km/s/Mpc in that paper."
+    from: paper.rotation
+    at: "p. 471, abstract"
+    fidelity: paraphrase
+  rotation.sample_size:
+    name: "Sc galaxies in the Rubin sample"
+    v: 21
+    from: paper.rotation
+    at: "p. 471, abstract"
+    fidelity: quoted
+    unit: galaxies
+  sparc.disk_mass_to_light:
+    name: "Adopted stellar disk mass-to-light ratio"
+    v: 0.5
+    from: paper.sparc
+    at: "Abstract; assumed M/L at 3.6 micrometres"
+    fidelity: quoted
+    unit: "solar mass / solar luminosity"
+  sparc.inputs:
+    name: "Two observational inputs to the mass models"
+    v: "Spitzer 3.6-micrometre surface photometry and rotation curves from previous HI/H-alpha
+        studies."
+    from: paper.sparc
+    at: Abstract
+    fidelity: paraphrase
+  sparc.mass_model_sensitivity:
+    name: "Why a mass-model assumption remains attached"
+    v: "The reported baryonic-to-observed velocity trends depend on the assumed stellar
+        mass-to-light ratio; the abstract contrasts 0.5 with 0.2."
+    from: paper.sparc
+    at: Abstract
+    fidelity: paraphrase
+  sparc.morphologies:
+    name: "Morphological coverage of the catalog"
+    v: "S0 through irregular galaxies, spanning broad luminosity and surface-brightness ranges."
+    from: paper.sparc
+    at: Abstract
+    fidelity: paraphrase
+  sparc.sample_size:
+    name: "Disk galaxies in SPARC"
+    v: 175
+    from: paper.sparc
+    at: Abstract
+    fidelity: quoted
+    unit: galaxies
+  sparc.wavelength:
+    name: "Spitzer photometry wavelength"
+    v: 3.6
+    from: paper.sparc
+    at: Abstract
+    fidelity: quoted
+    unit: micrometres
 judgments:
-  synthesis.dark_matter:
-    name: "A dark-matter account across scales"
-    rests_on: [rotation.finding, lensing.finding, cmb.finding, research.framework]
-    verdict: "Under the stated models, these findings support a dark-matter account across scales."
-    because: "Rotation, mass location and CMB structure constrain different parts of the account.
-              Their connection is an interpretation, not a vote count or a deduction performed by the
-              checker. This selected set does not establish a particle identity or exhaust
-              alternative explanations."
-    reopened_by: "A finding or its model assumptions are revised, or a worked alternative accounts
-                  for these observations together. Reassess the synthesis and its scope."
+  cluster.mass_location:
+    name: "The lensing mass does not follow the dominant gas"
+    rests_on: [lensing.inputs, lensing.gas, lensing.finding, lensing.offset_significance, research.framework]
+    verdict: "Under the adopted lensing interpretation, most gravitating mass in this merger does
+              not trace the dominant baryonic plasma."
+    because: "The spatial comparison is a distinct constraint from a rotation curve, while the
+              paper's stronger proof language remains the authors' interpretation."
+    reopened_by: "The lensing reconstruction, gas-mass interpretation, line-of-sight structure or
+                  the gravitational framework changes."
     seen:
-      rotation.finding: "The sampled galaxies have non-falling outer rotation curves; most still
-                         rise at the last measured point."
-      lensing.finding: "The reconstructed lensing mass peaks are displaced from the dominant hot gas
-                        and lie near the galaxies."
-      cmb.finding: "Planck reports a good fit to CMB observations with base Lambda-CDM, including a
-                    cold dark matter component."
+      lensing.inputs: "Wide-field ground-based images and HST/ACS images of the cluster cores."
+      lensing.gas: "The X-ray-emitting plasma is the dominant baryonic mass component and is
+                    spatially separated from the galaxies."
+      lensing.finding: "The reconstructed gravitational-potential peaks approximately follow the
+                        galaxies rather than the dominant plasma distribution."
+      lensing.offset_significance: 8
       research.framework: "Standard gravitational mass inference; base Lambda-CDM for the CMB
                            result."
+  cosmology.cold_component:
+    name: "A cold component in the baseline CMB fit"
+    rests_on: [cmb.finding, cmb.omega_c_h2, cmb.omega_b_h2, cmb.dark_to_baryon_density, cmb.lensing_tension, research.framework]
+    verdict: "Within base Lambda-CDM, the fitted physical cold-dark-matter density exceeds the
+              baryon density; this is not direct particle identification."
+    because: "The density ratio connects two central values from the same fit. The model assumptions
+              and retained lensing-amplitude tension limit the interpretation."
+    reopened_by: "The likelihood, data combination or cosmological model changes enough to alter the
+                  inferred component or the interpretation of the fit."
+    seen:
+      cmb.finding: Temperature, polarization and lensing give good consistency with the spatially flat
+        six-parameter base Lambda-CDM model.
+      cmb.omega_c_h2: 0.12
+      cmb.omega_b_h2: 0.0224
+      cmb.dark_to_baryon_density:
+        computed:
+          value:
+            rational:
+            - '75'
+            - '14'
+          rule:
+            expr: cmb.omega_c_h2 / cmb.omega_b_h2
+      cmb.lensing_tension: The CMB spectra prefer a higher lensing amplitude at over two sigma, but the
+        lensing reconstruction and BAO do not support that preference.
+      research.framework: Standard gravitational mass inference; base Lambda-CDM for the CMB result.
+  evidence.shared_catalog:
+    name: "SPARC and RAR share an evidence base"
+    rests_on: [sparc.sample_size, sparc.inputs, rar.catalog, rar.selection]
+    verdict: "Treat SPARC and the RAR analysis as related evidence, not two independent
+              observational votes."
+    because: "The acceleration paper explicitly selects its galaxies from the SPARC database;
+              methods and calibration assumptions can therefore be shared."
+    reopened_by: "A different catalog, sample selection or independently calibrated replication
+                  changes the dependence between these findings."
+    seen:
+      sparc.sample_size: 175
+      sparc.inputs: "Spitzer 3.6-micrometre surface photometry and rotation curves from previous
+                     HI/H-alpha studies."
+      rar.catalog: "The 153-galaxy analysis selects from SPARC rather than observing an independent
+                    second catalog."
+      rar.selection: "Ten galaxies with inclination below 30 degrees and twelve with asymmetric
+                      rotation curves are excluded; retained points require 10% velocity precision."
+  galaxy.baryon_coupling:
+    name: "A galaxy model must address the baryonic coupling"
+    rests_on: [sparc.mass_model_sensitivity, rar.finding, rar.observed_scatter, rar.mass_model, rar.interpretation_scope, evidence.shared_catalog]
+    verdict: "Require a galaxy-scale explanation to address the tight baryon-acceleration relation
+              and its modeling assumptions."
+    because: "The regularity is a constraint on explanations. This record does not turn it into a
+              proof of one dark-matter model or of modified gravity."
+    reopened_by: "Revised distances, inclinations, stellar mass-to-light conversion or independent
+                  samples materially change the reported relation or scatter."
+    seen:
+      sparc.mass_model_sensitivity: "The reported baryonic-to-observed velocity trends depend on the
+                                     assumed stellar mass-to-light ratio; the abstract contrasts 0.5
+                                     with 0.2."
+      rar.finding: "The observed radial acceleration tracks that predicted from the baryonic
+                    distribution across the selected galaxies."
+      rar.observed_scatter: 0.13
+      rar.mass_model: "Baryonic acceleration uses a stellar mass-to-light conversion and a
+                       Poisson-equation calculation; the disk value adopted is 0.50 at 3.6
+                       micrometres."
+      rar.interpretation_scope: "The discussion considers galaxy formation, dark-sector physics and
+                                 modified dynamics; it distinguishes an empirical fit from MOND as a
+                                 theory."
+      evidence.shared_catalog: "Treat SPARC and the RAR analysis as related evidence, not two
+                                independent observational votes."
+  galaxy.extended_mass:
+    name: "The galaxy-scale mass-inference problem"
+    rests_on: [rotation.method, rotation.finding, rotation.author_inference, research.framework]
+    verdict: "Under the adopted gravitational interpretation, the rotation readings support extended
+              gravitating mass."
+    because: "The source records measured rotation separately from the authors' mass inference; the
+              latter depends on the dynamical interpretation."
+    reopened_by: "The velocity readings, geometry, dynamical assumptions or an alternative
+                  explanation of the same curves changes."
+    seen:
+      rotation.method: "Major-axis spectra of high-inclination Sc galaxies, extending to faint outer
+                        regions."
+      rotation.finding: "Neither high- nor low-luminosity Sc galaxies in the sample have falling
+                         rotation curves; most still rise slowly at the farthest measured point."
+      rotation.author_inference: "The authors infer significant mass beyond the optical image across
+                                  the sampled Sc luminosities."
+      research.framework: "Standard gravitational mass inference; base Lambda-CDM for the CMB
+                           result."
+  particle.search_scope:
+    name: "A null search constrains candidates, not every mass explanation"
+    rests_on: [lz.live_days, lz.fiducial_mass, lz.finding, lz.si_limit, lz.mass_at_limit, lz.limit_scope]
+    verdict: "The first LZ result restricts specified WIMP interactions without establishing the
+              identity or nonexistence of all dark matter."
+    because: "Astronomical mass inference and a laboratory scattering limit answer different
+              questions; the mass, interaction type and confidence level must travel with the
+              number."
+    reopened_by: "A later exposure, revised calibration, different interaction model or positive
+                  signal changes the candidate constraint."
+    seen:
+      lz.live_days: 60
+      lz.fiducial_mass: 5.5
+      lz.finding: "The profile-likelihood analysis is consistent with a background-only hypothesis."
+      lz.si_limit: 9.2e-48
+      lz.mass_at_limit: 36
+      lz.limit_scope: "Limits on specified WIMP-nucleon interactions, with the abstract reporting
+                       limits for masses above 9 GeV/c^2; not a test of every possible dark
+                       component."
+  synthesis.dark_matter:
+    name: "A connected account with unresolved physics"
+    rests_on: [galaxy.extended_mass, galaxy.baryon_coupling, cluster.mass_location, cosmology.cold_component, particle.search_scope, research.framework, research.selection]
+    verdict: "Under the stated models, the selected evidence supports a dark-matter account across
+              scales, while baryonic regularities and direct-search limits constrain its
+              explanation."
+    because: "The chain keeps observations, modeling choices, evidence reuse and intermediate
+              judgments visible. It neither adds paper votes nor calculates a probability that dark
+              matter exists. The physical identity and a worked comparison of alternatives remain
+              open."
+    reopened_by: "A source finding or shared assumption is revised, or a worked alternative jointly
+                  addresses the galaxy, cluster, cosmological and particle-search constraints.
+                  Reassess the affected paths and the synthesis."
+    seen:
+      galaxy.extended_mass: "Under the adopted gravitational interpretation, the rotation readings
+                             support extended gravitating mass."
+      galaxy.baryon_coupling: "Require a galaxy-scale explanation to address the tight
+                               baryon-acceleration relation and its modeling assumptions."
+      cluster.mass_location: "Under the adopted lensing interpretation, most gravitating mass in
+                              this merger does not trace the dominant baryonic plasma."
+      cosmology.cold_component: "Within base Lambda-CDM, the fitted physical cold-dark-matter
+                                 density exceeds the baryon density; this is not direct particle
+                                 identification."
+      particle.search_scope: "The first LZ result restricts specified WIMP interactions without
+                              establishing the identity or nonexistence of all dark matter."
+      research.framework: "Standard gravitational mass inference; base Lambda-CDM for the CMB
+                           result."
+      research.selection: "Six source papers, selected findings and an authored synthesis. Not a
+                           complete review, a statistically combined likelihood, or a claim to run
+                           live research agents."
 open:
   research.alternatives:
     name: "Compare explanations on the same evidence"
-    question: "Which alternative models address all three observations, and what extra assumptions
-               do they need?"
+    question: "Which alternatives address the selected galaxy, cluster and CMB observations
+               together, and with which additional assumptions?"
+  research.baryon_coupling:
+    name: "Explain the acceleration relation"
+    question: "Which mechanisms reproduce the RAR and its scatter across independent samples without
+               treating the source relation as a proof of one theory?"
   research.identity:
     name: "What is the dark component?"
-    question: "Which physical candidates, if any, survive evidence beyond this selected set?"
+    question: "Which physical candidates jointly satisfy the astronomical constraints and
+               interaction-specific direct-search limits?"
+
+  research.later_searches:
+    name: "Extend beyond the first LZ result"
+    question: "What do later exposures and other experiments change? This selected first-search
+               paper is not a current survey of exclusion limits."
+
+  research.shared_systematics:
+    name: "Track shared data and assumptions"
+    question: "How do SPARC/RAR catalog overlap, mass-to-light choices and other common assumptions
+               change the effective independence of the evidence?"

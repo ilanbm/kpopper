@@ -1,0 +1,25 @@
+{
+  "description": "Observed check of the fictional reasoning-overview record.",
+  "measured_at_utc": "2026-09-18T21:11:41.529766+00:00",
+  "platform": {
+    "system": "Darwin",
+    "machine": "arm64"
+  },
+  "entrypoint": "Installed kpopper CLI, plugin 1.6.0+codex.20260917100413",
+  "command_form": "kpop check assets/diagrams/reasoning-check.yaml",
+  "record": "assets/diagrams/reasoning-check.yaml",
+  "record_sha256": "92988e5cddc363b8097c7ec3e45aee1f6dd6a3cc9b13d38eb27615cebba4cf9a",
+  "measurement": "Wall-clock duration of the full CLI subprocess, including Python and CLI startup. Five consecutive local invocations; no model calls.",
+  "elapsed_seconds": [
+    0.244026,
+    0.219574,
+    0.243699,
+    0.235957,
+    0.259072
+  ],
+  "median_seconds": 0.243699,
+  "display": "0.24 s · local run",
+  "exit_code": 1,
+  "stdout": "FAIL downloads.availability: wrong_if holds (files.days < link.days) - broken by its own condition\n\n1 judgments, 3 entries, 1 problems\n",
+  "interpretation": "Exit 1 is expected: the recorded condition is true when seven days of retention cannot support the 30-day promise. The timing badge is caller-measured metadata, separate from stdout. This small local sample is not a general latency guarantee."
+}
