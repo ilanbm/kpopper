@@ -10,7 +10,7 @@
 
 # Your project, more self-aware.
 
-**Your agents reason. kpopper makes that reasoning explicit, persistent, and [deterministically checkable](#what-deterministic-reasoning-means-here).**
+**Your agents reason. kpopper makes that reasoning explicit, persistent, and [deterministically checkable](#how-it-works).**
 
 kpopper connects decisions to the evidence, assumptions and earlier decisions they
 depend on, and records what would make them worth revisiting. When a recorded premise
@@ -21,8 +21,8 @@ changes, kpopper traces its reach through the record and surfaces what needs ano
 >
 > [**Try it and see for yourself →**](#get-started)
 
-**[Get started](#get-started)** · [Examples](#example-1-coding-agent) ·
-[Capabilities](#what-you-can-do-with-kpopper) · [Record format](#the-knowledge-record) ·
+**[Get started](#get-started)** · [Choose your path](#choose-your-path) ·
+[Capabilities](#what-you-can-do-with-kpopper) · [Record format](#how-it-works) ·
 [Commands](#quick-reference) ·
 [Contributing](CONTRIBUTING.md) · [Why the name?](#popper-give-a-conclusion-a-way-to-fail)
 
@@ -30,32 +30,32 @@ changes, kpopper traces its reach through the record and surfaces what needs ano
 
 [Phone layout](assets/diagrams/reasoning-check-mobile.png)
 
-<details>
+<details open>
 <summary>Contents</summary>
 
-- [Example 1: Coding Agent (assumption checks)](#example-1-coding-agent)
-  - [Two working modes](#two-working-modes)
-- [Example 2: Claude Cowork / ChatGPT Work (freshness)](#example-2-claude-cowork-and-chatgpt-work)
-- [Example 3: Research (evidence synthesis)](#example-3-research)
+- [Choose your path](#choose-your-path)
+  - [Coding agents](#example-1-coding-agent)
+  - [Cowork / Work](#example-2-claude-cowork-and-chatgpt-work)
+  - [Research](#example-3-research)
 - [Installation and first use](#get-started)
 - [CLI and plugin quick reference](#quick-reference)
 - [What you can do with kpopper](#what-you-can-do-with-kpopper)
-- [One project, across your existing tools](#one-project-across-your-existing-tools)
-- [Past, present and future](#past-present-future)
-- [Background capture during a conversation](#keep-the-conversation-moving)
-- [What deterministic reasoning means here](#what-deterministic-reasoning-means-here)
-- [The record and its evolving structure](#the-knowledge-record)
-- [Review that needs judgment](#when-a-review-needs-judgment)
-- [Followups and background checks](#followups-and-background-checks)
-- [Checks across branches and in CI](#coding-check-the-reasoning-behind-a-merge)
-- [Karl Popper, K-pop and the name](#popper-give-a-conclusion-a-way-to-fail)
-- [The third-brain idea](#a-third-brain-for-work-in-progress)
-- [Lean and deterministic reasoning](#the-lean-proof-assistant-from-fermat-to-agents)
-- [Experimental applications](#experimental-applications)
-- [Availability and limits](#what-is-available-and-what-is-next)
+- [Go deeper](#go-deeper)
+  - [How it works](#how-it-works)
+  - [Followups and background checks](#followups-and-background-checks)
+  - [Optional experimental applications](#experimental-applications)
+  - [Karl Popper, K-pop and the name](#popper-give-a-conclusion-a-way-to-fail)
+  - [Availability and limits](#what-is-available-and-what-is-next)
 - [Try it, get help and contribute](#make-it-earn-its-place)
 
 </details>
+
+<a id="choose-your-path"></a>
+
+## Where would you like to start?
+
+Open the example closest to your work. Each path follows the situation, the record
+and what the checks return. You can also [go straight to installation](#get-started).
 
 <a id="access-control-and-shared-caching"></a>
 
@@ -63,6 +63,9 @@ changes, kpopper traces its reach through the record and surfaces what needs ano
 
 <a id="example-1-private-data-exposure-assumption-checks"></a>
 <a id="example-1-coding-agent"></a>
+
+<details>
+<summary><a href="assets/stories/cache-privacy.png"><img src="assets/navigation/coding.png" width="112" height="70" align="middle" alt="Preview the coding-agent illustration"></a> <strong>Coding agents</strong><br>Catch assumptions that break across branches and worktrees.</summary>
 
 ## Example 1: Coding Agent (assumption checks)
 
@@ -162,7 +165,7 @@ measurement recipes and a separate integration probe.
 These are executable examples. Checks cover the assumptions the record
 declares and the inputs deliberately measured or recorded. The examples on this page
 retain their compact legacy records, which kpopper 1.7 continues to read without
-migration. [New records also preserve immutable history](#the-knowledge-record).
+migration. [New records also preserve immutable history](#how-it-works).
 
 ### Two working modes
 
@@ -235,6 +238,8 @@ dry run, folding and refutation commands.
 
 These project modes also apply to document and research work.
 
+</details>
+
 <a id="revisiting-plans-when-the-brief-changes"></a>
 
 <a id="example-3-outdated-planning-assumptions"></a>
@@ -243,6 +248,9 @@ These project modes also apply to document and research work.
 
 <a id="example-2-outdated-planning-assumptions-freshness"></a>
 <a id="example-2-claude-cowork-and-chatgpt-work"></a>
+
+<details>
+<summary><a href="assets/stories/cowork-workshop.png"><img src="assets/navigation/cowork.png" width="112" height="70" align="middle" alt="Preview the workshop illustration"></a> <strong>Cowork / Work</strong><br>Keep plans current when the brief changes.</summary>
 
 ## Example 2: Claude Cowork / ChatGPT Work (freshness)
 
@@ -357,10 +365,15 @@ The record links back to relevant evidence; there is no need to migrate your kno
 For another example that needs judgment, explore
 [a replacement offer with an uncertain deadline](examples/offer-review/README.md).
 
+</details>
+
 <a id="example-4-dark-matter-across-studies-evidence-synthesis"></a>
 
 <a id="example-3-dark-matter-across-studies-evidence-synthesis"></a>
 <a id="example-3-research"></a>
+
+<details>
+<summary><a href="assets/stories/dark-matter-intro.png"><img src="assets/navigation/research.png" width="112" height="70" align="middle" alt="Preview the research illustration"></a> <strong>Research</strong><br>Connect evidence and revisit conclusions as findings change.</summary>
 
 ## Example 3: Research (evidence synthesis)
 
@@ -573,6 +586,8 @@ The [runnable exercise and captured output](examples/dark-matter/advanced/README
 also preserve the exact `75/14` density ratio and an unchanged qualitative
 review judgment. Five papers is a coverage count: RAR still reuses SPARC, model
 assumptions remain explicit, and neither the count nor replay proves the synthesis.
+
+</details>
 
 ## Get started
 
@@ -810,22 +825,22 @@ own setup; it is optional alongside the default reasoning engine.
 Carry the reasoning into the next session, check it against recorded inputs, and keep
 the earlier evidence available when the work changes.
 
-| What you want to do | What kpopper provides |
-|---|---|
-| Resume work with its context | Open the project's standing decisions and attention items, then retrieve the facts and reasons relevant to a question. [Before the first answer](#before-the-first-answer). |
-| Trace why a decision was made | Follow its sources, declared dependencies and the values used at its last review. [The knowledge record](#the-knowledge-record). |
-| Keep earlier decisions inspectable | History-backed records retain immutable claim versions and explicit acceptance, review, correction and refutation acts as the current record evolves. [History](docs/history-contract.md). |
-| Calculate and check explicit rules | Evaluate exact arithmetic, compound Boolean conditions and conditional expressions with the packaged Lean runtime. Missing inputs and execution errors remain visible. [Deterministic reasoning](#what-deterministic-reasoning-means-here). |
-| Ask questions over a recorded collection | Filter, select, count or sum within a declared scope, or test whether all/any members meet a condition. The result retains scope evidence and diagnostics. [Collection queries](docs/query.md). |
-| Catch a changed basis behind an unchanged answer | Compare the recorded inputs, rules and collection membership with the last review, even when the numeric result stays equal. [Five selected papers, a different basis](examples/dark-matter/advanced/README.md). |
-| Reproduce an earlier computation | Replay a retained Snapshot through the public API to recover its earlier result and basis after the live record changes. [Source-free replay example](examples/dark-matter/advanced/README.md#run-it). |
-| Notice which decisions need another look | Trace changed premises, evaluate declared breaking conditions and explicitly rerun configured measurement recipes. [Checks and measurements](docs/reference.md#what-check-means). |
-| Test alternatives and reconcile branch work | Keep named hypotheses, inspect the proposed combination and retain conflicts or refutations. Worktrees keep their code-specific context, with checks available before a merge and in CI. [Two working modes](#two-working-modes). |
-| Keep useful findings across sessions and branches | Capture explicit reports in the background and retain scoped project contributions with their sources and pending/accepted status. [Background capture](#keep-the-conversation-moving) · [Shared contributions](docs/project-modes.md). |
-| Return to work when its conditions change | Tie followups to dates, changed recorded inputs or earlier work, with scheduling and delivery configured in the host. [Followups](#followups-and-background-checks). |
-| Share a focused piece of the reasoning | Export selected entries as Markdown, with earlier/current readings, omitted values marked and optional Mermaid diagrams. [Focused exports](docs/graph-export.md). |
-| Build a tool on structured findings | Read versioned assessment JSON with computational results, review comparisons, contention, integrity and history evidence kept distinct. [Assessment contract](docs/assessment.md). |
-| Let the record fit the work | Add domain-specific subjects and vocabulary while preserving explicit sources, dependencies and review conditions. [Evolving structure](#a-structure-that-grows-with-the-project). |
+| What you want to do | What kpopper provides | Example |
+| --- | --- | --- |
+| Resume work with its context | Open the project's standing decisions and attention items, then retrieve the facts and reasons relevant to a question. [Before the first answer](#example-2-claude-cowork-and-chatgpt-work). | Resume a job search and recover why three roles were shortlisted. |
+| Trace why a decision was made | Follow its sources, declared dependencies and the values used at its last review. [The knowledge record](#how-it-works). | Trace the upload queue decision back to the test that exposed request timeouts. |
+| Keep earlier decisions inspectable | History-backed records retain immutable claim versions and explicit acceptance, review, correction and refutation acts as the current record evolves. [History](docs/history-contract.md). | See why a trip moved from July to August, without losing the original constraints. |
+| Calculate and check explicit rules | Evaluate exact arithmetic, compound Boolean conditions and conditional expressions with the packaged Lean runtime. Missing inputs and execution errors remain visible. [Deterministic reasoning](#how-it-works). | Check whether 24 guests fit a venue with 18 seats. |
+| Ask questions over a recorded collection | Filter, select, count or sum within a declared scope, or test whether all/any members meet a condition. The result retains scope evidence and diagnostics. [Collection queries](docs/query.md). | Find apartments below $2,000 with an elevator and a lease that allows pets. |
+| Catch a changed basis behind an unchanged answer | Compare the recorded inputs, rules and collection membership with the last review, even when the numeric result stays equal. [Five selected papers, a different basis](examples/dark-matter/advanced/README.md). | The pass rate is still 100%, but the tests behind the release decision have changed. |
+| Reproduce an earlier computation | Replay a retained Snapshot through the public API to recover its earlier result and basis after the live record changes. [Source-free replay example](examples/dark-matter/advanced/README.md#run-it). | Reproduce last quarter's server cost estimate using the prices and traffic assumptions saved then. |
+| Notice which decisions need another look | Trace changed premises, evaluate declared breaking conditions and explicitly rerun configured measurement recipes. [Checks and measurements](docs/reference.md#what-check-means). | Record a babysitter's cancellation and surface the evening plans that depended on it. |
+| Test alternatives and reconcile branch work | Keep named hypotheses, inspect the proposed combination and retain conflicts or refutations. Worktrees keep their code-specific context, with checks available before a merge and in CI. [Two working modes](#example-1-coding-agent). | One branch removes password login; another adds a feature that still requires it. |
+| Keep useful findings across sessions and branches | Capture explicit reports in the background and retain scoped project contributions with their sources and pending/accepted status. [Background capture](#keep-the-conversation-moving) · [Shared contributions](docs/project-modes.md). | A discarded prototype's documented API limit remains available to the next integration task. |
+| Return to work when its conditions change | Tie followups to dates, changed recorded inputs or earlier work, with scheduling and delivery configured in the host. [Followups](#followups-and-background-checks). | Resume tax preparation once the missing bank statement has been recorded. |
+| Share a focused piece of the reasoning | Export selected entries as Markdown, with earlier/current readings, omitted values marked and optional Mermaid diagrams. [Focused exports](docs/graph-export.md). | Share why you chose a school, including the commute times and fee comparisons. |
+| Build a tool on structured findings | Read versioned assessment JSON with computational results, review comparisons, contention, integrity and history evidence kept distinct. [Assessment contract](docs/assessment.md). | Build a grant dashboard that separates budget overruns from missing receipts. |
+| Let the record fit the work | Add domain-specific subjects and vocabulary while preserving explicit sources, dependencies and review conditions. [Evolving structure](#how-it-works). | Organize a garden plan around plants, watering schedules and frost precautions. |
 
 New records use `core/v1` and immutable history by default; existing legacy records
 require explicit adoption. Collection queries use the declared `query/v1` capability.
@@ -834,15 +849,24 @@ and makes judgments. Your existing documents, tools and memory stay where they a
 
 **Optional experimental tools**
 
-| What you want to do | Tool and scope |
-|---|---|
-| Browse the record visually | **kpopper Hub:** a rendered snapshot with project layouts, source links and an interactive graph. Requires the optional HTML runtime. [Applications](#experimental-applications). |
-| Share a document with inspectable evidence | **Annotated Documents:** standalone HTML with selected source snapshots and reviewable copy updates. Requires the optional HTML runtime. [Document workflow](docs/documents.md). |
-| Bind an agent's reads to a known revision | **Checked sessions:** a revision-bound view and optional MCP transport, with their own setup and session checks. [Checked-session integration](docs/checked-sessions.md). |
+| What you want to do | Tool and scope | Example |
+| --- | --- | --- |
+| Browse the record visually | **kpopper Hub:** a rendered snapshot with project layouts, source links and an interactive graph. Requires the optional HTML runtime. [Applications](#experimental-applications). | Open a visual overview of a renovation's quotes, decisions and unresolved questions. |
+| Share a document with inspectable evidence | **Annotated Documents:** standalone HTML with selected source snapshots and reviewable copy updates. Requires the optional HTML runtime. [Document workflow](docs/documents.md). | Produce a client report with the source invoices beside each expense total. |
+| Bind an agent's reads to a known revision | **Checked sessions:** a revision-bound view and optional MCP transport, with their own setup and session checks. [Checked-session integration](docs/checked-sessions.md). | An agent refreshes its view after another session changes the recorded API contract. |
+
+
+## Go deeper
+
+Open a topic when you need its details. The examples, commands and explanations
+remain here for reference.
 
 <a id="start-with-the-work"></a>
 
-## One project, across your existing tools
+<a id="one-project-across-your-existing-tools"></a>
+
+<details>
+<summary><strong>One project, across your existing tools</strong></summary>
 
 A project is **work around a goal**. Its materials may span documents, conversations,
 calendars, task systems, files and earlier sessions. In software, they also include code,
@@ -877,7 +901,12 @@ for an [initial map or deeper investigation](docs/first-use.md) of selected mate
 The agent uses the sources available in your context; access to a file alone does not
 make it part of the project.
 
-## Past, present, future
+</details>
+
+<a id="past-present-future"></a>
+
+<details>
+<summary><strong>Past, present, future</strong></summary>
 
 Keep the work connected across time: the sources and decisions behind it, what needs
 attention now, and the checks or actions to return to later.
@@ -891,7 +920,12 @@ configured in the host. The return arrow is the agent's step of recording useful
 as evidence; marking a followup complete is a separate operation and does not automatically
 rewrite the knowledge record.
 
-## Keep the conversation moving
+</details>
+
+<a id="keep-the-conversation-moving"></a>
+
+<details>
+<summary><strong>Keep the conversation moving</strong></summary>
 
 New information often arrives halfway through another task. kpopper can retain an explicit
 report and process a supported update in a separate worker. Routine results stay quiet;
@@ -912,7 +946,12 @@ after an answer requires the host capabilities described in the
 an update, inspect its outcome before relying on it. Background work is useful precisely
 where the conversation can safely continue without that result.
 
-## How it works
+</details>
+
+<a id="how-it-works"></a>
+
+<details>
+<summary><strong>How it works — reasoning, record format and review</strong></summary>
 
 ### What deterministic reasoning means here
 
@@ -1000,7 +1039,7 @@ preserving a basis for review. A judgment needs the values it was reviewed again
 to make drift detectable, and a meaningful condition for reconsideration. A record
 with no judgments yet does not need invented conclusions, snapshots or derivations
 just to fill a template. Field names and project-specific categories are described
-[below](#a-structure-that-grows-with-the-project).
+[below](#how-it-works).
 
 **Change is compared with the last review.** When a recorded scalar differs from a judgment's
 `seen` snapshot, the reader identifies the movement. A supported `wrong_if` comparison says
@@ -1076,7 +1115,12 @@ select one flagged decision for attention. A prose condition alone is not an
 automatic background review of every judgment. See [followups](skills/kpopper/FOLLOWUPS.md)
 for triggers, work budgets and scheduling.
 
-## Followups and background checks
+</details>
+
+<a id="followups-and-background-checks"></a>
+
+<details>
+<summary><strong>Followups and background checks</strong></summary>
 
 Deferred work can become ready on a date, after a recorded value changes, when a
 threshold is crossed, or after another task finishes. Keep the task in your existing
@@ -1101,7 +1145,12 @@ See [setup and host limits](skills/watch/SKILL.md),
 [followup routing and review budgets](skills/kpopper/FOLLOWUPS.md), and
 [branch compatibility and shared observations](skills/watch/references/compatibility.md).
 
-## “Ready to launch” had a condition
+</details>
+
+<a id="ready-to-launch-had-a-condition"></a>
+
+<details>
+<summary><strong>“Ready to launch” had a condition</strong></summary>
 
 Karl Popper is releasing his debut K-pop single.
 An agent has prepared Friday's launch-party announcement. The venue has confirmed the
@@ -1144,7 +1193,12 @@ earlier decision was based on**. It knows to revisit the announcement before reu
 [Try the example](docs/reference.md#try-it-from-the-command-line) ·
 [See a PR and CI case](#coding-check-the-reasoning-behind-a-merge)
 
-## Coding: check the reasoning behind a merge
+</details>
+
+<a id="coding-check-the-reasoning-behind-a-merge"></a>
+
+<details>
+<summary><strong>Coding: check the reasoning behind a merge</strong></summary>
 
 **Two branches can pass their own tests and undermine each other's decisions when merged.**
 Git checks whether their text can be combined. kpopper adds a check on the recorded premises
@@ -1199,7 +1253,12 @@ code or prove that all goals are mutually compatible. Keep relevant readings cur
 review measurement recipes as code. A contradiction expressed only in prose, or hidden behind
 unrelated IDs, can still require human review.
 
-## Popper: give a conclusion a way to fail
+</details>
+
+<a id="popper-give-a-conclusion-a-way-to-fail"></a>
+
+<details>
+<summary><strong>Popper: give a conclusion a way to fail</strong></summary>
 
 The man in the banner is **Karl Popper**, cast here as an unlikely K-pop star.
 
@@ -1224,9 +1283,10 @@ If the recorded status is `planned`, that condition fires and `check` fails.
 A green check means no failing condition was found by these checks;
 it does not establish that the recommendation is true, wise, complete or authorized.
 
-The predicate language is deliberately small: one supported comparison over declared
-references and values. Free-form reasoning and compound logical expressions are outside
-that evaluator. If a condition cannot yet be checked, `blocked_on` records why. A decision
+This legacy example uses one comparison over declared inputs. The current core also
+supports [compound conditions](docs/reasoning-core.md#composable-conditions). Free-form
+reasoning still needs interpretation. If a condition cannot yet be checked, `blocked_on`
+records why. A decision
 that needs a person's judgment can instead carry `reopened_by`, describing the sign that
 would bring it back for review. Preferences and open questions need no invented scientific
 certainty. See [the checking rules](docs/reference.md#what-check-means).
@@ -1234,7 +1294,12 @@ certainty. See [the checking rules](docs/reference.md#what-check-means).
 This is a practical use of falsification, not an automated implementation of the scientific
 method. Choosing good evidence and meaningful breaking conditions remains intellectual work.
 
-## A third brain for work in progress
+</details>
+
+<a id="a-third-brain-for-work-in-progress"></a>
+
+<details>
+<summary><strong>A third brain for work in progress</strong></summary>
 
 An agent's working instructions and the work it produces serve different readers.
 Plan section numbers can leak into code comments; a website can start describing the
@@ -1265,7 +1330,7 @@ this reasoning and review layer a **third brain**; the agent supplies the interp
 **Keep the knowledge system already in use.** A folder of Markdown files, an Obsidian vault,
 a project wiki, or memory files used by Claude or Codex can stay where they are. The agent
 reads relevant material through its available tools and records the claims it relies on,
-with links back to those sources, in the [project record](#the-knowledge-record).
+with links back to those sources, in the [project record](#how-it-works).
 `GROUNDING.yaml` presents those claims; new records retain their history in `.kpopper/`.
 There is no need to migrate the
 existing notes or replace the agent's memory system.
@@ -1294,7 +1359,12 @@ with new information, draw attention to a consequential mismatch, and review the
 In kpopper those steps are explicit records and checks. The person or agent supplies the
 interpretation; the software follows the declared connections. You retain the decision.
 
-## The Lean proof assistant: from Fermat to agents
+</details>
+
+<a id="the-lean-proof-assistant-from-fermat-to-agents"></a>
+
+<details>
+<summary><strong>The Lean proof assistant: from Fermat to agents</strong></summary>
 
 <p>
   <a href="https://lean-lang.org/">
@@ -1356,11 +1426,16 @@ The ordinary commands remain available without it.
 
 [Logo source and trademark information](assets/README.md#lean-logo).
 
+</details>
+
 <a id="share-a-document-with-its-reasons"></a>
 <a id="explore-the-projects-knowledge-record"></a>
 <a id="regular-html-annotated-with-reasoning"></a>
 
-## Experimental applications
+<a id="experimental-applications"></a>
+
+<details>
+<summary><strong>Experimental applications</strong></summary>
 
 kpopper's core keeps claims, their sources and dependencies, and the conditions that
 make decisions worth revisiting. Optional applications build on that core:
@@ -1390,7 +1465,12 @@ session hooks work without the HTML runtime. Plugin users can add it with
 See [installation, boundaries and maturity](docs/applications.md),
 [Annotated Documents](docs/documents.md), and [kpopper Hub](skills/kpopper/PAGE.md).
 
-## Share a focused excerpt
+</details>
+
+<a id="share-a-focused-excerpt"></a>
+
+<details>
+<summary><strong>Share a focused excerpt</strong></summary>
 
 To share a small part of the record in a task, document or pull request, use
 `kpop export`. The excerpt separates readings captured at review from current recorded
@@ -1405,7 +1485,12 @@ Add `--format markdown-mermaid` to keep the text and append a diagram for destin
 that support Mermaid. See [focused exports](docs/graph-export.md) for selection limits,
 original-field details and output options.
 
-## What is available, and what is next
+</details>
+
+<a id="what-is-available-and-what-is-next"></a>
+
+<details>
+<summary><strong>What is available, and what is next</strong></summary>
 
 This table describes the current repository. Check the [changelog](CHANGELOG.md) when
 updating an older installation; a merged feature may still be awaiting a release.
@@ -1440,6 +1525,8 @@ read-only assessment and the packaged Windows reasoning runtime remain available
 Mapping runs in the calling agent session, using its available tools and the sources you
 authorize. It does not install connectors or scan accounts by itself. See
 [starting a knowledge record](docs/first-use.md) for the workflow and host requirements.
+
+</details>
 
 ## Make it earn its place
 
