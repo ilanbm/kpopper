@@ -25,6 +25,7 @@ jobs:
       session: ${{ steps.select.outputs.session }}
       installed: ${{ steps.select.outputs.installed }}
       native: ${{ steps.select.outputs.native }}
+      examples: ${{ steps.select.outputs.examples }}
       test_suites: ${{ steps.select.outputs.test_suites }}
       test_matrix: ${{ steps.select.outputs.test_matrix }}
     steps:
@@ -51,7 +52,7 @@ jobs:
             python .github/scripts/ci_selection.py --full
           fi
       - name: Reject incomplete committed bundles before starting expensive checks
-        if: steps.select.outputs.installed == 'true'
+        if: steps.select.outputs.installed == 'true' || steps.select.outputs.examples == 'true'
         run: python scripts/reasoning/build_runtime.py --check-bundles
 
   record:
@@ -148,6 +149,28 @@ jobs:
         if: needs.changes.outputs.python == 'true' && matrix.group == 1
         run: python examples/scoped-query/exercise.py
 
+  examples:
+    name: research example (${{ matrix.python }})
+    timeout-minutes: 15
+    needs: [changes, record]
+    if: needs.changes.outputs.examples == 'true'
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python: ["3.9", "3.13"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+      - name: Install the package with its committed reasoning runtime
+        run: python -m pip install .
+      - name: Check the research exercise, captured output and CLI projection
+        run: python .github/scripts/check_research_example.py
+      - name: The example leaves the source tree unchanged
+        run: git diff --exit-code
+
   document-ui:
     timeout-minutes: 15
     needs: [changes, record]
@@ -195,7 +218,7 @@ jobs:
 
   ci-required:
     timeout-minutes: 10
-    needs: [changes, record, check, document-ui, session, reasoning-runtime]
+    needs: [changes, record, check, examples, document-ui, session, reasoning-runtime]
     if: always()
     runs-on: ubuntu-latest
     steps:

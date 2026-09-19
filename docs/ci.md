@@ -7,13 +7,31 @@ families. The final `ci-required` job requires successful completion of every
 selected family and rejects missing output, incomplete test plans and unexpected
 skips.
 
+The reviewed inputs for `examples/dark-matter/advanced` select a focused `examples`
+family. That job installs the package and runs the research exercise on Linux with
+Python 3.9 and 3.13, using the committed native runtime. It compares the result with
+the published capture and checks the `jq` projection, including preservation of
+unknown and error states. Example-only PRs keep the mandatory checks but do not
+select the Python test shards, document UI, session matrix, installed-platform
+matrix or native rebuilds. Core changes and pushes to main still run the example
+alongside their existing consumer checks.
+
+Only the exact files in `RESEARCH_EXAMPLE_INPUTS` receive this classification; a
+new helper or fixture must be reviewed and registered. Unknown paths, deletions
+and rename endpoints retain conservative selection. The example job's failure,
+cancellation or unexpected skip fails `ci-required` when selected.
+
+To run this focused check locally, install the checkout with `python -m pip install .`,
+make `jq` available, then run `python .github/scripts/check_research_example.py`.
+It uses temporary files and makes no model calls.
+
 The selector emits an explicit list of Python suites: core, documents, reasoning,
 session and other. Shared runtime changes retain all suites; document-only changes
 select documents. New tests enter the other suite until classified. The execution
 helper discovers importable test files, rejects an empty or unknown selection,
 and splits individual unittest cases by measured duration with pytest-split.
 Full PRs use eight Linux machines with two processes each for Python 3.9, and four
-machines with four processes each for Python 3.13. A push to main checks 3.13 only.
+machines with four processes each for Python 3.13. A push to main uses 3.13 for these shards.
 Document-only selections use one machine per interpreter. At most twelve Python
 jobs run concurrently, leaving capacity for the native and session checks.
 pytest-xdist uses work stealing inside each machine so a slow file cannot hold an
