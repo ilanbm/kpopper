@@ -18,8 +18,9 @@ import zipfile
 from .reasoning import runtime as R
 
 ENDPOINT = 'history/capabilities'
-INCLUSION = ['*.py', 'reasoning/*.py', 'session/*.py']
+INCLUSION = ['*.py', 'reasoning/*.py', 'session/*.py', 'applications/*.py']
 REQUIRED = sorted(['__init__.py', 'cli.py', 'history_cli.py', 'history_runtime.py',
+    'applications/__init__.py', 'applications/hub.py', 'applications/annotated_doc.py',
     'history_contract.py', 'history_store.py', 'history_adapter.py', 'history_transaction.py', 'history_paths.py',
     'history_authoring.py', 'history_bootstrap.py', 'history_identity.py', 'history_edits.py', 'history_direct.py', 'history_bundle.py', 'history_migration.py', 'history_activation.py',
     'history_group_activation.py', 'history_hypotheses.py', 'history_hypothesis_import.py', 'history_branch.py',

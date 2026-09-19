@@ -1,5 +1,9 @@
 # kpopper for OpenClaw
 
+The verification below predates the application rename. The current bundle has eight
+canonical skills plus the `page` and `document` compatibility aliases; the application
+skills are now `hub` and `annotated-doc`.
+
 **Status: bundle installation, all eight skills and a live record workflow were
 verified with OpenClaw 2026.9.4. The live tests used its Claude CLI backend with
 Fable 5.1 and explicit tool approvals. A follow-up excluded native user/project
@@ -132,7 +136,7 @@ give the exact pass criteria and distinguish command tests from conversation tes
 | Stop gate | Run `check` explicitly; no enforced stop hook. |
 | Grounding nudges and background delivery | No OpenClaw integration in the bundle. |
 | Mapping, workers and scheduled reviews | Host-specific dispatch and scheduling are unverified; skill discovery does not supply them. |
-| Record page | `kpop page` creates a local HTML file; viewing or delivering it depends on the host. |
+| Record page | `kpop experimental hub` (optional `kpopper[html]` application) creates a local HTML file; viewing or delivering it depends on the host. |
 
 ## Verification boundary
 

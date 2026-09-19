@@ -1,6 +1,6 @@
 ---
 name: ground
-description: "Read the project's knowledge record before answering from memory or from the files. Use before answering about the project's state, a number, a date, a decision, a source, a deadline or what was agreed - even a casual 'what's the situation with X' or 'is that quote still current' - because the recorded answer, with its source, beats a fresh search of the tree; before changing a value the record may hold; and whenever the session opener or a grounding line names entries. Runs pull, affects and check, reads what hypotheses and other branches propose, and searches when a question maps to no name. A missing id is not absence. Not for showing the record's page (the page skill). Requests come in any language."
+description: "Read the project's knowledge record before answering from memory or from the files. Use before answering about the project's state, a number, a date, a decision, a source, a deadline or what was agreed - even a casual 'what's the situation with X' or 'is that quote still current' - because the recorded answer, with its source, beats a fresh search of the tree; before changing a value the record may hold; and whenever the session opener or a grounding line names entries. Runs pull, affects and check, reads what hypotheses and other branches propose, and searches when a question maps to no name. A missing id is not absence. Not for showing the record's page (the hub skill). Requests come in any language."
 ---
 
 # Ground

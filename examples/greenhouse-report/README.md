@@ -8,8 +8,8 @@ With the kpopper CLI installed, run from this directory:
 
 ```sh
 kpop check
-kpop page --verify
-kpop page --open
+kpop experimental hub --verify
+kpop experimental hub --open
 ```
 
 On the **Now** tab, hover over the heating conclusion to see its premises, condition and

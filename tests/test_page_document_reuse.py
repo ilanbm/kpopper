@@ -1,8 +1,8 @@
 """Which callers of the page build hand it the record they already read, and which must not.
 
-A read command loads the record once and gives that document to the page build: `open` and
-`check` ask the page what it knows about the very record they just read, in the same instant,
-so a second read is a second chance for the two views to disagree.
+A core read command loads the record once without rendering. An explicit Hub projection
+can reuse that exact document; a second read would introduce another chance for the two
+views to disagree.
 
 The write path does the opposite, on purpose. `_page_side` takes no document and reloads on
 every call, because the counts taken before a write, the arrangement facts taken before it,
@@ -142,22 +142,22 @@ class AReadCommandLoadsTheRecordOnce(WithTheFixture):
         self.assertEqual(len(calls), 1, calls)
         self.assertEqual(fail, [], fail)
 
-    def test_the_opening_still_says_what_the_page_knows(self):
-        # the count above is only worth having while the page is still consulted: an
-        # arrangement's sign is decided by the build, so a footer that says one fired can
-        # only come from a page that was built
+    def test_the_opening_leaves_presentation_to_the_application(self):
         record = self.wind_lands()
         printed = io.StringIO()
-        with contextlib.redirect_stdout(printed):
+        with mock.patch.object(R, "build", side_effect=AssertionError("implicit HTML")), \
+                contextlib.redirect_stdout(printed):
             P.opening([str(record)])
-        self.assertIn("v.glazing_tab fired (page.unserved > 0)", printed.getvalue())
+        self.assertNotIn("v.glazing_tab fired", printed.getvalue())
 
-    def test_check_still_says_what_the_page_knows(self):
+    def test_check_leaves_page_conditions_unevaluated(self):
         record = self.wind_lands()
-        note = P.check_lines([str(record)])[1]
-        self.assertIn("v.glazing_tab: wrong_if holds (page.unserved > 0) - decided by the page, "
-                      "page.unserved is 1", note)
-        self.assertTrue(any("s.2026_09_05_wind is served by no tab" in line for line in note), note)
+        with mock.patch.object(R, "build", side_effect=AssertionError("implicit HTML")):
+            fail, note, _, _, _ = P.check_lines([str(record)])
+        self.assertEqual(fail, [])
+        self.assertTrue(any("wrong_if reads page.unserved" in line for line in note))
+        with contextlib.redirect_stdout(io.StringIO()):
+            self.assertEqual(R.verify([str(record)]), 1)
 
     def wind_lands(self):
         """A later session records an intent, and what it wrote, that no tab of the page serves."""
@@ -180,18 +180,29 @@ class HandoverMixin:
     was given, or the rest of the command reads a record the page invented. The comparison is
     taken after the whole command has run, so it holds both ways."""
 
-    def given_to_the_page_by(self, command):
-        seen, original = {}, R.build
-
-        def build(paths, brief_path=None, page_path=None, **keywords):
-            seen["doc"] = keywords.get("doc")
-            return original(paths, brief_path, page_path, **keywords)
-
-        with mock.patch.object(R, "build", build), contextlib.redirect_stdout(io.StringIO()):
-            command(self.paths)
-        self.assertIn("doc", seen, "the page was never built, so nothing was handed over")
-        self.assertIsNotNone(seen["doc"], "the page was built from a reading of its own")
-        return seen["doc"]
+    def given_to_the_page_by(self, reader):
+        # Core readers do not render. An explicit Hub request may reuse that exact
+        # loaded document, including its live contribution/conflict metadata.
+        captured = []
+        original = P.load
+        renderer = P._peer('render_page')
+        def load(*args, **kwargs):
+            document = original(*args, **kwargs)
+            captured.append(document)
+            return document
+        with mock.patch.object(P, "load", side_effect=load), \
+                mock.patch.object(renderer, "build", wraps=renderer.build) as build, \
+                contextlib.redirect_stdout(io.StringIO()):
+            reader(self.paths)
+            build.assert_not_called()
+            self.assertEqual(len(captured), 1)
+            document = captured[0]
+            before = document_state(document)
+            P._page_info(self.paths, doc=document)
+            build.assert_called_once()
+            self.assertEqual(len(captured), 1)
+            self.assertEqual(document_state(document), before)
+        return document
 
     def assert_as_read(self, given):
         self.assertEqual(document_state(given), document_state(P.load(self.paths)))

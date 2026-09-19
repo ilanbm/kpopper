@@ -82,7 +82,7 @@ unreadable record still requires reconciliation: the connection to the intended 
 is no longer established. Task content, ownership, remote-task evidence, claims and the
 user's authorized scope still govern execution. Readiness does not establish the missing
 value, and a calculation becoming available during a claim still counts as changed input.
-An explicit `kpop page` or `page --verify` publishes measured page counts outside the
+An explicit `kpop experimental hub` or `kpop experimental hub --verify` publishes measured page counts outside the
 record. Followups can read those counts for the same record, shards, hypotheses, canonical
 view and evaluator version. Changed inputs, missing or corrupt measurements stay unknown
 until another explicit build. A scan never renders the page or refreshes `seen`.

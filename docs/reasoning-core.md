@@ -71,7 +71,7 @@ kpop pull d.order --profile core/v1 example.yaml
 kpop affects m.total --profile core/v1 example.yaml
 kpop export d.order --profile core/v1 --record example.yaml
 kpop search "order" --profile core/v1 --record example.yaml
-kpop page --profile core/v1 --out core.html example.yaml
+kpop experimental hub --profile core/v1 --out core.html example.yaml
 kpop session open --assessment-profile core/v1 --input example.yaml
 ```
 

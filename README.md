@@ -56,8 +56,7 @@ changes, kpopper traces its reach through the record and surfaces what needs ano
 - [Karl Popper, K-pop and the name](#popper-give-a-conclusion-a-way-to-fail)
 - [The third-brain idea](#a-third-brain-for-work-in-progress)
 - [The optional Lean core](#the-lean-proof-assistant-from-fermat-to-agents)
-- [Documents with their evidence](#share-a-document-with-its-reasons)
-- [The record's page and graph view](#explore-the-projects-knowledge-record)
+- [Experimental applications](#experimental-applications)
 - [Availability and limits](#what-is-available-and-what-is-next)
 - [Try it, get help and contribute](#make-it-earn-its-place)
 
@@ -383,8 +382,8 @@ Other adapters describe their own interpreter configuration. A Python package in
 includes dependencies in its own environment; do not run pip against an externally managed
 system Python to repair plugin hooks.
 
-Lean is optional; the ordinary reader and page work without it. In a new agent session
-with the project open, start with:
+Lean is optional for ordinary record reading; HTML applications have a separate optional
+installation. In a new agent session with the project open, start with:
 
 > Use kpopper to keep this project's reasoning across sessions. If a record exists, open it
 > and show what needs review. As we work, preserve the useful findings, sources, decisions
@@ -411,7 +410,7 @@ For a standalone CLI installation and a walkthrough of the launch-party example,
 | Keep competing claims in view | Hypotheses, explicit reconciliation and retained refutations. [Consolidation](skills/consolidate/SKILL.md). |
 | Work across branches | Combined-record checks in CI and optional background compatibility checks while work continues. [Coding and CI](docs/coding-and-ci.md). |
 | Return to deferred work | Followups tied to dates, recorded changes or preceding work, with configured host scheduling. [Followups](#followups-and-background-checks). |
-| Share a result people can inspect | Standalone HTML with selected evidence and review choices, plus a separate navigable page for the project record. [Documents](#share-a-document-with-its-reasons). |
+| Try an HTML application | Optional, experimental kpopper Hub and Annotated Documents. [Applications](#experimental-applications). |
 | Share part of the record | A bounded Markdown excerpt with historical and current readings, omitted values marked, and optional Mermaid diagrams. [Focused exports](docs/graph-export.md). |
 | Let the structure grow with the project | Domain-specific subjects and vocabulary within a small set of explicit relationships and checks. [Evolving structure](#a-structure-that-grows-with-the-project). |
 | Build a tool on the record | Versioned assessment JSON with independent findings, explicit scope and task-specific attention policies. [Assessment contract](docs/assessment.md). |
@@ -939,64 +938,41 @@ The ordinary commands remain available without it.
 
 [Logo source and trademark information](assets/README.md#lean-logo).
 
-## Share a document with its reasons
+<a id="share-a-document-with-its-reasons"></a>
+<a id="explore-the-projects-knowledge-record"></a>
+<a id="regular-html-annotated-with-reasoning"></a>
 
-Ask for the document you want:
+## Experimental applications
 
-> Create an HTML project update from these notes, with a recommendation and a checklist.
+kpopper's core keeps claims, their sources and dependencies, and the conditions that
+make decisions worth revisiting. Optional applications build on that core:
 
-With kpopper active, the agent writes the content, design and evidence mapping together.
-You do not need to ask for the layer separately or prepare a knowledge record first.
+| Application | What it produces | Status |
+|---|---|---|
+| kpopper Hub (`hub`) | A browsable snapshot of the record, with layouts and an interactive graph. | Experimental |
+| Annotated Documents (`annotated-doc`) | A standalone document with selected evidence and reviewable copy updates. | Experimental |
 
-**Open the explanation where you are reading.** Hover over a dotted passage to preview
-its explanation; click to keep it open. The card focuses on that passage, with an explanation
-in ordinary language and technical details collapsed. Click outside or use the close button
-to return to the document.
+```sh
+python -m pip install 'kpopper[html]'
+kpop experimental hub --open
+kpop experimental annotated-doc guide
+```
+
+Request these applications explicitly or give the agent a standing preference. Their
+interfaces and artifact formats may change. Ordinary installation, record checks and
+session hooks work without the HTML runtime. Plugin users can add it with
+`plugin_runtime.py setup --applications html` at their active plugin path.
 
 <p align="center">
   <a href="assets/standalone-document-reasoning.png">
-    <img src="assets/standalone-document-reasoning.png" width="820" alt="The Autumn Garden Workshop report with its 16-day registration-window passage and a focused explanation visible together. The card marks the author's interpretation as Not checked, explains how it was derived from two dates, and links to the project notes offered as context.">
+    <img src="assets/standalone-document-reasoning.png" width="760" alt="Experimental HTML document with an evidence card beside a marked passage. The author's interpretation is labelled Not checked.">
   </a>
 </p>
 
-<sub>The card distinguishes the author's interpretation from a fact stated in the source:
-the notes give two dates, but do not define a registration window. Its reasoning,
-**Not checked** status and source link remain visible alongside the document.
-Click the image to inspect it at full size.</sub>
+See [installation, boundaries and maturity](docs/applications.md),
+[Annotated Documents](docs/documents.md), and [kpopper Hub](skills/kpopper/PAGE.md).
 
-**Follow the source, then come back.** An internal source link opens only the relevant
-reading in the same card. Back returns to the explanation without losing your place.
-The card keeps its position while longer content scrolls inside it.
-
-**Keep or share one file.** The HTML contains the document, selected source snapshots and
-review choices. Open it offline in a browser with JavaScript enabled; no account, server
-or neighboring files are needed to read the document and inspect its evidence.
-
-Give the agent a changed source later and it can prepare a new copy with grouped
-before-and-after corrections. A changed count and the percentage calculated from it stay
-one decision. Accept or keep the original, then choose **Save document copy** to retain
-your choice and the evidence behind it.
-
-A match covers the stated comparison or calculation against a saved reading. Missing
-evidence and unchecked interpretations remain explicit; unmarked text is not checked.
-Opening an old file does not reread sources or discover later changes.
-See [HTML documents with evidence](docs/documents.md) for the workflow and its limits.
-
-<a id="regular-html-annotated-with-reasoning"></a>
-
-## Explore the project's knowledge record
-
-The project record also has its own HTML page. Its views bring together recorded facts,
-decisions and open questions, and can arrange them as a report. See the
-[Greenhouse example record](examples/greenhouse-report/GROUNDING.yaml) and its
-[document layout](examples/greenhouse-report/.kpopper/view.yaml) for a report built from
-recorded readings and a heating judgment.
-
-`kpop page --open` generates this self-contained HTML from the project's record and a
-chosen layout. **Now** and other project tabs can present reports, plans or comparisons;
-**Record** lists the entries directly, and **Tree** offers an optional graph view. The page
-is a rendered snapshot—regenerate it after the record changes. For layouts, components,
-localization and checks on stale explanatory text, see the [page reference](skills/kpopper/PAGE.md).
+## Share a focused excerpt
 
 To share a small part of the record in a task, document or pull request, use
 `kpop export`. The excerpt separates readings captured at review from current recorded
@@ -1027,18 +1003,18 @@ New history-backed records also require POSIX locking for creation and writes.
 On native Windows, create and author history on a POSIX host such as WSL;
 read-only assessment and the packaged Windows reasoning runtime remain available.
 
-| Status | Capability |
-|---|---|
-| Available | YAML records, source references, judgment checks, dependency tracing, review snapshots, hypotheses and consolidation. |
-| Available | CLI, focused Markdown exports with optional Mermaid, HTML record page and agent integrations, with host-specific setup and limits. |
-| Available | Standalone HTML authoring with contextual explanations, selected source snapshots and grouped corrections saved in the document copy. |
-| Available | Checks on combined records and hypotheses in CI, including before-merge inspection of another branch's record. |
-| Available within stated limits | Background processing of explicit reports and selective delivery of important findings. |
-| Platform import route documented; runtime not yet validated | ChatGPT Work installation and execution of this plugin. |
-| Experimental, opt-in | Lean-checked session views, revision-bound reads and a project-bound MCP server. |
-| Default for new records | [Deterministic `core/v1` assessment](docs/reasoning-core.md) and [immutable history](docs/history-contract.md), with a packaged arithmetic runtime and automatic reader selection. Existing legacy records require explicit adoption. |
-| Available through the agent | Guided starting choices: learn during ordinary work, map selected existing materials, or investigate a defined subject and period in depth. |
-| Available within host limits | Optional first-use explanations, workspace guidance and the ability to skip or turn guidance off. |
+| Layer | Status | Capability |
+|---|---|---|
+| Core | Available | YAML records, source references, judgment checks, dependency tracing, review snapshots, hypotheses and consolidation. |
+| Core | Available | CLI and focused Markdown exports with optional Mermaid. |
+| Application | Experimental, optional | kpopper Hub and Annotated Documents, with selected evidence and copy updates. |
+| Core | Available | Checks on combined records and hypotheses in CI, including before-merge inspection of another branch's record. |
+| Integration | Available within stated limits | Background processing of explicit reports and selective delivery of important findings. |
+| Integration | Platform import route documented; runtime not yet validated | ChatGPT Work installation and execution of this plugin. |
+| Integration | Experimental, opt-in | Lean-checked session views, revision-bound reads and a project-bound MCP server. |
+| Core | Default for new records | [Deterministic `core/v1` assessment](docs/reasoning-core.md) and [immutable history](docs/history-contract.md), with a packaged arithmetic runtime and automatic reader selection. Existing legacy records require explicit adoption. |
+| Integration | Available through the agent | Guided starting choices: learn during ordinary work, map selected existing materials, or investigate a defined subject and period in depth. |
+| Integration | Available within host limits | Optional first-use explanations, workspace guidance and the ability to skip or turn guidance off. |
 
 Mapping runs in the calling agent session, using its available tools and the sources you
 authorize. It does not install connectors or scan accounts by itself. See

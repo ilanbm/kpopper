@@ -209,7 +209,7 @@ def main(argv):
     # the release pull request is opened by a token whose pull requests run no checks,
     # so the record's own checks run here, on the tree the release would ship
     sh("kpopper", "check")
-    sh("kpopper", "page", "--verify")
+    sh("kpopper", "experimental", "hub", "--verify")
     sh("git", "add", "CHANGELOG.md", *VERSION_FILES)
     sh("git", "commit", "-q", "-m", f"Release {nxt}")
     sh("git", "push", "-f", "origin", branch)

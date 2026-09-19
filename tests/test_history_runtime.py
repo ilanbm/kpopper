@@ -14,6 +14,16 @@ from unittest import mock
 from scripts import history_runtime as R
 
 
+class ApplicationSources(unittest.TestCase):
+    def test_loaded_application_modules_are_bound_to_the_runtime_manifest(self):
+        from scripts.applications import hub, annotated_doc
+        declaration = R.describe('application_sources_0123456789')
+        paths = {item['path'] for item in declaration['sources']['files']}
+        self.assertIn('applications/__init__.py', paths)
+        self.assertIn('applications/hub.py', paths)
+        self.assertIn('applications/annotated_doc.py', paths)
+
+
 class Runtime(unittest.TestCase):
     def setUp(self):
         temporary = tempfile.TemporaryDirectory()
@@ -115,6 +125,12 @@ class Runtime(unittest.TestCase):
         with self.assertRaisesRegex(R.RuntimeDeclarationError, 'runtime_digest_mismatch'):
             R.probe_launchers([self.item], self.expected, self.nonce)
         self.assertEqual(before, self.inventory())
+
+    def test_changed_application_source_fails_preconfigured_digest(self):
+        source = self.package / 'applications/hub.py'
+        source.write_bytes(source.read_bytes() + b'\n# changed application deployment\n')
+        with self.assertRaisesRegex(R.RuntimeDeclarationError, 'runtime_digest_mismatch'):
+            R.probe_launchers([self.item], self.expected, self.nonce)
 
     def test_wrong_package_or_interpreter_refuses(self):
         wrong = self.root / 'wrong'

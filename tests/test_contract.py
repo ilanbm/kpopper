@@ -1279,8 +1279,8 @@ class IntentsTabsCoverage(unittest.TestCase):
                           "from=s.2026_09_03_glazing"]):
                 code, out, err = run(SCRIPTS / "provenance.py", "add", *args, "--as-of", "2026-09-03", rec)
                 self.assertEqual(code, 0, out + err)
-            # check says the intent is served by no tab, and where what it wrote falls
-            code, out, _ = run(SCRIPTS / "provenance.py", "check", rec)
+            # Explicit page verification says the intent is served by no tab, and where what it wrote falls
+            code, out, _ = run(SCRIPTS / "render_page.py", "--verify", rec)
             self.assertEqual(code, 0, out)
             self.assertIn("NOTE s.2026_09_03_glazing is served by no tab - asked: What would glazing the "
                           "north wall cost, and how much of the shortfall would it close?\n"
@@ -1343,17 +1343,12 @@ class IntentsTabsCoverage(unittest.TestCase):
             self.assertIn("FAIL v.glazing_tab: wrong_if holds (page.unserved > 0) - decided by the page", out)
             self.assertIn("hint: it wrote glaze. (3), v. (1) - 1 of 4 inside 'The February night'; "
                           "3 of 4 inside 'The glazing quote'", out)
-            # check leaves the line to the page and still says which intent - and fails the
-            # brief for no longer carrying what the arrangement decided, since a tab that
-            # drops its serves: line is the arrangement's reversal by another road
+            # Core checking preserves the unavailable page condition without rendering.
             code, out, _ = run(SCRIPTS / "provenance.py", "check", rec)
-            self.assertEqual(code, 1, out)
-            self.assertIn("NOTE s.2026_09_03_glazing is served by no tab", out)
-            self.assertIn("NOTE v.glazing_tab: wrong_if holds (page.unserved > 0) - decided by the page, "
-                          "page.unserved is 1", out)
-            self.assertIn("FAIL the brief does not serve s.2026_09_03_glazing together, as v.glazing_tab "
-                          "decided (no tab's sections earn s.2026_09_03_glazing) - serve them on a tab "
-                          "whose sections pick what they wrote, or re-decide v.glazing_tab", out)
+            self.assertEqual(code, 0, out)
+            self.assertIn("wrong_if reads page.unserved, which is counted when the page is built", out)
+            self.assertIn("page layout not checked", out)
+            self.assertNotIn("wrong_if holds", out)
 
     def test_page_counts_are_snapshotted_by_add(self):
         with tempfile.TemporaryDirectory() as d:
@@ -1403,7 +1398,7 @@ class IntentsTabsCoverage(unittest.TestCase):
                 i = dom.index(f'<section id="panel-{key}"')
                 self.assertIn('data-id="c.stray"', dom[i:dom.index("</section>", i)])
 
-    def test_the_opener_names_the_newest_unserved_intent(self):
+    def test_the_opener_does_not_require_page_coverage(self):
         with tempfile.TemporaryDirectory() as d:
             rec, brief = before_second_session(pathlib.Path(d))
             run(SCRIPTS / "provenance.py", "add", "s.2026_09_03_glazing",
@@ -1413,9 +1408,8 @@ class IntentsTabsCoverage(unittest.TestCase):
                 "from=s.2026_09_03_glazing", "--as-of", "2026-09-03", rec)
             code, out, _ = run(SCRIPTS / "provenance.py", "open", rec)
             self.assertEqual(code, 0, out)
-            self.assertTrue(out.endswith("next: check - s.2026_09_03_glazing is served by no tab · pull "
-                                         "<entry|prefix> (values with sources) · affects <entry> (what a "
-                                         "change reaches)\n"), out)
+            self.assertTrue(out.endswith(PLAIN_NEXT), out)
+            self.assertNotIn("served by no tab", out)
         # every intent served, or no brief at all: the line is what it always was
         _, out, _ = run(SCRIPTS / "provenance.py", "open", RECORD)
         self.assertTrue(out.endswith(PLAIN_NEXT), out)
@@ -1444,9 +1438,8 @@ class IntentsTabsCoverage(unittest.TestCase):
             run(SCRIPTS / "provenance.py", "add", "heat.gust_kw", "v=2", "unit=kW", "name=loss in a gust",
                 "from=s.2026_09_04_wind", "--as-of", "2026-09-04", rec)
             code, out, _ = run(SCRIPTS / "provenance.py", "gate", state, rec)
-            self.assertEqual(code, 2, out)
-            self.assertEqual(out, "s.2026_09_04_wind is served by no tab of the page - serve it in a tab "
-                                  "whose sections pick what it wrote, or leave it outside and say why\n")
+            self.assertEqual(code, 0, out)
+            self.assertEqual(out, "")
             # served by a tab whose sections pick what it wrote, the gate has nothing to say
             edit(pathlib.Path(d) / "PROVENANCE.view.yaml", "    serves: [s.2026_09_02_heating]\n",
                  "    serves: [s.2026_09_02_heating, s.2026_09_04_wind]\n")
@@ -1479,7 +1472,9 @@ class IntentsTabsCoverage(unittest.TestCase):
     def test_the_hooks_mark_at_open_and_bounce_once_at_stop(self):
         with tempfile.TemporaryDirectory() as d:
             rec = copy_fixture(pathlib.Path(d))
-            env = dict(os.environ, TMPDIR=d, KPOPPER_AGENT_SESSION="t1")
+            env = dict(os.environ, TMPDIR=d, KPOPPER_AGENT_SESSION="t1",
+                       PATH=str(pathlib.Path(sys.executable).parent) + os.pathsep + os.environ["PATH"],
+                       KPOPPER_RUNTIME_HOME=str(pathlib.Path(d) / "no-private-runtime"))
 
             def hook(name, payload):
                 return subprocess.run(["sh", str(SCRIPTS / name)], cwd=d, input=json.dumps(payload),

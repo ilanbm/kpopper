@@ -115,7 +115,7 @@ relevant entries first and preserve current judgments when historical accounts d
    additional review conditions without presenting unevaluated prose as an automatic check.
 5. **Return the map and its limits.** Show useful findings, open questions, sources reviewed and
    scope not covered. Link the knowledge view, record and sources where supported. Use the
-   shipped page renderer when a page helps, following PAGE.md; keep the outcome accessible in
+   optional experimental hub only on an explicit request or standing preference, following PAGE.md; keep the outcome accessible in
    the conversation too. Run `kpop check` and use the returned completion protocol with the real report or record
    path when the agreed mapping is finished. A completed map is not a standing instruction to survey again.
 

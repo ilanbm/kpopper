@@ -1,5 +1,22 @@
 # Changelog
 
+## Unreleased
+
+- Plugin users upgrading from the earlier HTML-dependent runtime should run
+  `plugin_runtime.py setup` once to prepare the new private environment.
+
+- Probe only PyYAML before opening a session; normal setup retains timezone data for followups.
+- Separate the optional experimental hub and document applications from the core CLI.
+  Install their runtime with `kpopper[html]` or plugin setup's `--applications html`,
+  then use `kpop experimental hub` or `kpop experimental annotated-doc`. Existing command
+  names (`page` and `document`) remain compatibility aliases, including under `experimental`.
+  The canonical skills are `hub` and `annotated-doc`; old skill names forward to them.
+- Keep record checks and ordinary session hooks independent of HTML rendering and
+  layouts. Projects using the page should also run `kpop experimental hub --verify`.
+  Explicit presentation authoring and layout proposals retain their application checks.
+- Make application selection explicit in agent guidance; mapping or requesting generic
+  HTML no longer automatically selects a kpopper HTML application.
+
 ## 1.7.0 — 2026-09-19
 
 - Default new records to history-backed reasoning and complete temporal observers (#134) — minor

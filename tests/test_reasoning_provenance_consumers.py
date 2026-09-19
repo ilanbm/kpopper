@@ -112,7 +112,7 @@ class CoreProvenanceConsumers(unittest.TestCase):
                 self.assertIn('core_profile_option_unsupported: ' + expected,
                               result.stderr + result.stdout)
 
-    def test_core_check_fails_an_unresolved_page_selector(self):
+    def test_hub_checks_an_unresolved_selector_without_failing_the_core(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             path = root / 'GROUNDING.yaml'
@@ -123,10 +123,15 @@ class CoreProvenanceConsumers(unittest.TestCase):
                 'title: Missing\nsections:\n- title: Missing\n  pick: missing.prefix\n',
                 encoding='utf-8')
             code, output = self.capture_output(P.core_check, [str(path)])
-        self.assertEqual(code, 1)
-        self.assertIn('page selectors unresolved (missing.prefix)', output)
+            hub = subprocess.run([sys.executable, str(Path(P.__file__).with_name('cli.py')),
+                'experimental', 'hub', '--verify', str(path)], capture_output=True, text=True)
+        self.assertEqual(code, 0, output)
+        self.assertNotIn('page selectors unresolved', output)
+        self.assertIn('page layout not checked; use kpop experimental hub --verify', output)
+        self.assertEqual(hub.returncode, 1, hub.stdout + hub.stderr)
+        self.assertIn('core page selectors unresolved: missing.prefix', hub.stdout)
 
-    def test_core_check_fails_stale_shape_and_renderer_misfit(self):
+    def test_hub_checks_shape_and_renderer_without_failing_the_core(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             path = root / 'GROUNDING.yaml'
@@ -139,9 +144,13 @@ class CoreProvenanceConsumers(unittest.TestCase):
                 'sections:\n- title: Bad fit\n  as: comparison\n  pick: all\n',
                 encoding='utf-8')
             code, output = self.capture_output(P.core_check, [str(path)])
-        self.assertEqual(code, 1)
-        self.assertIn('page renderer mismatch', output)
-        self.assertIn('page shape moved', output)
+            hub = subprocess.run([sys.executable, str(Path(P.__file__).with_name('cli.py')),
+                'experimental', 'hub', '--verify', str(path)], capture_output=True, text=True)
+        self.assertEqual(code, 0, output)
+        self.assertNotIn('page shape moved', output)
+        self.assertEqual(hub.returncode, 1, hub.stdout + hub.stderr)
+        self.assertIn('core page renderer does not fit', hub.stdout)
+        self.assertIn('core page shape moved', hub.stdout)
 
     def test_core_writer_summary_wraps_cached_v2_without_another_evaluation(self):
         snapshot = Snapshot.from_data({

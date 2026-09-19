@@ -263,6 +263,11 @@ sources:
             counts for coverage but no longer silences a flagged item"
     of: "2026-09-04, given the written layer at 2e5f4f3 and what four pieces since then built on it"
     read: "2026-09-04"
+  doc.applications:
+    name: "Optional experimental applications and the core boundary"
+    from: s.2026_09_18_experimental_applications
+    file: "docs/applications.md"
+    read: "2026-09-18"
   doc.assessment_contract:
     name: "Recorded assessment API and policy contract"
     file: "docs/assessment.md"
@@ -701,6 +706,12 @@ sources:
     at: "captured executable findings from task 01a0afd0-4d5f-7083-8025-f1ddca47d953"
     of: "2026-09-17"
     read: "2026-09-17"
+  s.2026_09_18_application_names:
+    name: "Rename the HTML applications to hub and annotated-doc"
+    asked: "מצויין תעשה את זה, ותעדכן בכל מקום שצריך בריפו"
+    of: "2026-09-18, approval of hub and annotated-doc as application names, noun-based CLI
+         commands, and compatibility aliases for page and document"
+    read: "2026-09-18"
   s.2026_09_18_ci_cost:
     name: "The session that measured what the repository's own checks cost to run"
     asked: "הMetered usage בפרויקט בגיטהב מוגזם, זה כבר על 110$ ואני כל הזמן מעלה\nבטוח אפשר לצמצם
@@ -717,6 +728,12 @@ sources:
     at: "User request in task 01a0b42e-d428-79a0-a6f7-03bf6195dde1"
     read: "2026-09-18"
     fidelity: quoted
+  s.2026_09_18_experimental_applications:
+    name: "Separate the optional experimental HTML applications from the core"
+    asked: "מצויין אני בעד, גם להגדיר אותם כapplications עם התקנה אופציונלית וגם experimental"
+    of: "2026-09-18, approval of the proposed page/document application boundary, explicit CLI and
+         README presentation"
+    read: "2026-09-18"
   s.2026_09_18_lane_a_hoist:
     name: "The Lane A session that implemented F1, the per-document hoist in
            knowledge_views.overlay"
@@ -768,6 +785,26 @@ sources:
     at: "PR #119 run 35285716254 attempt 1 and local forced-date and fixed-day test runs"
     of: "2026-09-18"
     read: "2026-09-18"
+  s.2026_09_19_main_integration:
+    name: "Integrate main with the optional HTML applications"
+    asked: "זה יפתר בגישה שלנו לא? אגב נכנסו המון שינויים לmain רוצה למזג אלינו ולתקן ולהתאים אצלנו
+            מה שצריך?"
+    of: "2026-09-19, request to merge current main into the applications branch and preserve
+         optional HTML installation and canonical hub/annotated-doc commands"
+    read: "2026-09-19"
+  s.2026_09_19_pr137_ci_review:
+    name: "Fix PR 137 CI and obtain an adversarial Opus 5 review"
+    asked: "הPR נכשל. תתקן ותריץ גם adverserial review עם opus 5?"
+    of: "2026-09-19, PR 137 failures in the plugin-lane broad reasoning suite after successful
+         core-only installed acceptance; requested independent adversarial review"
+    read: "2026-09-19"
+  s.2026_09_19_pr_and_plugin_descriptions:
+    name: "Review the application separation and align plugin descriptions with the README"
+    asked: "יש עוד merge קטן שנעשה לתוך main אז תבדוק. חוץ מזה תעבור על זה ותכין PR? אה אגב אולי
+            כדאי להחליף את התיאורים בplugin.json? תסתכל בreadme הנוכחי?"
+    of: "2026-09-19, request to incorporate latest main, review the changes, prepare a pull request
+         and refresh plugin descriptions from the current README"
+    read: "2026-09-19"
   s.background_ingestion:
     name: "Background capture and selective delivery contract"
     file: "skills/kpopper/INGESTION.md"
@@ -1298,13 +1335,14 @@ known:
          half drifts while the total holds"
     measure: blocked_on_implementation
   m.blocked_on_reopeners:
-    v: 64
+    v: 63
+    # set 2026-09-18: Remeasured after separating the optional HTML applications.
     # set 2026-09-17: remeasured after the explicit history authority decision
     # set 2026-09-14: this branch added two judgments that declare an observational hole
     # set 2026-09-11: measured by blocked_on_reopeners at a51bc75 with the working tree changed
     # reconciled 2026-09-05 after the same-day write rule refused a second reading: this tree adds
     # five observational declarations to the 55 measured earlier that day
-    of: "2026-09-17"
+    of: "2026-09-18"
     name: "Judgments that declare a hole with blocked_on - the count. Whether each names a sign
            that would re-open the decision, or an input the record lacks, is read by hand and said
            beside it"
@@ -2273,11 +2311,13 @@ known:
     from: doc.session_activity
     at: "The plugin hooks: session write attribution and delivery receipts"
   p.skills_shipped:
-    v: 8
-    name: "Skill directories the plugin ships, each one occasion with its own SKILL.md"
+    v: 10
+    # set 2026-09-18: Eight canonical skills and two compatibility aliases after the application rename.
+    name: "Shipped skill entry-point directories, including compatibility aliases, each with SKILL.md"
     from: "skills/*/SKILL.md"
-    at: "one directory per skill"
-    of: "2026-09-10"
+    at: "one directory per canonical skill or compatibility alias"
+    of: "2026-09-18"
+    scope: {kind: code, environment: kpopper skill entry points, commit: 9f1415584430ad3536a6eef0dd19b657a1aa034c, working_tree: false}
     measure: skills_shipped
   p.supersede_doors:
     v: 1
@@ -2384,13 +2424,15 @@ known:
     of: "2026-09-10"
 
   m.skill_bytes_largest:
-    v: 22581
-    # set 2026-09-19: measured by skill_bytes_largest at 8d64018
-    # set 2026-09-18: measured by skill_bytes_largest at 177e78c with the working tree changed
+    v: 22629
+    # Same-day correction measured after integrating session attribution from main.
+    # set 2026-09-19: Measured after merging main plugin-qualified skill guidance with the application names and aliases.
+    # Same-day working-tree correction after renaming the application skills.
+    # set 2026-09-18: Remeasured after separating the optional HTML applications.
     # set 2026-09-17: Measured after the recording example changed src to canonical from; largest skill is skills/record/SKILL.md on branch 89f46e8
     # set 2026-09-16: measured by skill_bytes_largest at a566286 with the working tree changed
     # Measured on the integrated source at 2218aa3; earlier same-day values describe its parents.
-    scope: {kind: code, environment: kpopper skill sources, commit: 2218aa345c292eef51c4205c5437dd1fa93d56c3}
+    scope: {kind: code, environment: kpopper skill sources, commit: 9f1415584430ad3536a6eef0dd19b657a1aa034c, working_tree: false}
     # set 2026-09-14: Measured by skill_bytes_largest after the recording guidance update
     # set 2026-09-14: measured by skill_bytes_largest after updating the project-mode guidance
     # set 2026-09-12: measured by skill_bytes_largest after the skills learned the entry file and the directory beside it
@@ -2781,6 +2823,17 @@ judgments:
                          record holds only what the tree cannot hold, the world outside the code; a
                          user-level directory is at most an index of records, never content; a
                          session named as a source is provenance, not process"
+  d.application_names_are_nouns:
+    from: s.2026_09_18_application_names
+    rests_on: [s.2026_09_18_application_names, doc.applications]
+    verdict: "Name the applications kpopper Hub and Annotated Documents, with CLI names hub and
+              annotated-doc. Retain page and document as compatibility aliases."
+    because: "The hub presents the project record; annotated documents are standalone
+              evidence-bearing artifacts. Noun-based application names support build, inspect and
+              refresh without tying the application to one action."
+    reopened_by: "Users confuse the project hub with a standalone document, canonical names differ
+                  across CLI and skills, or a supported old invocation stops working."
+    seen: {s.2026_09_18_application_names: "read 2026-09-18", doc.applications: "read 2026-09-18"}
   d.arrangement_link_is_earned:
     rests_on: [s.2026_09_03_arrangements, d.review_names_what_it_reads, d.serving_earned_by_picks]
     verdict: "an arrangement's tabs are the ones whose picks earn a session source it rests on, and
@@ -3623,6 +3676,26 @@ judgments:
       s.2026_09_10_skills_split: "read 2026-09-10"
       d.open_is_a_slot: "the session opener fills a fixed character slot, highest value per
                          character first; values never preload"
+  d.html_applications_are_optional:
+    from: s.2026_09_18_experimental_applications
+    rests_on: [doc.applications, d.assessment_separates_findings_and_attention]
+    verdict: "Page and standalone HTML documents are optional experimental applications. Ordinary
+              record checks and session hooks do not render or validate their presentation."
+    because: "Record semantics remain useful without an HTML runtime. Explicit application commands
+              own rendering, layout validation and document copies; experimental maturity is separate
+              from architectural layer."
+    reopened_by: "A core read or ordinary write requires the HTML runtime, a presentation change
+                  alters canonical findings, or an application runs from an unrelated request without
+                  a standing preference."
+    seen:
+      doc.applications: "read 2026-09-18"
+      d.assessment_separates_findings_and_attention: "Expose versioned recorded findings through one
+                                                      assessment contract, preserve the source body
+                                                      and evaluation scope, and derive task-scoped
+                                                      attention separately. Keep existing reader
+                                                      flags as a compatibility policy and identify
+                                                      the optional typed session semantics
+                                                      separately."
   d.hypotheses_read_beside_the_base:
     rests_on: [s.2026_09_03_hypotheses, d.consolidation_is_a_test, d.no_feed_of_other_branches, p.hypothesis_thresholds]
     verdict: "every command reads the hypotheses beside the record over the base - pull shows what
@@ -4111,6 +4184,28 @@ judgments:
       p.record_parsers: 1
       m.prompt_hook_10x_parsing: 1.3
       m.prompt_hook_10x_kept: 0.15
+  d.plugin_descriptions_lead_with_reasoning:
+    from: s.2026_09_19_pr_and_plugin_descriptions
+    rests_on: [s.2026_09_19_pr_and_plugin_descriptions, d.readme_opens_with_what_it_does, d.html_applications_are_optional]
+    verdict: "Plugin descriptions lead with explicit, persistent, deterministically checkable
+              reasoning, following the README. The extended description identifies Hub and Annotated
+              Documents as optional experimental applications."
+    because: "The listing should explain the core benefit and when a changed recorded premise needs
+              another look; installation details and optional applications should not obscure that
+              purpose."
+    reopened_by: "A plugin description diverges from the README, suggests all source truth is
+                  verified, or presents an optional application as necessary to use the core."
+    seen:
+      s.2026_09_19_pr_and_plugin_descriptions: "read 2026-09-19"
+      d.readme_opens_with_what_it_does: "Keep the hero, practical benefit, direct installation link
+                                         and opening reasoning illustration, followed by the concrete
+                                         code and non-code examples with visible recorded premises
+                                         and phone layouts. Omit the introductory caption and link to
+                                         the illustration-production guide. Introduce the third-brain
+                                         metaphor later."
+      d.html_applications_are_optional: "Page and standalone HTML documents are optional
+                                         experimental applications. Ordinary record checks and
+                                         session hooks do not render or validate their presentation."
   d.plugin_runtime_is_explicit:
     rests_on: [goal.portable, doc.plugin_runtime]
     verdict: "Prepare hook dependencies through an explicit private-virtualenv setup; Claude Code
@@ -4951,14 +5046,14 @@ judgments:
               five thousand tokens of a skill return, which in that file was the philosophy while the
               commands began at line 688. A precise description triggers - the activation A/B of
               2026-09-09 - and a body cut to the occasion costs the occasion: {{p.skills_shipped}}
-              skills now, the largest {{m.skill_bytes_largest}} bytes. The opener keeps the same
+              shipped entry points now (including compatibility aliases), the largest {{m.skill_bytes_largest}} bytes. The opener keeps the same
               discipline for the record ({{d.open_is_a_slot}}): what is read is what the moment asks
               for."
     wrong_if: "m.skill_bytes_largest > 32000"
     seen:
       s.2026_09_10_skills_split: "read 2026-09-10"
-      p.skills_shipped: 8
-      m.skill_bytes_largest: 19067
+      p.skills_shipped: 10
+      m.skill_bytes_largest: 22629
       m.skill_bytes_before: 64011
       d.open_is_a_slot: "the session opener fills a fixed character slot, highest value per
                          character first; values never preload"
@@ -4990,6 +5085,17 @@ judgments:
                   applied, evidence runs in the document shell, or an unmarked statement is presented
                   as checked."
     seen: {doc.standalone_html: "read 2026-09-10"}
+  d.startup_checks_only_record_dependencies:
+    from: s.2026_09_19_main_integration
+    rests_on: [s.2026_09_19_main_integration, doc.applications]
+    verdict: "Session startup probes only PyYAML. Normal setup retains timezone data for followups,
+              and HTML applications retain their explicit optional runtime."
+    because: "Opening and checking a record do not need an HTML renderer or a timezone database.
+              Missing dependencies for another operation should be reported at that operation without
+              preventing access to the record."
+    reopened_by: "A record opening is blocked solely by missing HTML or timezone libraries, or
+                  configured followups silently accept an unavailable timezone."
+    seen: {s.2026_09_19_main_integration: "read 2026-09-19", doc.applications: "read 2026-09-18"}
   d.stood_is_derived:
     rests_on: [s.2026_09_03_arrangements, d.metrics_derived_builtin, d.minimal_repair, p.fields_a_build_writes]
     verdict: "how long an arrangement stood is derived - the sessions read on a later day than it
@@ -5286,15 +5392,15 @@ judgments:
                  slower or ground worse than the single file they replaced"
     seen: {skill.two_shapes: "Two parallel records is the most expensive mistake available here"}
   d.first_meeting_artifact:
-    rests_on: [doc.agent_graph]
-    verdict: "a record born in this session, on a surface that can publish, is rendered and
-              shown as a live artifact without asking"
-    because: "The first turn must feel like a normal session, and the first meeting with the
-              record should be the page, alive - not a yaml file. Surfaces that strip script
-              from previews get the browser instead."
-    blocked_on: "observational: falsified if users close or ignore the unrequested page more
-                 often than they touch it"
-    seen: {doc.agent_graph: "read 2026-09-01"}
+    rests_on: [doc.agent_graph, doc.applications]
+    verdict: "Show the optional experimental record page only on an explicit request or a standing
+              preference; creating a record or finishing a map does not activate it."
+    because: "The HTML page is an optional application. A person can meet and use the record through
+              ordinary reading without installing or selecting a presentation runtime."
+    reopened_by: "A page appears after ordinary mapping or recording without a request or standing
+                  preference, or core onboarding requires an HTML dependency."
+    replaced: ["the standing judgment holds, and a person takes this over it by name on 2026-09-18"]
+    seen: {doc.agent_graph: "read 2026-09-01", doc.applications: "read 2026-09-18"}
   d.named_for_popper:
     rests_on: [lit.name_risk]
     verdict: "the project keeps the name kpopper; discovery runs on direct links and qualified

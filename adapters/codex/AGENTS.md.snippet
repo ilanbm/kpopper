@@ -61,7 +61,8 @@ a harness build that has not wired hooks.json yet).
 Codex scans `.agents/skills` from cwd up to the repo root, plus `~/.agents/skills` and
 `~/.codex/skills` (the two are equivalent — Codex checks both). This plugin's skills
 live under `skills/` in the kpopper checkout, one directory per occasion (`kpopper`, the
-method; `ground`, `record`, `map`, `document`, `page`, `consolidate`, `watch`); make them
+method; `ground`, `record`, `map`, `annotated-doc`, `hub`, `consolidate`, `watch`).
+`document` and `page` remain compatibility aliases. Make them
 visible to Codex with symlinks, not copies, so they never drift from the source. Use the
 absolute checkout path for `<plugin>`:
 

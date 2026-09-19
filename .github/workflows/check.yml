@@ -99,8 +99,11 @@ jobs:
         # command that refreshes it in the log.
         run: kpop --frozen remeasure --run
 
-      - name: The page renders, and says what it rendered
-        run: kpop --frozen page --verify
+      - name: Install the optional HTML application runtime
+        run: pip install ".[html]"
+
+      - name: The experimental hub renders, and says what it rendered
+        run: kpop --frozen experimental hub --verify
 
       - name: The committed view still matches the record it comes from
         # Rendering rewrites .kpopper/view.yaml. If that leaves a diff, the record
@@ -124,7 +127,7 @@ jobs:
         with:
           python-version: ${{ matrix.python }}
       - name: Install the package the way a user gets it
-        run: pip install .
+        run: pip install ".[html]"
       - name: Install the test runner and schema validator
         run: python -m pip install -r .github/requirements-test.txt
       - name: The reader and the page keep their contract
@@ -162,7 +165,7 @@ jobs:
           cache-dependency-path: tests/document-support/package-lock.json
       - name: Install the document runtime and pinned DOM test dependency
         run: |
-          pip install .
+          pip install ".[html]"
           npm ci --prefix tests/document-support --ignore-scripts --no-audit --no-fund
       - name: Check offline evidence, copy choices and export recovery
         run: npm run test:documents

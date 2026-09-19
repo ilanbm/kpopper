@@ -91,7 +91,8 @@ class UpdateFlow(unittest.TestCase):
         self.assertTrue(Path(result['source_file']).is_file())
         self.assertIn('view.coverage', '\n'.join(result['validation_issues']))
 
-    def test_actual_page_constraint_is_not_bypassed_by_a_captured_report(self):
+    def test_report_updates_the_record_and_explicit_hub_check_reports_layout_drift(self):
+        from scripts import render_page as R
         self.doc['sources']['s.layout'] = {'name': 'Review the order', 'asked': 'Review order warnings', 'read': '2026-09-09'}
         self.doc['known']['order.price']['from'] = 's.layout'
         self.doc['judgments']['v.coverage'] = {'rests_on': ['s.layout', 'page.spill'], 'verdict': 'Warnings are covered',
@@ -99,12 +100,16 @@ class UpdateFlow(unittest.TestCase):
         self.record.write_text(yaml.safe_dump(self.doc, sort_keys=False))
         self.brief.write_text('title: Order\ntabs:\n  - title: Checks\n    serves: [s.layout]\n    sections:\n      - title: Coverage\n        pick: order.price\n')
         self.assertEqual(P.check_lines([str(self.record)])[0], [])
-        before = self.record.read_bytes()
+        before = copy.deepcopy(self.doc['judgments'])
         result = I.update(self.report(), self.record)
-        self.assertEqual(result['state'], 'needs_primary', result)
-        self.assertEqual(self.record.read_bytes(), before)
-        self.assertIn('s.layout', result['reason'])
-        self.assertTrue(result['validation_issues'])
+        self.assertEqual(result['state'], 'applied', result)
+        saved = yaml.safe_load(self.record.read_text())
+        self.assertEqual(saved['known']['order.price']['v'], 40)
+        self.assertEqual(saved['judgments'], before)
+        with contextlib.redirect_stdout(io.StringIO()) as out:
+            code = R.verify([str(self.record)])
+        self.assertEqual(code, 1, out.getvalue())
+        self.assertIn('s.layout', out.getvalue())
 
     def test_an_unsupported_platform_fails_before_writing_state(self):
         with patch.object(I, '_require_locking', side_effect=I.LockingUnavailable('durable ingestion writes require fcntl file locking')):
@@ -112,14 +117,18 @@ class UpdateFlow(unittest.TestCase):
                 I.update(self.report(), self.record)
         self.assertFalse((self.base / 'state').exists())
 
-    def test_ordinary_unserved_requests_still_require_page_attention(self):
+    def test_ordinary_unserved_requests_do_not_block_the_record_gate(self):
+        from scripts import render_page as R
         mark = self.base / 'mark.json'
         with contextlib.redirect_stdout(io.StringIO()):
             P.mark(str(mark), [str(self.record)])
             P.apply([str(self.record)], {'kind': 'add', 'id': 's.request', 'body': {'asked': 'Review the next offer', 'name': 'A real request'}})
             P.apply([str(self.record)], {'kind': 'add', 'id': 'offer.price', 'body': {'v': 10, 'from': 's.request'}})
             code = P.gate(str(mark), [str(self.record)])
-        self.assertEqual(code, 2)
+        self.assertEqual(code, 0)
+        with contextlib.redirect_stdout(io.StringIO()) as out:
+            R.verify([str(self.record)])
+        self.assertIn('s.request is served by no tab', out.getvalue())
 
     def test_an_arbitrary_source_cannot_claim_the_capture_exemption(self):
         for name in ('s.note', 's.ingest_fake'):

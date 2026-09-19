@@ -83,7 +83,7 @@ class PageSourceLinks(unittest.TestCase):
             yaml.safe_dump(brief, allow_unicode=True, sort_keys=False), encoding="utf-8")
 
     def render(self, *args, cwd=None):
-        result = subprocess.run([sys.executable, str(CLI), "page", *map(str, args)],
+        result = subprocess.run([sys.executable, str(CLI), "experimental", "hub", *map(str, args)],
                                 cwd=cwd or self.root, capture_output=True, text=True)
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
 
