@@ -353,15 +353,13 @@ fn concurrent_different_identity_claims_have_one_winner() {
 
 #[cfg(unix)]
 #[test]
+#[ignore = "requires an explicitly configured immutable Python oracle and tokenizer"]
 fn python_oracle_accepts_rust_revision_and_payload() {
-    let python = "/Users/ilanbm/.local/share/kpopper/runtimes/bf4942511207a39e/bin/python";
-    let baseline = "/Users/ilanbm/docs/kpopper/rust-runtime-spike/baseline-ff0d02e";
+    let python =
+        std::env::var_os("KPOP_SESSION_ORACLE_PYTHON").expect("set explicit oracle Python");
+    let baseline = std::env::var_os("KPOP_SESSION_ORACLE_ROOT").expect("set immutable oracle root");
     let tokenizer =
-        "/Users/ilanbm/docs/kpopper/rust-migration/tokenizer-oracle/lib/python3.14/site-packages";
-    if !std::path::Path::new(python).is_file() || !std::path::Path::new(baseline).is_dir() {
-        eprintln!("Python oracle is not installed; cross-load proof skipped");
-        return;
-    }
+        std::env::var_os("KPOP_SESSION_ORACLE_TOKENIZER").expect("set oracle tokenizer directory");
     let dir = tempfile::tempdir().unwrap();
     let source = dir.path().join("missing.yaml");
     let c = context();
@@ -398,7 +396,10 @@ assert context.session_revision(identity) == sys.argv[3]
         .arg(source)
         .arg(&revision)
         .arg(serde_json::to_string(&profile).unwrap())
-        .env("PYTHONPATH", format!("{baseline}:{tokenizer}"))
+        .env(
+            "PYTHONPATH",
+            std::env::join_paths([baseline, tokenizer]).unwrap(),
+        )
         .output()
         .unwrap();
     assert!(

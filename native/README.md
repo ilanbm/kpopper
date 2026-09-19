@@ -3,8 +3,9 @@
 `kpop-native` is an opt-in Rust executable with versioned knowledge assessment and
 an experimental bounded history writer.
 It does not replace `kpop`, modify installed plugins, or activate existing records.
-Use disposable workspaces only. macOS arm64 is the initial verified target;
-other platforms are not yet verified, and non-POSIX operations currently refuse.
+Use disposable workspaces only. Native history locking, recovery and copied-binary
+authoring flows have been exercised on macOS arm64, Linux x86_64 and Windows x86_64.
+Windows network/UNC history roots explicitly refuse; locks coordinate local writers.
 
 ## Build and run
 
@@ -68,7 +69,7 @@ hypothesis orientation, private-draft counts, historical decisions and final sou
 store workspaces retain their explicitly marked experimental opener. The writer
 commands below, MCP, hooks, browser and distribution integration remain in progress.
 
-### Build the optional core Hub
+### Build optional HTML applications
 
 ```sh
 kpop-native experimental hub --out report.html
@@ -77,14 +78,46 @@ kpop-native experimental hub --checks report.html
 kpop-native page --open
 ```
 
-`page` is a compatibility alias. The current native Hub supports core/v1 records;
-ordinary Hub and Annotated Documents are not yet available. It renders one captured
+`page` is a compatibility alias. The native Hub supports ordinary and core/v1 records,
+including all ten ordinary layout components and arrangement history. It renders one captured
 assessment, preserving exact typed display values and the bound page envelope.
 Source links are relative to the output location, including paths with spaces,
 Unicode, `#` and `%`. `--verify` writes no HTML. Default builds go to
 `.kpopper/build/page.html` for `GROUNDING.yaml` and ignore that build directory.
 Explicit output must be an HTML file; captured inputs and leaf symlinks cannot be
 overwritten. Successful builds replace the output atomically.
+
+Annotated Documents package authored HTML and explicit source checks in a portable copy:
+
+```sh
+kpop-native experimental annotated-doc guide
+kpop-native experimental annotated-doc build --html report.html --manifest manifest.json --out checked.html
+kpop-native experimental annotated-doc inspect checked.html
+kpop-native experimental annotated-doc refresh checked.html --sources sources.json --out refreshed.html
+```
+
+`document` is a compatibility alias. Build and refresh protect their inputs and
+declared sources, and require `--overwrite` to replace an existing output copy.
+Refresh retains omitted source snapshots and prepares grouped corrections for review.
+Inspection validates embedded evidence without executing authored scripts.
+
+### Retain a checked core session
+
+```sh
+kpop-native session open --no-settings --input GROUNDING.yaml --project example --state /absolute/private-state
+kpop-native session read --no-settings --input GROUNDING.yaml --project example --state /absolute/private-state --ref / --revision REVISION
+kpop-native session serve --no-settings --input GROUNDING.yaml --project example --state /absolute/private-state
+```
+
+Opening a `core/v1` record captures and assesses once, then retains the detached
+context under its revision. Later processes check a fresh source Snapshot and
+read retained findings without loading an evaluator. Changed sources, project/input
+identity, navigation profiles or retained bytes require reopening. Budgets use the
+real `o200k_base` or `cl100k_base` tokenizer; records and workspace discovery require Git.
+The stdio MCP server currently exposes `kpopper_open` and `kpopper_read`.
+Ordinary checked sessions, search/context/proposals, setup and hook activation are
+still unconnected. Session-state filesystem hardening is currently verified on Unix;
+Windows session-state acceptance remains separate from the history platform checks.
 
 ### Author an active history record
 
@@ -102,8 +135,9 @@ command-line numbers and `true`/`false` retain their types; other scalar text st
 text, while explicit YAML lists/maps retain their structure.
 
 Private writes are retained outside the project. `recover` also resumes or rolls
-back an interrupted first write. Existing legacy records, named-hypothesis writes
-and explicit contribution routing remain unconnected in this public writer.
+back an interrupted first write. `--hypothesis NAME` supports named authoring during
+bootstrap and on active records, including recovery of its own receipts. Existing
+legacy-record writes and explicit contribution routing remain unconnected.
 
 For the earlier feasibility writer, supply an absolute path to an existing **empty** directory:
 

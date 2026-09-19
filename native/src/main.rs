@@ -70,6 +70,8 @@ enum Command {
     Mark(kpop_native::public_session::Options),
     /// Assess against a saved baseline; --session enables once-only delivery.
     Gate(kpop_native::public_session::Options),
+    /// Open and read revision-bound checked sessions; serve their MCP transport.
+    Session(kpop_native::public_checked_session::Options),
     /// Canonical typed identity for JSON-compatible input on stdin.
     Identity {
         #[arg(long, conflicts_with = "yaml")]
@@ -329,6 +331,7 @@ fn run(args: Args) -> Result<Value> {
         }
         Command::Review(_) => Err(kpop_native::Error("review requires a public record".into())),
         Command::Assess(_)
+        | Command::Session(_)
         | Command::Check(_)
         | Command::Pull(_)
         | Command::Affects(_)
@@ -341,6 +344,35 @@ fn run(args: Args) -> Result<Value> {
 }
 fn main() {
     let args = Args::parse();
+    if let Command::Session(options) = &args.command {
+        let result = (|| {
+            let cwd = args
+                .workspace
+                .clone()
+                .map(Ok)
+                .unwrap_or_else(std::env::current_dir)?;
+            let mode =
+                if args.frozen || std::env::var("KPOPPER_READ_MODE").as_deref() == Ok("frozen") {
+                    kpop_native::source_capture::ReadMode::Frozen
+                } else {
+                    kpop_native::source_capture::ReadMode::Live
+                };
+            kpop_native::public_checked_session::run(options, &cwd, mode)
+        })();
+        match result {
+            Ok(text) => {
+                print!("{text}");
+                if !text.is_empty() && !text.ends_with('\n') {
+                    println!();
+                }
+            }
+            Err(error) => {
+                eprintln!("{}", json!({"error":error.to_string()}));
+                std::process::exit(2);
+            }
+        }
+        return;
+    }
     let session_command = match &args.command {
         Command::Mark(o) => Some(("mark", o)),
         Command::Gate(o) => Some(("gate", o)),

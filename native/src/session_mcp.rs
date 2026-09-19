@@ -19,10 +19,22 @@ pub struct Tool {
 }
 
 impl Tool {
-    pub fn new(name: impl Into<String>, description: impl Into<String>, input_schema: Value) -> Self {
-        Self { name: name.into(), description: description.into(), input_schema, annotations: json!({}) }
+    pub fn new(
+        name: impl Into<String>,
+        description: impl Into<String>,
+        input_schema: Value,
+    ) -> Self {
+        Self {
+            name: name.into(),
+            description: description.into(),
+            input_schema,
+            annotations: json!({}),
+        }
     }
-    pub fn with_annotations(mut self, annotations: Value) -> Self { self.annotations = annotations; self }
+    pub fn with_annotations(mut self, annotations: Value) -> Self {
+        self.annotations = annotations;
+        self
+    }
 }
 
 /// Declarations corresponding to the reference Python MCP service. Callers should
@@ -45,13 +57,22 @@ pub enum Error {
     OutputTooLong,
 }
 
-impl From<std::io::Error> for Error { fn from(e: std::io::Error) -> Self { Self::Io(e) } }
+impl From<std::io::Error> for Error {
+    fn from(e: std::io::Error) -> Self {
+        Self::Io(e)
+    }
+}
 
 type RpcId = Value;
 type RequestParts<'a> = Result<(Option<RpcId>, String, &'a Value), (Option<RpcId>, &'static str)>;
 
 /// Serve newline-delimited JSON-RPC requests until EOF.
-pub fn server<R, W, F>(reader: &mut R, writer: &mut W, tools: &[Tool], mut handler: F) -> Result<(), Error>
+pub fn server<R, W, F>(
+    reader: &mut R,
+    writer: &mut W,
+    tools: &[Tool],
+    mut handler: F,
+) -> Result<(), Error>
 where
     R: BufRead,
     W: Write,
@@ -63,20 +84,39 @@ where
         let mut byte = [0_u8; 1];
         loop {
             let read = reader.read(&mut byte)?;
-            if read == 0 { if line.is_empty() { return Ok(()); } break; }
+            if read == 0 {
+                if line.is_empty() {
+                    return Ok(());
+                }
+                break;
+            }
             line.push(byte[0]);
-            if byte[0] == b'\n' { break; }
-            if line.len() > MAX_LINE_BYTES { return Err(Error::LineTooLong); }
+            if byte[0] == b'\n' {
+                break;
+            }
+            if line.len() > MAX_LINE_BYTES {
+                return Err(Error::LineTooLong);
+            }
         }
-        while line.last().is_some_and(|b| *b == b'\n' || *b == b'\r') { line.pop(); }
-        if line.is_empty() { continue; }
+        while line.last().is_some_and(|b| *b == b'\n' || *b == b'\r') {
+            line.pop();
+        }
+        if line.is_empty() {
+            continue;
+        }
         let value: Value = match serde_json::from_slice(&line) {
             Ok(v) => v,
-            Err(_) => { write_error(writer, None, -32700, "Parse error")?; continue; }
+            Err(_) => {
+                write_error(writer, None, -32700, "Parse error")?;
+                continue;
+            }
         };
         let (id, method, params) = match request_parts(&value) {
             Ok(parts) => parts,
-            Err((id, message)) => { write_error(writer, id, -32600, message)?; continue; }
+            Err((id, message)) => {
+                write_error(writer, id, -32600, message)?;
+                continue;
+            }
         };
         let Some(id) = id else {
             // Notifications, including initialized/cancelled, never receive a response.
@@ -89,18 +129,29 @@ where
 
 fn request_parts(value: &Value) -> RequestParts<'_> {
     let object = value.as_object().ok_or((None, "Invalid Request"))?;
-    if object.get("jsonrpc") != Some(&Value::String("2.0".into())) { return Err((object.get("id").cloned(), "Invalid Request")); }
-    let method = object.get("method").and_then(Value::as_str).ok_or((object.get("id").cloned(), "Invalid Request"))?;
+    if object.get("jsonrpc") != Some(&Value::String("2.0".into())) {
+        return Err((object.get("id").cloned(), "Invalid Request"));
+    }
+    let method = object
+        .get("method")
+        .and_then(Value::as_str)
+        .ok_or((object.get("id").cloned(), "Invalid Request"))?;
     let id = match object.get("id") {
         None => None,
         Some(Value::String(_) | Value::Number(_)) => Some(object["id"].clone()),
         Some(value) => return Err((Some(value.clone()), "Invalid Request")),
     };
-    Ok((id, method.to_owned(), object.get("params").unwrap_or(&Value::Null)))
+    Ok((
+        id,
+        method.to_owned(),
+        object.get("params").unwrap_or(&Value::Null),
+    ))
 }
 
 fn dispatch<F>(method: &str, params: &Value, id: &RpcId, tools: &[Tool], handler: &mut F) -> Value
-where F: FnMut(&str, &Value) -> Result<String, String> {
+where
+    F: FnMut(&str, &Value) -> Result<String, String>,
+{
     let result = match method {
         "initialize" => initialize(params),
         "ping" => Ok(json!({})),
@@ -110,28 +161,57 @@ where F: FnMut(&str, &Value) -> Result<String, String> {
     };
     match result {
         Ok(value) => json!({"jsonrpc":"2.0", "id":id, "result":value}),
-        Err((_code, message, application)) if application => json!({"jsonrpc":"2.0", "id":id, "result":{"content":[{"type":"text","text":message}],"isError":true}}),
-        Err((code, message, _)) => json!({"jsonrpc":"2.0", "id":id, "error":{"code":code,"message":message}}),
+        Err((_code, message, application)) if application => {
+            json!({"jsonrpc":"2.0", "id":id, "result":{"content":[{"type":"text","text":message}],"isError":true}})
+        }
+        Err((code, message, _)) => {
+            json!({"jsonrpc":"2.0", "id":id, "error":{"code":code,"message":message}})
+        }
     }
 }
 
 fn initialize(params: &Value) -> Result<Value, (i32, String, bool)> {
-    let requested = params.get("protocolVersion").and_then(Value::as_str).ok_or((-32602, "Invalid params".into(), false))?;
-    let version = SUPPORTED_PROTOCOL_VERSIONS.iter().find(|v| **v == requested).copied().unwrap_or(SUPPORTED_PROTOCOL_VERSIONS[2]);
-    Ok(json!({"protocolVersion":version,"capabilities":{"tools":{}},"serverInfo":{"name":"kpopper","version":"0.1.0"}}))
+    let requested = params
+        .get("protocolVersion")
+        .and_then(Value::as_str)
+        .ok_or((-32602, "Invalid params".into(), false))?;
+    let version = SUPPORTED_PROTOCOL_VERSIONS
+        .iter()
+        .find(|v| **v == requested)
+        .copied()
+        .unwrap_or(SUPPORTED_PROTOCOL_VERSIONS[2]);
+    Ok(
+        json!({"protocolVersion":version,"capabilities":{"tools":{}},"serverInfo":{"name":"kpopper","version":"0.1.0"}}),
+    )
 }
 
 fn tool_json(tool: &Tool) -> Value {
     json!({"name":tool.name,"description":tool.description,"inputSchema":tool.input_schema,"annotations":tool.annotations})
 }
 
-fn call_tool<F>(params: &Value, tools: &[Tool], handler: &mut F) -> Result<Value, (i32, String, bool)>
-where F: FnMut(&str, &Value) -> Result<String, String> {
-    let object = params.as_object().ok_or((-32602, "Invalid params".into(), false))?;
-    let name = object.get("name").and_then(Value::as_str).ok_or((-32602, "Invalid params".into(), false))?;
+fn call_tool<F>(
+    params: &Value,
+    tools: &[Tool],
+    handler: &mut F,
+) -> Result<Value, (i32, String, bool)>
+where
+    F: FnMut(&str, &Value) -> Result<String, String>,
+{
+    let object = params
+        .as_object()
+        .ok_or((-32602, "Invalid params".into(), false))?;
+    let name = object.get("name").and_then(Value::as_str).ok_or((
+        -32602,
+        "Invalid params".into(),
+        false,
+    ))?;
     let empty_arguments = Value::Object(Default::default());
     let arguments = object.get("arguments").unwrap_or(&empty_arguments);
-    let tool = tools.iter().find(|t| t.name == name).ok_or((-32602, "Unknown tool".into(), false))?;
+    let tool =
+        tools
+            .iter()
+            .find(|t| t.name == name)
+            .ok_or((-32602, "Unknown tool".into(), false))?;
     validate_schema(arguments, &tool.input_schema).map_err(|e| (-32602, e, false))?;
     match handler(name, arguments) {
         Ok(text) => Ok(json!({"content":[{"type":"text","text":text}],"isError":false})),
@@ -142,40 +222,98 @@ where F: FnMut(&str, &Value) -> Result<String, String> {
 fn validate_schema(value: &Value, schema: &Value) -> Result<(), String> {
     validate_type(value, schema, "arguments")?;
     if let Some(required) = schema.get("required").and_then(Value::as_array) {
-        let object = value.as_object().ok_or_else(|| "arguments must be an object".to_owned())?;
-        for key in required { let key = key.as_str().ok_or_else(|| "invalid schema".to_owned())?; if !object.contains_key(key) { return Err(format!("missing required argument: {key}")); } }
+        let object = value
+            .as_object()
+            .ok_or_else(|| "arguments must be an object".to_owned())?;
+        for key in required {
+            let key = key.as_str().ok_or_else(|| "invalid schema".to_owned())?;
+            if !object.contains_key(key) {
+                return Err(format!("missing required argument: {key}"));
+            }
+        }
     }
     if let Some(properties) = schema.get("properties").and_then(Value::as_object) {
-        let object = value.as_object().ok_or_else(|| "arguments must be an object".to_owned())?;
-        for (key, item) in object { if let Some(rule) = properties.get(key) { validate_type(item, rule, key)?; } else if schema.get("additionalProperties") == Some(&Value::Bool(false)) { return Err(format!("unknown argument: {key}")); } }
+        let object = value
+            .as_object()
+            .ok_or_else(|| "arguments must be an object".to_owned())?;
+        for (key, item) in object {
+            if let Some(rule) = properties.get(key) {
+                validate_type(item, rule, key)?;
+            } else if schema.get("additionalProperties") == Some(&Value::Bool(false)) {
+                return Err(format!("unknown argument: {key}"));
+            }
+        }
     }
     Ok(())
 }
 
 fn validate_type(value: &Value, schema: &Value, key: &str) -> Result<(), String> {
     if let Some(options) = schema.get("anyOf").and_then(Value::as_array) {
-        if options.iter().any(|option| validate_type(value, option, key).is_ok()) { return Ok(()); }
+        if options
+            .iter()
+            .any(|option| validate_type(value, option, key).is_ok())
+        {
+            return Ok(());
+        }
         return Err(format!("argument {key} has invalid type"));
     }
     if let Some(values) = schema.get("enum").and_then(Value::as_array)
-        && !values.iter().any(|candidate| candidate == value) { return Err(format!("argument {key} has invalid value")); }
+        && !values.iter().any(|candidate| candidate == value)
+    {
+        return Err(format!("argument {key} has invalid value"));
+    }
     let valid = match schema.get("type") {
         Some(Value::String(kind)) => type_matches(value, kind),
-        Some(Value::Array(kinds)) => kinds.iter().filter_map(Value::as_str).any(|kind| type_matches(value, kind)),
+        Some(Value::Array(kinds)) => kinds
+            .iter()
+            .filter_map(Value::as_str)
+            .any(|kind| type_matches(value, kind)),
         Some(_) => false,
         None => true,
     };
-    if !valid { return Err(format!("argument {key} has invalid type")); }
+    if !valid {
+        return Err(format!("argument {key} has invalid type"));
+    }
     if let Some(items) = schema.get("items")
-        && let Some(array) = value.as_array() {
-            for item in array { validate_type(item, items, key)?; }
+        && let Some(array) = value.as_array()
+    {
+        for item in array {
+            validate_type(item, items, key)?;
+        }
     }
     Ok(())
 }
 
 fn type_matches(value: &Value, kind: &str) -> bool {
-    match kind { "string" => value.is_string(), "integer" => value.as_i64().is_some() || value.as_u64().is_some(), "boolean" => value.is_boolean(), "array" => value.is_array(), "object" => value.is_object(), "null" => value.is_null(), _ => false }
+    match kind {
+        "string" => value.is_string(),
+        "integer" => value.as_i64().is_some() || value.as_u64().is_some(),
+        "boolean" => value.is_boolean(),
+        "array" => value.is_array(),
+        "object" => value.is_object(),
+        "null" => value.is_null(),
+        _ => false,
+    }
 }
 
-fn write_error<W: Write>(writer: &mut W, id: Option<RpcId>, code: i32, message: &str) -> Result<(), Error> { write_json(writer, &json!({"jsonrpc":"2.0","id":id,"error":{"code":code,"message":message}})) }
-fn write_json<W: Write>(writer: &mut W, value: &Value) -> Result<(), Error> { let bytes = serde_json::to_vec(value).map_err(|_| Error::OutputTooLong)?; if bytes.len() + 1 > MAX_LINE_BYTES { return Err(Error::OutputTooLong); } writer.write_all(&bytes)?; writer.write_all(b"\n")?; writer.flush()?; Ok(()) }
+fn write_error<W: Write>(
+    writer: &mut W,
+    id: Option<RpcId>,
+    code: i32,
+    message: &str,
+) -> Result<(), Error> {
+    write_json(
+        writer,
+        &json!({"jsonrpc":"2.0","id":id,"error":{"code":code,"message":message}}),
+    )
+}
+fn write_json<W: Write>(writer: &mut W, value: &Value) -> Result<(), Error> {
+    let bytes = serde_json::to_vec(value).map_err(|_| Error::OutputTooLong)?;
+    if bytes.len() + 1 > MAX_LINE_BYTES {
+        return Err(Error::OutputTooLong);
+    }
+    writer.write_all(&bytes)?;
+    writer.write_all(b"\n")?;
+    writer.flush()?;
+    Ok(())
+}
