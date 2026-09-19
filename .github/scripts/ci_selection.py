@@ -5,11 +5,21 @@ import os
 from pathlib import Path
 import subprocess
 
-LANES = ("python", "documents", "session", "installed", "native")
+LANES = ("python", "documents", "session", "installed", "native", "examples")
 TEST_SUITES = ("core", "documents", "reasoning", "session", "other")
 JOB_LANES = {"check": ("python", "documents"), "document-ui": ("documents",),
-             "session": ("session",), "reasoning-runtime": ("installed",)}
+             "session": ("session",), "reasoning-runtime": ("installed",),
+             "examples": ("examples",)}
 RUNTIME = set(LANES) - {"native"}
+RESEARCH_EXAMPLE_INPUTS = {
+    ".github/scripts/check_research_example.py",
+    "examples/dark-matter/advanced/exercise.py",
+    "examples/dark-matter/advanced/record.yaml",
+    "examples/dark-matter/advanced/judgment.yaml",
+    "examples/dark-matter/advanced/later-study.yaml",
+    "examples/dark-matter/advanced/captured-output.json",
+    "examples/dark-matter/advanced/assessment-summary.jq",
+}
 
 
 def families(path):
@@ -24,6 +34,10 @@ def families(path):
     # tests on every PR, including changes to this selector and its test module.
     if path in {".github/scripts/ci_selection.py", "tests/test_ci_selection.py"}:
         return set()
+    # Only these reviewed example inputs use the focused installed-package check.
+    # A new helper or asset still falls through to the conservative full matrix.
+    if path in RESEARCH_EXAMPLE_INPUTS:
+        return {"examples"}
     # These workflows never compile the reasoning runtime. Changes still exercise
     # all consumers; the native workflow itself takes the full audit.
     if path in {".github/workflows/check.yml", ".github/workflows/session.yml",

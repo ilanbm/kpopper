@@ -33,6 +33,43 @@ class Selection(unittest.TestCase):
         self.assertFalse(any(CI.select([".github/scripts/ci_selection.py",
                                        "tests/test_ci_selection.py"]).values()))
 
+    def test_pr140_research_example_uses_only_its_focused_check(self):
+        paths = ["README.md", "examples/dark-matter/README.md",
+                 "examples/dark-matter/advanced/README.md",
+                 "examples/dark-matter/advanced/exercise.py",
+                 "examples/dark-matter/advanced/record.yaml",
+                 "examples/dark-matter/advanced/judgment.yaml",
+                 "examples/dark-matter/advanced/later-study.yaml",
+                 "examples/dark-matter/advanced/captured-output.json",
+                 "examples/dark-matter/advanced/assessment-summary.jq"]
+        expected = dict.fromkeys(CI.LANES, False) | {"examples": True}
+        self.assertEqual(CI.select(paths), expected)
+        for path in paths[3:]:
+            with self.subTest(path=path):
+                self.assertEqual(CI.select([path]), expected)
+
+    def test_example_runner_has_a_focused_check_and_new_inputs_stay_conservative(self):
+        expected = dict.fromkeys(CI.LANES, False) | {"examples": True}
+        self.assertEqual(CI.select([".github/scripts/check_research_example.py"]), expected)
+        for path in ("examples/dark-matter/advanced/helper.py",
+                     "examples/dark-matter/advanced/new-input.yaml",
+                     "examples/dark-matter/advanced/nested/record.yaml",
+                     "examples/unregistered/exercise.py"):
+            with self.subTest(path=path):
+                self.assertTrue(all(CI.select([path]).values()))
+
+    def test_example_inputs_do_not_hide_mixed_core_or_native_changes(self):
+        example = "examples/dark-matter/advanced/record.yaml"
+        selected = CI.select([example, "scripts/cli.py"])
+        self.assertTrue(all(selected[lane] for lane in CI.RUNTIME))
+        self.assertFalse(selected["native"])
+        self.assertTrue(all(CI.select([example, "scripts/reasoning/lean/Kernel.lean"]).values()))
+
+    def test_example_only_change_does_not_schedule_python_test_shards(self):
+        selected = CI.select(["examples/dark-matter/advanced/exercise.py"])
+        self.assertEqual(CI.test_suites(selected), [])
+        self.assertEqual(CI.test_matrix(selected), {"include": []})
+
     def test_community_paths_do_not_hide_mixed_runtime_changes(self):
         selected = CI.select(["SECURITY.md", ".github/ISSUE_TEMPLATE/bug_report.yml",
                               "scripts/document/layer.js"])
@@ -176,6 +213,20 @@ class RequiredResults(unittest.TestCase):
         del needs["changes"]["outputs"]["session"]
         self.assertTrue(CI.required_failures(needs))
 
+    def test_focused_example_must_complete_when_selected(self):
+        selected = CI.select(["examples/dark-matter/advanced/assessment-summary.jq"])
+        self.assertEqual(CI.required_failures(self.results(selected)), [])
+        for result in ("skipped", "failure", "cancelled"):
+            with self.subTest(result=result):
+                needs = self.results(selected)
+                needs["examples"]["result"] = result
+                self.assertTrue(CI.required_failures(needs))
+
+    def test_missing_example_selection_cannot_pass(self):
+        needs = self.results(CI.select(["README.md"]))
+        del needs["changes"]["outputs"]["examples"]
+        self.assertTrue(CI.required_failures(needs))
+
     def test_a_truncated_or_missing_test_plan_cannot_pass(self):
         for plan in ('["documents"]', '[]', 'null', 'invalid'):
             needs = self.results(CI.select(["scripts/cli.py"]))
@@ -191,6 +242,22 @@ class RequiredResults(unittest.TestCase):
 
 
 class WorkflowCoverage(unittest.TestCase):
+    def test_focused_example_runs_installed_package_on_supported_python_versions(self):
+        jobs = yaml.safe_load((ROOT / ".github/workflows/check.yml").read_text())["jobs"]
+        example = jobs["examples"]
+        self.assertEqual(set(example["needs"]), {"changes", "record"})
+        self.assertEqual(example["if"], "needs.changes.outputs.examples == 'true'")
+        self.assertEqual(example["runs-on"], "ubuntu-latest")
+        self.assertEqual(example["strategy"]["matrix"]["python"], ["3.9", "3.13"])
+        self.assertFalse(example["strategy"]["fail-fast"])
+        commands = [step.get("run", "") for step in example["steps"]]
+        self.assertIn("python -m pip install .", commands)
+        self.assertIn("python .github/scripts/check_research_example.py", commands)
+        self.assertIn("git diff --exit-code", commands)
+        integrity = next(step for step in jobs["changes"]["steps"]
+                         if "--check-bundles" in step.get("run", ""))
+        self.assertIn("steps.select.outputs.examples == 'true'", integrity["if"])
+
     def test_summary_covers_every_job_and_every_optional_family(self):
         jobs = yaml.safe_load((ROOT / ".github/workflows/check.yml").read_text())["jobs"]
         self.assertEqual(set(jobs["ci-required"]["needs"]), set(jobs) - {"ci-required"})
