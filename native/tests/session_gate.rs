@@ -252,6 +252,56 @@ fn mark_refuses_record_member_and_hypothesis_targets() {
         "session_mark_overlaps_record"
     );
     assert_eq!(fs::read_to_string(hypothesis).unwrap(), body);
+
+    let view = tmp.path().join(".kpopper/view.yaml");
+    fs::write(&view, "tabs:\n  - name: main\n    shows: [p.ready]\n").unwrap();
+    let mut overlap = options(&state, &record, tmp.path());
+    overlap.state_path = &view;
+    assert_eq!(
+        session_gate::mark(&overlap).unwrap_err().0,
+        "session_mark_overlaps_record"
+    );
+    assert_eq!(
+        fs::read_to_string(view).unwrap(),
+        "tabs:\n  - name: main\n    shows: [p.ready]\n"
+    );
+}
+
+#[cfg(unix)]
+#[test]
+fn unavailable_ingestion_evidence_does_not_hide_new_failures_or_block() {
+    let tmp = tempfile::tempdir().unwrap();
+    let root = tmp.path();
+    let record = root.join("GROUNDING.yaml");
+    let state = root.join("private/mark.json");
+    fs::create_dir_all(state.parent().unwrap()).unwrap();
+    let ingestion = root.join("ingestion");
+    fs::create_dir_all(ingestion.join("sources")).unwrap();
+    assert!(
+        Command::new("mkfifo")
+            .arg(ingestion.join("record.json"))
+            .status()
+            .unwrap()
+            .success()
+    );
+    let base = format!(
+        "schema: {{deps: rests_on, snapshot: seen, predicate: wrong_if}}\nknown:\n  p.a: {{v: 1}}\n  s.ingest_e:\n    file: '{}/sources/e.txt'\n    recorded_for: purpose\n",
+        ingestion.display()
+    );
+    fs::write(&record, &base).unwrap();
+    session_gate::mark(&options(&state, &record, root)).unwrap();
+    fs::write(&record,format!("{base}  p.new: {{v: 2, from: s.ingest_e}}\njudgments:\n  d.new: {{verdict: go, rests_on: [absent], seen: {{}}, wrong_if: 'p.a > 9'}}\n")).unwrap();
+    let started = std::time::Instant::now();
+    let result = session_gate::gate(&options(&state, &record, root)).unwrap();
+    assert_eq!(result.code, 2, "{}", result.text);
+    assert!(result.text.contains("d.new: rests on absent"));
+    assert!(
+        result
+            .issues
+            .iter()
+            .any(|issue| issue.kind == "unattributed" && issue.subject == "p.new")
+    );
+    assert!(started.elapsed() < std::time::Duration::from_secs(2));
 }
 
 #[test]

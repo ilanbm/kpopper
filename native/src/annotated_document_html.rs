@@ -639,10 +639,10 @@ fn audit_element(tag: &str, attrs: &BTreeMap<String, String>, text: &str) -> Res
         ));
     }
     for key in ["src", "poster", "background", "href", "xlink:href"] {
-        if let Some(value) = attrs.get(key) {
-            if !(tag == "a" && matches!(key, "href" | "xlink:href")) {
-                asset_url(value, &format!("<{tag}> {key}"))?;
-            }
+        if let Some(value) = attrs.get(key)
+            && !(tag == "a" && matches!(key, "href" | "xlink:href"))
+        {
+            asset_url(value, &format!("<{tag}> {key}"))?;
         }
     }
     if let Some(style) = attrs.get("style") {

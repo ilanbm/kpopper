@@ -267,3 +267,23 @@ fn hub_does_not_overwrite_a_linked_source_document() {
         );
     }
 }
+
+#[test]
+fn hub_protects_declared_files_in_record_and_also_containers() {
+    let tmp = tempfile::tempdir().unwrap();
+    let root = tmp.path();
+    for section in ["also", "record"] {
+        fs::write(root.join("source.html"), "original source").unwrap();
+        fs::write(root.join("GROUNDING.yaml"), format!("meta:\n  reasoning: {{version: 1, profile: core/v1, requires: [arithmetic/v1]}}\n{section}:\n  local: {{file: source.html}}\nknown:\n  p.a: {{v: 1}}\n")).unwrap();
+        let result = cli(root, &["page", "--out", "source.html"]);
+        assert!(
+            !result.status.success(),
+            "{section}: {}",
+            String::from_utf8_lossy(&result.stderr)
+        );
+        assert_eq!(
+            fs::read_to_string(root.join("source.html")).unwrap(),
+            "original source"
+        );
+    }
+}

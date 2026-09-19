@@ -35,6 +35,7 @@ fn load(inventory: &mut Inventory, path: &Path) -> Result<Value> {
     if !inventory.exists(path)? {
         return Ok(Value::Null);
     }
+    crate::require(inventory.file(path)?, "ingestion_evidence_not_regular")?;
     Ok(serde_json::from_slice(&inventory.read(path)?)?)
 }
 
@@ -184,7 +185,11 @@ fn valid(
     if !event.is_object() || event["event_id"] != eid || event["source_file"] != file.as_str() {
         return Ok(false);
     }
-    let envelope = inventory.read(&root.join("envelopes").join(format!("{eid}.json")))?;
+    let envelope_path = root.join("envelopes").join(format!("{eid}.json"));
+    if !inventory.file(&envelope_path)? || !inventory.file(&source)? {
+        return Ok(false);
+    }
+    let envelope = inventory.read(&envelope_path)?;
     let source_bytes = inventory.read(&source)?;
     if event["source_sha256"] != sha256(&source_bytes)
         || event["envelope_sha256"] != sha256(&envelope)
@@ -248,16 +253,15 @@ pub fn capture(
         {
             continue;
         }
-        match valid(id, &body, origin, preparing, &mut result.inventory) {
-            Ok(true) => {
-                result.ids.insert(id.clone());
-            }
-            Err(e) if e.0 == "snapshot_changed" => return Err(e),
-            _ => {}
+        if let Ok(true) = valid(id, &body, origin, preparing, &mut result.inventory) {
+            result.ids.insert(id.clone());
         }
     }
-    result.verify()?;
-    Ok(result)
+    if result.verify().is_err() {
+        Ok(RecordingSources::default())
+    } else {
+        Ok(result)
+    }
 }
 
 #[cfg(test)]

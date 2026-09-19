@@ -22,20 +22,16 @@ const MAX_STATE: usize = 1024 * 1024;
 
 /// Empty TMPDIR must never turn optional private state into workspace files.
 pub fn temporary_directory() -> PathBuf {
-    if let Some(path) = env::var_os("TMPDIR").filter(|s| !s.is_empty()) {
-        return PathBuf::from(path);
-    }
-    for name in ["TEMP", "TMP"] {
-        if let Some(path) = env::var_os(name)
-            .filter(|s| !s.is_empty())
-            .map(PathBuf::from)
-            && path.is_dir()
-        {
-            return path;
+    let candidates = ["TMPDIR", "TEMP", "TMP"].map(|name| env::var_os(name).map(PathBuf::from));
+    choose_temporary_directory(&candidates, env::temp_dir())
+}
+fn choose_temporary_directory(candidates: &[Option<PathBuf>], system: PathBuf) -> PathBuf {
+    for path in candidates.iter().flatten() {
+        if !path.as_os_str().is_empty() && path.is_absolute() && path.is_dir() {
+            return path.clone();
         }
     }
-    let system = env::temp_dir();
-    if !system.as_os_str().is_empty() {
+    if system.is_absolute() && system.is_dir() {
         return system;
     }
     #[cfg(unix)]
@@ -479,6 +475,21 @@ mod tests {
     use tempfile::tempdir;
     fn image(before: Option<&str>, after: Option<&str>, role: &str) -> FileImage {
         image_path("GROUNDING.yaml", before, after, role)
+    }
+
+    #[test]
+    fn temporary_directory_ignores_blank_relative_and_missing_candidates() {
+        let valid = tempdir().unwrap();
+        let choices = [
+            Some(PathBuf::new()),
+            Some(PathBuf::from("relative")),
+            Some(valid.path().join("missing")),
+            Some(valid.path().to_owned()),
+        ];
+        assert_eq!(
+            choose_temporary_directory(&choices, PathBuf::from("also-relative")),
+            valid.path()
+        );
     }
     fn image_path(path: &str, before: Option<&str>, after: Option<&str>, role: &str) -> FileImage {
         FileImage {

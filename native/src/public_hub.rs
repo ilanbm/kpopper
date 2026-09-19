@@ -150,29 +150,45 @@ fn browser_checks(page: &Path) -> Result<Output> {
 }
 
 fn declared_source_paths(document: &crate::value::TypedValue, base: &Path) -> Result<Vec<PathBuf>> {
+    use crate::value::TypedValue;
+    fn collect(
+        value: &TypedValue,
+        base: &Path,
+        paths: &mut Vec<PathBuf>,
+        declarations: &mut Vec<String>,
+    ) {
+        match value {
+            TypedValue::Map(fields) => {
+                for field in ["file", "url"] {
+                    if let Some(TypedValue::Text(value)) = fields.get(field) {
+                        if field == "file" && !value.is_empty() {
+                            paths.push(base.join(value));
+                            paths.push(base.join(value.trim()));
+                        }
+                        if field == "url" || value.to_ascii_lowercase().starts_with("file:") {
+                            declarations.push(value.trim().to_owned());
+                        }
+                    }
+                }
+                for value in fields.values() {
+                    collect(value, base, paths, declarations);
+                }
+            }
+            TypedValue::List(values) => {
+                for value in values {
+                    collect(value, base, paths, declarations);
+                }
+            }
+            _ => {}
+        }
+    }
     let mut paths = Vec::new();
     let mut declarations = Vec::new();
     for (section, members) in map(document)? {
-        if matches!(section.as_str(), "meta" | "schema" | "record" | "also") {
+        if matches!(section.as_str(), "meta" | "schema") {
             continue;
         }
-        let Ok(members) = map(members) else { continue };
-        for body in members.values() {
-            let Ok(body) = map(body) else { continue };
-            for field in ["file", "url"] {
-                if let Some(crate::value::TypedValue::Text(value)) = body.get(field) {
-                    if field == "file" && !value.is_empty() {
-                        // A declared local source stays protected even when a URL
-                        // wins for display, or its name contains literal % or #.
-                        paths.push(base.join(value));
-                        paths.push(base.join(value.trim()));
-                    }
-                    if field == "url" || value.to_ascii_lowercase().starts_with("file:") {
-                        declarations.push(value.trim().to_owned());
-                    }
-                }
-            }
-        }
+        collect(members, base, &mut paths, &mut declarations);
     }
     for href in declarations {
         if href.is_empty() {

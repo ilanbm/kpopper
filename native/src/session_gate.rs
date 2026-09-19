@@ -316,7 +316,7 @@ fn capture(
     let capabilities = crate::reasoning_fields::capabilities(&capture.document(), None)?;
     let core_profile = string_is(&map(&capabilities)?["profile"], "core/v1");
     let recordings = if check_purpose && !core_profile {
-        crate::recording_receipt::capture(&capture, preparing)?
+        crate::recording_receipt::capture(&capture, preparing).unwrap_or_default()
     } else {
         crate::recording_receipt::RecordingSources::default()
     };
@@ -494,21 +494,33 @@ fn mark_overlaps_capture(path: &Path, capture: &CapturedSource, paths: &[PathBuf
     let Ok(target) = crate::project_modes::resolved(path) else {
         return true;
     };
-    paths
-        .iter()
-        .chain(capture.members())
-        .any(|path| crate::project_modes::resolved(path).ok().as_ref() == Some(&target))
-        || capture.files().keys().any(|path| {
-            let retained_hypothesis = path
-                .components()
-                .any(|part| part.as_os_str() == "hypotheses")
-                || path
-                    .parent()
-                    .and_then(Path::file_name)
-                    .is_some_and(|name| name == "PROVENANCE.d");
-            retained_hypothesis
-                && crate::project_modes::resolved(path).ok().as_ref() == Some(&target)
-        })
+    let mut reserved = paths.iter().flat_map(|entry| {
+        let parent = entry.parent().unwrap_or_else(|| Path::new("."));
+        let name = entry.file_name().and_then(|v| v.to_str()).unwrap_or("");
+        crate::history_transaction::Layout::for_entry(name)
+            .ok()
+            .into_iter()
+            .flat_map(move |layout| {
+                [
+                    layout.view,
+                    layout.replaced,
+                    layout.authority,
+                    layout.journal,
+                    format!("{}/project.json", layout.home),
+                ]
+                .into_iter()
+                .map(move |relative| parent.join(relative))
+            })
+    });
+    reserved.any(|path| crate::project_modes::resolved(&path).ok().as_ref() == Some(&target))
+        || paths
+            .iter()
+            .chain(capture.members())
+            .any(|path| crate::project_modes::resolved(path).ok().as_ref() == Some(&target))
+        || capture
+            .files()
+            .keys()
+            .any(|path| crate::project_modes::resolved(path).ok().as_ref() == Some(&target))
 }
 
 /// Capture and persist the bounded private session-start mark.
@@ -595,194 +607,205 @@ pub fn gate_with_recording_context(
     options: &GateOptions<'_>,
     preparing: Option<&crate::recording_receipt::PreparingContext>,
 ) -> Result<GateResult> {
-    let mut base = read_mark(options.state_path)?;
-    let (capture, current, recordings) = capture(options, true, preparing)?;
-    let previous = base
-        .failures
-        .clone()
-        .unwrap_or_default()
-        .into_iter()
-        .collect::<BTreeSet<_>>();
-    let mut allowed = BTreeMap::<String, String>::new();
-    for (id, old) in &base.judgments {
-        let Some(now) = current.judgments.get(id) else {
-            continue;
-        };
-        if old.shape == now.shape
-            && !old.arrangement
-            && !now.arrangement
-            && old.predicate != Some(true)
-            && now.predicate == Some(true)
-            && now
-                .inputs
-                .iter()
-                .any(|(dependency, value)| old.inputs.get(dependency) != Some(value))
-        {
-            let failure = if current.profile == "core/v1" {
-                format!("{id}: falsifier holds")
-            } else {
-                current
-                    .failures
+    let saved_base = read_mark(options.state_path)?;
+    let mut use_recordings = true;
+    loop {
+        let mut base = saved_base.clone();
+        let (capture, current, recordings) = capture(options, use_recordings, preparing)?;
+        let previous = base
+            .failures
+            .clone()
+            .unwrap_or_default()
+            .into_iter()
+            .collect::<BTreeSet<_>>();
+        let mut allowed = BTreeMap::<String, String>::new();
+        for (id, old) in &base.judgments {
+            let Some(now) = current.judgments.get(id) else {
+                continue;
+            };
+            if old.shape == now.shape
+                && !old.arrangement
+                && !now.arrangement
+                && old.predicate != Some(true)
+                && now.predicate == Some(true)
+                && now
+                    .inputs
                     .iter()
-                    .find(|failure| failure.starts_with(&format!("{id}: wrong_if holds")))
-                    .cloned()
-                    .unwrap_or_else(|| format!("{id}: wrong_if holds"))
-            };
-            allowed.insert(failure, id.clone());
-        }
-    }
-    let added = if current.profile == "ordinary/v1" && base.failures.is_some() {
-        current
-            .failures
-            .iter()
-            .filter(|failure| !previous.contains(*failure) && !allowed.contains_key(*failure))
-            .cloned()
-            .collect::<Vec<_>>()
-    } else if current.profile == "core/v1" {
-        current
-            .failures
-            .iter()
-            .filter(|failure| {
-                base.profile.as_deref() != Some("core/v1")
-                    || (!previous.contains(*failure) && !allowed.contains_key(*failure))
-            })
-            .cloned()
-            .collect()
-    } else if current.failures.len() > base.fails {
-        current.failures.clone()
-    } else {
-        vec![]
-    };
-    let mut lines = vec![];
-    let mut issues = vec![];
-    if !added.is_empty() {
-        let first = options
-            .paths
-            .first()
-            .map(|path| path.display().to_string())
-            .unwrap_or_else(|| "record".into());
-        lines.push(if current.profile == "core/v1" {
-            format!(
-                "{first} fails core check with {} problems ({} at session start).",
-                current.failures.len(),
-                base.fails
-            )
-        } else {
-            format!(
-                "{first} fails check with {} problems ({} at session start).",
-                current.failures.len(),
-                base.fails
-            )
-        });
-        if current.profile != "core/v1" {
-            lines.push(
-                "Fix the record - or declare the hole with blocked_on - before finishing:".into(),
-            );
-        }
-        for failure in added.iter().take(12) {
-            let line = format!("FAIL {failure}");
-            lines.push(line.clone());
-        }
-        for failure in &added {
-            let line = format!("FAIL {failure}");
-            issues.push(Issue {
-                kind: "failure".into(),
-                subject: failure.clone(),
-                text: line,
-            });
-        }
-    }
-    if let Some(was) = &base.ids {
-        let mut new = current
-            .ids
-            .difference(&was.iter().cloned().collect())
-            .cloned()
-            .collect::<Vec<_>>();
-        if let Some(sid) = options.session_id {
-            let tmp = options
-                .private_tmp
-                .map(Path::to_path_buf)
-                .unwrap_or_else(crate::session_activity::temporary_directory);
-            let owned = crate::session_activity::owned(&tmp, sid, &capture);
-            new.retain(|id| owned.contains(id));
-        }
-        if !new.is_empty()
-            && !new
-                .iter()
-                .any(|id| current.intents.contains(id) || current.attributed.contains(id))
-        {
-            let mut names = new.iter().take(4).cloned().collect::<Vec<_>>().join(", ");
-            if new.len() > 4 {
-                names.push_str(&format!(" and {} more", new.len() - 4));
+                    .any(|(dependency, value)| old.inputs.get(dependency) != Some(value))
+            {
+                let failure = if current.profile == "core/v1" {
+                    format!("{id}: falsifier holds")
+                } else {
+                    current
+                        .failures
+                        .iter()
+                        .find(|failure| failure.starts_with(&format!("{id}: wrong_if holds")))
+                        .cloned()
+                        .unwrap_or_else(|| format!("{id}: wrong_if holds"))
+                };
+                allowed.insert(failure, id.clone());
             }
-            let message = if current.profile == "core/v1" {
+        }
+        let added = if current.profile == "ordinary/v1" && base.failures.is_some() {
+            current
+                .failures
+                .iter()
+                .filter(|failure| !previous.contains(*failure) && !allowed.contains_key(*failure))
+                .cloned()
+                .collect::<Vec<_>>()
+        } else if current.profile == "core/v1" {
+            current
+                .failures
+                .iter()
+                .filter(|failure| {
+                    base.profile.as_deref() != Some("core/v1")
+                        || (!previous.contains(*failure) && !allowed.contains_key(*failure))
+                })
+                .cloned()
+                .collect()
+        } else if current.failures.len() > base.fails {
+            current.failures.clone()
+        } else {
+            vec![]
+        };
+        let mut lines = vec![];
+        let mut issues = vec![];
+        if !added.is_empty() {
+            let first = options
+                .paths
+                .first()
+                .map(|path| path.display().to_string())
+                .unwrap_or_else(|| "record".into());
+            lines.push(if current.profile == "core/v1" {
                 format!(
-                    "this session wrote {} {} ({names}); verify its recorded intent before finishing",
-                    new.len(),
-                    if new.len() == 1 { "entry" } else { "entries" }
+                    "{first} fails core check with {} problems ({} at session start).",
+                    current.failures.len(),
+                    base.fails
                 )
             } else {
                 format!(
-                    "this session wrote {} {} ({names}) and recorded no intent: add s.<date>_<slug> asked=\"...\" name=\"...\", and from: it on what it wrote",
-                    new.len(),
-                    if new.len() == 1 { "entry" } else { "entries" }
+                    "{first} fails check with {} problems ({} at session start).",
+                    current.failures.len(),
+                    base.fails
                 )
-            };
-            lines.push(message);
-            for id in new {
-                let text = if current.profile == "core/v1" {
-                    format!(
-                        "this session wrote 1 entry ({id}); verify its recorded intent before finishing"
-                    )
-                } else {
-                    format!(
-                        "this session wrote 1 entry ({id}) and recorded no intent: add s.<date>_<slug> asked=\"...\" name=\"...\", and from: it on what it wrote"
-                    )
-                };
+            });
+            if current.profile != "core/v1" {
+                lines.push(
+                    "Fix the record - or declare the hole with blocked_on - before finishing:"
+                        .into(),
+                );
+            }
+            for failure in added.iter().take(12) {
+                let line = format!("FAIL {failure}");
+                lines.push(line.clone());
+            }
+            for failure in &added {
+                let line = format!("FAIL {failure}");
                 issues.push(Issue {
-                    kind: "unattributed".into(),
-                    subject: id,
-                    text,
+                    kind: "failure".into(),
+                    subject: failure.clone(),
+                    text: line,
                 });
             }
         }
+        if let Some(was) = &base.ids {
+            let mut new = current
+                .ids
+                .difference(&was.iter().cloned().collect())
+                .cloned()
+                .collect::<Vec<_>>();
+            if let Some(sid) = options.session_id {
+                let tmp = options
+                    .private_tmp
+                    .map(Path::to_path_buf)
+                    .unwrap_or_else(crate::session_activity::temporary_directory);
+                let owned = crate::session_activity::owned(&tmp, sid, &capture);
+                new.retain(|id| owned.contains(id));
+            }
+            if !new.is_empty()
+                && !new
+                    .iter()
+                    .any(|id| current.intents.contains(id) || current.attributed.contains(id))
+            {
+                let mut names = new.iter().take(4).cloned().collect::<Vec<_>>().join(", ");
+                if new.len() > 4 {
+                    names.push_str(&format!(" and {} more", new.len() - 4));
+                }
+                let message = if current.profile == "core/v1" {
+                    format!(
+                        "this session wrote {} {} ({names}); verify its recorded intent before finishing",
+                        new.len(),
+                        if new.len() == 1 { "entry" } else { "entries" }
+                    )
+                } else {
+                    format!(
+                        "this session wrote {} {} ({names}) and recorded no intent: add s.<date>_<slug> asked=\"...\" name=\"...\", and from: it on what it wrote",
+                        new.len(),
+                        if new.len() == 1 { "entry" } else { "entries" }
+                    )
+                };
+                lines.push(message);
+                for id in new {
+                    let text = if current.profile == "core/v1" {
+                        format!(
+                            "this session wrote 1 entry ({id}); verify its recorded intent before finishing"
+                        )
+                    } else {
+                        format!(
+                            "this session wrote 1 entry ({id}) and recorded no intent: add s.<date>_<slug> asked=\"...\" name=\"...\", and from: it on what it wrote"
+                        )
+                    };
+                    issues.push(Issue {
+                        kind: "unattributed".into(),
+                        subject: id,
+                        text,
+                    });
+                }
+            }
+        }
+        if lines.is_empty()
+            && let Some(message) = nudge(
+                &base,
+                &source_digest(&capture, options.paths),
+                options.workspace,
+                options.turns,
+                options.host,
+                options.nudged_at,
+            )
+        {
+            lines.push(message.clone());
+            issues.push(Issue {
+                kind: "untouched".into(),
+                subject: "record".into(),
+                text: message,
+            });
+            base.nudged = true;
+            base.nudged_turn = Some(options.turns);
+            let _ = write_mark(options.state_path, &base);
+        }
+        let allowed_falsifiers = allowed.values().cloned().collect::<Vec<_>>();
+        if !allowed_falsifiers.is_empty() {
+            lines.push(format!("Updated readings falsified unchanged judgments: {}. They remain flagged for review; check still reports their failed conditions.", allowed_falsifiers.join(", ")));
+        }
+        let code = if issues.is_empty() { 0 } else { 2 };
+        let result = GateResult {
+            code,
+            text: if lines.is_empty() {
+                String::new()
+            } else {
+                lines.join("\n") + "\n"
+            },
+            issues,
+            allowed_falsifiers,
+        };
+        capture.verify()?;
+        if use_recordings && recordings.verify().is_err() {
+            // Optional ingestion evidence grants only a purpose exemption. If it
+            // becomes unavailable at final proof, assess again without exemptions;
+            // never discard unrelated failures or refresh the session baseline.
+            use_recordings = false;
+            continue;
+        }
+        return Ok(result);
     }
-    if lines.is_empty()
-        && let Some(message) = nudge(
-            &base,
-            &source_digest(&capture, options.paths),
-            options.workspace,
-            options.turns,
-            options.host,
-            options.nudged_at,
-        )
-    {
-        lines.push(message.clone());
-        issues.push(Issue {
-            kind: "untouched".into(),
-            subject: "record".into(),
-            text: message,
-        });
-        base.nudged = true;
-        base.nudged_turn = Some(options.turns);
-        let _ = write_mark(options.state_path, &base);
-    }
-    let allowed_falsifiers = allowed.values().cloned().collect::<Vec<_>>();
-    if !allowed_falsifiers.is_empty() {
-        lines.push(format!("Updated readings falsified unchanged judgments: {}. They remain flagged for review; check still reports their failed conditions.", allowed_falsifiers.join(", ")));
-    }
-    let code = if issues.is_empty() { 0 } else { 2 };
-    let result = GateResult {
-        code,
-        text: if lines.is_empty() {
-            String::new()
-        } else {
-            lines.join("\n") + "\n"
-        },
-        issues,
-        allowed_falsifiers,
-    };
-    capture.verify()?;
-    recordings.verify()?;
-    Ok(result)
 }

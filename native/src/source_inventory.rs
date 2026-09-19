@@ -116,7 +116,39 @@ fn failure(error: &std::io::Error) -> &'static str {
     }
 }
 fn bytes(path: &Path) -> std::io::Result<Vec<u8>> {
-    let file = fs::File::open(path)?;
+    #[cfg(unix)]
+    let file = {
+        use rustix::fs::{Mode, OFlags, open};
+        let fd = open(
+            path,
+            OFlags::RDONLY | OFlags::NONBLOCK | OFlags::CLOEXEC,
+            Mode::empty(),
+        )
+        .map_err(std::io::Error::from)?;
+        fs::File::from(fd)
+    };
+    #[cfg(not(unix))]
+    let file = {
+        #[cfg(windows)]
+        if path.components().any(|component| matches!(component,
+            Component::Prefix(prefix) if matches!(prefix.kind(), std::path::Prefix::DeviceNS(_) | std::path::Prefix::UNC(_, _) | std::path::Prefix::VerbatimUNC(_, _) | std::path::Prefix::Verbatim(_)))) {
+            return Err(std::io::Error::new(std::io::ErrorKind::InvalidInput, "device and UNC source paths are not supported"));
+        }
+        let metadata = fs::symlink_metadata(path)?;
+        if metadata.file_type().is_symlink() || !metadata.is_file() {
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::InvalidInput,
+                "source is not a regular file",
+            ));
+        }
+        fs::File::open(path)?
+    };
+    if !file.metadata()?.is_file() {
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::InvalidInput,
+            "source is not a regular file",
+        ));
+    }
     let mut raw = Vec::new();
     file.take((MAX_FILE + 1) as u64).read_to_end(&mut raw)?;
     Ok(raw)
@@ -204,5 +236,39 @@ impl Inventory {
             require(actual == *expected, "snapshot_changed")?;
         }
         Ok(())
+    }
+}
+
+#[cfg(all(test, unix))]
+mod tests {
+    use super::*;
+    use std::process::Command;
+
+    fn fifo(path: &Path) {
+        assert!(Command::new("mkfifo").arg(path).status().unwrap().success());
+    }
+
+    #[test]
+    fn fifo_reads_fail_without_waiting_for_a_writer() {
+        let root = tempfile::tempdir().unwrap();
+        let path = root.path().join("input");
+        fifo(&path);
+        let started = std::time::Instant::now();
+        assert!(Inventory::default().read(&path).is_err());
+        assert!(started.elapsed() < std::time::Duration::from_secs(2));
+    }
+
+    #[test]
+    fn regular_file_swapped_to_fifo_fails_revalidation_without_blocking() {
+        let root = tempfile::tempdir().unwrap();
+        let path = root.path().join("input");
+        fs::write(&path, "stable").unwrap();
+        let mut inventory = Inventory::default();
+        inventory.read(&path).unwrap();
+        fs::remove_file(&path).unwrap();
+        fifo(&path);
+        let started = std::time::Instant::now();
+        assert_eq!(inventory.verify().unwrap_err().0, "snapshot_changed");
+        assert!(started.elapsed() < std::time::Duration::from_secs(2));
     }
 }

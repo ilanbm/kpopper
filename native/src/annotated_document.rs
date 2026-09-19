@@ -452,10 +452,10 @@ fn normalize_claims(value: &Value) -> Result<Vec<Value>> {
         if kind == "inference" {
             text(o.get("reason"), "inference reason", false, 20000)?;
         }
-        if let Some(group) = o.get("group") {
-            if !valid_id(text(Some(group), "group", false, 128)?) {
-                return Err(err("Invalid group ID"));
-            }
+        if let Some(group) = o.get("group")
+            && !valid_id(text(Some(group), "group", false, 128)?)
+        {
+            return Err(err("Invalid group ID"));
         }
         if let Some(format) = o.get("format") {
             validate_format(format)?;
@@ -591,12 +591,12 @@ fn source_spec(value: &Value) -> Result<&Map<String, Value>> {
     {
         return Err(err("representation must be file or extraction"));
     }
-    if let Some(profile) = o.get("profile") {
-        if profile != "core/v1" || o.get("format") != Some(&json!("record")) {
-            return Err(err(
-                "source.profile supports only explicit core/v1 record sources",
-            ));
-        }
+    if let Some(profile) = o.get("profile")
+        && (profile != "core/v1" || o.get("format") != Some(&json!("record")))
+    {
+        return Err(err(
+            "source.profile supports only explicit core/v1 record sources",
+        ));
     }
     if let Some(event) = o.get("event_id") {
         let event = text(Some(event), "event_id", false, 32)?;
@@ -1381,10 +1381,10 @@ fn proposal_groups(
                 dsu.union(id, &other)
             }
         }
-        if let Some(group) = c.get("group").and_then(Value::as_str) {
-            if let Some(other) = explicit.insert(group, id.to_owned()) {
-                dsu.union(id, &other)
-            }
+        if let Some(group) = c.get("group").and_then(Value::as_str)
+            && let Some(other) = explicit.insert(group, id.to_owned())
+        {
+            dsu.union(id, &other)
         }
         let a = &parsed["anchors"][id];
         let key = (
@@ -1490,6 +1490,7 @@ fn proposal_groups(
     Ok(Value::Array(groups))
 }
 
+#[allow(clippy::too_many_arguments)]
 fn make_artifact(
     authored: &str,
     claims: &[Value],
