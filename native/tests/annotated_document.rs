@@ -159,6 +159,43 @@ fn rejects_unsafe_or_ambiguous_inputs() {
 }
 
 #[test]
+fn json_sources_preserve_literal_private_number_objects_and_large_numbers() {
+    let literal = document::read_json(
+        r#"{"a":{"$serde_json::private::Number":"{\"b\":5}"},"large":123456789012345678901234567890}"#,
+    )
+    .unwrap();
+    assert_eq!(
+        literal["a"],
+        json!({"$serde_json::private::Number":"{\"b\":5}"})
+    );
+    assert_eq!(
+        literal["large"].as_number().unwrap().to_string(),
+        "123456789012345678901234567890"
+    );
+    assert!(document::read_json(r#"{"outer":{"a":1,"a":2}}"#).is_err());
+}
+
+#[test]
+fn json_pointer_array_indices_must_be_canonical() {
+    let root = tempfile::tempdir().unwrap();
+    fs::write(root.path().join("values.json"), r#"{"a":[10,20]}"#).unwrap();
+    for pointer in ["/a/01", "/a/+1"] {
+        let manifest = json!({"version":1,"sources":{"values":{"name":"Values","path":"values.json","format":"json"}},"claims":[
+            {"id":"value","label":"Value","kind":"value","inputs":[{"source":"values","pointer":pointer}]}
+        ]});
+        let data = document::build(
+            &page("<p><span data-kpopper-claim=\"value\">x</span></p>"),
+            &manifest,
+            root.path(),
+            Some(NOW),
+        )
+        .unwrap();
+        assert_eq!(data["checks"]["value"]["status"], "unavailable");
+        assert_eq!(data["groups"][0]["status"], "blocked");
+    }
+}
+
+#[test]
 fn refuses_tampering_overwrite_and_protected_output() {
     let root = tempfile::tempdir().unwrap();
     let source = root.path().join("counts.json");
@@ -238,6 +275,31 @@ fn path_wrappers_are_bounded_and_protect_every_input() {
     )
     .unwrap();
     assert!(document::refresh_file(&output, &source_inputs, None, &output, true).is_err());
+}
+
+#[test]
+fn build_files_defaults_only_an_absent_sources_member_to_empty() {
+    let root = tempfile::tempdir().unwrap();
+    let html = root.path().join("draft.html");
+    let manifest_path = root.path().join("manifest.json");
+    let output = root.path().join("report.html");
+    fs::write(
+        &html,
+        page("<p data-kpopper-claim=\"meaning\">A supported interpretation.</p>"),
+    )
+    .unwrap();
+    let manifest = json!({"version":1,"claims":[
+        {"id":"meaning","label":"Meaning","kind":"inference","inputs":[],"reason":"The prose is explicitly an interpretation."}
+    ]});
+    fs::write(&manifest_path, manifest.to_string()).unwrap();
+    document::build_files(&html, &manifest_path, None, &output, false).unwrap();
+    assert!(document::inspect_file(&output).is_ok());
+
+    fs::remove_file(&output).unwrap();
+    let mut invalid = manifest;
+    invalid["sources"] = Value::Null;
+    fs::write(&manifest_path, invalid.to_string()).unwrap();
+    assert!(document::build_files(&html, &manifest_path, None, &output, false).is_err());
 }
 
 #[test]

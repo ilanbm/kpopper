@@ -111,83 +111,69 @@ fn safe_json(value: &Value) -> Result<String> {
 
 /// Strict JSON input with duplicate-key and non-finite rejection.
 pub fn read_json(raw: &str) -> Result<Value> {
-    use serde::de::{self, DeserializeSeed, MapAccess, SeqAccess, Visitor};
-    struct Seed;
-    impl<'de> DeserializeSeed<'de> for Seed {
-        type Value = Value;
-        fn deserialize<D: serde::Deserializer<'de>>(
-            self,
-            d: D,
-        ) -> std::result::Result<Value, D::Error> {
-            d.deserialize_any(V)
-        }
-    }
-    struct V;
-    impl<'de> Visitor<'de> for V {
-        type Value = Value;
-        fn expecting(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-            f.write_str("JSON")
-        }
-        fn visit_unit<E: de::Error>(self) -> std::result::Result<Value, E> {
-            Ok(Value::Null)
-        }
-        fn visit_none<E: de::Error>(self) -> std::result::Result<Value, E> {
-            Ok(Value::Null)
-        }
-        fn visit_bool<E: de::Error>(self, v: bool) -> std::result::Result<Value, E> {
-            Ok(Value::Bool(v))
-        }
-        fn visit_i64<E: de::Error>(self, v: i64) -> std::result::Result<Value, E> {
-            Ok(Value::Number(v.into()))
-        }
-        fn visit_u64<E: de::Error>(self, v: u64) -> std::result::Result<Value, E> {
-            Ok(Value::Number(v.into()))
-        }
-        fn visit_f64<E: de::Error>(self, v: f64) -> std::result::Result<Value, E> {
-            Number::from_f64(v)
-                .map(Value::Number)
-                .ok_or_else(|| E::custom("Non-finite JSON number"))
-        }
-        fn visit_str<E: de::Error>(self, v: &str) -> std::result::Result<Value, E> {
-            Ok(Value::String(v.into()))
-        }
-        fn visit_string<E: de::Error>(self, v: String) -> std::result::Result<Value, E> {
-            Ok(Value::String(v))
-        }
-        fn visit_seq<A: SeqAccess<'de>>(self, mut a: A) -> std::result::Result<Value, A::Error> {
-            let mut r = vec![];
-            while let Some(v) = a.next_element_seed(Seed)? {
-                r.push(v)
+    use serde::{Deserialize, de};
+    use serde_json::value::RawValue;
+
+    fn decode(raw: &RawValue) -> Result<Value> {
+        struct ObjectVisitor;
+        impl<'de> de::Visitor<'de> for ObjectVisitor {
+            type Value = Map<String, Value>;
+            fn expecting(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+                f.write_str("a JSON object")
             }
-            Ok(Value::Array(r))
-        }
-        fn visit_map<A: MapAccess<'de>>(self, mut a: A) -> std::result::Result<Value, A::Error> {
-            let mut r = Map::new();
-            while let Some(k) = a.next_key::<String>()? {
-                // serde_json's arbitrary_precision feature exposes a number to
-                // deserialize_any as this private one-field map.
-                if k == "$serde_json::private::Number" && r.is_empty() {
-                    let raw = a.next_value::<String>()?;
-                    if a.next_key::<String>()?.is_some() {
-                        return Err(de::Error::custom("Invalid JSON number"));
+            fn visit_map<A: de::MapAccess<'de>>(
+                self,
+                mut fields: A,
+            ) -> std::result::Result<Self::Value, A::Error> {
+                let mut result = Map::new();
+                while let Some(key) = fields.next_key::<String>()? {
+                    if result.contains_key(&key) {
+                        return Err(de::Error::custom(format!("Duplicate JSON key: {key}")));
                     }
-                    return serde_json::from_str::<Value>(&raw).map_err(de::Error::custom);
+                    let raw = fields.next_value::<Box<RawValue>>()?;
+                    let value = decode(&raw).map_err(de::Error::custom)?;
+                    result.insert(key, value);
                 }
-                if r.contains_key(&k) {
-                    return Err(de::Error::custom(format!("Duplicate JSON key: {k}")));
-                }
-                let v = a.next_value_seed(Seed)?;
-                r.insert(k, v);
+                Ok(result)
             }
-            Ok(Value::Object(r))
         }
-    }
-    let mut de = serde_json::Deserializer::from_str(raw);
-    let result = Seed
-        .deserialize(&mut de)
+
+        let text = raw.get().trim();
+        let mut decoder = serde_json::Deserializer::from_str(text);
+        let value = match text.as_bytes().first() {
+            Some(b'{') => {
+                serde::Deserializer::deserialize_map(&mut decoder, ObjectVisitor).map(Value::Object)
+            }
+            Some(b'[') => Vec::<Box<RawValue>>::deserialize(&mut decoder).and_then(|items| {
+                items
+                    .iter()
+                    .map(|item| decode(item).map_err(de::Error::custom))
+                    .collect::<std::result::Result<Vec<_>, _>>()
+                    .map(Value::Array)
+            }),
+            Some(b'"') => String::deserialize(&mut decoder).map(Value::String),
+            Some(b'n') => <()>::deserialize(&mut decoder).map(|()| Value::Null),
+            Some(b't' | b'f') => bool::deserialize(&mut decoder).map(Value::Bool),
+            Some(_) => Number::deserialize(&mut decoder).map(Value::Number),
+            None => unreachable!("RawValue cannot be empty"),
+        }
         .map_err(|e| err(format!("Invalid JSON: {e}")))?;
-    de.end().map_err(|e| err(format!("Invalid JSON: {e}")))?;
-    Ok(result)
+        decoder
+            .end()
+            .map_err(|e| err(format!("Invalid JSON: {e}")))?;
+        Ok(value)
+    }
+
+    // Parse once as a raw token tree. This preserves serde_json's nesting bound
+    // while letting the recursive decoder distinguish JSON number tokens from
+    // literal objects that use serde_json's private arbitrary-precision key.
+    let mut decoder = serde_json::Deserializer::from_str(raw);
+    let raw_value = Box::<RawValue>::deserialize(&mut decoder)
+        .map_err(|e| err(format!("Invalid JSON: {e}")))?;
+    decoder
+        .end()
+        .map_err(|e| err(format!("Invalid JSON: {e}")))?;
+    decode(&raw_value)
 }
 fn read_limited(path: &Path, limit: usize) -> Result<Vec<u8>> {
     let data = fs::read(path)?;
@@ -517,7 +503,12 @@ fn pointer(mut data: &Value, pointer: &str) -> Result<Value> {
         let key = p.replace("~1", "/").replace("~0", "~");
         data = match data {
             Value::Object(o) => o.get(&key),
-            Value::Array(a) => key.parse::<usize>().ok().and_then(|i| a.get(i)),
+            Value::Array(a)
+                if key == "0"
+                    || (!key.starts_with('0') && key.bytes().all(|b| b.is_ascii_digit())) =>
+            {
+                key.parse::<usize>().ok().and_then(|i| a.get(i))
+            }
             _ => None,
         }
         .ok_or_else(|| err("The selected field is unavailable"))?;
@@ -825,17 +816,25 @@ fn core_record_source(
         history_view::list as typed_list,
         reasoning_context::CapturedAssessment,
         reasoning_runtime::OperationalBounds,
-        source_capture::{ReadMode, capture_source},
+        source_capture::{ReadMode, capture_source_with_runtime},
         value::TypedValue,
     };
     let cwd = path.parent().ok_or_else(|| err("invalid record path"))?;
-    let capture = capture_source(&[path.to_owned()], cwd, ReadMode::Frozen, None)
+    let runtime = crate::public_workspace::core_runtime()
         .map_err(|e| err(format!("The source could not be assessed as core/v1: {e}")))?;
+    let capture = capture_source_with_runtime(
+        &[path.to_owned()],
+        cwd,
+        ReadMode::Frozen,
+        None,
+        runtime.as_ref(),
+    )
+    .map_err(|e| err(format!("The source could not be assessed as core/v1: {e}")))?;
     let context = CapturedAssessment::from_snapshot(
         capture.snapshot()?.clone(),
         None,
         "focused-review/v1",
-        None,
+        runtime.as_ref(),
         OperationalBounds::default(),
         None,
     )
@@ -1977,7 +1976,11 @@ pub fn build_files(
     });
     let data = build(&authored, &manifest, &root, None)?;
     let mut protected = vec![html_path.to_owned(), manifest_path.to_owned()];
-    protected.extend(protected_sources(&manifest["sources"], &root)?);
+    let empty_sources = Value::Object(Map::new());
+    protected.extend(protected_sources(
+        manifest.get("sources").unwrap_or(&empty_sources),
+        &root,
+    )?);
     let output = write_output(&data, output, overwrite, &protected)?;
     Ok(operation_result(&data, &output))
 }
