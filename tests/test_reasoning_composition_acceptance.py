@@ -136,11 +136,20 @@ class InstalledOperationalCLI(unittest.TestCase):
             for command in (["open", "--json"], ["check"], ["pull", "p.input"],
                             ["affects", "p.input"], ["assess", "p.input"],
                             ["export", "p.input"], ["search", "input"],
-                            ["page", "--out", str(root / "page.html")],
-                            ["session", "open", "--no-settings", "--tokens", "2000"]):
+                            ["page", "--out", str(root / "page.html")]):
                 reopened = subprocess.run([sys.executable, str(self.cli_path()), *command],
                     cwd=root, text=True, capture_output=True, check=False)
                 self.assertEqual(reopened.returncode, 0, reopened.stdout + reopened.stderr)
+            session = subprocess.run([sys.executable, str(self.cli_path()), "session", "open",
+                "--no-settings", "--tokens", "2000"], cwd=root, text=True,
+                capture_output=True, check=False)
+            if importlib.util.find_spec("tiktoken") is None:
+                # Base distributions keep session dependencies optional.
+                self.assertEqual(session.returncode, 2, session.stdout + session.stderr)
+                self.assertEqual(json.loads(session.stderr)["missing"], "tiktoken")
+            else:
+                self.assertEqual(session.returncode, 0, session.stdout + session.stderr)
+                self.assertIn("core/v1", session.stdout)
 
     def history_fixture(self, *, measured=1, judgment=False):
         """Use the checked history fixture while importing all product modules from ``scripts``."""
