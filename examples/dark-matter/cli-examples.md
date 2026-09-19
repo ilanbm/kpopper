@@ -156,8 +156,8 @@ notices.
 <details>
 <summary>Capture details</summary>
 
-- Captured at: `2026-09-19T09:48:11.513426+00:00`.
-- Reader: kpopper 1.7.0 source based on main `8115b44`; checked-in legacy record.
+- Captured at: `2026-09-19T09:51:55.735419+00:00`.
+- Reader: source `6ab9877` (after 1.7.0); checked-in legacy record.
 - Input SHA-256: `8b6a03d01392daa3f14a0aa6c1d4f3c30e9d55279cb8be99d288d08ef8d06c73`.
 - All five commands exited `0`; the output above is retained verbatim, including
   abbreviations introduced by the CLI's budgets.
