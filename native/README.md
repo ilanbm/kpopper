@@ -106,6 +106,7 @@ Inspection validates embedded evidence without executing authored scripts.
 ```sh
 kpop-native session open --no-settings --input GROUNDING.yaml --project example --state /absolute/private-state
 kpop-native session read --no-settings --input GROUNDING.yaml --project example --state /absolute/private-state --ref / --revision REVISION
+kpop-native session context --no-settings --input GROUNDING.yaml --project example --state /absolute/private-state --id d.decision --direction support --revision REVISION
 kpop-native session serve --no-settings --input GROUNDING.yaml --project example --state /absolute/private-state
 ```
 
@@ -114,10 +115,12 @@ context under its revision. Later processes check a fresh source Snapshot and
 read retained findings without loading an evaluator. Changed sources, project/input
 identity, navigation profiles or retained bytes require reopening. Budgets use the
 real `o200k_base` or `cl100k_base` tokenizer; records and workspace discovery require Git.
-The stdio MCP server currently exposes `kpopper_open` and `kpopper_read`.
-Ordinary checked sessions, search/context/proposals, setup and hook activation are
-still unconnected. Session-state filesystem hardening is currently verified on Unix;
-Windows session-state acceptance remains separate from the history platform checks.
+`context` follows declared support or impact edges within explicit depth, node and
+token limits. It returns exact complete node reads and lists omitted values and
+unread incident edges. The stdio MCP server exposes `kpopper_open`, `kpopper_read`
+and `kpopper_context`. Ordinary checked sessions, search/proposals, setup and hook
+activation are still unconnected. Session-state storage has been exercised on Unix
+and Windows, including physical identity, no-clobber creation and changed-source checks.
 
 ### Author an active history record
 

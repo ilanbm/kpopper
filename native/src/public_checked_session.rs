@@ -1,6 +1,7 @@
 //! Public core session service. Follow-up reads reuse retained findings.
 use crate::{
     Result,
+    checked_session::{ContextDirection, ContextOptions},
     checked_session_store::CheckedSessionStore,
     history_contract::*,
     project_modes::{self, Project},
@@ -19,6 +20,7 @@ use std::path::{Path, PathBuf};
 pub enum Operation {
     Open,
     Read,
+    Context,
     Serve,
 }
 
@@ -48,6 +50,14 @@ pub struct Options {
     pub revision: Option<String>,
     #[arg(long)]
     pub offset: Option<usize>,
+    #[arg(long = "id")]
+    pub ids: Vec<String>,
+    #[arg(long, value_enum)]
+    pub direction: Option<ContextDirection>,
+    #[arg(long, default_value_t = 1)]
+    pub depth: usize,
+    #[arg(long, default_value_t = 16)]
+    pub max_nodes: usize,
 }
 
 fn home() -> Result<PathBuf> {
@@ -288,6 +298,25 @@ impl Service {
         self.inputs.verify()?;
         Ok(result)
     }
+    pub fn contextualizing(
+        &self,
+        ids: &[String],
+        revision: &str,
+        options: &ContextOptions,
+    ) -> Result<String> {
+        let capture = source_capture::capture_source(
+            std::slice::from_ref(&self.input),
+            &self.cwd,
+            self.mode,
+            None,
+        )?;
+        let session = self.store.load(revision, capture.snapshot())?;
+        let result =
+            session.contextualize(ids, revision, options, |s| self.store.encoding().count(s))?;
+        capture.verify()?;
+        self.inputs.verify()?;
+        Ok(result)
+    }
 }
 
 pub fn run(options: &Options, cwd: &Path, mode: ReadMode) -> Result<String> {
@@ -306,10 +335,26 @@ pub fn run(options: &Options, cwd: &Path, mode: ReadMode) -> Result<String> {
             options.tokens.unwrap_or(1600),
             options.offset,
         ),
+        Operation::Context => service.contextualizing(
+            &options.ids,
+            options.revision.as_deref().ok_or_else(|| {
+                error("context requires --revision and --direction support|impact")
+            })?,
+            &ContextOptions {
+                direction: options.direction.ok_or_else(|| {
+                    error("context requires --revision and --direction support|impact")
+                })?,
+                tokens: options.tokens.unwrap_or(2000),
+                depth: options.depth,
+                max_nodes: options.max_nodes,
+            },
+        ),
         Operation::Serve => {
             let tools = crate::session_mcp::declared_tools()
                 .into_iter()
-                .filter(|t| ["kpopper_open", "kpopper_read"].contains(&t.name.as_str()))
+                .filter(|t| {
+                    ["kpopper_open", "kpopper_read", "kpopper_context"].contains(&t.name.as_str())
+                })
                 .collect::<Vec<_>>();
             crate::session_mcp::server(
                 &mut std::io::stdin().lock(),
@@ -345,6 +390,46 @@ pub fn run(options: &Options, cwd: &Path, mode: ReadMode) -> Result<String> {
                                     .ok_or_else(|| error("missing revision"))?,
                                 token_count(1600)?,
                                 offset,
+                            )
+                        }
+                        "kpopper_context" => {
+                            let number = |key: &str, default| -> Result<usize> {
+                                args.get(key).map_or(Ok(default), |v| {
+                                    v.as_u64()
+                                        .and_then(|n| usize::try_from(n).ok())
+                                        .ok_or_else(|| error(&format!("invalid {key}")))
+                                })
+                            };
+                            let ids = args["ids"]
+                                .as_array()
+                                .ok_or_else(|| error("missing IDs"))?
+                                .iter()
+                                .map(|v| {
+                                    v.as_str()
+                                        .map(str::to_owned)
+                                        .ok_or_else(|| error("invalid ID"))
+                                })
+                                .collect::<Result<Vec<_>>>()?;
+                            let direction = match args["direction"].as_str() {
+                                Some("support") => ContextDirection::Support,
+                                Some("impact") => ContextDirection::Impact,
+                                _ => {
+                                    return Err(error(
+                                        "context direction must be support or impact",
+                                    ));
+                                }
+                            };
+                            service.contextualizing(
+                                &ids,
+                                args["revision"]
+                                    .as_str()
+                                    .ok_or_else(|| error("missing revision"))?,
+                                &ContextOptions {
+                                    direction,
+                                    tokens: token_count(2000)?,
+                                    depth: number("depth", 1)?,
+                                    max_nodes: number("max_nodes", 16)?,
+                                },
                             )
                         }
                         _ => Err(error("unknown tool")),

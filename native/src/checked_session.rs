@@ -22,6 +22,19 @@ pub struct Opening {
     pub visible_ids: usize,
 }
 
+#[derive(Clone, Copy, Debug, clap::ValueEnum)]
+pub enum ContextDirection {
+    Support,
+    Impact,
+}
+#[derive(Clone, Debug)]
+pub struct ContextOptions {
+    pub direction: ContextDirection,
+    pub tokens: usize,
+    pub depth: usize,
+    pub max_nodes: usize,
+}
+
 #[derive(Clone, Debug)]
 struct Node {
     states: Vec<String>,
@@ -350,6 +363,164 @@ impl CheckedSession {
                 .filter(|e| matches!(e, Entry::Node(_)))
                 .count(),
         })
+    }
+
+    /// Read exact selected nodes along declared edges with an explicit unread frontier.
+    pub fn contextualize<F>(
+        &self,
+        ids: &[String],
+        revision: &str,
+        options: &ContextOptions,
+        count: F,
+    ) -> Result<String>
+    where
+        F: Fn(&str) -> usize,
+    {
+        budget(options.tokens)?;
+        require(
+            revision == self.revision,
+            "unknown core session revision; reopen",
+        )?;
+        require(options.depth <= 4, "context depth must be0..4")?;
+        require(
+            (1..=64).contains(&options.max_nodes),
+            "context max_nodes must be1..64",
+        )?;
+        require(
+            (1..=8).contains(&ids.len())
+                && ids
+                    .iter()
+                    .all(|n| !n.is_empty() && n.chars().count() <= 500),
+            "context requires1..8 nonempty node IDs or node: references of at most500 characters",
+        )?;
+        let mut seeds = Vec::new();
+        for reference in ids {
+            let id = if !reference.contains('#') {
+                reference.strip_prefix("node:").unwrap_or(reference)
+            } else {
+                reference
+            };
+            require(
+                self.nodes.contains_key(id),
+                "unknown context node; use a known ID or exact node: reference",
+            )?;
+            if !seeds.contains(&id.to_owned()) {
+                seeds.push(id.to_owned());
+            }
+        }
+        require(
+            options.max_nodes >= seeds.len(),
+            "context max_nodes cannot omit a requested seed",
+        )?;
+        let mut links: BTreeMap<String, Vec<(String, J)>> = BTreeMap::new();
+        for edge in &self.edges {
+            if !["rests_on", "from", "rule_reads"].contains(&edge["rel"].as_str().unwrap_or("")) {
+                continue;
+            }
+            let from = edge["from"]
+                .as_str()
+                .ok_or_else(|| Error("invalid captured edge".into()))?;
+            let to = edge["to"]
+                .as_str()
+                .ok_or_else(|| Error("invalid captured edge".into()))?;
+            let (start, end) = match options.direction {
+                ContextDirection::Support => (from, to),
+                ContextDirection::Impact => (to, from),
+            };
+            links
+                .entry(start.into())
+                .or_default()
+                .push((end.into(), edge.clone()));
+        }
+        for links in links.values_mut() {
+            links.sort_by_cached_key(|(neighbor, edge)| {
+                (neighbor.clone(), serde_json::to_string(edge).unwrap())
+            });
+        }
+        let mut paths: Vec<(String, Vec<J>)> =
+            seeds.iter().map(|id| (id.clone(), vec![])).collect();
+        let mut visited: BTreeSet<String> = seeds.iter().cloned().collect();
+        let mut position = 0;
+        while position < paths.len() && paths.len() < options.max_nodes {
+            let (id, path) = paths[position].clone();
+            position += 1;
+            if path.len() >= options.depth {
+                continue;
+            }
+            for (neighbor, edge) in links.get(&id).into_iter().flatten() {
+                if visited.contains(neighbor) || !self.nodes.contains_key(neighbor) {
+                    continue;
+                }
+                let mut next = path.clone();
+                next.push(edge.clone());
+                paths.push((neighbor.clone(), next));
+                visited.insert(neighbor.clone());
+                if paths.len() >= options.max_nodes {
+                    break;
+                }
+            }
+        }
+        let capped = paths.iter().any(|(id, path)| {
+            path.len() < options.depth
+                && links
+                    .get(id)
+                    .into_iter()
+                    .flatten()
+                    .any(|(n, _)| self.nodes.contains_key(n) && !visited.contains(n))
+        });
+        let render = |items: &[J]| -> Result<String> {
+            let included: BTreeSet<&str> = items.iter().filter_map(|v| v["id"].as_str()).collect();
+            let frontier_ids: BTreeSet<&str> = seeds
+                .iter()
+                .map(String::as_str)
+                .chain(included.iter().copied())
+                .collect();
+            let mut frontier = Vec::new();
+            for id in frontier_ids {
+                let unread: Vec<_> = links
+                    .get(id)
+                    .into_iter()
+                    .flatten()
+                    .filter(|(n, _)| !included.contains(n.as_str()))
+                    .collect();
+                if !unread.is_empty() {
+                    let missing: BTreeSet<_> = unread
+                        .iter()
+                        .filter(|(n, _)| !self.nodes.contains_key(n))
+                        .map(|(n, _)| n)
+                        .collect();
+                    frontier.push(json!({"ref":format!("edges:{id}"), "unread_edges":unread.len(), "missing_targets":missing.len()}));
+                }
+            }
+            let packet = json!({
+                "project": self.project, "revision": revision,
+                "scope":"Selected exact record reads; declared paths are not proof and external document contents are not supplied by their locators.",
+                "direction": match options.direction { ContextDirection::Support => "support", ContextDirection::Impact => "impact" },
+                "depth":options.depth,"max_nodes":options.max_nodes,"seed_refs":seeds.iter().map(|n| format!("node:{n}")).collect::<Vec<_>>(),
+                "reads":items,"candidates":paths.len(),"candidate_limit_reached":capped,
+                "unread_candidates":paths.len()-included.len(),
+                "omitted_for_budget":paths.iter().filter(|(n, _)| !included.contains(n.as_str())).map(|(n, _)| format!("node:{n}")).collect::<Vec<_>>(),
+                "unread_seed_refs":seeds.iter().filter(|n| !included.contains(n.as_str())).map(|n| format!("node:{n}")).collect::<Vec<_>>(),
+                "frontier":frontier,
+                "frontier_scope":"Remaining edges from seeds and returned reads, in the requested direction; not full graph closure.",
+                "root_ref":"/",
+                "next":"Read node:ID or node:ID#/body fields for omitted values and edges:ID for exact incident links. Continue global search for unlinked or lower-ranked qualifications."
+            });
+            Ok(canonical_json(&packet)? + "\n")
+        };
+        let mut selected = Vec::new();
+        require(
+            count(&render(&[])?) <= options.tokens,
+            "budget cannot carry context boundaries; raise tokens or reduce depth/max_nodes",
+        )?;
+        for (id, path) in &paths {
+            let value = self.read_value(&format!("node:{id}"))?;
+            selected.push(json!({"id":id,"ref":format!("node:{id}"),"complete":true,"via":path,"value":value}));
+            if count(&render(&selected)?) > options.tokens {
+                selected.pop();
+            }
+        }
+        render(&selected)
     }
 
     /// Read a complete value or an exact Unicode-scalar text fragment.

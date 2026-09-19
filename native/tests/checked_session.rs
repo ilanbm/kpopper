@@ -29,6 +29,42 @@ fn chars(text: &str) -> usize {
 }
 
 #[test]
+fn declared_context_exactly_matches_python_token_budgets_and_frontiers() {
+    use kpop_native::{
+        checked_session::{ContextDirection, ContextOptions},
+        tokenizer::Encoding,
+    };
+    let corpus: J = serde_json::from_str(include_str!("fixtures/checked-context.json")).unwrap();
+    let checked = session(None);
+    for case in corpus["cases"].as_array().unwrap() {
+        let encoding = Encoding::parse(case["encoding"].as_str().unwrap()).unwrap();
+        let ids = case["ids"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|v| v.as_str().unwrap().to_owned())
+            .collect::<Vec<_>>();
+        let options = ContextOptions {
+            direction: if case["direction"] == "support" {
+                ContextDirection::Support
+            } else {
+                ContextDirection::Impact
+            },
+            tokens: case["tokens"].as_u64().unwrap() as usize,
+            depth: case["depth"].as_u64().unwrap() as usize,
+            max_nodes: case["max_nodes"].as_u64().unwrap() as usize,
+        };
+        let actual =
+            checked.contextualize(&ids, checked.revision(), &options, |s| encoding.count(s));
+        if let Some(error) = case["error"].as_str() {
+            assert_eq!(actual.unwrap_err().0, error, "{case}");
+        } else {
+            assert_eq!(actual.unwrap(), case["text"].as_str().unwrap(), "{case}");
+        }
+    }
+}
+
+#[test]
 fn real_token_budgets_match_pinned_python_views() {
     use kpop_native::tokenizer::Encoding;
     let corpus: J =
