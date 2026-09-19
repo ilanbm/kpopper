@@ -1,6 +1,7 @@
 //! Sorted block YAML compatible with the retained SafeDumper byte contract.
 //! Scalar writing is adapted from PyYAML (see third_party/PyYAML-LICENSE).
 use crate::{Result, history_yaml as Y, require, value::TypedValue as V};
+use Y::SourceValue as S;
 
 fn linebreak(c: char) -> bool {
     matches!(c, '\n' | '\u{85}' | '\u{2028}' | '\u{2029}')
@@ -60,14 +61,16 @@ fn analyze(text: &[char]) -> Analysis {
 }
 struct Writer {
     out: String,
+    width: usize,
     column: usize,
     whitespace: bool,
     indention: bool,
 }
 impl Writer {
-    fn new() -> Self {
+    fn new(width: usize) -> Self {
         Self {
             out: String::new(),
+            width: if width > 4 { width } else { 80 },
             column: 0,
             whitespace: true,
             indention: true,
@@ -132,7 +135,7 @@ impl Writer {
             let ch = t.get(end).copied();
             if spaces {
                 if ch != Some(' ') {
-                    if start + 1 == end && self.column > 80 && split {
+                    if start + 1 == end && self.column > self.width && split {
                         self.indent(indent);
                         self.whitespace = false;
                         self.indention = false;
@@ -157,7 +160,11 @@ impl Writer {
             let ch = t.get(end).copied();
             if spaces {
                 if ch != Some(' ') {
-                    if start + 1 == end && self.column > 80 && split && start != 0 && end != t.len()
+                    if start + 1 == end
+                        && self.column > self.width
+                        && split
+                        && start != 0
+                        && end != t.len()
                     {
                         self.indent(indent);
                     } else {
@@ -242,7 +249,7 @@ impl Writer {
             if end > 0
                 && end + 1 < t.len()
                 && (ch == Some(' ') || start >= end)
-                && self.column as isize + end as isize - start as isize > 80
+                && self.column as isize + end as isize - start as isize > self.width as isize
                 && split
             {
                 if start < end {
@@ -260,9 +267,9 @@ impl Writer {
         }
         self.indicator("\"", false, false);
     }
-    fn node(&mut self, v: &V, parent: Option<usize>, mapping: bool, key: bool) -> Result<()> {
+    fn node(&mut self, v: &S, parent: Option<usize>, mapping: bool, key: bool) -> Result<()> {
         match v {
-            V::Map(m) if !m.is_empty() => {
+            S::Map(m) if !m.is_empty() => {
                 let indent = parent.map_or(0, |i| i + 2);
                 for (k, v) in m {
                     self.indent(indent);
@@ -273,7 +280,7 @@ impl Writer {
                     if !simple {
                         self.indicator("?", true, true);
                     }
-                    self.node(&V::Text(k.clone()), Some(indent), true, simple)?;
+                    self.node(&S::Scalar(V::Text(k.clone())), Some(indent), true, simple)?;
                     if !simple {
                         self.indent(indent);
                     }
@@ -281,7 +288,7 @@ impl Writer {
                     self.node(v, Some(indent), true, false)?;
                 }
             }
-            V::List(a) if !a.is_empty() => {
+            S::List(a) if !a.is_empty() => {
                 let indent =
                     parent.map_or(0, |i| if mapping && !self.indention { i } else { i + 2 });
                 for v in a {
@@ -290,15 +297,15 @@ impl Writer {
                     self.node(v, Some(indent), false, false)?;
                 }
             }
-            V::Map(_) => {
+            S::Map(_) => {
                 self.indicator("{", true, false);
                 self.indicator("}", false, false);
             }
-            V::List(_) => {
+            S::List(_) => {
                 self.indicator("[", true, false);
                 self.indicator("]", false, false);
             }
-            _ => {
+            S::Scalar(v) => {
                 let (tag, raw) = match v {
                     V::Text(v) => ("str", v.clone()),
                     V::Null => ("null", "null".into()),
@@ -324,14 +331,20 @@ impl Writer {
     }
 }
 pub fn encode_document(value: &V) -> Result<Vec<u8>> {
-    Y::validate_value(value, Y::MAX_DOCUMENT_BYTES)?;
-    require(matches!(value, V::Map(_)), "invalid_schema")?;
-    let mut w = Writer::new();
+    encode_source(&S::from_typed(value), 80)
+}
+
+/// Preserve source mapping order while retaining the SafeDumper representation.
+pub fn encode_source(value: &S, width: usize) -> Result<Vec<u8>> {
+    let typed = value.typed();
+    Y::validate_value(&typed, Y::MAX_DOCUMENT_BYTES)?;
+    require(matches!(value, S::Map(_)), "invalid_schema")?;
+    let mut w = Writer::new(width);
     w.node(value, None, false, false)?;
     w.indent(0);
     let bytes = w.out.into_bytes();
     require(
-        Y::decode_document(&bytes)?.digest()? == value.digest()?,
+        Y::decode_document(&bytes)?.digest()? == typed.digest()?,
         "serialization_changed",
     )?;
     Ok(bytes)

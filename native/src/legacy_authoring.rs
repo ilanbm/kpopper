@@ -105,6 +105,10 @@ fn blank(line: &str) -> bool {
     line.is_empty() || line.starts_with('#')
 }
 
+fn separator_blank(line: &str) -> bool {
+    line.trim().is_empty()
+}
+
 fn inline(line: &str) -> &str {
     line.split_once(':').map_or("", |(_, v)| v.trim())
 }
@@ -229,22 +233,26 @@ fn bare_ok(value: &str) -> bool {
 }
 
 fn scalar(value: &V, style: Style) -> Result<String> {
+    scalar_at(value, style, 0, false)
+}
+
+fn scalar_at(value: &V, style: Style, col: usize, fold: bool) -> Result<String> {
     Ok(match value {
         V::Null => "null".into(),
         V::Bool(value) => value.to_string(),
         V::Integer(value) => value.as_str().into(),
         V::Float(value) => crate::identity::python_float(value.get()),
-        V::Text(value) => text_scalar(value, style),
+        V::Text(value) => text_scalar(value, style, col, fold),
         V::Date(value) => match style {
             Style::Date => value.as_str().into(),
-            _ => text_scalar(value.as_str(), style),
+            _ => text_scalar(value.as_str(), style, col, fold),
         },
-        V::DateTime(value) => text_scalar(value.as_str(), style),
+        V::DateTime(value) => text_scalar(value.as_str(), style, col, fold),
         V::List(_) | V::Map(_) => return Err(error("container_requires_field_emission")),
     })
 }
 
-fn text_scalar(value: &str, style: Style) -> String {
+fn text_scalar(value: &str, style: Style, col: usize, fold: bool) -> String {
     if matches!(style, Style::Date) && DATE.is_match(value) {
         return value.into();
     }
@@ -254,13 +262,42 @@ fn text_scalar(value: &str, style: Style) -> String {
     if matches!(style, Style::Bare | Style::Date) && bare_ok(value) {
         return value.into();
     }
-    format!(
-        "\"{}\"",
-        value
-            .replace('\\', "\\\\")
-            .replace('"', "\\\"")
-            .replace('\n', "\\n")
-    )
+    let escaped = value
+        .replace('\\', "\\\\")
+        .replace('"', "\\\"")
+        .replace('\n', "\\n");
+    let quoted = format!("\"{escaped}\"");
+    if !fold || col + quoted.chars().count() <= 100 {
+        return quoted;
+    }
+    let chars = quoted.char_indices().collect::<Vec<_>>();
+    let mut words = Vec::new();
+    let mut start = 0;
+    for (i, (at, ch)) in chars.iter().enumerate() {
+        if *ch == ' '
+            && i > 0
+            && i + 1 < chars.len()
+            && !python_whitespace(chars[i - 1].1)
+            && !python_whitespace(chars[i + 1].1)
+        {
+            words.push(&quoted[start..*at]);
+            start = *at + 1;
+        }
+    }
+    words.push(&quoted[start..]);
+    let mut lines = Vec::new();
+    let mut current = words[0].to_owned();
+    for word in &words[1..] {
+        if col + current.chars().count() + 1 + word.chars().count() <= 100 {
+            current.push(' ');
+            current.push_str(word);
+        } else {
+            lines.push(current);
+            current = (*word).into();
+        }
+    }
+    lines.push(current);
+    lines.join(&format!("\n{}", " ".repeat(col + 1)))
 }
 
 fn safe_key(key: &str) -> Result<String> {
@@ -268,77 +305,89 @@ fn safe_key(key: &str) -> Result<String> {
     Ok(if bare_ok(key) {
         key.into()
     } else {
-        text_scalar(key, Style::Double)
+        text_scalar(key, Style::Double, 0, false)
     })
 }
 
+fn python_whitespace(c: char) -> bool {
+    c.is_whitespace() || ('\u{1c}'..='\u{1f}').contains(&c)
+}
+
 fn field_lines(field: &str, value: &V, ind: usize) -> Result<Vec<String>> {
+    field_lines_ordered(
+        field,
+        &crate::history_yaml::SourceValue::from_typed(value),
+        ind,
+    )
+}
+
+/// Preserve source order through the existing SafeDumper emitter.
+pub(crate) fn dump_ordered_yaml(
+    value: &crate::history_yaml::SourceValue,
+    width: usize,
+) -> Result<String> {
+    String::from_utf8(crate::history_emit::encode_source(value, width)?)
+        .map_err(|_| error("nontext_yaml_output"))
+}
+
+fn field_lines_ordered(
+    field: &str,
+    value: &crate::history_yaml::SourceValue,
+    ind: usize,
+) -> Result<Vec<String>> {
+    use crate::history_yaml::SourceValue as S;
     let key = safe_key(field)?;
+    let prefix = format!("{}{key}: ", " ".repeat(ind));
+    let nested = match value {
+        S::List(values) => values.iter().any(|v| !matches!(v, S::Scalar(_))),
+        S::Map(values) => values.iter().any(|(_, v)| !matches!(v, S::Scalar(_))),
+        _ => false,
+    };
+    if nested {
+        let document = S::Map(vec![(field.into(), value.clone())]);
+        return Ok(dump_ordered_yaml(&document, 100usize.saturating_sub(ind))?
+            .trim_end()
+            .lines()
+            .map(|line| format!("{}{line}", " ".repeat(ind)))
+            .collect());
+    }
     match value {
-        V::List(values) if values.iter().all(|v| !matches!(v, V::List(_) | V::Map(_))) => {
-            Ok(vec![format!(
-                "{}{key}: [{}]",
-                " ".repeat(ind),
-                values
-                    .iter()
-                    .map(|v| scalar(v, Style::Bare))
-                    .collect::<Result<Vec<_>>>()?
-                    .join(", ")
-            )])
-        }
-        V::Map(values)
-            if values
-                .values()
-                .all(|v| !matches!(v, V::List(_) | V::Map(_))) =>
-        {
+        S::Scalar(value) => Ok(format!(
+            "{prefix}{}",
+            scalar_at(value, Style::Bare, prefix.chars().count(), true)?
+        )
+        .split('\n')
+        .map(str::to_owned)
+        .collect()),
+        S::List(values) => Ok(vec![format!(
+            "{prefix}[{}]",
+            values
+                .iter()
+                .map(|v| scalar(&v.typed(), Style::Bare))
+                .collect::<Result<Vec<_>>>()?
+                .join(", ")
+        )]),
+        S::Map(values) => {
             let pairs = values
                 .iter()
                 .map(|(key, value)| {
                     Ok(format!(
                         "{}: {}",
                         safe_key(key)?,
-                        scalar(value, Style::Bare)?
+                        scalar(&value.typed(), Style::Bare)?
                     ))
                 })
                 .collect::<Result<Vec<_>>>()?;
-            let flow = format!("{}{key}: {{{}}}", " ".repeat(ind), pairs.join(", "));
-            if flow.len() <= 100 {
-                Ok(vec![flow])
-            } else {
-                let mut lines = vec![format!("{}{key}:", " ".repeat(ind))];
-                for (key, value) in values {
-                    lines.extend(field_lines(key, value, ind + 2)?);
-                }
-                Ok(lines)
+            let flow = format!("{prefix}{{{}}}", pairs.join(", "));
+            if flow.chars().count() <= 100 {
+                return Ok(vec![flow]);
             }
-        }
-        V::List(values) => {
-            let mut lines = vec![format!("{}{key}:", " ".repeat(ind))];
-            for value in values {
-                require(
-                    !matches!(value, V::Map(_) | V::List(_)),
-                    "nested_sequence_authoring_unsupported",
-                )?;
-                lines.push(format!(
-                    "{}- {}",
-                    " ".repeat(ind + 2),
-                    scalar(value, Style::Bare)?
-                ));
-            }
-            Ok(lines)
-        }
-        V::Map(values) => {
             let mut lines = vec![format!("{}{key}:", " ".repeat(ind))];
             for (key, value) in values {
-                lines.extend(field_lines(key, value, ind + 2)?);
+                lines.extend(field_lines_ordered(key, value, ind + 2)?);
             }
             Ok(lines)
         }
-        _ => Ok(vec![format!(
-            "{}{key}: {}",
-            " ".repeat(ind),
-            scalar(value, Style::Bare)?
-        )]),
     }
 }
 
@@ -349,33 +398,55 @@ fn entry_lines(
     field_indent: usize,
     flow: bool,
 ) -> Result<Vec<String>> {
-    safe_key(id)?;
-    let V::Map(fields) = body else {
-        return field_lines(id, body, ind);
+    let fields = if let V::Map(fields) = body {
+        crate::history_yaml::SourceValue::Map(
+            ordered_fields(fields)
+                .into_iter()
+                .map(|(key, value)| {
+                    (
+                        key.clone(),
+                        crate::history_yaml::SourceValue::from_typed(value),
+                    )
+                })
+                .collect(),
+        )
+    } else {
+        crate::history_yaml::SourceValue::from_typed(body)
     };
-    if flow
-        && fields
-            .values()
-            .all(|v| !matches!(v, V::Map(_) | V::List(_)))
-    {
-        let pairs = ordered_fields(fields)
-            .into_iter()
+    entry_lines_ordered(id, &fields, ind, field_indent, flow)
+}
+
+pub(crate) fn entry_lines_ordered(
+    id: &str,
+    body: &crate::history_yaml::SourceValue,
+    ind: usize,
+    field_indent: usize,
+    flow: bool,
+) -> Result<Vec<String>> {
+    use crate::history_yaml::SourceValue as S;
+    safe_key(id)?;
+    let S::Map(fields) = body else {
+        return field_lines_ordered(id, body, ind);
+    };
+    if flow && fields.iter().all(|(_, v)| matches!(v, S::Scalar(_))) {
+        let pairs = fields
+            .iter()
             .map(|(key, value)| {
                 Ok(format!(
                     "{}: {}",
                     safe_key(key)?,
-                    scalar(value, Style::Bare)?
+                    scalar(&value.typed(), Style::Bare)?
                 ))
             })
             .collect::<Result<Vec<_>>>()?;
         let line = format!("{}{id}: {{{}}}", " ".repeat(ind), pairs.join(", "));
-        if line.len() <= 100 {
+        if line.chars().count() <= 100 {
             return Ok(vec![line]);
         }
     }
     let mut lines = vec![format!("{}{id}:", " ".repeat(ind))];
-    for (key, value) in ordered_fields(fields) {
-        lines.extend(field_lines(key, value, field_indent)?);
+    for (key, value) in fields {
+        lines.extend(field_lines_ordered(key, value, field_indent)?);
     }
     Ok(lines)
 }
@@ -440,15 +511,16 @@ fn insert_entry(
     let flow = inline(&lines[anchor.start]).starts_with('{');
     let mut new = entry_lines(id, body, anchor.indent, field_indent, flow)?;
     let position = if before {
-        if anchor.start > collection.start + 1 && blank(&lines[anchor.start - 1]) {
+        if anchor.start > collection.start + 1
+            && separator_blank(&lines[anchor.start - 1])
+            && lines[anchor.start - 1].trim().is_empty()
+        {
             new.push(String::new());
-            anchor.start - 1
-        } else {
-            anchor.start
         }
+        anchor.start
     } else {
         let mut position = anchor.end;
-        if position < collection.end && blank(&lines[position]) {
+        if position < collection.end && separator_blank(&lines[position]) {
             position += 1;
             new.push(String::new());
         }
@@ -493,8 +565,14 @@ fn replace_field(
     } else {
         let replacement = field_lines(field, value, member.indent + 2)?;
         let len = replacement.len();
-        lines.splice(member.end..member.end, replacement);
-        Ok(member.end + len)
+        let mut insertion = member.start + 1;
+        for candidate in ["v", "quoted", "of", "from", "at"] {
+            if let Some(span) = field_span(lines, member, candidate) {
+                insertion = insertion.max(span.end);
+            }
+        }
+        lines.splice(insertion..insertion, replacement);
+        Ok(insertion + len)
     }
 }
 
@@ -654,23 +732,45 @@ fn set_entry(
     let field = field_span(lines, &member, "v")
         .or_else(|| field_span(lines, &member, "quoted"))
         .ok_or_else(|| error(&format!("{id} carries no v: this reader can rewrite")))?;
-    require(
-        field.end == field.start + 1,
-        "multiline_scalar_authoring_unsupported",
-    )?;
-    let old = inline(&lines[field.start]).to_owned();
+    let mut old_parts = inline(&lines[field.start])
+        .split(python_whitespace)
+        .filter(|part| !part.is_empty())
+        .map(str::to_owned)
+        .collect::<Vec<_>>();
+    old_parts.extend(
+        lines[field.start + 1..field.end]
+            .iter()
+            .map(|line| line.trim().to_owned()),
+    );
+    let old = old_parts.join(" ");
     let value_field = lines[field.start]
         .trim()
         .split_once(':')
         .map(|(name, _)| name)
         .ok_or_else(|| error("invalid_history_yaml"))?
         .to_owned();
-    lines[field.start] = format!(
+    let replacement = format!(
         "{}{}: {}",
         " ".repeat(field.indent),
         value_field,
-        scalar(value, style(&old))?
+        scalar_at(
+            value,
+            style(&old),
+            field.indent + value_field.chars().count() + 2,
+            true
+        )?
     );
+    let mut replacement_lines = replacement
+        .split('\n')
+        .map(str::to_owned)
+        .collect::<Vec<_>>();
+    replacement_lines.extend(
+        lines[field.start..field.end]
+            .iter()
+            .filter(|line| line.trim_start().starts_with('#'))
+            .cloned(),
+    );
+    lines.splice(field.start..field.end, replacement_lines);
     let (_, member) = locate(lines, id).unwrap();
     let had_of = field_span(lines, &member, "of").is_some();
     if let Some(of) = field_span(lines, &member, "of") {
@@ -692,9 +792,9 @@ fn set_entry(
         );
     }
     if source.is_some() || at.is_some() {
-        let (_, member) = locate(lines, id).unwrap();
         for (name, value) in [("from", source), ("at", at)] {
             let value = value.ok_or_else(|| error("--source and --at go together"))?;
+            let (_, member) = locate(lines, id).unwrap();
             replace_field(lines, &member, name, &s(value))?;
         }
     }
@@ -764,7 +864,14 @@ fn bump_updated(lines: &mut Vec<String>, stamp: &str) -> Result<()> {
             &found[3]
         );
     } else {
-        lines.insert(meta.start + 1, format!("  updated: {stamp}"));
+        let updated_indent = members(lines, &meta)
+            .first()
+            .map(|member| member.indent)
+            .unwrap_or(2);
+        lines.insert(
+            meta.start + 1,
+            format!("{}updated: {stamp}", " ".repeat(updated_indent)),
+        );
     }
     Ok(())
 }

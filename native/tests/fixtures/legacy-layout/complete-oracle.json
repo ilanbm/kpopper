@@ -1,0 +1,316 @@
+[
+  {
+    "name": "long",
+    "before": "meta:\n  updated: 2026-09-01\nknown:\n  p.alpha:\n    v: 2\n    of: 2026-09-01\n",
+    "args": [
+      "set",
+      "p.alpha",
+      "some measured value some measured value some measured value some measured value some measured value some measured value some measured value some measured value some measured value",
+      "--as-of",
+      "2026-09-19",
+      "GROUNDING.yaml"
+    ],
+    "after": "meta:\n  updated: 2026-09-19\nknown:\n  p.alpha:\n    v: \"some measured value some measured value some measured value some measured value some\n        measured value some measured value some measured value some measured value some measured\n        value\"\n    of: 2026-09-19\n",
+    "stdout": "set p.alpha: 2 -> \"some measured value some measured value some measured value some measured value some measured value some measured value some measured value some measured value some measured value\" (as of 2026-09-19)\nnothing rests on it\n\nthe record needs a person on 0 judgments - check says the rest\n",
+    "stderr": "",
+    "status": 0
+  },
+  {
+    "name": "long-replace-folded",
+    "before": "meta:\n  updated: 2026-09-19\nknown:\n  p.alpha:\n    v: \"some measured value some measured value some measured value some measured value some\n        measured value some measured value some measured value some measured value some measured\n        value\"\n    of: 2026-09-19\n",
+    "args": [
+      "set",
+      "p.alpha",
+      "9",
+      "--why",
+      "correction",
+      "--as-of",
+      "2026-09-20",
+      "GROUNDING.yaml"
+    ],
+    "after": "meta:\n  updated: 2026-09-20\nknown:\n  p.alpha:\n    v: 9\n    # set 2026-09-20: correction\n    of: 2026-09-20\n",
+    "stdout": "set p.alpha: \"some measured value some measured value some measured value some measured value some measured value some measured value some measured value some measured value some measured value\" -> 9 (as of 2026-09-20)\nnothing rests on it\n\nthe record needs a person on 0 judgments - check says the rest\n",
+    "stderr": "",
+    "status": 0
+  },
+  {
+    "name": "spaces",
+    "before": "meta:\n  updated: 2026-09-01\nknown:\n  p.alpha:\n    v: 2\n    of: 2026-09-01\n",
+    "args": [
+      "set",
+      "p.alpha",
+      "some  measured   value some  measured   value some  measured   value some  measured   value some  measured   value some  measured   value some  measured   value some  measured   value some  measured   value",
+      "--as-of",
+      "2026-09-19",
+      "GROUNDING.yaml"
+    ],
+    "after": "meta:\n  updated: 2026-09-19\nknown:\n  p.alpha:\n    v: \"some  measured   value some  measured   value some  measured   value some  measured   value\n        some  measured   value some  measured   value some  measured   value some  measured   value\n        some  measured   value\"\n    of: 2026-09-19\n",
+    "stdout": "set p.alpha: 2 -> \"some  measured   value some  measured   value some  measured   value some  measured   value some  measured   value some  measured   value some  measured   value some  measured   value some  measured   value\" (as of 2026-09-19)\nnothing rests on it\n\nthe record needs a person on 0 judgments - check says the rest\n",
+    "stderr": "",
+    "status": 0
+  },
+  {
+    "name": "spaces-replace-folded",
+    "before": "meta:\n  updated: 2026-09-19\nknown:\n  p.alpha:\n    v: \"some  measured   value some  measured   value some  measured   value some  measured   value\n        some  measured   value some  measured   value some  measured   value some  measured   value\n        some  measured   value\"\n    of: 2026-09-19\n",
+    "args": [
+      "set",
+      "p.alpha",
+      "9",
+      "--why",
+      "correction",
+      "--as-of",
+      "2026-09-20",
+      "GROUNDING.yaml"
+    ],
+    "after": "meta:\n  updated: 2026-09-20\nknown:\n  p.alpha:\n    v: 9\n    # set 2026-09-20: correction\n    of: 2026-09-20\n",
+    "stdout": "set p.alpha: \"some measured value some measured value some measured value some measured value some  measured   value some  measured   value some  measured   value some  measured   value some  measured   value\" -> 9 (as of 2026-09-20)\nnothing rests on it\n\nthe record needs a person on 0 judgments - check says the rest\n",
+    "stderr": "",
+    "status": 0
+  },
+  {
+    "name": "unicode",
+    "before": "meta:\n  updated: 2026-09-01\nknown:\n  p.alpha:\n    v: 2\n    of: 2026-09-01\n",
+    "args": [
+      "set",
+      "p.alpha",
+      "מדידה ברורה מתוך המקור מדידה ברורה מתוך המקור מדידה ברורה מתוך המקור מדידה ברורה מתוך המקור מדידה ברורה מתוך המקור מדידה ברורה מתוך המקור מדידה ברורה מתוך המקור מדידה ברורה מתוך המקור מדידה ברורה מתוך המקור",
+      "--as-of",
+      "2026-09-19",
+      "GROUNDING.yaml"
+    ],
+    "after": "meta:\n  updated: 2026-09-19\nknown:\n  p.alpha:\n    v: \"מדידה ברורה מתוך המקור מדידה ברורה מתוך המקור מדידה ברורה מתוך המקור מדידה ברורה מתוך המקור\n        מדידה ברורה מתוך המקור מדידה ברורה מתוך המקור מדידה ברורה מתוך המקור מדידה ברורה מתוך המקור\n        מדידה ברורה מתוך המקור\"\n    of: 2026-09-19\n",
+    "stdout": "set p.alpha: 2 -> \"מדידה ברורה מתוך המקור מדידה ברורה מתוך המקור מדידה ברורה מתוך המקור מדידה ברורה מתוך המקור מדידה ברורה מתוך המקור מדידה ברורה מתוך המקור מדידה ברורה מתוך המקור מדידה ברורה מתוך המקור מדידה ברורה מתוך המקור\" (as of 2026-09-19)\nnothing rests on it\n\nthe record needs a person on 0 judgments - check says the rest\n",
+    "stderr": "",
+    "status": 0
+  },
+  {
+    "name": "unicode-replace-folded",
+    "before": "meta:\n  updated: 2026-09-19\nknown:\n  p.alpha:\n    v: \"מדידה ברורה מתוך המקור מדידה ברורה מתוך המקור מדידה ברורה מתוך המקור מדידה ברורה מתוך המקור\n        מדידה ברורה מתוך המקור מדידה ברורה מתוך המקור מדידה ברורה מתוך המקור מדידה ברורה מתוך המקור\n        מדידה ברורה מתוך המקור\"\n    of: 2026-09-19\n",
+    "args": [
+      "set",
+      "p.alpha",
+      "9",
+      "--why",
+      "correction",
+      "--as-of",
+      "2026-09-20",
+      "GROUNDING.yaml"
+    ],
+    "after": "meta:\n  updated: 2026-09-20\nknown:\n  p.alpha:\n    v: 9\n    # set 2026-09-20: correction\n    of: 2026-09-20\n",
+    "stdout": "set p.alpha: \"מדידה ברורה מתוך המקור מדידה ברורה מתוך המקור מדידה ברורה מתוך המקור מדידה ברורה מתוך המקור מדידה ברורה מתוך המקור מדידה ברורה מתוך המקור מדידה ברורה מתוך המקור מדידה ברורה מתוך המקור מדידה ברורה מתוך המקור\" -> 9 (as of 2026-09-20)\nnothing rests on it\n\nthe record needs a person on 0 judgments - check says the rest\n",
+    "stderr": "",
+    "status": 0
+  },
+  {
+    "name": "long_word",
+    "before": "meta:\n  updated: 2026-09-01\nknown:\n  p.alpha:\n    v: 2\n    of: 2026-09-01\n",
+    "args": [
+      "set",
+      "p.alpha",
+      "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa tail words here another word another word another word another word another word another word another word another word another word",
+      "--as-of",
+      "2026-09-19",
+      "GROUNDING.yaml"
+    ],
+    "after": "meta:\n  updated: 2026-09-19\nknown:\n  p.alpha:\n    v: \"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\n        tail words here another word another word another word another word another word another word\n        another word another word another word\"\n    of: 2026-09-19\n",
+    "stdout": "set p.alpha: 2 -> \"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa tail words here another word another word another word another word another word another word another word another word another word\" (as of 2026-09-19)\nnothing rests on it\n\nthe record needs a person on 0 judgments - check says the rest\n",
+    "stderr": "",
+    "status": 0
+  },
+  {
+    "name": "long_word-replace-folded",
+    "before": "meta:\n  updated: 2026-09-19\nknown:\n  p.alpha:\n    v: \"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\n        tail words here another word another word another word another word another word another word\n        another word another word another word\"\n    of: 2026-09-19\n",
+    "args": [
+      "set",
+      "p.alpha",
+      "9",
+      "--why",
+      "correction",
+      "--as-of",
+      "2026-09-20",
+      "GROUNDING.yaml"
+    ],
+    "after": "meta:\n  updated: 2026-09-20\nknown:\n  p.alpha:\n    v: 9\n    # set 2026-09-20: correction\n    of: 2026-09-20\n",
+    "stdout": "set p.alpha: \"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa tail words here another word another word another word another word another word another word another word another word another word\" -> 9 (as of 2026-09-20)\nnothing rests on it\n\nthe record needs a person on 0 judgments - check says the rest\n",
+    "stderr": "",
+    "status": 0
+  },
+  {
+    "name": "single_quote",
+    "before": "meta:\n  updated: 2026-09-01\nknown:\n  p.alpha:\n    v: 'two'\n    of: 2026-09-01\n",
+    "args": [
+      "set",
+      "p.alpha",
+      "a long quoted value a long quoted value a long quoted value a long quoted value a long quoted value a long quoted value a long quoted value a long quoted value a long quoted value",
+      "--as-of",
+      "2026-09-19",
+      "GROUNDING.yaml"
+    ],
+    "after": "meta:\n  updated: 2026-09-19\nknown:\n  p.alpha:\n    v: 'a long quoted value a long quoted value a long quoted value a long quoted value a long quoted value a long quoted value a long quoted value a long quoted value a long quoted value'\n    of: 2026-09-19\n",
+    "stdout": "set p.alpha: 'two' -> \"a long quoted value a long quoted value a long quoted value a long quoted value a long quoted value a long quoted value a long quoted value a long quoted value a long quoted value\" (as of 2026-09-19)\nnothing rests on it\n\nthe record needs a person on 0 judgments - check says the rest\n",
+    "stderr": "",
+    "status": 0
+  },
+  {
+    "name": "single_quote-replace-folded",
+    "before": "meta:\n  updated: 2026-09-19\nknown:\n  p.alpha:\n    v: 'a long quoted value a long quoted value a long quoted value a long quoted value a long quoted value a long quoted value a long quoted value a long quoted value a long quoted value'\n    of: 2026-09-19\n",
+    "args": [
+      "set",
+      "p.alpha",
+      "9",
+      "--why",
+      "correction",
+      "--as-of",
+      "2026-09-20",
+      "GROUNDING.yaml"
+    ],
+    "after": "meta:\n  updated: 2026-09-20\nknown:\n  p.alpha:\n    v: 9\n    # set 2026-09-20: correction\n    of: 2026-09-20\n",
+    "stdout": "set p.alpha: 'a long quoted value a long quoted value a long quoted value a long quoted value a long quoted value a long quoted value a long quoted value a long quoted value a long quoted value' -> 9 (as of 2026-09-20)\nnothing rests on it\n\nthe record needs a person on 0 judgments - check says the rest\n",
+    "stderr": "",
+    "status": 0
+  },
+  {
+    "name": "nested-lists",
+    "before": "meta:\n  updated: 2026-09-01\nknown:\n  p.alpha:\n    v: 2\n    of: 2026-09-01\n",
+    "args": [
+      "add",
+      "p.new",
+      "items=[[1,2],[3]]",
+      "--as-of",
+      "2026-09-19",
+      "GROUNDING.yaml"
+    ],
+    "after": "meta:\n  updated: 2026-09-19\nknown:\n  p.alpha:\n    v: 2\n    of: 2026-09-01\n\n  p.new:\n    items:\n    - - 1\n      - 2\n    - - 3\n",
+    "stdout": "add p.new into known, after p.alpha\n\nthe record needs a person on 0 judgments - check says the rest\n",
+    "stderr": "",
+    "status": 0
+  },
+  {
+    "name": "empty-children",
+    "before": "meta:\n  updated: 2026-09-01\nknown:\n  p.alpha:\n    v: 2\n    of: 2026-09-01\n",
+    "args": [
+      "add",
+      "p.new",
+      "items=[[],{}]",
+      "--as-of",
+      "2026-09-19",
+      "GROUNDING.yaml"
+    ],
+    "after": "meta:\n  updated: 2026-09-19\nknown:\n  p.alpha:\n    v: 2\n    of: 2026-09-01\n\n  p.new:\n    items:\n    - []\n    - {}\n",
+    "stdout": "add p.new into known, after p.alpha\n\nthe record needs a person on 0 judgments - check says the rest\n",
+    "stderr": "",
+    "status": 0
+  },
+  {
+    "name": "mixed",
+    "before": "meta:\n  updated: 2026-09-01\nknown:\n  p.alpha:\n    v: 2\n    of: 2026-09-01\n",
+    "args": [
+      "add",
+      "p.new",
+      "items=[1,[2,[3,{}]],{q: [], s: {}},[]]",
+      "--as-of",
+      "2026-09-19",
+      "GROUNDING.yaml"
+    ],
+    "after": "meta:\n  updated: 2026-09-19\nknown:\n  p.alpha:\n    v: 2\n    of: 2026-09-01\n\n  p.new:\n    items:\n    - 1\n    - - 2\n      - - 3\n        - {}\n    - q: []\n      s: {}\n    - []\n",
+    "stdout": "add p.new into known, after p.alpha\n\nthe record needs a person on 0 judgments - check says the rest\n",
+    "stderr": "",
+    "status": 0
+  },
+  {
+    "name": "map",
+    "before": "meta:\n  updated: 2026-09-01\nknown:\n  p.alpha:\n    v: 2\n    of: 2026-09-01\n",
+    "args": [
+      "add",
+      "p.new",
+      "items={a: {b: 1}, c: 2}",
+      "--as-of",
+      "2026-09-19",
+      "GROUNDING.yaml"
+    ],
+    "after": "meta:\n  updated: 2026-09-19\nknown:\n  p.alpha:\n    v: 2\n    of: 2026-09-01\n\n  p.new:\n    items:\n      a:\n        b: 1\n      c: 2\n",
+    "stdout": "add p.new into known, after p.alpha\n\nthe record needs a person on 0 judgments - check says the rest\n",
+    "stderr": "",
+    "status": 0
+  },
+  {
+    "name": "nested-text",
+    "before": "meta:\n  updated: 2026-09-01\nknown:\n  p.alpha:\n    v: 2\n    of: 2026-09-01\n",
+    "args": [
+      "add",
+      "p.new",
+      "items=[{label: \"on\", text: \"a: b\"}, {q: \"line one\\nline two\"}]",
+      "--as-of",
+      "2026-09-19",
+      "GROUNDING.yaml"
+    ],
+    "after": "meta:\n  updated: 2026-09-19\nknown:\n  p.alpha:\n    v: 2\n    of: 2026-09-01\n\n  p.new:\n    items:\n    - label: 'on'\n      text: 'a: b'\n    - q: 'line one\n    \n        line two'\n",
+    "stdout": "add p.new into known, after p.alpha\n\nthe record needs a person on 0 judgments - check says the rest\n",
+    "stderr": "",
+    "status": 0
+  },
+  {
+    "name": "blank-p.aardvark",
+    "before": "known:\n\n  p.alpha: {v: 2}\n  # tail\n",
+    "args": [
+      "add",
+      "p.aardvark",
+      "v=5",
+      "--as-of",
+      "2026-09-19",
+      "GROUNDING.yaml"
+    ],
+    "after": "known:\n\n  p.aardvark: {v: 5}\n\n  p.alpha: {v: 2}\n  # tail\n",
+    "stdout": "add p.aardvark into known, before p.alpha\n\nthe record needs a person on 0 judgments - check says the rest\n",
+    "stderr": "",
+    "status": 0
+  },
+  {
+    "name": "blank-p.gamma",
+    "before": "known:\n\n  p.alpha: {v: 2}\n  # tail\n",
+    "args": [
+      "add",
+      "p.gamma",
+      "v=5",
+      "--as-of",
+      "2026-09-19",
+      "GROUNDING.yaml"
+    ],
+    "after": "known:\n\n  p.alpha: {v: 2}\n  p.gamma: {v: 5}\n  # tail\n",
+    "stdout": "add p.gamma into known, after p.alpha\n\nthe record needs a person on 0 judgments - check says the rest\n",
+    "stderr": "",
+    "status": 0
+  },
+  {
+    "name": "comment-p.aardvark",
+    "before": "known:\n  # next record entry\n  p.alpha: {v: 2}\n  # tail\n",
+    "args": [
+      "add",
+      "p.aardvark",
+      "v=5",
+      "--as-of",
+      "2026-09-19",
+      "GROUNDING.yaml"
+    ],
+    "after": "known:\n  # next record entry\n  p.aardvark: {v: 5}\n  p.alpha: {v: 2}\n  # tail\n",
+    "stdout": "add p.aardvark into known, before p.alpha\n\nthe record needs a person on 0 judgments - check says the rest\n",
+    "stderr": "",
+    "status": 0
+  },
+  {
+    "name": "comment-p.gamma",
+    "before": "known:\n  # next record entry\n  p.alpha: {v: 2}\n  # tail\n",
+    "args": [
+      "add",
+      "p.gamma",
+      "v=5",
+      "--as-of",
+      "2026-09-19",
+      "GROUNDING.yaml"
+    ],
+    "after": "known:\n  # next record entry\n  p.alpha: {v: 2}\n  p.gamma: {v: 5}\n  # tail\n",
+    "stdout": "add p.gamma into known, after p.alpha\n\nthe record needs a person on 0 judgments - check says the rest\n",
+    "stderr": "",
+    "status": 0
+  }
+]

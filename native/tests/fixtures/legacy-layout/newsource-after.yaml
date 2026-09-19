@@ -1,0 +1,13 @@
+meta:
+  updated: 2026-09-19
+sources:
+  s.new:
+    name: a document
+    read: 2026-09-01
+known:
+  p.alpha:
+    v: 3
+    of: 2026-09-19
+    from: s.new
+    at: page-2
+    note: keep this
