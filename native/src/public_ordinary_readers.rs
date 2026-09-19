@@ -291,6 +291,28 @@ pub struct GateData {
     pub attributed: BTreeSet<String>,
 }
 
+/// Immutable ordinary semantics needed by the optional Hub presentation.
+///
+/// This deliberately contains no layout choices: the Hub owns the brief and maps
+/// these already-assessed facts onto tabs without reimplementing Reader semantics.
+#[derive(Clone, Debug, PartialEq)]
+pub(crate) struct HubArrangement {
+    pub id: String,
+    pub sources: Vec<String>,
+    pub born: Option<String>,
+    pub request: Option<String>,
+    pub predicate: String,
+    pub fired: bool,
+    pub moved: Vec<(String, V, V, &'static str)>,
+    pub contested: Vec<(String, String)>,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub(crate) struct HubData {
+    pub arrangements: Vec<HubArrangement>,
+    pub reader_lines: Vec<String>,
+}
+
 fn source_body<'a>(source: &'a SourceValue, id: &str) -> Option<&'a SourceValue> {
     let SourceValue::Map(collections) = source else {
         return None;
@@ -625,6 +647,65 @@ impl<'a> Projection<'a> {
 
     pub fn gate_data(&self) -> Result<GateData> {
         self.gate_data_inner(None, &BTreeSet::new())
+    }
+
+    pub(crate) fn hub_data(&self) -> Result<HubData> {
+        let mut arrangements = Vec::new();
+        for (id, body) in &self.base.judgments {
+            if !crate::reasoning_authoring_guards::arrangement(&self.base.reader, body) {
+                continue;
+            }
+            let sources: Vec<String> = self
+                .base
+                .deps(id)?
+                .into_iter()
+                .filter(|source| {
+                    self.base
+                        .reader
+                        .raw
+                        .get(source)
+                        .and_then(|body| map(body).ok())
+                        .and_then(|body| body.get("asked"))
+                        .is_some_and(truth)
+                })
+                .collect();
+            let b = map(body)?;
+            let request = b
+                .get("request")
+                .and_then(|value| text(value).ok())
+                .filter(|request| {
+                    sources.iter().any(|source| source == request)
+                        && self.base.reader.raw.get(*request).is_some_and(|body| {
+                            map(body)
+                                .ok()
+                                .and_then(|body| body.get("asked"))
+                                .is_some_and(truth)
+                        })
+                })
+                .map(str::to_owned);
+            let contested = self
+                .disputed
+                .get(id)
+                .into_iter()
+                .flatten()
+                .map(|(name, claim)| (name.clone(), short(claim, 120)))
+                .collect();
+            arrangements.push(HubArrangement {
+                id: id.clone(),
+                sources,
+                born: b.get("born").filter(|v| truth(v)).map(py),
+                request,
+                predicate: predicate_text(&self.base.pred(id)),
+                fired: crate::ordinary_counts::flags(&self.base.reader, body)?
+                    .contains("falsified"),
+                moved: self.base.moved(id)?,
+                contested,
+            });
+        }
+        Ok(HubData {
+            arrangements,
+            reader_lines: self.knowledge.clone(),
+        })
     }
 
     pub fn gate_data_with_source(&self, source: Option<&SourceValue>) -> Result<GateData> {
@@ -2103,6 +2184,21 @@ mod tests {
         }
         let rational = V::from_json(&serde_json::json!({"rational":["2","4"]})).unwrap();
         assert_eq!(fmt(&rational), "1/2");
+    }
+    #[test]
+    fn hub_data_uses_reader_arrangement_and_movement_semantics() {
+        let document = crate::history_yaml::decode_document(b"sources:\n  s.request: {asked: Why, read: 2026-09-03}\nknown:\n  p.answer: {v: 2, from: s.request}\njudgments:\n  v.layout:\n    verdict: Keep this tab\n    rests_on: [s.request, page.unserved]\n    wrong_if: page.unserved > 0\n    born: 2026-09-03\n    request: s.request\n    seen: {s.request: 'read 2026-09-03', page.unserved: 0}\n").unwrap();
+        let cache = tempfile::tempdir().unwrap();
+        let runtime = crate::history_authoring::tests::runtime(cache.path())
+            .with_ordinary_program(crate::ordinary_reader::tests::program());
+        let projection =
+            Projection::new(&document, &Map::new(), &Map::new(), vec![], Some(&runtime)).unwrap();
+        let data = projection.hub_data().unwrap();
+        assert_eq!(data.arrangements.len(), 1);
+        assert_eq!(data.arrangements[0].id, "v.layout");
+        assert_eq!(data.arrangements[0].sources, vec!["s.request"]);
+        assert_eq!(data.arrangements[0].request.as_deref(), Some("s.request"));
+        assert_eq!(data.arrangements[0].born.as_deref(), Some("2026-09-03"));
     }
     #[test]
     fn ordinary_pull_and_affects_match_final_python() {

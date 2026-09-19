@@ -82,6 +82,57 @@ fn ordinary_hub_builds_arranged_typed_interactive_page_and_verifies_without_writ
         "source"
     );
 }
+
+#[test]
+fn ordinary_hub_preserves_every_declared_component_surface() {
+    let tmp = tempfile::tempdir().unwrap();
+    let root = tmp.path();
+    fs::write(root.join("GROUNDING.yaml"), "meta: {name: Components}\nsources:\n  s.docs: {name: Docs, url: 'https://example.com/a b'}\nknown:\n  p.one: {v: 1}\n  p.two: {v: 2}\n  q.three: {v: 3}\n  dates.deadline: {v: 2026-12-31}\njudgments:\n  d.choice: {verdict: Choose, rests_on: [p.one], seen: {p.one: 1}, wrong_if: 'p.one > 4'}\n").unwrap();
+    fs::create_dir(root.join(".kpopper")).unwrap();
+    fs::write(root.join(".kpopper/view.yaml"), "groups:\n  Left: [p]\n  Right: [q]\ntabs:\n- title: Components\n  sections:\n  - {title: Table, pick: p, as: table}\n  - {title: Lines, pick: p, as: lines}\n  - {title: Cards, pick: judgments, as: cards}\n  - {title: Timeline, pick: dates, as: timeline}\n  - {title: Headline, pick: p, as: headline}\n  - {title: Grouped, pick: [p, q], as: grouped}\n  - {title: Fronts, pick: [p, q], as: fronts}\n  - {title: Alerts, pick: judgments, as: alerts}\n  - {title: Axis, pick: p, as: axis, text: 'p.one -> p.two'}\n  - {title: Links, pick: s, as: links}\n").unwrap();
+    ok(root, &["--frozen", "page", "--out", "components.html"]);
+    let html = fs::read_to_string(root.join("components.html")).unwrap();
+    for component in [
+        "table", "lines", "cards", "timeline", "headline", "grouped", "fronts", "alerts", "axis",
+        "links",
+    ] {
+        assert!(
+            html.contains(&format!("data-component=\"{component}\"")),
+            "{component}"
+        );
+    }
+    for class in [
+        "<table>",
+        "class=\"deps\"",
+        "class=\"card\"",
+        "class=\"tl\"",
+        "class=\"heads\"",
+        "class=\"grid\"",
+        "class=\"alerts\"",
+        "class=\"axis\"",
+        "class=\"links\"",
+    ] {
+        assert!(html.contains(class), "{class}");
+    }
+    assert!(html.contains("href=\"https://example.com/a%20b\""));
+}
+
+#[test]
+fn ordinary_hub_draws_arrangement_history_from_reader_semantics() {
+    let tmp = tempfile::tempdir().unwrap();
+    let root = tmp.path();
+    fs::write(root.join("GROUNDING.yaml"),"meta: {name: Arrangement}\nsources:\n  s.request: {asked: 'What should this page show?', read: 2026-09-03}\nknown:\n  p.answer: {v: 2, from: s.request}\njudgments:\n  v.layout:\n    verdict: Keep this tab\n    rests_on: [s.request, page.unserved]\n    wrong_if: page.unserved > 0\n    born: 2026-09-03\n    request: s.request\n    seen: {s.request: 'read 2026-09-03', page.unserved: 0}\n").unwrap();
+    fs::create_dir(root.join(".kpopper")).unwrap();
+    fs::write(
+        root.join(".kpopper/view.yaml"),
+        "title: Arrangement\nsections:\n- {title: Answer, pick: p, as: table}\n",
+    )
+    .unwrap();
+    ok(root, &["--frozen", "page", "--out", "page.html"]);
+    let html = fs::read_to_string(root.join("page.html")).unwrap();
+    assert!(html.contains("decided <span class=\"fx\" data-id=\"v.layout\">2026-09-03</span>"));
+    assert!(html.contains("data-request=\"s.request\">What should this page show?</span>"));
+}
 fn ok(root: &Path, args: &[&str]) -> std::process::Output {
     let result = cli(root, args);
     assert!(

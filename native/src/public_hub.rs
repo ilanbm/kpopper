@@ -350,8 +350,12 @@ pub fn run(options: &Options, cwd: &Path, mode: ReadMode) -> Result<Output> {
                 first,
                 &destination,
                 MAX_HTML,
+                runtime.as_ref(),
             )?;
             let mut text = String::new();
+            for note in &page.notes {
+                text.push_str(&format!("NOTE {note}\n"));
+            }
             for failure in &page.failures {
                 text.push_str(&format!("FAIL {failure}\n"));
             }
@@ -411,6 +415,7 @@ pub fn run(options: &Options, cwd: &Path, mode: ReadMode) -> Result<Output> {
             first,
             &resolved,
             MAX_HTML,
+            runtime.as_ref(),
         )?
         .html
     };

@@ -8,6 +8,7 @@ use crate::{
     history_contract::{Map, map, text},
     history_view::{list, truth},
     reasoning_authoring::{named, py},
+    reasoning_runtime::Runtime,
     source_capture::CapturedSource,
     value::TypedValue as V,
 };
@@ -30,12 +31,18 @@ pub struct Page {
     pub judgments: usize,
     pub tabs: usize,
     pub failures: Vec<String>,
+    pub notes: Vec<String>,
 }
 
 #[derive(Clone)]
 struct Tab {
     key: String,
     title: String,
+    occasion: String,
+    intent: String,
+    serves: Vec<String>,
+    bare: bool,
+    shape: Map,
     sections: Vec<Section>,
 }
 #[derive(Clone)]
@@ -45,6 +52,7 @@ struct Section {
     text: String,
     pick: Vec<String>,
     kind: String,
+    by: String,
 }
 
 fn esc(value: &str, attribute: bool) -> String {
@@ -70,6 +78,26 @@ fn textish(v: &V) -> String {
     } else {
         py(v)
     }
+}
+fn entry_date(body: &Map) -> Option<chrono::NaiveDate> {
+    let value = field(body, &["v", "quoted"])?;
+    let value = textish(value);
+    let value = value.trim();
+    for format in ["%Y-%m-%d", "%d/%m/%Y", "%d.%m.%Y"] {
+        if let Ok(date) = chrono::NaiveDate::parse_from_str(value, format) {
+            return Some(date);
+        }
+    }
+    None
+}
+fn parse_date(value: &str) -> Option<chrono::NaiveDate> {
+    chrono::NaiveDate::parse_from_str(value.trim(), "%Y-%m-%d").ok()
+}
+fn intent_date(body: Option<&Map>) -> Option<chrono::NaiveDate> {
+    let body = body?;
+    field(body, &["read", "of"])
+        .map(textish)
+        .and_then(|value| parse_date(&value))
 }
 fn field<'a>(m: &'a Map, keys: &[&str]) -> Option<&'a V> {
     keys.iter().find_map(|k| m.get(*k).filter(|v| truth(v)))
@@ -208,6 +236,76 @@ fn select(
         }
     }
 }
+type Groups = BTreeMap<String, BTreeMap<String, BTreeSet<String>>>;
+fn groups(
+    brief: &Map,
+    ids: &BTreeSet<String>,
+    judgments: &BTreeSet<String>,
+    states: &BTreeMap<String, BTreeSet<String>>,
+) -> Groups {
+    let Some(declaration) = brief
+        .get("groups")
+        .or_else(|| brief.get("fronts"))
+        .and_then(|v| map(v).ok())
+    else {
+        return Groups::new();
+    };
+    let nested = !declaration.is_empty() && declaration.values().all(|v| matches!(v, V::Map(_)));
+    let schemes = if nested {
+        declaration.clone()
+    } else {
+        BTreeMap::from([("groups".into(), V::Map(declaration.clone()))])
+    };
+    schemes
+        .into_iter()
+        .filter_map(|(scheme, value)| {
+            let declared = map(&value).ok()?;
+            Some((
+                scheme,
+                declared
+                    .iter()
+                    .map(|(name, sels)| {
+                        let mut members = BTreeSet::new();
+                        for selector in selectors(Some(sels)) {
+                            members.extend(select(&selector, ids, judgments, states));
+                        }
+                        (name.clone(), members)
+                    })
+                    .collect(),
+            ))
+        })
+        .collect()
+}
+fn groups_of(id: &str, by: &str, schemes: &Groups, nodes: &Map) -> Vec<String> {
+    let scheme = if by.is_empty() {
+        schemes
+            .keys()
+            .next()
+            .map(String::as_str)
+            .unwrap_or("prefix")
+    } else {
+        by
+    };
+    if let Some(groups) = schemes.get(scheme) {
+        return groups
+            .iter()
+            .filter(|(_, members)| members.contains(id))
+            .map(|(name, _)| name.clone())
+            .collect();
+    }
+    if scheme == "prefix" {
+        return id
+            .split_once('.')
+            .map(|(p, _)| vec![p.into()])
+            .unwrap_or_default();
+    }
+    body(nodes, id)
+        .ok()
+        .and_then(|b| b.get(scheme))
+        .filter(|v| !matches!(v, V::Map(_) | V::List(_)))
+        .map(|v| vec![textish(v)])
+        .unwrap_or_default()
+}
 fn parse_brief(content: Option<&[u8]>) -> Result<(Map, Vec<Tab>)> {
     let brief = match content {
         Some(b) => crate::history_yaml::decode_source_value(b)?.typed(),
@@ -228,6 +326,15 @@ fn parse_brief(content: Option<&[u8]>) -> Result<(Map, Vec<Tab>)> {
         tabs.push(Tab {
             key: "now".into(),
             title: String::new(),
+            occasion: String::new(),
+            intent: brief.get("intent").map(textish).unwrap_or_default(),
+            serves: vec![],
+            bare: true,
+            shape: brief
+                .get("shape")
+                .and_then(|v| map(v).ok())
+                .cloned()
+                .unwrap_or_default(),
             sections: parse_sections(&section_values),
         });
     }
@@ -246,6 +353,15 @@ fn parse_brief(content: Option<&[u8]>) -> Result<(Map, Vec<Tab>)> {
         tabs.push(Tab {
             key,
             title: t.get("title").map(textish).unwrap_or_default(),
+            occasion: t.get("occasion").map(textish).unwrap_or_default(),
+            intent: String::new(),
+            serves: selectors(t.get("serves")),
+            bare: false,
+            shape: t
+                .get("shape")
+                .and_then(|v| map(v).ok())
+                .cloned()
+                .unwrap_or_default(),
             sections: parse_sections(t.get("sections").and_then(|v| list(v).ok()).unwrap_or(&[])),
         });
     }
@@ -261,11 +377,13 @@ fn parse_sections(values: &[V]) -> Vec<Section> {
             text: s.get("text").map(textish).unwrap_or_default(),
             pick: selectors(s.get("pick")),
             kind: s.get("as").map(textish).unwrap_or_default(),
+            by: s.get("by").map(textish).unwrap_or_default(),
         })
         .collect()
 }
-fn json_value(v: &V) -> J {
-    serde_json::from_str(&crate::ordinary_assessment_report::legacy_json(v).unwrap()).unwrap()
+fn json_value(v: &V) -> Result<J> {
+    serde_json::from_str(&crate::ordinary_assessment_report::legacy_json(v)?)
+        .map_err(|e| crate::Error(format!("ordinary Hub JSON projection: {e}")))
 }
 fn url_path(value: &str) -> String {
     value
@@ -347,8 +465,8 @@ fn href(body: &Map, root: &Path, page: &Path) -> Option<String> {
     let parent = page.parent()?;
     Some(url_path(&pathdiff(&source, parent).to_string_lossy()))
 }
-fn js_safe(v: &J) -> String {
-    serde_json::to_string(v).unwrap().replace('<', "\\u003c")
+fn js_safe(v: &J) -> Result<String> {
+    Ok(serde_json::to_string(v)?.replace('<', "\\u003c"))
 }
 
 pub fn build(
@@ -358,6 +476,7 @@ pub fn build(
     entry: &Path,
     page_path: &Path,
     max: usize,
+    runtime: Option<&Runtime>,
 ) -> Result<Page> {
     let document = capture.document();
     let doc = map(&document)?;
@@ -380,14 +499,22 @@ pub fn build(
         .collect::<BTreeSet<_>>();
     let states = ids
         .iter()
-        .map(|id| {
-            (
-                id.clone(),
-                flags(map(&nodes[id]).unwrap(), judgments.contains(id)),
-            )
-        })
-        .collect::<BTreeMap<_, _>>();
+        .map(|id| Ok((id.clone(), flags(map(&nodes[id])?, judgments.contains(id)))))
+        .collect::<Result<BTreeMap<_, _>>>()?;
     let (brief, tabs) = parse_brief(brief_content)?;
+    let context = capture.ordinary_context();
+    let context = map(&context)?;
+    let empty_conflicts = V::Map(Map::new());
+    let conflicts = map(context.get("conflicts").unwrap_or(&empty_conflicts))?;
+    let projection = crate::public_ordinary_readers::Projection::new(
+        &document,
+        map(capture.hypotheses())?,
+        conflicts,
+        capture.reader_lines()?,
+        runtime,
+    )?;
+    let hub = projection.hub_data()?;
+    let group_schemes = groups(&brief, &ids, &judgments, &states);
     let labels = brief
         .get("labels")
         .and_then(|v| map(v).ok())
@@ -428,7 +555,7 @@ pub fn build(
                 "measure",
             ] {
                 if let Some(v) = b.get(k).filter(|v| truth(v)) {
-                    e.insert(k.into(), json_value(v));
+                    e.insert(k.into(), json_value(v)?);
                 }
             }
             if !e.contains_key("v") {
@@ -458,9 +585,154 @@ pub fn build(
         }
     }
     let mut failures = vec![];
+    let mut notes = vec![];
     let mut panels = vec![];
     let mut selected_all = BTreeSet::new();
-    for tab in &tabs {
+    let picked_by_tab = tabs
+        .iter()
+        .map(|tab| {
+            tab.sections
+                .iter()
+                .flat_map(|sec| sec.pick.iter())
+                .flat_map(|selector| select(selector, &ids, &judgments, &states))
+                .collect::<BTreeSet<_>>()
+        })
+        .collect::<Vec<_>>();
+    selected_all.extend(
+        picked_by_tab
+            .iter()
+            .flat_map(|picked| picked.iter().cloned()),
+    );
+    let recorded_by = ids
+        .iter()
+        .filter(|id| body(nodes, id).is_ok_and(|b| b.get("asked").is_some_and(truth)))
+        .map(|intent| {
+            let recorded = ids
+                .iter()
+                .filter(|id| {
+                    body(nodes, id).is_ok_and(|b| {
+                        b.get("from").and_then(|v| text(v).ok()) == Some(intent.as_str())
+                            || judgments.contains(*id) && deps(b, dep_field).contains(intent)
+                    })
+                })
+                .cloned()
+                .collect::<BTreeSet<_>>();
+            (intent.clone(), recorded)
+        })
+        .collect::<BTreeMap<_, _>>();
+    let current_shape = BTreeMap::from([
+        ("entries", ids.len() - judgments.len()),
+        ("judgments", judgments.len()),
+        ("flagged", states.values().filter(|f| !f.is_empty()).count()),
+        (
+            "blocked",
+            ids.iter()
+                .filter(|id| {
+                    body(nodes, id).is_ok_and(|b| {
+                        field(b, &["blocked_on", "blocked", "waiting_for"]).is_some()
+                    })
+                })
+                .count(),
+        ),
+    ]);
+    let earned_by_tab = tabs
+        .iter()
+        .enumerate()
+        .map(|(index, tab)| {
+            tab.serves
+                .iter()
+                .filter(|intent| {
+                    recorded_by
+                        .get(*intent)
+                        .is_some_and(|recorded| !recorded.is_disjoint(&picked_by_tab[index]))
+                })
+                .cloned()
+                .collect::<BTreeSet<_>>()
+        })
+        .collect::<Vec<_>>();
+    let arrangement_owns = hub
+        .arrangements
+        .iter()
+        .map(|arrangement| {
+            tabs.iter()
+                .enumerate()
+                .filter(|(index, tab)| {
+                    tabs.len() == 1 && tab.bare
+                        || arrangement
+                            .sources
+                            .iter()
+                            .any(|source| earned_by_tab[*index].contains(source))
+                })
+                .map(|(index, _)| index)
+                .collect::<BTreeSet<_>>()
+        })
+        .collect::<Vec<_>>();
+    for left in 0..hub.arrangements.len() {
+        for right in left + 1..hub.arrangements.len() {
+            if !arrangement_owns[left].is_disjoint(&arrangement_owns[right])
+                && hub.arrangements[left]
+                    .sources
+                    .iter()
+                    .all(|source| !hub.arrangements[right].sources.contains(source))
+            {
+                let tab = *arrangement_owns[left]
+                    .intersection(&arrangement_owns[right])
+                    .next()
+                    .unwrap();
+                failures.push(format!(
+                    "the brief reads {} and {} on one tab ('{}'), which neither decided",
+                    hub.arrangements[left].id,
+                    hub.arrangements[right].id,
+                    if tabs[tab].title.is_empty() {
+                        "Now"
+                    } else {
+                        &tabs[tab].title
+                    }
+                ));
+            }
+        }
+    }
+    for (index, arrangement) in hub.arrangements.iter().enumerate() {
+        let unearned = arrangement
+            .sources
+            .iter()
+            .filter(|source| {
+                !arrangement_owns[index]
+                    .iter()
+                    .any(|tab| earned_by_tab[*tab].contains(*source))
+            })
+            .cloned()
+            .collect::<Vec<_>>();
+        if !(tabs.len() == 1 && tabs[0].bare) && !unearned.is_empty() {
+            failures.push(format!(
+                "the brief does not serve {} together, as {} decided (no tab's sections earn {})",
+                arrangement.sources.join(", "),
+                arrangement.id,
+                unearned.join(", ")
+            ));
+        }
+        if arrangement.fired {
+            failures.push(format!(
+                "{}: wrong_if holds ({}) - the arrangement fired",
+                arrangement.id, arrangement.predicate
+            ));
+        }
+    }
+    if !brief.is_empty() && hub.arrangements.is_empty() && !recorded_by.is_empty() {
+        notes.push("no arrangement decision is recorded, so the brief is held against none".into());
+    }
+    for (index, tab) in tabs.iter().enumerate() {
+        if !tab.bare
+            && !earned_by_tab[index].is_empty()
+            && !arrangement_owns.iter().any(|owned| owned.contains(&index))
+        {
+            notes.push(format!(
+                "tab '{}' is an arrangement no decision records",
+                tab.title
+            ));
+        }
+    }
+    for (tab_index, tab) in tabs.iter().enumerate() {
         let mut panel = String::new();
         panel.push_str(&heading(
             &meta,
@@ -469,6 +741,116 @@ pub fn build(
             ids.len() - judgments.len(),
             judgments.len(),
         ));
+        if tab.bare {
+            if !tab.intent.is_empty() {
+                panel.push_str(&format!("<p class=\"purpose\" dir=\"auto\">Everything in this tab was chosen for one purpose — <b dir=\"auto\">{}</b></p>",esc(&tab.intent,false)));
+            } else {
+                panel.push_str(&format!("<p class=\"sub\" dir=\"{dir}\">The Record tab has all {} entries and judgments, arranged by nothing.</p>",ids.len()));
+            }
+        } else {
+            panel.push_str(&format!("<p class=\"purpose\" dir=\"auto\">This tab is for one occasion — <b dir=\"auto\">{}</b></p><p class=\"sub\">The Record tab has all {} entries and judgments, arranged by nothing.</p>",esc(if tab.occasion.is_empty(){&tab.title}else{&tab.occasion},false),ids.len()));
+        }
+        for line in &hub.reader_lines {
+            panel.push_str(&format!(
+                "<p class=\"meta\" dir=\"auto\" lang=\"en\">{}</p>",
+                linked_text(line, &ids, &labels, nodes, true)
+            ));
+        }
+        let mut tab_drift = Vec::new();
+        for (arrangement_index, arrangement) in hub.arrangements.iter().enumerate() {
+            let owns =
+                arrangement_owns[arrangement_index].contains(&tab_index) || tab.serves.is_empty();
+            if !owns {
+                continue;
+            }
+            let decided = arrangement.born.as_deref().unwrap_or(&arrangement.id);
+            let born = arrangement.born.as_deref().and_then(parse_date);
+            let stood = recorded_by
+                .keys()
+                .filter(|intent| {
+                    intent_date(body(nodes, intent).ok())
+                        .is_some_and(|date| born.is_some_and(|born| date > born))
+                        && arrangement_owns[arrangement_index]
+                            .iter()
+                            .any(|index| earned_by_tab[*index].contains(*intent))
+                })
+                .count();
+            let added = recorded_by
+                .iter()
+                .filter(|(intent, _)| {
+                    intent_date(body(nodes, intent).ok())
+                        .is_some_and(|date| born.is_some_and(|born| date >= born))
+                })
+                .flat_map(|(_, recorded)| recorded.iter().cloned())
+                .collect::<BTreeSet<_>>();
+            let drift = (!added.is_empty()).then(|| {
+                ((added.difference(&selected_all).count() as f64 / added.len() as f64) * 100.0)
+                    .round()
+                    / 100.0
+            });
+            tab_drift.push((arrangement.id.clone(), drift));
+            panel.push_str(&format!("<p class=\"sub\" dir=\"auto\">decided <span class=\"fx\" data-id=\"{}\">{}</span>{}{}</p>",esc(&arrangement.id,true),esc(decided,false),if stood>0{format!(" &middot; stood {stood} session{}",if stood==1{""}else{"s"})}else{String::new()},arrangement.request.as_ref().map(|request|{let asked=body(nodes,request).ok().and_then(|b|b.get("asked")).map(textish).unwrap_or_else(||request.clone());format!(" &middot; on the word of <span class=\"fx\" data-id=\"{}\" data-request=\"{}\">{}</span>",esc(request,true),esc(request,true),esc(&asked,false))}).unwrap_or_default()));
+            if arrangement.fired {
+                panel.push_str(&format!(
+                    "<p class=\"sub\" data-warning=\"true\">{}: wrong_if holds ({})</p>",
+                    esc(&arrangement.id, false),
+                    esc(&arrangement.predicate, false)
+                ));
+            }
+            for (who, claim) in &arrangement.contested {
+                panel.push_str(&format!(
+                    "<p class=\"sub\">{} is contested by {}: {}</p>",
+                    esc(&arrangement.id, false),
+                    esc(who, false),
+                    esc(claim, false)
+                ));
+            }
+            for (dependency, old, now, state) in &arrangement.moved {
+                panel.push_str(&format!(
+                    "<p class=\"sub\">{} moved since review: {} {} &rarr; {} ({})</p>",
+                    esc(&arrangement.id, false),
+                    esc(dependency, false),
+                    esc(&textish(old), false),
+                    esc(&textish(now), false),
+                    state
+                ));
+            }
+        }
+        if !tab.shape.is_empty() {
+            let moved = tab
+                .shape
+                .iter()
+                .filter_map(|(key, old)| {
+                    current_shape
+                        .get(key.as_str())
+                        .filter(|now| textish(old) != now.to_string())
+                        .map(|now| format!("{key}: {} -> {now}", textish(old)))
+                })
+                .collect::<Vec<_>>();
+            if !moved.is_empty() {
+                let message = format!(
+                    "tab '{}': shape moved ({})",
+                    if tab.title.is_empty() {
+                        "Now"
+                    } else {
+                        &tab.title
+                    },
+                    moved.join("; ")
+                );
+                failures.push(message.clone());
+                let drift = tab_drift
+                    .iter()
+                    .filter_map(|(id, value)| {
+                        value.map(|value| format!("; since {id} was decided {value}"))
+                    })
+                    .collect::<String>();
+                panel.push_str(&format!(
+                    "<div class=\"banner\">{}{}</div>",
+                    esc(&message, false),
+                    esc(&drift, false)
+                ));
+            }
+        }
         for sec in &tab.sections {
             let mut chosen = BTreeSet::new();
             for s in &sec.pick {
@@ -515,6 +897,63 @@ pub fn build(
             ) {
                 failures.push(format!("section '{title}': unknown renderer '{kind}'"));
             }
+            let entry_ids = chosen.difference(&judgments).cloned().collect::<Vec<_>>();
+            match kind {
+                "timeline" => {
+                    let bad = entry_ids
+                        .iter()
+                        .filter(|id| body(nodes, id).ok().and_then(entry_date).is_none())
+                        .collect::<Vec<_>>();
+                    if !bad.is_empty() {
+                        failures.push(format!(
+                            "section '{title}': timeline needs date values; {} of {} are not dates",
+                            bad.len(),
+                            chosen.len()
+                        ));
+                    }
+                }
+                "headline" if !(1..=4).contains(&entry_ids.len()) => failures.push(format!(
+                    "section '{title}': headline carries one to four values, not {}",
+                    entry_ids.len()
+                )),
+                "alerts" if !entry_ids.is_empty() => failures.push(format!(
+                    "section '{title}': alerts ranks judgments; {} of these are entries",
+                    entry_ids.len()
+                )),
+                "links" => {
+                    let bad = entry_ids
+                        .iter()
+                        .filter(|id| {
+                            body(nodes, id)
+                                .ok()
+                                .and_then(|body| href(body, root_of(entry), page_path))
+                                .is_none()
+                        })
+                        .collect::<Vec<_>>();
+                    if !bad.is_empty() {
+                        failures.push(format!(
+                            "section '{title}': links needs a safe url or file: {}",
+                            bad.into_iter()
+                                .map(|s| s.as_str())
+                                .collect::<Vec<_>>()
+                                .join(", ")
+                        ));
+                    }
+                }
+                "grouped" | "fronts" => {
+                    let found = chosen
+                        .iter()
+                        .flat_map(|id| groups_of(id, &sec.by, &group_schemes, nodes))
+                        .collect::<BTreeSet<_>>();
+                    if found.len() < 2 {
+                        failures.push(format!("section '{title}': grouped lays groups side by side; these are all one group ({})",found.into_iter().collect::<Vec<_>>().join(", ")));
+                    }
+                }
+                "axis" if sec.text.trim().is_empty() => failures.push(format!(
+                    "section '{title}': axis needs a written sequence in text"
+                )),
+                _ => {}
+            }
             if sec.pick.is_empty() && sec.text.is_empty() {
                 failures.push(format!("section '{title}' is empty"));
             }
@@ -531,10 +970,16 @@ pub fn build(
                 ));
             }
             if !sec.text.is_empty() {
-                panel.push_str(&format!(
-                    "<div class=\"prose\" dir=\"auto\">{}</div>",
-                    linked_text(&sec.text, &ids, &labels, nodes)
-                ));
+                let content = if kind == "axis" {
+                    sec.text
+                        .lines()
+                        .filter(|line| !line.trim().is_empty())
+                        .map(|line| format!("<div class=\"axis-step\">{}</div>", esc(line, false)))
+                        .collect::<String>()
+                } else {
+                    linked_text(&sec.text, &ids, &labels, nodes, false)
+                };
+                panel.push_str(&format!("<div data-prose=\"connective\" data-review=\"current\"><div class=\"txt\" dir=\"auto\"><div class=\"{}\">{content}</div></div></div>",if kind=="axis"{"axis"}else{"prose"}));
             }
             panel.push_str(&render_set(
                 &chosen,
@@ -546,6 +991,8 @@ pub fn build(
                 page_path,
                 kind,
                 &states,
+                &group_schemes,
+                &sec.by,
             )?);
             panel.push_str("</div>");
         }
@@ -569,6 +1016,8 @@ pub fn build(
                 page_path,
                 "alerts",
                 &states,
+                &group_schemes,
+                "",
             )?);
         }
     }
@@ -581,8 +1030,9 @@ pub fn build(
         root_of(entry),
         page_path,
         &states,
+        &group_schemes,
     )?;
-    let tree = render_tree(&ids, &judgments, nodes, dep_field, &labels);
+    let tree = render_tree(&ids, &judgments, nodes, dep_field, &labels)?;
     let title = brief
         .get("title")
         .map(textish)
@@ -629,11 +1079,11 @@ pub fn build(
     }
     out.push_str(&format!("<section id=\"panel-record\"{}>{}{record}</section><section id=\"panel-tree\" hidden>{}<div class=\"treewrap\">{tree}</div></section>",if tabs.is_empty(){""}else{" hidden"},heading(&meta,&brief,&words,ids.len()-judgments.len(),judgments.len()),esc(&title,false)));
     out.push_str("<footer>Hover or click any reference to see where it came from. This page is generated from the record.</footer></div><script>window.__T=");
-    out.push_str(&js_safe(&words));
+    out.push_str(&js_safe(&words)?);
     out.push_str(";window.__E=");
-    out.push_str(&js_safe(&J::Object(entries)));
+    out.push_str(&js_safe(&J::Object(entries))?);
     out.push_str(";window.__J=");
-    out.push_str(&js_safe(&J::Object(decisions)));
+    out.push_str(&js_safe(&J::Object(decisions))?);
     out.push_str(";</script><script>");
     out.push_str(JS);
     out.push_str("</script><script>");
@@ -647,30 +1097,59 @@ pub fn build(
         judgments: judgments.len(),
         tabs: tabs.len() + 2,
         failures,
+        notes,
     })
 }
 fn root_of(entry: &Path) -> &Path {
     entry.parent().unwrap_or_else(|| Path::new("."))
 }
-fn linked_text(value: &str, ids: &BTreeSet<String>, labels: &Map, nodes: &Map) -> String {
-    let re = regex::Regex::new(r"[A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z0-9_]+)+").unwrap();
+fn linked_text(
+    value: &str,
+    ids: &BTreeSet<String>,
+    labels: &Map,
+    nodes: &Map,
+    axis: bool,
+) -> String {
+    let re = regex::Regex::new(r"\{\{\s*([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z0-9_]+)+)\s*\}\}|([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z0-9_]+)+)").unwrap();
     let mut out = String::new();
     let mut at = 0;
-    for m in re.find_iter(value) {
-        if !ids.contains(m.as_str()) {
+    for captures in re.captures_iter(value) {
+        let m = captures.get(0).unwrap();
+        let id = captures
+            .get(1)
+            .or_else(|| captures.get(2))
+            .unwrap()
+            .as_str();
+        if !ids.contains(id) {
             continue;
         }
         out.push_str(&esc(&value[at..m.start()], false));
-        let id = m.as_str();
-        let shown = body(nodes, id)
-            .ok()
-            .map(|b| label(id, b, labels))
-            .unwrap_or_else(|| id.into());
-        out.push_str(&format!(
-            "<span class=\"fx in\" data-id=\"{}\">{}</span>",
-            esc(id, true),
-            esc(&shown, false)
-        ));
+        if captures.get(1).is_some() {
+            let b = body(nodes, id).ok();
+            let mut shown = b
+                .and_then(|b| field(b, &["v", "quoted", "because", "verdict", "title"]))
+                .map(textish)
+                .unwrap_or_else(|| b.map(|b| label(id, b, labels)).unwrap_or_else(|| id.into()));
+            if axis && shown.parse::<f64>().is_ok_and(|n| n > 0.0) {
+                shown = format!("+{shown}")
+            }
+            out.push_str(&format!(
+                "<span class=\"fx in{}\" data-id=\"{}\">{}</span>",
+                if axis { " signed" } else { "" },
+                esc(id, true),
+                esc(&shown, false)
+            ));
+        } else {
+            let shown = if axis {
+                id.into()
+            } else {
+                body(nodes, id)
+                    .ok()
+                    .map(|b| label(id, b, labels))
+                    .unwrap_or_else(|| id.into())
+            };
+            out.push_str(&esc(&shown, false));
+        }
         at = m.end();
     }
     out.push_str(&esc(&value[at..], false));
@@ -697,32 +1176,142 @@ fn render_set(
     page: &Path,
     kind: &str,
     states: &BTreeMap<String, BTreeSet<String>>,
+    schemes: &Groups,
+    by: &str,
 ) -> Result<String> {
     let mut o = String::new();
-    let cards = matches!(kind, "cards" | "alerts") || ids.iter().any(|id| jud.contains(id));
-    if cards {
+    let judgment_ids = ids.intersection(jud).cloned().collect::<Vec<_>>();
+    let entries = ids.difference(jud).cloned().collect::<Vec<_>>();
+    if !judgment_ids.is_empty() {
         o.push_str(if kind == "alerts" {
             "<div class=\"alerts\">"
         } else {
             "<div class=\"cards\">"
         });
-        for id in ids {
-            if jud.contains(id) {
-                let b = body(nodes, id)?;
-                let verdict = field(b, &["verdict", "title"])
-                    .map(textish)
-                    .unwrap_or_else(|| id.clone());
-                o.push_str(&format!("<article class=\"card\" data-flags=\"{}\"><div class=\"vd fx\" data-id=\"{}\">{}</div></article>",states[id].iter().cloned().collect::<Vec<_>>().join(" "),esc(id,true),esc(&verdict,false)));
+        for id in &judgment_ids {
+            let b = body(nodes, id)?;
+            let verdict = field(b, &["verdict", "title"])
+                .map(textish)
+                .unwrap_or_else(|| id.clone());
+            if kind == "alerts" {
+                let tone = if states[id].contains("falsified") || states[id].contains("broken") {
+                    "stop"
+                } else if states[id].is_empty() {
+                    "ok"
+                } else {
+                    "warn"
+                };
+                let status = if states[id].is_empty() {
+                    "holds".into()
+                } else {
+                    states[id].iter().cloned().collect::<Vec<_>>().join(", ")
+                };
+                let group = deps(b, _dep)
+                    .into_iter()
+                    .flat_map(|dependency| groups_of(&dependency, by, schemes, nodes))
+                    .next();
+                o.push_str(&format!("<div class=\"al\"><span class=\"ico {tone}\">{}</span><span class=\"at\"><span class=\"fx\" data-id=\"{}\">{}</span><div class=\"aw\">{}</div></span><span class=\"tag {tone}\">judgment</span>{}</div>",if tone=="stop"{"!"}else if tone=="warn"{"△"}else{"✓"},esc(id,true),esc(&verdict,false),esc(&status,false),group.map(|g|format!("<span class=\"grp\"><i class=\"group-dot\"></i>{}</span>",esc(&g,false))).unwrap_or_default()));
+            } else {
+                let rest = deps(b, _dep).len();
+                o.push_str(&format!("<div class=\"card\" data-judgment=\"{}\" data-review=\"{}\"><div class=\"cardtop\"><span class=\"judgment-label\">judgment</span></div><div class=\"vd fx\" data-id=\"{}\">{}</div>{}</div>",esc(id,true),if states[id].contains("moved"){"moved"}else{"current"},esc(id,true),esc(&verdict,false),if rest>0{format!("<div class=\"rest\">rests on {rest} more — hover the line above</div>")}else{String::new()}));
             }
         }
         o.push_str("</div>");
     }
-    let entries = ids
-        .iter()
-        .filter(|id| !jud.contains(*id))
-        .cloned()
-        .collect::<Vec<_>>();
-    if !entries.is_empty() {
+    if entries.is_empty() {
+        return Ok(o);
+    }
+    if kind == "lines" {
+        o.push_str("<div class=\"deps\">");
+        for id in entries {
+            o.push_str(&format!(
+                "<span class=\"fx dep\" data-id=\"{}\" dir=\"auto\">{}</span>",
+                esc(&id, true),
+                esc(&label(&id, body(nodes, &id)?, labels), false)
+            ));
+        }
+        o.push_str("</div>");
+        return Ok(o);
+    }
+    if kind == "timeline" {
+        let today = chrono::Local::now().date_naive();
+        let mut rows = entries
+            .into_iter()
+            .filter_map(|id| entry_date(body(nodes, &id).ok()?).map(|d| (d, id)))
+            .collect::<Vec<_>>();
+        rows.sort();
+        o.push_str("<div class=\"tl\">");
+        for (date, id) in rows {
+            let hot = if date == today {
+                " hot"
+            } else if date < today {
+                " past"
+            } else {
+                ""
+            };
+            o.push_str(&format!("<div class=\"day{hot}\" data-day=\"{date}\"><div class=\"when\"><span class=\"fx\" data-id=\"{}\">{}</span></div><div class=\"day-label\">{}</div><div class=\"day-item\"><span class=\"fx\" data-id=\"{}\">{}</span></div></div>",esc(&id,true),date.format("%d/%m/%Y"),if date==today{"today"}else{""},esc(&id,true),esc(&label(&id,body(nodes,&id)?,labels),false)));
+        }
+        o.push_str("</div>");
+        return Ok(o);
+    }
+    if kind == "headline" {
+        o.push_str("<div class=\"heads\">");
+        for id in entries {
+            let b = body(nodes, &id)?;
+            let value = field(b, &["v", "quoted"]).map(textish).unwrap_or_default();
+            let date = entry_date(b);
+            o.push_str(&format!("<div class=\"head\"><div class=\"big\"{}><span class=\"fx\" data-id=\"{}\">{}</span></div><div class=\"cap\" dir=\"auto\">{}</div>{}</div>",date.map(|d|format!(" data-countdown=\"{d}\"")).unwrap_or_default(),esc(&id,true),esc(&value,false),esc(&label(&id,b,labels),false),date.map(|d|format!("<div class=\"nt\"><span class=\"fx\" data-id=\"{}\">{d}</span></div>",esc(&id,true))).unwrap_or_default()));
+        }
+        o.push_str("</div>");
+        return Ok(o);
+    }
+    if matches!(kind, "grouped" | "fronts") {
+        let mut grouped = BTreeMap::<String, Vec<String>>::new();
+        for id in entries {
+            let names = groups_of(&id, by, schemes, nodes);
+            for name in if names.is_empty() {
+                vec![id.split('.').next().unwrap_or("-").into()]
+            } else {
+                names
+            } {
+                grouped.entry(name).or_default().push(id.clone())
+            }
+        }
+        o.push_str("<div class=\"grid\">");
+        for (name, members) in grouped {
+            o.push_str(&format!(
+                "<div class=\"group\"><h3 dir=\"auto\">{}</h3>",
+                esc(&name, false)
+            ));
+            for id in members {
+                let b = body(nodes, &id)?;
+                let value = field(b, &["v", "quoted", "rule"])
+                    .map(textish)
+                    .unwrap_or_else(|| "derived".into());
+                o.push_str(&format!("<div class=\"kv fx\" data-id=\"{}\"><span class=\"kl\">{}</span><span class=\"kvv\">{}</span></div>",esc(&id,true),esc(&label(&id,b,labels),false),esc(&value,false)));
+            }
+            o.push_str("</div>");
+        }
+        o.push_str("</div>");
+        return Ok(o);
+    }
+    if kind == "links" {
+        o.push_str("<div class=\"links\">");
+        for id in entries {
+            let b = body(nodes, &id)?;
+            if let Some(target) = href(b, root, page) {
+                o.push_str(&format!(
+                    "<a class=\"lk\" href=\"{}\"><span class=\"fx\" data-id=\"{}\">{}</span></a>",
+                    esc(&target, true),
+                    esc(&id, true),
+                    esc(&label(&id, b, labels), false)
+                ));
+            }
+        }
+        o.push_str("</div>");
+        return Ok(o);
+    }
+    {
         o.push_str("<table><tbody>");
         for id in entries {
             let b = body(nodes, &id)?;
@@ -757,6 +1346,7 @@ fn render_record(
     root: &Path,
     page: &Path,
     states: &BTreeMap<String, BTreeSet<String>>,
+    schemes: &Groups,
 ) -> Result<String> {
     let mut o = String::new();
     if !jud.is_empty() {
@@ -765,12 +1355,12 @@ fn render_record(
             jud.len()
         ));
         o.push_str(&render_set(
-            jud, jud, nodes, labels, dep, root, page, "cards", states,
+            jud, jud, nodes, labels, dep, root, page, "cards", states, schemes, "",
         )?);
     }
     let entries = ids.difference(jud).cloned().collect();
     o.push_str(&render_set(
-        &entries, jud, nodes, labels, dep, root, page, "table", states,
+        &entries, jud, nodes, labels, dep, root, page, "table", states, schemes, "",
     )?);
     Ok(o)
 }
@@ -780,7 +1370,7 @@ fn render_tree(
     nodes: &Map,
     dep: &str,
     labels: &Map,
-) -> String {
+) -> Result<String> {
     let n = ids.len().max(1);
     let mut pos = BTreeMap::new();
     for (i, id) in ids.iter().enumerate() {
@@ -789,7 +1379,7 @@ fn render_tree(
     }
     let mut o = "<svg viewBox=\"0 0 960 700\" role=\"img\">".to_string();
     for id in jud {
-        for d in deps(body(nodes, id).unwrap(), dep) {
+        for d in deps(body(nodes, id)?, dep) {
             if let (Some(&(x1, y1)), Some(&(x2, y2))) = (pos.get(&d), pos.get(id)) {
                 o.push_str(&format!("<path class=\"tlimb\" data-lf=\"{}\" data-lt=\"{}\" d=\"M{x1:.1} {y1:.1} C{x1:.1} {:.1} {x2:.1} {:.1} {x2:.1} {y2:.1}\"/>",esc(&d,true),esc(id,true),(y1+y2)/2.0,(y1+y2)/2.0));
             }
@@ -804,9 +1394,10 @@ fn render_tree(
             .unwrap_or_else(|| id.clone());
         o.push_str(&format!("<g class=\"tn {cls}\" data-id=\"{}\"><circle cx=\"{x:.1}\" cy=\"{y:.1}\" r=\"15\"/><text x=\"{x:.1}\" y=\"{:.1}\" text-anchor=\"middle\">{}</text></g>",esc(id,true),y+34.0,esc(&lbl.chars().take(18).collect::<String>(),false)));
     }
-    o + "</svg>"
+    Ok(o + "</svg>")
 }
 fn words(lang: &str, dir: &str) -> J {
     let he = lang == "he";
-    json!({"dir":dir,"untitled":if he{"מה ידוע כאן"}else{"What is known here"},"concludes":if he{"מסקנה"}else{"concludes"},"rests_on":if he{"נשען על"}else{"rests on"},"wrong_if":if he{"שגוי אם"}else{"wrong if"},"blocked":"blocked","reopened_by":"reopened by","because":"because","value":"value","rule":"rule","measure":"measure","source":"from","at":"at","file":"file","url":"url","as_of":"as of","used_by":"used by","back":if he{"→"}else{"←"},"tree_btn":"tree","tree_btn_title":"prune the tree to what this touches","whole_tree":if he{"כל העץ ⟶"}else{"⟵ the whole tree"},"asked":"asked","today":"today","days_left_one":"1 day left","days_ago_one":"1 day ago","days_left":"{n} days left","days_ago":"{n} days ago"})
+    let ar = lang == "ar";
+    json!({"dir":dir,"untitled":if he{"מה ידוע כאן"}else if ar{"ما المعروف هنا"}else{"What is known here"},"concludes":if he{"מסקנה"}else if ar{"يستنتج"}else{"concludes"},"rests_on":if he{"נשען על"}else if ar{"يستند إلى"}else{"rests on"},"wrong_if":if he{"שגוי אם"}else if ar{"خطأ إذا"}else{"wrong if"},"blocked":"blocked","reopened_by":"reopened by","because":"because","value":"value","rule":"rule","measure":"measure","source":"from","at":"at","file":"file","url":"url","as_of":"as of","used_by":"used by","back":if he||ar{"→"}else{"←"},"tree_btn":"tree","tree_btn_title":"prune the tree to what this touches","whole_tree":if he{"כל העץ ⟶"}else if ar{"الشجرة كاملة ⟶"}else{"⟵ the whole tree"},"asked":"asked","today":if he{"היום"}else if ar{"اليوم"}else{"today"},"days_left_one":if he{"נותר יום אחד"}else if ar{"بقي يوم واحد"}else{"1 day left"},"days_ago_one":if he{"לפני יום אחד"}else if ar{"منذ يوم واحد"}else{"1 day ago"},"days_left_two":if he{"נותרו יומיים"}else if ar{"بقي يومان"}else{"{n} days left"},"days_left_many":if he{"נותרו {n} ימים"}else if ar{"بقي {n} يوماً"}else{"{n} days left"},"days_left_other":if he{"נותרו {n} ימים"}else if ar{"بقي {n} يوم"}else{"{n} days left"},"days_ago_two":if he{"לפני יומיים"}else if ar{"منذ يومين"}else{"{n} days ago"},"days_ago_many":if he{"לפני {n} ימים"}else if ar{"منذ {n} يوماً"}else{"{n} days ago"},"days_ago_other":if he{"לפני {n} ימים"}else if ar{"منذ {n} يوم"}else{"{n} days ago"},"days_left":"{n} days left","days_ago":"{n} days ago"})
 }
