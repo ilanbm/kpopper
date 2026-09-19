@@ -584,11 +584,18 @@ fn private_home(root: &Path, journal: &str, m: &PreparedMutation) -> Result<()> 
 fn to_str(path: &Path) -> Result<&str> {
     path.to_str().ok_or_else(|| error("invalid_path"))
 }
-fn relative<'a>(root: &Path, path: &'a Path) -> Result<&'a str> {
-    to_str(
-        path.strip_prefix(root.canonicalize()?)
-            .map_err(|_| error("invalid_path"))?,
-    )
+fn relative(root: &Path, path: &Path) -> Result<String> {
+    let relative = path
+        .strip_prefix(root.canonicalize()?)
+        .map_err(|_| error("invalid_path"))?;
+    relative
+        .components()
+        .map(|part| match part {
+            std::path::Component::Normal(name) => to_str(Path::new(name)),
+            _ => Err(error("invalid_path")),
+        })
+        .collect::<Result<Vec<_>>>()
+        .map(|parts| parts.join("/"))
 }
 pub(crate) fn replicas(root: &Path, journal: &str, m: &PreparedMutation) -> Result<Vec<PathBuf>> {
     let value = data(m);
@@ -647,7 +654,7 @@ fn prepare_replicas(root: &Path, journal: &str, m: &PreparedMutation) -> Result<
     let mut images = Vec::new();
     for p in &paths {
         let raw = member_guard(root, m, p.parent().unwrap().parent().unwrap())?;
-        let checked = journal_path(root, relative(root, p)?, m)?;
+        let checked = journal_path(root, &relative(root, p)?, m)?;
         require(
             read(&checked)?.is_none_or(|existing| existing == raw),
             "journal_replica_mismatch",
@@ -657,10 +664,10 @@ fn prepare_replicas(root: &Path, journal: &str, m: &PreparedMutation) -> Result<
     for (path, raw) in paths.iter().zip(images) {
         publish_immutable(
             root,
-            relative(root, &path.parent().unwrap().join(".gitignore"))?,
+            &relative(root, &path.parent().unwrap().join(".gitignore"))?,
             b"*\n",
         )?;
-        publish_immutable(root, relative(root, path)?, &raw)?;
+        publish_immutable(root, &relative(root, path)?, &raw)?;
     }
     Ok(paths)
 }
@@ -755,7 +762,7 @@ pub fn publish_legacy(
     let mut copies = prepare_replicas(root, journal, m)?;
     if !copies.is_empty() {
         let ready = ready_path(&primary, m)?;
-        publish_immutable(root, relative(root, &ready)?, digest(m)?.as_bytes())?;
+        publish_immutable(root, &relative(root, &ready)?, digest(m)?.as_bytes())?;
         copies.push(ready);
     }
     apply(m, &paths, Direction::After)?;
@@ -829,7 +836,7 @@ pub fn recover_legacy(
     verify(&data(&m))?;
     let mut copies = prepare_replicas(root, journal, &m)?;
     if !copies.is_empty() {
-        publish_immutable(root, relative(root, &ready)?, digest.as_bytes())?;
+        publish_immutable(root, &relative(root, &ready)?, digest.as_bytes())?;
         copies.push(ready);
     }
     apply(&m, &paths, direction)?;
@@ -946,7 +953,7 @@ pub fn publish_transition(
     let mut copies = prepare_replicas(root, journal, m)?;
     if !copies.is_empty() {
         let ready = ready_path(&primary, m)?;
-        publish_immutable(root, relative(root, &ready)?, digest(m)?.as_bytes())?;
+        publish_immutable(root, &relative(root, &ready)?, digest(m)?.as_bytes())?;
         copies.push(ready);
     }
     apply_transition(root, m, &paths, Direction::After)?;
@@ -1070,7 +1077,7 @@ fn recover_transition_inner(
         "invalid_ready_marker",
     )?;
     if !copies.is_empty() {
-        publish_immutable(root, relative(root, &ready)?, digest.as_bytes())?;
+        publish_immutable(root, &relative(root, &ready)?, digest.as_bytes())?;
         copies.push(ready);
     }
     apply_transition(root, &m, &paths, direction)?;
