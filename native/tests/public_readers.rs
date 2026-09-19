@@ -243,6 +243,14 @@ fn actual_ordinary_pull_history_reads_the_retained_versions() {
     assert_eq!(
         String::from_utf8(output.stdout).unwrap(),
         concat!(
+            "p.load: 61 <- s.note\n",
+            "+ d.work: continue\n",
+            "    holds\n",
+            "    wrong_if: p.load > 80\n",
+            "    moved since review: p.load 44 -> 61 - within wrong_if\n",
+            "\n",
+            "affects <entry> shows what a change reaches\n",
+            "\n",
             "history of d.work: 2 versions kept in .kpopper/replaced.yaml\n",
             "  1. until 2026-09-18 - the standing judgment broke\n",
             "     verdict: before\n",

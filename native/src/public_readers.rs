@@ -311,7 +311,18 @@ pub fn run(
             "pull" => {
                 if options.history {
                     let (history, path) = replaced(&paths, &mut inventory)?;
-                    projection.history(history.as_ref(), &path, &seeds)?
+                    let mut output = projection.pull(&seeds, options.budget.unwrap_or(40))?;
+                    output.push('\n');
+                    let retained = projection.history(history.as_ref(), &path, &seeds)?;
+                    if retained.is_empty() {
+                        output.push_str(&format!(
+                            "no replaced version is kept for {}\n",
+                            seeds.join(", ")
+                        ));
+                    } else {
+                        output.push_str(&retained);
+                    }
+                    output
                 } else {
                     projection.pull(&seeds, options.budget.unwrap_or(40))?
                 }
