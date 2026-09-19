@@ -194,6 +194,20 @@ fn publish(
     finish(store, mutation, &path, &raw)
 }
 
+/// Publish a mutation prepared by another public history adapter through the
+/// same retained journal used by every direct-history write. The caller owns
+/// the route and directory guards across preparation and this call.
+pub(crate) fn publish_prepared(
+    store: &Store,
+    mutation: &PreparedMutation,
+    route: &WriteRoute,
+    original: &[PathBuf],
+    runtime: Option<&Runtime>,
+    probe: &mut dyn FnMut(&str) -> Result<()>,
+) -> Result<()> {
+    publish(store, mutation, route, original, runtime, probe)
+}
+
 pub fn act(original: &[PathBuf], cwd: &Path, action: &V) -> Result<V> {
     act_with_probe(original, cwd, action, &mut |_| Ok(()))
 }
@@ -459,7 +473,7 @@ pub fn proposals(
 pub fn recover(original: &[PathBuf], cwd: &Path, before: bool) -> Result<V> {
     recover_with_runtime(original, cwd, before, None)
 }
-fn recover_with_runtime(
+pub(crate) fn recover_with_runtime(
     original: &[PathBuf],
     cwd: &Path,
     before: bool,

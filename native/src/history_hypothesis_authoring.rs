@@ -757,6 +757,30 @@ fn physical_layers(store: &Store, active: &BTreeMap<String, String>) -> Result<V
     }
     Ok(V::Map(layers))
 }
+
+pub(crate) fn assess_prepared_fold(
+    store: &Store,
+    captured: &Capture,
+    mutation: &PreparedMutation,
+    runtime: Option<&Runtime>,
+) -> Result<crate::history_prospective::Assessment> {
+    let document = A::document(captured)?;
+    let physical = physical_layers(store, &active_physical(store, &document)?)?;
+    let receipt = mutation.to_data();
+    let receipt = map(field(map(&receipt)?, "receipt")?)?;
+    let before = map(field(receipt, "before")?)?;
+    let intent = map(field(before, "hypothesis_authoring")?)?;
+    let recorded_at = text(field(intent, "recorded_at")?)?;
+    crate::history_prospective::assess(
+        captured,
+        mutation,
+        Some(&physical),
+        Some(&s(recorded_at
+            .get(..10)
+            .ok_or_else(|| error("missing_recording_time"))?)),
+        runtime,
+    )
+}
 fn fold_inner(
     store: &Store,
     captured: &Capture,
