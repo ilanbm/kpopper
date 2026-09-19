@@ -264,21 +264,22 @@ impl Service {
             None,
             runtime.as_ref(),
         )?;
-        let capabilities = crate::reasoning_fields::capabilities(&capture.document(), None)?;
+        let capabilities =
+            crate::reasoning_fields::capabilities(capture.ordinary_document(), None)?;
         crate::require(
             string_is(&map(&capabilities)?["profile"], "core/v1"),
             "unsupported_capability: native sessions currently require a core/v1 record",
         )?;
         let context = CapturedAssessment::from_snapshot(
-            capture.snapshot().clone(),
+            capture.snapshot()?.clone(),
             None,
             "focused-review/v1",
             runtime.as_ref(),
             OperationalBounds::default(),
             None,
         )?;
-        let revision = self.store.save(&context, capture.snapshot())?;
-        let session = self.store.load(&revision, capture.snapshot())?;
+        let revision = self.store.save(&context, capture.snapshot()?)?;
+        let session = self.store.load(&revision, capture.snapshot()?)?;
         let result = session
             .opening(tokens, |s| self.store.encoding().count(s))?
             .text;
@@ -302,7 +303,7 @@ impl Service {
             self.mode,
             None,
         )?;
-        let session = self.store.load(revision, capture.snapshot())?;
+        let session = self.store.load(revision, capture.snapshot()?)?;
         let result = session.read(reference, revision, tokens, offset, |s| {
             self.store.encoding().count(s)
         })?;
@@ -317,7 +318,7 @@ impl Service {
             self.mode,
             None,
         )?;
-        let session = self.store.load(revision, capture.snapshot())?;
+        let session = self.store.load(revision, capture.snapshot()?)?;
         let result = session.search(revision, request, |s| self.store.encoding().count(s))?;
         capture.verify()?;
         self.inputs.verify()?;
@@ -336,7 +337,7 @@ impl Service {
             self.mode,
             None,
         )?;
-        let session = self.store.load(revision, capture.snapshot())?;
+        let session = self.store.load(revision, capture.snapshot()?)?;
         let result =
             session.contextualize(ids, revision, options, |s| self.store.encoding().count(s))?;
         capture.verify()?;
