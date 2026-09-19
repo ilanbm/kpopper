@@ -36,6 +36,8 @@ enum Command {
     },
     /// Open the current knowledge context.
     Open(kpop_native::public_readers::Options),
+    /// Locate this workspace's record without reading its contents.
+    Where,
     /// Check record integrity and findings.
     Check(kpop_native::public_readers::Options),
     /// Read entries, their sources and findings.
@@ -373,6 +375,7 @@ fn run(args: Args) -> Result<Value> {
         }
         Command::Review(_) => Err(kpop_native::Error("review requires a public record".into())),
         Command::Assess(_)
+        | Command::Where
         | Command::Session(_)
         | Command::Consolidate(_)
         | Command::Check(_)
@@ -387,6 +390,34 @@ fn run(args: Args) -> Result<Value> {
 }
 fn main() {
     let args = Args::parse();
+    if matches!(args.command, Command::Where) {
+        let result = (|| -> Result<Option<PathBuf>> {
+            let cwd = args
+                .workspace
+                .clone()
+                .map(Ok)
+                .unwrap_or_else(std::env::current_dir)?;
+            Ok(kpop_native::public_workspace::records(&cwd)?
+                .into_iter()
+                .next()
+                .filter(|p| p.exists()))
+        })();
+        let (output, error, code) = match result {
+            Ok(Some(path)) => (format!("{}\n", path.display()), String::new(), 0),
+            Ok(None) => (String::new(), String::new(), 1),
+            Err(error) => (String::new(), format!("{error}\n"), 1),
+        };
+        if args.json {
+            println!(
+                "{}",
+                json!({"command":"where","exit_code":code,"output":output,"error":error})
+            );
+        } else {
+            print!("{output}");
+            eprint!("{error}");
+        }
+        std::process::exit(code);
+    }
     if let Command::Consolidate(arguments) = &args.command {
         let result = (|| {
             let cwd = args
