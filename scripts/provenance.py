@@ -5436,6 +5436,10 @@ def recover_direct(paths, *, direction='after'):
                 # for byte before it can read or finish either mutable image.
                 return direct.recover(paths, project=project,
                                       original_paths=original_paths, direction=direction)
+            bootstrap = retained._data.get('baseline', {}).get('bootstrap', {})
+            if bootstrap.get('kind') == 'new-record-bootstrap/v1':
+                return _peer('history_bootstrap').recover(entry, policy=policy, direction=direction,
+                    verify=lambda prepared: _verify_newborn_route(entry, project, policy))
             if retained.to_data().get('transition') is not None:
                 raise transaction.C.HistoryError('transition_recovery_required',
                     'history_activation.recover requires the original managed-deployment guard')
@@ -6230,6 +6234,8 @@ def _apply_first_add(action):
     path = location["record"]
     project = _peer('project_modes').Project(location.get('workspace', os.path.dirname(path)))
     policy = project.config()
+    if location['status'] == 'found' and _peer('history_direct').active([path]):
+        return apply([path], action), []
     try:
         receipt = _peer('recording').route([path], action, sys.modules.get(__name__) or _Reader(),
                                           project=project, expected_policy=policy)
@@ -6255,10 +6261,29 @@ def _apply_first_add(action):
                 path = current
                 continue
             if location["status"] == "found":
+                if _peer('history_direct').active([current]):
+                    return _peer('history_direct').apply([current], action, project=project,
+                                                         original_paths=[current]), []
                 return _apply_unlocked([current], action, project=project), []
-            result = _mutate_legacy([current], action,
-                lambda: _apply_unlocked([current], action, project=project), newborn=True)
-            return result, [current]
+            bootstrap = _peer('history_bootstrap')
+            try:
+                mutation = bootstrap.prepare(current, action, policy=policy)
+            except SystemExit as error:
+                # File-path runtime loading has its own Refused class identity.
+                if error.__class__.__name__ != 'Refused':
+                    raise
+                raise Refused(str(error)) from None
+            bootstrap.publish(current, mutation, policy=policy,
+                verify=lambda prepared: _verify_newborn_route(current, project, policy))
+            print('history committed: ' + mutation.to_data()['operation'] +
+                  ' (' + action['kind'] + ' ' + action['id'] + ')')
+            return 0, [current]
+
+
+def _verify_newborn_route(entry, project, policy):
+    """Recheck only caller-owned routing; prepared intent is verified separately."""
+    if project.config() != policy:
+        raise Refused('refused - project mode or record destination changed; retry the write')
 
 
 
