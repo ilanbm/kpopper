@@ -21,6 +21,8 @@ zip = { version = "6", default-features = false, features = ["deflate"] }
 rustpython-parser = { version = "0.4", default-features = false, features = ["num-bigint"] }
 unicode-normalization = "0.1"
 chrono = { version = "0.4.45", default-features = false, features = ["clock"] }
+tiktoken-rs = "0.12.0"
+same-file = "1"
 
 [target.'cfg(unix)'.dependencies]
 rustix = { version = "1.1.5", features = ["fs"] }
