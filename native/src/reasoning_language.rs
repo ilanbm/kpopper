@@ -284,7 +284,7 @@ pub(crate) fn legacy_references(value: &V) -> Vec<String> {
         .map(|v| references(&v))
         .unwrap_or_default()
 }
-fn legacy_expression(value: &V, predicate: bool) -> Result<V> {
+pub(crate) fn legacy_expression(value: &V, predicate: bool) -> Result<V> {
     fn legacy_visit(source: &str, node: &ast::Expr, depth: usize) -> Result<J> {
         require(depth < 64, "invalid_legacy_expression")?;
         Ok(match node {

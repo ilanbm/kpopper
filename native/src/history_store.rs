@@ -431,9 +431,26 @@ impl Store {
     }
     /// Mandatory verifier checks the operation's retained semantic and routing evidence.
     pub fn commit(&self, mutation: &PreparedMutation, verify: F::Verify<'_>) -> Result<V> {
+        self.commit_inner(mutation, verify, None, false)
+    }
+    /// Only the edit adapter selects this path; semantic replay is enforced here.
+    pub(crate) fn commit_edits(
+        &self,
+        mutation: &PreparedMutation,
+        runtime: Option<&crate::reasoning_runtime::Runtime>,
+        verify: F::Verify<'_>,
+    ) -> Result<V> {
+        self.commit_inner(mutation, verify, runtime, true)
+    }
+    fn commit_inner(
+        &self,
+        mutation: &PreparedMutation,
+        verify: F::Verify<'_>,
+        runtime: Option<&crate::reasoning_runtime::Runtime>,
+        edited: bool,
+    ) -> Result<V> {
         let _lock = F::DirectoryGuard::acquire(&self.root, true)?;
-        // Identity, view-edit and adoption verification belongs to its replay
-        // preparer. These are refused until that preparer is available.
+        // Auxiliary identity and adoption require their own replay preparers.
         require(
             mutation.auxiliary_view()?.is_none(),
             "unsupported_identity_replay",
@@ -485,10 +502,13 @@ impl Store {
             !map(&receipt["after"])?.contains_key("history_branch_adoption"),
             "unsupported_branch_adoption",
         )?;
-        require(
-            !map(&receipt["before"])?.contains_key("history_edit"),
-            "unsupported_view_edit_replay",
-        )?;
+        let edit_receipt = map(&receipt["before"])?.get("history_edit");
+        if edited {
+            require(edit_receipt.is_some(), "invalid_edit_receipt")?;
+            crate::history_edits::verify_prepared(self, mutation, runtime)?;
+        } else {
+            require(edit_receipt.is_none(), "unsupported_view_edit_replay")?;
+        }
         let prior = live.commits.get(op);
         let after = manifest
             .after
@@ -510,7 +530,7 @@ impl Store {
                 record.before.as_ref() == Some(&live.entry_bytes),
                 "concurrent_edit",
             )?;
-            if !live.commits.is_empty() {
+            if !live.commits.is_empty() && !edited {
                 require(
                     live.document.digest()?
                         == Y::decode_document(&self.render(&live)?)?.digest()?,

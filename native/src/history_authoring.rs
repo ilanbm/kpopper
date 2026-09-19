@@ -755,7 +755,7 @@ pub fn prepare_proposal(
 ) -> Result<PreparedMutation> {
     prepare_proposal_inner(store, capture, proposal, options, runtime, None)
 }
-fn prepare_proposal_inner(
+pub(crate) fn prepare_proposal_inner(
     store: &Store,
     capture: &Capture,
     proposal: &Proposal,

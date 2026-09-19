@@ -160,8 +160,16 @@ only after validating the mutation's authority, causal parents, immutable object
 bytes and rendered view. Preview does not publish or accept a proposal; retained
 branch-adoption evidence still requires its separate audit adapter.
 
-These library interfaces remain separate from the experimental CLI. Identity/edit
-application adapters, temporal authoring and ordinary-profile authoring
+`history_edits` captures the complete set of body changes in a generated view as
+proposals. It retains exact edited UTF-8 bytes, including comments and historical
+snapshots, as immutable receipt-bound evidence. Partial selections, deletions,
+collection moves and header edits require separate dispositions. Its storage path
+enforces fresh semantic replay; an edit marker alone cannot authorize publication.
+Identity rewrite primitives preserve source-map order, provenance fields and
+expression literals while producing checked body and brief rewrites.
+
+These library interfaces remain separate from the experimental CLI. Full identity
+action preparation/replay, temporal authoring and ordinary-profile authoring
 are not yet exposed through this preparation layer. The newer receipt contracts are
 checked against a Python 1.7 candidate; final release binding remains pending.
 

@@ -1025,6 +1025,7 @@ pub(crate) fn replay_context(
     store: &Store,
     mutation: &PreparedMutation,
     key: &str,
+    physical: bool,
 ) -> Result<(Capture, Options, V, ReplayAudit)> {
     let live = store.capture()?;
     let data = mutation.to_data();
@@ -1035,10 +1036,12 @@ pub(crate) fn replay_context(
         A::archive(store)? == *field(intent_map, "archive")?,
         "concurrent_archive_edit",
     )?;
-    require(
-        physical_evidence(store)? == *field(intent_map, "physical")?,
-        "concurrent_hypothesis_edit",
-    )?;
+    if physical {
+        require(
+            physical_evidence(store)? == *field(intent_map, "physical")?,
+            "concurrent_hypothesis_edit",
+        )?;
+    }
     let manifest = mutation
         .files()
         .iter()
@@ -1111,7 +1114,7 @@ pub fn verify_prepared(
     runtime: Option<&Runtime>,
 ) -> Result<()> {
     let (capture, mut options, intent, audit) =
-        replay_context(store, mutation, "hypothesis_authoring")?;
+        replay_context(store, mutation, "hypothesis_authoring", true)?;
     let intent = map(&intent)?;
     let version = field(intent, "version")?;
     require(
