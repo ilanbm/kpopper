@@ -36,12 +36,19 @@ enum Command {
     },
     /// Open the current knowledge context.
     Open(kpop_native::public_readers::Options),
-    /// Check the record and its page arrangement.
+    /// Check record integrity and findings.
     Check(kpop_native::public_readers::Options),
     /// Read entries, their sources and findings.
     Pull(kpop_native::public_readers::Options),
     /// Trace the consequences of changed entries.
     Affects(kpop_native::public_readers::Options),
+    /// Optional applications built from the captured record.
+    Experimental {
+        #[command(subcommand)]
+        application: Application,
+    },
+    /// Compatibility alias for experimental hub.
+    Page(kpop_native::public_hub::Options),
     Add(WriteArgs),
     Set(WriteArgs),
     Review(WriteArgs),
@@ -87,6 +94,11 @@ enum Command {
     HistoryCapture {
         entry: PathBuf,
     },
+}
+#[derive(Subcommand)]
+enum Application {
+    /// Build or verify the optional record Hub.
+    Hub(kpop_native::public_hub::Options),
 }
 #[derive(Clone, clap::ValueEnum)]
 enum Envelope {
@@ -298,13 +310,48 @@ fn run(args: Args) -> Result<Value> {
             unreachable!()
         }
         Command::Review(_) => Err(kpop_native::Error("review requires a public record".into())),
-        Command::Assess(_) | Command::Check(_) | Command::Pull(_) | Command::Affects(_) => {
+        Command::Assess(_)
+        | Command::Check(_)
+        | Command::Pull(_)
+        | Command::Affects(_)
+        | Command::Page(_)
+        | Command::Experimental { .. } => {
             unreachable!()
         }
     }
 }
 fn main() {
     let args = Args::parse();
+    if let Command::Page(options)
+    | Command::Experimental {
+        application: Application::Hub(options),
+    } = &args.command
+    {
+        let result = (|| {
+            let cwd = args
+                .workspace
+                .clone()
+                .map(Ok)
+                .unwrap_or_else(std::env::current_dir)?;
+            let mode =
+                if args.frozen || std::env::var("KPOPPER_READ_MODE").as_deref() == Ok("frozen") {
+                    kpop_native::source_capture::ReadMode::Frozen
+                } else {
+                    kpop_native::source_capture::ReadMode::Live
+                };
+            kpop_native::public_hub::run(options, &cwd, mode)
+        })();
+        match result {
+            Ok(output) => {
+                print!("{}", output.text);
+                std::process::exit(output.code);
+            }
+            Err(error) => {
+                eprintln!("kpop-native experimental hub: {error}");
+                std::process::exit(2);
+            }
+        }
+    }
     let write = match &args.command {
         Command::Add(o) => Some(("add", o)),
         Command::Set(o) => Some(("set", o)),

@@ -16,8 +16,9 @@ cargo clippy --locked --all-targets -- -D warnings
 cargo build --locked --release
 ```
 
-The resulting executable does not require Python, Node, Cargo or Rust on the runtime
-PATH. Rust and downloaded build dependencies are required only when building it.
+Core commands and Hub rendering do not require Python, Node, Cargo or Rust on the
+runtime PATH. Rust and downloaded build dependencies are required only for builds.
+Optional Hub browser checks use Node, playwright-core and Chrome.
 
 ### Assess an existing record
 
@@ -66,6 +67,24 @@ replacement file. They preserve namespace ordering, review flags, pointer and
 hypothesis orientation, private-draft counts, historical decisions and final source revalidation. Existing feasibility-
 store workspaces retain their explicitly marked experimental opener. The writer
 commands below, MCP, hooks, browser and distribution integration remain in progress.
+
+### Build the optional core Hub
+
+```sh
+kpop-native experimental hub --out report.html
+kpop-native experimental hub --verify
+kpop-native experimental hub --checks report.html
+kpop-native page --open
+```
+
+`page` is a compatibility alias. The current native Hub supports core/v1 records;
+ordinary Hub and Annotated Documents are not yet available. It renders one captured
+assessment, preserving exact typed display values and the bound page envelope.
+Source links are relative to the output location, including paths with spaces,
+Unicode, `#` and `%`. `--verify` writes no HTML. Default builds go to
+`.kpopper/build/page.html` for `GROUNDING.yaml` and ignore that build directory.
+Explicit output must be an HTML file; captured inputs and leaf symlinks cannot be
+overwritten. Successful builds replace the output atomically.
 
 ### Author an active history record
 

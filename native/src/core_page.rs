@@ -5,6 +5,7 @@ use crate::{
 };
 use serde_json::{Value as J, json};
 use std::collections::{BTreeMap, BTreeSet};
+use std::path::Path;
 const STATES: &[&str] = &[
     "broken",
     "falsified",
@@ -374,6 +375,26 @@ pub fn project(
     content: Option<&[u8]>,
     with_links: bool,
 ) -> Result<J> {
+    project_with_page_path(context, content, with_links, None, None)
+}
+
+/// Project the page envelope with local file links relative to its eventual output path.
+pub fn project_for_page(
+    context: &CapturedAssessment,
+    content: Option<&[u8]>,
+    record_entry: &Path,
+    page_path: &Path,
+) -> Result<J> {
+    project_with_page_path(context, content, true, Some(record_entry), Some(page_path))
+}
+
+fn project_with_page_path(
+    context: &CapturedAssessment,
+    content: Option<&[u8]>,
+    with_links: bool,
+    record_entry: Option<&Path>,
+    page_path: Option<&Path>,
+) -> Result<J> {
     let brief = if let Some(content) = content {
         require(
             content.len()
@@ -516,6 +537,8 @@ pub fn project(
         &arrangements,
         &coverage,
         with_links,
+        record_entry,
+        page_path,
     )?;
     Ok(
         json!({"shape":shape,"flags":flags,"tabs":arrangements,"coverage":coverage,"page_assessment":page}),
@@ -534,7 +557,7 @@ fn quote(value: &str, safe: &str) -> String {
     }
     output
 }
-fn link(body: &J) -> String {
+fn link_for_page(body: &J, record_entry: Option<&Path>, page_path: Option<&Path>) -> String {
     if !has_link(body) {
         return String::new();
     }
@@ -581,11 +604,68 @@ fn link(body: &J) -> String {
             out.push_str(&quote(f, "/?.-_~%:@!$&'()*+,;="));
         }
         out
+    } else if let (Some(record), Some(page)) = (record_entry, page_path) {
+        let source = if Path::new(value).is_absolute() {
+            Path::new(value).to_path_buf()
+        } else {
+            record.parent().unwrap_or(record).join(value)
+        };
+        let source = realpath_like(&source);
+        let page_dir = page.parent().unwrap_or(Path::new("."));
+        let page_dir = realpath_like(page_dir);
+        let relative = pathdiff(&source, &page_dir);
+        quote(&relative, "/.-_~")
     } else if is_url && (value.starts_with('#') || value.starts_with('?')) {
         quote(value, "?.-_~%=&#+@!$'()*+,;:/")
     } else {
         quote(value, if is_url { "/.-_~%?=&#+@" } else { "/.-_~" })
     }
+}
+
+fn pathdiff(path: &Path, base: &Path) -> String {
+    let path = path.components().collect::<Vec<_>>();
+    let base = base.components().collect::<Vec<_>>();
+    let common = path.iter().zip(&base).take_while(|(a, b)| a == b).count();
+    let mut out = Vec::new();
+    for _ in common..base.len() {
+        out.push("..".into());
+    }
+    out.extend(
+        path[common..]
+            .iter()
+            .map(|c| c.as_os_str().to_string_lossy().into_owned()),
+    );
+    if out.is_empty() {
+        ".".into()
+    } else {
+        out.join("/")
+    }
+}
+
+fn realpath_like(path: &Path) -> std::path::PathBuf {
+    let absolute = if path.is_absolute() {
+        path.to_path_buf()
+    } else {
+        std::env::current_dir()
+            .unwrap_or_else(|_| Path::new(".").to_path_buf())
+            .join(path)
+    };
+    let mut missing = Vec::new();
+    let mut probe = absolute.as_path();
+    while !probe.exists() {
+        if let Some(name) = probe.file_name() {
+            missing.push(name.to_owned());
+        }
+        let Some(parent) = probe.parent() else {
+            return absolute;
+        };
+        probe = parent;
+    }
+    let mut resolved = std::fs::canonicalize(probe).unwrap_or_else(|_| probe.to_path_buf());
+    for name in missing.iter().rev() {
+        resolved.push(name);
+    }
+    resolved
 }
 fn language(doc: &J) -> String {
     let meta = &doc["meta"];
@@ -664,6 +744,8 @@ fn secondary(
     arrangements: &[J],
     coverage: &J,
     with_links: bool,
+    record_entry: Option<&Path>,
+    page_path: Option<&Path>,
 ) -> Result<J> {
     let snapshot = crate::public_core_readers::json_value(&context.snapshot().to_data())?;
     let document = &snapshot["document"];
@@ -728,7 +810,7 @@ fn secondary(
                     .filter_map(|d| d["id"].as_str()),
             )
             .collect::<BTreeSet<_>>();
-        nodes.push(json!({"id":id,"kind":if judgments.contains(id){"judgment"}else{"entry"},"label":label,"value":projected["status"]["computation"]["value_text"],"rule":rule,"status":projected["status"],"status_text":projected["status_text"],"dependencies":deps,"flags":flags[id],"href":if with_links{json!(link(body))}else{J::Null}}));
+        nodes.push(json!({"id":id,"kind":if judgments.contains(id){"judgment"}else{"entry"},"label":label,"value":projected["status"]["computation"]["value_text"],"rule":rule,"status":projected["status"],"status_text":projected["status_text"],"dependencies":deps,"flags":flags[id],"href":if with_links{json!(link_for_page(body, record_entry, page_path))}else{J::Null}}));
     }
     let values = json!({"consumer_view_version":view["version"],"title":title,"language":lang,"direction":direction,"nodes":nodes,"arrangements":arrangements,"coverage":coverage});
     let to_value = |v: &J| V::from_json_bounded(v, 64 * 1024 * 1024 / 8);
@@ -755,4 +837,37 @@ fn secondary(
         "page_assessment_output_limit",
     )?;
     Ok(envelope)
+}
+
+#[cfg(test)]
+mod page_link_tests {
+    use super::link_for_page;
+    use serde_json::json;
+    use std::path::Path;
+
+    #[test]
+    fn output_relative_local_links_match_python_shape() {
+        let body = json!({"file":"evidence/space #/%/Δ.txt"});
+        assert_eq!(
+            link_for_page(
+                &body,
+                Some(Path::new("/tmp/record/GROUNDING.yaml")),
+                Some(Path::new("/tmp/out/pages/index.html")),
+            ),
+            "../../record/evidence/space%20%23/%25/%CE%94.txt"
+        );
+    }
+
+    #[test]
+    fn url_sources_keep_scheme_and_encoded_components() {
+        let body = json!({"url":"https://example.com/a b?q=x y#frag ment"});
+        assert_eq!(
+            link_for_page(
+                &body,
+                Some(Path::new("/tmp/record/GROUNDING.yaml")),
+                Some(Path::new("/tmp/page.html"))
+            ),
+            "https://example.com/a%20b?q=x%20y#frag%20ment"
+        );
+    }
 }

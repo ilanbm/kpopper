@@ -1,6 +1,7 @@
 #![forbid(unsafe_code)]
 
 pub mod authoring_source;
+pub mod core_html;
 pub mod direct_history;
 pub mod history_activation;
 mod history_activation_verify;
@@ -63,6 +64,7 @@ pub mod project_modes;
 pub mod public_assessment;
 pub mod public_authoring;
 pub mod public_history;
+pub mod public_hub;
 pub mod public_workspace;
 mod python_identifiers;
 pub mod reasoning_assessment;
