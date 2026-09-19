@@ -1,6 +1,6 @@
 {
   "name": "kpopper",
-  "version": "1.7.0",
+  "version": "1.8.0",
   "description": "Make your agents' reasoning explicit, persistent, and deterministically checkable. Connect decisions to evidence and assumptions, and see what needs another look when a recorded premise changes.",
   "author": {
     "name": "Ilan Bar Magen"
