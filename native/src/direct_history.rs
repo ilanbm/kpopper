@@ -4,7 +4,7 @@ use crate::{
     Result, history_adapter,
     history_authoring::{self as A, n, obj, s},
     history_contract::*,
-    history_edits as E, history_emit,
+    history_edits as E, history_emit, history_hypothesis_authoring as HA,
     history_paths::Scheme,
     history_store::Store,
     history_transaction::{self as T, PreparedMutation},
@@ -83,19 +83,31 @@ fn options(prefix: &str, by: V) -> Result<A::Options> {
         receipt_version: None,
     })
 }
-fn edits(mutation: &PreparedMutation) -> Result<bool> {
+enum ReceiptFamily {
+    Authoring,
+    Edit,
+    Hypothesis,
+}
+fn receipt_family(mutation: &PreparedMutation) -> Result<ReceiptFamily> {
     let data = mutation.to_data();
-    Ok(map(&map(&map(&data)?["receipt"])?["before"])?.contains_key("history_edit"))
+    let before = map(&map(&map(&data)?["receipt"])?["before"])?;
+    Ok(if before.contains_key("history_edit") {
+        ReceiptFamily::Edit
+    } else if before.contains_key("hypothesis_authoring") {
+        ReceiptFamily::Hypothesis
+    } else {
+        ReceiptFamily::Authoring
+    })
 }
 fn verify_mutation(
     store: &Store,
     mutation: &PreparedMutation,
     runtime: Option<&Runtime>,
 ) -> Result<()> {
-    if edits(mutation)? {
-        E::verify_prepared(store, mutation, runtime)
-    } else {
-        A::verify_prepared(store, mutation, runtime)
+    match receipt_family(mutation)? {
+        ReceiptFamily::Edit => E::verify_prepared(store, mutation, runtime),
+        ReceiptFamily::Hypothesis => HA::verify_prepared(store, mutation, runtime),
+        ReceiptFamily::Authoring => A::verify_prepared(store, mutation, runtime),
     }
 }
 fn commit(
@@ -104,10 +116,10 @@ fn commit(
     runtime: Option<&Runtime>,
     verify: F::Verify<'_>,
 ) -> Result<V> {
-    if edits(mutation)? {
-        E::commit(store, mutation, runtime, verify)
-    } else {
-        A::commit(store, mutation, runtime, verify)
+    match receipt_family(mutation)? {
+        ReceiptFamily::Edit => E::commit(store, mutation, runtime, verify),
+        ReceiptFamily::Hypothesis => HA::commit(store, mutation, runtime, verify),
+        ReceiptFamily::Authoring => A::commit(store, mutation, runtime, verify),
     }
 }
 fn journal(store: &Store) -> String {
@@ -262,6 +274,14 @@ fn act_with_probe(
 }
 
 pub fn write(original: &[PathBuf], cwd: &Path, action: &V) -> Result<V> {
+    write_with_probe(original, cwd, action, &mut |_| Ok(()))
+}
+fn write_with_probe(
+    original: &[PathBuf],
+    cwd: &Path,
+    action: &V,
+    probe: &mut dyn FnMut(&str) -> Result<()>,
+) -> Result<V> {
     let a = map(action)?;
     let kind = text(field(a, "kind")?)?;
     require(
@@ -277,9 +297,24 @@ pub fn write(original: &[PathBuf], cwd: &Path, action: &V) -> Result<V> {
         "recovery_required",
     )?;
     let captured = store.capture()?;
-    let mut document = history_adapter::from_store_capture(&captured)?
-        .document()
-        .clone();
+    let write_options = options("write", V::Null)?;
+    let hypothesis = a
+        .get("hypothesis")
+        .filter(|v| **v != V::Null)
+        .map(text)
+        .transpose()?;
+    let mut document = if let Some(name) = hypothesis {
+        let context = HA::capture(&store, &captured, &write_options)?;
+        if map(&context.groups)?.contains_key(name) {
+            HA::layer(&context.base, &context.groups, &[name.to_owned()])?
+        } else {
+            context.base
+        }
+    } else {
+        history_adapter::from_store_capture(&captured)?
+            .document()
+            .clone()
+    };
     if let Some(meta) = map_mut(&mut document)?.get_mut("meta") {
         map_mut(meta)?.remove("history");
     }
@@ -321,13 +356,19 @@ pub fn write(original: &[PathBuf], cwd: &Path, action: &V) -> Result<V> {
         return Ok(draft);
     }
     let runtime = public_workspace::runtime_for_document(&document)?;
-    let mutation = A::prepare(
-        &store,
-        &captured,
-        action,
-        &options("write", V::Null)?,
-        runtime.as_ref(),
-    )?;
+    let mutation = if let Some(name) = hypothesis {
+        HA::prepare(
+            &store,
+            &captured,
+            name,
+            action,
+            None,
+            &write_options,
+            runtime.as_ref(),
+        )?
+    } else {
+        A::prepare(&store, &captured, action, &write_options, runtime.as_ref())?
+    };
     let authored = V::List(
         mutation
             .files()
@@ -344,14 +385,7 @@ pub fn write(original: &[PathBuf], cwd: &Path, action: &V) -> Result<V> {
             "private historical proposal",
         );
     }
-    publish(
-        &store,
-        &mutation,
-        &route,
-        original,
-        runtime.as_ref(),
-        &mut |_| Ok(()),
-    )?;
+    publish(&store, &mutation, &route, original, runtime.as_ref(), probe)?;
     crate::session_activity::published(
         &store.root,
         mutation.files(),
@@ -420,6 +454,14 @@ pub fn proposals(
 }
 
 pub fn recover(original: &[PathBuf], cwd: &Path, before: bool) -> Result<V> {
+    recover_with_runtime(original, cwd, before, None)
+}
+fn recover_with_runtime(
+    original: &[PathBuf],
+    cwd: &Path,
+    before: bool,
+    runtime_override: Option<&Runtime>,
+) -> Result<V> {
     let route = WriteRoute::capture(original, cwd)?;
     require(route.paths().len() == 1, "choose one logical record entry")?;
     let store = Store::new(&route.paths()[0])?;
@@ -466,13 +508,19 @@ pub fn recover(original: &[PathBuf], cwd: &Path, before: bool) -> Result<V> {
         routing(&route, original)? == retained,
         "history_routing_changed",
     )?;
-    let runtime = if string_is(
-        &map(&map(&mutation.to_data())?["receipt"])?["profile"],
-        "core/v1",
-    ) {
-        public_workspace::core_runtime()?
+    let loaded_runtime;
+    let runtime = if let Some(runtime) = runtime_override {
+        Some(runtime)
     } else {
-        public_workspace::runtime()?
+        loaded_runtime = if string_is(
+            &map(&map(&mutation.to_data())?["receipt"])?["profile"],
+            "core/v1",
+        ) {
+            public_workspace::core_runtime()?
+        } else {
+            public_workspace::runtime()?
+        };
+        loaded_runtime.as_ref()
     };
     route.verify()?;
     if before {
@@ -484,13 +532,13 @@ pub fn recover(original: &[PathBuf], cwd: &Path, before: bool) -> Result<V> {
             "history_already_committed: committed evidence requires an explicit new act",
         )?;
         cancelled_images(&store, &mutation)?;
-        verify_mutation(&store, &mutation, runtime.as_ref())?;
+        verify_mutation(&store, &mutation, runtime)?;
         route.verify()?;
         cancelled_images(&store, &mutation)?;
         require(F::read(&path)?.as_ref() == Some(&raw), "concurrent_edit")?;
         F::remove(&path)?;
     } else {
-        commit(&store, &mutation, runtime.as_ref(), &mut |_| {
+        commit(&store, &mutation, runtime, &mut |_| {
             route.verify()?;
             require(F::read(&path)?.as_ref() == Some(&raw), "concurrent_edit")
         })
@@ -545,6 +593,43 @@ mod tests {
                 ("because", s("explicit test disposition")),
             ]),
         )
+    }
+    fn core_fixture(root: &Path, runtime: &Runtime) -> PathBuf {
+        let entry = root.join("GROUNDING.yaml");
+        let action = obj([
+            ("kind", s("add")),
+            ("id", s("p.base")),
+            ("body", obj([("v", n("1"))])),
+            ("as_of", s("2026-09-19")),
+            ("why", V::Null),
+            ("into", V::Null),
+            ("hypothesis", V::Null),
+            ("source", V::Null),
+            ("at", V::Null),
+        ]);
+        let policy = crate::project_modes::Project::open(root)
+            .unwrap()
+            .config()
+            .unwrap();
+        let mutation = crate::history_bootstrap::prepare(
+            &entry,
+            &action,
+            &policy,
+            &crate::history_bootstrap::BootstrapOptions {
+                operation: "first-fixture".into(),
+                recorded_at: "2026-09-19T12:00:00+00:00".into(),
+                recording_day: "2026-09-19".into(),
+                record_id: "fixture".into(),
+                by: V::Null,
+            },
+            Some(runtime),
+        )
+        .unwrap();
+        crate::history_bootstrap::publish(&entry, &mutation, &policy, Some(runtime), &mut |_| {
+            Ok(())
+        })
+        .unwrap();
+        entry
     }
     #[test]
     fn interruptions_replay_exact_bytes_and_rollback_cannot_erase_a_commit() {
@@ -625,6 +710,93 @@ mod tests {
                 }
             );
             assert_eq!(fs::read(path).unwrap(), old);
+        }
+    }
+
+    #[test]
+    fn named_hypothesis_journals_recover_with_their_receipt_family() {
+        let cache = tempfile::tempdir().unwrap();
+        let runtime = Runtime::open(
+            &Path::new(env!("CARGO_MANIFEST_DIR"))
+                .join("../scripts/reasoning/native")
+                .join(format!(
+                    "{}.zip",
+                    crate::reasoning_runtime::target_name().unwrap()
+                )),
+            cache.path(),
+            crate::reasoning_runtime::OperationalBounds::default(),
+        )
+        .unwrap();
+        for stage in ["journal", "committed"] {
+            for before in [true, false] {
+                let temp = tempfile::tempdir().unwrap();
+                let entry = core_fixture(temp.path(), &runtime);
+                let cwd = entry.parent().unwrap();
+                let original = fs::read(&entry).unwrap();
+                let action = obj([
+                    ("kind", s("add")),
+                    ("id", s("p.named")),
+                    ("body", obj([("v", n("2"))])),
+                    ("as_of", V::Null),
+                    ("why", V::Null),
+                    ("into", V::Null),
+                    ("hypothesis", s("alpha")),
+                    ("source", V::Null),
+                    ("at", V::Null),
+                ]);
+                let route = WriteRoute::capture(std::slice::from_ref(&entry), cwd).unwrap();
+                let store = Store::new(&entry).unwrap();
+                let captured = store.capture().unwrap();
+                let write_options = options("write", V::Null).unwrap();
+                let mutation = HA::prepare(
+                    &store,
+                    &captured,
+                    "alpha",
+                    &action,
+                    None,
+                    &write_options,
+                    Some(&runtime),
+                )
+                .unwrap();
+                let stopped = publish(
+                    &store,
+                    &mutation,
+                    &route,
+                    std::slice::from_ref(&entry),
+                    Some(&runtime),
+                    &mut |at| require(at != stage, "interrupted"),
+                );
+                drop(route);
+                assert_eq!(stopped.unwrap_err().0, "interrupted");
+                let store = Store::new(&entry).unwrap();
+                let path = cwd.join(journal(&store));
+                let bytes = fs::read(&path).unwrap();
+                let (mutation, _) = decode(&bytes).unwrap();
+                assert!(matches!(
+                    receipt_family(&mutation).unwrap(),
+                    ReceiptFamily::Hypothesis
+                ));
+                let recovered =
+                    recover_with_runtime(std::slice::from_ref(&entry), cwd, before, Some(&runtime));
+                if stage == "committed" && before {
+                    assert_eq!(
+                        recovered.unwrap_err().0,
+                        "history_already_committed: committed evidence requires an explicit new act"
+                    );
+                    recover_with_runtime(std::slice::from_ref(&entry), cwd, false, Some(&runtime))
+                        .unwrap();
+                } else {
+                    recovered.unwrap();
+                }
+                assert!(!path.exists());
+                if stage == "journal" && before {
+                    assert_eq!(fs::read(&entry).unwrap(), original);
+                } else {
+                    for file in mutation.files() {
+                        assert_eq!(F::read(&cwd.join(&file.path)).unwrap(), file.after);
+                    }
+                }
+            }
         }
     }
 

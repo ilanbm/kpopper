@@ -119,6 +119,128 @@ fn first_add_creates_history_and_subsequent_set_retains_the_original_version() {
     ));
     assert!(success(run(&root, &["review", "d.work"])).contains("(review d.work)"));
 }
+
+#[test]
+fn named_hypothesis_cli_writes_stay_out_of_base_and_support_add_set_review() {
+    let temp = tempfile::tempdir().unwrap();
+    let root = temp.path().canonicalize().unwrap();
+    success(run(&root, &["add", "p.base", "v=10"]));
+    success(run(
+        &root,
+        &["add", "p.only", "v=1", "--hypothesis", "alpha"],
+    ));
+    success(run(&root, &["set", "p.only", "2", "--hypothesis", "alpha"]));
+    success(run(
+        &root,
+        &[
+            "add",
+            "d.named",
+            "verdict=continue",
+            "rests_on=[p.only]",
+            "reopened_by=new readings",
+            "--hypothesis",
+            "alpha",
+        ],
+    ));
+    assert!(
+        success(run(&root, &["review", "d.named", "--hypothesis", "alpha"],))
+            .contains("(review d.named)")
+    );
+    let record = kpop_native::history_yaml::decode_source_document(
+        &fs::read(root.join("GROUNDING.yaml")).unwrap(),
+    )
+    .unwrap();
+    let known = record.get("known").unwrap();
+    assert_eq!(
+        known
+            .get("p.base")
+            .unwrap()
+            .get("v")
+            .unwrap()
+            .typed()
+            .to_tagged()
+            .unwrap(),
+        serde_json::json!(["int", "10"])
+    );
+    assert!(known.get("p.only").is_none());
+    assert!(
+        record
+            .get("judgments")
+            .and_then(|v| v.get("d.named"))
+            .is_none()
+    );
+    let status: Value = serde_json::from_str(&success(run(&root, &["history", "status"]))).unwrap();
+    assert_eq!(status["subjects"]["p.base"]["acceptance"], "accepted");
+    assert_eq!(status["subjects"]["p.only"]["acceptance"], "proposed");
+    assert_eq!(status["subjects"]["d.named"]["acceptance"], "proposed");
+}
+
+#[test]
+fn first_named_add_bootstraps_a_proposal_without_accepting_it() {
+    let temp = tempfile::tempdir().unwrap();
+    let root = temp.path().canonicalize().unwrap();
+    let output = success(run(
+        &root,
+        &["add", "p.first", "v=1", "--hypothesis", "opening"],
+    ));
+    assert!(output.contains("born with its first entry"));
+    let record = kpop_native::history_yaml::decode_source_document(
+        &fs::read(root.join("GROUNDING.yaml")).unwrap(),
+    )
+    .unwrap();
+    assert!(record.get("known").unwrap().get("p.first").is_none());
+    let status: Value = serde_json::from_str(&success(run(&root, &["history", "status"]))).unwrap();
+    assert_eq!(status["subjects"]["p.first"]["acceptance"], "proposed");
+}
+
+#[test]
+fn named_hypothesis_rejects_invalid_and_physical_authority_names() {
+    let temp = tempfile::tempdir().unwrap();
+    let root = temp.path().canonicalize().unwrap();
+    success(run(&root, &["add", "p.base", "v=1"]));
+    let invalid = run(&root, &["add", "p.bad", "v=2", "--hypothesis", "../bad"]);
+    assert!(!invalid.status.success());
+    assert!(String::from_utf8_lossy(&invalid.stderr).contains("invalid_history_hypothesis"));
+    fs::create_dir_all(root.join(".kpopper/hypotheses")).unwrap();
+    fs::write(
+        root.join(".kpopper/hypotheses/taken.yaml"),
+        "known: {p.physical: {v: 3}}\n",
+    )
+    .unwrap();
+    let collision = run(&root, &["add", "p.bad", "v=2", "--hypothesis", "taken"]);
+    assert!(!collision.status.success());
+    assert!(String::from_utf8_lossy(&collision.stderr).contains("hypothesis_authority_collision"));
+}
+
+#[test]
+fn named_privacy_checks_use_hypothesis_only_dependencies() {
+    let temp = tempfile::tempdir().unwrap();
+    let root = temp.path().canonicalize().unwrap();
+    let private = tempfile::tempdir().unwrap();
+    success(run(&root, &["add", "p.base", "v=1"]));
+    success(run(
+        &root,
+        &["add", "p.only", "v=2", "--hypothesis", "alpha"],
+    ));
+    let before = fs::read(root.join("GROUNDING.yaml")).unwrap();
+    let output = command(&root)
+        .env("KPOPPER_PRIVATE_HOME", private.path())
+        .args([
+            "add",
+            "d.private",
+            "verdict=stop",
+            "rests_on=[p.only]",
+            "private=true",
+            "--hypothesis",
+            "alpha",
+        ])
+        .output()
+        .unwrap();
+    let result: Value = serde_json::from_str(&success(output)).unwrap();
+    assert_eq!(result["state"], "private draft");
+    assert_eq!(fs::read(root.join("GROUNDING.yaml")).unwrap(), before);
+    assert!(!success(run(&root, &["history", "status"])).contains("d.private"));
+}
 #[test]
 fn refused_first_add_leaves_no_partial_record_or_authority() {
     let temp = tempfile::tempdir().unwrap();

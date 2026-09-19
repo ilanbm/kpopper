@@ -113,17 +113,16 @@ fn action(kind: &str, options: &Options) -> Result<(V, Vec<PathBuf>)> {
             .to_string();
         require(day <= &today, "--as-of is after today")?;
     }
-    require(
-        options.hypothesis.is_none(),
-        "public hypothesis authoring is not connected",
-    )?;
     let mut a = obj([
         ("kind", s(kind)),
         ("id", s(&options.subject)),
         ("as_of", options.as_of.as_deref().map(s).unwrap_or(V::Null)),
         ("why", options.why.as_deref().map(s).unwrap_or(V::Null)),
         ("into", options.into.as_deref().map(s).unwrap_or(V::Null)),
-        ("hypothesis", V::Null),
+        (
+            "hypothesis",
+            options.hypothesis.as_deref().map(s).unwrap_or(V::Null),
+        ),
         (
             "source",
             options.source.as_deref().map(s).unwrap_or(V::Null),
