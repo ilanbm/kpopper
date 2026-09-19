@@ -129,7 +129,7 @@ class TestPlans(unittest.TestCase):
     def test_invalid_committed_bundles_gate_every_expensive_family(self):
         jobs = yaml.safe_load((ROOT / '.github/workflows/check.yml').read_text())['jobs']
         self.assertTrue(any('--check-bundles' in s.get('run', '') for s in jobs['changes']['steps']))
-        for name in ('check', 'document-ui', 'session', 'reasoning-runtime'):
+        for name in ('check', 'examples', 'document-ui', 'session', 'reasoning-runtime'):
             self.assertEqual(set(jobs[name]['needs']), {'changes', 'record'})
         native = yaml.safe_load((ROOT / '.github/workflows/reasoning-runtime.yml').read_text())['jobs']
         self.assertEqual(native['target']['needs'], 'preflight')
