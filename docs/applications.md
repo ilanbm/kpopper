@@ -70,6 +70,9 @@ document modules remain implementation modules at their compatible paths. Existi
 operations do not depend on those entry points; explicit presentation authoring crosses
 the application boundary deliberately.
 
+History runtime declarations include the application modules in their source manifest.
+The optional installation adds dependencies; it does not change that source inventory.
+
 ## Maturity
 
 | Capability | Layer | Status |
