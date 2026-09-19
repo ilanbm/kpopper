@@ -122,15 +122,24 @@ pub(crate) fn collection_for(
     body: &V,
     explicit: Option<&str>,
 ) -> Result<String> {
-    let cols = F::collections(&world.document)?;
+    collection_for_document(&world.document, &world.fields, id, body, explicit)
+}
+pub(crate) fn collection_for_document(
+    document: &V,
+    fields: &Map,
+    id: &str,
+    body: &V,
+    explicit: Option<&str>,
+) -> Result<String> {
+    let cols = F::collections(document)?;
     if let Some(e) = explicit.filter(|s| !s.is_empty()) {
         require(
-            cols.contains_key(e) || map(&world.document)?.contains_key(e),
+            cols.contains_key(e) || map(document)?.contains_key(e),
             &format!("no collection {e} in this record"),
         )?;
         return Ok(e.into());
     }
-    let deps = text(&world.fields["deps"])?;
+    let deps = text(&fields["deps"])?;
     let jud = |b: &V| map(b).is_ok_and(|m| m.contains_key(deps));
     if cols.is_empty() {
         return Ok(if jud(body) {
@@ -201,9 +210,8 @@ pub(crate) fn collection_for(
             .map(|(c, _)| c.clone())
             .unwrap_or_else(|| "sources".into()));
     }
-    Ok(most(&|id, b| {
-        !judgment(world, id)
-            && map(b).is_ok_and(|m| ["v", "rule", "quoted"].iter().any(|k| m.contains_key(*k)))
+    Ok(most(&|_, b| {
+        !jud(b) && map(b).is_ok_and(|m| ["v", "rule", "quoted"].iter().any(|k| m.contains_key(*k)))
     })
     .filter(|(_, n)| *n > 0)
     .map(|(c, _)| c.clone())

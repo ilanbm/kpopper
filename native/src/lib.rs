@@ -3,6 +3,7 @@
 pub mod history_adapter;
 pub mod history_authoring;
 mod history_authoring_audit;
+pub mod history_authoring_batch;
 pub mod history_authority;
 pub mod history_bundle;
 pub mod history_cancellation;

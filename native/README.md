@@ -143,8 +143,15 @@ policy checks, followed by archive and imported-source revalidation before publi
 The `history_sources` adapter bounds retained members, verifies their hashes and
 requires evidence for composite YAML pointers.
 
-These library interfaces remain separate from the experimental CLI. Batch authoring,
-identity/edit application adapters, temporal authoring and ordinary-profile authoring
+`history_authoring_batch` validates up to 64 actions against one final computation
+world while comparing each replacement to its actual preceding claim. It binds
+dependencies to their final immutable versions and refuses cyclic new pins.
+Receipt versions 2/3 retain sequential replay, version 6 retains the earlier final
+world, and version 8 captures typed snapshots and declared missing-pin evidence.
+Attached report files remain part of the complete mutation and replay comparison.
+
+These library interfaces remain separate from the experimental CLI. Identity/edit
+application adapters, temporal authoring and ordinary-profile authoring
 are not yet exposed through this preparation layer. The newer receipt contracts are
 checked against a Python 1.7 candidate; final release binding remains pending.
 

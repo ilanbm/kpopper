@@ -21,19 +21,19 @@ use crate::{
     value::{Integer, TypedValue as V},
 };
 use std::collections::BTreeSet;
-fn s(v: &str) -> V {
+pub(crate) fn s(v: &str) -> V {
     V::Text(v.into())
 }
-fn n(v: &str) -> V {
+pub(crate) fn n(v: &str) -> V {
     V::Integer(Integer::new(v).unwrap())
 }
-fn obj(v: impl IntoIterator<Item = (&'static str, V)>) -> V {
+pub(crate) fn obj(v: impl IntoIterator<Item = (&'static str, V)>) -> V {
     V::Map(v.into_iter().map(|(k, v)| (k.into(), v)).collect())
 }
-fn strings(v: impl IntoIterator<Item = String>) -> V {
+pub(crate) fn strings(v: impl IntoIterator<Item = String>) -> V {
     V::List(v.into_iter().map(V::Text).collect())
 }
-fn empty() -> V {
+pub(crate) fn empty() -> V {
     V::Map(Map::new())
 }
 
@@ -50,7 +50,7 @@ pub struct Options {
     pub receipt_version: Option<u8>,
 }
 impl Options {
-    fn requires(&self) -> Option<V> {
+    pub(crate) fn requires(&self) -> Option<V> {
         let mut requires = BTreeSet::new();
         if self.strict {
             requires.insert(A::ROOT_DISPOSITION.into());
@@ -65,7 +65,7 @@ impl Options {
         }
     }
 }
-fn document(capture: &Capture) -> Result<V> {
+pub(crate) fn document(capture: &Capture) -> Result<V> {
     let mut doc = Adapter::from_store_capture(capture)?.document().clone();
     map_mut(
         map_mut(&mut doc)?
@@ -75,7 +75,7 @@ fn document(capture: &Capture) -> Result<V> {
     .remove("history");
     Ok(doc)
 }
-fn destination(document: &V) -> Result<V> {
+pub(crate) fn destination(document: &V) -> Result<V> {
     let cap = F::capabilities(document, None)?;
     let desired = Authoring::declaration(document)?;
     let have = list(&map(&cap)?["requires"])?;
@@ -95,7 +95,7 @@ fn destination(document: &V) -> Result<V> {
         Ok(document.clone())
     }
 }
-fn archive(store: &Store) -> Result<V> {
+pub(crate) fn archive(store: &Store) -> Result<V> {
     let path = FS::target(&store.root, &store.layout.replaced)?;
     let raw = FS::read(&path)?;
     require(
@@ -107,7 +107,7 @@ fn archive(store: &Store) -> Result<V> {
         ("sha256", raw.map(|v| s(&sha256(&v))).unwrap_or(V::Null)),
     ]))
 }
-fn guards(store: &Store, capture: &Capture, options: &Options) -> Result<()> {
+pub(crate) fn guards(store: &Store, capture: &Capture, options: &Options) -> Result<()> {
     require(!capture.commits.is_empty(), "history_bootstrap_required")?;
     require(
         store.root.canonicalize()? == capture.root.canonicalize()?
@@ -130,7 +130,7 @@ fn guards(store: &Store, capture: &Capture, options: &Options) -> Result<()> {
     require(!options.recorded_at.is_empty(), "missing_recording_time")?;
     Ok(())
 }
-fn head<'a>(capture: &'a Capture, subject: &str) -> Result<&'a V> {
+pub(crate) fn head<'a>(capture: &'a Capture, subject: &str) -> Result<&'a V> {
     let state = map(&map(&capture.state)?["subjects"])?
         .get(subject)
         .ok_or_else(|| error("unresolved_history_subject"))?;
@@ -144,7 +144,7 @@ fn head<'a>(capture: &'a Capture, subject: &str) -> Result<&'a V> {
         .get(text(&state["head"])?)
         .ok_or_else(|| error("incomplete_closure"))
 }
-fn pins(capture: &Capture, deps: &[V], missing: bool) -> Result<(V, V)> {
+pub(crate) fn pins(capture: &Capture, deps: &[V], missing: bool) -> Result<(V, V)> {
     let mut pins = Map::new();
     let mut gaps = Map::new();
     for dep in deps {
@@ -157,7 +157,7 @@ fn pins(capture: &Capture, deps: &[V], missing: bool) -> Result<(V, V)> {
     }
     Ok((V::Map(pins), V::Map(gaps)))
 }
-fn evidence(doc: &V, world: &mut World<'_>, audit: Option<&ReplayAudit>) -> Result<V> {
+pub(crate) fn evidence(doc: &V, world: &mut World<'_>, audit: Option<&ReplayAudit>) -> Result<V> {
     for (_, body) in entries(doc)?.values() {
         require(
             !map(body).is_ok_and(|b| b.contains_key("temporal")),
@@ -176,7 +176,7 @@ fn evidence(doc: &V, world: &mut World<'_>, audit: Option<&ReplayAudit>) -> Resu
     ]))
 }
 #[allow(clippy::too_many_arguments)]
-fn make_object(
+pub(crate) fn make_object(
     subject: &str,
     kind: &str,
     body: V,
@@ -208,7 +208,7 @@ fn make_object(
     validate_object(&value)?;
     Ok(value)
 }
-fn saw(capture: &Capture, subject: &str) -> Result<Vec<String>> {
+pub(crate) fn saw(capture: &Capture, subject: &str) -> Result<Vec<String>> {
     capture
         .objects
         .iter()
@@ -219,7 +219,7 @@ fn saw(capture: &Capture, subject: &str) -> Result<Vec<String>> {
         })
         .collect()
 }
-fn template(capture: &Capture, doc: &V) -> Result<V> {
+pub(crate) fn template(capture: &Capture, doc: &V) -> Result<V> {
     let mut template = View::template(&capture.commits)?;
     for c in F::collections(doc)?.keys() {
         map_mut(&mut template)?
@@ -238,7 +238,7 @@ fn template(capture: &Capture, doc: &V) -> Result<V> {
     target.insert("reasoning".into(), meta["reasoning"].clone());
     Ok(template)
 }
-fn candidate(capture: &Capture, mutation: &PreparedMutation) -> Result<Capture> {
+pub(crate) fn candidate(capture: &Capture, mutation: &PreparedMutation) -> Result<Capture> {
     let mut candidate = capture.clone();
     for file in mutation.files() {
         let raw = file
@@ -298,7 +298,7 @@ pub fn prepare(
 ) -> Result<PreparedMutation> {
     prepare_inner(store, capture, action, options, runtime, None)
 }
-fn prepare_inner(
+pub(crate) fn prepare_inner(
     store: &Store,
     capture: &Capture,
     action: &V,
@@ -308,7 +308,6 @@ fn prepare_inner(
 ) -> Result<PreparedMutation> {
     guards(store, capture, options)?;
     crate::history_sources::capture(&store.root, &store.layout.entry, &capture.document)?;
-    require(!options.recording_day.is_empty(), "missing_recording_time")?;
     require(
         options.receipt_version.is_none_or(|v| [1, 7].contains(&v)),
         "invalid_authoring_receipt",
@@ -325,6 +324,7 @@ fn prepare_inner(
         "history_hypothesis_write_unsupported",
     )?;
     if !a.get("as_of").is_some_and(truth) {
+        require(!options.recording_day.is_empty(), "missing_recording_time")?;
         a.insert("as_of".into(), s(&options.recording_day));
     }
     let intent = action.clone();
@@ -466,7 +466,7 @@ fn prepare_inner(
         let (pins, gaps) = pins(
             capture,
             &deps,
-            judgment && !Authoring::blocked_text(&body).is_empty(),
+            judgment && version == 7 && !Authoring::blocked_text(&body).is_empty(),
         )?;
         let claim = make_object(
             subject,
@@ -956,7 +956,9 @@ pub fn verify_prepared(
     let intent = map(field(map(&map(receipt)?["before"])?, "authoring")?)?;
     let version = field(intent, "version")?;
     require(
-        ["1", "4", "5", "7", "9"].iter().any(|v| is_int(version, v)),
+        ["1", "2", "3", "4", "5", "6", "7", "8", "9"]
+            .iter()
+            .any(|v| is_int(version, v)),
         "invalid_authoring_receipt",
     )?;
     require(
@@ -1020,12 +1022,7 @@ pub fn verify_prepared(
     let options = Options {
         operation: text(&data["operation"])?.into(),
         recorded_at: text(field(intent, "recorded_at")?)?.into(),
-        recording_day: map(action)?
-            .get("as_of")
-            .map(text)
-            .transpose()?
-            .unwrap_or("")
-            .into(),
+        recording_day: String::new(),
         by: field(intent, "by")?.clone(),
         strict: requires.contains(&s(A::ROOT_DISPOSITION)),
         paths: if requires.contains(&s(P::CAPABILITY)) {
@@ -1043,7 +1040,42 @@ pub fn verify_prepared(
             1
         }),
     };
-    let expected = if is_int(version, "5") || is_int(version, "9") {
+    let expected = if ["2", "3", "6", "8"].iter().any(|v| is_int(version, v)) {
+        require(
+            intent.get("kind").is_some_and(|v| string_is(v, "batch")),
+            "invalid_authoring_receipt",
+        )?;
+        let version = [2u8, 3, 6, 8]
+            .into_iter()
+            .find(|v| is_int(version, &v.to_string()))
+            .unwrap();
+        let actions = list(field(intent, "actions")?)?;
+        let evidence = mutation
+            .files()
+            .iter()
+            .filter(|f| f.role == "history_evidence")
+            .map(|f| {
+                Ok((
+                    f.path.clone(),
+                    f.after.clone().ok_or_else(|| error("invalid_mutation"))?,
+                ))
+            })
+            .collect::<Result<_>>()?;
+        let batch = crate::history_authoring_batch::BatchOptions {
+            authoring: options,
+            receipt_version: version,
+            context: field(intent, "context")?.clone(),
+            evidence,
+        };
+        crate::history_authoring_batch::prepare_inner(
+            store,
+            &captured,
+            actions,
+            &batch,
+            runtime,
+            Some(&audit),
+        )?
+    } else if is_int(version, "5") || is_int(version, "9") {
         require(
             intent.get("kind").is_some_and(|v| string_is(v, "proposal")) && options.strict,
             "invalid_authoring_receipt",
@@ -1173,10 +1205,6 @@ mod tests {
         let runtime = runtime(cache.path());
         let mut failures = vec![];
         for case in data["cases"].as_array().unwrap() {
-            // Version 7 adds explicit gaps; old accepted v1 envelopes remain exact.
-            if case["name"] == "blocked-judgment" && case["candidate"] != true {
-                continue;
-            }
             let temp = tempfile::tempdir().unwrap();
             write(temp.path(), case);
             let store = Store::new(&temp.path().join("GROUNDING.yaml")).unwrap();
@@ -1345,6 +1373,40 @@ mod tests {
         assert_eq!(store.capture().unwrap().commits.len(), 1);
     }
 
+    #[test]
+    fn typed_recording_dates_replay_without_setting_computational_time() {
+        let data: J =
+            serde_json::from_str(include_str!("../tests/fixtures/history-authoring.json")).unwrap();
+        let case = &data["cases"][1];
+        let temp = tempfile::tempdir().unwrap();
+        write(temp.path(), case);
+        let cache = tempfile::tempdir().unwrap();
+        let runtime = runtime(cache.path());
+        let store = Store::new(&temp.path().join("GROUNDING.yaml")).unwrap();
+        let capture = store.capture().unwrap();
+        let mut action = V::from_tagged(&case["action"]).unwrap();
+        let date = V::from_tagged(&serde_json::json!(["date", "2026-09-18"])).unwrap();
+        map_mut(&mut action)
+            .unwrap()
+            .insert("as_of".into(), date.clone());
+        let mut opts = options(case);
+        opts.recording_day.clear();
+        let mutation = prepare(&store, &capture, &action, &opts, Some(&runtime)).unwrap();
+        verify_prepared(&store, &mutation, Some(&runtime)).unwrap();
+        let projected = candidate(&capture, &mutation).unwrap();
+        assert_eq!(
+            map(&map(head(&projected, "p.input").unwrap()).unwrap()["body"]).unwrap()["of"],
+            date
+        );
+        let world = World::new(
+            &document(&capture).unwrap(),
+            None,
+            Some(&runtime),
+            OperationalBounds::default(),
+        )
+        .unwrap();
+        assert_eq!(map(world.snapshot().data()).unwrap()["as_of"], V::Null);
+    }
     #[test]
     fn rehashed_computational_forgery_fails_whole_mutation_replay() {
         let data: J =

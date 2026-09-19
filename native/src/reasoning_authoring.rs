@@ -252,6 +252,8 @@ pub struct World<'a> {
     readings: BTreeMap<String, J>,
     assessment: Option<V>,
     operation_assessment: bool,
+    batch_final: Option<V>,
+    batch_subject: Option<String>,
 }
 impl<'a> World<'a> {
     pub(crate) fn snapshot_id(&self) -> &str {
@@ -368,8 +370,29 @@ impl<'a> World<'a> {
             readings: BTreeMap::new(),
             assessment: None,
             operation_assessment: false,
+            batch_final: None,
+            batch_subject: None,
         })
     }
+    /// Prior authored claims are admitted against the fully staged computation world.
+    pub(crate) fn batch_admission(
+        final_document: &V,
+        prior_document: &V,
+        subject: &str,
+        runtime: Option<&'a Runtime>,
+        bounds: OperationalBounds,
+    ) -> Result<Self> {
+        let mut world = Self::new(final_document, None, runtime, bounds)?;
+        world.document = prior_document.clone();
+        world.raw = entries(prior_document)?
+            .into_iter()
+            .map(|(id, (_, body))| (id, body))
+            .collect();
+        world.batch_final = Some(final_document.clone());
+        world.batch_subject = Some(subject.into());
+        Ok(world)
+    }
+
     pub(crate) fn check_builtin(names: &[String]) -> Result<()> {
         let bad = names
             .iter()
@@ -388,8 +411,33 @@ impl<'a> World<'a> {
         Self::check_builtin(&[id.into()])?;
         if !self.readings.contains_key(id) {
             let mut e = Evaluator::new(&self.snapshot, self.runtime, None, self.bounds.clone())?;
-            self.readings
-                .insert(id.into(), A::dependency_result(&self.snapshot, id, &mut e)?);
+            let result = if self.batch_subject.as_deref() == Some(id) {
+                let body = self.raw.get(id).unwrap_or(&V::Null);
+                let rule = map(body)
+                    .ok()
+                    .and_then(|m| m.get("rule"))
+                    .unwrap_or(&V::Null);
+                let query = query_expression(&self.document, rule)?;
+                let expression = if let Some(query) = query {
+                    query
+                } else {
+                    L::node_expression(&V::Map(Map::from([("body".into(), body.clone())])))?
+                };
+                if let Some(reason) = expression.get("unavailable") {
+                    json!({"status":"unknown","diagnostics":[{"code":reason}]})
+                } else {
+                    let declared = expression
+                        .get("query")
+                        .and_then(|q| q.get("scope"))
+                        .and_then(J::as_str)
+                        .map(|v| vec![v.into()])
+                        .unwrap_or_else(|| L::references(&expression));
+                    e.evaluate(val(&expression)?, declared)?
+                }
+            } else {
+                A::dependency_result(&self.snapshot, id, &mut e)?
+            };
+            self.readings.insert(id.into(), result);
         }
         Ok(self.readings[id].clone())
     }
@@ -446,6 +494,14 @@ impl<'a> World<'a> {
         Ok(current["value"] == proposed["value"])
     }
     pub fn candidate(&self, action: &V) -> Result<Self> {
+        if let Some(final_document) = &self.batch_final {
+            return Self::new(
+                final_document,
+                Some(&self.snapshot),
+                self.runtime,
+                self.bounds.clone(),
+            );
+        }
         let a = map(action)?;
         let kind = text(field(a, "kind")?)?;
         let id = text(field(a, "id")?)?;

@@ -84,6 +84,26 @@ pub fn prepare_commit(
     receipt: &V,
     requires: Option<&V>,
 ) -> Result<PreparedMutation> {
+    prepare_commit_with_files(
+        capture,
+        operation,
+        new_objects,
+        template,
+        receipt,
+        requires,
+        &[],
+    )
+}
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn prepare_commit_with_files(
+    capture: &Capture,
+    operation: &str,
+    new_objects: &[V],
+    template: &V,
+    receipt: &V,
+    requires: Option<&V>,
+    extra_files: &[FileImage],
+) -> Result<PreparedMutation> {
     require(
         !capture.commits.contains_key(operation),
         "operation_already_prepared",
@@ -176,6 +196,7 @@ pub fn prepare_commit(
         before: None,
         after: Some(E::encode_document(&manifest)?),
     });
+    files.extend_from_slice(extra_files);
     PreparedMutation::prepare(
         operation,
         &capture.marker,
