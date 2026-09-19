@@ -65,6 +65,26 @@ by the checker or a general latency guarantee. The
 sample durations and exact output. Exit 1 is expected because the example's declared
 condition fires.
 
+## Dependency-check illustration
+
+`diagrams/dependency-checks.png` shows a changed recorded assumption, deterministic
+checks over its declared dependencies, and the affected decisions returned to an
+agent for review. Amber marks a need for review; it does not assert that the
+decisions are false. The graph is schematic. The prominent comparison reads:
+"A check that takes an agent 10 seconds runs locally in 4.5 milliseconds."
+It describes a possible comparison, not measured benchmark results.
+The matching SVG is its editable source. `diagrams/dependency-checks-mobile.png`
+and its SVG reflow the same content for phones.
+
+## Reasoning canvas
+
+`canvas-for-reasoning.png` shows a software agent painting relationships between
+evidence, assumptions, a decision and review conditions on a canvas labelled
+`GROUNDING.yaml`. It illustrates a shared place to develop and preserve reasoning
+across conversations. The caption is "The canvas your AI didn’t know it needed."
+The matching SVG is the editable source. The README displays it outside collapsed
+sections, immediately before **Make it earn its place**.
+
 ## Knowledge-source illustration
 
 `knowledge-sources.png` keeps the detailed, playful source-map treatment: crowded
