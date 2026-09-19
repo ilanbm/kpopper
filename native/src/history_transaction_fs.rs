@@ -571,12 +571,16 @@ pub(crate) fn journal_path(root: &Path, journal: &str, m: &PreparedMutation) -> 
 }
 fn private_home(root: &Path, journal: &str, m: &PreparedMutation) -> Result<()> {
     if journal == Layout::for_entry(&mutation_entry(m)?)?.journal {
-        let ignore = Path::new(journal).parent().unwrap().join(".gitignore");
-        let path = target(root, to_str(&ignore)?)?;
+        let parent = journal
+            .rsplit_once('/')
+            .map(|(parent, _)| parent)
+            .ok_or_else(|| error("invalid_journal_path"))?;
+        let ignore = format!("{parent}/.gitignore");
+        let path = target(root, &ignore)?;
         if let Some(raw) = read(&path)? {
             require(raw == b"*\n", "journal_ignore_mismatch")?;
         } else {
-            publish_immutable(root, to_str(&ignore)?, b"*\n")?;
+            publish_immutable(root, &ignore, b"*\n")?;
         }
     }
     Ok(())
@@ -940,42 +944,23 @@ pub fn publish_transition(
     mut committed: Option<Verify<'_>>,
 ) -> Result<()> {
     refuse_group(m)?;
-    let directories = participant_directories(root, m).map_err(|e| {
-        eprintln!("platform-trace: participant directories: {e}");
-        e
-    })?;
-    let _guards = guards(directories).map_err(|e| {
-        eprintln!("platform-trace: participant locks: {e}");
-        e
-    })?;
+    let _guards = guards(participant_directories(root, m)?)?;
     let primary = journal_path(root, journal, m)?;
     require(read(&primary)?.is_none(), "recovery_required")?;
     let paths = transition_targets(root, m)?;
     mutable_before(m, &paths)?;
-    verify(&data(m)).map_err(|e| {
-        eprintln!("platform-trace: transaction verifier: {e}");
-        e
-    })?;
+    verify(&data(m))?;
     let paths = transition_targets(root, m)?;
     mutable_before(m, &paths)?;
-    private_home(root, journal, m).map_err(|e| {
-        eprintln!("platform-trace: private home: {e}");
-        e
-    })?;
-    publish_immutable(root, journal, &m.to_bytes()?).map_err(|e| {
-        eprintln!("platform-trace: primary journal: {e}");
-        e
-    })?;
+    private_home(root, journal, m)?;
+    publish_immutable(root, journal, &m.to_bytes()?)?;
     let mut copies = prepare_replicas(root, journal, m)?;
     if !copies.is_empty() {
         let ready = ready_path(&primary, m)?;
         publish_immutable(root, &relative(root, &ready)?, digest(m)?.as_bytes())?;
         copies.push(ready);
     }
-    apply_transition(root, m, &paths, Direction::After).map_err(|e| {
-        eprintln!("platform-trace: apply transition: {e}");
-        e
-    })?;
+    apply_transition(root, m, &paths, Direction::After)?;
     if let Some(callback) = committed.as_mut() {
         callback(&data(m))?;
     }

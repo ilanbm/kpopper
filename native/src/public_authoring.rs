@@ -279,22 +279,14 @@ pub fn run(kind: &str, options: &Options, cwd: &Path) -> Result<String> {
             by: V::Null,
         },
         runtime.as_ref(),
-    )
-    .map_err(|e| {
-        eprintln!("platform-trace: bootstrap prepare: {e}");
-        e
-    })?;
+    )?;
     B::publish(
         entry,
         &mutation,
         route.config(),
         runtime.as_ref(),
         &mut |_| route.verify(),
-    )
-    .map_err(|e| {
-        eprintln!("platform-trace: bootstrap publish: {e}");
-        e
-    })?;
+    )?;
     crate::session_activity::published(
         entry.parent().unwrap(),
         mutation.files(),

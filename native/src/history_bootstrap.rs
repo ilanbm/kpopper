@@ -622,27 +622,12 @@ pub fn publish(
     let root = entry.parent().unwrap();
     let layout = T::Layout::for_entry("GROUNDING.yaml")?;
     let mut checked = |data: &V| {
-        verify_prepared(&entry, mutation, policy, runtime).map_err(|e| {
-            eprintln!("platform-trace: bootstrap pre-verify: {e}");
-            e
-        })?;
-        verify(data).map_err(|e| {
-            eprintln!("platform-trace: route verify: {e}");
-            e
-        })?;
-        verify_prepared(&entry, mutation, policy, runtime).map_err(|e| {
-            eprintln!("platform-trace: bootstrap post-verify: {e}");
-            e
-        })
+        verify_prepared(&entry, mutation, policy, runtime)?;
+        verify(data)?;
+        verify_prepared(&entry, mutation, policy, runtime)
     };
-    F::publish_transition(root, &layout.journal, mutation, &mut checked, None).map_err(|e| {
-        eprintln!("platform-trace: transition publication: {e}");
-        e
-    })?;
-    verify_result(&entry, mutation).map_err(|e| {
-        eprintln!("platform-trace: bootstrap result verification: {e}");
-        e
-    })
+    F::publish_transition(root, &layout.journal, mutation, &mut checked, None)?;
+    verify_result(&entry, mutation)
 }
 pub fn recover(
     path: &Path,
