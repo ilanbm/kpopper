@@ -3,40 +3,40 @@ use crate::{
     Error, Result, history_paths, identity::typed_object_identity, require, value::TypedValue as V,
 };
 use std::collections::{BTreeMap, BTreeSet};
-type Map = BTreeMap<String, V>;
+pub(crate) type Map = BTreeMap<String, V>;
 pub const MAX_OBJECTS: usize = 20_000;
 const ID_SCHEME: &str = "typed-history/v2";
-fn error(code: &str) -> Error {
+pub(crate) fn error(code: &str) -> Error {
     Error(code.into())
 }
-fn map(value: &V) -> Result<&Map> {
+pub(crate) fn map(value: &V) -> Result<&Map> {
     if let V::Map(m) = value {
         Ok(m)
     } else {
         Err(error("invalid_schema"))
     }
 }
-fn field<'a>(m: &'a Map, key: &str) -> Result<&'a V> {
+pub(crate) fn field<'a>(m: &'a Map, key: &str) -> Result<&'a V> {
     m.get(key).ok_or_else(|| error("invalid_schema"))
 }
-fn text(v: &V) -> Result<&str> {
+pub(crate) fn text(v: &V) -> Result<&str> {
     if let V::Text(s) = v {
         Ok(s)
     } else {
         Err(error("invalid_identifier"))
     }
 }
-fn string_is(v: &V, s: &str) -> bool {
+pub(crate) fn string_is(v: &V, s: &str) -> bool {
     matches!(v,V::Text(v) if v==s)
 }
 fn nonblank(s: &str) -> bool {
     !s.trim_matches(|c: char| c.is_whitespace() || ('\u{1c}'..='\u{1f}').contains(&c))
         .is_empty()
 }
-fn is_int(v: &V, s: &str) -> bool {
+pub(crate) fn is_int(v: &V, s: &str) -> bool {
     matches!(v,V::Integer(v) if v.as_str()==s)
 }
-fn schema<'a>(value: &'a V, required: &[&str], optional: &[&str]) -> Result<&'a Map> {
+pub(crate) fn schema<'a>(value: &'a V, required: &[&str], optional: &[&str]) -> Result<&'a Map> {
     let m = map(value)?;
     require(
         required.iter().all(|k| m.contains_key(*k))
@@ -46,7 +46,7 @@ fn schema<'a>(value: &'a V, required: &[&str], optional: &[&str]) -> Result<&'a 
     )?;
     Ok(m)
 }
-fn token(value: &V) -> Result<()> {
+pub(crate) fn token(value: &V) -> Result<()> {
     let s = text(value)?;
     require(
         s.len() <= 160
@@ -56,13 +56,13 @@ fn token(value: &V) -> Result<()> {
         "invalid_identifier",
     )
 }
-fn subject(v: &V) -> Result<()> {
+pub(crate) fn subject(v: &V) -> Result<()> {
     history_paths::subject(text(v)?)
 }
-fn id(v: &V) -> Result<()> {
+pub(crate) fn id(v: &V) -> Result<()> {
     require(history_paths::object_id(text(v)?), "invalid_identifier")
 }
-fn ids(v: &V, unique: bool) -> Result<Vec<&str>> {
+pub(crate) fn ids(v: &V, unique: bool) -> Result<Vec<&str>> {
     let V::List(values) = v else {
         return Err(error("invalid_references"));
     };

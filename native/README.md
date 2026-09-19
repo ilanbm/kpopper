@@ -128,6 +128,15 @@ limit. These are bounded input contracts, not a claim to accept every PyYAML sou
 
 ## Deliberate limits
 
+The detached `history_authority` library additionally validates authority v1/v2,
+cancellation receipts, baselines, manifest DAGs, explicit root dispositions and
+every retained generation against its exact committed bytes. It resolves declared
+objects across legacy and hashed storage paths; unreferenced objects remain staging
+residue. Callers supply captured membership, which cannot be established by a hash.
+`history-envelope <authority|baseline|commit|cancellation|template>` exposes the
+read-only envelope boundary with YAML or `--typed` input. These detached interfaces
+do not activate a record or expand the store operations listed below.
+
 - No judgments, dependency pins, formulas, competing histories, review/refutation,
   temporal semantics, Lean evaluation, MCP, UI, migration or production activation.
 - No authority v2 cancellation metadata, legacy 40-hex storage operations or typed

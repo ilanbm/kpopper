@@ -57,6 +57,21 @@ enum Command {
         #[arg(long)]
         closure: bool,
     },
+    /// Validate detached history envelopes; does not establish accepted history.
+    HistoryEnvelope {
+        #[arg(value_enum)]
+        kind: Envelope,
+        #[arg(long)]
+        typed: bool,
+    },
+}
+#[derive(Clone, clap::ValueEnum)]
+enum Envelope {
+    Authority,
+    Baseline,
+    Commit,
+    Cancellation,
+    Template,
 }
 #[derive(clap::Args)]
 struct WriteArgs {
@@ -120,6 +135,22 @@ fn session() -> Result<()> {
     Ok(())
 }
 fn run(args: Args) -> Result<Value> {
+    if let Command::HistoryEnvelope { kind, typed } = args.command {
+        use kpop_native::history_authority as contract;
+        let mut value = if typed {
+            kpop_native::value::TypedValue::from_tagged(&stdin()?)?
+        } else {
+            kpop_native::history_yaml::decode_document(&stdin_bytes()?)?
+        };
+        match kind {
+            Envelope::Authority => contract::validate_authority(&value)?,
+            Envelope::Baseline => contract::validate_baseline(&value)?,
+            Envelope::Commit => contract::validate_commit(&value)?,
+            Envelope::Cancellation => contract::validate_cancellation(&value)?,
+            Envelope::Template => value = contract::document_template(&value)?,
+        }
+        return Ok(json!({"status":"valid","typed":value.to_tagged()?,"digest":value.digest()?}));
+    }
     if let Command::Identity {
         typed,
         yaml,
@@ -205,6 +236,7 @@ fn run(args: Args) -> Result<Value> {
         Command::Identity { .. }
         | Command::HistoryCodec { .. }
         | Command::HistoryValidate { .. }
+        | Command::HistoryEnvelope { .. }
         | Command::SessionStart => {
             unreachable!()
         }
