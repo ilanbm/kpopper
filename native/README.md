@@ -77,6 +77,20 @@ name the Python revision and source hashes, and cover both accepted and refused 
 Exotic scalar tags applied to collections (for example `!!str {=: value}`), and
 `!!omap`/`!!pairs` collections remain unsupported, including their empty forms.
 
+`history-validate` validates a detached immutable claim/act from YAML, including its
+schema, identity and declared references. `--typed` reads a tagged object instead;
+`--closure` validates an ID-to-object mapping and requires every reference to have
+the exact subject and allowed object kind. A valid detached object or complete
+closure does not establish committed membership, DAG consistency, acceptance, or
+semantic truth. The experimental store also applies this object validator before
+its existing, narrower operation checks.
+
+The library's portable path contract supports both retained legacy directories and
+hashed subject directories for 40- or 64-hex objects. Subjects retain exact Unicode,
+empty or path-like data; only validated derived paths reach storage. Missing objects,
+duplicate physical layouts and missing hashed-path capability declarations refuse.
+The experimental store continues using its original hashed, typed-v2-only layout.
+
 Typed decoding accepts canonical encoder output, not noncanonical convenience
 spellings: tags and arity are exact, integer/float/date spellings are canonical,
 and map keys must be unique and sorted. The library bounds logical depth at 128 and

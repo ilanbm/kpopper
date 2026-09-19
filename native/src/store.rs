@@ -482,6 +482,9 @@ impl Store {
                     "object_bytes_mismatch",
                 )?;
                 let object = parse(&object_raw)?;
+                crate::history_contract::validate_object(&crate::value::TypedValue::from_json(
+                    &object,
+                )?)?;
                 require(
                     object["subject"] == subject && object["id"] == id && object["op"] == *op,
                     "object_binding_mismatch",

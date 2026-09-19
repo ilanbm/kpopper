@@ -50,6 +50,13 @@ enum Command {
         #[arg(long)]
         typed: bool,
     },
+    /// Validate a detached immutable object or complete object closure, without writes.
+    HistoryValidate {
+        #[arg(long)]
+        typed: bool,
+        #[arg(long)]
+        closure: bool,
+    },
 }
 #[derive(clap::Args)]
 struct WriteArgs {
@@ -148,6 +155,22 @@ fn run(args: Args) -> Result<Value> {
             json!({"identity":value.digest()?,"typed":value.to_tagged()?,"yaml":String::from_utf8(yaml).unwrap()}),
         );
     }
+    if let Command::HistoryValidate { typed, closure } = args.command {
+        let value = if typed {
+            kpop_native::value::TypedValue::from_tagged(&stdin()?)?
+        } else {
+            kpop_native::history_yaml::decode_document(&stdin_bytes()?)?
+        };
+        if closure {
+            let kpop_native::value::TypedValue::Map(objects) = &value else {
+                return Err(kpop_native::Error("invalid_schema".into()));
+            };
+            kpop_native::history_contract::validate_closure(objects)?;
+            return Ok(json!({"status":"valid","objects":objects.len(),"digest":value.digest()?}));
+        }
+        kpop_native::history_contract::validate_object(&value)?;
+        return Ok(json!({"status":"valid","id":identity::typed_object_identity(&value)?}));
+    }
     let root = args
         .workspace
         .ok_or_else(|| kpop_native::Error("workspace_required".into()))?;
@@ -179,7 +202,10 @@ fn run(args: Args) -> Result<Value> {
                 write.expected_revision.as_deref(),
             )
         }
-        Command::Identity { .. } | Command::HistoryCodec { .. } | Command::SessionStart => {
+        Command::Identity { .. }
+        | Command::HistoryCodec { .. }
+        | Command::HistoryValidate { .. }
+        | Command::SessionStart => {
             unreachable!()
         }
     }

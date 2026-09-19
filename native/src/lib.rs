@@ -1,5 +1,7 @@
 #![forbid(unsafe_code)]
 
+pub mod history_contract;
+pub mod history_paths;
 pub mod history_yaml;
 pub mod identity;
 pub mod store;

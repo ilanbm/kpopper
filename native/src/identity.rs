@@ -32,9 +32,7 @@ pub fn subject_path(subject: &str, version: &str) -> Result<String> {
                 .all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b)),
         "invalid_subject_or_version",
     )?;
-    let mut bytes = b"kpopper-history-subject-path/v1\0".to_vec();
-    bytes.extend_from_slice(subject.as_bytes());
-    Ok(format!("~{}/{version}.yaml", sha256(&bytes)))
+    crate::history_paths::object_path(subject, version, crate::history_paths::Scheme::Hashed)
 }
 
 /// Python's finite float repr: shortest digits, exponent below -4 or at least 16.

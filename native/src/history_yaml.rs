@@ -430,13 +430,25 @@ pub fn decode_document(raw: &[u8]) -> Result<TypedValue> {
     )?;
     let value = construct(node)?;
     require(matches!(value, TypedValue::Map(_)), "invalid_schema")?;
-    detached(&value)?;
+    validate_value(&value, MAX_DOCUMENT_BYTES)?;
     Ok(value)
 }
 
 /// Match history's compact ASCII JSON accounting, including escaped keys and dates.
-fn detached(value: &TypedValue) -> Result<()> {
+pub(crate) fn validate_value(value: &TypedValue, maximum: usize) -> Result<()> {
     value.validate()?;
+    let mut pending = vec![value];
+    while let Some(item) = pending.pop() {
+        match item {
+            TypedValue::Integer(v) => require(
+                v.as_str().trim_start_matches('-').len() <= 4300,
+                "history_limit",
+            )?,
+            TypedValue::Map(v) => pending.extend(v.values()),
+            TypedValue::List(v) => pending.extend(v.iter()),
+            _ => {}
+        }
+    }
     fn size(v: &TypedValue) -> usize {
         fn string(s: &str) -> usize {
             2 + s
@@ -474,7 +486,7 @@ fn detached(value: &TypedValue) -> Result<()> {
             }
         }
     }
-    require(size(value) <= MAX_DOCUMENT_BYTES, "history_limit")
+    require(size(value) <= maximum, "history_limit")
 }
 fn quote(text: &str) -> String {
     // JSON escapes are valid in YAML; YAML line separators must additionally be escaped.
@@ -495,7 +507,7 @@ fn quote(text: &str) -> String {
     out
 }
 pub fn encode_document(value: &TypedValue) -> Result<Vec<u8>> {
-    detached(value)?;
+    validate_value(value, MAX_DOCUMENT_BYTES)?;
     require(matches!(value, TypedValue::Map(_)), "invalid_schema")?;
     fn write(v: &TypedValue, out: &mut String) {
         match v {
