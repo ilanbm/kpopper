@@ -13,7 +13,7 @@ use fs2::FileExt;
 #[cfg(unix)]
 use std::os::unix::fs::{MetadataExt, PermissionsExt};
 #[cfg(windows)]
-use std::os::windows::{ffi::OsStrExt, fs::MetadataExt};
+use std::os::windows::{ffi::OsStrExt, fs::OpenOptionsExt};
 use std::{
     cell::RefCell,
     collections::BTreeSet,
@@ -23,10 +23,24 @@ use std::{
     rc::{Rc, Weak},
 };
 
+#[cfg(unix)]
+type DirectoryIdentity = (u64, u64, u32);
+#[cfg(windows)]
+struct DirectoryIdentity {
+    directory: same_file::Handle,
+    process: u32,
+}
+#[cfg(windows)]
+impl PartialEq for DirectoryIdentity {
+    fn eq(&self, other: &Self) -> bool {
+        self.process == other.process && self.directory == other.directory
+    }
+}
+
 struct Held {
     _file: File,
     path: PathBuf,
-    identity: (u64, u64, u32),
+    identity: DirectoryIdentity,
     exclusive: bool,
 }
 thread_local! {static LOCKS: RefCell<Vec<Weak<Held>>> = const {RefCell::new(Vec::new())};}
@@ -286,19 +300,20 @@ impl DirectoryGuard {
             let path = root.canonicalize()?;
             let stat = fs::metadata(&path)?;
             require(stat.is_dir(), "invalid_path")?;
-            let identity = windows_identity(&stat)?;
+            let identity = directory_identity(&path)?;
             let held = LOCKS.with(|locks| -> Result<Option<Rc<Held>>> {
                 let mut locks = locks.borrow_mut();
                 locks.retain(|l| l.strong_count() > 0);
                 let active: Vec<_> = locks
                     .iter()
                     .filter_map(Weak::upgrade)
-                    .filter(|l| l.identity.2 == identity.2)
+                    .filter(|l| l.identity.process == identity.process)
                     .collect();
                 if let Some(existing) = active.iter().find(|l| l.identity == identity) {
                     require(existing.exclusive || !exclusive, "lock_upgrade_refused")?;
                     return Ok(Some(existing.clone()));
                 }
+                require(active.iter().all(|l| l.path != path), "directory_replaced")?;
                 require(active.iter().all(|l| l.path <= path), "lock_order_refused")?;
                 Ok(None)
             })?;
@@ -311,26 +326,23 @@ impl DirectoryGuard {
             for unit in path.as_os_str().encode_wide() {
                 key.extend_from_slice(&unit.to_le_bytes());
             }
-            let lock_path = lock_home.join(format!("{}.lock", sha256(&key)));
-            let file = fs::OpenOptions::new()
-                .read(true)
-                .write(true)
-                .create(true)
-                .open(&lock_path)?;
+            let namespace_path = lock_home.join(format!("path-{}.lock", sha256(&key)));
+            let namespace_file = windows_lock_file(&namespace_path)?;
             if exclusive {
-                FileExt::lock_exclusive(&file)?;
+                FileExt::lock_exclusive(&namespace_file)?;
             } else {
-                FileExt::lock_shared(&file)?;
+                FileExt::lock_shared(&namespace_file)?;
+            }
+            verify_windows_lock_file(&namespace_file, &namespace_path)?;
+            if exclusive {
+                FileExt::lock_exclusive(identity.directory.as_file())?;
+            } else {
+                FileExt::lock_shared(identity.directory.as_file())?;
             }
             require(path == root.canonicalize()?, "directory_replaced")?;
             require(directory_identity(&path)? == identity, "directory_replaced")?;
-            require(
-                windows_file_identity(&file.metadata()?)?
-                    == windows_file_identity(&fs::metadata(&lock_path)?)?,
-                "lock_replaced",
-            )?;
             let held = Rc::new(Held {
-                _file: file,
+                _file: namespace_file,
                 path,
                 identity,
                 exclusive,
@@ -346,22 +358,30 @@ fn directory_identity(root: &Path) -> Result<(u64, u64, u32)> {
     Ok((stat.dev(), stat.ino(), std::process::id()))
 }
 #[cfg(windows)]
-fn windows_file_identity(stat: &fs::Metadata) -> Result<(u64, u64)> {
-    Ok((
-        stat.volume_serial_number()
-            .ok_or_else(|| error("locking_unavailable"))? as u64,
-        stat.file_index()
-            .ok_or_else(|| error("locking_unavailable"))?,
-    ))
+fn windows_lock_file(path: &Path) -> Result<File> {
+    // Denying FILE_SHARE_DELETE keeps the named kernel-lock handle from being
+    // replaced while it fences this directory namespace or identity.
+    Ok(fs::OpenOptions::new()
+        .read(true)
+        .write(true)
+        .create(true)
+        .share_mode(0x0000_0001 | 0x0000_0002)
+        .open(path)?)
 }
 #[cfg(windows)]
-fn windows_identity(stat: &fs::Metadata) -> Result<(u64, u64, u32)> {
-    let (volume, file) = windows_file_identity(stat)?;
-    Ok((volume, file, std::process::id()))
+fn verify_windows_lock_file(file: &File, path: &Path) -> Result<()> {
+    let opened = same_file::Handle::from_file(file.try_clone()?)?;
+    require(
+        opened == same_file::Handle::from_path(path)?,
+        "lock_replaced",
+    )
 }
 #[cfg(windows)]
-fn directory_identity(root: &Path) -> Result<(u64, u64, u32)> {
-    windows_identity(&fs::metadata(root)?)
+fn directory_identity(root: &Path) -> Result<DirectoryIdentity> {
+    Ok(DirectoryIdentity {
+        directory: same_file::Handle::from_path(root)?,
+        process: std::process::id(),
+    })
 }
 fn guards(paths: Vec<PathBuf>) -> Result<Vec<DirectoryGuard>> {
     let paths = paths

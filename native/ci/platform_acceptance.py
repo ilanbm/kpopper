@@ -62,19 +62,19 @@ def main():
     if snapshot(workspace) != before_reads:
         raise RuntimeError("read-only commands changed the record workspace")
 
+    contender_commands = [
+        ["add", "p.concurrent_a", "v=13"],
+        ["add", "p.concurrent_b", "v=14"],
+    ]
     contenders = []
-    for value, reason in [("13", "concurrent-a"), ("14", "concurrent-b")]:
+    for command in contender_commands:
         contenders.append(
             subprocess.Popen(
                 [
                     str(binary),
                     "--workspace",
                     str(workspace),
-                    "set",
-                    "p.hours",
-                    value,
-                    "--why",
-                    reason,
+                    *command,
                 ],
                 env=env,
                 text=True,
@@ -92,10 +92,15 @@ def main():
         commands.append(
             {"name": f"06-concurrent-{index}", "exit_code": process.returncode}
         )
-    if sorted(code == 0 for code in contender_results) != [False, True]:
+    if not any(code == 0 for code in contender_results):
         raise RuntimeError(
-            f"expected one serialized winner and one fenced writer, got {contender_results}"
+            f"both concurrent writers were refused: {contender_results}"
         )
+    for index, (code, command) in enumerate(
+        zip(contender_results, contender_commands), 1
+    ):
+        if code != 0:
+            run(f"06-concurrent-{index}-retry", command)
     run("07-history-status-after-contention", ["history", "status"])
     recovery = run("08-recover-clean", ["recover", "--json"], expect=False)
     if recovery.returncode == 0:

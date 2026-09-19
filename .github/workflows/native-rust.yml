@@ -55,12 +55,20 @@ jobs:
         run: |
           KPOPPER_CI_ORDINARY=$(python -c 'import os; from scripts.session.core import setup; print(setup(os.environ["KPOPPER_LEAN_ROOT"])["cache"])')
           echo "KPOP_TEST_ORDINARY_PROGRAM=$KPOPPER_CI_ORDINARY" >> "$GITHUB_ENV"
+      - name: Initialize the platform evidence archive
+        shell: bash
+        run: |
+          mkdir -p "$RUNNER_TEMP/native-evidence"
+          git rev-parse HEAD > "$RUNNER_TEMP/native-evidence/commit.txt"
+          rustc --version --verbose > "$RUNNER_TEMP/native-evidence/rustc.txt"
       - name: Compile and test the platform lock and interrupted recovery boundaries
         working-directory: native
+        shell: bash
         run: |
-          cargo test --locked --config 'profile.test.package.sha2.opt-level=3' --test platform_locking
-          cargo test --locked --config 'profile.test.package.sha2.opt-level=3' --test public_authoring public_recovery_finishes_or_cancels_a_retained_first_write
-          cargo build --locked --release
+          set -o pipefail
+          cargo test --locked --config 'profile.test.package.sha2.opt-level=3' --test platform_locking 2>&1 | tee "$RUNNER_TEMP/native-evidence/platform-locking.log"
+          cargo test --locked --config 'profile.test.package.sha2.opt-level=3' --test public_authoring public_recovery_finishes_or_cancels_a_retained_first_write 2>&1 | tee "$RUNNER_TEMP/native-evidence/interrupted-recovery.log"
+          cargo build --locked --release 2>&1 | tee "$RUNNER_TEMP/native-evidence/release-build.log"
       - name: Copy the executable and its verified native resources
         shell: python
         env:
