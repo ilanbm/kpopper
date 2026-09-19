@@ -1,9 +1,11 @@
 #![forbid(unsafe_code)]
 
 pub mod history_authority;
+pub mod history_cancellation;
 pub mod history_capture;
 pub mod history_contract;
 pub mod history_emit;
+pub mod history_group;
 pub mod history_paths;
 pub mod history_preparation;
 pub mod history_reduce;

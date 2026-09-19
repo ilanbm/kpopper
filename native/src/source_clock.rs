@@ -235,7 +235,7 @@ fn integer_value(v: &V) -> Option<BigInt> {
         _ => None,
     }
 }
-fn python_equal(a: &V, b: &V) -> bool {
+pub(crate) fn python_equal(a: &V, b: &V) -> bool {
     if let (Some(a), Some(b)) = (integer_value(a), integer_value(b)) {
         return a == b;
     }

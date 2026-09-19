@@ -79,7 +79,7 @@ fn with_digest(mut value: V) -> Result<V> {
     }
     Ok(value)
 }
-fn blob(raw: Option<&[u8]>) -> V {
+pub(crate) fn blob(raw: Option<&[u8]>) -> V {
     raw.map_or(V::Null, |raw| {
         object(&[
             ("sha256", s(&sha256(raw))),
@@ -87,7 +87,7 @@ fn blob(raw: Option<&[u8]>) -> V {
         ])
     })
 }
-fn unblob(v: &V) -> Result<Option<Vec<u8>>> {
+pub(crate) fn unblob(v: &V) -> Result<Option<Vec<u8>>> {
     if *v == V::Null {
         return Ok(None);
     }
@@ -840,7 +840,7 @@ fn decode_image(raw: &Option<Vec<u8>>) -> Result<V> {
     Y::decode_document(raw.as_deref().ok_or_else(|| error("history_limit"))?)
 }
 
-fn parse_journal(raw: &[u8], code: &str) -> Result<V> {
+pub(crate) fn parse_journal(raw: &[u8], code: &str) -> Result<V> {
     require(raw.len() <= MAX_TRANSACTION_BYTES, "history_limit")?;
     // Bound syntax depth before disabling serde's smaller default recursion limit.
     // A typed map adds three array levels per semantic value level.

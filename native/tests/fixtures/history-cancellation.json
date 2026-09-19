@@ -1,0 +1,467 @@
+{
+  "oracle": "b639cdbab1e3c624ad52708350166d222821aec1",
+  "cases": [
+    {
+      "name": "GROUNDING.yaml-activate-GROUNDING.yaml",
+      "entry": "GROUNDING.yaml",
+      "mutation": "[\"map\",[[\"authority\",[\"map\",[[\"authority\",[\"text\",\"legacy\"]],[\"generation\",[\"int\",\"0\"]],[\"profile\",[\"text\",\"history/v1\"]],[\"record_id\",[\"text\",\"record\"]],[\"version\",[\"int\",\"1\"]]]]],[\"baseline\",[\"map\",[[\"direction\",[\"text\",\"activate\"]],[\"history_baseline\",[\"map\",[[\"authority_generation\",[\"int\",\"1\"]],[\"committed_set_digest\",[\"text\",\"7ad43f899d941308dbb3cfb1f6bffe01785ea3bdbfb3a47dcda645bd35a671fb\"]],[\"heads\",[\"map\",[]]],[\"open_acts\",[\"map\",[]]],[\"record_id\",[\"text\",\"record\"]],[\"version\",[\"int\",\"1\"]]]]],[\"kind\",[\"text\",\"history-authority-transition/v1\"]]]]],[\"digest\",[\"text\",\"de92cfd261318396f15ef940219708e9ee01ad44f12ed4a9a6046f61c22da908\"]],[\"entry\",[\"text\",\"GROUNDING.yaml\"]],[\"files\",[\"list\",[[\"map\",[[\"after\",[\"map\",[[\"data\",[\"text\",\"YXV0aG9yaXR5X2dlbmVyYXRpb246IDEKYmFzZWxpbmVfZGlnZXN0OiBmMmZlNTIxZjU0MmZjYzdhZTEwMmU0ODcxYjZjMmNiNGRlZmQ2Mjg0YzBjODA5MTg3NDU1NGYwMTIwNzVhMDM3Cm9iamVjdHM6Ci0gaWQ6IGNhYTc3MWE0YzgxZmU2YmNiYzQyNmRiODNhMDVkYTc1ZWZiMGMxYmM5MGM4ZmI3YTUzNjdlNGQ4MGU4ZjM0NWYKICBzaGEyNTY6IGYyYzkyZjZkYmQ0ZDFmOWUzOTU1MGM5MzNmMjg4YWUyOGZhMGIxNzM1MTVkNDczNjNkZDJkY2FjNTFjNmU5NTgKICBzdWJqZWN0OiBwLmEKb3BlcmF0aW9uOiBvcGVyYXRpb24KcGFyZW50czoge30KcmVjZWlwdDoKICBhZnRlcjoKICAgIGFjY2VwdGVkOiB0cnVlCiAgYmVmb3JlOgogICAgZGF0ZTogMjAyNi0wOS0xOQogIGNhcGFiaWxpdGllczoKICAgIHJlcXVpcmVzOiBbXQogIGRpZ2VzdDogNjFmYjUzMWQ5MDcxNTExZGU3ZWZkODYxMGIxZmYzMTU4NDU1YTE3YjU4MmUxYWE1ZjUxM2QyNzRiM2M0MzQ1ZgogIHByb2ZpbGU6IG9yZGluYXJ5LXJlYWRlci92MQogIHZlcnNpb246IDEKcmVjb3JkX2lkOiByZWNvcmQKdmVyc2lvbjogMQp2aWV3X3NoYTI1NjogMTIzNWY4ZjQzNWIxZDE2ZjdhYWM0NDIzNTFmMmUyOWZmMWJkMmI3NDY1MjM5MmM0YWNjYjVlYzU1NjU5NzNkYQo=\"]],[\"sha256\",[\"text\",\"aa0e8d6131f881efcee863b36112a95db26b3e54436a9348625f7946638943e6\"]]]]],[\"before\",[\"null\"]],[\"path\",[\"text\",\".kpopper/history-commits/operation.yaml\"]],[\"role\",[\"text\",\"history_commit\"]]]],[\"map\",[[\"after\",[\"map\",[[\"data\",[\"text\",\"YXV0aG9yaXR5OiBoaXN0b3J5CmdlbmVyYXRpb246IDEKcHJvZmlsZTogaGlzdG9yeS92MQpyZWNvcmRfaWQ6IHJlY29yZAp2ZXJzaW9uOiAxCg==\"]],[\"sha256\",[\"text\",\"5849b3f6141779233b3318e3a727e0768d6ff6918688a3d746e0c18bc5466ed4\"]]]]],[\"before\",[\"null\"]],[\"path\",[\"text\",\".kpopper/history.yaml\"]],[\"role\",[\"text\",\"history_authority\"]]]],[\"map\",[[\"after\",[\"map\",[[\"data\",[\"text\",\"YXV0aG9yZWQ6CiAgY29sbGVjdGlvbjogcmVhZGluZ3MKICBmaWVsZHM6CiAgICB2YWx1ZTogdgogIHByb2ZpbGU6IG9yZGluYXJ5LXJlYWRlci92MQpib2R5OgogIHY6IDEKYnk6IG51bGwKaWQ6IGNhYTc3MWE0YzgxZmU2YmNiYzQyNmRiODNhMDVkYTc1ZWZiMGMxYmM5MGM4ZmI3YTUzNjdlNGQ4MGU4ZjM0NWYKaWRfc2NoZW1lOiB0eXBlZC1oaXN0b3J5L3YyCmtpbmQ6IHJlYWRpbmcKJ29uJzogdG9kYXkKb3A6IG9wZXJhdGlvbgpwaW5zOiB7fQpzYXc6IFtdCnNjaGVtYV92ZXJzaW9uOiAyCnN1YmplY3Q6IHAuYQo=\"]],[\"sha256\",[\"text\",\"f2c92f6dbd4d1f9e39550c933f288ae28fa0b173515d47363dd2dcac51c6e958\"]]]]],[\"before\",[\"null\"]],[\"path\",[\"text\",\".kpopper/history/p.a/caa771a4c81fe6bcbc426db83a05da75efb0c1bc90c8fb7a5367e4d80e8f345f.yaml\"]],[\"role\",[\"text\",\"history_object\"]]]],[\"map\",[[\"after\",[\"map\",[[\"data\",[\"text\",\"YWZ0ZXINCg==\"]],[\"sha256\",[\"text\",\"1235f8f435b1d16f7aac442351f2e29ff1bd2b74652392c4accb5ec5565973da\"]]]]],[\"before\",[\"map\",[[\"data\",[\"text\",\"YmVmb3JlAP8NCg==\"]],[\"sha256\",[\"text\",\"87957804ca5f025ea5fa2df090d4c4e8d6f036b003b317f3f5daae120838ccd3\"]]]]],[\"path\",[\"text\",\"GROUNDING.yaml\"]],[\"role\",[\"text\",\"record\"]]]]]]],[\"operation\",[\"text\",\"operation\"]],[\"receipt\",[\"map\",[[\"after\",[\"map\",[[\"accepted\",[\"bool\",true]]]]],[\"before\",[\"map\",[[\"date\",[\"date\",\"2026-09-19\"]]]]],[\"capabilities\",[\"map\",[[\"requires\",[\"list\",[]]]]]],[\"digest\",[\"text\",\"61fb531d9071511de7efd8610b1ff3158455a17b582e1aa5f513d274b3c4345f\"]],[\"profile\",[\"text\",\"ordinary-reader/v1\"]],[\"version\",[\"int\",\"1\"]]]]],[\"transition\",[\"map\",[[\"after\",[\"map\",[[\"authority\",[\"text\",\"history\"]],[\"generation\",[\"int\",\"1\"]],[\"profile\",[\"text\",\"history/v1\"]],[\"record_id\",[\"text\",\"record\"]],[\"version\",[\"int\",\"1\"]]]]],[\"version\",[\"int\",\"1\"]]]]],[\"version\",[\"int\",\"2\"]]]]",
+      "output": [
+        "map",
+        [
+          [
+            "digest",
+            [
+              "text",
+              "1608736a536a4dc9be9420e493e6b59e73558797b01ba18e06bc94316918a5a1"
+            ]
+          ],
+          [
+            "immutable_images",
+            [
+              "list",
+              [
+                [
+                  "map",
+                  [
+                    [
+                      "after",
+                      [
+                        "text",
+                        "617574686f726974795f67656e65726174696f6e3a20310a626173656c696e655f6469676573743a20663266653532316635343266636337616531303265343837316236633263623464656664363238346330633830393138373435353466303132303735613033370a6f626a656374733a0a2d2069643a20636161373731613463383166653662636263343236646238336130356461373565666230633162633930633866623761353336376534643830653866333435660a20207368613235363a20663263393266366462643464316639653339353530633933336632383861653238666130623137333531356434373336336464326463616335316336653935380a20207375626a6563743a20702e610a6f7065726174696f6e3a206f7065726174696f6e0a706172656e74733a207b7d0a726563656970743a0a202061667465723a0a2020202061636365707465643a20747275650a20206265666f72653a0a20202020646174653a20323032362d30392d31390a20206361706162696c69746965733a0a2020202072657175697265733a205b5d0a20206469676573743a20363166623533316439303731353131646537656664383631306231666633313538343535613137623538326531616135663531336432373462336334333435660a202070726f66696c653a206f7264696e6172792d7265616465722f76310a202076657273696f6e3a20310a7265636f72645f69643a207265636f72640a76657273696f6e3a20310a766965775f7368613235363a20313233356638663433356231643136663761616334343233353166326532396666316264326237343635323339326334616363623565633535363539373364610a"
+                      ]
+                    ],
+                    [
+                      "path",
+                      [
+                        "text",
+                        ".kpopper/history-commits/operation.yaml"
+                      ]
+                    ]
+                  ]
+                ],
+                [
+                  "map",
+                  [
+                    [
+                      "after",
+                      [
+                        "text",
+                        "617574686f7265643a0a2020636f6c6c656374696f6e3a2072656164696e67730a20206669656c64733a0a2020202076616c75653a20760a202070726f66696c653a206f7264696e6172792d7265616465722f76310a626f64793a0a2020763a20310a62793a206e756c6c0a69643a20636161373731613463383166653662636263343236646238336130356461373565666230633162633930633866623761353336376534643830653866333435660a69645f736368656d653a2074797065642d686973746f72792f76320a6b696e643a2072656164696e670a276f6e273a20746f6461790a6f703a206f7065726174696f6e0a70696e733a207b7d0a7361773a205b5d0a736368656d615f76657273696f6e3a20320a7375626a6563743a20702e610a"
+                      ]
+                    ],
+                    [
+                      "path",
+                      [
+                        "text",
+                        ".kpopper/history/p.a/caa771a4c81fe6bcbc426db83a05da75efb0c1bc90c8fb7a5367e4d80e8f345f.yaml"
+                      ]
+                    ]
+                  ]
+                ]
+              ]
+            ]
+          ],
+          [
+            "marker_bytes",
+            [
+              "text",
+              "617574686f726974793a206c65676163790a63616e63656c6c6174696f6e733a0a20202731273a0a202020206c65676163795f67656e65726174696f6e3a20320a202020206f7065726174696f6e3a206f7065726174696f6e0a20202020706174683a206f7065726174696f6e2e79616d6c0a2020202072657365727665645f67656e65726174696f6e3a20310a202020207368613235363a20313661363233343564626334636635336536386238663336363431636330626262363435666362326266363032393466373734353039336135313865363864300a67656e65726174696f6e3a20320a70726f66696c653a20686973746f72792f76310a7265636f72645f69643a207265636f72640a72657175697265733a0a2d2067656e65726174696f6e2d63616e63656c6c6174696f6e2f76310a76657273696f6e3a20320a"
+            ]
+          ],
+          [
+            "mutation_digest",
+            [
+              "text",
+              "de92cfd261318396f15ef940219708e9ee01ad44f12ed4a9a6046f61c22da908"
+            ]
+          ],
+          [
+            "operation",
+            [
+              "text",
+              "operation"
+            ]
+          ],
+          [
+            "original_entry",
+            [
+              "text",
+              "6265666f726500ff0d0a"
+            ]
+          ],
+          [
+            "receipt_bytes",
+            [
+              "text",
+              "6172746966616374733a207b7d0a6265666f72655f617574686f726974795f6469676573743a20303836313461383036663739363437663231386130613762653066376437313336343161636361336636366338343738613264656532373866636230633738340a656e7472793a2047524f554e44494e472e79616d6c0a6b696e643a2067656e65726174696f6e2d63616e63656c6c6174696f6e2f76310a6c65676163795f67656e65726174696f6e3a20320a6d616e69666573745f7368613235363a20616130653864363133316638383165666365653836336233363131326139356462323662336535343433366139333438363235663739343636333839343365360a6d75746174696f6e5f6469676573743a20646539326366643236313331383339366631356566393430323139373038653965653031616434346631326564346139613630343666363163323264613930380a6f626a656374733a0a2020636161373731613463383166653662636263343236646238336130356461373565666230633162633930633866623761353336376534643830653866333435663a0a202020207368613235363a20663263393266366462643464316639653339353530633933336632383861653238666130623137333531356434373336336464326463616335316336653935380a202020207375626a6563743a20702e610a6f7065726174696f6e3a206f7065726174696f6e0a6f726967696e616c5f656e7472795f7368613235363a20383739353738303463613566303235656135666132646630393064346334653864366630333662303033623331376633663564616165313230383338636364330a7265636f72645f69643a207265636f72640a72657365727665645f617574686f726974795f6469676573743a20656361643438323564363637363635336330656663373139653834633734653361363030623263613063356437383334633962643236346533333635643661630a72657365727665645f67656e65726174696f6e3a20310a76657273696f6e3a20310a7669736962696c6974793a206e657665725f72656c65617365645f746f5f726561646572730a"
+            ]
+          ],
+          [
+            "receipt_path",
+            [
+              "text",
+              ".kpopper/history-cancellations/operation.yaml"
+            ]
+          ],
+          [
+            "version",
+            [
+              "int",
+              "1"
+            ]
+          ]
+        ]
+      ]
+    },
+    {
+      "name": "GROUNDING.yaml-activate-other.yaml",
+      "entry": "other.yaml",
+      "mutation": "[\"map\",[[\"authority\",[\"map\",[[\"authority\",[\"text\",\"legacy\"]],[\"generation\",[\"int\",\"0\"]],[\"profile\",[\"text\",\"history/v1\"]],[\"record_id\",[\"text\",\"record\"]],[\"version\",[\"int\",\"1\"]]]]],[\"baseline\",[\"map\",[[\"direction\",[\"text\",\"activate\"]],[\"history_baseline\",[\"map\",[[\"authority_generation\",[\"int\",\"1\"]],[\"committed_set_digest\",[\"text\",\"7ad43f899d941308dbb3cfb1f6bffe01785ea3bdbfb3a47dcda645bd35a671fb\"]],[\"heads\",[\"map\",[]]],[\"open_acts\",[\"map\",[]]],[\"record_id\",[\"text\",\"record\"]],[\"version\",[\"int\",\"1\"]]]]],[\"kind\",[\"text\",\"history-authority-transition/v1\"]]]]],[\"digest\",[\"text\",\"de92cfd261318396f15ef940219708e9ee01ad44f12ed4a9a6046f61c22da908\"]],[\"entry\",[\"text\",\"GROUNDING.yaml\"]],[\"files\",[\"list\",[[\"map\",[[\"after\",[\"map\",[[\"data\",[\"text\",\"YXV0aG9yaXR5X2dlbmVyYXRpb246IDEKYmFzZWxpbmVfZGlnZXN0OiBmMmZlNTIxZjU0MmZjYzdhZTEwMmU0ODcxYjZjMmNiNGRlZmQ2Mjg0YzBjODA5MTg3NDU1NGYwMTIwNzVhMDM3Cm9iamVjdHM6Ci0gaWQ6IGNhYTc3MWE0YzgxZmU2YmNiYzQyNmRiODNhMDVkYTc1ZWZiMGMxYmM5MGM4ZmI3YTUzNjdlNGQ4MGU4ZjM0NWYKICBzaGEyNTY6IGYyYzkyZjZkYmQ0ZDFmOWUzOTU1MGM5MzNmMjg4YWUyOGZhMGIxNzM1MTVkNDczNjNkZDJkY2FjNTFjNmU5NTgKICBzdWJqZWN0OiBwLmEKb3BlcmF0aW9uOiBvcGVyYXRpb24KcGFyZW50czoge30KcmVjZWlwdDoKICBhZnRlcjoKICAgIGFjY2VwdGVkOiB0cnVlCiAgYmVmb3JlOgogICAgZGF0ZTogMjAyNi0wOS0xOQogIGNhcGFiaWxpdGllczoKICAgIHJlcXVpcmVzOiBbXQogIGRpZ2VzdDogNjFmYjUzMWQ5MDcxNTExZGU3ZWZkODYxMGIxZmYzMTU4NDU1YTE3YjU4MmUxYWE1ZjUxM2QyNzRiM2M0MzQ1ZgogIHByb2ZpbGU6IG9yZGluYXJ5LXJlYWRlci92MQogIHZlcnNpb246IDEKcmVjb3JkX2lkOiByZWNvcmQKdmVyc2lvbjogMQp2aWV3X3NoYTI1NjogMTIzNWY4ZjQzNWIxZDE2ZjdhYWM0NDIzNTFmMmUyOWZmMWJkMmI3NDY1MjM5MmM0YWNjYjVlYzU1NjU5NzNkYQo=\"]],[\"sha256\",[\"text\",\"aa0e8d6131f881efcee863b36112a95db26b3e54436a9348625f7946638943e6\"]]]]],[\"before\",[\"null\"]],[\"path\",[\"text\",\".kpopper/history-commits/operation.yaml\"]],[\"role\",[\"text\",\"history_commit\"]]]],[\"map\",[[\"after\",[\"map\",[[\"data\",[\"text\",\"YXV0aG9yaXR5OiBoaXN0b3J5CmdlbmVyYXRpb246IDEKcHJvZmlsZTogaGlzdG9yeS92MQpyZWNvcmRfaWQ6IHJlY29yZAp2ZXJzaW9uOiAxCg==\"]],[\"sha256\",[\"text\",\"5849b3f6141779233b3318e3a727e0768d6ff6918688a3d746e0c18bc5466ed4\"]]]]],[\"before\",[\"null\"]],[\"path\",[\"text\",\".kpopper/history.yaml\"]],[\"role\",[\"text\",\"history_authority\"]]]],[\"map\",[[\"after\",[\"map\",[[\"data\",[\"text\",\"YXV0aG9yZWQ6CiAgY29sbGVjdGlvbjogcmVhZGluZ3MKICBmaWVsZHM6CiAgICB2YWx1ZTogdgogIHByb2ZpbGU6IG9yZGluYXJ5LXJlYWRlci92MQpib2R5OgogIHY6IDEKYnk6IG51bGwKaWQ6IGNhYTc3MWE0YzgxZmU2YmNiYzQyNmRiODNhMDVkYTc1ZWZiMGMxYmM5MGM4ZmI3YTUzNjdlNGQ4MGU4ZjM0NWYKaWRfc2NoZW1lOiB0eXBlZC1oaXN0b3J5L3YyCmtpbmQ6IHJlYWRpbmcKJ29uJzogdG9kYXkKb3A6IG9wZXJhdGlvbgpwaW5zOiB7fQpzYXc6IFtdCnNjaGVtYV92ZXJzaW9uOiAyCnN1YmplY3Q6IHAuYQo=\"]],[\"sha256\",[\"text\",\"f2c92f6dbd4d1f9e39550c933f288ae28fa0b173515d47363dd2dcac51c6e958\"]]]]],[\"before\",[\"null\"]],[\"path\",[\"text\",\".kpopper/history/p.a/caa771a4c81fe6bcbc426db83a05da75efb0c1bc90c8fb7a5367e4d80e8f345f.yaml\"]],[\"role\",[\"text\",\"history_object\"]]]],[\"map\",[[\"after\",[\"map\",[[\"data\",[\"text\",\"YWZ0ZXINCg==\"]],[\"sha256\",[\"text\",\"1235f8f435b1d16f7aac442351f2e29ff1bd2b74652392c4accb5ec5565973da\"]]]]],[\"before\",[\"map\",[[\"data\",[\"text\",\"YmVmb3JlAP8NCg==\"]],[\"sha256\",[\"text\",\"87957804ca5f025ea5fa2df090d4c4e8d6f036b003b317f3f5daae120838ccd3\"]]]]],[\"path\",[\"text\",\"GROUNDING.yaml\"]],[\"role\",[\"text\",\"record\"]]]]]]],[\"operation\",[\"text\",\"operation\"]],[\"receipt\",[\"map\",[[\"after\",[\"map\",[[\"accepted\",[\"bool\",true]]]]],[\"before\",[\"map\",[[\"date\",[\"date\",\"2026-09-19\"]]]]],[\"capabilities\",[\"map\",[[\"requires\",[\"list\",[]]]]]],[\"digest\",[\"text\",\"61fb531d9071511de7efd8610b1ff3158455a17b582e1aa5f513d274b3c4345f\"]],[\"profile\",[\"text\",\"ordinary-reader/v1\"]],[\"version\",[\"int\",\"1\"]]]]],[\"transition\",[\"map\",[[\"after\",[\"map\",[[\"authority\",[\"text\",\"history\"]],[\"generation\",[\"int\",\"1\"]],[\"profile\",[\"text\",\"history/v1\"]],[\"record_id\",[\"text\",\"record\"]],[\"version\",[\"int\",\"1\"]]]]],[\"version\",[\"int\",\"1\"]]]]],[\"version\",[\"int\",\"2\"]]]]",
+      "error": "invalid_generation_cancellation"
+    },
+    {
+      "name": "GROUNDING.yaml-deactivate-GROUNDING.yaml",
+      "entry": "GROUNDING.yaml",
+      "mutation": "[\"map\",[[\"authority\",[\"map\",[[\"authority\",[\"text\",\"history\"]],[\"generation\",[\"int\",\"1\"]],[\"profile\",[\"text\",\"history/v1\"]],[\"record_id\",[\"text\",\"record\"]],[\"version\",[\"int\",\"1\"]]]]],[\"baseline\",[\"map\",[[\"direction\",[\"text\",\"deactivate\"]],[\"kind\",[\"text\",\"history-authority-transition/v1\"]]]]],[\"digest\",[\"text\",\"a9bb9932e2818e4f98d2f2b7ae608b1a85fc0911a7f6e5170c4aa678c0222dd7\"]],[\"entry\",[\"text\",\"GROUNDING.yaml\"]],[\"files\",[\"list\",[[\"map\",[[\"after\",[\"map\",[[\"data\",[\"text\",\"YXV0aG9yaXR5OiBsZWdhY3kKZ2VuZXJhdGlvbjogMgpwcm9maWxlOiBoaXN0b3J5L3YxCnJlY29yZF9pZDogcmVjb3JkCnZlcnNpb246IDEK\"]],[\"sha256\",[\"text\",\"7dba861bdcb50b970597f1e69c4ff169e37cdc57fac8eb8347e51e96a6df6ab6\"]]]]],[\"before\",[\"map\",[[\"data\",[\"text\",\"YXV0aG9yaXR5OiBoaXN0b3J5CmdlbmVyYXRpb246IDEKcHJvZmlsZTogaGlzdG9yeS92MQpyZWNvcmRfaWQ6IHJlY29yZAp2ZXJzaW9uOiAxCg==\"]],[\"sha256\",[\"text\",\"5849b3f6141779233b3318e3a727e0768d6ff6918688a3d746e0c18bc5466ed4\"]]]]],[\"path\",[\"text\",\".kpopper/history.yaml\"]],[\"role\",[\"text\",\"history_authority\"]]]],[\"map\",[[\"after\",[\"map\",[[\"data\",[\"text\",\"YWZ0ZXINCg==\"]],[\"sha256\",[\"text\",\"1235f8f435b1d16f7aac442351f2e29ff1bd2b74652392c4accb5ec5565973da\"]]]]],[\"before\",[\"map\",[[\"data\",[\"text\",\"YmVmb3JlAP8NCg==\"]],[\"sha256\",[\"text\",\"87957804ca5f025ea5fa2df090d4c4e8d6f036b003b317f3f5daae120838ccd3\"]]]]],[\"path\",[\"text\",\"GROUNDING.yaml\"]],[\"role\",[\"text\",\"record\"]]]]]]],[\"operation\",[\"text\",\"operation\"]],[\"receipt\",[\"map\",[[\"after\",[\"map\",[[\"accepted\",[\"bool\",true]]]]],[\"before\",[\"map\",[[\"date\",[\"date\",\"2026-09-19\"]]]]],[\"capabilities\",[\"map\",[[\"requires\",[\"list\",[]]]]]],[\"digest\",[\"text\",\"61fb531d9071511de7efd8610b1ff3158455a17b582e1aa5f513d274b3c4345f\"]],[\"profile\",[\"text\",\"ordinary-reader/v1\"]],[\"version\",[\"int\",\"1\"]]]]],[\"transition\",[\"map\",[[\"after\",[\"map\",[[\"authority\",[\"text\",\"legacy\"]],[\"generation\",[\"int\",\"2\"]],[\"profile\",[\"text\",\"history/v1\"]],[\"record_id\",[\"text\",\"record\"]],[\"version\",[\"int\",\"1\"]]]]],[\"version\",[\"int\",\"1\"]]]]],[\"version\",[\"int\",\"2\"]]]]",
+      "error": "invalid_generation_cancellation"
+    },
+    {
+      "name": "GROUNDING.yaml-deactivate-other.yaml",
+      "entry": "other.yaml",
+      "mutation": "[\"map\",[[\"authority\",[\"map\",[[\"authority\",[\"text\",\"history\"]],[\"generation\",[\"int\",\"1\"]],[\"profile\",[\"text\",\"history/v1\"]],[\"record_id\",[\"text\",\"record\"]],[\"version\",[\"int\",\"1\"]]]]],[\"baseline\",[\"map\",[[\"direction\",[\"text\",\"deactivate\"]],[\"kind\",[\"text\",\"history-authority-transition/v1\"]]]]],[\"digest\",[\"text\",\"a9bb9932e2818e4f98d2f2b7ae608b1a85fc0911a7f6e5170c4aa678c0222dd7\"]],[\"entry\",[\"text\",\"GROUNDING.yaml\"]],[\"files\",[\"list\",[[\"map\",[[\"after\",[\"map\",[[\"data\",[\"text\",\"YXV0aG9yaXR5OiBsZWdhY3kKZ2VuZXJhdGlvbjogMgpwcm9maWxlOiBoaXN0b3J5L3YxCnJlY29yZF9pZDogcmVjb3JkCnZlcnNpb246IDEK\"]],[\"sha256\",[\"text\",\"7dba861bdcb50b970597f1e69c4ff169e37cdc57fac8eb8347e51e96a6df6ab6\"]]]]],[\"before\",[\"map\",[[\"data\",[\"text\",\"YXV0aG9yaXR5OiBoaXN0b3J5CmdlbmVyYXRpb246IDEKcHJvZmlsZTogaGlzdG9yeS92MQpyZWNvcmRfaWQ6IHJlY29yZAp2ZXJzaW9uOiAxCg==\"]],[\"sha256\",[\"text\",\"5849b3f6141779233b3318e3a727e0768d6ff6918688a3d746e0c18bc5466ed4\"]]]]],[\"path\",[\"text\",\".kpopper/history.yaml\"]],[\"role\",[\"text\",\"history_authority\"]]]],[\"map\",[[\"after\",[\"map\",[[\"data\",[\"text\",\"YWZ0ZXINCg==\"]],[\"sha256\",[\"text\",\"1235f8f435b1d16f7aac442351f2e29ff1bd2b74652392c4accb5ec5565973da\"]]]]],[\"before\",[\"map\",[[\"data\",[\"text\",\"YmVmb3JlAP8NCg==\"]],[\"sha256\",[\"text\",\"87957804ca5f025ea5fa2df090d4c4e8d6f036b003b317f3f5daae120838ccd3\"]]]]],[\"path\",[\"text\",\"GROUNDING.yaml\"]],[\"role\",[\"text\",\"record\"]]]]]]],[\"operation\",[\"text\",\"operation\"]],[\"receipt\",[\"map\",[[\"after\",[\"map\",[[\"accepted\",[\"bool\",true]]]]],[\"before\",[\"map\",[[\"date\",[\"date\",\"2026-09-19\"]]]]],[\"capabilities\",[\"map\",[[\"requires\",[\"list\",[]]]]]],[\"digest\",[\"text\",\"61fb531d9071511de7efd8610b1ff3158455a17b582e1aa5f513d274b3c4345f\"]],[\"profile\",[\"text\",\"ordinary-reader/v1\"]],[\"version\",[\"int\",\"1\"]]]]],[\"transition\",[\"map\",[[\"after\",[\"map\",[[\"authority\",[\"text\",\"legacy\"]],[\"generation\",[\"int\",\"2\"]],[\"profile\",[\"text\",\"history/v1\"]],[\"record_id\",[\"text\",\"record\"]],[\"version\",[\"int\",\"1\"]]]]],[\"version\",[\"int\",\"1\"]]]]],[\"version\",[\"int\",\"2\"]]]]",
+      "error": "invalid_generation_cancellation"
+    },
+    {
+      "name": "GROUNDING.yaml-history-GROUNDING.yaml",
+      "entry": "GROUNDING.yaml",
+      "mutation": "[\"map\",[[\"authority\",[\"map\",[[\"authority\",[\"text\",\"history\"]],[\"generation\",[\"int\",\"1\"]],[\"profile\",[\"text\",\"history/v1\"]],[\"record_id\",[\"text\",\"record\"]],[\"version\",[\"int\",\"1\"]]]]],[\"baseline\",[\"map\",[[\"authority_generation\",[\"int\",\"1\"]],[\"committed_set_digest\",[\"text\",\"7ad43f899d941308dbb3cfb1f6bffe01785ea3bdbfb3a47dcda645bd35a671fb\"]],[\"heads\",[\"map\",[]]],[\"open_acts\",[\"map\",[]]],[\"record_id\",[\"text\",\"record\"]],[\"version\",[\"int\",\"1\"]]]]],[\"digest\",[\"text\",\"ca54ad8ceb76f907d494aeefe522b7d0880093852aeeff2faf45b5533f1c07cf\"]],[\"entry\",[\"text\",\"GROUNDING.yaml\"]],[\"files\",[\"list\",[[\"map\",[[\"after\",[\"map\",[[\"data\",[\"text\",\"YXV0aG9yaXR5X2dlbmVyYXRpb246IDEKYmFzZWxpbmVfZGlnZXN0OiBmMmZlNTIxZjU0MmZjYzdhZTEwMmU0ODcxYjZjMmNiNGRlZmQ2Mjg0YzBjODA5MTg3NDU1NGYwMTIwNzVhMDM3Cm9iamVjdHM6Ci0gaWQ6IGNhYTc3MWE0YzgxZmU2YmNiYzQyNmRiODNhMDVkYTc1ZWZiMGMxYmM5MGM4ZmI3YTUzNjdlNGQ4MGU4ZjM0NWYKICBzaGEyNTY6IGYyYzkyZjZkYmQ0ZDFmOWUzOTU1MGM5MzNmMjg4YWUyOGZhMGIxNzM1MTVkNDczNjNkZDJkY2FjNTFjNmU5NTgKICBzdWJqZWN0OiBwLmEKb3BlcmF0aW9uOiBvcGVyYXRpb24KcGFyZW50czoge30KcmVjZWlwdDoKICBhZnRlcjoKICAgIGFjY2VwdGVkOiB0cnVlCiAgYmVmb3JlOgogICAgZGF0ZTogMjAyNi0wOS0xOQogIGNhcGFiaWxpdGllczoKICAgIHJlcXVpcmVzOiBbXQogIGRpZ2VzdDogNjFmYjUzMWQ5MDcxNTExZGU3ZWZkODYxMGIxZmYzMTU4NDU1YTE3YjU4MmUxYWE1ZjUxM2QyNzRiM2M0MzQ1ZgogIHByb2ZpbGU6IG9yZGluYXJ5LXJlYWRlci92MQogIHZlcnNpb246IDEKcmVjb3JkX2lkOiByZWNvcmQKdmVyc2lvbjogMQp2aWV3X3NoYTI1NjogMTIzNWY4ZjQzNWIxZDE2ZjdhYWM0NDIzNTFmMmUyOWZmMWJkMmI3NDY1MjM5MmM0YWNjYjVlYzU1NjU5NzNkYQo=\"]],[\"sha256\",[\"text\",\"aa0e8d6131f881efcee863b36112a95db26b3e54436a9348625f7946638943e6\"]]]]],[\"before\",[\"null\"]],[\"path\",[\"text\",\".kpopper/history-commits/operation.yaml\"]],[\"role\",[\"text\",\"history_commit\"]]]],[\"map\",[[\"after\",[\"map\",[[\"data\",[\"text\",\"YXV0aG9yZWQ6CiAgY29sbGVjdGlvbjogcmVhZGluZ3MKICBmaWVsZHM6CiAgICB2YWx1ZTogdgogIHByb2ZpbGU6IG9yZGluYXJ5LXJlYWRlci92MQpib2R5OgogIHY6IDEKYnk6IG51bGwKaWQ6IGNhYTc3MWE0YzgxZmU2YmNiYzQyNmRiODNhMDVkYTc1ZWZiMGMxYmM5MGM4ZmI3YTUzNjdlNGQ4MGU4ZjM0NWYKaWRfc2NoZW1lOiB0eXBlZC1oaXN0b3J5L3YyCmtpbmQ6IHJlYWRpbmcKJ29uJzogdG9kYXkKb3A6IG9wZXJhdGlvbgpwaW5zOiB7fQpzYXc6IFtdCnNjaGVtYV92ZXJzaW9uOiAyCnN1YmplY3Q6IHAuYQo=\"]],[\"sha256\",[\"text\",\"f2c92f6dbd4d1f9e39550c933f288ae28fa0b173515d47363dd2dcac51c6e958\"]]]]],[\"before\",[\"null\"]],[\"path\",[\"text\",\".kpopper/history/p.a/caa771a4c81fe6bcbc426db83a05da75efb0c1bc90c8fb7a5367e4d80e8f345f.yaml\"]],[\"role\",[\"text\",\"history_object\"]]]],[\"map\",[[\"after\",[\"map\",[[\"data\",[\"text\",\"YWZ0ZXINCg==\"]],[\"sha256\",[\"text\",\"1235f8f435b1d16f7aac442351f2e29ff1bd2b74652392c4accb5ec5565973da\"]]]]],[\"before\",[\"map\",[[\"data\",[\"text\",\"YmVmb3JlAP8NCg==\"]],[\"sha256\",[\"text\",\"87957804ca5f025ea5fa2df090d4c4e8d6f036b003b317f3f5daae120838ccd3\"]]]]],[\"path\",[\"text\",\"GROUNDING.yaml\"]],[\"role\",[\"text\",\"record\"]]]]]]],[\"operation\",[\"text\",\"operation\"]],[\"receipt\",[\"map\",[[\"after\",[\"map\",[[\"accepted\",[\"bool\",true]]]]],[\"before\",[\"map\",[[\"date\",[\"date\",\"2026-09-19\"]]]]],[\"capabilities\",[\"map\",[[\"requires\",[\"list\",[]]]]]],[\"digest\",[\"text\",\"61fb531d9071511de7efd8610b1ff3158455a17b582e1aa5f513d274b3c4345f\"]],[\"profile\",[\"text\",\"ordinary-reader/v1\"]],[\"version\",[\"int\",\"1\"]]]]],[\"version\",[\"int\",\"1\"]]]]",
+      "error": "invalid_generation_cancellation"
+    },
+    {
+      "name": "GROUNDING.yaml-history-other.yaml",
+      "entry": "other.yaml",
+      "mutation": "[\"map\",[[\"authority\",[\"map\",[[\"authority\",[\"text\",\"history\"]],[\"generation\",[\"int\",\"1\"]],[\"profile\",[\"text\",\"history/v1\"]],[\"record_id\",[\"text\",\"record\"]],[\"version\",[\"int\",\"1\"]]]]],[\"baseline\",[\"map\",[[\"authority_generation\",[\"int\",\"1\"]],[\"committed_set_digest\",[\"text\",\"7ad43f899d941308dbb3cfb1f6bffe01785ea3bdbfb3a47dcda645bd35a671fb\"]],[\"heads\",[\"map\",[]]],[\"open_acts\",[\"map\",[]]],[\"record_id\",[\"text\",\"record\"]],[\"version\",[\"int\",\"1\"]]]]],[\"digest\",[\"text\",\"ca54ad8ceb76f907d494aeefe522b7d0880093852aeeff2faf45b5533f1c07cf\"]],[\"entry\",[\"text\",\"GROUNDING.yaml\"]],[\"files\",[\"list\",[[\"map\",[[\"after\",[\"map\",[[\"data\",[\"text\",\"YXV0aG9yaXR5X2dlbmVyYXRpb246IDEKYmFzZWxpbmVfZGlnZXN0OiBmMmZlNTIxZjU0MmZjYzdhZTEwMmU0ODcxYjZjMmNiNGRlZmQ2Mjg0YzBjODA5MTg3NDU1NGYwMTIwNzVhMDM3Cm9iamVjdHM6Ci0gaWQ6IGNhYTc3MWE0YzgxZmU2YmNiYzQyNmRiODNhMDVkYTc1ZWZiMGMxYmM5MGM4ZmI3YTUzNjdlNGQ4MGU4ZjM0NWYKICBzaGEyNTY6IGYyYzkyZjZkYmQ0ZDFmOWUzOTU1MGM5MzNmMjg4YWUyOGZhMGIxNzM1MTVkNDczNjNkZDJkY2FjNTFjNmU5NTgKICBzdWJqZWN0OiBwLmEKb3BlcmF0aW9uOiBvcGVyYXRpb24KcGFyZW50czoge30KcmVjZWlwdDoKICBhZnRlcjoKICAgIGFjY2VwdGVkOiB0cnVlCiAgYmVmb3JlOgogICAgZGF0ZTogMjAyNi0wOS0xOQogIGNhcGFiaWxpdGllczoKICAgIHJlcXVpcmVzOiBbXQogIGRpZ2VzdDogNjFmYjUzMWQ5MDcxNTExZGU3ZWZkODYxMGIxZmYzMTU4NDU1YTE3YjU4MmUxYWE1ZjUxM2QyNzRiM2M0MzQ1ZgogIHByb2ZpbGU6IG9yZGluYXJ5LXJlYWRlci92MQogIHZlcnNpb246IDEKcmVjb3JkX2lkOiByZWNvcmQKdmVyc2lvbjogMQp2aWV3X3NoYTI1NjogMTIzNWY4ZjQzNWIxZDE2ZjdhYWM0NDIzNTFmMmUyOWZmMWJkMmI3NDY1MjM5MmM0YWNjYjVlYzU1NjU5NzNkYQo=\"]],[\"sha256\",[\"text\",\"aa0e8d6131f881efcee863b36112a95db26b3e54436a9348625f7946638943e6\"]]]]],[\"before\",[\"null\"]],[\"path\",[\"text\",\".kpopper/history-commits/operation.yaml\"]],[\"role\",[\"text\",\"history_commit\"]]]],[\"map\",[[\"after\",[\"map\",[[\"data\",[\"text\",\"YXV0aG9yZWQ6CiAgY29sbGVjdGlvbjogcmVhZGluZ3MKICBmaWVsZHM6CiAgICB2YWx1ZTogdgogIHByb2ZpbGU6IG9yZGluYXJ5LXJlYWRlci92MQpib2R5OgogIHY6IDEKYnk6IG51bGwKaWQ6IGNhYTc3MWE0YzgxZmU2YmNiYzQyNmRiODNhMDVkYTc1ZWZiMGMxYmM5MGM4ZmI3YTUzNjdlNGQ4MGU4ZjM0NWYKaWRfc2NoZW1lOiB0eXBlZC1oaXN0b3J5L3YyCmtpbmQ6IHJlYWRpbmcKJ29uJzogdG9kYXkKb3A6IG9wZXJhdGlvbgpwaW5zOiB7fQpzYXc6IFtdCnNjaGVtYV92ZXJzaW9uOiAyCnN1YmplY3Q6IHAuYQo=\"]],[\"sha256\",[\"text\",\"f2c92f6dbd4d1f9e39550c933f288ae28fa0b173515d47363dd2dcac51c6e958\"]]]]],[\"before\",[\"null\"]],[\"path\",[\"text\",\".kpopper/history/p.a/caa771a4c81fe6bcbc426db83a05da75efb0c1bc90c8fb7a5367e4d80e8f345f.yaml\"]],[\"role\",[\"text\",\"history_object\"]]]],[\"map\",[[\"after\",[\"map\",[[\"data\",[\"text\",\"YWZ0ZXINCg==\"]],[\"sha256\",[\"text\",\"1235f8f435b1d16f7aac442351f2e29ff1bd2b74652392c4accb5ec5565973da\"]]]]],[\"before\",[\"map\",[[\"data\",[\"text\",\"YmVmb3JlAP8NCg==\"]],[\"sha256\",[\"text\",\"87957804ca5f025ea5fa2df090d4c4e8d6f036b003b317f3f5daae120838ccd3\"]]]]],[\"path\",[\"text\",\"GROUNDING.yaml\"]],[\"role\",[\"text\",\"record\"]]]]]]],[\"operation\",[\"text\",\"operation\"]],[\"receipt\",[\"map\",[[\"after\",[\"map\",[[\"accepted\",[\"bool\",true]]]]],[\"before\",[\"map\",[[\"date\",[\"date\",\"2026-09-19\"]]]]],[\"capabilities\",[\"map\",[[\"requires\",[\"list\",[]]]]]],[\"digest\",[\"text\",\"61fb531d9071511de7efd8610b1ff3158455a17b582e1aa5f513d274b3c4345f\"]],[\"profile\",[\"text\",\"ordinary-reader/v1\"]],[\"version\",[\"int\",\"1\"]]]]],[\"version\",[\"int\",\"1\"]]]]",
+      "error": "invalid_generation_cancellation"
+    },
+    {
+      "name": "GROUNDING.yaml-legacy-GROUNDING.yaml",
+      "entry": "GROUNDING.yaml",
+      "mutation": "[\"map\",[[\"authority\",[\"map\",[[\"authority\",[\"text\",\"legacy\"]],[\"generation\",[\"int\",\"0\"]],[\"profile\",[\"text\",\"history/v1\"]],[\"record_id\",[\"text\",\"record\"]],[\"version\",[\"int\",\"1\"]]]]],[\"baseline\",[\"map\",[[\"revision\",[\"text\",\"before\"]]]]],[\"digest\",[\"text\",\"8ce4807ebc653502454dd188cc3f65bb7f4c0bffcaf7f7dafd8dd5228b55324a\"]],[\"entry\",[\"text\",\"GROUNDING.yaml\"]],[\"files\",[\"list\",[[\"map\",[[\"after\",[\"map\",[[\"data\",[\"text\",\"YWZ0ZXINCg==\"]],[\"sha256\",[\"text\",\"1235f8f435b1d16f7aac442351f2e29ff1bd2b74652392c4accb5ec5565973da\"]]]]],[\"before\",[\"map\",[[\"data\",[\"text\",\"YmVmb3JlAP8NCg==\"]],[\"sha256\",[\"text\",\"87957804ca5f025ea5fa2df090d4c4e8d6f036b003b317f3f5daae120838ccd3\"]]]]],[\"path\",[\"text\",\"GROUNDING.yaml\"]],[\"role\",[\"text\",\"record\"]]]]]]],[\"operation\",[\"text\",\"operation\"]],[\"receipt\",[\"map\",[[\"after\",[\"map\",[[\"accepted\",[\"bool\",true]]]]],[\"before\",[\"map\",[[\"date\",[\"date\",\"2026-09-19\"]]]]],[\"capabilities\",[\"map\",[[\"requires\",[\"list\",[]]]]]],[\"digest\",[\"text\",\"61fb531d9071511de7efd8610b1ff3158455a17b582e1aa5f513d274b3c4345f\"]],[\"profile\",[\"text\",\"ordinary-reader/v1\"]],[\"version\",[\"int\",\"1\"]]]]],[\"version\",[\"int\",\"1\"]]]]",
+      "error": "invalid_generation_cancellation"
+    },
+    {
+      "name": "GROUNDING.yaml-legacy-other.yaml",
+      "entry": "other.yaml",
+      "mutation": "[\"map\",[[\"authority\",[\"map\",[[\"authority\",[\"text\",\"legacy\"]],[\"generation\",[\"int\",\"0\"]],[\"profile\",[\"text\",\"history/v1\"]],[\"record_id\",[\"text\",\"record\"]],[\"version\",[\"int\",\"1\"]]]]],[\"baseline\",[\"map\",[[\"revision\",[\"text\",\"before\"]]]]],[\"digest\",[\"text\",\"8ce4807ebc653502454dd188cc3f65bb7f4c0bffcaf7f7dafd8dd5228b55324a\"]],[\"entry\",[\"text\",\"GROUNDING.yaml\"]],[\"files\",[\"list\",[[\"map\",[[\"after\",[\"map\",[[\"data\",[\"text\",\"YWZ0ZXINCg==\"]],[\"sha256\",[\"text\",\"1235f8f435b1d16f7aac442351f2e29ff1bd2b74652392c4accb5ec5565973da\"]]]]],[\"before\",[\"map\",[[\"data\",[\"text\",\"YmVmb3JlAP8NCg==\"]],[\"sha256\",[\"text\",\"87957804ca5f025ea5fa2df090d4c4e8d6f036b003b317f3f5daae120838ccd3\"]]]]],[\"path\",[\"text\",\"GROUNDING.yaml\"]],[\"role\",[\"text\",\"record\"]]]]]]],[\"operation\",[\"text\",\"operation\"]],[\"receipt\",[\"map\",[[\"after\",[\"map\",[[\"accepted\",[\"bool\",true]]]]],[\"before\",[\"map\",[[\"date\",[\"date\",\"2026-09-19\"]]]]],[\"capabilities\",[\"map\",[[\"requires\",[\"list\",[]]]]]],[\"digest\",[\"text\",\"61fb531d9071511de7efd8610b1ff3158455a17b582e1aa5f513d274b3c4345f\"]],[\"profile\",[\"text\",\"ordinary-reader/v1\"]],[\"version\",[\"int\",\"1\"]]]]],[\"version\",[\"int\",\"1\"]]]]",
+      "error": "invalid_generation_cancellation"
+    },
+    {
+      "name": "PROVENANCE.yaml-activate-PROVENANCE.yaml",
+      "entry": "PROVENANCE.yaml",
+      "mutation": "[\"map\",[[\"authority\",[\"map\",[[\"authority\",[\"text\",\"legacy\"]],[\"generation\",[\"int\",\"0\"]],[\"profile\",[\"text\",\"history/v1\"]],[\"record_id\",[\"text\",\"record\"]],[\"version\",[\"int\",\"1\"]]]]],[\"baseline\",[\"map\",[[\"direction\",[\"text\",\"activate\"]],[\"history_baseline\",[\"map\",[[\"authority_generation\",[\"int\",\"1\"]],[\"committed_set_digest\",[\"text\",\"7ad43f899d941308dbb3cfb1f6bffe01785ea3bdbfb3a47dcda645bd35a671fb\"]],[\"heads\",[\"map\",[]]],[\"open_acts\",[\"map\",[]]],[\"record_id\",[\"text\",\"record\"]],[\"version\",[\"int\",\"1\"]]]]],[\"kind\",[\"text\",\"history-authority-transition/v1\"]]]]],[\"digest\",[\"text\",\"b3c382582e382c8a6d6ed5bc6d369ad9d1a1faa1273eac9e0f91d1430999a553\"]],[\"entry\",[\"text\",\"PROVENANCE.yaml\"]],[\"files\",[\"list\",[[\"map\",[[\"after\",[\"map\",[[\"data\",[\"text\",\"YXV0aG9yaXR5X2dlbmVyYXRpb246IDEKYmFzZWxpbmVfZGlnZXN0OiBmMmZlNTIxZjU0MmZjYzdhZTEwMmU0ODcxYjZjMmNiNGRlZmQ2Mjg0YzBjODA5MTg3NDU1NGYwMTIwNzVhMDM3Cm9iamVjdHM6Ci0gaWQ6IGNhYTc3MWE0YzgxZmU2YmNiYzQyNmRiODNhMDVkYTc1ZWZiMGMxYmM5MGM4ZmI3YTUzNjdlNGQ4MGU4ZjM0NWYKICBzaGEyNTY6IGYyYzkyZjZkYmQ0ZDFmOWUzOTU1MGM5MzNmMjg4YWUyOGZhMGIxNzM1MTVkNDczNjNkZDJkY2FjNTFjNmU5NTgKICBzdWJqZWN0OiBwLmEKb3BlcmF0aW9uOiBvcGVyYXRpb24KcGFyZW50czoge30KcmVjZWlwdDoKICBhZnRlcjoKICAgIGFjY2VwdGVkOiB0cnVlCiAgYmVmb3JlOgogICAgZGF0ZTogMjAyNi0wOS0xOQogIGNhcGFiaWxpdGllczoKICAgIHJlcXVpcmVzOiBbXQogIGRpZ2VzdDogNjFmYjUzMWQ5MDcxNTExZGU3ZWZkODYxMGIxZmYzMTU4NDU1YTE3YjU4MmUxYWE1ZjUxM2QyNzRiM2M0MzQ1ZgogIHByb2ZpbGU6IG9yZGluYXJ5LXJlYWRlci92MQogIHZlcnNpb246IDEKcmVjb3JkX2lkOiByZWNvcmQKdmVyc2lvbjogMQp2aWV3X3NoYTI1NjogMTIzNWY4ZjQzNWIxZDE2ZjdhYWM0NDIzNTFmMmUyOWZmMWJkMmI3NDY1MjM5MmM0YWNjYjVlYzU1NjU5NzNkYQo=\"]],[\"sha256\",[\"text\",\"aa0e8d6131f881efcee863b36112a95db26b3e54436a9348625f7946638943e6\"]]]]],[\"before\",[\"null\"]],[\"path\",[\"text\",\"PROVENANCE.history-commits/operation.yaml\"]],[\"role\",[\"text\",\"history_commit\"]]]],[\"map\",[[\"after\",[\"map\",[[\"data\",[\"text\",\"YXV0aG9yaXR5OiBoaXN0b3J5CmdlbmVyYXRpb246IDEKcHJvZmlsZTogaGlzdG9yeS92MQpyZWNvcmRfaWQ6IHJlY29yZAp2ZXJzaW9uOiAxCg==\"]],[\"sha256\",[\"text\",\"5849b3f6141779233b3318e3a727e0768d6ff6918688a3d746e0c18bc5466ed4\"]]]]],[\"before\",[\"null\"]],[\"path\",[\"text\",\"PROVENANCE.history.yaml\"]],[\"role\",[\"text\",\"history_authority\"]]]],[\"map\",[[\"after\",[\"map\",[[\"data\",[\"text\",\"YXV0aG9yZWQ6CiAgY29sbGVjdGlvbjogcmVhZGluZ3MKICBmaWVsZHM6CiAgICB2YWx1ZTogdgogIHByb2ZpbGU6IG9yZGluYXJ5LXJlYWRlci92MQpib2R5OgogIHY6IDEKYnk6IG51bGwKaWQ6IGNhYTc3MWE0YzgxZmU2YmNiYzQyNmRiODNhMDVkYTc1ZWZiMGMxYmM5MGM4ZmI3YTUzNjdlNGQ4MGU4ZjM0NWYKaWRfc2NoZW1lOiB0eXBlZC1oaXN0b3J5L3YyCmtpbmQ6IHJlYWRpbmcKJ29uJzogdG9kYXkKb3A6IG9wZXJhdGlvbgpwaW5zOiB7fQpzYXc6IFtdCnNjaGVtYV92ZXJzaW9uOiAyCnN1YmplY3Q6IHAuYQo=\"]],[\"sha256\",[\"text\",\"f2c92f6dbd4d1f9e39550c933f288ae28fa0b173515d47363dd2dcac51c6e958\"]]]]],[\"before\",[\"null\"]],[\"path\",[\"text\",\"PROVENANCE.history/p.a/caa771a4c81fe6bcbc426db83a05da75efb0c1bc90c8fb7a5367e4d80e8f345f.yaml\"]],[\"role\",[\"text\",\"history_object\"]]]],[\"map\",[[\"after\",[\"map\",[[\"data\",[\"text\",\"YWZ0ZXINCg==\"]],[\"sha256\",[\"text\",\"1235f8f435b1d16f7aac442351f2e29ff1bd2b74652392c4accb5ec5565973da\"]]]]],[\"before\",[\"map\",[[\"data\",[\"text\",\"YmVmb3JlAP8NCg==\"]],[\"sha256\",[\"text\",\"87957804ca5f025ea5fa2df090d4c4e8d6f036b003b317f3f5daae120838ccd3\"]]]]],[\"path\",[\"text\",\"PROVENANCE.yaml\"]],[\"role\",[\"text\",\"record\"]]]]]]],[\"operation\",[\"text\",\"operation\"]],[\"receipt\",[\"map\",[[\"after\",[\"map\",[[\"accepted\",[\"bool\",true]]]]],[\"before\",[\"map\",[[\"date\",[\"date\",\"2026-09-19\"]]]]],[\"capabilities\",[\"map\",[[\"requires\",[\"list\",[]]]]]],[\"digest\",[\"text\",\"61fb531d9071511de7efd8610b1ff3158455a17b582e1aa5f513d274b3c4345f\"]],[\"profile\",[\"text\",\"ordinary-reader/v1\"]],[\"version\",[\"int\",\"1\"]]]]],[\"transition\",[\"map\",[[\"after\",[\"map\",[[\"authority\",[\"text\",\"history\"]],[\"generation\",[\"int\",\"1\"]],[\"profile\",[\"text\",\"history/v1\"]],[\"record_id\",[\"text\",\"record\"]],[\"version\",[\"int\",\"1\"]]]]],[\"version\",[\"int\",\"1\"]]]]],[\"version\",[\"int\",\"2\"]]]]",
+      "output": [
+        "map",
+        [
+          [
+            "digest",
+            [
+              "text",
+              "2a14c9acf0923fd3e30ddb233ed69f76b90400ee06292566457830553910eff1"
+            ]
+          ],
+          [
+            "immutable_images",
+            [
+              "list",
+              [
+                [
+                  "map",
+                  [
+                    [
+                      "after",
+                      [
+                        "text",
+                        "617574686f726974795f67656e65726174696f6e3a20310a626173656c696e655f6469676573743a20663266653532316635343266636337616531303265343837316236633263623464656664363238346330633830393138373435353466303132303735613033370a6f626a656374733a0a2d2069643a20636161373731613463383166653662636263343236646238336130356461373565666230633162633930633866623761353336376534643830653866333435660a20207368613235363a20663263393266366462643464316639653339353530633933336632383861653238666130623137333531356434373336336464326463616335316336653935380a20207375626a6563743a20702e610a6f7065726174696f6e3a206f7065726174696f6e0a706172656e74733a207b7d0a726563656970743a0a202061667465723a0a2020202061636365707465643a20747275650a20206265666f72653a0a20202020646174653a20323032362d30392d31390a20206361706162696c69746965733a0a2020202072657175697265733a205b5d0a20206469676573743a20363166623533316439303731353131646537656664383631306231666633313538343535613137623538326531616135663531336432373462336334333435660a202070726f66696c653a206f7264696e6172792d7265616465722f76310a202076657273696f6e3a20310a7265636f72645f69643a207265636f72640a76657273696f6e3a20310a766965775f7368613235363a20313233356638663433356231643136663761616334343233353166326532396666316264326237343635323339326334616363623565633535363539373364610a"
+                      ]
+                    ],
+                    [
+                      "path",
+                      [
+                        "text",
+                        "PROVENANCE.history-commits/operation.yaml"
+                      ]
+                    ]
+                  ]
+                ],
+                [
+                  "map",
+                  [
+                    [
+                      "after",
+                      [
+                        "text",
+                        "617574686f7265643a0a2020636f6c6c656374696f6e3a2072656164696e67730a20206669656c64733a0a2020202076616c75653a20760a202070726f66696c653a206f7264696e6172792d7265616465722f76310a626f64793a0a2020763a20310a62793a206e756c6c0a69643a20636161373731613463383166653662636263343236646238336130356461373565666230633162633930633866623761353336376534643830653866333435660a69645f736368656d653a2074797065642d686973746f72792f76320a6b696e643a2072656164696e670a276f6e273a20746f6461790a6f703a206f7065726174696f6e0a70696e733a207b7d0a7361773a205b5d0a736368656d615f76657273696f6e3a20320a7375626a6563743a20702e610a"
+                      ]
+                    ],
+                    [
+                      "path",
+                      [
+                        "text",
+                        "PROVENANCE.history/p.a/caa771a4c81fe6bcbc426db83a05da75efb0c1bc90c8fb7a5367e4d80e8f345f.yaml"
+                      ]
+                    ]
+                  ]
+                ]
+              ]
+            ]
+          ],
+          [
+            "marker_bytes",
+            [
+              "text",
+              "617574686f726974793a206c65676163790a63616e63656c6c6174696f6e733a0a20202731273a0a202020206c65676163795f67656e65726174696f6e3a20320a202020206f7065726174696f6e3a206f7065726174696f6e0a20202020706174683a206f7065726174696f6e2e79616d6c0a2020202072657365727665645f67656e65726174696f6e3a20310a202020207368613235363a20646139396161333761363132383265343731373336373732373461383864316435303436303765613039373630366236363730333165386438623832383730330a67656e65726174696f6e3a20320a70726f66696c653a20686973746f72792f76310a7265636f72645f69643a207265636f72640a72657175697265733a0a2d2067656e65726174696f6e2d63616e63656c6c6174696f6e2f76310a76657273696f6e3a20320a"
+            ]
+          ],
+          [
+            "mutation_digest",
+            [
+              "text",
+              "b3c382582e382c8a6d6ed5bc6d369ad9d1a1faa1273eac9e0f91d1430999a553"
+            ]
+          ],
+          [
+            "operation",
+            [
+              "text",
+              "operation"
+            ]
+          ],
+          [
+            "original_entry",
+            [
+              "text",
+              "6265666f726500ff0d0a"
+            ]
+          ],
+          [
+            "receipt_bytes",
+            [
+              "text",
+              "6172746966616374733a207b7d0a6265666f72655f617574686f726974795f6469676573743a20303836313461383036663739363437663231386130613762653066376437313336343161636361336636366338343738613264656532373866636230633738340a656e7472793a2050524f56454e414e43452e79616d6c0a6b696e643a2067656e65726174696f6e2d63616e63656c6c6174696f6e2f76310a6c65676163795f67656e65726174696f6e3a20320a6d616e69666573745f7368613235363a20616130653864363133316638383165666365653836336233363131326139356462323662336535343433366139333438363235663739343636333839343365360a6d75746174696f6e5f6469676573743a20623363333832353832653338326338613664366564356263366433363961643964316131666161313237336561633965306639316431343330393939613535330a6f626a656374733a0a2020636161373731613463383166653662636263343236646238336130356461373565666230633162633930633866623761353336376534643830653866333435663a0a202020207368613235363a20663263393266366462643464316639653339353530633933336632383861653238666130623137333531356434373336336464326463616335316336653935380a202020207375626a6563743a20702e610a6f7065726174696f6e3a206f7065726174696f6e0a6f726967696e616c5f656e7472795f7368613235363a20383739353738303463613566303235656135666132646630393064346334653864366630333662303033623331376633663564616165313230383338636364330a7265636f72645f69643a207265636f72640a72657365727665645f617574686f726974795f6469676573743a20656361643438323564363637363635336330656663373139653834633734653361363030623263613063356437383334633962643236346533333635643661630a72657365727665645f67656e65726174696f6e3a20310a76657273696f6e3a20310a7669736962696c6974793a206e657665725f72656c65617365645f746f5f726561646572730a"
+            ]
+          ],
+          [
+            "receipt_path",
+            [
+              "text",
+              "PROVENANCE.history-cancellations/operation.yaml"
+            ]
+          ],
+          [
+            "version",
+            [
+              "int",
+              "1"
+            ]
+          ]
+        ]
+      ]
+    },
+    {
+      "name": "PROVENANCE.yaml-activate-other.yaml",
+      "entry": "other.yaml",
+      "mutation": "[\"map\",[[\"authority\",[\"map\",[[\"authority\",[\"text\",\"legacy\"]],[\"generation\",[\"int\",\"0\"]],[\"profile\",[\"text\",\"history/v1\"]],[\"record_id\",[\"text\",\"record\"]],[\"version\",[\"int\",\"1\"]]]]],[\"baseline\",[\"map\",[[\"direction\",[\"text\",\"activate\"]],[\"history_baseline\",[\"map\",[[\"authority_generation\",[\"int\",\"1\"]],[\"committed_set_digest\",[\"text\",\"7ad43f899d941308dbb3cfb1f6bffe01785ea3bdbfb3a47dcda645bd35a671fb\"]],[\"heads\",[\"map\",[]]],[\"open_acts\",[\"map\",[]]],[\"record_id\",[\"text\",\"record\"]],[\"version\",[\"int\",\"1\"]]]]],[\"kind\",[\"text\",\"history-authority-transition/v1\"]]]]],[\"digest\",[\"text\",\"b3c382582e382c8a6d6ed5bc6d369ad9d1a1faa1273eac9e0f91d1430999a553\"]],[\"entry\",[\"text\",\"PROVENANCE.yaml\"]],[\"files\",[\"list\",[[\"map\",[[\"after\",[\"map\",[[\"data\",[\"text\",\"YXV0aG9yaXR5X2dlbmVyYXRpb246IDEKYmFzZWxpbmVfZGlnZXN0OiBmMmZlNTIxZjU0MmZjYzdhZTEwMmU0ODcxYjZjMmNiNGRlZmQ2Mjg0YzBjODA5MTg3NDU1NGYwMTIwNzVhMDM3Cm9iamVjdHM6Ci0gaWQ6IGNhYTc3MWE0YzgxZmU2YmNiYzQyNmRiODNhMDVkYTc1ZWZiMGMxYmM5MGM4ZmI3YTUzNjdlNGQ4MGU4ZjM0NWYKICBzaGEyNTY6IGYyYzkyZjZkYmQ0ZDFmOWUzOTU1MGM5MzNmMjg4YWUyOGZhMGIxNzM1MTVkNDczNjNkZDJkY2FjNTFjNmU5NTgKICBzdWJqZWN0OiBwLmEKb3BlcmF0aW9uOiBvcGVyYXRpb24KcGFyZW50czoge30KcmVjZWlwdDoKICBhZnRlcjoKICAgIGFjY2VwdGVkOiB0cnVlCiAgYmVmb3JlOgogICAgZGF0ZTogMjAyNi0wOS0xOQogIGNhcGFiaWxpdGllczoKICAgIHJlcXVpcmVzOiBbXQogIGRpZ2VzdDogNjFmYjUzMWQ5MDcxNTExZGU3ZWZkODYxMGIxZmYzMTU4NDU1YTE3YjU4MmUxYWE1ZjUxM2QyNzRiM2M0MzQ1ZgogIHByb2ZpbGU6IG9yZGluYXJ5LXJlYWRlci92MQogIHZlcnNpb246IDEKcmVjb3JkX2lkOiByZWNvcmQKdmVyc2lvbjogMQp2aWV3X3NoYTI1NjogMTIzNWY4ZjQzNWIxZDE2ZjdhYWM0NDIzNTFmMmUyOWZmMWJkMmI3NDY1MjM5MmM0YWNjYjVlYzU1NjU5NzNkYQo=\"]],[\"sha256\",[\"text\",\"aa0e8d6131f881efcee863b36112a95db26b3e54436a9348625f7946638943e6\"]]]]],[\"before\",[\"null\"]],[\"path\",[\"text\",\"PROVENANCE.history-commits/operation.yaml\"]],[\"role\",[\"text\",\"history_commit\"]]]],[\"map\",[[\"after\",[\"map\",[[\"data\",[\"text\",\"YXV0aG9yaXR5OiBoaXN0b3J5CmdlbmVyYXRpb246IDEKcHJvZmlsZTogaGlzdG9yeS92MQpyZWNvcmRfaWQ6IHJlY29yZAp2ZXJzaW9uOiAxCg==\"]],[\"sha256\",[\"text\",\"5849b3f6141779233b3318e3a727e0768d6ff6918688a3d746e0c18bc5466ed4\"]]]]],[\"before\",[\"null\"]],[\"path\",[\"text\",\"PROVENANCE.history.yaml\"]],[\"role\",[\"text\",\"history_authority\"]]]],[\"map\",[[\"after\",[\"map\",[[\"data\",[\"text\",\"YXV0aG9yZWQ6CiAgY29sbGVjdGlvbjogcmVhZGluZ3MKICBmaWVsZHM6CiAgICB2YWx1ZTogdgogIHByb2ZpbGU6IG9yZGluYXJ5LXJlYWRlci92MQpib2R5OgogIHY6IDEKYnk6IG51bGwKaWQ6IGNhYTc3MWE0YzgxZmU2YmNiYzQyNmRiODNhMDVkYTc1ZWZiMGMxYmM5MGM4ZmI3YTUzNjdlNGQ4MGU4ZjM0NWYKaWRfc2NoZW1lOiB0eXBlZC1oaXN0b3J5L3YyCmtpbmQ6IHJlYWRpbmcKJ29uJzogdG9kYXkKb3A6IG9wZXJhdGlvbgpwaW5zOiB7fQpzYXc6IFtdCnNjaGVtYV92ZXJzaW9uOiAyCnN1YmplY3Q6IHAuYQo=\"]],[\"sha256\",[\"text\",\"f2c92f6dbd4d1f9e39550c933f288ae28fa0b173515d47363dd2dcac51c6e958\"]]]]],[\"before\",[\"null\"]],[\"path\",[\"text\",\"PROVENANCE.history/p.a/caa771a4c81fe6bcbc426db83a05da75efb0c1bc90c8fb7a5367e4d80e8f345f.yaml\"]],[\"role\",[\"text\",\"history_object\"]]]],[\"map\",[[\"after\",[\"map\",[[\"data\",[\"text\",\"YWZ0ZXINCg==\"]],[\"sha256\",[\"text\",\"1235f8f435b1d16f7aac442351f2e29ff1bd2b74652392c4accb5ec5565973da\"]]]]],[\"before\",[\"map\",[[\"data\",[\"text\",\"YmVmb3JlAP8NCg==\"]],[\"sha256\",[\"text\",\"87957804ca5f025ea5fa2df090d4c4e8d6f036b003b317f3f5daae120838ccd3\"]]]]],[\"path\",[\"text\",\"PROVENANCE.yaml\"]],[\"role\",[\"text\",\"record\"]]]]]]],[\"operation\",[\"text\",\"operation\"]],[\"receipt\",[\"map\",[[\"after\",[\"map\",[[\"accepted\",[\"bool\",true]]]]],[\"before\",[\"map\",[[\"date\",[\"date\",\"2026-09-19\"]]]]],[\"capabilities\",[\"map\",[[\"requires\",[\"list\",[]]]]]],[\"digest\",[\"text\",\"61fb531d9071511de7efd8610b1ff3158455a17b582e1aa5f513d274b3c4345f\"]],[\"profile\",[\"text\",\"ordinary-reader/v1\"]],[\"version\",[\"int\",\"1\"]]]]],[\"transition\",[\"map\",[[\"after\",[\"map\",[[\"authority\",[\"text\",\"history\"]],[\"generation\",[\"int\",\"1\"]],[\"profile\",[\"text\",\"history/v1\"]],[\"record_id\",[\"text\",\"record\"]],[\"version\",[\"int\",\"1\"]]]]],[\"version\",[\"int\",\"1\"]]]]],[\"version\",[\"int\",\"2\"]]]]",
+      "error": "invalid_generation_cancellation"
+    },
+    {
+      "name": "PROVENANCE.yaml-deactivate-PROVENANCE.yaml",
+      "entry": "PROVENANCE.yaml",
+      "mutation": "[\"map\",[[\"authority\",[\"map\",[[\"authority\",[\"text\",\"history\"]],[\"generation\",[\"int\",\"1\"]],[\"profile\",[\"text\",\"history/v1\"]],[\"record_id\",[\"text\",\"record\"]],[\"version\",[\"int\",\"1\"]]]]],[\"baseline\",[\"map\",[[\"direction\",[\"text\",\"deactivate\"]],[\"kind\",[\"text\",\"history-authority-transition/v1\"]]]]],[\"digest\",[\"text\",\"907992912229ff60472958575107346ef164f5a8870a0a380c11cff7bab6f182\"]],[\"entry\",[\"text\",\"PROVENANCE.yaml\"]],[\"files\",[\"list\",[[\"map\",[[\"after\",[\"map\",[[\"data\",[\"text\",\"YXV0aG9yaXR5OiBsZWdhY3kKZ2VuZXJhdGlvbjogMgpwcm9maWxlOiBoaXN0b3J5L3YxCnJlY29yZF9pZDogcmVjb3JkCnZlcnNpb246IDEK\"]],[\"sha256\",[\"text\",\"7dba861bdcb50b970597f1e69c4ff169e37cdc57fac8eb8347e51e96a6df6ab6\"]]]]],[\"before\",[\"map\",[[\"data\",[\"text\",\"YXV0aG9yaXR5OiBoaXN0b3J5CmdlbmVyYXRpb246IDEKcHJvZmlsZTogaGlzdG9yeS92MQpyZWNvcmRfaWQ6IHJlY29yZAp2ZXJzaW9uOiAxCg==\"]],[\"sha256\",[\"text\",\"5849b3f6141779233b3318e3a727e0768d6ff6918688a3d746e0c18bc5466ed4\"]]]]],[\"path\",[\"text\",\"PROVENANCE.history.yaml\"]],[\"role\",[\"text\",\"history_authority\"]]]],[\"map\",[[\"after\",[\"map\",[[\"data\",[\"text\",\"YWZ0ZXINCg==\"]],[\"sha256\",[\"text\",\"1235f8f435b1d16f7aac442351f2e29ff1bd2b74652392c4accb5ec5565973da\"]]]]],[\"before\",[\"map\",[[\"data\",[\"text\",\"YmVmb3JlAP8NCg==\"]],[\"sha256\",[\"text\",\"87957804ca5f025ea5fa2df090d4c4e8d6f036b003b317f3f5daae120838ccd3\"]]]]],[\"path\",[\"text\",\"PROVENANCE.yaml\"]],[\"role\",[\"text\",\"record\"]]]]]]],[\"operation\",[\"text\",\"operation\"]],[\"receipt\",[\"map\",[[\"after\",[\"map\",[[\"accepted\",[\"bool\",true]]]]],[\"before\",[\"map\",[[\"date\",[\"date\",\"2026-09-19\"]]]]],[\"capabilities\",[\"map\",[[\"requires\",[\"list\",[]]]]]],[\"digest\",[\"text\",\"61fb531d9071511de7efd8610b1ff3158455a17b582e1aa5f513d274b3c4345f\"]],[\"profile\",[\"text\",\"ordinary-reader/v1\"]],[\"version\",[\"int\",\"1\"]]]]],[\"transition\",[\"map\",[[\"after\",[\"map\",[[\"authority\",[\"text\",\"legacy\"]],[\"generation\",[\"int\",\"2\"]],[\"profile\",[\"text\",\"history/v1\"]],[\"record_id\",[\"text\",\"record\"]],[\"version\",[\"int\",\"1\"]]]]],[\"version\",[\"int\",\"1\"]]]]],[\"version\",[\"int\",\"2\"]]]]",
+      "error": "invalid_generation_cancellation"
+    },
+    {
+      "name": "PROVENANCE.yaml-deactivate-other.yaml",
+      "entry": "other.yaml",
+      "mutation": "[\"map\",[[\"authority\",[\"map\",[[\"authority\",[\"text\",\"history\"]],[\"generation\",[\"int\",\"1\"]],[\"profile\",[\"text\",\"history/v1\"]],[\"record_id\",[\"text\",\"record\"]],[\"version\",[\"int\",\"1\"]]]]],[\"baseline\",[\"map\",[[\"direction\",[\"text\",\"deactivate\"]],[\"kind\",[\"text\",\"history-authority-transition/v1\"]]]]],[\"digest\",[\"text\",\"907992912229ff60472958575107346ef164f5a8870a0a380c11cff7bab6f182\"]],[\"entry\",[\"text\",\"PROVENANCE.yaml\"]],[\"files\",[\"list\",[[\"map\",[[\"after\",[\"map\",[[\"data\",[\"text\",\"YXV0aG9yaXR5OiBsZWdhY3kKZ2VuZXJhdGlvbjogMgpwcm9maWxlOiBoaXN0b3J5L3YxCnJlY29yZF9pZDogcmVjb3JkCnZlcnNpb246IDEK\"]],[\"sha256\",[\"text\",\"7dba861bdcb50b970597f1e69c4ff169e37cdc57fac8eb8347e51e96a6df6ab6\"]]]]],[\"before\",[\"map\",[[\"data\",[\"text\",\"YXV0aG9yaXR5OiBoaXN0b3J5CmdlbmVyYXRpb246IDEKcHJvZmlsZTogaGlzdG9yeS92MQpyZWNvcmRfaWQ6IHJlY29yZAp2ZXJzaW9uOiAxCg==\"]],[\"sha256\",[\"text\",\"5849b3f6141779233b3318e3a727e0768d6ff6918688a3d746e0c18bc5466ed4\"]]]]],[\"path\",[\"text\",\"PROVENANCE.history.yaml\"]],[\"role\",[\"text\",\"history_authority\"]]]],[\"map\",[[\"after\",[\"map\",[[\"data\",[\"text\",\"YWZ0ZXINCg==\"]],[\"sha256\",[\"text\",\"1235f8f435b1d16f7aac442351f2e29ff1bd2b74652392c4accb5ec5565973da\"]]]]],[\"before\",[\"map\",[[\"data\",[\"text\",\"YmVmb3JlAP8NCg==\"]],[\"sha256\",[\"text\",\"87957804ca5f025ea5fa2df090d4c4e8d6f036b003b317f3f5daae120838ccd3\"]]]]],[\"path\",[\"text\",\"PROVENANCE.yaml\"]],[\"role\",[\"text\",\"record\"]]]]]]],[\"operation\",[\"text\",\"operation\"]],[\"receipt\",[\"map\",[[\"after\",[\"map\",[[\"accepted\",[\"bool\",true]]]]],[\"before\",[\"map\",[[\"date\",[\"date\",\"2026-09-19\"]]]]],[\"capabilities\",[\"map\",[[\"requires\",[\"list\",[]]]]]],[\"digest\",[\"text\",\"61fb531d9071511de7efd8610b1ff3158455a17b582e1aa5f513d274b3c4345f\"]],[\"profile\",[\"text\",\"ordinary-reader/v1\"]],[\"version\",[\"int\",\"1\"]]]]],[\"transition\",[\"map\",[[\"after\",[\"map\",[[\"authority\",[\"text\",\"legacy\"]],[\"generation\",[\"int\",\"2\"]],[\"profile\",[\"text\",\"history/v1\"]],[\"record_id\",[\"text\",\"record\"]],[\"version\",[\"int\",\"1\"]]]]],[\"version\",[\"int\",\"1\"]]]]],[\"version\",[\"int\",\"2\"]]]]",
+      "error": "invalid_generation_cancellation"
+    },
+    {
+      "name": "PROVENANCE.yaml-history-PROVENANCE.yaml",
+      "entry": "PROVENANCE.yaml",
+      "mutation": "[\"map\",[[\"authority\",[\"map\",[[\"authority\",[\"text\",\"history\"]],[\"generation\",[\"int\",\"1\"]],[\"profile\",[\"text\",\"history/v1\"]],[\"record_id\",[\"text\",\"record\"]],[\"version\",[\"int\",\"1\"]]]]],[\"baseline\",[\"map\",[[\"authority_generation\",[\"int\",\"1\"]],[\"committed_set_digest\",[\"text\",\"7ad43f899d941308dbb3cfb1f6bffe01785ea3bdbfb3a47dcda645bd35a671fb\"]],[\"heads\",[\"map\",[]]],[\"open_acts\",[\"map\",[]]],[\"record_id\",[\"text\",\"record\"]],[\"version\",[\"int\",\"1\"]]]]],[\"digest\",[\"text\",\"06f1e7857af8ff567551109bb9d554050230034a5f997d26aee07d1fed655fdf\"]],[\"entry\",[\"text\",\"PROVENANCE.yaml\"]],[\"files\",[\"list\",[[\"map\",[[\"after\",[\"map\",[[\"data\",[\"text\",\"YXV0aG9yaXR5X2dlbmVyYXRpb246IDEKYmFzZWxpbmVfZGlnZXN0OiBmMmZlNTIxZjU0MmZjYzdhZTEwMmU0ODcxYjZjMmNiNGRlZmQ2Mjg0YzBjODA5MTg3NDU1NGYwMTIwNzVhMDM3Cm9iamVjdHM6Ci0gaWQ6IGNhYTc3MWE0YzgxZmU2YmNiYzQyNmRiODNhMDVkYTc1ZWZiMGMxYmM5MGM4ZmI3YTUzNjdlNGQ4MGU4ZjM0NWYKICBzaGEyNTY6IGYyYzkyZjZkYmQ0ZDFmOWUzOTU1MGM5MzNmMjg4YWUyOGZhMGIxNzM1MTVkNDczNjNkZDJkY2FjNTFjNmU5NTgKICBzdWJqZWN0OiBwLmEKb3BlcmF0aW9uOiBvcGVyYXRpb24KcGFyZW50czoge30KcmVjZWlwdDoKICBhZnRlcjoKICAgIGFjY2VwdGVkOiB0cnVlCiAgYmVmb3JlOgogICAgZGF0ZTogMjAyNi0wOS0xOQogIGNhcGFiaWxpdGllczoKICAgIHJlcXVpcmVzOiBbXQogIGRpZ2VzdDogNjFmYjUzMWQ5MDcxNTExZGU3ZWZkODYxMGIxZmYzMTU4NDU1YTE3YjU4MmUxYWE1ZjUxM2QyNzRiM2M0MzQ1ZgogIHByb2ZpbGU6IG9yZGluYXJ5LXJlYWRlci92MQogIHZlcnNpb246IDEKcmVjb3JkX2lkOiByZWNvcmQKdmVyc2lvbjogMQp2aWV3X3NoYTI1NjogMTIzNWY4ZjQzNWIxZDE2ZjdhYWM0NDIzNTFmMmUyOWZmMWJkMmI3NDY1MjM5MmM0YWNjYjVlYzU1NjU5NzNkYQo=\"]],[\"sha256\",[\"text\",\"aa0e8d6131f881efcee863b36112a95db26b3e54436a9348625f7946638943e6\"]]]]],[\"before\",[\"null\"]],[\"path\",[\"text\",\"PROVENANCE.history-commits/operation.yaml\"]],[\"role\",[\"text\",\"history_commit\"]]]],[\"map\",[[\"after\",[\"map\",[[\"data\",[\"text\",\"YXV0aG9yZWQ6CiAgY29sbGVjdGlvbjogcmVhZGluZ3MKICBmaWVsZHM6CiAgICB2YWx1ZTogdgogIHByb2ZpbGU6IG9yZGluYXJ5LXJlYWRlci92MQpib2R5OgogIHY6IDEKYnk6IG51bGwKaWQ6IGNhYTc3MWE0YzgxZmU2YmNiYzQyNmRiODNhMDVkYTc1ZWZiMGMxYmM5MGM4ZmI3YTUzNjdlNGQ4MGU4ZjM0NWYKaWRfc2NoZW1lOiB0eXBlZC1oaXN0b3J5L3YyCmtpbmQ6IHJlYWRpbmcKJ29uJzogdG9kYXkKb3A6IG9wZXJhdGlvbgpwaW5zOiB7fQpzYXc6IFtdCnNjaGVtYV92ZXJzaW9uOiAyCnN1YmplY3Q6IHAuYQo=\"]],[\"sha256\",[\"text\",\"f2c92f6dbd4d1f9e39550c933f288ae28fa0b173515d47363dd2dcac51c6e958\"]]]]],[\"before\",[\"null\"]],[\"path\",[\"text\",\"PROVENANCE.history/p.a/caa771a4c81fe6bcbc426db83a05da75efb0c1bc90c8fb7a5367e4d80e8f345f.yaml\"]],[\"role\",[\"text\",\"history_object\"]]]],[\"map\",[[\"after\",[\"map\",[[\"data\",[\"text\",\"YWZ0ZXINCg==\"]],[\"sha256\",[\"text\",\"1235f8f435b1d16f7aac442351f2e29ff1bd2b74652392c4accb5ec5565973da\"]]]]],[\"before\",[\"map\",[[\"data\",[\"text\",\"YmVmb3JlAP8NCg==\"]],[\"sha256\",[\"text\",\"87957804ca5f025ea5fa2df090d4c4e8d6f036b003b317f3f5daae120838ccd3\"]]]]],[\"path\",[\"text\",\"PROVENANCE.yaml\"]],[\"role\",[\"text\",\"record\"]]]]]]],[\"operation\",[\"text\",\"operation\"]],[\"receipt\",[\"map\",[[\"after\",[\"map\",[[\"accepted\",[\"bool\",true]]]]],[\"before\",[\"map\",[[\"date\",[\"date\",\"2026-09-19\"]]]]],[\"capabilities\",[\"map\",[[\"requires\",[\"list\",[]]]]]],[\"digest\",[\"text\",\"61fb531d9071511de7efd8610b1ff3158455a17b582e1aa5f513d274b3c4345f\"]],[\"profile\",[\"text\",\"ordinary-reader/v1\"]],[\"version\",[\"int\",\"1\"]]]]],[\"version\",[\"int\",\"1\"]]]]",
+      "error": "invalid_generation_cancellation"
+    },
+    {
+      "name": "PROVENANCE.yaml-history-other.yaml",
+      "entry": "other.yaml",
+      "mutation": "[\"map\",[[\"authority\",[\"map\",[[\"authority\",[\"text\",\"history\"]],[\"generation\",[\"int\",\"1\"]],[\"profile\",[\"text\",\"history/v1\"]],[\"record_id\",[\"text\",\"record\"]],[\"version\",[\"int\",\"1\"]]]]],[\"baseline\",[\"map\",[[\"authority_generation\",[\"int\",\"1\"]],[\"committed_set_digest\",[\"text\",\"7ad43f899d941308dbb3cfb1f6bffe01785ea3bdbfb3a47dcda645bd35a671fb\"]],[\"heads\",[\"map\",[]]],[\"open_acts\",[\"map\",[]]],[\"record_id\",[\"text\",\"record\"]],[\"version\",[\"int\",\"1\"]]]]],[\"digest\",[\"text\",\"06f1e7857af8ff567551109bb9d554050230034a5f997d26aee07d1fed655fdf\"]],[\"entry\",[\"text\",\"PROVENANCE.yaml\"]],[\"files\",[\"list\",[[\"map\",[[\"after\",[\"map\",[[\"data\",[\"text\",\"YXV0aG9yaXR5X2dlbmVyYXRpb246IDEKYmFzZWxpbmVfZGlnZXN0OiBmMmZlNTIxZjU0MmZjYzdhZTEwMmU0ODcxYjZjMmNiNGRlZmQ2Mjg0YzBjODA5MTg3NDU1NGYwMTIwNzVhMDM3Cm9iamVjdHM6Ci0gaWQ6IGNhYTc3MWE0YzgxZmU2YmNiYzQyNmRiODNhMDVkYTc1ZWZiMGMxYmM5MGM4ZmI3YTUzNjdlNGQ4MGU4ZjM0NWYKICBzaGEyNTY6IGYyYzkyZjZkYmQ0ZDFmOWUzOTU1MGM5MzNmMjg4YWUyOGZhMGIxNzM1MTVkNDczNjNkZDJkY2FjNTFjNmU5NTgKICBzdWJqZWN0OiBwLmEKb3BlcmF0aW9uOiBvcGVyYXRpb24KcGFyZW50czoge30KcmVjZWlwdDoKICBhZnRlcjoKICAgIGFjY2VwdGVkOiB0cnVlCiAgYmVmb3JlOgogICAgZGF0ZTogMjAyNi0wOS0xOQogIGNhcGFiaWxpdGllczoKICAgIHJlcXVpcmVzOiBbXQogIGRpZ2VzdDogNjFmYjUzMWQ5MDcxNTExZGU3ZWZkODYxMGIxZmYzMTU4NDU1YTE3YjU4MmUxYWE1ZjUxM2QyNzRiM2M0MzQ1ZgogIHByb2ZpbGU6IG9yZGluYXJ5LXJlYWRlci92MQogIHZlcnNpb246IDEKcmVjb3JkX2lkOiByZWNvcmQKdmVyc2lvbjogMQp2aWV3X3NoYTI1NjogMTIzNWY4ZjQzNWIxZDE2ZjdhYWM0NDIzNTFmMmUyOWZmMWJkMmI3NDY1MjM5MmM0YWNjYjVlYzU1NjU5NzNkYQo=\"]],[\"sha256\",[\"text\",\"aa0e8d6131f881efcee863b36112a95db26b3e54436a9348625f7946638943e6\"]]]]],[\"before\",[\"null\"]],[\"path\",[\"text\",\"PROVENANCE.history-commits/operation.yaml\"]],[\"role\",[\"text\",\"history_commit\"]]]],[\"map\",[[\"after\",[\"map\",[[\"data\",[\"text\",\"YXV0aG9yZWQ6CiAgY29sbGVjdGlvbjogcmVhZGluZ3MKICBmaWVsZHM6CiAgICB2YWx1ZTogdgogIHByb2ZpbGU6IG9yZGluYXJ5LXJlYWRlci92MQpib2R5OgogIHY6IDEKYnk6IG51bGwKaWQ6IGNhYTc3MWE0YzgxZmU2YmNiYzQyNmRiODNhMDVkYTc1ZWZiMGMxYmM5MGM4ZmI3YTUzNjdlNGQ4MGU4ZjM0NWYKaWRfc2NoZW1lOiB0eXBlZC1oaXN0b3J5L3YyCmtpbmQ6IHJlYWRpbmcKJ29uJzogdG9kYXkKb3A6IG9wZXJhdGlvbgpwaW5zOiB7fQpzYXc6IFtdCnNjaGVtYV92ZXJzaW9uOiAyCnN1YmplY3Q6IHAuYQo=\"]],[\"sha256\",[\"text\",\"f2c92f6dbd4d1f9e39550c933f288ae28fa0b173515d47363dd2dcac51c6e958\"]]]]],[\"before\",[\"null\"]],[\"path\",[\"text\",\"PROVENANCE.history/p.a/caa771a4c81fe6bcbc426db83a05da75efb0c1bc90c8fb7a5367e4d80e8f345f.yaml\"]],[\"role\",[\"text\",\"history_object\"]]]],[\"map\",[[\"after\",[\"map\",[[\"data\",[\"text\",\"YWZ0ZXINCg==\"]],[\"sha256\",[\"text\",\"1235f8f435b1d16f7aac442351f2e29ff1bd2b74652392c4accb5ec5565973da\"]]]]],[\"before\",[\"map\",[[\"data\",[\"text\",\"YmVmb3JlAP8NCg==\"]],[\"sha256\",[\"text\",\"87957804ca5f025ea5fa2df090d4c4e8d6f036b003b317f3f5daae120838ccd3\"]]]]],[\"path\",[\"text\",\"PROVENANCE.yaml\"]],[\"role\",[\"text\",\"record\"]]]]]]],[\"operation\",[\"text\",\"operation\"]],[\"receipt\",[\"map\",[[\"after\",[\"map\",[[\"accepted\",[\"bool\",true]]]]],[\"before\",[\"map\",[[\"date\",[\"date\",\"2026-09-19\"]]]]],[\"capabilities\",[\"map\",[[\"requires\",[\"list\",[]]]]]],[\"digest\",[\"text\",\"61fb531d9071511de7efd8610b1ff3158455a17b582e1aa5f513d274b3c4345f\"]],[\"profile\",[\"text\",\"ordinary-reader/v1\"]],[\"version\",[\"int\",\"1\"]]]]],[\"version\",[\"int\",\"1\"]]]]",
+      "error": "invalid_generation_cancellation"
+    },
+    {
+      "name": "PROVENANCE.yaml-legacy-PROVENANCE.yaml",
+      "entry": "PROVENANCE.yaml",
+      "mutation": "[\"map\",[[\"authority\",[\"map\",[[\"authority\",[\"text\",\"legacy\"]],[\"generation\",[\"int\",\"0\"]],[\"profile\",[\"text\",\"history/v1\"]],[\"record_id\",[\"text\",\"record\"]],[\"version\",[\"int\",\"1\"]]]]],[\"baseline\",[\"map\",[[\"revision\",[\"text\",\"before\"]]]]],[\"digest\",[\"text\",\"0e853629a6ea4c22bb442308427776a3ff8f7dfd9a776973e176fc5f78114735\"]],[\"entry\",[\"text\",\"PROVENANCE.yaml\"]],[\"files\",[\"list\",[[\"map\",[[\"after\",[\"map\",[[\"data\",[\"text\",\"YWZ0ZXINCg==\"]],[\"sha256\",[\"text\",\"1235f8f435b1d16f7aac442351f2e29ff1bd2b74652392c4accb5ec5565973da\"]]]]],[\"before\",[\"map\",[[\"data\",[\"text\",\"YmVmb3JlAP8NCg==\"]],[\"sha256\",[\"text\",\"87957804ca5f025ea5fa2df090d4c4e8d6f036b003b317f3f5daae120838ccd3\"]]]]],[\"path\",[\"text\",\"PROVENANCE.yaml\"]],[\"role\",[\"text\",\"record\"]]]]]]],[\"operation\",[\"text\",\"operation\"]],[\"receipt\",[\"map\",[[\"after\",[\"map\",[[\"accepted\",[\"bool\",true]]]]],[\"before\",[\"map\",[[\"date\",[\"date\",\"2026-09-19\"]]]]],[\"capabilities\",[\"map\",[[\"requires\",[\"list\",[]]]]]],[\"digest\",[\"text\",\"61fb531d9071511de7efd8610b1ff3158455a17b582e1aa5f513d274b3c4345f\"]],[\"profile\",[\"text\",\"ordinary-reader/v1\"]],[\"version\",[\"int\",\"1\"]]]]],[\"version\",[\"int\",\"1\"]]]]",
+      "error": "invalid_generation_cancellation"
+    },
+    {
+      "name": "PROVENANCE.yaml-legacy-other.yaml",
+      "entry": "other.yaml",
+      "mutation": "[\"map\",[[\"authority\",[\"map\",[[\"authority\",[\"text\",\"legacy\"]],[\"generation\",[\"int\",\"0\"]],[\"profile\",[\"text\",\"history/v1\"]],[\"record_id\",[\"text\",\"record\"]],[\"version\",[\"int\",\"1\"]]]]],[\"baseline\",[\"map\",[[\"revision\",[\"text\",\"before\"]]]]],[\"digest\",[\"text\",\"0e853629a6ea4c22bb442308427776a3ff8f7dfd9a776973e176fc5f78114735\"]],[\"entry\",[\"text\",\"PROVENANCE.yaml\"]],[\"files\",[\"list\",[[\"map\",[[\"after\",[\"map\",[[\"data\",[\"text\",\"YWZ0ZXINCg==\"]],[\"sha256\",[\"text\",\"1235f8f435b1d16f7aac442351f2e29ff1bd2b74652392c4accb5ec5565973da\"]]]]],[\"before\",[\"map\",[[\"data\",[\"text\",\"YmVmb3JlAP8NCg==\"]],[\"sha256\",[\"text\",\"87957804ca5f025ea5fa2df090d4c4e8d6f036b003b317f3f5daae120838ccd3\"]]]]],[\"path\",[\"text\",\"PROVENANCE.yaml\"]],[\"role\",[\"text\",\"record\"]]]]]]],[\"operation\",[\"text\",\"operation\"]],[\"receipt\",[\"map\",[[\"after\",[\"map\",[[\"accepted\",[\"bool\",true]]]]],[\"before\",[\"map\",[[\"date\",[\"date\",\"2026-09-19\"]]]]],[\"capabilities\",[\"map\",[[\"requires\",[\"list\",[]]]]]],[\"digest\",[\"text\",\"61fb531d9071511de7efd8610b1ff3158455a17b582e1aa5f513d274b3c4345f\"]],[\"profile\",[\"text\",\"ordinary-reader/v1\"]],[\"version\",[\"int\",\"1\"]]]]],[\"version\",[\"int\",\"1\"]]]]",
+      "error": "invalid_generation_cancellation"
+    },
+    {
+      "name": "custom.yml-activate-custom.yml",
+      "entry": "custom.yml",
+      "mutation": "[\"map\",[[\"authority\",[\"map\",[[\"authority\",[\"text\",\"legacy\"]],[\"generation\",[\"int\",\"0\"]],[\"profile\",[\"text\",\"history/v1\"]],[\"record_id\",[\"text\",\"record\"]],[\"version\",[\"int\",\"1\"]]]]],[\"baseline\",[\"map\",[[\"direction\",[\"text\",\"activate\"]],[\"history_baseline\",[\"map\",[[\"authority_generation\",[\"int\",\"1\"]],[\"committed_set_digest\",[\"text\",\"7ad43f899d941308dbb3cfb1f6bffe01785ea3bdbfb3a47dcda645bd35a671fb\"]],[\"heads\",[\"map\",[]]],[\"open_acts\",[\"map\",[]]],[\"record_id\",[\"text\",\"record\"]],[\"version\",[\"int\",\"1\"]]]]],[\"kind\",[\"text\",\"history-authority-transition/v1\"]]]]],[\"digest\",[\"text\",\"22c4618d1ecbfaab0ff662c343a0960181fcbbcef1f880aa6b1ebd91455c6698\"]],[\"entry\",[\"text\",\"custom.yml\"]],[\"files\",[\"list\",[[\"map\",[[\"after\",[\"map\",[[\"data\",[\"text\",\"YXV0aG9yaXR5X2dlbmVyYXRpb246IDEKYmFzZWxpbmVfZGlnZXN0OiBmMmZlNTIxZjU0MmZjYzdhZTEwMmU0ODcxYjZjMmNiNGRlZmQ2Mjg0YzBjODA5MTg3NDU1NGYwMTIwNzVhMDM3Cm9iamVjdHM6Ci0gaWQ6IGNhYTc3MWE0YzgxZmU2YmNiYzQyNmRiODNhMDVkYTc1ZWZiMGMxYmM5MGM4ZmI3YTUzNjdlNGQ4MGU4ZjM0NWYKICBzaGEyNTY6IGYyYzkyZjZkYmQ0ZDFmOWUzOTU1MGM5MzNmMjg4YWUyOGZhMGIxNzM1MTVkNDczNjNkZDJkY2FjNTFjNmU5NTgKICBzdWJqZWN0OiBwLmEKb3BlcmF0aW9uOiBvcGVyYXRpb24KcGFyZW50czoge30KcmVjZWlwdDoKICBhZnRlcjoKICAgIGFjY2VwdGVkOiB0cnVlCiAgYmVmb3JlOgogICAgZGF0ZTogMjAyNi0wOS0xOQogIGNhcGFiaWxpdGllczoKICAgIHJlcXVpcmVzOiBbXQogIGRpZ2VzdDogNjFmYjUzMWQ5MDcxNTExZGU3ZWZkODYxMGIxZmYzMTU4NDU1YTE3YjU4MmUxYWE1ZjUxM2QyNzRiM2M0MzQ1ZgogIHByb2ZpbGU6IG9yZGluYXJ5LXJlYWRlci92MQogIHZlcnNpb246IDEKcmVjb3JkX2lkOiByZWNvcmQKdmVyc2lvbjogMQp2aWV3X3NoYTI1NjogMTIzNWY4ZjQzNWIxZDE2ZjdhYWM0NDIzNTFmMmUyOWZmMWJkMmI3NDY1MjM5MmM0YWNjYjVlYzU1NjU5NzNkYQo=\"]],[\"sha256\",[\"text\",\"aa0e8d6131f881efcee863b36112a95db26b3e54436a9348625f7946638943e6\"]]]]],[\"before\",[\"null\"]],[\"path\",[\"text\",\"PROVENANCE.history-commits/operation.yaml\"]],[\"role\",[\"text\",\"history_commit\"]]]],[\"map\",[[\"after\",[\"map\",[[\"data\",[\"text\",\"YXV0aG9yaXR5OiBoaXN0b3J5CmdlbmVyYXRpb246IDEKcHJvZmlsZTogaGlzdG9yeS92MQpyZWNvcmRfaWQ6IHJlY29yZAp2ZXJzaW9uOiAxCg==\"]],[\"sha256\",[\"text\",\"5849b3f6141779233b3318e3a727e0768d6ff6918688a3d746e0c18bc5466ed4\"]]]]],[\"before\",[\"null\"]],[\"path\",[\"text\",\"PROVENANCE.history.yaml\"]],[\"role\",[\"text\",\"history_authority\"]]]],[\"map\",[[\"after\",[\"map\",[[\"data\",[\"text\",\"YXV0aG9yZWQ6CiAgY29sbGVjdGlvbjogcmVhZGluZ3MKICBmaWVsZHM6CiAgICB2YWx1ZTogdgogIHByb2ZpbGU6IG9yZGluYXJ5LXJlYWRlci92MQpib2R5OgogIHY6IDEKYnk6IG51bGwKaWQ6IGNhYTc3MWE0YzgxZmU2YmNiYzQyNmRiODNhMDVkYTc1ZWZiMGMxYmM5MGM4ZmI3YTUzNjdlNGQ4MGU4ZjM0NWYKaWRfc2NoZW1lOiB0eXBlZC1oaXN0b3J5L3YyCmtpbmQ6IHJlYWRpbmcKJ29uJzogdG9kYXkKb3A6IG9wZXJhdGlvbgpwaW5zOiB7fQpzYXc6IFtdCnNjaGVtYV92ZXJzaW9uOiAyCnN1YmplY3Q6IHAuYQo=\"]],[\"sha256\",[\"text\",\"f2c92f6dbd4d1f9e39550c933f288ae28fa0b173515d47363dd2dcac51c6e958\"]]]]],[\"before\",[\"null\"]],[\"path\",[\"text\",\"PROVENANCE.history/p.a/caa771a4c81fe6bcbc426db83a05da75efb0c1bc90c8fb7a5367e4d80e8f345f.yaml\"]],[\"role\",[\"text\",\"history_object\"]]]],[\"map\",[[\"after\",[\"map\",[[\"data\",[\"text\",\"YWZ0ZXINCg==\"]],[\"sha256\",[\"text\",\"1235f8f435b1d16f7aac442351f2e29ff1bd2b74652392c4accb5ec5565973da\"]]]]],[\"before\",[\"map\",[[\"data\",[\"text\",\"YmVmb3JlAP8NCg==\"]],[\"sha256\",[\"text\",\"87957804ca5f025ea5fa2df090d4c4e8d6f036b003b317f3f5daae120838ccd3\"]]]]],[\"path\",[\"text\",\"custom.yml\"]],[\"role\",[\"text\",\"record\"]]]]]]],[\"operation\",[\"text\",\"operation\"]],[\"receipt\",[\"map\",[[\"after\",[\"map\",[[\"accepted\",[\"bool\",true]]]]],[\"before\",[\"map\",[[\"date\",[\"date\",\"2026-09-19\"]]]]],[\"capabilities\",[\"map\",[[\"requires\",[\"list\",[]]]]]],[\"digest\",[\"text\",\"61fb531d9071511de7efd8610b1ff3158455a17b582e1aa5f513d274b3c4345f\"]],[\"profile\",[\"text\",\"ordinary-reader/v1\"]],[\"version\",[\"int\",\"1\"]]]]],[\"transition\",[\"map\",[[\"after\",[\"map\",[[\"authority\",[\"text\",\"history\"]],[\"generation\",[\"int\",\"1\"]],[\"profile\",[\"text\",\"history/v1\"]],[\"record_id\",[\"text\",\"record\"]],[\"version\",[\"int\",\"1\"]]]]],[\"version\",[\"int\",\"1\"]]]]],[\"version\",[\"int\",\"2\"]]]]",
+      "output": [
+        "map",
+        [
+          [
+            "digest",
+            [
+              "text",
+              "9afc4da3d2c61dfa72e34e22be2b065dd59262b019c60bb387da6676600e16a5"
+            ]
+          ],
+          [
+            "immutable_images",
+            [
+              "list",
+              [
+                [
+                  "map",
+                  [
+                    [
+                      "after",
+                      [
+                        "text",
+                        "617574686f726974795f67656e65726174696f6e3a20310a626173656c696e655f6469676573743a20663266653532316635343266636337616531303265343837316236633263623464656664363238346330633830393138373435353466303132303735613033370a6f626a656374733a0a2d2069643a20636161373731613463383166653662636263343236646238336130356461373565666230633162633930633866623761353336376534643830653866333435660a20207368613235363a20663263393266366462643464316639653339353530633933336632383861653238666130623137333531356434373336336464326463616335316336653935380a20207375626a6563743a20702e610a6f7065726174696f6e3a206f7065726174696f6e0a706172656e74733a207b7d0a726563656970743a0a202061667465723a0a2020202061636365707465643a20747275650a20206265666f72653a0a20202020646174653a20323032362d30392d31390a20206361706162696c69746965733a0a2020202072657175697265733a205b5d0a20206469676573743a20363166623533316439303731353131646537656664383631306231666633313538343535613137623538326531616135663531336432373462336334333435660a202070726f66696c653a206f7264696e6172792d7265616465722f76310a202076657273696f6e3a20310a7265636f72645f69643a207265636f72640a76657273696f6e3a20310a766965775f7368613235363a20313233356638663433356231643136663761616334343233353166326532396666316264326237343635323339326334616363623565633535363539373364610a"
+                      ]
+                    ],
+                    [
+                      "path",
+                      [
+                        "text",
+                        "PROVENANCE.history-commits/operation.yaml"
+                      ]
+                    ]
+                  ]
+                ],
+                [
+                  "map",
+                  [
+                    [
+                      "after",
+                      [
+                        "text",
+                        "617574686f7265643a0a2020636f6c6c656374696f6e3a2072656164696e67730a20206669656c64733a0a2020202076616c75653a20760a202070726f66696c653a206f7264696e6172792d7265616465722f76310a626f64793a0a2020763a20310a62793a206e756c6c0a69643a20636161373731613463383166653662636263343236646238336130356461373565666230633162633930633866623761353336376534643830653866333435660a69645f736368656d653a2074797065642d686973746f72792f76320a6b696e643a2072656164696e670a276f6e273a20746f6461790a6f703a206f7065726174696f6e0a70696e733a207b7d0a7361773a205b5d0a736368656d615f76657273696f6e3a20320a7375626a6563743a20702e610a"
+                      ]
+                    ],
+                    [
+                      "path",
+                      [
+                        "text",
+                        "PROVENANCE.history/p.a/caa771a4c81fe6bcbc426db83a05da75efb0c1bc90c8fb7a5367e4d80e8f345f.yaml"
+                      ]
+                    ]
+                  ]
+                ]
+              ]
+            ]
+          ],
+          [
+            "marker_bytes",
+            [
+              "text",
+              "617574686f726974793a206c65676163790a63616e63656c6c6174696f6e733a0a20202731273a0a202020206c65676163795f67656e65726174696f6e3a20320a202020206f7065726174696f6e3a206f7065726174696f6e0a20202020706174683a206f7065726174696f6e2e79616d6c0a2020202072657365727665645f67656e65726174696f6e3a20310a202020207368613235363a20653836663432616231623061626230613430376333393630646232343139353532373539636638663834396261613436336266363437326266356135613163650a67656e65726174696f6e3a20320a70726f66696c653a20686973746f72792f76310a7265636f72645f69643a207265636f72640a72657175697265733a0a2d2067656e65726174696f6e2d63616e63656c6c6174696f6e2f76310a76657273696f6e3a20320a"
+            ]
+          ],
+          [
+            "mutation_digest",
+            [
+              "text",
+              "22c4618d1ecbfaab0ff662c343a0960181fcbbcef1f880aa6b1ebd91455c6698"
+            ]
+          ],
+          [
+            "operation",
+            [
+              "text",
+              "operation"
+            ]
+          ],
+          [
+            "original_entry",
+            [
+              "text",
+              "6265666f726500ff0d0a"
+            ]
+          ],
+          [
+            "receipt_bytes",
+            [
+              "text",
+              "6172746966616374733a207b7d0a6265666f72655f617574686f726974795f6469676573743a20303836313461383036663739363437663231386130613762653066376437313336343161636361336636366338343738613264656532373866636230633738340a656e7472793a20637573746f6d2e796d6c0a6b696e643a2067656e65726174696f6e2d63616e63656c6c6174696f6e2f76310a6c65676163795f67656e65726174696f6e3a20320a6d616e69666573745f7368613235363a20616130653864363133316638383165666365653836336233363131326139356462323662336535343433366139333438363235663739343636333839343365360a6d75746174696f6e5f6469676573743a20323263343631386431656362666161623066663636326333343361303936303138316663626263656631663838306161366231656264393134353563363639380a6f626a656374733a0a2020636161373731613463383166653662636263343236646238336130356461373565666230633162633930633866623761353336376534643830653866333435663a0a202020207368613235363a20663263393266366462643464316639653339353530633933336632383861653238666130623137333531356434373336336464326463616335316336653935380a202020207375626a6563743a20702e610a6f7065726174696f6e3a206f7065726174696f6e0a6f726967696e616c5f656e7472795f7368613235363a20383739353738303463613566303235656135666132646630393064346334653864366630333662303033623331376633663564616165313230383338636364330a7265636f72645f69643a207265636f72640a72657365727665645f617574686f726974795f6469676573743a20656361643438323564363637363635336330656663373139653834633734653361363030623263613063356437383334633962643236346533333635643661630a72657365727665645f67656e65726174696f6e3a20310a76657273696f6e3a20310a7669736962696c6974793a206e657665725f72656c65617365645f746f5f726561646572730a"
+            ]
+          ],
+          [
+            "receipt_path",
+            [
+              "text",
+              "PROVENANCE.history-cancellations/operation.yaml"
+            ]
+          ],
+          [
+            "version",
+            [
+              "int",
+              "1"
+            ]
+          ]
+        ]
+      ]
+    },
+    {
+      "name": "custom.yml-activate-other.yaml",
+      "entry": "other.yaml",
+      "mutation": "[\"map\",[[\"authority\",[\"map\",[[\"authority\",[\"text\",\"legacy\"]],[\"generation\",[\"int\",\"0\"]],[\"profile\",[\"text\",\"history/v1\"]],[\"record_id\",[\"text\",\"record\"]],[\"version\",[\"int\",\"1\"]]]]],[\"baseline\",[\"map\",[[\"direction\",[\"text\",\"activate\"]],[\"history_baseline\",[\"map\",[[\"authority_generation\",[\"int\",\"1\"]],[\"committed_set_digest\",[\"text\",\"7ad43f899d941308dbb3cfb1f6bffe01785ea3bdbfb3a47dcda645bd35a671fb\"]],[\"heads\",[\"map\",[]]],[\"open_acts\",[\"map\",[]]],[\"record_id\",[\"text\",\"record\"]],[\"version\",[\"int\",\"1\"]]]]],[\"kind\",[\"text\",\"history-authority-transition/v1\"]]]]],[\"digest\",[\"text\",\"22c4618d1ecbfaab0ff662c343a0960181fcbbcef1f880aa6b1ebd91455c6698\"]],[\"entry\",[\"text\",\"custom.yml\"]],[\"files\",[\"list\",[[\"map\",[[\"after\",[\"map\",[[\"data\",[\"text\",\"YXV0aG9yaXR5X2dlbmVyYXRpb246IDEKYmFzZWxpbmVfZGlnZXN0OiBmMmZlNTIxZjU0MmZjYzdhZTEwMmU0ODcxYjZjMmNiNGRlZmQ2Mjg0YzBjODA5MTg3NDU1NGYwMTIwNzVhMDM3Cm9iamVjdHM6Ci0gaWQ6IGNhYTc3MWE0YzgxZmU2YmNiYzQyNmRiODNhMDVkYTc1ZWZiMGMxYmM5MGM4ZmI3YTUzNjdlNGQ4MGU4ZjM0NWYKICBzaGEyNTY6IGYyYzkyZjZkYmQ0ZDFmOWUzOTU1MGM5MzNmMjg4YWUyOGZhMGIxNzM1MTVkNDczNjNkZDJkY2FjNTFjNmU5NTgKICBzdWJqZWN0OiBwLmEKb3BlcmF0aW9uOiBvcGVyYXRpb24KcGFyZW50czoge30KcmVjZWlwdDoKICBhZnRlcjoKICAgIGFjY2VwdGVkOiB0cnVlCiAgYmVmb3JlOgogICAgZGF0ZTogMjAyNi0wOS0xOQogIGNhcGFiaWxpdGllczoKICAgIHJlcXVpcmVzOiBbXQogIGRpZ2VzdDogNjFmYjUzMWQ5MDcxNTExZGU3ZWZkODYxMGIxZmYzMTU4NDU1YTE3YjU4MmUxYWE1ZjUxM2QyNzRiM2M0MzQ1ZgogIHByb2ZpbGU6IG9yZGluYXJ5LXJlYWRlci92MQogIHZlcnNpb246IDEKcmVjb3JkX2lkOiByZWNvcmQKdmVyc2lvbjogMQp2aWV3X3NoYTI1NjogMTIzNWY4ZjQzNWIxZDE2ZjdhYWM0NDIzNTFmMmUyOWZmMWJkMmI3NDY1MjM5MmM0YWNjYjVlYzU1NjU5NzNkYQo=\"]],[\"sha256\",[\"text\",\"aa0e8d6131f881efcee863b36112a95db26b3e54436a9348625f7946638943e6\"]]]]],[\"before\",[\"null\"]],[\"path\",[\"text\",\"PROVENANCE.history-commits/operation.yaml\"]],[\"role\",[\"text\",\"history_commit\"]]]],[\"map\",[[\"after\",[\"map\",[[\"data\",[\"text\",\"YXV0aG9yaXR5OiBoaXN0b3J5CmdlbmVyYXRpb246IDEKcHJvZmlsZTogaGlzdG9yeS92MQpyZWNvcmRfaWQ6IHJlY29yZAp2ZXJzaW9uOiAxCg==\"]],[\"sha256\",[\"text\",\"5849b3f6141779233b3318e3a727e0768d6ff6918688a3d746e0c18bc5466ed4\"]]]]],[\"before\",[\"null\"]],[\"path\",[\"text\",\"PROVENANCE.history.yaml\"]],[\"role\",[\"text\",\"history_authority\"]]]],[\"map\",[[\"after\",[\"map\",[[\"data\",[\"text\",\"YXV0aG9yZWQ6CiAgY29sbGVjdGlvbjogcmVhZGluZ3MKICBmaWVsZHM6CiAgICB2YWx1ZTogdgogIHByb2ZpbGU6IG9yZGluYXJ5LXJlYWRlci92MQpib2R5OgogIHY6IDEKYnk6IG51bGwKaWQ6IGNhYTc3MWE0YzgxZmU2YmNiYzQyNmRiODNhMDVkYTc1ZWZiMGMxYmM5MGM4ZmI3YTUzNjdlNGQ4MGU4ZjM0NWYKaWRfc2NoZW1lOiB0eXBlZC1oaXN0b3J5L3YyCmtpbmQ6IHJlYWRpbmcKJ29uJzogdG9kYXkKb3A6IG9wZXJhdGlvbgpwaW5zOiB7fQpzYXc6IFtdCnNjaGVtYV92ZXJzaW9uOiAyCnN1YmplY3Q6IHAuYQo=\"]],[\"sha256\",[\"text\",\"f2c92f6dbd4d1f9e39550c933f288ae28fa0b173515d47363dd2dcac51c6e958\"]]]]],[\"before\",[\"null\"]],[\"path\",[\"text\",\"PROVENANCE.history/p.a/caa771a4c81fe6bcbc426db83a05da75efb0c1bc90c8fb7a5367e4d80e8f345f.yaml\"]],[\"role\",[\"text\",\"history_object\"]]]],[\"map\",[[\"after\",[\"map\",[[\"data\",[\"text\",\"YWZ0ZXINCg==\"]],[\"sha256\",[\"text\",\"1235f8f435b1d16f7aac442351f2e29ff1bd2b74652392c4accb5ec5565973da\"]]]]],[\"before\",[\"map\",[[\"data\",[\"text\",\"YmVmb3JlAP8NCg==\"]],[\"sha256\",[\"text\",\"87957804ca5f025ea5fa2df090d4c4e8d6f036b003b317f3f5daae120838ccd3\"]]]]],[\"path\",[\"text\",\"custom.yml\"]],[\"role\",[\"text\",\"record\"]]]]]]],[\"operation\",[\"text\",\"operation\"]],[\"receipt\",[\"map\",[[\"after\",[\"map\",[[\"accepted\",[\"bool\",true]]]]],[\"before\",[\"map\",[[\"date\",[\"date\",\"2026-09-19\"]]]]],[\"capabilities\",[\"map\",[[\"requires\",[\"list\",[]]]]]],[\"digest\",[\"text\",\"61fb531d9071511de7efd8610b1ff3158455a17b582e1aa5f513d274b3c4345f\"]],[\"profile\",[\"text\",\"ordinary-reader/v1\"]],[\"version\",[\"int\",\"1\"]]]]],[\"transition\",[\"map\",[[\"after\",[\"map\",[[\"authority\",[\"text\",\"history\"]],[\"generation\",[\"int\",\"1\"]],[\"profile\",[\"text\",\"history/v1\"]],[\"record_id\",[\"text\",\"record\"]],[\"version\",[\"int\",\"1\"]]]]],[\"version\",[\"int\",\"1\"]]]]],[\"version\",[\"int\",\"2\"]]]]",
+      "error": "invalid_generation_cancellation"
+    },
+    {
+      "name": "custom.yml-deactivate-custom.yml",
+      "entry": "custom.yml",
+      "mutation": "[\"map\",[[\"authority\",[\"map\",[[\"authority\",[\"text\",\"history\"]],[\"generation\",[\"int\",\"1\"]],[\"profile\",[\"text\",\"history/v1\"]],[\"record_id\",[\"text\",\"record\"]],[\"version\",[\"int\",\"1\"]]]]],[\"baseline\",[\"map\",[[\"direction\",[\"text\",\"deactivate\"]],[\"kind\",[\"text\",\"history-authority-transition/v1\"]]]]],[\"digest\",[\"text\",\"7499eda30169dfac8eb363ea893d94025c3b3dfb58d63037ca903f883df1f51c\"]],[\"entry\",[\"text\",\"custom.yml\"]],[\"files\",[\"list\",[[\"map\",[[\"after\",[\"map\",[[\"data\",[\"text\",\"YXV0aG9yaXR5OiBsZWdhY3kKZ2VuZXJhdGlvbjogMgpwcm9maWxlOiBoaXN0b3J5L3YxCnJlY29yZF9pZDogcmVjb3JkCnZlcnNpb246IDEK\"]],[\"sha256\",[\"text\",\"7dba861bdcb50b970597f1e69c4ff169e37cdc57fac8eb8347e51e96a6df6ab6\"]]]]],[\"before\",[\"map\",[[\"data\",[\"text\",\"YXV0aG9yaXR5OiBoaXN0b3J5CmdlbmVyYXRpb246IDEKcHJvZmlsZTogaGlzdG9yeS92MQpyZWNvcmRfaWQ6IHJlY29yZAp2ZXJzaW9uOiAxCg==\"]],[\"sha256\",[\"text\",\"5849b3f6141779233b3318e3a727e0768d6ff6918688a3d746e0c18bc5466ed4\"]]]]],[\"path\",[\"text\",\"PROVENANCE.history.yaml\"]],[\"role\",[\"text\",\"history_authority\"]]]],[\"map\",[[\"after\",[\"map\",[[\"data\",[\"text\",\"YWZ0ZXINCg==\"]],[\"sha256\",[\"text\",\"1235f8f435b1d16f7aac442351f2e29ff1bd2b74652392c4accb5ec5565973da\"]]]]],[\"before\",[\"map\",[[\"data\",[\"text\",\"YmVmb3JlAP8NCg==\"]],[\"sha256\",[\"text\",\"87957804ca5f025ea5fa2df090d4c4e8d6f036b003b317f3f5daae120838ccd3\"]]]]],[\"path\",[\"text\",\"custom.yml\"]],[\"role\",[\"text\",\"record\"]]]]]]],[\"operation\",[\"text\",\"operation\"]],[\"receipt\",[\"map\",[[\"after\",[\"map\",[[\"accepted\",[\"bool\",true]]]]],[\"before\",[\"map\",[[\"date\",[\"date\",\"2026-09-19\"]]]]],[\"capabilities\",[\"map\",[[\"requires\",[\"list\",[]]]]]],[\"digest\",[\"text\",\"61fb531d9071511de7efd8610b1ff3158455a17b582e1aa5f513d274b3c4345f\"]],[\"profile\",[\"text\",\"ordinary-reader/v1\"]],[\"version\",[\"int\",\"1\"]]]]],[\"transition\",[\"map\",[[\"after\",[\"map\",[[\"authority\",[\"text\",\"legacy\"]],[\"generation\",[\"int\",\"2\"]],[\"profile\",[\"text\",\"history/v1\"]],[\"record_id\",[\"text\",\"record\"]],[\"version\",[\"int\",\"1\"]]]]],[\"version\",[\"int\",\"1\"]]]]],[\"version\",[\"int\",\"2\"]]]]",
+      "error": "invalid_generation_cancellation"
+    },
+    {
+      "name": "custom.yml-deactivate-other.yaml",
+      "entry": "other.yaml",
+      "mutation": "[\"map\",[[\"authority\",[\"map\",[[\"authority\",[\"text\",\"history\"]],[\"generation\",[\"int\",\"1\"]],[\"profile\",[\"text\",\"history/v1\"]],[\"record_id\",[\"text\",\"record\"]],[\"version\",[\"int\",\"1\"]]]]],[\"baseline\",[\"map\",[[\"direction\",[\"text\",\"deactivate\"]],[\"kind\",[\"text\",\"history-authority-transition/v1\"]]]]],[\"digest\",[\"text\",\"7499eda30169dfac8eb363ea893d94025c3b3dfb58d63037ca903f883df1f51c\"]],[\"entry\",[\"text\",\"custom.yml\"]],[\"files\",[\"list\",[[\"map\",[[\"after\",[\"map\",[[\"data\",[\"text\",\"YXV0aG9yaXR5OiBsZWdhY3kKZ2VuZXJhdGlvbjogMgpwcm9maWxlOiBoaXN0b3J5L3YxCnJlY29yZF9pZDogcmVjb3JkCnZlcnNpb246IDEK\"]],[\"sha256\",[\"text\",\"7dba861bdcb50b970597f1e69c4ff169e37cdc57fac8eb8347e51e96a6df6ab6\"]]]]],[\"before\",[\"map\",[[\"data\",[\"text\",\"YXV0aG9yaXR5OiBoaXN0b3J5CmdlbmVyYXRpb246IDEKcHJvZmlsZTogaGlzdG9yeS92MQpyZWNvcmRfaWQ6IHJlY29yZAp2ZXJzaW9uOiAxCg==\"]],[\"sha256\",[\"text\",\"5849b3f6141779233b3318e3a727e0768d6ff6918688a3d746e0c18bc5466ed4\"]]]]],[\"path\",[\"text\",\"PROVENANCE.history.yaml\"]],[\"role\",[\"text\",\"history_authority\"]]]],[\"map\",[[\"after\",[\"map\",[[\"data\",[\"text\",\"YWZ0ZXINCg==\"]],[\"sha256\",[\"text\",\"1235f8f435b1d16f7aac442351f2e29ff1bd2b74652392c4accb5ec5565973da\"]]]]],[\"before\",[\"map\",[[\"data\",[\"text\",\"YmVmb3JlAP8NCg==\"]],[\"sha256\",[\"text\",\"87957804ca5f025ea5fa2df090d4c4e8d6f036b003b317f3f5daae120838ccd3\"]]]]],[\"path\",[\"text\",\"custom.yml\"]],[\"role\",[\"text\",\"record\"]]]]]]],[\"operation\",[\"text\",\"operation\"]],[\"receipt\",[\"map\",[[\"after\",[\"map\",[[\"accepted\",[\"bool\",true]]]]],[\"before\",[\"map\",[[\"date\",[\"date\",\"2026-09-19\"]]]]],[\"capabilities\",[\"map\",[[\"requires\",[\"list\",[]]]]]],[\"digest\",[\"text\",\"61fb531d9071511de7efd8610b1ff3158455a17b582e1aa5f513d274b3c4345f\"]],[\"profile\",[\"text\",\"ordinary-reader/v1\"]],[\"version\",[\"int\",\"1\"]]]]],[\"transition\",[\"map\",[[\"after\",[\"map\",[[\"authority\",[\"text\",\"legacy\"]],[\"generation\",[\"int\",\"2\"]],[\"profile\",[\"text\",\"history/v1\"]],[\"record_id\",[\"text\",\"record\"]],[\"version\",[\"int\",\"1\"]]]]],[\"version\",[\"int\",\"1\"]]]]],[\"version\",[\"int\",\"2\"]]]]",
+      "error": "invalid_generation_cancellation"
+    },
+    {
+      "name": "custom.yml-history-custom.yml",
+      "entry": "custom.yml",
+      "mutation": "[\"map\",[[\"authority\",[\"map\",[[\"authority\",[\"text\",\"history\"]],[\"generation\",[\"int\",\"1\"]],[\"profile\",[\"text\",\"history/v1\"]],[\"record_id\",[\"text\",\"record\"]],[\"version\",[\"int\",\"1\"]]]]],[\"baseline\",[\"map\",[[\"authority_generation\",[\"int\",\"1\"]],[\"committed_set_digest\",[\"text\",\"7ad43f899d941308dbb3cfb1f6bffe01785ea3bdbfb3a47dcda645bd35a671fb\"]],[\"heads\",[\"map\",[]]],[\"open_acts\",[\"map\",[]]],[\"record_id\",[\"text\",\"record\"]],[\"version\",[\"int\",\"1\"]]]]],[\"digest\",[\"text\",\"9d31e0ee4f0bc7124744e32edb0fe57dc3bc410acde141256954915548d2b9a0\"]],[\"entry\",[\"text\",\"custom.yml\"]],[\"files\",[\"list\",[[\"map\",[[\"after\",[\"map\",[[\"data\",[\"text\",\"YXV0aG9yaXR5X2dlbmVyYXRpb246IDEKYmFzZWxpbmVfZGlnZXN0OiBmMmZlNTIxZjU0MmZjYzdhZTEwMmU0ODcxYjZjMmNiNGRlZmQ2Mjg0YzBjODA5MTg3NDU1NGYwMTIwNzVhMDM3Cm9iamVjdHM6Ci0gaWQ6IGNhYTc3MWE0YzgxZmU2YmNiYzQyNmRiODNhMDVkYTc1ZWZiMGMxYmM5MGM4ZmI3YTUzNjdlNGQ4MGU4ZjM0NWYKICBzaGEyNTY6IGYyYzkyZjZkYmQ0ZDFmOWUzOTU1MGM5MzNmMjg4YWUyOGZhMGIxNzM1MTVkNDczNjNkZDJkY2FjNTFjNmU5NTgKICBzdWJqZWN0OiBwLmEKb3BlcmF0aW9uOiBvcGVyYXRpb24KcGFyZW50czoge30KcmVjZWlwdDoKICBhZnRlcjoKICAgIGFjY2VwdGVkOiB0cnVlCiAgYmVmb3JlOgogICAgZGF0ZTogMjAyNi0wOS0xOQogIGNhcGFiaWxpdGllczoKICAgIHJlcXVpcmVzOiBbXQogIGRpZ2VzdDogNjFmYjUzMWQ5MDcxNTExZGU3ZWZkODYxMGIxZmYzMTU4NDU1YTE3YjU4MmUxYWE1ZjUxM2QyNzRiM2M0MzQ1ZgogIHByb2ZpbGU6IG9yZGluYXJ5LXJlYWRlci92MQogIHZlcnNpb246IDEKcmVjb3JkX2lkOiByZWNvcmQKdmVyc2lvbjogMQp2aWV3X3NoYTI1NjogMTIzNWY4ZjQzNWIxZDE2ZjdhYWM0NDIzNTFmMmUyOWZmMWJkMmI3NDY1MjM5MmM0YWNjYjVlYzU1NjU5NzNkYQo=\"]],[\"sha256\",[\"text\",\"aa0e8d6131f881efcee863b36112a95db26b3e54436a9348625f7946638943e6\"]]]]],[\"before\",[\"null\"]],[\"path\",[\"text\",\"PROVENANCE.history-commits/operation.yaml\"]],[\"role\",[\"text\",\"history_commit\"]]]],[\"map\",[[\"after\",[\"map\",[[\"data\",[\"text\",\"YXV0aG9yZWQ6CiAgY29sbGVjdGlvbjogcmVhZGluZ3MKICBmaWVsZHM6CiAgICB2YWx1ZTogdgogIHByb2ZpbGU6IG9yZGluYXJ5LXJlYWRlci92MQpib2R5OgogIHY6IDEKYnk6IG51bGwKaWQ6IGNhYTc3MWE0YzgxZmU2YmNiYzQyNmRiODNhMDVkYTc1ZWZiMGMxYmM5MGM4ZmI3YTUzNjdlNGQ4MGU4ZjM0NWYKaWRfc2NoZW1lOiB0eXBlZC1oaXN0b3J5L3YyCmtpbmQ6IHJlYWRpbmcKJ29uJzogdG9kYXkKb3A6IG9wZXJhdGlvbgpwaW5zOiB7fQpzYXc6IFtdCnNjaGVtYV92ZXJzaW9uOiAyCnN1YmplY3Q6IHAuYQo=\"]],[\"sha256\",[\"text\",\"f2c92f6dbd4d1f9e39550c933f288ae28fa0b173515d47363dd2dcac51c6e958\"]]]]],[\"before\",[\"null\"]],[\"path\",[\"text\",\"PROVENANCE.history/p.a/caa771a4c81fe6bcbc426db83a05da75efb0c1bc90c8fb7a5367e4d80e8f345f.yaml\"]],[\"role\",[\"text\",\"history_object\"]]]],[\"map\",[[\"after\",[\"map\",[[\"data\",[\"text\",\"YWZ0ZXINCg==\"]],[\"sha256\",[\"text\",\"1235f8f435b1d16f7aac442351f2e29ff1bd2b74652392c4accb5ec5565973da\"]]]]],[\"before\",[\"map\",[[\"data\",[\"text\",\"YmVmb3JlAP8NCg==\"]],[\"sha256\",[\"text\",\"87957804ca5f025ea5fa2df090d4c4e8d6f036b003b317f3f5daae120838ccd3\"]]]]],[\"path\",[\"text\",\"custom.yml\"]],[\"role\",[\"text\",\"record\"]]]]]]],[\"operation\",[\"text\",\"operation\"]],[\"receipt\",[\"map\",[[\"after\",[\"map\",[[\"accepted\",[\"bool\",true]]]]],[\"before\",[\"map\",[[\"date\",[\"date\",\"2026-09-19\"]]]]],[\"capabilities\",[\"map\",[[\"requires\",[\"list\",[]]]]]],[\"digest\",[\"text\",\"61fb531d9071511de7efd8610b1ff3158455a17b582e1aa5f513d274b3c4345f\"]],[\"profile\",[\"text\",\"ordinary-reader/v1\"]],[\"version\",[\"int\",\"1\"]]]]],[\"version\",[\"int\",\"1\"]]]]",
+      "error": "invalid_generation_cancellation"
+    },
+    {
+      "name": "custom.yml-history-other.yaml",
+      "entry": "other.yaml",
+      "mutation": "[\"map\",[[\"authority\",[\"map\",[[\"authority\",[\"text\",\"history\"]],[\"generation\",[\"int\",\"1\"]],[\"profile\",[\"text\",\"history/v1\"]],[\"record_id\",[\"text\",\"record\"]],[\"version\",[\"int\",\"1\"]]]]],[\"baseline\",[\"map\",[[\"authority_generation\",[\"int\",\"1\"]],[\"committed_set_digest\",[\"text\",\"7ad43f899d941308dbb3cfb1f6bffe01785ea3bdbfb3a47dcda645bd35a671fb\"]],[\"heads\",[\"map\",[]]],[\"open_acts\",[\"map\",[]]],[\"record_id\",[\"text\",\"record\"]],[\"version\",[\"int\",\"1\"]]]]],[\"digest\",[\"text\",\"9d31e0ee4f0bc7124744e32edb0fe57dc3bc410acde141256954915548d2b9a0\"]],[\"entry\",[\"text\",\"custom.yml\"]],[\"files\",[\"list\",[[\"map\",[[\"after\",[\"map\",[[\"data\",[\"text\",\"YXV0aG9yaXR5X2dlbmVyYXRpb246IDEKYmFzZWxpbmVfZGlnZXN0OiBmMmZlNTIxZjU0MmZjYzdhZTEwMmU0ODcxYjZjMmNiNGRlZmQ2Mjg0YzBjODA5MTg3NDU1NGYwMTIwNzVhMDM3Cm9iamVjdHM6Ci0gaWQ6IGNhYTc3MWE0YzgxZmU2YmNiYzQyNmRiODNhMDVkYTc1ZWZiMGMxYmM5MGM4ZmI3YTUzNjdlNGQ4MGU4ZjM0NWYKICBzaGEyNTY6IGYyYzkyZjZkYmQ0ZDFmOWUzOTU1MGM5MzNmMjg4YWUyOGZhMGIxNzM1MTVkNDczNjNkZDJkY2FjNTFjNmU5NTgKICBzdWJqZWN0OiBwLmEKb3BlcmF0aW9uOiBvcGVyYXRpb24KcGFyZW50czoge30KcmVjZWlwdDoKICBhZnRlcjoKICAgIGFjY2VwdGVkOiB0cnVlCiAgYmVmb3JlOgogICAgZGF0ZTogMjAyNi0wOS0xOQogIGNhcGFiaWxpdGllczoKICAgIHJlcXVpcmVzOiBbXQogIGRpZ2VzdDogNjFmYjUzMWQ5MDcxNTExZGU3ZWZkODYxMGIxZmYzMTU4NDU1YTE3YjU4MmUxYWE1ZjUxM2QyNzRiM2M0MzQ1ZgogIHByb2ZpbGU6IG9yZGluYXJ5LXJlYWRlci92MQogIHZlcnNpb246IDEKcmVjb3JkX2lkOiByZWNvcmQKdmVyc2lvbjogMQp2aWV3X3NoYTI1NjogMTIzNWY4ZjQzNWIxZDE2ZjdhYWM0NDIzNTFmMmUyOWZmMWJkMmI3NDY1MjM5MmM0YWNjYjVlYzU1NjU5NzNkYQo=\"]],[\"sha256\",[\"text\",\"aa0e8d6131f881efcee863b36112a95db26b3e54436a9348625f7946638943e6\"]]]]],[\"before\",[\"null\"]],[\"path\",[\"text\",\"PROVENANCE.history-commits/operation.yaml\"]],[\"role\",[\"text\",\"history_commit\"]]]],[\"map\",[[\"after\",[\"map\",[[\"data\",[\"text\",\"YXV0aG9yZWQ6CiAgY29sbGVjdGlvbjogcmVhZGluZ3MKICBmaWVsZHM6CiAgICB2YWx1ZTogdgogIHByb2ZpbGU6IG9yZGluYXJ5LXJlYWRlci92MQpib2R5OgogIHY6IDEKYnk6IG51bGwKaWQ6IGNhYTc3MWE0YzgxZmU2YmNiYzQyNmRiODNhMDVkYTc1ZWZiMGMxYmM5MGM4ZmI3YTUzNjdlNGQ4MGU4ZjM0NWYKaWRfc2NoZW1lOiB0eXBlZC1oaXN0b3J5L3YyCmtpbmQ6IHJlYWRpbmcKJ29uJzogdG9kYXkKb3A6IG9wZXJhdGlvbgpwaW5zOiB7fQpzYXc6IFtdCnNjaGVtYV92ZXJzaW9uOiAyCnN1YmplY3Q6IHAuYQo=\"]],[\"sha256\",[\"text\",\"f2c92f6dbd4d1f9e39550c933f288ae28fa0b173515d47363dd2dcac51c6e958\"]]]]],[\"before\",[\"null\"]],[\"path\",[\"text\",\"PROVENANCE.history/p.a/caa771a4c81fe6bcbc426db83a05da75efb0c1bc90c8fb7a5367e4d80e8f345f.yaml\"]],[\"role\",[\"text\",\"history_object\"]]]],[\"map\",[[\"after\",[\"map\",[[\"data\",[\"text\",\"YWZ0ZXINCg==\"]],[\"sha256\",[\"text\",\"1235f8f435b1d16f7aac442351f2e29ff1bd2b74652392c4accb5ec5565973da\"]]]]],[\"before\",[\"map\",[[\"data\",[\"text\",\"YmVmb3JlAP8NCg==\"]],[\"sha256\",[\"text\",\"87957804ca5f025ea5fa2df090d4c4e8d6f036b003b317f3f5daae120838ccd3\"]]]]],[\"path\",[\"text\",\"custom.yml\"]],[\"role\",[\"text\",\"record\"]]]]]]],[\"operation\",[\"text\",\"operation\"]],[\"receipt\",[\"map\",[[\"after\",[\"map\",[[\"accepted\",[\"bool\",true]]]]],[\"before\",[\"map\",[[\"date\",[\"date\",\"2026-09-19\"]]]]],[\"capabilities\",[\"map\",[[\"requires\",[\"list\",[]]]]]],[\"digest\",[\"text\",\"61fb531d9071511de7efd8610b1ff3158455a17b582e1aa5f513d274b3c4345f\"]],[\"profile\",[\"text\",\"ordinary-reader/v1\"]],[\"version\",[\"int\",\"1\"]]]]],[\"version\",[\"int\",\"1\"]]]]",
+      "error": "invalid_generation_cancellation"
+    },
+    {
+      "name": "custom.yml-legacy-custom.yml",
+      "entry": "custom.yml",
+      "mutation": "[\"map\",[[\"authority\",[\"map\",[[\"authority\",[\"text\",\"legacy\"]],[\"generation\",[\"int\",\"0\"]],[\"profile\",[\"text\",\"history/v1\"]],[\"record_id\",[\"text\",\"record\"]],[\"version\",[\"int\",\"1\"]]]]],[\"baseline\",[\"map\",[[\"revision\",[\"text\",\"before\"]]]]],[\"digest\",[\"text\",\"45b194f3824121c8c226ec00c79cef47f7bca8de26e3079c37b588cc2b143c32\"]],[\"entry\",[\"text\",\"custom.yml\"]],[\"files\",[\"list\",[[\"map\",[[\"after\",[\"map\",[[\"data\",[\"text\",\"YWZ0ZXINCg==\"]],[\"sha256\",[\"text\",\"1235f8f435b1d16f7aac442351f2e29ff1bd2b74652392c4accb5ec5565973da\"]]]]],[\"before\",[\"map\",[[\"data\",[\"text\",\"YmVmb3JlAP8NCg==\"]],[\"sha256\",[\"text\",\"87957804ca5f025ea5fa2df090d4c4e8d6f036b003b317f3f5daae120838ccd3\"]]]]],[\"path\",[\"text\",\"custom.yml\"]],[\"role\",[\"text\",\"record\"]]]]]]],[\"operation\",[\"text\",\"operation\"]],[\"receipt\",[\"map\",[[\"after\",[\"map\",[[\"accepted\",[\"bool\",true]]]]],[\"before\",[\"map\",[[\"date\",[\"date\",\"2026-09-19\"]]]]],[\"capabilities\",[\"map\",[[\"requires\",[\"list\",[]]]]]],[\"digest\",[\"text\",\"61fb531d9071511de7efd8610b1ff3158455a17b582e1aa5f513d274b3c4345f\"]],[\"profile\",[\"text\",\"ordinary-reader/v1\"]],[\"version\",[\"int\",\"1\"]]]]],[\"version\",[\"int\",\"1\"]]]]",
+      "error": "invalid_generation_cancellation"
+    },
+    {
+      "name": "custom.yml-legacy-other.yaml",
+      "entry": "other.yaml",
+      "mutation": "[\"map\",[[\"authority\",[\"map\",[[\"authority\",[\"text\",\"legacy\"]],[\"generation\",[\"int\",\"0\"]],[\"profile\",[\"text\",\"history/v1\"]],[\"record_id\",[\"text\",\"record\"]],[\"version\",[\"int\",\"1\"]]]]],[\"baseline\",[\"map\",[[\"revision\",[\"text\",\"before\"]]]]],[\"digest\",[\"text\",\"45b194f3824121c8c226ec00c79cef47f7bca8de26e3079c37b588cc2b143c32\"]],[\"entry\",[\"text\",\"custom.yml\"]],[\"files\",[\"list\",[[\"map\",[[\"after\",[\"map\",[[\"data\",[\"text\",\"YWZ0ZXINCg==\"]],[\"sha256\",[\"text\",\"1235f8f435b1d16f7aac442351f2e29ff1bd2b74652392c4accb5ec5565973da\"]]]]],[\"before\",[\"map\",[[\"data\",[\"text\",\"YmVmb3JlAP8NCg==\"]],[\"sha256\",[\"text\",\"87957804ca5f025ea5fa2df090d4c4e8d6f036b003b317f3f5daae120838ccd3\"]]]]],[\"path\",[\"text\",\"custom.yml\"]],[\"role\",[\"text\",\"record\"]]]]]]],[\"operation\",[\"text\",\"operation\"]],[\"receipt\",[\"map\",[[\"after\",[\"map\",[[\"accepted\",[\"bool\",true]]]]],[\"before\",[\"map\",[[\"date\",[\"date\",\"2026-09-19\"]]]]],[\"capabilities\",[\"map\",[[\"requires\",[\"list\",[]]]]]],[\"digest\",[\"text\",\"61fb531d9071511de7efd8610b1ff3158455a17b582e1aa5f513d274b3c4345f\"]],[\"profile\",[\"text\",\"ordinary-reader/v1\"]],[\"version\",[\"int\",\"1\"]]]]],[\"version\",[\"int\",\"1\"]]]]",
+      "error": "invalid_generation_cancellation"
+    }
+  ]
+}
