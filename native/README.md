@@ -218,6 +218,14 @@ acceptance never removes them. Computational target capture takes an explicitly
 supplied verified runtime. Unavailable targets retain their reason and observed
 revision. This library does not activate installed command or write routes.
 
+`authoring_source::AuthoringSource` retains the actual source capture and project
+policy lock through writer preparation. `history_bootstrap` prepares and publishes
+the first core history generation, including scalar questions and named proposals.
+It replays retained intent before publication and recovery. Interrupted births can
+complete or return to an absent record; rollback removes only the exact new images
+owned by that birth while the recovery journal remains present. Existing records,
+companion evidence and changed images refuse. Publication requires POSIX locks.
+
 The detached `history_transaction` library decodes Python prepared mutations,
 validates semantic receipts and exact file images, and serializes canonical typed
 journals up to 64 MiB. Its companion `history_transaction_fs` implements guarded

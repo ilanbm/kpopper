@@ -805,7 +805,24 @@ pub fn recover_transition(
     journal: &str,
     direction: Direction,
     verify: Verify<'_>,
+    committed: Option<Verify<'_>>,
+) -> Result<PreparedMutation> {
+    recover_transition_inner(root, journal, direction, verify, committed, false)
+}
+pub(crate) fn rollback_bootstrap(
+    root: &Path,
+    journal: &str,
+    verify: Verify<'_>,
+) -> Result<PreparedMutation> {
+    recover_transition_inner(root, journal, Direction::Before, verify, None, true)
+}
+fn recover_transition_inner(
+    root: &Path,
+    journal: &str,
+    direction: Direction,
+    verify: Verify<'_>,
     mut committed: Option<Verify<'_>>,
+    bootstrap_cleanup: bool,
 ) -> Result<PreparedMutation> {
     let primary = target(root, journal)?;
     let raw = read(&primary)?.ok_or_else(|| error("no_recovery_pending"))?;
@@ -817,6 +834,20 @@ pub fn recover_transition(
     let value = data(&m);
     let value = map(&value)?;
     let base = map(field(value, "baseline")?)?;
+    if bootstrap_cleanup {
+        let bootstrap = map(field(base, "bootstrap")?)?;
+        let authority = map(field(value, "authority")?)?;
+        require(
+            direction == Direction::Before
+                && base.get("source_absent") == Some(&V::Bool(true))
+                && bootstrap.get("kind") == Some(&V::Text("new-record-bootstrap/v1".into()))
+                && bootstrap.get("version").is_some_and(|v| is_int(v, "1"))
+                && string_is(&authority["authority"], "legacy")
+                && is_int(&authority["generation"], "0")
+                && m.files().iter().all(|i| i.before.is_none()),
+            "invalid_history_bootstrap",
+        )?;
+    }
     let cancellation = if base
         .get("direction")
         .is_some_and(|v| string_is(v, "activate"))
@@ -858,6 +889,23 @@ pub fn recover_transition(
         copies.push(ready);
     }
     apply_transition(root, &m, &paths, direction)?;
+    if bootstrap_cleanup {
+        for (item, path) in m
+            .files()
+            .iter()
+            .zip(&paths)
+            .filter(|(i, _)| transition_immutable(&i.role))
+        {
+            let current = read(path)?;
+            require(
+                current.is_none() || current == item.after,
+                "history_bootstrap_rollback_changed",
+            )?;
+            if current.is_some() {
+                remove(path)?;
+            }
+        }
+    }
     if direction == Direction::After
         && let Some(callback) = committed.as_mut()
     {

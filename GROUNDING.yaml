@@ -871,12 +871,26 @@ sources:
     file: "native/src/history_authoring.rs"
     of: "2026-09-19: direct, act and proposal preparation with causal-parent replay; conformance
          fixtures under native/tests/fixtures/history-authoring*.json"
+  s.native_authoring_source:
+    name: "Native writer source and policy ownership evidence"
+    file: "native/src/authoring_source.rs"
+    at: "WriteRoute and CapturedSource stay owned together; actual pending decisions govern profile
+         preparation; tests prove accepted contributions remain active, explicit retirement and
+         unrelated artifacts differ, and the policy lock survives until release"
+    read: "2026-09-19"
   s.native_batch_envelopes:
     name: "Native final-world batch conformance"
     from: s.2026_09_19_native_snapshot_continuation
     file: "native/src/history_authoring_batch.rs"
     of: "2026-09-19: batch preparation and causal-parent replay added after direct-authoring
          checkpoint 0c757063ab8a2e40f87c3d967dffdbbd3d621cbe"
+  s.native_bootstrap:
+    name: "Native first-record authoring and recovery evidence"
+    file: "native/tests/fixtures/history-bootstrap.json"
+    at: "Seven exact final Python 1.7.0 preparation envelopes, actual native publication, five
+         interruption phases in both directions, restartable rollback, changed-image refusal, and
+         independent intent replay"
+    read: "2026-09-19"
   s.native_branch_adoption:
     name: "Native physical proposal import and branch adoption conformance"
     from: s.2026_09_19_native_identity_continuation
@@ -966,6 +980,12 @@ sources:
     file: "native/tests/fixtures/reasoning-authoring.json"
     at: "230 pinned Python writer scenarios at commit 8c7bc2a; scalar identity corpus is
          reasoning-authoring-identities.json beside this file"
+    read: "2026-09-19"
+  s.python_final_native_reference:
+    name: "Final Python 1.7.0 native compatibility reference"
+    url: "https://github.com/ilanbm/kpopper/releases/tag/v1.7.0"
+    at: "Tag and PR102 merge 5acfd0f9c7f4d839bb6930b8e1d0a5d1fd315ce4; tree
+         48723a4e183df4d907ac39cbb33040a3179cd1a2; post-merge CI 35427119610 succeeded"
     read: "2026-09-19"
   s.query_candidate_report_2026_09_18:
     name: "Finite-query candidate verification packet"
@@ -2039,6 +2059,10 @@ known:
         CLI."
     from: s.native_prospective
     at: "history_prospective and history_hypothesis_authoring fold APIs, fixtures and tests"
+  p.native_python_reference:
+    name: "Final Python commit targeted by native conformance"
+    v: "5acfd0f9c7f4d839bb6930b8e1d0a5d1fd315ce4"
+    from: s.python_final_native_reference
   p.native_retained_pin_evidence:
     name: "Historical pin evidence boundary"
     v: "A recorded pin exposes a historical computation only when its typed value and stored basis
