@@ -351,3 +351,92 @@ fn command_enum_routes_configure_pause_and_resume() {
     .unwrap();
     assert_eq!(value["paused"], false);
 }
+
+#[test]
+fn terminal_decisions_and_retry_match_python_outputs_and_state_files() {
+    let (oracle, ledgers) = fixtures();
+    for name in ["withdraw", "reject", "supersede"] {
+        let entry = named(&oracle, name);
+        let setup = entry["setup"].as_str().unwrap();
+        let temp = tempfile::tempdir().unwrap();
+        let root = temp.path().join("repo");
+        std::fs::create_dir(&root).unwrap();
+        fixture(&root, named(&ledgers, setup));
+        let project = Project::open(&root).unwrap();
+        let argv = entry["argv"].as_array().unwrap();
+        let action = argv[0].as_str().unwrap();
+        let revision = argv[1].as_str().unwrap().to_owned();
+        let reason = argv
+            .iter()
+            .position(|value| value == "--reason")
+            .map(|index| argv[index + 1].as_str().unwrap())
+            .unwrap_or("");
+        let replacement = argv
+            .iter()
+            .position(|value| value == "--replacement")
+            .map(|index| argv[index + 1].as_str().unwrap());
+        let value =
+            pending_control::action_at(&project, action, &[revision], reason, replacement, 123.5)
+                .unwrap();
+        assert_eq!(
+            value.to_json().unwrap(),
+            expected_output(entry, &[]),
+            "{name}"
+        );
+        assert_eq!(state_files(&project), expected_files(entry, None), "{name}");
+    }
+
+    let entry = named(&oracle, "retry");
+    let temp = tempfile::tempdir().unwrap();
+    let root = temp.path().join("repo");
+    std::fs::create_dir(&root).unwrap();
+    fixture(&root, named(&ledgers, "one"));
+    let project = Project::open(&root).unwrap();
+    std::fs::create_dir_all(&project.state).unwrap();
+    std::fs::write(
+        project.state.join("publication.json"),
+        r#"{"version":1,"scope":null,"decisions":{},"receipts":[],"expected_head":null,"pr":null,"cycle":0,"proposed":[],"intent":null,"failures":4,"retry_at":9999,"paused":false,"states":{}}"#,
+    ).unwrap();
+    let value = pending_control::action_at(&project, "retry", &[], "", None, 123.5)
+        .unwrap()
+        .to_json()
+        .unwrap();
+    assert_eq!(value, expected_output(entry, &[]));
+    assert_eq!(state_files(&project), expected_files(entry, None));
+}
+
+#[test]
+fn terminal_decision_requires_exact_revision_reason_and_replacement() {
+    let (oracle, ledgers) = fixtures();
+    let temp = tempfile::tempdir().unwrap();
+    let root = temp.path().join("repo");
+    std::fs::create_dir(&root).unwrap();
+    fixture(&root, named(&ledgers, "one"));
+    let revision = "8887db9b513dddd4f3d7d26155713251effcfaa5e97a8edbcb1d7ced6d7297dd";
+    let output = public_pending::dispatch(
+        &Options {
+            command: Command::Withdraw(ControlOptions {
+                revisions: vec![revision.into()],
+                reason: String::new(),
+            }),
+        },
+        &root,
+        false,
+    );
+    let expected = named(&oracle, "withdraw_missing_reason");
+    assert_eq!(output.code, 2);
+    assert_eq!(output.stdout, expected["actual"]["stdout"]);
+    assert_eq!(output.stderr, expected["actual"]["stderr"]);
+    assert_eq!(
+        pending_control::action(
+            &Project::open(&root).unwrap(),
+            "supersede",
+            &[revision.into()],
+            "reason",
+            Some(revision)
+        )
+        .unwrap_err()
+        .0,
+        "supersession must name a different captured revision"
+    );
+}

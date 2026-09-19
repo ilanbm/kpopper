@@ -149,6 +149,102 @@
     }
   },
   {
+    "name": "withdraw",
+    "setup": "one",
+    "argv": [
+      "withdraw",
+      "8887db9b513dddd4f3d7d26155713251effcfaa5e97a8edbcb1d7ced6d7297dd",
+      "--reason",
+      "fixture decision"
+    ],
+    "actual": {
+      "code": 0,
+      "stdout": "{\n  \"states\": {\n    \"8887db9b513dddd4f3d7d26155713251effcfaa5e97a8edbcb1d7ced6d7297dd\": \"withdrawn\"\n  },\n  \"decisions\": {\n    \"8887db9b513dddd4f3d7d26155713251effcfaa5e97a8edbcb1d7ced6d7297dd\": {\n      \"state\": \"withdrawn\",\n      \"reason\": \"fixture decision\",\n      \"replacement\": null\n    }\n  },\n  \"paused\": false,\n  \"pr\": null,\n  \"expected_head\": null,\n  \"ledger_ref\": \"0fb26ab1d38923497106b48af21b78db29372cba\",\n  \"retry_at\": 0,\n  \"failures\": 0,\n  \"intent\": null,\n  \"verified\": false,\n  \"last_verified\": null\n}\n",
+      "stderr": ""
+    },
+    "state_files": {
+      "project.lock": "",
+      "publication.json": "{\"cycle\":0,\"decisions\":{\"8887db9b513dddd4f3d7d26155713251effcfaa5e97a8edbcb1d7ced6d7297dd\":{\"reason\":\"fixture decision\",\"replacement\":null,\"state\":\"withdrawn\"}},\"expected_head\":null,\"failures\":0,\"intent\":null,\"paused\":false,\"pr\":null,\"proposed\":[],\"receipts\":[{\"action\":\"withdraw\",\"at\":123.5,\"event\":\"decision\",\"reason\":\"fixture decision\",\"replacement\":null,\"revisions\":[\"8887db9b513dddd4f3d7d26155713251effcfaa5e97a8edbcb1d7ced6d7297dd\"]}],\"retry_at\":0,\"scope\":null,\"states\":{\"8887db9b513dddd4f3d7d26155713251effcfaa5e97a8edbcb1d7ced6d7297dd\":\"withdrawn\"},\"version\":1}\n",
+      "publisher.lock": ""
+    }
+  },
+  {
+    "name": "reject",
+    "setup": "one",
+    "argv": [
+      "reject",
+      "8887db9b513dddd4f3d7d26155713251effcfaa5e97a8edbcb1d7ced6d7297dd",
+      "--reason",
+      "fixture decision"
+    ],
+    "actual": {
+      "code": 0,
+      "stdout": "{\n  \"states\": {\n    \"8887db9b513dddd4f3d7d26155713251effcfaa5e97a8edbcb1d7ced6d7297dd\": \"rejected\"\n  },\n  \"decisions\": {\n    \"8887db9b513dddd4f3d7d26155713251effcfaa5e97a8edbcb1d7ced6d7297dd\": {\n      \"state\": \"rejected\",\n      \"reason\": \"fixture decision\",\n      \"replacement\": null\n    }\n  },\n  \"paused\": false,\n  \"pr\": null,\n  \"expected_head\": null,\n  \"ledger_ref\": \"0fb26ab1d38923497106b48af21b78db29372cba\",\n  \"retry_at\": 0,\n  \"failures\": 0,\n  \"intent\": null,\n  \"verified\": false,\n  \"last_verified\": null\n}\n",
+      "stderr": ""
+    },
+    "state_files": {
+      "project.lock": "",
+      "publication.json": "{\"cycle\":0,\"decisions\":{\"8887db9b513dddd4f3d7d26155713251effcfaa5e97a8edbcb1d7ced6d7297dd\":{\"reason\":\"fixture decision\",\"replacement\":null,\"state\":\"rejected\"}},\"expected_head\":null,\"failures\":0,\"intent\":null,\"paused\":false,\"pr\":null,\"proposed\":[],\"receipts\":[{\"action\":\"reject\",\"at\":123.5,\"event\":\"decision\",\"reason\":\"fixture decision\",\"replacement\":null,\"revisions\":[\"8887db9b513dddd4f3d7d26155713251effcfaa5e97a8edbcb1d7ced6d7297dd\"]}],\"retry_at\":0,\"scope\":null,\"states\":{\"8887db9b513dddd4f3d7d26155713251effcfaa5e97a8edbcb1d7ced6d7297dd\":\"rejected\"},\"version\":1}\n",
+      "publisher.lock": ""
+    }
+  },
+  {
+    "name": "supersede",
+    "setup": "two",
+    "argv": [
+      "supersede",
+      "8887db9b513dddd4f3d7d26155713251effcfaa5e97a8edbcb1d7ced6d7297dd",
+      "--replacement",
+      "b5bea064401e23c2f7f3b95022324ff396479ea22a7663c3da58f7871d4c36cc",
+      "--reason",
+      "new evidence"
+    ],
+    "actual": {
+      "code": 0,
+      "stdout": "{\n  \"states\": {\n    \"8887db9b513dddd4f3d7d26155713251effcfaa5e97a8edbcb1d7ced6d7297dd\": \"superseded\",\n    \"b5bea064401e23c2f7f3b95022324ff396479ea22a7663c3da58f7871d4c36cc\": \"captured\"\n  },\n  \"decisions\": {\n    \"8887db9b513dddd4f3d7d26155713251effcfaa5e97a8edbcb1d7ced6d7297dd\": {\n      \"state\": \"superseded\",\n      \"reason\": \"new evidence\",\n      \"replacement\": \"b5bea064401e23c2f7f3b95022324ff396479ea22a7663c3da58f7871d4c36cc\"\n    }\n  },\n  \"paused\": false,\n  \"pr\": null,\n  \"expected_head\": null,\n  \"ledger_ref\": \"5bf07801c7a1e0e237a5b2f301b53830a83900f5\",\n  \"retry_at\": 0,\n  \"failures\": 0,\n  \"intent\": null,\n  \"verified\": false,\n  \"last_verified\": null\n}\n",
+      "stderr": ""
+    },
+    "state_files": {
+      "project.lock": "",
+      "publication.json": "{\"cycle\":0,\"decisions\":{\"8887db9b513dddd4f3d7d26155713251effcfaa5e97a8edbcb1d7ced6d7297dd\":{\"reason\":\"new evidence\",\"replacement\":\"b5bea064401e23c2f7f3b95022324ff396479ea22a7663c3da58f7871d4c36cc\",\"state\":\"superseded\"}},\"expected_head\":null,\"failures\":0,\"intent\":null,\"paused\":false,\"pr\":null,\"proposed\":[],\"receipts\":[{\"action\":\"supersede\",\"at\":123.5,\"event\":\"decision\",\"reason\":\"new evidence\",\"replacement\":\"b5bea064401e23c2f7f3b95022324ff396479ea22a7663c3da58f7871d4c36cc\",\"revisions\":[\"8887db9b513dddd4f3d7d26155713251effcfaa5e97a8edbcb1d7ced6d7297dd\"]}],\"retry_at\":0,\"scope\":null,\"states\":{\"8887db9b513dddd4f3d7d26155713251effcfaa5e97a8edbcb1d7ced6d7297dd\":\"superseded\"},\"version\":1}\n",
+      "publisher.lock": ""
+    }
+  },
+  {
+    "name": "retry",
+    "setup": "one-retry",
+    "argv": [
+      "retry"
+    ],
+    "actual": {
+      "code": 0,
+      "stdout": "{\n  \"states\": {\n    \"8887db9b513dddd4f3d7d26155713251effcfaa5e97a8edbcb1d7ced6d7297dd\": \"captured\"\n  },\n  \"decisions\": {},\n  \"paused\": false,\n  \"pr\": null,\n  \"expected_head\": null,\n  \"ledger_ref\": \"0fb26ab1d38923497106b48af21b78db29372cba\",\n  \"retry_at\": 0,\n  \"failures\": 0,\n  \"intent\": null,\n  \"verified\": false,\n  \"last_verified\": null\n}\n",
+      "stderr": ""
+    },
+    "state_files": {
+      "project.lock": "",
+      "publication.json": "{\"cycle\":0,\"decisions\":{},\"expected_head\":null,\"failures\":0,\"intent\":null,\"paused\":false,\"pr\":null,\"proposed\":[],\"receipts\":[{\"action\":\"retry\",\"at\":123.5,\"event\":\"decision\",\"reason\":\"\",\"replacement\":null,\"revisions\":[]}],\"retry_at\":0,\"scope\":null,\"states\":{},\"version\":1}\n",
+      "publisher.lock": ""
+    }
+  },
+  {
+    "name": "withdraw_missing_reason",
+    "setup": "one",
+    "argv": [
+      "withdraw",
+      "8887db9b513dddd4f3d7d26155713251effcfaa5e97a8edbcb1d7ced6d7297dd"
+    ],
+    "actual": {
+      "code": 2,
+      "stdout": "",
+      "stderr": "kpop pending: terminal decisions need exact revisions and a reason\n"
+    },
+    "state_files": {
+      "project.lock": "",
+      "publisher.lock": ""
+    }
+  },
+  {
     "name": "configure_pending_scope_change",
     "setup": "one-configured",
     "argv": [

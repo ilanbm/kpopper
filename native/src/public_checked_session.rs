@@ -161,6 +161,9 @@ pub struct Service {
     mode: ReadMode,
     store: CheckedSessionStore,
     inputs: Inventory,
+    project: String,
+    navigation: Option<V>,
+    requested_profile: Option<String>,
 }
 impl Service {
     pub fn new(options: &Options, cwd: &Path, mode: ReadMode) -> Result<Self> {
@@ -250,12 +253,8 @@ impl Service {
             .as_ref()
             .map(|p| json_file(&mut inputs, p).and_then(|v| V::from_json(&v)))
             .transpose()?;
-        // The legacy checked-reader route has its own assessment contract.
-        crate::require(
-            options.assessment_profile.as_deref() != Some("checked-reader/v1"),
-            "unsupported_capability: native checked-reader/v1 sessions are not yet available",
-        )?;
-        let store = CheckedSessionStore::open(&state, &name, &input, navigation, options.encoding)?;
+        let store =
+            CheckedSessionStore::open(&state, &name, &input, navigation.clone(), options.encoding)?;
         inputs.verify()?;
         Ok(Self {
             cwd,
@@ -263,11 +262,72 @@ impl Service {
             mode,
             store,
             inputs,
+            project: name,
+            navigation,
+            requested_profile: options.assessment_profile.clone(),
         })
+    }
+
+    fn ordinary(&self) -> Result<bool> {
+        if let Some(profile) = &self.requested_profile {
+            return Ok(profile == "checked-reader/v1");
+        }
+        let capture = source_capture::capture_source(
+            std::slice::from_ref(&self.input),
+            &self.cwd,
+            self.mode,
+            None,
+        )?;
+        let capabilities =
+            crate::reasoning_fields::capabilities(capture.ordinary_document(), None)?;
+        let ordinary = !string_is(&map(&capabilities)?["profile"], "core/v1");
+        capture.verify()?;
+        Ok(ordinary)
+    }
+
+    fn ordinary_session(
+        &self,
+    ) -> Result<(
+        source_capture::CapturedSource,
+        crate::reasoning_runtime::Runtime,
+        crate::ordinary_checked_session::OrdinarySession,
+    )> {
+        let runtime = W::runtime()?
+            .ok_or_else(|| error("checked session core is not ready; run kpop session setup"))?;
+        let capture = source_capture::capture_source_with_runtime(
+            std::slice::from_ref(&self.input),
+            &self.cwd,
+            self.mode,
+            None,
+            Some(&runtime),
+        )?;
+        let capabilities =
+            crate::reasoning_fields::capabilities(capture.ordinary_document(), None)?;
+        crate::require(
+            string_is(&map(&capabilities)?["profile"], "ordinary-reader/v1"),
+            "checked-reader/v1 requires an ordinary record",
+        )?;
+        let session = crate::ordinary_checked_session::OrdinarySession::capture(
+            &capture,
+            &runtime,
+            &self.project,
+            self.navigation.as_ref(),
+        )?;
+        capture.verify()?;
+        Ok((capture, runtime, session))
     }
 
     pub fn opening(&self, tokens: usize) -> Result<String> {
         crate::require((64..=65_536).contains(&tokens), "tokens must be 64..65536")?;
+        if self.ordinary()? {
+            let (capture, _, session) = self.ordinary_session()?;
+            let result = session
+                .opening(tokens, |s| self.store.encoding().count(s))?
+                .text;
+            capture.verify()?;
+            self.inputs.verify()?;
+            return Ok(result);
+        }
         let runtime = W::core_runtime()?;
         let capture = source_capture::capture_source_with_runtime(
             std::slice::from_ref(&self.input),
@@ -311,6 +371,15 @@ impl Service {
         offset: Option<usize>,
     ) -> Result<String> {
         crate::require((64..=65_536).contains(&tokens), "tokens must be 64..65536")?;
+        if self.ordinary()? {
+            let (capture, _, session) = self.ordinary_session()?;
+            let result = session.read(reference, revision, tokens, offset, |s| {
+                self.store.encoding().count(s)
+            })?;
+            capture.verify()?;
+            self.inputs.verify()?;
+            return Ok(result);
+        }
         // Source recapture validates freshness; it never recomputes findings.
         let capture = source_capture::capture_source(
             std::slice::from_ref(&self.input),
@@ -340,6 +409,11 @@ impl Service {
         Ok(result)
     }
     pub fn searching(&self, revision: &str, request: &SearchRequest) -> Result<String> {
+        if self.ordinary()? {
+            return Err(error(
+                "unsupported_capability: native ordinary session search is not yet available",
+            ));
+        }
         let capture = source_capture::capture_source(
             std::slice::from_ref(&self.input),
             &self.cwd,
@@ -354,6 +428,11 @@ impl Service {
     }
 
     pub fn proposing(&self, revision: &str, request: &ProposalRequest) -> Result<String> {
+        if self.ordinary()? {
+            return Err(error(
+                "unsupported_capability: native ordinary session proposals are not yet available",
+            ));
+        }
         let capture = source_capture::capture_source(
             std::slice::from_ref(&self.input),
             &self.cwd,
@@ -366,11 +445,26 @@ impl Service {
         Ok(serde_json::to_string(&result)?)
     }
 
-    pub fn verify_claims_boundary(&self, revision: &str, assertions: &[J]) -> Result<String> {
+    pub fn verify_claims_boundary(
+        &self,
+        judgment: &str,
+        revision: &str,
+        assertions: &[J],
+    ) -> Result<String> {
         crate::require(
             !assertions.is_empty(),
             "no assertions supplied; nothing was checked",
         )?;
+        if self.ordinary()? {
+            let (capture, runtime, session) = self.ordinary_session()?;
+            let program = runtime
+                .ordinary_program()
+                .ok_or_else(|| error("ordinary expression program is not configured"))?;
+            let result = session.verify_claims(judgment, revision, assertions, program)?;
+            capture.verify()?;
+            self.inputs.verify()?;
+            return Ok(result);
+        }
         let capture = source_capture::capture_source(
             std::slice::from_ref(&self.input),
             &self.cwd,
@@ -391,6 +485,11 @@ impl Service {
         revision: &str,
         options: &ContextOptions,
     ) -> Result<String> {
+        if self.ordinary()? {
+            return Err(error(
+                "unsupported_capability: native ordinary session context is not yet available",
+            ));
+        }
         let capture = source_capture::capture_source(
             std::slice::from_ref(&self.input),
             &self.cwd,
@@ -521,6 +620,9 @@ pub fn run(options: &Options, cwd: &Path, mode: ReadMode) -> Result<String> {
                             )
                         }
                         "kpopper_verify_claims" => service.verify_claims_boundary(
+                            args["judgment"]
+                                .as_str()
+                                .ok_or_else(|| error("missing judgment"))?,
                             args["revision"]
                                 .as_str()
                                 .ok_or_else(|| error("missing revision"))?,

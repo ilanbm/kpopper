@@ -299,6 +299,20 @@ pub struct GateData {
     pub attributed: BTreeSet<String>,
 }
 
+/// Python-compatible ordinary graph semantics for checked-reader sessions.
+/// Source bytes and handles are attached by the captured-session adapter.
+#[derive(Clone, Debug, PartialEq)]
+pub struct OrdinarySessionData {
+    pub nodes: BTreeMap<String, serde_json::Value>,
+    pub edges: Vec<serde_json::Value>,
+    pub topics: BTreeMap<String, Vec<String>>,
+    pub sections: BTreeMap<String, String>,
+    pub scope: String,
+    pub native_hypotheses: serde_json::Value,
+    pub contributions: serde_json::Value,
+    pub knowledge_conflicts: serde_json::Value,
+}
+
 /// Immutable ordinary semantics needed by the optional Hub presentation.
 ///
 /// This deliberately contains no layout choices: the Hub owns the brief and maps
@@ -661,6 +675,182 @@ impl<'a> Projection<'a> {
                     .flat_map(|w| w.reader.ids.iter().cloned()),
             )
             .collect()
+    }
+
+    pub fn session_data(&self) -> Result<OrdinarySessionData> {
+        let collections = F::collections(&self.base.reader.document)?;
+        let sections = collections
+            .iter()
+            .filter(|(section, _)| section.as_str() != "meta")
+            .flat_map(|(section, members)| members.keys().map(|id| (id.clone(), section.clone())))
+            .collect::<BTreeMap<_, _>>();
+        let questions = collections
+            .iter()
+            .filter(|(section, _)| ["open", "questions"].contains(&section.as_str()))
+            .flat_map(|(_, members)| members.keys().cloned())
+            .collect::<BTreeSet<_>>();
+        let pending = self
+            .hypotheses
+            .values()
+            .filter_map(|hypothesis| map(hypothesis).ok())
+            .filter(|hypothesis| string_is(get(hypothesis, "kind"), "contribution"))
+            .filter_map(|hypothesis| hypothesis.get("ids").and_then(|ids| list(ids).ok()))
+            .flatten()
+            .filter_map(|id| text(id).ok().map(str::to_owned))
+            .collect::<BTreeSet<_>>();
+        let mut nodes = BTreeMap::new();
+        let mut topics = BTreeMap::new();
+        let mut edges = Vec::new();
+        for id in &self.base.reader.ids {
+            let source_body = self.base.reader.raw.get(id).cloned().unwrap_or(V::Null);
+            let body = if matches!(source_body, V::Map(_)) {
+                source_body.clone()
+            } else {
+                V::Map(Map::from([("v".into(), source_body.clone())]))
+            };
+            let mut states = if let Some(judgment) = self.base.judgments.get(id) {
+                crate::ordinary_counts::flags(&self.base.reader, judgment)?
+                    .into_iter()
+                    .map(str::to_owned)
+                    .collect::<BTreeSet<_>>()
+            } else {
+                BTreeSet::new()
+            };
+            if pending.contains(id) {
+                states.insert("pending".into());
+            }
+            if questions.contains(id) {
+                states.insert("question".into());
+            }
+            if self.disputed.contains_key(id) {
+                states.insert("contested".into());
+            }
+            if id.starts_with("prior.") {
+                states.insert("prior".into());
+            }
+            if !blocked_text(&body).is_empty() {
+                states.insert("declared_gap".into());
+            }
+            if !reopened_text(&body).is_empty() {
+                states.insert("human_reopener".into());
+            }
+            let kind = if self.base.judgments.contains_key(id) {
+                "judgment".into()
+            } else if F::BUILTINS.contains(&id.as_str()) {
+                "computed".into()
+            } else {
+                sections.get(id).cloned().unwrap_or_else(|| "entry".into())
+            };
+            let mut node = serde_json::Map::from_iter([
+                ("kind".into(), serde_json::Value::String(kind)),
+                ("states".into(), serde_json::json!(states)),
+                ("body".into(), R::json_value(&body, 0)?),
+            ]);
+            if !matches!(source_body, V::Map(_)) {
+                node.insert("source_body".into(), R::json_value(&source_body, 0)?);
+            }
+            if self.base.judgments.contains_key(id) {
+                let mut assessed = map(&body)?.clone();
+                for (role, canonical) in [
+                    ("deps", "rests_on"),
+                    ("snapshot", "seen"),
+                    ("predicate", "wrong_if"),
+                ] {
+                    if let Some(field) =
+                        self.base.reader.fields.get(role).and_then(|v| text(v).ok())
+                    {
+                        assessed.insert(
+                            canonical.into(),
+                            map(&body)?.get(field).cloned().unwrap_or(V::Null),
+                        );
+                    }
+                }
+                node.insert(
+                    "assessment_body".into(),
+                    R::json_value(&V::Map(assessed), 0)?,
+                );
+                node.insert(
+                    "assessment_fields".into(),
+                    R::json_value(&V::Map(self.base.reader.fields.clone()), 0)?,
+                );
+                for dependency in self.base.deps(id)? {
+                    edges.push(serde_json::json!({"from":id,"rel":"rests_on","to":dependency}));
+                }
+            }
+            if let Some(source) = map(&body)
+                .ok()
+                .and_then(|body| body.get("from"))
+                .and_then(|v| text(v).ok())
+                && self.base.reader.ids.contains(source)
+            {
+                edges.push(serde_json::json!({"from":id,"rel":"from","to":source}));
+            }
+            if !self.base.judgments.contains_key(id) {
+                let references = map(&body)
+                    .ok()
+                    .map(|body| {
+                        body.get("rule")
+                            .into_iter()
+                            .chain(body.get("v"))
+                            .flat_map(R::predicate_refs)
+                            .filter(|reference| {
+                                self.base.reader.ids.contains(reference) && reference != id
+                            })
+                            .collect::<BTreeSet<_>>()
+                    })
+                    .unwrap_or_default();
+                for reference in references {
+                    edges.push(serde_json::json!({"from":id,"rel":"rule_reads","to":reference}));
+                }
+            }
+            nodes.insert(id.clone(), serde_json::Value::Object(node));
+            let mut topic = vec![
+                sections
+                    .get(id)
+                    .cloned()
+                    .unwrap_or_else(|| "computed".into()),
+            ];
+            topic.extend(
+                id.split('.')
+                    .take(id.split('.').count().saturating_sub(1))
+                    .map(str::to_owned),
+            );
+            topics.insert(id.clone(), topic);
+        }
+        edges.sort_by_cached_key(|edge| serde_json::to_string(edge).unwrap());
+        edges.dedup();
+        let meta = map(&self.base.reader.document)
+            .ok()
+            .and_then(|document| document.get("meta"))
+            .and_then(|meta| map(meta).ok());
+        let scope = meta
+            .and_then(|meta| meta.get("scope"))
+            .map(py)
+            .filter(|scope| !scope.is_empty())
+            .unwrap_or_else(|| "Epistemic project record.".into());
+        let native_hypotheses = R::json_value(&V::Map(self.hypotheses.clone()), 0)?;
+        let contributions = serde_json::Value::Array(
+            self.hypotheses
+                .values()
+                .filter_map(|hypothesis| {
+                    let hypothesis = map(hypothesis).ok()?;
+                    string_is(get(hypothesis, "kind"), "contribution")
+                        .then(|| hypothesis.get("head").cloned().unwrap_or(V::Null))
+                })
+                .map(|value| R::json_value(&value, 0))
+                .collect::<Result<_>>()?,
+        );
+        let knowledge_conflicts = serde_json::json!(self.base.reader.knowledge_conflicts);
+        Ok(OrdinarySessionData {
+            nodes,
+            edges,
+            topics,
+            sections,
+            scope,
+            native_hypotheses,
+            contributions,
+            knowledge_conflicts,
+        })
     }
 
     pub fn gate_data(&self) -> Result<GateData> {

@@ -65,6 +65,8 @@ enum Command {
     Knowledge(kpop_native::public_knowledge::Options),
     /// Inspect local pending contribution state.
     Pending(kpop_native::public_pending::Options),
+    /// Manage durable local followups.
+    Followups(kpop_native::public_followups::Args),
     History(kpop_native::public_history::Options),
     Recover {
         #[arg(long)]
@@ -248,6 +250,14 @@ fn session() -> Result<()> {
     Ok(())
 }
 fn run(args: Args) -> Result<Value> {
+    if let Command::Followups(options) = &args.command {
+        let root = args
+            .workspace
+            .clone()
+            .map(Ok)
+            .unwrap_or_else(std::env::current_dir)?;
+        return kpop_native::public_followups::run(options, &root);
+    }
     if let Command::HistoryCapture { entry } = args.command {
         let captured = kpop_native::history_capture::capture(&entry, None, None)?;
         let evidence = captured.evidence();
@@ -387,6 +397,7 @@ fn run(args: Args) -> Result<Value> {
         | Command::Export(_)
         | Command::Knowledge(_)
         | Command::Pending(_)
+        | Command::Followups(_)
         | Command::Check(_)
         | Command::Pull(_)
         | Command::Affects(_)

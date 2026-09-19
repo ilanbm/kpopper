@@ -40,7 +40,7 @@ fn object(items: impl IntoIterator<Item = (&'static str, V)>) -> V {
     )
 }
 
-fn git(root: &Path, args: &[&str]) -> Result<(bool, Vec<u8>)> {
+pub(crate) fn git(root: &Path, args: &[&str]) -> Result<(bool, Vec<u8>)> {
     let mut command = Command::new("git");
     command
         .args([
@@ -75,7 +75,7 @@ fn git(root: &Path, args: &[&str]) -> Result<(bool, Vec<u8>)> {
     }
 }
 
-fn save(path: &Path, value: &V) -> Result<()> {
+pub(crate) fn save(path: &Path, value: &V) -> Result<()> {
     let parent = path.parent().ok_or_else(|| Error("invalid_path".into()))?;
     #[cfg(unix)]
     {
@@ -117,7 +117,7 @@ fn save(path: &Path, value: &V) -> Result<()> {
     }
 }
 
-fn canonical_json(value: &V) -> Result<Vec<u8>> {
+pub(crate) fn canonical_json(value: &V) -> Result<Vec<u8>> {
     let mut raw = serde_json::to_vec(&value.to_json()?)?;
     raw.push(b'\n');
     Ok(raw)
@@ -141,7 +141,7 @@ fn default_state() -> V {
     ])
 }
 
-fn load_state(path: &Path) -> Result<V> {
+pub(crate) fn load_state(path: &Path) -> Result<V> {
     let Some(raw) = pending_state::read_private(path)? else {
         return Ok(default_state());
     };
@@ -157,11 +157,11 @@ fn load_state(path: &Path) -> Result<V> {
     Ok(value)
 }
 
-struct PublisherLock {
+pub(crate) struct PublisherLock {
     _file: File,
 }
 impl PublisherLock {
-    fn acquire(project: &Project) -> Result<Self> {
+    pub(crate) fn acquire(project: &Project) -> Result<Self> {
         #[cfg(unix)]
         {
             use std::os::unix::fs::DirBuilderExt;
@@ -310,7 +310,7 @@ fn now() -> f64 {
 }
 
 pub fn decision(project: &Project, action: &str, revisions: &[String], reason: &str) -> Result<V> {
-    decision_at(project, action, revisions, reason, now())
+    action_at(project, action, revisions, reason, None, now())
 }
 
 pub fn decision_at(
@@ -320,12 +320,36 @@ pub fn decision_at(
     reason: &str,
     at: f64,
 ) -> Result<V> {
+    action_at(project, action, revisions, reason, None, at)
+}
+
+pub fn action(
+    project: &Project,
+    action: &str,
+    revisions: &[String],
+    reason: &str,
+    replacement: Option<&str>,
+) -> Result<V> {
+    action_at(project, action, revisions, reason, replacement, now())
+}
+
+pub fn action_at(
+    project: &Project,
+    action: &str,
+    revisions: &[String],
+    reason: &str,
+    replacement: Option<&str>,
+    at: f64,
+) -> Result<V> {
     require(
         project.is_git(),
         "Simple projects without Git have no publication queue",
     )?;
     require(
-        matches!(action, "pause" | "resume"),
+        matches!(
+            action,
+            "pause" | "resume" | "withdraw" | "reject" | "supersede" | "retry"
+        ),
         "unknown publication action",
     )?;
     let _publisher = PublisherLock::acquire(project)?;
@@ -339,9 +363,50 @@ pub fn decision_at(
             .all(|revision| ledger.bundles.contains_key(revision)),
         "decision must name a captured immutable revision",
     )?;
-    if action == "pause" {
+    if matches!(action, "withdraw" | "reject" | "supersede") {
+        require(
+            !revisions.is_empty() && !reason.trim().is_empty(),
+            "terminal decisions need exact revisions and a reason",
+        )?;
+        if action == "supersede" {
+            require(
+                replacement.is_some_and(|revision| {
+                    ledger.bundles.contains_key(revision)
+                        && !revisions.iter().any(|selected| selected == revision)
+                }),
+                "supersession must name a different captured revision",
+            )?;
+        }
+        let state_name = match action {
+            "withdraw" => "withdrawn",
+            "reject" => "rejected",
+            _ => "superseded",
+        };
+        let fields = map_mut(&mut state)?;
+        for revision in revisions {
+            map_mut(
+                fields
+                    .get_mut("decisions")
+                    .ok_or_else(|| Error("invalid_publication_state".into()))?,
+            )?
+            .insert(
+                revision.clone(),
+                object([
+                    ("state", s(state_name)),
+                    ("reason", s(reason)),
+                    ("replacement", replacement.map(s).unwrap_or(V::Null)),
+                ]),
+            );
+            map_mut(
+                fields
+                    .get_mut("states")
+                    .ok_or_else(|| Error("invalid_publication_state".into()))?,
+            )?
+            .insert(revision.clone(), s(state_name));
+        }
+    } else if action == "pause" {
         map_mut(&mut state)?.insert("paused".into(), V::Bool(true));
-    } else {
+    } else if action == "resume" {
         if !revisions.is_empty() {
             let record = project.record(Some(policy.config()))?;
             let destination = if record.exists() {
@@ -384,6 +449,10 @@ pub fn decision_at(
             }
         }
         map_mut(&mut state)?.insert("paused".into(), V::Bool(false));
+    } else {
+        let fields = map_mut(&mut state)?;
+        fields.insert("failures".into(), n("0"));
+        fields.insert("retry_at".into(), n("0"));
     }
     let receipt = object([
         ("event", s("decision")),
@@ -394,7 +463,7 @@ pub fn decision_at(
             V::List(revisions.iter().map(|value| s(value)).collect()),
         ),
         ("reason", s(reason)),
-        ("replacement", V::Null),
+        ("replacement", replacement.map(s).unwrap_or(V::Null)),
     ]);
     let receipts = map_mut(&mut state)?
         .get_mut("receipts")

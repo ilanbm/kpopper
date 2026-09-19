@@ -92,6 +92,47 @@ def main():
                                'argv': argv, 'actual': normalized(actual, [(root, '$ROOT')]),
                                'state_files': state_files(root)})
 
+        for action in ('withdraw', 'reject'):
+            root = temp / action
+            root.mkdir()
+            restore(root, cases['one'])
+            snapshot = __import__('scripts.pending_grounding', fromlist=['Store']).Store(root).snapshot()
+            revision = next(iter(snapshot['bundles']))
+            argv = [action, revision, '--reason', 'fixture decision']
+            output.append({'name': action, 'setup': 'one', 'argv': argv,
+                           'actual': run(argv, root), 'state_files': state_files(root)})
+
+        root = temp / 'supersede'
+        root.mkdir()
+        restore(root, cases['two'])
+        revisions = list(__import__('scripts.pending_grounding', fromlist=['Store']).Store(root).snapshot()['bundles'])
+        argv = ['supersede', revisions[0], '--replacement', revisions[1], '--reason', 'new evidence']
+        output.append({'name': 'supersede', 'setup': 'two', 'argv': argv,
+                       'actual': run(argv, root), 'state_files': state_files(root)})
+
+        root = temp / 'retry'
+        root.mkdir()
+        restore(root, cases['one'])
+        project = __import__('scripts.project_modes', fromlist=['Project']).Project(root)
+        project.state.mkdir(parents=True, exist_ok=True)
+        (project.state / 'publication.json').write_text(json.dumps({
+            'version': 1, 'scope': None, 'decisions': {}, 'receipts': [],
+            'expected_head': None, 'pr': None, 'cycle': 0, 'proposed': [],
+            'intent': None, 'failures': 4, 'retry_at': 9999, 'paused': False,
+            'states': {},
+        }))
+        argv = ['retry']
+        output.append({'name': 'retry', 'setup': 'one-retry', 'argv': argv,
+                       'actual': run(argv, root), 'state_files': state_files(root)})
+
+        root = temp / 'terminal-invalid'
+        root.mkdir()
+        restore(root, cases['one'])
+        revision = next(iter(__import__('scripts.pending_grounding', fromlist=['Store']).Store(root).snapshot()['bundles']))
+        argv = ['withdraw', revision]
+        output.append({'name': 'withdraw_missing_reason', 'setup': 'one', 'argv': argv,
+                       'actual': run(argv, root), 'state_files': state_files(root)})
+
         guarded = temp / 'guarded-scope'
         guarded.mkdir()
         restore(guarded, cases['one'])

@@ -88,6 +88,19 @@ pub(crate) fn run_command_bounded(
     timeout: Duration,
     output_limit: usize,
 ) -> Result<Vec<u8>> {
+    let (status, output) = run_command_bounded_with_status(cmd, payload, timeout, output_limit)?;
+    require(status.success(), "native reasoning process failed")?;
+    Ok(output)
+}
+
+/// Run one bounded process while retaining its exit status. Callers must
+/// validate the status together with the complete response schema.
+pub(crate) fn run_command_bounded_with_status(
+    cmd: &mut Command,
+    payload: Vec<u8>,
+    timeout: Duration,
+    output_limit: usize,
+) -> Result<(std::process::ExitStatus, Vec<u8>)> {
     let deadline = Instant::now() + timeout;
     cmd.stdin(Stdio::piped())
         .stdout(Stdio::piped())
@@ -203,11 +216,8 @@ pub(crate) fn run_command_bounded(
     }
     require(!timeout_hit, "runtime_timeout")?;
     require(!state.exceeded, "output_limit")?;
-    require(
-        !state.failed && status.success(),
-        "native reasoning process failed",
-    )?;
-    Ok(std::mem::take(&mut state.bytes))
+    require(!state.failed, "native reasoning process failed")?;
+    Ok((status, std::mem::take(&mut state.bytes)))
 }
 pub fn target_name() -> Result<String> {
     let os = std::env::consts::OS;

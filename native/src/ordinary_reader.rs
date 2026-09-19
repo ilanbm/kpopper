@@ -147,7 +147,7 @@ fn number(v: &V) -> Option<f64> {
     }
     source.replace('_', "").parse().ok()
 }
-fn json_value(v: &V, depth: usize) -> Result<J> {
+pub(crate) fn json_value(v: &V, depth: usize) -> Result<J> {
     if depth > 128 {
         return Ok(J::Null);
     }

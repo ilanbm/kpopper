@@ -39,6 +39,14 @@ pub enum Command {
     Pause(ControlOptions),
     /// Resume local publication attempts and optionally selected revisions.
     Resume(ControlOptions),
+    /// Withdraw selected immutable revisions locally.
+    Withdraw(ControlOptions),
+    /// Reject selected immutable revisions locally.
+    Reject(ControlOptions),
+    /// Supersede selected revisions with another captured revision.
+    Supersede(SupersedeOptions),
+    /// Clear local publication backoff state.
+    Retry(ControlOptions),
 }
 
 #[derive(Clone, Debug, Default, clap::Args)]
@@ -63,6 +71,15 @@ pub struct ControlOptions {
     pub revisions: Vec<String>,
     #[arg(long, default_value = "")]
     pub reason: String,
+}
+
+#[derive(Clone, Debug, clap::Args)]
+pub struct SupersedeOptions {
+    pub revisions: Vec<String>,
+    #[arg(long, default_value = "")]
+    pub reason: String,
+    #[arg(long)]
+    pub replacement: String,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -157,6 +174,46 @@ pub fn run(options: &Options, workspace: &Path) -> Result<V> {
                 "resume",
                 &options.revisions,
                 &options.reason,
+            )
+        }
+        Command::Withdraw(options) => {
+            let project = Project::open(workspace)?;
+            crate::pending_control::action(
+                &project,
+                "withdraw",
+                &options.revisions,
+                &options.reason,
+                None,
+            )
+        }
+        Command::Reject(options) => {
+            let project = Project::open(workspace)?;
+            crate::pending_control::action(
+                &project,
+                "reject",
+                &options.revisions,
+                &options.reason,
+                None,
+            )
+        }
+        Command::Supersede(options) => {
+            let project = Project::open(workspace)?;
+            crate::pending_control::action(
+                &project,
+                "supersede",
+                &options.revisions,
+                &options.reason,
+                Some(&options.replacement),
+            )
+        }
+        Command::Retry(options) => {
+            let project = Project::open(workspace)?;
+            crate::pending_control::action(
+                &project,
+                "retry",
+                &options.revisions,
+                &options.reason,
+                None,
             )
         }
     }

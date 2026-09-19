@@ -1,0 +1,265 @@
+{
+  "commands": [
+    {
+      "argv": [
+        "setup",
+        "--timezone",
+        "Asia/Jerusalem",
+        "--private"
+      ],
+      "code": 0,
+      "stdout": "{\n  \"record\": \"${ROOT}/project/PROVENANCE.yaml\",\n  \"store\": \"${ROOT}/state/kpopper/followups/c23bd2e63de950e573abefe370f6b802edc504d7cb2f51957edc33497934456c/items\",\n  \"timezone\": \"Asia/Jerusalem\",\n  \"workspace\": \"${ROOT}/project\"\n}\n",
+      "stderr": ""
+    },
+    {
+      "argv": [
+        "add",
+        "--file",
+        "${ROOT}/spec.json"
+      ],
+      "code": 0,
+      "stdout": "{\n  \"attempts\": [],\n  \"baseline\": {\n    \"facts.count\": 1\n  },\n  \"baseline_events\": {\n    \"completed\": {},\n    \"external\": {}\n  },\n  \"claim\": null,\n  \"created_at\": \"2026-09-10T12:00:00Z\",\n  \"executor\": \"kpopper\",\n  \"generation\": 1,\n  \"id\": \"review\",\n  \"next_at\": null,\n  \"spec\": {\n    \"how\": \"Inspect the count and its evidence.\",\n    \"id\": \"review\",\n    \"related\": [\n      \"facts.count\"\n    ],\n    \"scope\": \"Read the count and report findings.\",\n    \"title\": \"Review the count\",\n    \"when\": {\n      \"changed\": \"facts.count\"\n    },\n    \"why\": \"Keep the decision current.\"\n  },\n  \"state\": \"waiting\",\n  \"task\": \"${ROOT}/state/kpopper/followups/c23bd2e63de950e573abefe370f6b802edc504d7cb2f51957edc33497934456c/items/kp-review.md\",\n  \"task_fingerprint\": \"6e6699b19e3e1edaf4d2c056d36e8d1e65c7ab43d69a08807b8abd49b7a15848\"\n}\n",
+      "stderr": ""
+    },
+    {
+      "argv": [
+        "status"
+      ],
+      "code": 0,
+      "stdout": "{\n  \"config\": {\n    \"record\": \"${ROOT}/project/PROVENANCE.yaml\",\n    \"store\": \"${ROOT}/state/kpopper/followups/c23bd2e63de950e573abefe370f6b802edc504d7cb2f51957edc33497934456c/items\",\n    \"timezone\": \"Asia/Jerusalem\",\n    \"workspace\": \"${ROOT}/project\"\n  },\n  \"configured\": true,\n  \"daily\": {\n    \"binding\": null,\n    \"claim\": null,\n    \"last_review\": null,\n    \"run\": \"idle\",\n    \"state\": \"proposed\",\n    \"timezone\": \"Asia/Jerusalem\"\n  },\n  \"ledger\": \"${ROOT}/state/kpopper/followups/c23bd2e63de950e573abefe370f6b802edc504d7cb2f51957edc33497934456c/followups.yaml\",\n  \"suggested_store\": null\n}\n",
+      "stderr": ""
+    },
+    {
+      "argv": [
+        "list"
+      ],
+      "code": 0,
+      "stdout": "{\n  \"items\": [\n    {\n      \"id\": \"review\",\n      \"state\": \"waiting\",\n      \"task\": \"${ROOT}/state/kpopper/followups/c23bd2e63de950e573abefe370f6b802edc504d7cb2f51957edc33497934456c/items/kp-review.md\"\n    }\n  ]\n}\n",
+      "stderr": ""
+    },
+    {
+      "argv": [
+        "show",
+        "review"
+      ],
+      "code": 0,
+      "stdout": "{\n  \"attempts\": [],\n  \"baseline\": {\n    \"facts.count\": 1\n  },\n  \"baseline_events\": {\n    \"completed\": {},\n    \"external\": {}\n  },\n  \"claim\": null,\n  \"created_at\": \"2026-09-10T12:00:00Z\",\n  \"executor\": \"kpopper\",\n  \"generation\": 1,\n  \"id\": \"review\",\n  \"next_at\": null,\n  \"spec\": {\n    \"how\": \"Inspect the count and its evidence.\",\n    \"id\": \"review\",\n    \"related\": [\n      \"facts.count\"\n    ],\n    \"scope\": \"Read the count and report findings.\",\n    \"title\": \"Review the count\",\n    \"when\": {\n      \"changed\": \"facts.count\"\n    },\n    \"why\": \"Keep the decision current.\"\n  },\n  \"state\": \"waiting\",\n  \"task\": \"${ROOT}/state/kpopper/followups/c23bd2e63de950e573abefe370f6b802edc504d7cb2f51957edc33497934456c/items/kp-review.md\",\n  \"task_fingerprint\": \"6e6699b19e3e1edaf4d2c056d36e8d1e65c7ab43d69a08807b8abd49b7a15848\"\n}\n",
+      "stderr": ""
+    },
+    {
+      "argv": [
+        "scan"
+      ],
+      "code": 0,
+      "stdout": "{\n  \"counts\": {\n    \"cancelled\": 0,\n    \"claimed\": 0,\n    \"delegated\": 0,\n    \"done\": 0,\n    \"interrupted\": 0,\n    \"needs_user\": 0,\n    \"ready\": 0,\n    \"unknown\": 0,\n    \"waiting\": 1\n  },\n  \"daily\": null,\n  \"graph_error\": null,\n  \"items\": [\n    {\n      \"executor\": \"kpopper\",\n      \"id\": \"review\",\n      \"next_at\": null,\n      \"occurrence\": \"7b87d7c940bd4079a47d6bd80a466e35e80e3f2c171e4b8da8bc200cf4d27171\",\n      \"reasons\": [\n        \"facts.count matches baseline\"\n      ],\n      \"related\": [\n        \"facts.count\"\n      ],\n      \"scope\": \"Read the count and report findings.\",\n      \"state\": \"waiting\",\n      \"task\": \"${ROOT}/state/kpopper/followups/c23bd2e63de950e573abefe370f6b802edc504d7cb2f51957edc33497934456c/items/kp-review.md\",\n      \"title\": \"Review the count\",\n      \"wake_hint\": null\n    }\n  ],\n  \"ledger\": \"${ROOT}/state/kpopper/followups/c23bd2e63de950e573abefe370f6b802edc504d7cb2f51957edc33497934456c/followups.yaml\",\n  \"maintenance\": [],\n  \"maintenance_omitted\": 0,\n  \"notification\": false,\n  \"omitted\": 0,\n  \"record\": \"${ROOT}/project/PROVENANCE.yaml\",\n  \"workspace\": \"${ROOT}/project\"\n}\n",
+      "stderr": ""
+    },
+    {
+      "argv": [
+        "scan"
+      ],
+      "code": 0,
+      "stdout": "{\n  \"counts\": {\n    \"cancelled\": 0,\n    \"claimed\": 0,\n    \"delegated\": 0,\n    \"done\": 0,\n    \"interrupted\": 0,\n    \"needs_user\": 0,\n    \"ready\": 1,\n    \"unknown\": 0,\n    \"waiting\": 0\n  },\n  \"daily\": null,\n  \"graph_error\": null,\n  \"items\": [\n    {\n      \"executor\": \"kpopper\",\n      \"id\": \"review\",\n      \"next_at\": null,\n      \"occurrence\": \"0e9d2189b52d6d09345c2a08563ed047ec543ff4974799790c7021c5fdc417da\",\n      \"reasons\": [\n        \"facts.count changed\"\n      ],\n      \"related\": [\n        \"facts.count\"\n      ],\n      \"scope\": \"Read the count and report findings.\",\n      \"state\": \"ready\",\n      \"task\": \"${ROOT}/state/kpopper/followups/c23bd2e63de950e573abefe370f6b802edc504d7cb2f51957edc33497934456c/items/kp-review.md\",\n      \"title\": \"Review the count\",\n      \"wake_hint\": null\n    }\n  ],\n  \"ledger\": \"${ROOT}/state/kpopper/followups/c23bd2e63de950e573abefe370f6b802edc504d7cb2f51957edc33497934456c/followups.yaml\",\n  \"maintenance\": [],\n  \"maintenance_omitted\": 0,\n  \"notification\": true,\n  \"omitted\": 0,\n  \"record\": \"${ROOT}/project/PROVENANCE.yaml\",\n  \"workspace\": \"${ROOT}/project\"\n}\n",
+      "stderr": ""
+    },
+    {
+      "argv": [
+        "claim",
+        "review",
+        "--occurrence",
+        "0e9d2189b52d6d09345c2a08563ed047ec543ff4974799790c7021c5fdc417da",
+        "--owner",
+        "oracle"
+      ],
+      "code": 0,
+      "stdout": "{\n  \"claim\": {\n    \"baseline\": {\n      \"facts.count\": 2\n    },\n    \"baseline_events\": {\n      \"completed\": {},\n      \"external\": {}\n    },\n    \"daily_token\": null,\n    \"expires_at\": \"2026-09-10T12:30:00Z\",\n    \"occurrence\": \"0e9d2189b52d6d09345c2a08563ed047ec543ff4974799790c7021c5fdc417da\",\n    \"owner\": \"oracle\",\n    \"started_at\": \"2026-09-10T12:00:00Z\",\n    \"token\": \"11111111111111111111111111111111\"\n  },\n  \"executor\": \"kpopper\",\n  \"id\": \"review\",\n  \"next_at\": null,\n  \"occurrence\": \"0e9d2189b52d6d09345c2a08563ed047ec543ff4974799790c7021c5fdc417da\",\n  \"reasons\": [\n    \"facts.count changed\"\n  ],\n  \"record\": \"${ROOT}/project/PROVENANCE.yaml\",\n  \"related\": [\n    \"facts.count\"\n  ],\n  \"scope\": \"Read the count and report findings.\",\n  \"spec\": {\n    \"how\": \"Inspect the count and its evidence.\",\n    \"id\": \"review\",\n    \"related\": [\n      \"facts.count\"\n    ],\n    \"scope\": \"Read the count and report findings.\",\n    \"title\": \"Review the count\",\n    \"when\": {\n      \"changed\": \"facts.count\"\n    },\n    \"why\": \"Keep the decision current.\"\n  },\n  \"state\": \"ready\",\n  \"task\": \"${ROOT}/state/kpopper/followups/c23bd2e63de950e573abefe370f6b802edc504d7cb2f51957edc33497934456c/items/kp-review.md\",\n  \"title\": \"Review the count\",\n  \"wake_hint\": null\n}\n",
+      "stderr": ""
+    },
+    {
+      "argv": [
+        "renew",
+        "review",
+        "--token",
+        "11111111111111111111111111111111"
+      ],
+      "code": 0,
+      "stdout": "{\n  \"baseline\": {\n    \"facts.count\": 2\n  },\n  \"baseline_events\": {\n    \"completed\": {},\n    \"external\": {}\n  },\n  \"daily_token\": null,\n  \"expires_at\": \"2026-09-10T12:50:00Z\",\n  \"occurrence\": \"0e9d2189b52d6d09345c2a08563ed047ec543ff4974799790c7021c5fdc417da\",\n  \"owner\": \"oracle\",\n  \"started_at\": \"2026-09-10T12:00:00Z\",\n  \"token\": \"11111111111111111111111111111111\"\n}\n",
+      "stderr": ""
+    },
+    {
+      "argv": [
+        "release",
+        "review",
+        "--token",
+        "11111111111111111111111111111111",
+        "--evidence",
+        "No work started."
+      ],
+      "code": 0,
+      "stdout": "{\n  \"id\": \"review\",\n  \"inputs_changed\": false,\n  \"outcome\": \"released\",\n  \"state\": \"waiting\"\n}\n",
+      "stderr": ""
+    },
+    {
+      "argv": [
+        "scan"
+      ],
+      "code": 0,
+      "stdout": "{\n  \"counts\": {\n    \"cancelled\": 0,\n    \"claimed\": 0,\n    \"delegated\": 0,\n    \"done\": 0,\n    \"interrupted\": 0,\n    \"needs_user\": 0,\n    \"ready\": 1,\n    \"unknown\": 0,\n    \"waiting\": 0\n  },\n  \"daily\": null,\n  \"graph_error\": null,\n  \"items\": [\n    {\n      \"executor\": \"kpopper\",\n      \"id\": \"review\",\n      \"next_at\": null,\n      \"occurrence\": \"0e9d2189b52d6d09345c2a08563ed047ec543ff4974799790c7021c5fdc417da\",\n      \"reasons\": [\n        \"facts.count changed\"\n      ],\n      \"related\": [\n        \"facts.count\"\n      ],\n      \"scope\": \"Read the count and report findings.\",\n      \"state\": \"ready\",\n      \"task\": \"${ROOT}/state/kpopper/followups/c23bd2e63de950e573abefe370f6b802edc504d7cb2f51957edc33497934456c/items/kp-review.md\",\n      \"title\": \"Review the count\",\n      \"wake_hint\": null\n    }\n  ],\n  \"ledger\": \"${ROOT}/state/kpopper/followups/c23bd2e63de950e573abefe370f6b802edc504d7cb2f51957edc33497934456c/followups.yaml\",\n  \"maintenance\": [],\n  \"maintenance_omitted\": 0,\n  \"notification\": true,\n  \"omitted\": 0,\n  \"record\": \"${ROOT}/project/PROVENANCE.yaml\",\n  \"workspace\": \"${ROOT}/project\"\n}\n",
+      "stderr": ""
+    },
+    {
+      "argv": [
+        "claim",
+        "review",
+        "--occurrence",
+        "0e9d2189b52d6d09345c2a08563ed047ec543ff4974799790c7021c5fdc417da",
+        "--owner",
+        "oracle"
+      ],
+      "code": 0,
+      "stdout": "{\n  \"claim\": {\n    \"baseline\": {\n      \"facts.count\": 2\n    },\n    \"baseline_events\": {\n      \"completed\": {},\n      \"external\": {}\n    },\n    \"daily_token\": null,\n    \"expires_at\": \"2026-09-10T12:50:00Z\",\n    \"occurrence\": \"0e9d2189b52d6d09345c2a08563ed047ec543ff4974799790c7021c5fdc417da\",\n    \"owner\": \"oracle\",\n    \"started_at\": \"2026-09-10T12:20:00Z\",\n    \"token\": \"22222222222222222222222222222222\"\n  },\n  \"executor\": \"kpopper\",\n  \"id\": \"review\",\n  \"next_at\": null,\n  \"occurrence\": \"0e9d2189b52d6d09345c2a08563ed047ec543ff4974799790c7021c5fdc417da\",\n  \"reasons\": [\n    \"facts.count changed\"\n  ],\n  \"record\": \"${ROOT}/project/PROVENANCE.yaml\",\n  \"related\": [\n    \"facts.count\"\n  ],\n  \"scope\": \"Read the count and report findings.\",\n  \"spec\": {\n    \"how\": \"Inspect the count and its evidence.\",\n    \"id\": \"review\",\n    \"related\": [\n      \"facts.count\"\n    ],\n    \"scope\": \"Read the count and report findings.\",\n    \"title\": \"Review the count\",\n    \"when\": {\n      \"changed\": \"facts.count\"\n    },\n    \"why\": \"Keep the decision current.\"\n  },\n  \"state\": \"ready\",\n  \"task\": \"${ROOT}/state/kpopper/followups/c23bd2e63de950e573abefe370f6b802edc504d7cb2f51957edc33497934456c/items/kp-review.md\",\n  \"title\": \"Review the count\",\n  \"wake_hint\": null\n}\n",
+      "stderr": ""
+    },
+    {
+      "argv": [
+        "recover",
+        "review",
+        "--evidence",
+        "Verified no external effect."
+      ],
+      "code": 0,
+      "stdout": "{\n  \"id\": \"review\",\n  \"state\": \"waiting\"\n}\n",
+      "stderr": ""
+    },
+    {
+      "argv": [
+        "resolve",
+        "review",
+        "--outcome",
+        "done",
+        "--evidence",
+        "Owner completed it."
+      ],
+      "code": 0,
+      "stdout": "{\n  \"id\": \"review\",\n  \"state\": \"done\"\n}\n",
+      "stderr": ""
+    },
+    {
+      "argv": [
+        "resolve",
+        "review",
+        "--outcome",
+        "done",
+        "--evidence",
+        "Owner completed it."
+      ],
+      "code": 0,
+      "stdout": "{\n  \"already_recorded\": true,\n  \"id\": \"review\",\n  \"state\": \"done\"\n}\n",
+      "stderr": ""
+    }
+  ],
+  "ledger": {
+    "config": {
+      "record": "${ROOT}/project/PROVENANCE.yaml",
+      "store": "${ROOT}/state/kpopper/followups/c23bd2e63de950e573abefe370f6b802edc504d7cb2f51957edc33497934456c/items",
+      "timezone": "Asia/Jerusalem",
+      "workspace": "${ROOT}/project"
+    },
+    "daily": {
+      "binding": null,
+      "claim": null,
+      "receipts": []
+    },
+    "items": {
+      "review": {
+        "attempts": [
+          {
+            "evidence": "No work started.",
+            "finished_at": "2026-09-10T12:20:00Z",
+            "inputs_changed": false,
+            "outcome": "released",
+            "request": {
+              "evidence": "No work started.",
+              "next_at": null,
+              "outcome": "released",
+              "token": "11111111111111111111111111111111"
+            },
+            "run": {
+              "baseline": {
+                "facts.count": 2
+              },
+              "baseline_events": {
+                "completed": {},
+                "external": {}
+              },
+              "daily_token": null,
+              "expires_at": "2026-09-10T12:50:00Z",
+              "occurrence": "0e9d2189b52d6d09345c2a08563ed047ec543ff4974799790c7021c5fdc417da",
+              "owner": "oracle",
+              "started_at": "2026-09-10T12:00:00Z",
+              "token": "11111111111111111111111111111111"
+            }
+          },
+          {
+            "evidence": "Verified no external effect.",
+            "finished_at": "2026-09-10T12:50:00Z",
+            "outcome": "recovered",
+            "run": {
+              "baseline": {
+                "facts.count": 2
+              },
+              "baseline_events": {
+                "completed": {},
+                "external": {}
+              },
+              "daily_token": null,
+              "expires_at": "2026-09-10T12:50:00Z",
+              "occurrence": "0e9d2189b52d6d09345c2a08563ed047ec543ff4974799790c7021c5fdc417da",
+              "owner": "oracle",
+              "started_at": "2026-09-10T12:20:00Z",
+              "token": "22222222222222222222222222222222"
+            }
+          },
+          {
+            "evidence": "Owner completed it.",
+            "finished_at": "2026-09-10T12:50:00Z",
+            "outcome": "done",
+            "reconciled_external": true
+          }
+        ],
+        "baseline": {
+          "facts.count": 1
+        },
+        "baseline_events": {
+          "completed": {},
+          "external": {}
+        },
+        "claim": null,
+        "created_at": "2026-09-10T12:00:00Z",
+        "executor": "kpopper",
+        "generation": 1,
+        "id": "review",
+        "next_at": null,
+        "spec": {
+          "how": "Inspect the count and its evidence.",
+          "id": "review",
+          "related": [
+            "facts.count"
+          ],
+          "scope": "Read the count and report findings.",
+          "title": "Review the count",
+          "when": {
+            "changed": "facts.count"
+          },
+          "why": "Keep the decision current."
+        },
+        "state": "done",
+        "task": "${ROOT}/state/kpopper/followups/c23bd2e63de950e573abefe370f6b802edc504d7cb2f51957edc33497934456c/items/kp-review.md",
+        "task_fingerprint": "6e6699b19e3e1edaf4d2c056d36e8d1e65c7ab43d69a08807b8abd49b7a15848"
+      }
+    },
+    "observations": {},
+    "version": 1,
+    "workspace_key": "c23bd2e63de950e573abefe370f6b802edc504d7cb2f51957edc33497934456c"
+  }
+}
