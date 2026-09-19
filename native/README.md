@@ -91,6 +91,18 @@ older private opener. It ignores subagent payloads, and reports failed opening v
 without blocking the host. This command does not install hooks, write the stop-gate
 baseline, or establish host trust.
 
+For a record whose native history authority is already active, `history status`
+captures and revalidates the authority, committed objects and reduced subject heads
+without writing:
+
+```sh
+kpop-native --workspace /absolute/workspace history status
+```
+
+Other public history operations remain unconnected; the old subject-oriented
+`history <subject>` command is available only inside an explicitly marked feasibility
+store.
+
 ## Supported history boundary
 
 `ordinary_reader` preserves ordinary-reader/v1 value selection, legacy comparison

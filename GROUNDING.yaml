@@ -2338,6 +2338,11 @@ known:
     v: 1235
     from: s.native_public_readers
     at: "Conformance: 1144 complete envelopes and 91 expected refusals"
+  m.native_history_status_tests:
+    name: "Native public history status integration cases"
+    v: 1
+    from: s.native_session_read
+    at: "de0154e native/tests/cli.rs"
   m.native_import_runtime_tests:
     name: "Full native regression gate after record import and launcher probes"
     v: 201
