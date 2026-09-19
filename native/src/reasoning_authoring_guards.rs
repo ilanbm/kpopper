@@ -458,7 +458,7 @@ fn disagreement(world: &mut World<'_>, a: &Map) -> Result<Option<Disagreement>> 
         let pred = map(&body)?
             .get(text(&world.fields["predicate"])?)
             .unwrap_or(&V::Null);
-        let may = world.predicate(pred, None)? == Some(true);
+        let may = world.standing_predicate(id, pred)? == Some(true);
         let why = if may {
             format!("its wrong_if holds ({})", short(pred, 60))
         } else {

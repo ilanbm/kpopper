@@ -251,8 +251,45 @@ pub struct World<'a> {
     pub(crate) bounds: OperationalBounds,
     readings: BTreeMap<String, J>,
     assessment: Option<V>,
+    operation_assessment: bool,
 }
 impl<'a> World<'a> {
+    pub(crate) fn snapshot_id(&self) -> &str {
+        self.snapshot.snapshot_id()
+    }
+    pub(crate) fn seed_assessment(&mut self, report: &V) -> Result<()> {
+        let report = crate::reasoning_history_assessment::validate_v2(&self.snapshot, report)?;
+        for (id, node) in map(&map(&report)?["nodes"])? {
+            let c = &map(node)?["computation"];
+            if *c != V::Null {
+                self.readings.insert(id.clone(), c.to_json()?);
+            }
+        }
+        self.assessment = Some(report);
+        self.operation_assessment = true;
+        Ok(())
+    }
+
+    pub(crate) fn standing_predicate(&self, id: &str, expression: &V) -> Result<Option<bool>> {
+        if self.operation_assessment {
+            let report = self
+                .assessment
+                .as_ref()
+                .ok_or_else(|| Error("operation assessment missing".into()))?;
+            let node = map(&map(report)?["nodes"])?.get(id);
+            return Ok(node
+                .and_then(|v| map(v).ok())
+                .and_then(|m| map(&m["state"]).ok())
+                .and_then(|m| map(&m["falsifier"]).ok())
+                .and_then(|m| text(&m["status"]).ok())
+                .and_then(|s| match s {
+                    "holds" => Some(true),
+                    "does_not_hold" => Some(false),
+                    _ => None,
+                }));
+        }
+        self.predicate(expression, None)
+    }
     pub fn snapshot(&self) -> &Snapshot {
         &self.snapshot
     }
@@ -330,6 +367,7 @@ impl<'a> World<'a> {
             bounds,
             readings: BTreeMap::new(),
             assessment: None,
+            operation_assessment: false,
         })
     }
     pub(crate) fn check_builtin(names: &[String]) -> Result<()> {
