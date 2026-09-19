@@ -304,8 +304,24 @@ fold/refute, same/distinct and expression migration. Hypothesis additions and
 deletions bind exact membership and protect separately opened files. Shared
 watch reports retain exact prepared generations and durable event completion
 receipts; interrupted storage remains retryable in their owning processor. Public
-combined assessment, default consumer binding and temporal applicability policy
-remain incomplete. Authority transitions use the separate guarded interface below.
+combined assessment and default consumer binding remain separate from storage.
+Typed judgments may opt into `temporal-applicability/v1` with
+`temporal: {version: 1, applicability: current|anchored|general}`. Their authoring
+receipts retain the exact bounded Snapshot and claim-version map for every observed
+committed before/after world. Fresh assessment replays those snapshots through the
+canonical evaluator once; serialized assessment replay is source-free. A current
+claim recovers when its present falsifier clears while retaining the earlier fired
+episode. Anchored and general claims retain a verified firing as a counterexample
+until an explicit new claim or correction version replaces them. Missing, malformed,
+over-limit or non-reproducible evidence remains unknown. No source clock is inferred:
+object `on`, optional `at`/`applies`, and Snapshot `as_of` remain separate and may be
+unknown. Claims without the explicit metadata retain their existing semantics.
+Applicability selects only how a verified counterexample persists for that exact
+claim version. It does not infer a date window, reinterpret a current reference as
+a past value, change acceptance, or synthesize support. Anchored predicate and
+evidence subjects must therefore be authored explicitly; `on`, `at`, `applies`,
+and `as_of` remain independent provenance fields rather than selectors.
+Authority transitions use the separate guarded interface below.
 
 
 ## History commands and portable contributions

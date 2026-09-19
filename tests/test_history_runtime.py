@@ -26,7 +26,8 @@ class Runtime(unittest.TestCase):
                 target = self.package / path.relative_to(source)
                 target.parent.mkdir(parents=True, exist_ok=True)
                 shutil.copyfile(path, target)
-        for name in ('assessment.schema.json', 'reasoning/assessment.schema.json'):
+        for name in ('assessment.schema.json', 'reasoning/assessment.schema.json',
+                     'reasoning/history_assessment.schema.json'):
             shutil.copyfile(source / name, self.package / name)
         shutil.copytree(source / 'reasoning/lean', self.package / 'reasoning/lean')
         native = self.package / 'reasoning/native'

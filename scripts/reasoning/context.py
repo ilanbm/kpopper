@@ -71,9 +71,21 @@ class CapturedAssessment:
                 for identifier, node in report['nodes'].items()},
             'operational_limits': copy.deepcopy(report['operational_limits']),
         }
+        # Temporal review requests are v3 policy, not part of the retained v2
+        # assessment revision. Remove only the separately appended action.
+        for node in base['nodes'].values():
+            node['attention'] = [action for action in node['attention'] if not (
+                action.get('action') == 'review' and action.get('reasons') and
+                all(reason.get('code') in ('historical_counterexample',
+                                           'historical_evidence_unknown')
+                    for reason in action['reasons']))]
         base = validate_v2(snapshot, base)
+        temporal_evidence = {identifier: copy.deepcopy(subject['temporal']['episodes'])
+                             for identifier, subject in report['history_subjects'].items()
+                             if 'temporal' in subject}
         rebuilt = history_from_v2(snapshot, base,
-                                  display_selection=report['display_selection'])
+                                  display_selection=report['display_selection'],
+                                  temporal_evidence=temporal_evidence)
         if rebuilt != report:
             raise ValueError('assessment does not match its retained snapshot')
         view = project_findings(report)

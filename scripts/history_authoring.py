@@ -180,11 +180,38 @@ def _retain_adapter_audit(report):
     return report
 
 
-def _evidence(document, world):
+def _temporal_bodies(document):
+    return {subject: body['temporal'] for subject, (_, body) in entries(document).items()
+            if isinstance(body, dict) and isinstance(body.get('temporal'), dict)}
+
+
+def _accepted_versions(captured):
+    return {subject: state['head'] for subject, state in captured.state['subjects'].items()
+            if state.get('acceptance') == 'accepted' and 'head' in state}
+
+
+def _temporal_requires(document, base):
+    required = list(base or [])
+    if _temporal_bodies(document):
+        required.append(C.TEMPORAL_APPLICABILITY)
+    return HP.commit_requires(sorted(set(required)))
+
+
+def _evidence(document, world, *, versions=None):
     evidence = {'kind': 'authored-computational-projection/v1', 'document': dict(document)}
     if world is not None:
         evidence['assessment'] = _retain_adapter_audit(world.assessment())
+        _attach_temporal_replay(evidence, document, world, versions or {})
     return evidence
+
+
+def _attach_temporal_replay(evidence, document, world, versions):
+    temporal = {subject: metadata for subject, metadata in _temporal_bodies(document).items()
+                if subject in versions}
+    if temporal:
+        evidence['temporal_replay'] = {
+            'version': 1, 'snapshot': world.snapshot.to_json(),
+            'claims': {subject: versions[subject] for subject in sorted(temporal)}}
 
 
 def _head(captured, subject):
@@ -300,17 +327,21 @@ def prepare(entry, action, *, by=None, operation=None, recorded_at=None, capture
         template['meta']['updated'] = document['meta']['updated']
     _declare_template(template, document)
     after_world = _world(document)
-    before = _evidence(before_document, before_world)
+    before_versions = _accepted_versions(captured)
+    after_versions = dict(before_versions)
+    if kind != 'review':
+        after_versions[subject] = claim['id']
+    before = _evidence(before_document, before_world, versions=before_versions)
     before['authoring'] = {'version': 1, 'action': intent, 'by': by, 'recorded_at': recorded_at,
                            'archive': frozen_archive, 'baseline': captured.baseline}
-    after = _evidence(document, after_world)
+    after = _evidence(document, after_world, versions=after_versions)
     after['authoring'] = {'objects': sorted(obj['id'] for obj in new), 'notes': notes}
     receipt = T.semantic_receipt(profile=cap['profile'], capabilities=cap, before=before, after=after)
     pairs = [(obj, C.encode_document(obj)) for obj in new]
     parents = C.commit_frontier(captured.commits)
     draft = C.make_commit(marker=captured.marker, operation=operation, parents=parents,
         baseline=captured.baseline, objects=pairs, receipt=receipt, view=b'', view_template=template,
-        requires=HP.commit_requires([C.EXPLICIT_ROOT_DISPOSITION] if _strict else None))
+        requires=_temporal_requires(document, [C.EXPLICIT_ROOT_DISPOSITION] if _strict else None))
     combined = {**captured.commits, operation: C.encode_document(draft)}
     rendered = store.render(captured, objects={**captured.objects, **{o['id']: o for o in new}}, commits=combined)
     candidate_objects = {**captured.objects, **{o['id']: o for o in new}}
@@ -321,7 +352,7 @@ def prepare(entry, action, *, by=None, operation=None, recorded_at=None, capture
     history_adapter.from_store_capture(candidate)
     manifest = C.make_commit(marker=captured.marker, operation=operation, parents=parents,
         baseline=captured.baseline, objects=pairs, receipt=receipt, view=rendered, view_template=template,
-        requires=HP.commit_requires([C.EXPLICIT_ROOT_DISPOSITION] if _strict else None))
+        requires=_temporal_requires(document, [C.EXPLICIT_ROOT_DISPOSITION] if _strict else None))
     files = [{'path': store.entry.name, 'role': 'record', 'before': captured.entry_bytes, 'after': rendered}]
     for obj, raw in pairs:
         path = Path(store.layout['history']) / HP.path_for_object(obj, captured)
@@ -394,7 +425,8 @@ def prepare_act(entry, action, *, by=None, operation=None, recorded_at=None, cap
     placeholder = T.semantic_receipt(profile=cap['profile'], capabilities=cap, before={}, after={})
     draft = C.make_commit(marker=captured.marker, operation=operation, parents=parents,
         baseline=captured.baseline, objects=pairs, receipt=placeholder, view=b'', view_template=template,
-        requires=HP.commit_requires([C.EXPLICIT_ROOT_DISPOSITION] if _strict else None))
+        requires=_temporal_requires(before_document,
+                                    [C.EXPLICIT_ROOT_DISPOSITION] if _strict else None))
     combined = {**captured.commits, operation: C.encode_document(draft)}
     selected = {**captured.objects, obj['id']: obj}
     state = H.reduce(selected, captured.state['rules'])
@@ -405,7 +437,8 @@ def prepare_act(entry, action, *, by=None, operation=None, recorded_at=None, cap
     _declare_template(template, projected)
     draft = C.make_commit(marker=captured.marker, operation=operation, parents=parents,
         baseline=captured.baseline, objects=pairs, receipt=placeholder, view=b'', view_template=template,
-        requires=HP.commit_requires([C.EXPLICIT_ROOT_DISPOSITION] if _strict else None))
+        requires=_temporal_requires(projected,
+                                    [C.EXPLICIT_ROOT_DISPOSITION] if _strict else None))
     combined = {**captured.commits, operation: C.encode_document(draft)}
     rendered = store.render(captured, objects=selected, commits=combined)
     candidate = replace(captured, entry_bytes=rendered, document=C.decode_document(rendered),
@@ -414,16 +447,19 @@ def prepare_act(entry, action, *, by=None, operation=None, recorded_at=None, cap
         baseline=H.baseline(captured.marker, combined, state))
     after_document = _document(history_adapter.from_store_capture(candidate).document)
     cap = capabilities(after_document, profile=target['authored']['profile'])
-    before = _evidence(before_document, _world(before_document))
+    before = _evidence(before_document, _world(before_document),
+                       versions=_accepted_versions(captured))
     before['authoring'] = {'version': 4, 'kind': 'act', 'action': action, 'by': by,
         'recorded_at': recorded_at, 'archive': frozen_archive, 'baseline': captured.baseline}
-    after = _evidence(after_document, _world(after_document))
+    after = _evidence(after_document, _world(after_document),
+                      versions=_accepted_versions(candidate))
     after['authoring'] = {'objects': [obj['id']], 'subject': action['id'],
                          'acceptance': state['subjects'][action['id']]['acceptance']}
     receipt = T.semantic_receipt(profile=cap['profile'], capabilities=cap, before=before, after=after)
     manifest = C.make_commit(marker=captured.marker, operation=operation, parents=parents,
         baseline=captured.baseline, objects=pairs, receipt=receipt, view=rendered, view_template=template,
-        requires=HP.commit_requires([C.EXPLICIT_ROOT_DISPOSITION] if _strict else None))
+        requires=_temporal_requires(after_document,
+                                    [C.EXPLICIT_ROOT_DISPOSITION] if _strict else None))
     C._require(store.render(captured, objects=selected,
         commits={**captured.commits, operation: C.encode_document(manifest)}) == rendered,
         'view_projection_mismatch')
@@ -492,7 +528,8 @@ def prepare_proposal(entry, subject, body=None, collection=None, *, because=None
             hypothetical[name].pop(subject, None)
     hypothetical.setdefault(collection, {})[subject] = body
     hypothetical = _destination(hypothetical)
-    before = _evidence(document, _world(document))
+    current_versions = _accepted_versions(captured)
+    before = _evidence(document, _world(document), versions=current_versions)
     before['authoring'] = {'version': 5, 'kind': 'proposal', 'subject': subject,
         'body': body, 'collection': collection, 'because': because, 'hypothesis': hypothesis,
         'by': by, 'recorded_at': recorded_at, 'archive': frozen_archive, 'baseline': captured.baseline}
@@ -500,8 +537,8 @@ def prepare_proposal(entry, subject, body=None, collection=None, *, because=None
     # labelled separately and is never used as a reducer acceptance decision.
     accepted_document = copy.deepcopy(document)
     cap = capabilities(accepted_document, profile=cap['profile'])
-    after = _evidence(accepted_document, _world(accepted_document))
-    after['proposal'] = _evidence(hypothetical, _world(hypothetical))
+    after = _evidence(accepted_document, _world(accepted_document), versions=current_versions)
+    after['proposal'] = _evidence(hypothetical, _world(hypothetical), versions=current_versions)
     after['authoring'] = {'objects': sorted([claim['id'], propose['id']]), 'subject': subject,
                           'proposal': claim['id']}
     receipt = T.semantic_receipt(profile=cap['profile'], capabilities=cap, before=before, after=after)
@@ -512,7 +549,7 @@ def prepare_proposal(entry, subject, body=None, collection=None, *, because=None
     parents = C.commit_frontier(captured.commits)
     draft = C.make_commit(marker=captured.marker, operation=operation, parents=parents,
         baseline=captured.baseline, objects=pairs, receipt=receipt, view=b'', view_template=template,
-        requires=HP.commit_requires([C.EXPLICIT_ROOT_DISPOSITION]))
+        requires=_temporal_requires(hypothetical, [C.EXPLICIT_ROOT_DISPOSITION]))
     commits = {**captured.commits, operation: C.encode_document(draft)}
     rendered = store.render(captured, objects=objects, commits=commits)
     state = H.reduce(objects, captured.state['rules'])
@@ -522,7 +559,7 @@ def prepare_proposal(entry, subject, body=None, collection=None, *, because=None
     history_adapter.from_store_capture(candidate)
     manifest = C.make_commit(marker=captured.marker, operation=operation, parents=parents,
         baseline=captured.baseline, objects=pairs, receipt=receipt, view=rendered, view_template=template,
-        requires=HP.commit_requires([C.EXPLICIT_ROOT_DISPOSITION]))
+        requires=_temporal_requires(hypothetical, [C.EXPLICIT_ROOT_DISPOSITION]))
     files = [{'path': store.entry.name, 'role': 'record', 'before': captured.entry_bytes, 'after': rendered},
         {'path': (Path(store.layout['history_commits']) / (operation + '.yaml')).relative_to(store.root).as_posix(),
          'role': 'history_commit', 'before': None, 'after': C.encode_document(manifest)}]
@@ -739,7 +776,8 @@ def _prepare_final_batch(entry, actions, *, by=None, operation=None, recorded_at
                         'collection': step['collection'], 'fields': fields, 'profile': cap['profile']}
                     claim = C.make_object(subject=subject,
                         kind='judgment' if isinstance(body, dict) and fields['deps'] in body else 'reading',
-                        by=by, on=recorded_at, operation=op, body=body, saw=saw, pins=pins, authored=authored)
+                        by=by, on=recorded_at, operation=op, body=body, saw=saw, pins=pins,
+                        authored=authored)
                     generated += [claim, C.make_object(subject=subject, kind='act', by=by, on=recorded_at,
                         operation=op, saw=sorted([*saw, claim['id']]), body={'act': 'accept', 'of': claim['id'],
                             'over': sorted(heads), 'because': str(action.get('why') or 'explicit ' + action['kind'])})]
@@ -759,7 +797,9 @@ def _prepare_final_batch(entry, actions, *, by=None, operation=None, recorded_at
     for path, raw in evidence.items():
         C.relative_path(path)
         C._require(type(raw) is bytes, 'invalid_bytes')
-    before = _evidence(before_document, _world(before_document))
+    _attach_temporal_replay(after_evidence, final_document, final_world, final_versions)
+    before = _evidence(before_document, _world(before_document),
+                       versions=_accepted_versions(original))
     before['authoring'] = {'version': 6, 'kind': 'batch', 'actions': intent_actions, 'by': by,
         'recorded_at': recorded_at, 'archive': frozen_archive, 'baseline': original.baseline,
         'context': C.detached(context or {}), 'evidence': {path: C.sha256(raw) for path, raw in sorted(evidence.items())}}
@@ -777,7 +817,7 @@ def _prepare_final_batch(entry, actions, *, by=None, operation=None, recorded_at
     _declare_template(template, final_document)
     args = dict(marker=original.marker, operation=operation, parents=C.commit_frontier(original.commits),
         baseline=original.baseline, objects=pairs, receipt=receipt, view_template=template,
-        requires=HP.commit_requires([C.EXPLICIT_ROOT_DISPOSITION]))
+        requires=_temporal_requires(final_document, [C.EXPLICIT_ROOT_DISPOSITION]))
     draft = C.make_commit(**args, view=b'')
     selected = {**original.objects, **objects}
     commits = {**original.commits, operation: C.encode_document(draft)}
@@ -872,12 +912,14 @@ def prepare_batch(entry, actions, *, by=None, operation=None, recorded_at=None, 
     template = store._template(virtual.commits)
     draft = C.make_commit(marker=original.marker, operation=operation, parents=parents,
         baseline=original.baseline, objects=pairs, receipt=receipt, view=b'', view_template=template,
-        requires=HP.commit_requires([C.EXPLICIT_ROOT_DISPOSITION] if _strict else None))
+        requires=_temporal_requires(last_receipt['after']['document'],
+                                    [C.EXPLICIT_ROOT_DISPOSITION] if _strict else None))
     combined = {**original.commits, operation: C.encode_document(draft)}
     rendered = store.render(original, objects=virtual.objects, commits=combined)
     manifest = C.make_commit(marker=original.marker, operation=operation, parents=parents,
         baseline=original.baseline, objects=pairs, receipt=receipt, view=rendered, view_template=template,
-        requires=HP.commit_requires([C.EXPLICIT_ROOT_DISPOSITION] if _strict else None))
+        requires=_temporal_requires(last_receipt['after']['document'],
+                                    [C.EXPLICIT_ROOT_DISPOSITION] if _strict else None))
     files += [{'path': store.entry.name, 'role': 'record', 'before': original.entry_bytes, 'after': rendered},
               {'path': (Path(store.layout['history_commits']) / (operation + '.yaml')).relative_to(store.root).as_posix(),
                'role': 'history_commit', 'before': None, 'after': C.encode_document(manifest)}]

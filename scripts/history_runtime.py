@@ -151,14 +151,16 @@ def _history_schemas():
             'group_transition': [1], 'named_hypotheses': [1], 'physical_hypothesis_import': [1],
             'branch_capture': [1, 2], 'branch_adoption': [1, 2],
             'bundle': [1, 2, 3], 'contribution': [1, 2, 3], 'retained_generations': [1], 'cancellation': [1],
-            'commit_capabilities': ['explicit-root-disposition/v1', 'subject-paths/v2'],
+            'commit_capabilities': ['explicit-root-disposition/v1', 'subject-paths/v2',
+                                    'temporal-applicability/v1'],
             'bundle_capabilities': ['generation-cancellation/v1', 'history-closure/v1', 'history-generations/v1', 'history-subset/v1', 'subject-paths/v2'],
             'act_kinds': ['accept', 'correct', 'propose', 'refute', 'retire', 'review']}
 
 
 def _schemas(root):
     resources = []
-    for name in ('assessment.schema.json', 'reasoning/assessment.schema.json'):
+    for name in ('assessment.schema.json', 'reasoning/assessment.schema.json',
+                 'reasoning/history_assessment.schema.json'):
         raw = _read(root, name)
         _strict_json(raw)
         resources.append({'path': name, 'sha256': hashlib.sha256(raw).hexdigest()})
@@ -275,8 +277,10 @@ def _validate_declaration(value, nonce):
              and schemas['identity_schemes'] == ['prototype/v1', 'typed-history/v2']
              and isinstance(schemas['resources'], list), 'unsupported_runtime_schema')
     resources = schemas['resources']
-    _require(len(resources) == 2, 'unsupported_runtime_schema')
-    for item, path in zip(resources, ('assessment.schema.json', 'reasoning/assessment.schema.json')):
+    schema_paths = ('assessment.schema.json', 'reasoning/assessment.schema.json',
+                    'reasoning/history_assessment.schema.json')
+    _require(len(resources) == len(schema_paths), 'unsupported_runtime_schema')
+    for item, path in zip(resources, schema_paths):
         _require(isinstance(item, dict) and set(item) == {'path', 'sha256'} and item['path'] == path
                  and isinstance(item['sha256'], str) and HEX.fullmatch(item['sha256']),
                  'unsupported_runtime_schema')

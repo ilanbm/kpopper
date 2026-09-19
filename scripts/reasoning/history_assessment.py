@@ -19,6 +19,7 @@ SCHEMA_VERSION = 3
 SUPPORT_REDUCER = 'necessary-support/v1'
 MAX_SUPPORT_VISITS = 100_000
 MAX_SUPPORT_PATH_ITEMS = 200_000
+MAX_TEMPORAL_REPLAYS = 64
 ACCEPTANCE = frozenset(('accepted', 'proposed', 'contested', 'refuted', 'corrected',
                         'retired', 'unreviewed', 'unavailable'))
 SUPPORT_STATES = ACCEPTANCE | frozenset(('moved', 'fired', 'unknown'))
@@ -568,6 +569,212 @@ def _outcomes(nodes):
     return {subject: sorted(states) for subject, states in result.items()}
 
 
+def _semantic_node(node):
+    """Comparison preimage for replayed truth, excluding adapter build identity."""
+    node = copy.deepcopy(node)
+    computations = [node.get('computation'), node.get('state', {}).get('falsifier', {}).get('computation')]
+    computations.extend(item.get('computation') for item in
+                        node.get('state', {}).get('basis', {}).get('dependencies', {}).values())
+    for computation in computations:
+        if not isinstance(computation, dict):
+            continue
+        computation.pop('implementation', None)
+        if isinstance(computation.get('assurance'), dict):
+            computation['assurance'].pop('implementation', None)
+    return node
+
+
+def _semantic_falsifier(value):
+    holder = {'computation': copy.deepcopy(value.get('computation')),
+              'state': {'falsifier': copy.deepcopy(value), 'basis': {'dependencies': {}}}}
+    return _semantic_node(holder)['state']['falsifier']
+
+
+def _temporal_replays(projection):
+    """Replay each retained observation through the canonical v2 evaluator."""
+    temporal = projection.get('temporal')
+    if temporal is None:
+        return {}
+    results = {}
+    count = 0
+    for observation in temporal['observations']:
+        for claim in observation['claims']:
+            subject, version = claim['subject'], claim['claim_id']
+            episode = {
+                'evidence_version': 1, 'operation': observation['operation'],
+                'phase': observation['phase'], 'subject': subject, 'claim_id': version,
+                'evidence_kind': observation['evidence_kind'],
+                'applicability': claim['applicability'],
+                'predicate_digest': claim['predicate_digest'],
+                'anchors': copy.deepcopy(claim['anchors']), 'snapshot_id': None,
+                'as_of': None, 'verification': 'unknown', 'outcome': 'unknown',
+                'finding': None, 'result': None,
+            }
+            try:
+                count += 1
+                if count > MAX_TEMPORAL_REPLAYS:
+                    raise OperationalLimit('temporal_replay_limit')
+                historical = Snapshot.from_json(observation['snapshot'])
+                episode['snapshot_id'] = historical.snapshot_id
+                episode['as_of'] = historical.to_data()['as_of']
+                retained = (validate_v2(historical, observation['assessment'])
+                            if observation['assessment'] is not None else None)
+                _require(retained is None or subject in retained['nodes'],
+                         'temporal subject absent from retained assessment')
+                replayed = (base_assessment.assess(
+                    historical, [subject], policy=retained['attention_policy'],
+                    operational_limits=retained['operational_limits']) if retained is not None
+                    else base_assessment.assess(historical, [subject]))
+                if retained is not None:
+                    _require(_same(_semantic_node(replayed['nodes'][subject]),
+                                   _semantic_node(retained['nodes'][subject])),
+                             'temporal replay result mismatch')
+                node = replayed['nodes'][subject]
+                episode['verification'] = 'verified'
+                status = node['state']['falsifier']['status']
+                episode['result'] = copy.deepcopy(node['state']['falsifier'])
+                episode['outcome'] = ('counterexample' if status == 'holds' else
+                                      'not_counterexample' if status in ('does_not_hold', 'not_declared')
+                                      else 'unknown')
+                if episode['outcome'] == 'unknown':
+                    episode['finding'] = 'temporal_falsifier_' + status
+            except Exception as error:
+                episode['finding'] = getattr(error, 'code', None) or \
+                    str(error).split(':', 1)[0] or 'temporal_replay_failed'
+            results.setdefault(subject, []).append(episode)
+    for subject in results:
+        results[subject].sort(key=lambda item: (
+            item['claim_id'], item['snapshot_id'] or '', item['operation'], item['phase']))
+    return results
+
+
+def _unknown_temporal_replays(projection):
+    results = {}
+    for observation in projection.get('temporal', {}).get('observations', []):
+        try:
+            historical = Snapshot.from_json(observation['snapshot'])
+            snapshot_id, as_of = historical.snapshot_id, historical.to_data()['as_of']
+        except (ValueError, TypeError, KeyError):
+            snapshot_id, as_of = None, None
+        for claim in observation['claims']:
+            results.setdefault(claim['subject'], []).append({
+                'evidence_version': 1, 'operation': observation['operation'],
+                'phase': observation['phase'], 'subject': claim['subject'],
+                'claim_id': claim['claim_id'], 'applicability': claim['applicability'],
+                'evidence_kind': observation['evidence_kind'],
+                'predicate_digest': claim['predicate_digest'],
+                'anchors': copy.deepcopy(claim['anchors']), 'snapshot_id': snapshot_id,
+                'as_of': as_of, 'verification': 'unknown', 'outcome': 'unknown',
+                'finding': 'temporal_replay_not_performed', 'result': None,
+            })
+    return results
+
+
+def _validate_retained_temporal(projection, results):
+    _require(isinstance(results, dict), 'invalid retained temporal evidence')
+    expected = {}
+    for observation in projection.get('temporal', {}).get('observations', []):
+        snapshot_id = as_of = None
+        retained = None
+        try:
+            snapshot = Snapshot.from_json(observation['snapshot'])
+            retained = (validate_v2(snapshot, observation['assessment'])
+                        if observation['assessment'] is not None else None)
+            snapshot_id, as_of = snapshot.snapshot_id, snapshot.to_data()['as_of']
+        except (ValueError, TypeError, KeyError):
+            pass
+        for claim in observation['claims']:
+            key = (observation['operation'], observation['phase'], claim['subject'],
+                   claim['claim_id'], claim['predicate_digest'])
+            expected[key] = (claim, snapshot_id, as_of, retained,
+                             observation['evidence_kind'])
+    seen = set()
+    for subject, episodes in results.items():
+        _require(isinstance(subject, str) and isinstance(episodes, list),
+                 'invalid retained temporal evidence')
+        for episode in episodes:
+            _validate_temporal({'version': 1, 'applicability': episode.get('applicability'),
+                'status': 'unknown', 'current_falsifier': 'unavailable', 'complete': False,
+                'counterexample_claim_ids': [], 'episodes': [episode], 'findings': []})
+            key = (episode['operation'], episode['phase'], episode['subject'],
+                   episode['claim_id'], episode['predicate_digest'])
+            _require(subject == episode['subject'] and key in expected and key not in seen,
+                     'retained temporal evidence does not match source receipts')
+            claim, snapshot_id, as_of, retained, evidence_kind = expected[key]
+            _require(episode['applicability'] == claim['applicability']
+                     and episode['evidence_kind'] == evidence_kind
+                     and episode['anchors'] == claim['anchors']
+                     and episode['snapshot_id'] == snapshot_id and episode['as_of'] == as_of,
+                     'retained temporal evidence does not match source receipts')
+            if episode['verification'] == 'verified':
+                result = episode['result']
+                _require(isinstance(result, dict)
+                         and {'status', 'expression', 'reads'} <= set(result),
+                         'verified temporal evidence has no result')
+                computation = result.get('computation')
+                if computation is not None:
+                    _require(snapshot_id is not None, 'verified temporal evidence has no snapshot')
+                    _validate_result(computation, snapshot_id)
+                if retained is not None:
+                    _require(_same(_semantic_falsifier(result), _semantic_falsifier(
+                        retained['nodes'][subject]['state']['falsifier'])),
+                        'retained temporal result does not match source receipt')
+                status = result['status']
+                expected_outcome = ('counterexample' if status == 'holds' else
+                                    'not_counterexample' if status in ('does_not_hold', 'not_declared')
+                                    else 'unknown')
+                _require(episode['outcome'] == expected_outcome,
+                         'retained temporal outcome does not match source receipt')
+            seen.add(key)
+    _require(seen == set(expected), 'incomplete retained temporal evidence')
+    return copy.deepcopy(results)
+
+
+def _temporal_state(projection, subject, current_node, episodes):
+    heads = set(projection['subjects'][subject]['heads'])
+    head_objects = [projection['pins'][version]['object'] for version in sorted(heads)
+                    if projection['pins'].get(version, {}).get('status') == 'recorded']
+    metadata = [obj['body'].get('temporal') for obj in head_objects
+                if isinstance(obj.get('body'), dict) and obj['body'].get('temporal') is not None]
+    if not metadata:
+        return None
+    _require(len(metadata) == len(head_objects)
+             and len({digest(item) for item in metadata}) == 1,
+             'incompatible temporal heads')
+    applicability = metadata[0]['applicability']
+    exact = [item for item in episodes if item['claim_id'] in heads]
+    relevant_findings = [copy.deepcopy(item) for item in projection['temporal']['findings']
+                         if item.get('object_id') in heads or not item.get('object_id')]
+    verified_counterexamples = [item for item in exact
+                                if item['verification'] == 'verified'
+                                and item['outcome'] == 'counterexample']
+    unknown = (bool(relevant_findings)
+               or any(item['verification'] != 'verified' or item['outcome'] == 'unknown'
+                      for item in exact)
+               or not exact)
+    current = (current_node['state']['falsifier']['status']
+               if current_node is not None else 'unavailable')
+    if current == 'holds':
+        status = 'counterexample'
+    elif applicability == 'current' and current == 'does_not_hold':
+        status = 'recovered' if verified_counterexamples else ('unknown' if unknown else 'clear')
+    elif applicability in ('anchored', 'general') and verified_counterexamples:
+        status = 'counterexample'
+    elif current in ('unknown', 'error') or unknown:
+        status = 'unknown'
+    else:
+        status = 'clear'
+    findings = relevant_findings
+    findings.extend({'code': item['finding'], 'subject': subject,
+                     'object_id': item['claim_id'], 'detail': 'historical replay was not verified'}
+                    for item in exact if item['finding'])
+    return {'version': 1, 'applicability': applicability, 'status': status,
+            'current_falsifier': current, 'complete': not unknown,
+            'counterexample_claim_ids': sorted({item['claim_id']
+                                                for item in verified_counterexamples}),
+            'episodes': copy.deepcopy(episodes), 'findings': findings}
+
+
 def _pin_evidence(projection, subject, version, cache):
     key = subject, version
     if key not in cache:
@@ -692,6 +899,16 @@ def _node_with_history(node_id, node, projection, subjects, graph, outcomes):
         assurance=_assurance(node, projected['recorded_support'],
                              projected['pin_review_evidence']),
         support=copy.deepcopy(projected['support']))
+    if 'temporal' in projected:
+        result['temporal'] = copy.deepcopy(projected['temporal'])
+        temporal = result['temporal']
+        if temporal['status'] in ('counterexample', 'unknown'):
+            code = ('historical_counterexample' if temporal['status'] == 'counterexample'
+                    else 'historical_evidence_unknown')
+            reason = {'code': code, 'related_ids': temporal['counterexample_claim_ids']}
+            if not any(action['action'] == 'review' and reason in action['reasons']
+                       for action in result['attention']):
+                result['attention'].append({'action': 'review', 'reasons': [reason]})
     return result
 
 
@@ -699,7 +916,7 @@ def _history_summary(projection):
     if projection is None:
         return {'authority_status': 'not_active'}
     authority = projection['authority']
-    return {
+    result = {
         'authority_status': 'active',
         'projection_version': projection['projection_version'],
         'authority': {'record_id': authority['record_id'], 'generation': authority['generation'],
@@ -710,6 +927,9 @@ def _history_summary(projection):
         'identity_schemes': list(projection['identity_schemes']),
         'integrity': copy.deepcopy(projection['integrity']),
     }
+    if history_contract.TEMPORAL_APPLICABILITY in projection.get('requires', []):
+        result['capabilities'] = [history_contract.TEMPORAL_APPLICABILITY]
+    return result
 
 
 def _display_selection(value, known, default):
@@ -829,6 +1049,39 @@ def _validate_node_history(value):
         _validate_review_evidence(evidence)
 
 
+def _validate_temporal(value):
+    expected = {'version', 'applicability', 'status', 'current_falsifier', 'complete',
+                'counterexample_claim_ids', 'episodes', 'findings'}
+    _require(isinstance(value, dict) and set(value) == expected and value['version'] == 1
+             and value['applicability'] in ('current', 'anchored', 'general')
+             and value['status'] in ('clear', 'recovered', 'counterexample', 'unknown')
+             and isinstance(value['current_falsifier'], str)
+             and type(value['complete']) is bool
+             and isinstance(value['episodes'], list) and len(value['episodes']) <= MAX_TEMPORAL_REPLAYS
+             and isinstance(value['findings'], list), 'v3 schema: invalid temporal assessment')
+    _validate_ids(value['counterexample_claim_ids'],
+                  'v3 schema: invalid temporal counterexamples')
+    for episode in value['episodes']:
+        keys = {'evidence_version', 'operation', 'phase', 'subject', 'claim_id',
+                'evidence_kind', 'applicability', 'predicate_digest', 'anchors',
+                'snapshot_id', 'as_of', 'verification', 'outcome', 'finding', 'result'}
+        _require(isinstance(episode, dict) and set(episode) == keys
+                 and episode['evidence_version'] == 1
+                 and episode['phase'] in ('before', 'after')
+                 and episode['evidence_kind'] in (
+                     'recorded_receipt', 'reconstructed_committed_world')
+                 and episode['applicability'] in ('current', 'anchored', 'general')
+                 and episode['verification'] in ('verified', 'unknown')
+                 and episode['outcome'] in ('counterexample', 'not_counterexample', 'unknown')
+                 and (episode['snapshot_id'] is None or _is_digest(episode['snapshot_id']))
+                 and (episode['as_of'] is None or isinstance(episode['as_of'], str))
+                 and (episode['finding'] is None or isinstance(episode['finding'], str))
+                 and (episode['result'] is None or isinstance(episode['result'], dict))
+                 and isinstance(episode['anchors'], dict)
+                 and set(episode['anchors']) == {'on', 'at', 'applies'},
+                 'v3 schema: invalid temporal episode')
+
+
 def _validate_history_summary(value):
     _require(isinstance(value, dict) and value.get('authority_status') in ('active', 'not_active'),
              'v3 schema: invalid history summary')
@@ -837,7 +1090,7 @@ def _validate_history_summary(value):
         return
     expected = {'authority_status', 'projection_version', 'authority', 'committed_set_digest',
                 'closure_digest', 'coverage', 'identity_schemes', 'integrity'}
-    _require(set(value) == expected and value['projection_version'] == 1
+    _require(set(value) in (expected, expected | {'capabilities'}) and value['projection_version'] == 1
              and isinstance(value['authority'], dict)
              and set(value['authority']) == {'record_id', 'generation', 'identity'}
              and isinstance(value['authority']['record_id'], str)
@@ -861,6 +1114,8 @@ def _validate_history_summary(value):
              and isinstance(value['integrity']['findings'], list)
              and all(isinstance(item, dict) for item in value['integrity']['findings']),
              'v3 schema: invalid active history')
+    if 'capabilities' in value:
+        history_contract.validate_history_requires(value['capabilities'])
 
 
 def validate(report):
@@ -891,9 +1146,11 @@ def validate(report):
     known = set(nodes) | set(subjects)
     _display_selection(report['display_selection'], known, [])
     for node in nodes.values():
-        _require(isinstance(node, dict) and set(node) == {
+        _require(isinstance(node, dict) and set(node) in ({
             'body', 'fields', 'state', 'attention', 'computation', 'acceptance', 'history',
-            'coverage', 'assurance', 'support'}, 'v3 schema: invalid node fields')
+            'coverage', 'assurance', 'support'}, {
+            'body', 'fields', 'state', 'attention', 'computation', 'acceptance', 'history',
+            'coverage', 'assurance', 'support', 'temporal'}), 'v3 schema: invalid node fields')
         _validate_v2_node({key: node[key] for key in (
             'body', 'fields', 'state', 'attention', 'computation')})
         acceptance = node['acceptance']
@@ -907,12 +1164,14 @@ def validate(report):
         _validate_assurance(node['assurance'])
         _validate_support(node['support'])
         _validate_node_history(node['history'])
+        if 'temporal' in node:
+            _validate_temporal(node['temporal'])
     for subject in subjects.values():
         required = {'acceptance', 'head_ids', 'open_act_ids', 'head_witnesses', 'proposals',
                     'reviews', 'disposition_marks', 'contested_claims', 'implied_reservations',
                     'recorded_support', 'pin_review_evidence', 'coverage', 'support'}
         _require(isinstance(subject, dict) and required <= set(subject)
-                 and set(subject) <= required | {'source_state'}
+                 and set(subject) <= required | {'source_state', 'temporal'}
                  and subject.get('acceptance') in ACCEPTANCE
                  and all(isinstance(subject[key], list) for key in (
                      'head_ids', 'open_act_ids', 'head_witnesses', 'proposals', 'reviews',
@@ -941,6 +1200,8 @@ def validate(report):
                      'v3 schema: invalid history source state')
         _validate_coverage(subject['coverage'])
         _validate_support(subject['support'])
+        if 'temporal' in subject:
+            _validate_temporal(subject['temporal'])
     history = report['history']
     _validate_history_summary(history)
     if history['authority_status'] == 'not_active':
@@ -956,8 +1217,8 @@ def validate(report):
     return copy.deepcopy(report)
 
 
-def from_v2(snapshot, report, *, display_selection=None):
-    """Enrich one complete canonical v2 report without source I/O or evaluation."""
+def from_v2(snapshot, report, *, display_selection=None, temporal_evidence=None):
+    """Enrich one canonical v2 report without source I/O or evaluation."""
     base = validate_v2(snapshot, report)
     data = snapshot.to_data()
     projection = data['context'].get('history')
@@ -965,12 +1226,21 @@ def from_v2(snapshot, report, *, display_selection=None):
         projection = history_contract.validate_projection(projection)
     graph = _support_graph(projection) if projection is not None else {}
     outcomes = _outcomes(base['nodes'])
+    temporal_replays = (_validate_retained_temporal(projection, temporal_evidence)
+                        if temporal_evidence is not None and projection is not None
+                        else _unknown_temporal_replays(projection) if projection is not None else {})
     evidence_cache = {}
     support_budget = {'remaining': MAX_SUPPORT_VISITS,
                       'path_items': MAX_SUPPORT_PATH_ITEMS}
     subjects = {subject: _subject_projection(
                     projection, subject, graph, outcomes, evidence_cache, support_budget)
                 for subject in sorted(projection['subjects'])} if projection is not None else {}
+    if projection is not None and 'temporal' in projection:
+        for subject in subjects:
+            temporal = _temporal_state(projection, subject, base['nodes'].get(subject),
+                                       temporal_replays.get(subject, []))
+            if temporal is not None:
+                subjects[subject]['temporal'] = temporal
     nodes = {node_id: _node_with_history(node_id, node, projection, subjects, graph, outcomes)
              for node_id, node in base['nodes'].items()}
     history_selection = sorted(subjects)
@@ -1002,4 +1272,8 @@ def assess(snapshot, selection=None, *, policy='focused-review/v1', runtime=None
     """Compute schema v2 exactly once, then return its history-aware v3 envelope."""
     report = base_assessment.assess(snapshot, selection, policy=policy, runtime=runtime,
                                     operational_limits=operational_limits)
-    return from_v2(snapshot, report, display_selection=display_selection)
+    projection = snapshot.to_data()['context'].get('history')
+    temporal_evidence = (_temporal_replays(history_contract.validate_projection(projection))
+                         if projection is not None and 'temporal' in projection else {})
+    return from_v2(snapshot, report, display_selection=display_selection,
+                   temporal_evidence=temporal_evidence)
