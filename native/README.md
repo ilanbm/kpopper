@@ -174,6 +174,14 @@ recovery resumes the exact operation, or cancels it before its manifest is commi
 Identity dates use the later of the current local and UTC day, independently of the
 operation's recording timestamp or the computational snapshot time.
 
+`reasoning_authoring_preparation` selects a writer profile from a frozen snapshot,
+refuses reinterpretation of legacy executable fields, and checks an explicitly
+supplied pending overlay before promotion. `pending_bundle` binds portable roots,
+complete dependency and scope closure, and evidence bytes; accepted revisions remain
+effective until a terminal decision retires them. `reasoning_declaration_text` changes
+generated YAML capability fields while retaining surrounding source text. These APIs
+do not collect live project policy or establish a filesystem route for the caller.
+
 These library interfaces remain separate from the experimental CLI. Temporal authoring and ordinary-profile authoring
 are not yet exposed through this preparation layer. The newer receipt contracts are
 checked against a Python 1.7 candidate; final release binding remains pending.

@@ -23,7 +23,7 @@ use std::{
 fn s(value: &str) -> V {
     V::Text(value.into())
 }
-fn files_valid(files: &Files) -> Result<()> {
+pub(crate) fn files_valid(files: &Files) -> Result<()> {
     require(files.len() <= 2 * MAX_OBJECTS + 2, "history_limit")?;
     let mut size = 0;
     for (path, bytes) in files {
@@ -224,7 +224,7 @@ const GENERATIONS: &str = "history-generations/v1";
 const CANCELLATIONS: &str = "generation-cancellation/v1";
 const SUBSET: &str = "history-subset/v1";
 const PREFIX: &str = "history-closure/";
-fn privacy(value: &V) -> Result<()> {
+pub(crate) fn privacy(value: &V) -> Result<()> {
     let mut pending = vec![value];
     while let Some(value) = pending.pop() {
         match value {

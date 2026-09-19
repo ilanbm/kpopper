@@ -891,6 +891,13 @@ sources:
     at: "history_edits; history_identity_rewrite, history_identity_text and history_identity_brief;
          their exact fixtures and tests"
     from: s.2026_09_19_native_hypothesis_edit_continuation
+  s.native_frozen_preparation:
+    name: "Native frozen writer preparation and portable contribution evidence"
+    from: s.2026_09_19_native_identity_continuation
+    file: "native/src/reasoning_authoring_preparation.rs"
+    at: "Snapshot profile preparation; pending_bundle complete closure and effective overlay tests;
+         reasoning_declaration_text source preservation fixtures"
+    read: "2026-09-19"
   s.native_identity_conformance:
     name: "Native identity actions and auxiliary recovery evidence"
     from: s.2026_09_19_native_identity_continuation
@@ -1897,6 +1904,18 @@ known:
         unimplemented; these helpers do not expand the experimental CLI."
     from: s.native_edit_rewrite
     at: "Native edit replay, storage commit_edits, and identity rewrite regression cases"
+  p.native_frozen_preparation_boundary:
+    name: "Native profile and portable contribution preparation boundary"
+    v: "Frozen writer preparation checks legacy executable migration blockers and preserves the
+        original Snapshot context. Portable v1 identity and complete v2 contribution closure are
+        validated, with v3 delegated to the existing complete history adapter. Accepted pending
+        revisions remain effective until withdrawn, rejected or superseded; explicitly resumed
+        revisions are checked again. YAML declaration changes preserve surrounding text and retain
+        strict alias/duplicate-key refusal. Live project policy-lock capture, source ordering,
+        routing and public CLI integration remain outside these source-free APIs."
+    from: s.native_frozen_preparation
+    at: "Native preparation, pending bundle and declaration source APIs with exact pinned Python
+         fixtures and forgery regressions"
   p.native_history_decode_boundary:
     name: "Native historical typed-value authority"
     v: "Only explicitly versioned computed history envelopes decode typed historical scalar values;
