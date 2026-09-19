@@ -8,6 +8,8 @@ from scripts.pending_grounding import identity
 from scripts.reasoning import context as Context
 from scripts.reasoning import history_assessment as V3
 from scripts.reasoning.contract import digest
+from scripts.reasoning.evaluate import Evaluator
+from scripts.reasoning.snapshot import Snapshot
 from tests import test_history_authoring as authoring_fixtures
 
 
@@ -182,6 +184,44 @@ class TemporalApplicability(unittest.TestCase):
                                side_effect=AssertionError('native replayed during deserialize')):
             restored = Context.CapturedAssessment.from_json(context.to_json())
         self.assertEqual(restored.assessment, context.assessment)
+
+    def test_rehashed_reconstructed_result_for_other_expression_refuses_purely(self):
+        fixture, _ = self.history('anchored')
+        current = fixture.store.capture()
+        old = current.objects[current.state['subjects']['p.input']['head']]
+        new = authoring_fixtures.claim('p.input', value=10, op='generic-forgery-reading',
+                                      saw=sorted(version for version, obj in current.objects.items()
+                                                 if obj['subject'] == 'p.input'))
+        accept = __import__('tests.test_history_store', fromlist=['act']).act(
+            new, op='generic-forgery-accept', over=[old['id']],
+            saw=sorted([*new['saw'], new['id']]))
+        fixture.fixture.publish([new, accept], op='generic-forgery')
+        adapted = HA.from_store_capture(fixture.store.capture())
+        current_snapshot = adapted.snapshot()
+        context = Context.CapturedAssessment.from_snapshot(current_snapshot)
+        forged = context.assessment
+        raw = next(item for item in adapted.projection['temporal']['observations']
+                   if item['operation'] == 'generic-forgery' and item['phase'] == 'after')
+        historical = Snapshot.from_json(raw['snapshot'])
+        expression = {'expr': 'p.input < 5'}
+        computation = Evaluator(historical).evaluate(expression, declared=['p.input'])
+        replacement = {'status': 'does_not_hold', 'expression': expression,
+                       'reads': [item['id'] for item in computation['executed_reads']],
+                       'computation': computation}
+        for holder in (forged['nodes']['p.ready']['temporal'],
+                       forged['history_subjects']['p.ready']['temporal']):
+            episode = next(item for item in holder['episodes']
+                           if item['operation'] == 'generic-forgery'
+                           and item['phase'] == 'after')
+            episode['result'] = copy.deepcopy(replacement)
+            episode['outcome'] = 'not_counterexample'
+        forged['findings_revision'] = digest(V3._findings_preimage(forged))
+        forged['envelope_revision'] = digest({key: value for key, value in forged.items()
+                                              if key != 'envelope_revision'})
+        with mock.patch.object(V3.base_assessment, 'assess',
+                               side_effect=AssertionError('native replayed during deserialize')):
+            with self.assertRaisesRegex(ValueError, 'expression does not match immutable claim'):
+                Context.CapturedAssessment(current_snapshot, forged)
 
     def test_rehashed_forgery_is_not_verified(self):
         fixture, _ = self.history('anchored')

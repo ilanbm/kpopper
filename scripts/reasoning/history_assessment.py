@@ -712,9 +712,35 @@ def _validate_retained_temporal(projection, results):
                          and {'status', 'expression', 'reads'} <= set(result),
                          'verified temporal evidence has no result')
                 computation = result.get('computation')
+                witness = projection['pins'][episode['claim_id']]['object']
+                predicate_field = witness['authored']['fields']['predicate']
+                predicate = witness['body'].get(predicate_field)
+                _require(digest(result['expression']) == digest(predicate)
+                         and digest(result['expression']) == episode['predicate_digest'],
+                         'retained temporal expression does not match immutable claim')
                 if computation is not None:
                     _require(snapshot_id is not None, 'verified temporal evidence has no snapshot')
                     _validate_result(computation, snapshot_id)
+                    executed = sorted(item['id'] if item['kind'] == 'node' else item['scope_id']
+                                      for item in computation['executed_reads'])
+                    _require(result['reads'] == executed,
+                             'retained temporal reads do not match computation witnesses')
+                    basis = computation.get('basis')
+                    if isinstance(basis, dict) and basis.get('recipe') == 'merkle-inputs/v1':
+                        from .language import lower, references
+                        tree = lower(predicate)
+                        _require(basis.get('expression') == tree
+                                 and basis.get('as_of') == as_of
+                                 and basis.get('dependencies') == computation['potential_dependencies']
+                                 and set(references(tree)) <= set(computation['potential_ids']),
+                                 'retained temporal basis does not match immutable predicate')
+                        expected_computation = digest({
+                            'snapshot_id': snapshot_id, 'expression': tree,
+                            'profile': computation['profile'], 'modules': computation['modules'],
+                            'declared': sorted(witness.get('pins', {})), 'as_of': as_of,
+                            'resources': computation['resource_profile']})
+                        _require(computation['computation_id'] == expected_computation,
+                                 'retained temporal computation identity mismatch')
                 if retained is not None:
                     _require(_same(_semantic_falsifier(result), _semantic_falsifier(
                         retained['nodes'][subject]['state']['falsifier'])),
