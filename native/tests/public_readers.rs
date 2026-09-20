@@ -458,6 +458,7 @@ fn actual_ordinary_pull_history_reads_the_retained_versions() {
             "     request: s.note\n",
             "     no longer rested on p.old: superseded\n",
             "  2. until 2026-09-19 - a person restored it (the same decision as version 1)\n",
-        )
+        ).replacen("kept in .kpopper/replaced.yaml",
+            &format!("kept in {}", Path::new(".kpopper").join("replaced.yaml").display()), 1)
     );
 }

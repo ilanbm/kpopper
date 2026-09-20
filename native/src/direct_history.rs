@@ -976,7 +976,9 @@ mod tests {
             });
             let error = result.unwrap_err().0;
             assert!(error.starts_with("concurrent_edit:"));
-            assert!(error.replace('\\', "/").contains(&path.to_string_lossy().replace('\\', "/")));
+            let reported = error.split_once("recovery journal retained at ").unwrap().1
+                .split_once(". Preserve conflicting edits").unwrap().0;
+            assert_eq!(Path::new(reported).canonicalize().unwrap(), path.canonicalize().unwrap());
             assert_eq!(fs::read(&path).unwrap(), expected);
             assert!(recover(std::slice::from_ref(&entry), cwd, false).is_err());
             assert_eq!(fs::read(&path).unwrap(), expected);

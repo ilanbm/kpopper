@@ -81,6 +81,8 @@ fn command(
     environment: &[(&str, &Path)],
 ) -> Result<Vec<u8>> {
     let mut command = Command::new("git");
+    #[cfg(windows)]
+    command.args(["-c", "core.longpaths=true"]);
     command
         .args([
             "--no-pager",
@@ -100,6 +102,12 @@ fn command(
         command.env_remove(name);
     }
     for (name, value) in environment {
+        #[cfg(windows)]
+        if *name == "GIT_INDEX_FILE" {
+            let value = value.to_str().ok_or_else(|| Error("invalid git index path".into()))?;
+            command.env(name, windows_index_path(value));
+            continue;
+        }
         command.env(name, value);
     }
     command.env("GIT_TERMINAL_PROMPT", "0");
@@ -110,6 +118,18 @@ fn command(
         Duration::from_secs(30),
         64 * 1024 * 1024,
     )
+}
+
+#[cfg(any(windows, test))]
+fn windows_index_path(path: &str) -> String {
+    // Git accepts ordinary drive/UNC paths in GIT_INDEX_FILE, but not the
+    // verbatim prefix returned by Windows canonicalize. Git adds its own long
+    // path prefix when core.longpaths is enabled for this invocation.
+    if let Some(path) = path.strip_prefix(r"\\?\UNC\") {
+        format!("//{}", path.replace('\\', "/"))
+    } else {
+        path.strip_prefix(r"\\?\").unwrap_or(path).replace('\\', "/")
+    }
 }
 
 fn scope(project: &Project) -> Result<V> {
@@ -1728,4 +1748,16 @@ pub fn verify(project: Project) -> Result<V> {
         .unwrap_or("");
     let mut provider = GitHubProvider::new(repository);
     Publisher::new(project, &mut provider).verify()
+}
+
+#[cfg(test)]
+mod index_path_tests {
+    use super::*;
+
+    #[test]
+    fn windows_git_index_paths_preserve_drive_and_unc_locations() {
+        assert_eq!(windows_index_path(r"\\?\C:\work\index"), "C:/work/index");
+        assert_eq!(windows_index_path(r"\\?\UNC\server\share\index"), "//server/share/index");
+        assert_eq!(windows_index_path(r"C:\work\index"), "C:/work/index");
+    }
 }
