@@ -4,7 +4,7 @@
 
 `kpopper-hero.png` is the current README hero: a large ink portrait on the left,
 a prominent wordmark and one-line quotation on the right, and a separate italic
-attribution beneath the quotation. Popper looks inward toward the wording with a
+attribution beneath the quotation, beginning with a hyphen and space. Popper looks inward toward the wording with a
 restrained, faintly amused expression; a small Korean speech bubble accompanies the portrait.
 The Winamp-inspired slogan is presented as a
 fictional humorous quotation, with logic symbols around *lemma*. It is not a
@@ -25,12 +25,22 @@ has been changed by adding these files.
 
 ## Illustrated stories
 
-The opening series lives in `stories/`: two merge cases followed by a cooking-workshop
-case in Claude Cowork and a research synthesis from three dark-matter papers.
+The story series lives in `stories/`: two merge cases, a cooking-workshop case in
+Claude Cowork and a research synthesis from six dark-matter papers. The README links
+to the full download merge case rather than repeating the opening overview's scenario.
 Each has a desktop and phone layout. The illustrations use bold
 typography and expressive ink scenes; the accompanying examples distinguish a failed
 condition from a changed premise that needs judgment, and paper findings from an
 agent's synthesis. See [the story index](stories/README.md).
+
+The cache, workshop and research examples each include a record close-up generated
+from their complete YAML. Selected entries remain readable while a minimap shows the
+actual surrounding file. The research record retains source versions, shared data,
+model assumptions, a density calculation and open questions alongside its synthesis.
+
+Explanatory illustrations begin with their panels or process. Omit titles that
+repeat the README heading, and place a useful takeaway after the process. Retain
+panel labels, data and existing conclusions needed to understand the illustration.
 
 ## Process diagrams
 
@@ -40,6 +50,20 @@ shows natural-language statements, their explicit YAML relationship and a repeat
 comparison; its exact record is supplied alongside it. Separate editable SVG schematics
 preserve compact maps of the conversation and time processes; they are not the
 illustration sources.
+
+The opening overview introduces `GROUNDING.yaml` as a file viewer. Its desktop layout
+connects two conversations directly to the saved reason and changed reading; the phone
+layout uses consecutive excerpts from the same file. The displayed YAML preserves the
+values, conclusion, condition and review snapshot in
+[`diagrams/reasoning-check.yaml`](diagrams/reasoning-check.yaml).
+
+The returned diagnostic is actual CLI output from that fictional record. The **0.24 s ·
+local run** badge is the rounded median of five consecutive local invocations on macOS
+arm64, including Python and CLI startup. It is caller-measured metadata, not text emitted
+by the checker or a general latency guarantee. The
+[run evidence](diagrams/reasoning-check-run.json) retains the timestamp, input hash,
+sample durations and exact output. Exit 1 is expected because the example's declared
+condition fires.
 
 ## Knowledge-source illustration
 
@@ -56,7 +80,8 @@ organize every source.
 ## Product screenshots
 
 `standalone-document-reasoning.png` is an unaltered browser capture of **The Autumn Garden
-Workshop**, an HTML report produced by the standalone document workflow. The document and
+Workshop**, an HTML report illustrating the optional, experimental Annotated Documents
+application. The document and
 the focused explanation for its 16-day registration window appear together. The card marks
 that interpretation as **Not checked**, explains its basis in two dates, and links to the
 project notes offered as context. It does not present the interpretation as an automatically
@@ -87,3 +112,6 @@ The Lean name and logo are trademarks of Lean Focused Research Organization (FRO
 Their use follows the [Lean Trademark Policy](https://lean-lang.org/trademark-policy/)
 and does not imply endorsement of kpopper by Lean FRO. The logo is not covered by this
 repository's MIT license.
+
+`lean-logo-readme.png` is a proportionally resized 220-pixel-wide copy for ordinary
+Markdown rendering. The original mark, whitespace and trademark symbol are retained.

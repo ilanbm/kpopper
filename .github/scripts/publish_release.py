@@ -130,6 +130,8 @@ def main(argv):
     if before == version:
         print(f"this commit did not move the version ({version}); nothing to publish")
         return 0
+    target_commit = release.sh("git", "rev-parse", "HEAD").strip()
+    release.sh("git", "diff", "--quiet", "HEAD", "--")
     tag = tag_for(version)
     if published(tag):
         print(f"{tag} is already published; nothing to do")
@@ -145,9 +147,12 @@ def main(argv):
     if dry:
         return 0
     files = build(version)
+    if release.sh("git", "rev-parse", "HEAD").strip() != target_commit:
+        raise SystemExit("the checkout changed while building the release; nothing was published")
+    release.sh("git", "diff", "--quiet", "HEAD", "--")
     print("attaching " + ", ".join(p.name for p in files))
     release.sh("gh", "release", "create", tag, *[str(p) for p in files],
-               "--title", f"Release {version}", "--notes", notes)
+               "--target", target_commit, "--title", f"Release {version}", "--notes", notes)
     print(f"published {tag}")
     return 0
 

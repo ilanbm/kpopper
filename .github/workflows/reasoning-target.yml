@@ -81,14 +81,14 @@ jobs:
       - name: Check archive boundaries
         run: python -m unittest tests.test_reasoning_distribution -v
       - name: Execute the freshly built archive against the source scalar corpus
-        run: python tests/test_reasoning_distribution.py --archive scripts/reasoning/native/${{ inputs.target }}.zip
+        run: python tests/test_reasoning_distribution.py --archive scripts/reasoning/native/${{ inputs.target }}.kpopper-runtime
       - name: Execute the freshly built archive against composition conformance
         shell: python
         run: |
           import os, pathlib, subprocess, sys
           sys.path.insert(0, str(pathlib.Path.cwd()))
           from scripts.reasoning.runtime import Runtime
-          archive = pathlib.Path('scripts/reasoning/native/${{ inputs.target }}.zip').resolve()
+          archive = pathlib.Path('scripts/reasoning/native/${{ inputs.target }}.kpopper-runtime').resolve()
           native = Runtime(archive)
           env = dict(os.environ,
                      KPOPPER_REASONING_TEST_BINARY=str(native.binary),
@@ -103,7 +103,7 @@ jobs:
         shell: python
         run: |
           import os, pathlib, subprocess, sys
-          archive = pathlib.Path('scripts/reasoning/native/${{ inputs.target }}.zip').resolve()
+          archive = pathlib.Path('scripts/reasoning/native/${{ inputs.target }}.kpopper-runtime').resolve()
           env = dict(os.environ, KPOPPER_QUERY_ARCHIVE=str(archive))
           subprocess.run([sys.executable, '-m', 'unittest',
                           'tests.test_reasoning_query_runtime', '-v'],
@@ -113,8 +113,8 @@ jobs:
         with:
           name: reasoning-${{ inputs.target }}
           path: |
-            scripts/reasoning/native/${{ inputs.target }}.zip
-            scripts/reasoning/native/${{ inputs.target }}.zip.sha256
+            scripts/reasoning/native/${{ inputs.target }}.kpopper-runtime
+            scripts/reasoning/native/${{ inputs.target }}.kpopper-runtime.sha256
           if-no-files-found: error
       - name: Upload the separately modified test library
         uses: actions/upload-artifact@v4
@@ -131,7 +131,8 @@ jobs:
           if-no-files-found: error
 
   installed:
-    timeout-minutes: 20
+    # Cold channels run independently; the plugin lane also runs the native suites.
+    timeout-minutes: 45
     needs: build
     # Only this target waits for its own replacement library. Other platforms
     # proceed as soon as their matching build finishes or is intentionally skipped.
@@ -143,6 +144,7 @@ jobs:
       fail-fast: false
       matrix:
         python: ${{ fromJSON(inputs.python-versions) }}
+        distribution: [wheel, sdist, plugin]
     runs-on: ${{ inputs.runner }}
     steps:
       - uses: actions/checkout@v4
@@ -165,33 +167,42 @@ jobs:
       - name: Install each distribution and execute with cold caches and no compiler PATH
         shell: python
         env:
+          KPOPPER_INSTALL_CHANNEL: ${{ matrix.distribution }}
           KPOPPER_TEST_REPLACEMENT_ROOT: ${{ needs.build.result == 'success' && format('{0}/replacement', runner.temp) || '' }}
         run: |
           import os, pathlib, shutil, subprocess, sys, tempfile, zipfile
           root = pathlib.Path.cwd()
           work = pathlib.Path(tempfile.mkdtemp(prefix='reasoning-install-'))
-          for kind, artifact in [('wheel', next((root/'dist').glob('*.whl'))), ('sdist', next((root/'dist').glob('*.tar.gz')))]:
-              env = work/kind
-              subprocess.run([sys.executable, '-m', 'venv', str(env)], check=True)
-              python = env/('Scripts/python.exe' if sys.platform == 'win32' else 'bin/python')
-              subprocess.run([str(python), '-m', 'pip', 'install', str(artifact)], check=True)
-              subprocess.run([sys.executable, 'tests/test_reasoning_distribution.py', '--installed-python', str(python)], check=True)
-              subprocess.run([sys.executable, 'tests/test_reasoning_composition_acceptance.py',
-                              '--installed-python', str(python)], check=True)
-          # Extract a real plugin tree into a separate directory, with the same
-          # native assets. Use only its own source modules for the plugin probe.
-          plugin_stage = work/'plugin-stage'
-          shutil.copytree(root, plugin_stage, ignore=shutil.ignore_patterns('.git', '.lake', 'dist', '__pycache__'))
-          archive = shutil.make_archive(str(work/'plugin'), 'zip', plugin_stage)
-          plugin = work/'plugin-extracted'
-          with zipfile.ZipFile(archive) as zf:
-              zf.extractall(plugin)
-          subprocess.run([sys.executable, 'tests/test_reasoning_distribution.py', '--installed-python', str(python), str(plugin)], check=True)
+          kind = os.environ['KPOPPER_INSTALL_CHANNEL']
+          if kind not in ('wheel', 'sdist', 'plugin'):
+              raise ValueError('unknown installed distribution channel: ' + kind)
+          artifact = next((root/'dist').glob('*.whl' if kind == 'wheel' else '*.tar.gz'))
+          env = work/kind
+          subprocess.run([sys.executable, '-m', 'venv', str(env)], check=True)
+          python = env/('Scripts/python.exe' if sys.platform == 'win32' else 'bin/python')
+          subprocess.run([str(python), '-m', 'pip', 'install', str(artifact)], check=True)
+          distribution_args, composition_args = [], []
+          if kind == 'plugin':
+              # Extract a real plugin with its own modules and committed native assets.
+              plugin_stage = work/'plugin-stage'
+              shutil.copytree(root, plugin_stage, ignore=shutil.ignore_patterns('.git', '.lake', 'dist', '__pycache__'))
+              archive = shutil.make_archive(str(work/'plugin'), 'zip', plugin_stage)
+              plugin = work/'plugin-extracted'
+              with zipfile.ZipFile(archive) as zf:
+                  zf.extractall(plugin)
+              distribution_args = [str(plugin)]
+              composition_args = ['--plugin-root', str(plugin)]
+          subprocess.run([sys.executable, 'tests/test_reasoning_distribution.py', '--installed-python', str(python),
+                          *distribution_args], check=True)
           subprocess.run([sys.executable, 'tests/test_reasoning_composition_acceptance.py',
-                          '--installed-python', str(python), '--plugin-root', str(plugin)], check=True)
-          # Make the native oracle/framing suites and schema validation mandatory.
-          # The executable comes from the installed, committed package payload.
-          subprocess.run([str(python), '-m', 'pip', 'install', 'jsonschema'], check=True)
+                          '--installed-python', str(python), *composition_args], check=True)
+          if kind != 'plugin':
+              sys.exit(0)
+          # The core-only installed acceptance above has already run. The broader
+          # suite also exercises Hub and document consumers, so opt into their
+          # runtime now, once per Python/target, using the same installed artifact.
+          subprocess.run([str(python), '-m', 'pip', 'install',
+                          str(artifact) + '[html]', 'jsonschema'], check=True)
           suite_env = dict(os.environ, XDG_CACHE_HOME=str(work/'native-suite-cache'),
                            KPOPPER_REQUIRE_REASONING_TESTS='1', KPOPPER_REQUIRE_CORE_TESTS='1')
           binary = subprocess.check_output([str(python), '-c', 'from kpopper.reasoning.runtime import Runtime; print(Runtime().binary)'],

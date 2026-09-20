@@ -25,6 +25,7 @@ jobs:
       session: ${{ steps.select.outputs.session }}
       installed: ${{ steps.select.outputs.installed }}
       native: ${{ steps.select.outputs.native }}
+      examples: ${{ steps.select.outputs.examples }}
       test_suites: ${{ steps.select.outputs.test_suites }}
       test_matrix: ${{ steps.select.outputs.test_matrix }}
     steps:
@@ -51,7 +52,7 @@ jobs:
             python .github/scripts/ci_selection.py --full
           fi
       - name: Reject incomplete committed bundles before starting expensive checks
-        if: steps.select.outputs.installed == 'true'
+        if: steps.select.outputs.installed == 'true' || steps.select.outputs.examples == 'true'
         run: python scripts/reasoning/build_runtime.py --check-bundles
 
   record:
@@ -99,8 +100,11 @@ jobs:
         # command that refreshes it in the log.
         run: kpop --frozen remeasure --run
 
-      - name: The page renders, and says what it rendered
-        run: kpop --frozen page --verify
+      - name: Install the optional HTML application runtime
+        run: pip install ".[html]"
+
+      - name: The experimental hub renders, and says what it rendered
+        run: kpop --frozen experimental hub --verify
 
       - name: The committed view still matches the record it comes from
         # Rendering rewrites .kpopper/view.yaml. If that leaves a diff, the record
@@ -124,7 +128,7 @@ jobs:
         with:
           python-version: ${{ matrix.python }}
       - name: Install the package the way a user gets it
-        run: pip install .
+        run: pip install ".[html]"
       - name: Install the test runner and schema validator
         run: python -m pip install -r .github/requirements-test.txt
       - name: The reader and the page keep their contract
@@ -145,6 +149,28 @@ jobs:
         if: needs.changes.outputs.python == 'true' && matrix.group == 1
         run: python examples/scoped-query/exercise.py
 
+  examples:
+    name: research example (${{ matrix.python }})
+    timeout-minutes: 15
+    needs: [changes, record]
+    if: needs.changes.outputs.examples == 'true'
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python: ["3.9", "3.13"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+      - name: Install the package with its committed reasoning runtime
+        run: python -m pip install .
+      - name: Check the research exercise, captured output and CLI projection
+        run: python .github/scripts/check_research_example.py
+      - name: The example leaves the source tree unchanged
+        run: git diff --exit-code
+
   document-ui:
     timeout-minutes: 15
     needs: [changes, record]
@@ -162,7 +188,7 @@ jobs:
           cache-dependency-path: tests/document-support/package-lock.json
       - name: Install the document runtime and pinned DOM test dependency
         run: |
-          pip install .
+          pip install ".[html]"
           npm ci --prefix tests/document-support --ignore-scripts --no-audit --no-fund
       - name: Check offline evidence, copy choices and export recovery
         run: npm run test:documents
@@ -192,7 +218,7 @@ jobs:
 
   ci-required:
     timeout-minutes: 10
-    needs: [changes, record, check, document-ui, session, reasoning-runtime]
+    needs: [changes, record, check, examples, document-ui, session, reasoning-runtime]
     if: always()
     runs-on: ubuntu-latest
     steps:

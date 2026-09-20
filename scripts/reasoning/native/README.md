@@ -1,10 +1,11 @@
 # Packaged core runtime
 
-`<target>.zip` is generated package data for the explicit, default-off
+`<target>.kpopper-runtime` is ZIP-formatted generated package data for the explicit, default-off
 experimental `core/v1` profile. A normal pip or plugin installation uses it
 offline: no compiler, network download, or checked-session setup is needed. The
 Python wrapper is portable; native computation requires a matching verified
-archive.
+archive. The domain-specific suffix keeps hosts that reject ZIP files nested in
+plugin downloads from mistaking this runtime payload for another plugin package.
 
 The data-only executable has three closed transports. KP2/KR2 retains the scalar
 arithmetic request, response and `resources/v2` accounting byte-for-byte. A

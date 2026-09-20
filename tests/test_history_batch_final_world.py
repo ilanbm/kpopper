@@ -128,7 +128,7 @@ else: raise AssertionError('noncausal sibling was accepted as an audit witness')
             {'kind': 'set', 'id': 'p.multi', 'value': 2, 'as_of': '2026-09-15'},
             {'kind': 'review', 'id': 'd.multi'},
             {'kind': 'set', 'id': 'p.multi', 'value': 3, 'as_of': '2026-09-16'}])
-        self.assertEqual(mutation.to_data()['receipt']['before']['authoring']['version'], 6)
+        self.assertEqual(mutation.to_data()['receipt']['before']['authoring']['version'], 8)
         made = objects(mutation)
         readings = {obj['body']['v']: obj for obj in made if obj['kind'] == 'reading'}
         self.assertEqual(set(readings), {2, 3})
@@ -139,6 +139,41 @@ else: raise AssertionError('noncausal sibling was accepted as an audit witness')
         A.commit(self.entry, mutation, verify=lambda data: None)
         self.assertEqual(self.store.capture().objects[judgment['id']], judgment)
         self.assertEqual(self.store.state()['subjects']['p.multi']['body']['v'], 3)
+
+    def test_new_judgment_seen_uses_final_world_with_forward_reference(self):
+        mutation = self.batch([
+            {'kind': 'add', 'id': 'd.forward', 'into': 'judgments', 'body': {
+                'verdict': 'ready', 'rests_on': ['p.future'],
+                'wrong_if': {'expr': 'p.future > 5'}}},
+            {'kind': 'add', 'id': 'p.future', 'into': 'readings', 'body': {'v': 3}}])
+        self.assertEqual(mutation.to_data()['receipt']['before']['authoring']['version'], 8)
+        judgment = next(obj for obj in objects(mutation)
+                        if obj['subject'] == 'd.forward' and obj['kind'] == 'judgment')
+        self.assertEqual(judgment['body']['seen']['p.future']['computed']['value'],
+                         {'type': 'number', 'numerator': '3', 'denominator': '1'})
+        self.assertEqual(judgment['pins']['p.future'], next(
+            obj['id'] for obj in objects(mutation)
+            if obj['subject'] == 'p.future' and obj['kind'] == 'reading'))
+
+    def test_blocked_missing_dependency_records_gap_in_final_batch(self):
+        mutation = self.batch([{'kind': 'add', 'id': 'd.wait', 'into': 'judgments',
+            'body': {'verdict': 'pending', 'rests_on': ['p.missing'],
+                     'wrong_if': {'expr': 'p.missing > 5'},
+                     'blocked_on': {'missing': ['p.missing'], 'why': 'awaiting source'}}}])
+        judgment = next(obj for obj in objects(mutation) if obj['kind'] == 'judgment')
+        self.assertEqual(judgment['pins'], {})
+        self.assertEqual(judgment['pin_gaps'], {'p.missing': 'unavailable'})
+        self.assertEqual(judgment['body']['seen'], {})
+
+    def test_retained_version_six_batch_replays_without_new_seen(self):
+        mutation = A.prepare_batch(self.entry, [{'kind': 'add', 'id': 'd.old_batch',
+            'into': 'judgments', 'body': {'verdict': 'ready', 'rests_on': ['p.input'],
+                                          'wrong_if': {'expr': 'p.input > 5'}}}],
+            recorded_at='2026-09-17T12:00:00Z', _receipt_version=6)
+        self.assertEqual(mutation.to_data()['receipt']['before']['authoring']['version'], 6)
+        judgment = next(obj for obj in objects(mutation) if obj['kind'] == 'judgment')
+        self.assertNotIn('seen', judgment['body'])
+        A.verify_prepared(self.entry, T.PreparedMutation.from_bytes(mutation.to_bytes()))
 
     def test_final_world_cannot_mask_same_day_replacement_or_invalid_source(self):
         before = self.store.capture().inventory

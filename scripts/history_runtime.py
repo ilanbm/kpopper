@@ -18,13 +18,14 @@ import zipfile
 from .reasoning import runtime as R
 
 ENDPOINT = 'history/capabilities'
-INCLUSION = ['*.py', 'reasoning/*.py', 'session/*.py']
+INCLUSION = ['*.py', 'reasoning/*.py', 'session/*.py', 'applications/*.py']
 REQUIRED = sorted(['__init__.py', 'cli.py', 'history_cli.py', 'history_runtime.py',
+    'applications/__init__.py', 'applications/hub.py', 'applications/annotated_doc.py',
     'history_contract.py', 'history_store.py', 'history_adapter.py', 'history_transaction.py', 'history_paths.py',
-    'history_authoring.py', 'history_identity.py', 'history_edits.py', 'history_direct.py', 'history_bundle.py', 'history_migration.py', 'history_activation.py',
+    'history_authoring.py', 'history_bootstrap.py', 'history_identity.py', 'history_edits.py', 'history_direct.py', 'history_bundle.py', 'history_migration.py', 'history_activation.py',
     'history_group_activation.py', 'history_hypotheses.py', 'history_hypothesis_import.py', 'history_branch.py',
     'provenance.py', 'pending_grounding.py', 'knowledge_views.py', 'reasoning/__init__.py',
-    'reasoning/contract.py', 'reasoning/snapshot.py', 'reasoning/evaluate.py',
+    'reasoning/contract.py', 'reasoning/snapshot.py', 'reasoning/scenario.py', 'reasoning/evaluate.py',
     'reasoning/runtime.py', 'session/__init__.py'])
 MAX_SOURCE_BYTES = 32 * 1024 * 1024
 MAX_OUTPUT_BYTES = 2 * 1024 * 1024
@@ -147,18 +148,20 @@ def _resolved(root, manifest):
 def _history_schemas():
     return {'authority': [1, 2], 'baseline': [1], 'commit': [1],
             'typed_object': [2], 'prepared_mutation': [1, 2], 'projection': [1], 'import': [1, 2],
-            'authoring_receipt': [1, 2, 3, 4, 5, 6], 'identity_receipt': [1, 2], 'history_auxiliary': [1],
+            'authoring_receipt': [1, 2, 3, 4, 5, 6, 7, 8, 9], 'identity_receipt': [1, 2], 'history_auxiliary': [1],
             'group_transition': [1], 'named_hypotheses': [1], 'physical_hypothesis_import': [1],
             'branch_capture': [1, 2], 'branch_adoption': [1, 2],
             'bundle': [1, 2, 3], 'contribution': [1, 2, 3], 'retained_generations': [1], 'cancellation': [1],
-            'commit_capabilities': ['explicit-root-disposition/v1', 'subject-paths/v2'],
+            'commit_capabilities': ['explicit-root-disposition/v1', 'subject-paths/v2',
+                                    'temporal-applicability/v1'],
             'bundle_capabilities': ['generation-cancellation/v1', 'history-closure/v1', 'history-generations/v1', 'history-subset/v1', 'subject-paths/v2'],
             'act_kinds': ['accept', 'correct', 'propose', 'refute', 'retire', 'review']}
 
 
 def _schemas(root):
     resources = []
-    for name in ('assessment.schema.json', 'reasoning/assessment.schema.json'):
+    for name in ('assessment.schema.json', 'reasoning/assessment.schema.json',
+                 'reasoning/history_assessment.schema.json'):
         raw = _read(root, name)
         _strict_json(raw)
         resources.append({'path': name, 'sha256': hashlib.sha256(raw).hexdigest()})
@@ -173,7 +176,7 @@ def _native(root):
     except R.RuntimeUnavailable:
         return _seal({'version': 1, 'status': 'unavailable', 'reason': 'unsupported_target',
                       'target': None, 'readiness': 'not_tested'})
-    relative = 'reasoning/native/' + target + '.zip'
+    relative = 'reasoning/native/' + target + R.RUNTIME_ARCHIVE_SUFFIX
     if not (root / relative).exists():
         return _seal({'version': 1, 'status': 'unavailable', 'reason': 'archive_missing',
                       'target': target, 'readiness': 'not_tested'})
@@ -275,8 +278,10 @@ def _validate_declaration(value, nonce):
              and schemas['identity_schemes'] == ['prototype/v1', 'typed-history/v2']
              and isinstance(schemas['resources'], list), 'unsupported_runtime_schema')
     resources = schemas['resources']
-    _require(len(resources) == 2, 'unsupported_runtime_schema')
-    for item, path in zip(resources, ('assessment.schema.json', 'reasoning/assessment.schema.json')):
+    schema_paths = ('assessment.schema.json', 'reasoning/assessment.schema.json',
+                    'reasoning/history_assessment.schema.json')
+    _require(len(resources) == len(schema_paths), 'unsupported_runtime_schema')
+    for item, path in zip(resources, schema_paths):
         _require(isinstance(item, dict) and set(item) == {'path', 'sha256'} and item['path'] == path
                  and isinstance(item['sha256'], str) and HEX.fullmatch(item['sha256']),
                  'unsupported_runtime_schema')
@@ -289,7 +294,7 @@ def _validate_declaration(value, nonce):
         _require(set(native) == {'version', 'status', 'target', 'archive', 'archive_sha256', 'manifest',
                                 'readiness', 'digest'} and native['status'] == 'archive_validated'
                  and isinstance(native['target'], str) and
-                 native['archive'] == 'reasoning/native/' + native['target'] + '.zip'
+                 native['archive'] == 'reasoning/native/' + native['target'] + R.RUNTIME_ARCHIVE_SUFFIX
                  and isinstance(native['archive_sha256'], str) and HEX.fullmatch(native['archive_sha256'])
                  and isinstance(native['manifest'], dict), 'unsupported_native_manifest')
     return value

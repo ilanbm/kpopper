@@ -1,14 +1,6 @@
-<p align="center">
-  <img src="assets/kpopper-hero.png" width="760" alt="kpopper. An ink illustration of Karl Popper holds a microphone and makes a finger heart, looking toward the wordmark and fictional quotation: It really whips the lemma's ass! Logic symbols rise from the blue word lemma. A separate italic attribution reads Karl Popper, the father of K-pop. His speech bubble says OMG 이건 꼭 필요해! — roughly, OMG, I really need this!">
-</p>
+[![kpopper. An ink illustration of Karl Popper holds a microphone and makes a finger heart, looking toward the wordmark and fictional quotation: It really whips the lemma's ass! Logic symbols rise from the blue word lemma. A separate italic attribution reads - Karl Popper, the father of K-pop. His speech bubble says OMG 이건 꼭 필요해! — roughly, OMG, I really need this!](assets/kpopper-hero.png)](assets/kpopper-hero.png)
 
-<p align="center">
-  <a href="https://github.com/ilanbm/kpopper/actions/workflows/check.yml"><img src="https://github.com/ilanbm/kpopper/actions/workflows/check.yml/badge.svg?branch=main" alt="CI tests and record checks"></a>
-  <a href="https://github.com/ilanbm/kpopper/releases/latest"><img src="https://img.shields.io/github/v/release/ilanbm/kpopper" alt="Latest release"></a>
-  <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue" alt="License: MIT"></a>
-  <a href="docs/reasoning-core.md"><img src="https://img.shields.io/badge/reasoning--runtime-Lean%204-3B82F6" alt="reasoning-runtime: Lean 4"></a>
-  <a href="docs/history-contract.md"><img src="https://img.shields.io/badge/Versioned%20knowledge-experimental-8B5CF6" alt="Versioned knowledge: experimental"></a>
-</p>
+[![CI tests and record checks](https://github.com/ilanbm/kpopper/actions/workflows/check.yml/badge.svg?branch=main)](https://github.com/ilanbm/kpopper/actions/workflows/check.yml) [![Latest release](https://img.shields.io/github/v/release/ilanbm/kpopper)](https://github.com/ilanbm/kpopper/releases/latest) [![License: MIT](https://img.shields.io/badge/license-MIT-blue)](LICENSE) [![reasoning-runtime: Lean 4](https://img.shields.io/badge/reasoning--runtime-Lean%204-3B82F6)](docs/reasoning-core.md) [![Versioned knowledge: default for new records](https://img.shields.io/badge/Versioned%20knowledge-default%20for%20new%20records-8B5CF6)](docs/history-contract.md)
 
 <p align="center">
   <a href="#popper-give-a-conclusion-a-way-to-fail">What's going on? Who is this guy?</a>
@@ -18,86 +10,126 @@
 
 # Your project, more self-aware.
 
-**Your agents reason. kpopper makes that reasoning explicit, persistent, and deterministically checkable.**
+**Your agents reason. kpopper makes that reasoning explicit, persistent, and [deterministically checkable](#how-it-works).**
 
 kpopper connects decisions to the evidence, assumptions and earlier decisions they
 depend on, and records what would make them worth revisiting. When a recorded premise
 changes, kpopper traces its reach through the record and surfaces what needs another look.
 
-**[Get started](#get-started)** · [Examples](#example-1-private-data-exposure-assumption-checks) ·
-[Capabilities](#what-you-can-do-with-kpopper) · [Record format](#the-knowledge-record) ·
+> [!IMPORTANT]
+> **TL;DR: kpopper makes your AI sessions less forgetful and your work easier to pick up, check, and build on.**
+>
+> [**Try it and see for yourself →**](#get-started)
+
+**[Get started](#get-started)** · [Choose your path](#choose-your-path) ·
+[Capabilities](#what-you-can-do-with-kpopper) · [Record format](#how-it-works) ·
+[Commands](#quick-reference) ·
 [Contributing](CONTRIBUTING.md) · [Why the name?](#popper-give-a-conclusion-a-way-to-fail)
 
-<p align="center">
-  <a href="assets/diagrams/reasoning-check.png">
-    <picture>
-      <source media="(max-width: 600px)" srcset="assets/diagrams/reasoning-check-mobile.png">
-      <img src="assets/diagrams/reasoning-check.png" width="760" alt="More deterministic reasoning. An earlier conversation creates an email with a 30-day download window; an action annotation shows the decision and its grounds recorded. A later session drafts a seven-day retention policy and updates the recorded retention from thirty to seven. An Agent records arrow leads to Deterministic checks: YAML retains the conclusion that retention supports the promised window and its earlier 30/30 review snapshot. Below the YAML, seven less than thirty produces Promise no longer supported. The closing line reads Conversations move on. The reasoning stays checkable. The agent interprets the words; the checker evaluates the recorded condition.">
-    </picture>
-  </a>
-</p>
+[![Meet GROUNDING.yaml, with a handwritten your new friend note. An earlier conversation creates an email with a 30-day promise and records the supporting reason; a later conversation updates a draft retention policy and its recorded value to seven days. Blue arrows connect the conversations to the saved conclusion and changed reading. The YAML retains its 30/30 review snapshot. A pink arrow follows wrong_if to the deterministic check: seven is less than thirty, so the promise is no longer supported. Actual CLI output returns FAIL downloads.availability to the agent, with a caller-measured 0.24-second local-run badge. The closing line reads Deterministic Reasoning that outlives the conversation, with a blue underline pointing to the returned result. The phone layout presents consecutive excerpts from the same file.](assets/diagrams/reasoning-check.png)](assets/diagrams/reasoning-check.png)
 
-<details>
+[Phone layout](assets/diagrams/reasoning-check-mobile.png)
+
+<details open>
 <summary>Contents</summary>
 
-- [Example 1: Private data exposure (assumption checks)](#example-1-private-data-exposure-assumption-checks)
-- [Example 2: Premature file deletion (consistency)](#example-2-premature-file-deletion-consistency)
-- [Example 3: Outdated planning assumptions (freshness)](#example-3-outdated-planning-assumptions-freshness)
-- [Example 4: Dark matter across studies (evidence synthesis)](#example-4-dark-matter-across-studies-evidence-synthesis)
+- [Choose your path](#choose-your-path)
+  - [Coding agents](#example-1-coding-agent)
+  - [Cowork / Work](#example-2-claude-cowork-and-chatgpt-work)
+  - [Research](#example-3-research)
 - [Installation and first use](#get-started)
+- [CLI and plugin quick reference](#quick-reference)
 - [What you can do with kpopper](#what-you-can-do-with-kpopper)
-- [One project, across your existing tools](#one-project-across-your-existing-tools)
-- [Past, present and future](#past-present-future)
-- [Background capture during a conversation](#keep-the-conversation-moving)
-- [The record and its evolving structure](#the-knowledge-record)
-- [Review that needs judgment](#when-a-review-needs-judgment)
-- [Followups and background checks](#followups-and-background-checks)
-- [Checks across branches and in CI](#coding-check-the-reasoning-behind-a-merge)
-- [Karl Popper, K-pop and the name](#popper-give-a-conclusion-a-way-to-fail)
-- [The third-brain idea](#a-third-brain-for-work-in-progress)
-- [The optional Lean core](#the-lean-proof-assistant-from-fermat-to-agents)
-- [Documents with their evidence](#share-a-document-with-its-reasons)
-- [The record's page and graph view](#explore-the-projects-knowledge-record)
-- [Availability and limits](#what-is-available-and-what-is-next)
+- [Go deeper](#go-deeper)
+  - [How it works](#how-it-works)
+  - [Followups and background checks](#followups-and-background-checks)
+  - [Optional experimental applications](#experimental-applications)
+  - [Karl Popper, K-pop and the name](#popper-give-a-conclusion-a-way-to-fail)
+  - [Availability and limits](#what-is-available-and-what-is-next)
 - [Try it, get help and contribute](#make-it-earn-its-place)
 
 </details>
+
+<a id="choose-your-path"></a>
+
+## Where would you like to start?
+
+Open the example closest to your work. Each path follows the situation, the record
+and what the checks return. You can also [go straight to installation](#get-started).
 
 <a id="access-control-and-shared-caching"></a>
 
 <a id="example-1-private-data-exposure"></a>
 
-## Example 1: Private data exposure (assumption checks)
+<a id="example-1-private-data-exposure-assumption-checks"></a>
+<a id="example-1-coding-agent"></a>
+
+<details>
+<summary><a href="assets/stories/cache-privacy.png"><img src="assets/navigation/coding.png" width="112" height="70" align="middle" alt="Preview the coding-agent illustration"></a> <strong>Coding agents</strong><br>Catch assumptions that break across branches and worktrees.</summary>
+
+## Example 1: Coding Agent (assumption checks)
+
+### Private data exposure
 
 Two agents start from a search service whose results are all public. PR A adds
 private projects and filters results for each user. PR B adds a shared cache keyed
 only by the query, relying on those results being public and identical for everyone.
 
-<p align="center">
-  <a href="assets/stories/cache-privacy.png">
-    <picture>
-      <source media="(max-width: 600px)" srcset="assets/stories/cache-privacy-mobile.png">
-      <img src="assets/stories/cache-privacy.png" width="760" alt="PR A adds private projects in search.py. PR B caches by query in cache.py because all results were public. Tests pass separately and Git merges cleanly. The combination risks serving Alice's private result to Bob. kpopper flags the failed recorded condition and points back to the cache decision.">
-    </picture>
-  </a>
-</p>
+[![PR A adds private projects in search.py. PR B caches by query in cache.py because all results were public. Tests pass separately and Git merges cleanly. The combination risks serving Alice's private result to Bob. kpopper flags the failed recorded condition and points back to the cache decision. The closing line reads Two green PRs. One data leak.](assets/stories/cache-privacy.png)](assets/stories/cache-privacy.png)
+
+[Phone layout](assets/stories/cache-privacy-mobile.png)
 
 The files merge cleanly. **The reason for sharing the cache no longer holds.**
 
-The relevant part of PR B's `GROUNDING.yaml`:
+The same record retains the surrounding design: query matching, cache behavior,
+test coverage, operational limits and open questions.
+
+[![A richer cache record connects the public-results premise to the query-only cache and its hit-path authorization assumption. The minimap is generated from the complete record.](assets/stories/cache-privacy-record.png)](assets/stories/cache-privacy-record.png)
+
+[Phone layout](assets/stories/cache-privacy-record-mobile.png) · [Full design record](examples/merge-assumptions/cache/pr-b/GROUNDING.yaml)
+
+A selected excerpt from PR B:
 
 ```yaml
 known:
-  search.results_public: {v: true, measure: search_results_public}
-
+  search.results_public:
+    v: true
+    from: s.search
+    at: INCLUDE_PRIVATE_PROJECTS is false
+    measure: search_results_public
+  cache.key_fields:
+    v: query
+    from: s.cache
+    at: 'lookup: query not in _CACHE; _CACHE[query]'
+  cache.hit_reuses_result:
+    v: true
+    from: s.cache
+    at: 'lookup: return _CACHE[query]'
+  cache.test_data:
+    v: One mocked public project; no private-result fixture in that test.
+    from: s.cache_tests
+    at: test_public_query_is_served_once_across_users
 judgments:
   search.shared_cache:
-    rests_on: [search.results_public]
-    verdict: >-
-      Search responses can share a cache keyed only by query
-      because all results are public.
-    wrong_if: "search.results_public == false"
-    seen: {search.results_public: true}
+    rests_on:
+    - search.results_public
+    - cache.key_fields
+    - cache.goal
+    verdict: Search responses can share a cache keyed only by query because all results are public.
+    wrong_if: search.results_public == false
+    seen:
+      search.results_public: true
+      cache.key_fields: query
+      cache.goal: Avoid a second search for the same public query across users.
+  cache.hit_authorization:
+    rests_on:
+    - search.shared_cache
+    - cache.hit_reuses_result
+    - cache.miss_delegate
+    verdict: Treat cross-user cache hits as depending on the public-results decision, not as a fresh
+      authorization check.
+    reopened_by: The hit path, key scope or public-results decision changes; review the combined
+      path.
 ```
 
 `rests_on` names the premise. `seen` keeps its value at the last review. When the
@@ -122,143 +154,440 @@ infer arbitrary security properties from code or replace behavioral tests.
 </details>
 
 <a id="download-promises-and-storage-retention"></a>
-
 <a id="example-2-unavailable-downloads"></a>
+<a id="example-2-premature-file-deletion-consistency"></a>
 
-## Example 2: Premature file deletion (consistency)
+The opening overview uses a download promise and a retention policy. The
+[complete merge example](examples/merge-assumptions/README.md#premature-file-deletion-consistency)
+shows the same 7-versus-30-day conflict across two branches, with executable code,
+measurement recipes and a separate integration probe.
 
-Exports stay for 30 days; download emails currently promise seven. PR A reduces
-storage retention to seven days. PR B extends the download promise to 30 days.
-Each change fits the other policy on its own branch.
+These are executable examples. Checks cover the assumptions the record
+declares and the inputs deliberately measured or recorded. The examples on this page
+retain their compact legacy records, which kpopper 1.7 continues to read without
+migration. [New records also preserve immutable history](#how-it-works).
 
-<p align="center">
-  <a href="assets/stories/download-promise.png">
-    <picture>
-      <source media="(max-width: 600px)" srcset="assets/stories/download-promise-mobile.png">
-      <img src="assets/stories/download-promise.png" width="760" alt="PR A keeps exports for seven days in storage-policy.yaml. PR B promises 30-day downloads in download-email.html because files previously stayed for 30 days. Tests pass and Git merges cleanly. Together, a still-promised link can point to a file deleted on day seven. The recorded condition fails: seven days of storage is less than the 30 days promised.">
-    </picture>
-  </a>
-</p>
+### Two working modes
 
-**The email still says the link is available. The storage policy has already deleted
-the file.** The example's recipes read both the policy and the promise in the actual
-email template. [Run both merge stories](examples/merge-assumptions/README.md).
+The difference is **whether sessions share one project context or work against different
+versions of the code**. Both modes support several sessions and competing hypotheses.
 
-PR B records the promise against the retention period it sees:
+**`GROUNDING.yaml` is the readable project record shown below:** one shared context in
+Simple, and a version kept with each branch, including `main`, in Advanced. New
+history-backed records also keep their supporting history in `.kpopper/`; carry
+that directory with the YAML when sharing or versioning the record.
 
-```yaml
-known:
-  exports.retention_days: {v: 30, measure: retention_days}
-  downloads.promised_days: {v: 30, measure: promised_days}
+[![Simple: sessions share one sourced project record labeled GROUNDING.yaml, with competing hypotheses beside it; consolidation compares and checks proposals, then folds them into the record, refutes them with a reason, or leaves them pending. Advanced: Branch A, Branch B and main each have a GROUNDING.yaml record for their version of the code. Branch records pass through consolidation before integration into main. A continuing Shared findings, pending review path captures feature-independent findings with their source, scope and status. Dashed arrows show local reading before merge. With permission, findings enter a knowledge PR, where consolidation reconciles them with the target record before acceptance. Both paths reach the same main record; the shared path continues for the next batch.](assets/diagrams/two-working-modes.png)](assets/diagrams/two-working-modes.png)
 
-judgments:
-  downloads.availability:
-    rests_on: [exports.retention_days, downloads.promised_days]
-    verdict: "Keep exports available for the full promised download window."
-    wrong_if: "exports.retention_days < downloads.promised_days"
-    seen: {exports.retention_days: 30, downloads.promised_days: 30}
-```
+[Phone layout](assets/diagrams/two-working-modes-mobile.png)
 
-After the merge, the measured values are seven days of retention and 30 days promised.
-The comparison fails. The [full record](examples/merge-assumptions/downloads/pr-b/GROUNDING.yaml)
-and recipes connect both readings to their files.
+[View the full-size illustration](assets/diagrams/two-working-modes.png) ·
+[View the vertical version](assets/diagrams/two-working-modes-mobile.png)
 
-These are fictional, executable examples. Checks cover the assumptions the record
-declares and the inputs deliberately measured or recorded. A changed premise can also
-prompt review without proving a decision wrong.
+**Simple — one shared context.** Sessions read and contribute to the same project graph.
+Competing ideas are named hypotheses beside it: several sessions can examine the same
+proposal, and one session can work on several. For a research project, for example, sessions
+can read different papers and compare explanations against the same sourced record.
+**Consolidation** is how those proposals become part of the shared record: compare them
+with what it already holds, check the combined dependencies and resolve conflicting claims.
+A proposal can be folded in, refuted with its reason retained, or left pending.
+
+**Advanced — branch contexts and shared findings.** Each branch's record describes its
+version of the code. A cache decision on one branch may depend on results being public,
+while another branch introduces private results. Keeping those premises with their branches
+lets review check whether the reasoning still holds when the changes are combined.
+Consolidation reconciles those records: it identifies overlapping subjects and conflicting
+claims, and checks which decisions need another look under the combined premises. Resolve
+what needs judgment before folding a proposal in; unresolved hypotheses remain explicit.
+
+Knowledge then follows two paths:
+
+- **Feature knowledge travels with its branch.** Its assumptions, measurements and
+  hypotheses stay attached to the code they describe. Consolidation tests their combination
+  with the target record as part of reviewing the change.
+- **Shared findings have a continuing path of their own.** Shareable findings that apply
+  independently of the feature enter `pending_grounding`, with their sources and scope.
+  They remain available even if the originating session closes or its worktree is removed.
+
+Suppose a session building an integration discovers a documented change to the vendor's
+API limit. **The feature may be abandoned; the finding can still help the project.** Other
+local worktrees can read it immediately, marked as pending, without waiting for the feature
+to merge. It appears alongside their branch record; reading it does not adopt it or replace
+their recorded premises.
+
+With the project's publication permission, shared findings accumulate in one knowledge PR.
+Consolidation reconciles the proposed knowledge with the target record before acceptance;
+conflicts and changed premises need resolution. Accepted contributions are then verified
+in the target branch, shown as `main` above. The same publication branch is reused for
+the next batch, while the local contribution history persists across review cycles. Local
+capture and reading also work without publication.
+
+A measurement of an unmerged commit can be a fact about that commit. A proposed conclusion
+remains a hypothesis. Merging means the team accepted the contribution; it does not prove
+the claim, increase confidence or refresh its last review. Private material and information
+whose sharing permission is unclear stay in a structured private draft.
+
+Projects without Git start in Simple; new Git projects start in Advanced, including those
+with only one checkout. Simple can also be configured for a Git project with one external
+shared record. Existing registered shared records keep their current location and behavior;
+changing mode requires explicit reconciliation.
+
+See [project modes and publication](docs/project-modes.md) for routing, reproducible reads
+and the publication lifecycle, and [consolidation](skills/consolidate/SKILL.md) for the
+dry run, folding and refutation commands.
+
+These project modes also apply to document and research work.
+
+</details>
 
 <a id="revisiting-plans-when-the-brief-changes"></a>
 
 <a id="example-3-outdated-planning-assumptions"></a>
 
-## Example 3: Outdated planning assumptions (freshness)
+<a id="example-3-outdated-planning-assumptions-freshness"></a>
 
-In Claude Cowork, you're planning a cooking workshop around the venue's shared kitchen,
-equipment and ingredients. A later client brief moves the workshop entirely online.
+<a id="example-2-outdated-planning-assumptions-freshness"></a>
+<a id="example-2-claude-cowork-and-chatgpt-work"></a>
 
-<p align="center">
-  <a href="assets/stories/cowork-workshop.png">
-    <picture>
-      <source media="(max-width: 600px)" srcset="assets/stories/cowork-workshop-mobile.png">
-      <img src="assets/stories/cowork-workshop.png" width="760" alt="A later session records the client's change from an onsite cooking workshop to an online event. The saved plan still assumes one shared kitchen with equipment and ingredients provided. kpopper reports that the workshop format moved from onsite to remote. The agent needs to revisit equipment, ingredients and activities; this is a review notice, not an automatically failed conclusion.">
-    </picture>
-  </a>
-</p>
+<details>
+<summary><a href="assets/stories/cowork-workshop.png"><img src="assets/navigation/cowork.png" width="112" height="70" align="middle" alt="Preview the workshop illustration"></a> <strong>Cowork / Work</strong><br>Keep plans current when the brief changes.</summary>
+
+## Example 2: Claude Cowork / ChatGPT Work (freshness)
+
+### Outdated planning assumptions
+
+A cooking workshop is planned around the venue's shared kitchen, equipment and
+ingredients. A later client brief moves it entirely online. For ChatGPT Work, see
+the [runtime requirements and current limits](docs/chatgpt-work.md).
+
+[![A later session records the client's change from an onsite cooking workshop to an online event. The saved plan still assumes one shared kitchen with equipment and ingredients provided. kpopper reports that the workshop format moved from onsite to remote. The agent needs to revisit equipment, ingredients and activities; this is a review notice, not an automatically failed conclusion.](assets/stories/cowork-workshop.png)](assets/stories/cowork-workshop.png)
+
+[Phone layout](assets/stories/cowork-workshop-mobile.png)
 
 Once the agent records the new format, kpopper flags the saved plan for review.
 **It does not decide whether the activities can work remotely.** The next session can
 recover the old reason, read the updated brief, and work out what participants need.
 [Try the Cowork example](examples/cowork-workshop/README.md).
 
-The after record retains the old decision and its review snapshot:
+The planning record connects 13 readings to five saved plans and four open questions.
+The format change reaches the agenda, equipment, ingredients, group arrangement and
+supervision; the earlier review snapshots remain visible.
+
+[![A complete planning record shows the remote format beside five plans last reviewed as onsite, with unchanged client constraints and unresolved home requirements.](assets/stories/cowork-workshop-record.png)](assets/stories/cowork-workshop-record.png)
+
+[Phone layout](assets/stories/cowork-workshop-record-mobile.png) · [Full planning record](examples/cowork-workshop/after/GROUNDING.yaml)
+
+Selected entries from the after record:
 
 ```yaml
 known:
-  workshop.format: {v: remote}
-
+  workshop.format:
+    v: remote
+    from: s.updated_brief
+    at: Participants join online from home
+  workshop.participants:
+    v: 18
+    from: s.session_plan
+    at: Client constraints
+  workshop.duration_minutes:
+    v: 90
+    from: s.session_plan
+    at: Client constraints
+  venue.workstations:
+    v: 6
+    from: s.logistics_plan
+    at: Venue provision
 judgments:
   workshop.agenda:
-    rests_on: [workshop.format]
-    verdict: "Use the shared-kitchen agenda and provide ingredients at the venue."
-    reopened_by: >-
-      The workshop format or access to the kitchen changes; review the
-      activities, equipment and ingredients participants need.
-    seen: {workshop.format: onsite}
+    rests_on:
+    - workshop.format
+    - venue.shared_kitchen
+    - workshop.duration_minutes
+    - workshop.recipe
+    verdict: Use the shared-kitchen agenda and provide ingredients at the venue.
+    reopened_by: The format or access to the shared kitchen changes; review activities, equipment
+      and preparation.
+    seen:
+      workshop.format: onsite
+      venue.shared_kitchen: true
+      workshop.duration_minutes: 90
+      workshop.recipe: Fresh pasta with tomato sauce.
+  workshop.equipment_plan:
+    rests_on:
+    - workshop.format
+    - venue.equipment_supplied
+    - venue.workstations
+    verdict: Plan equipment around the six venue workstations.
+    reopened_by: The format, supplied equipment or access to the workstations changes.
+    seen:
+      workshop.format: onsite
+      venue.equipment_supplied: true
+      venue.workstations: 6
+  workshop.ingredient_plan:
+    rests_on:
+    - workshop.format
+    - venue.ingredients_supplied
+    - workshop.participants
+    verdict: Prepare ingredient portions at the venue for the 18 participants.
+    reopened_by: The format, ingredient provision or participant count changes; review purchasing,
+      portions and distribution.
+    seen:
+      workshop.format: onsite
+      venue.ingredients_supplied: true
+      workshop.participants: 18
 ```
 
 The current value is `remote`; the decision was reviewed against `onsite`. That is a
 `MOVED` notice. The prose in `reopened_by` tells the agent what deserves attention;
 it is not an executable predicate. [Read the complete after record](examples/cowork-workshop/after/GROUNDING.yaml).
 
+### Before the first answer
+
+The next session opens with the saved context: all five plans need review because
+`workshop.format` changed from `onsite` to `remote`. Then the user asks:
+
+> Prepare the ingredient portions for the 18 participants.
+
+On a host with the prompt hook enabled, this matching prompt produces a focused
+pointer (actual hook output, shown here with Codex skill syntax):
+
+```text
+kpopper: the record holds workshop.ingredient_plan on this - $ground workshop.ingredient_plan before answering from memory.
+```
+
+The agent follows that pointer with `pull workshop.ingredient_plan`. It retrieves
+`remote`, the old venue-based plan and its `onsite` review snapshot before answering.
+The next decision is how ingredients will reach participants at home.
+[See the opening and retrieval output](examples/cowork-workshop/README.md#before-the-first-answer).
+
 **Keep your existing documents, notes and task tools.**
 The record links back to relevant evidence; there is no need to migrate your knowledge system.
 For another example that needs judgment, explore
 [a replacement offer with an uncertain deadline](examples/offer-review/README.md).
 
-## Example 4: Dark matter across studies (evidence synthesis)
+</details>
 
-Give three research agents different papers and the same knowledge record. One
-reads [galaxy rotation](https://articles.adsabs.harvard.edu/pdf/1980ApJ...238..471R),
-another [Bullet Cluster lensing](https://arxiv.org/abs/astro-ph/0608407v1), and a third
-[Planck's CMB results](https://arxiv.org/abs/1807.06209v4). Each adds sourced findings.
-A synthesis agent can follow all three contributions and build a connected argument,
-with its assumptions and open questions attached.
+<a id="example-4-dark-matter-across-studies-evidence-synthesis"></a>
 
-<p align="center">
-  <a href="assets/stories/dark-matter.png">
-    <picture>
-      <source media="(max-width: 600px)" srcset="assets/stories/dark-matter-mobile.png">
-      <img src="assets/stories/dark-matter.png" width="760" alt="Three research agents contribute findings from galaxy rotation, gravitational lensing and the cosmic microwave background to one shared record. A synthesis agent connects the evidence under stated models. The graph retains the adopted assumptions and open questions about physical identity and alternative explanations; new evidence can prompt review.">
-    </picture>
-  </a>
-</p>
+<a id="example-3-dark-matter-across-studies-evidence-synthesis"></a>
+<a id="example-3-research"></a>
 
-**The next session inherits the argument, including how it could fail.** This
-three-paper example connects different observations into a dark-matter account
-under stated models. It keeps that synthesis separate from what each paper reports.
-The illustration is schematic; the [guide](examples/dark-matter/README.md) links
-the readings to their exact source locations and explains their limits.
+<details>
+<summary><a href="assets/stories/dark-matter-intro.png"><img src="assets/navigation/research.png" width="112" height="70" align="middle" alt="Preview the research illustration"></a> <strong>Research</strong><br>Connect evidence and revisit conclusions as findings change.</summary>
 
-The synthesis declares its dependencies and a condition for further judgment:
+## Example 3: Research (evidence synthesis)
+
+### Dark matter across studies
+
+The original three-paper view shows the shared-record idea:
+
+[![Three research tasks connect galaxy rotation, Bullet Cluster lensing and the CMB in a shared record, with assumptions and open questions attached.](assets/stories/dark-matter-intro.png)](assets/stories/dark-matter-intro.png)
+
+[Phone layout](assets/stories/dark-matter-intro-mobile.png)
+
+A research record can connect observations across scales and retain the tensions
+between them. This worked example follows **six papers**: Rubin's galaxy rotation,
+SPARC's galaxy catalog, the radial acceleration relation, Bullet Cluster lensing,
+Planck's cosmological fit and the first LZ particle search.
+
+[![Six papers connect galaxy rotation and baryonic structure, cluster mass location, the CMB fit and a particle-search limit. Their assumptions and shared inputs remain attached to the synthesis.](assets/stories/dark-matter.png)](assets/stories/dark-matter.png)
+
+[Phone layout](assets/stories/dark-matter-mobile.png)
+
+The argument includes **36 source readings, two scope readings, one calculation,
+seven linked judgments and five open questions**. Its depth comes from the links:
+SPARC and the acceleration paper share data; the Planck density ratio comes from
+one model fit; a null WIMP search constrains specific interactions without settling
+the identity of the astronomical mass component.
+
+[![The research GROUNDING.yaml includes six paper sources, detailed readings, an exact density-ratio calculation, intermediate judgments and the final synthesis. A framework change reaches multiple interpretations.](assets/stories/dark-matter-record.png)](assets/stories/dark-matter-record.png)
+
+[Phone layout](assets/stories/dark-matter-record-mobile.png) · [Complete research record](examples/dark-matter/GROUNDING.yaml) · [Sources and exact locations](examples/dark-matter/README.md#the-six-sources)
+
+A source-grounded excerpt:
 
 ```yaml
-synthesis.dark_matter:
-  rests_on: [rotation.finding, lensing.finding, cmb.finding, research.framework]
-  verdict: Under the stated models, these findings support a dark-matter account across scales.
-  reopened_by: >-
-    A finding or its model assumptions are revised, or a worked alternative
-    accounts for these observations together. Reassess the synthesis and its scope.
+known:
+  sparc.sample_size:
+    v: 175
+    from: paper.sparc
+    at: Abstract
+    unit: galaxies
+  rar.sample_size:
+    v: 153
+    from: paper.rar
+    at: p. 1, Data / Galaxy Sample
+    unit: galaxies
+  rar.points:
+    v: 2693
+    from: paper.rar
+    at: 'p. 1, Galaxy Sample: velocity-precision cut'
+    unit: points
+  cmb.omega_c_h2:
+    v: 0.12
+    from: paper.cmb
+    at: Abstract, combined analysis
+    uncertainty: 0.001
+    confidence: 68%
+  cmb.omega_b_h2:
+    v: 0.0224
+    from: paper.cmb
+    at: Abstract, combined analysis
+    uncertainty: 0.0001
+    confidence: 68%
+  lz.si_limit:
+    v: 9.2e-48
+    from: paper.lz
+    at: 'Abstract, version 4: limit at 36 GeV/c^2'
+    unit: cm^2
+    confidence: 90%
+  lz.mass_at_limit:
+    v: 36
+    from: paper.lz
+    at: Abstract, version 4
+    unit: GeV/c^2
+  cmb.dark_to_baryon_density:
+    rule:
+      expr: cmb.omega_c_h2 / cmb.omega_b_h2
+judgments:
+  evidence.shared_catalog:
+    rests_on:
+    - sparc.sample_size
+    - sparc.inputs
+    - rar.catalog
+    - rar.selection
+    verdict: Treat SPARC and the RAR analysis as related evidence, not two independent observational
+      votes.
+    reopened_by: A different catalog, sample selection or independently calibrated replication changes
+      the dependence between these findings.
+  synthesis.dark_matter:
+    rests_on:
+    - galaxy.extended_mass
+    - galaxy.baryon_coupling
+    - cluster.mass_location
+    - cosmology.cold_component
+    - particle.search_scope
+    - research.framework
+    - research.selection
+    verdict: Under the stated models, the selected evidence supports a dark-matter account across
+      scales, while baryonic regularities and direct-search limits constrain its explanation.
+    reopened_by: A source finding or shared assumption is revised, or a worked alternative jointly
+      addresses the galaxy, cluster, cosmological and particle-search constraints. Reassess the
+      affected paths and the synthesis.
 ```
 
-The [full GROUNDING.yaml](examples/dark-matter/GROUNDING.yaml) includes the sources,
-readings, open questions and tool-filled `seen`. Agents make the scientific judgment;
-kpopper preserves and traces the declared reasoning. It does not turn agreement
-between agents into proof.
+**The next session inherits the argument, including its unresolved questions.**
+
+Run the checker on that same record:
+
+```sh
+kpop check examples/dark-matter/GROUNDING.yaml
+```
+
+Its final summary (exit `0`; the full response also lists the seven prose review
+conditions):
+
+```text
+7 judgments, 58 entries, 0 problems, 7 declared
+```
+
+For a starting overview use `open`; to inspect a subject use `pull`; to trace a
+premise use `affects`. The `ground` skill guides that workflow for an agent.
+
+<details>
+<summary>Read the context, inspect the calculation, and trace a change</summary>
+
+**Current context** — selected lines from the actual `open` response:
+
+```sh
+kpop open examples/dark-matter/GROUNDING.yaml --chars 1000
+```
+
+```text
+Six-paper worked example; selected source readings and an authored synthesis, not a complete review or live research-agent evaluation.
+holds: rar (8) · research (8) · cmb (7) · lz (6) · paper (6) · sparc (6) · lensing (5) · rotation (5)
+58 entries, 7 judgments, 5 open questions, updated 2026-09-19
+```
+
+**A computed reading and the judgment that uses it:**
+
+```sh
+kpop pull cmb.dark_to_baryon_density examples/dark-matter/GROUNDING.yaml --budget 1100
+```
+
+```text
+cmb.dark_to_baryon_density: 75/14 = cmb.omega_c_h2 / cmb.omega_b_h2 (Ratio of the abstract central physical de ...
++ cosmology.cold_component: Within base Lambda-CDM, the fitted physical cold-dark-matter density exceeds the b ...
+    holds
+    because: The density ratio connects two central values from the same fit. The model assumptions and
+             retained lensing-amplitude tension limit the interpretation.
+    reopened by: The likelihood, data combination or cosmological model changes enough to alter the inferred c ...
+
+affects <entry> shows what a change reaches
+```
+
+**The reach of the adopted framework:**
+
+```sh
+kpop affects research.framework examples/dark-matter/GROUNDING.yaml
+```
+
+```text
+cluster.mass_location
+    via research.framework -> flagged only
+cosmology.cold_component
+    via research.framework -> flagged only
+galaxy.extended_mass
+    via research.framework -> flagged only
+synthesis.dark_matter
+    via research.framework -> flagged only
+
+4 judgments reached
+```
+
+</details>
+
+[See all captured commands and responses](examples/dark-matter/cli-examples.md),
+including `pull synthesis.dark_matter`. Here `check` reports record consistency;
+the scientific review conditions still require judgment.
+
+The illustrations are schematics drawn from the record. The
+[full example](examples/dark-matter/README.md) distinguishes source readings,
+authored interpretations, shared assumptions and the computed `75/14` density ratio.
+That arithmetic does not establish the scientific synthesis.
 
 [Run the shared-record example](examples/dark-matter/README.md#run-the-shared-record-example):
-three concurrent CLI writers replay prepared readings, then a proposed change in
-the review framework flags the synthesis. It uses real papers and real record
-operations, without calling models or claiming a live research evaluation.
+three concurrent CLI writers retain the prepared six-paper contributions, and the
+writer records each judgment's review snapshot. A proposed change of framework
+then reopens several interpretations and the synthesis. No model call or claim of
+live independent research is part of that replay.
+
+### The collection changes; the answer stays five
+
+The [advanced continuation](examples/dark-matter/advanced/README.md) starts with
+the five astronomical papers and an explicit selection rule: include a study
+when it is in this review and classified as astronomy. Adding the existing LZ
+laboratory paper grows the captured collection while leaving that selection equal.
+
+| Reading | Before LZ | After LZ | Replay of the earlier Snapshot |
+|---|---:|---:|---:|
+| Papers in the scope | 5 | 6 | 5 |
+| Selected astronomical papers | 5 | 5 | 5 |
+| Query basis | Earlier basis | Changed basis | Earlier basis recovered |
+| Particle identities | Unknown | Unknown | Unknown |
+
+The `core/v1` record uses `composition/v1` for the inclusion condition and
+`query/v1` for selection. Its basis includes nonmatching members, so an equal
+numeric answer does not hide a changed collection. The retained Snapshot
+recovers the earlier inputs and result even with the source files unavailable.
+
+These are scripted CLI and public API results, checked without model calls.
+The [runnable exercise and captured output](examples/dark-matter/advanced/README.md#run-it)
+also preserve the exact `75/14` density ratio and an unchanged qualitative
+review judgment. Five papers is a coverage count: RAR still reuses SPARC, model
+assumptions remain explicit, and neither the count nor replay proves the synthesis.
+
+</details>
 
 ## Get started
 
@@ -279,7 +608,7 @@ python3 "$HOME/kpopper/scripts/plugin_runtime.py" doctor
 ```
 
 If you already have a checkout, use its absolute path instead. `setup` explicitly
-downloads the four [package dependencies](pyproject.toml) from PyPI into a private
+installs the [core dependencies](pyproject.toml) from PyPI into a private
 virtualenv under `~/.local/share/kpopper/runtimes/`. It works with externally managed
 Python installations: system packages are not modified. On Linux distributions that
 package `venv` separately, install that Python's `venv` support first.
@@ -383,15 +712,19 @@ Other adapters describe their own interpreter configuration. A Python package in
 includes dependencies in its own environment; do not run pip against an externally managed
 system Python to repair plugin hooks.
 
-Lean is optional; the ordinary reader and page work without it. In a new agent session
-with the project open, start with:
+New records use the packaged reasoning runtime; you do not need to install the Lean
+development toolchain. The optional [checked-session mode](docs/checked-sessions.md)
+and [HTML applications](#experimental-applications) have their own setup.
+In a new agent session with the project open, start with:
 
 > Use kpopper to keep this project's reasoning across sessions. If a record exists, open it
 > and show what needs review. As we work, preserve the useful findings, sources, decisions
 > and conditions that would make those decisions worth reconsidering.
 
 Installation creates no record. Start with the first finding worth carrying into another
-session. A one-off question may need no record at all.
+session. On macOS/Linux or WSL, the first `kpop add` creates a record with `core/v1`
+reasoning and immutable history. Existing legacy records keep their interpretation
+until explicitly adopted. A one-off question may need no record at all.
 
 Keep useful findings within the existing schema and your write permissions. The
 [recording guidance](skills/record/SKILL.md#record-what-the-work-calls-for) includes an
@@ -401,36 +734,148 @@ explicit read-only instructions.
 For a standalone CLI installation and a walkthrough of the launch-party example, see
 [Try it from the command line](docs/reference.md#try-it-from-the-command-line).
 
+## Quick reference
+
+Use the CLI in a terminal, or ask your agent to follow a plugin skill. A skill guides
+a workflow and may use several CLI commands. You can also describe what you need in
+ordinary language.
+
+### CLI
+
+These commands assume an installed `kpop`. From a source checkout with its dependencies
+installed, use `python3 scripts/kpopper` instead. For plugin work, use the command supplied
+by the session's `KPOPPER_AGENT_CONTEXT`. `<id>` names a record entry, such as
+`workshop.ingredient_plan`; `kpop --help` lists command groups.
+
+| Command | What you need |
+| --- | --- |
+| `kpop where` | Locate this project's record |
+| `kpop open` | Open the current context and attention items |
+| `kpop pull <id>` | Retrieve a subject, its sources and reasons |
+| `kpop search "terms"` | Find matching claims and local source passages |
+| `kpop affects <id>` | Trace what depends on a premise |
+| `kpop check` | Check recorded conditions and changed premises |
+| `kpop assess <id>` | Inspect findings and scoped attention as JSON |
+| `kpop export <id>` | Share a focused Markdown excerpt |
+
+<details>
+<summary>Writing, history and background commands</summary>
+
+These commands can record decisions, update project state or configure work. The linked
+guides describe their arguments and review steps.
+
+| Command or command group | What you need |
+| --- | --- |
+| `kpop add <id> field=value ...` | Add a finding or judgment |
+| `kpop set <id> <value> --why "reason" --as-of YYYY-MM-DD` | Update a reading with its reason and date |
+| `kpop update --file report.json` | Apply one prepared source report |
+| `kpop review <id>` | Record a completed review |
+| `kpop same <a> <b>` · `kpop distinct <a> <b> "reason"` | Resolve whether two IDs name the same subject |
+| `kpop consolidate --dry-run` · `kpop consolidate --from <ref> --dry-run` | Test hypotheses or another branch before folding |
+| `kpop consolidate` · `kpop consolidate --refute <name> "reason"` | Fold eligible hypotheses or retain a refutation |
+| `kpop history status` | Inspect committed history acceptance |
+| `kpop remeasure --run` | Rerun the record's configured measurement recipes |
+| `kpop map` | Begin a guided mapping of existing material |
+| `kpop ingest` | Capture and process reports in the background |
+| `kpop watch` | Configure branch checks or inspect shared findings |
+| `kpop followups` | Manage deferred work and its recorded outcomes |
+| `kpop config` | Inspect or change workspace guidance |
+
+See the [command reference](docs/reference.md), [history commands](docs/history-contract.md#history-commands-and-portable-contributions),
+[background capture](skills/kpopper/INGESTION.md) and [followups](skills/kpopper/FOLLOWUPS.md).
+`review` records your assessment; it does not make that assessment for you.
+
+</details>
+
+### Plugin skills
+
+| Command | Skill | What happens in practice · possible CLI calls |
+| --- | --- | --- |
+| `/kpopper:kpopper` | [kpopper](skills/kpopper/SKILL.md) | Explains the method and chooses the workflow that fits the task. CLI calls follow the selected workflow. |
+| `/kpopper:ground` | [ground](skills/ground/SKILL.md) | Retrieves relevant claims, sources and dependencies before answering, and checks what needs review.<br>May use `kpop pull <id>`, `kpop affects <id>`, `kpop check` or `kpop search "terms"`. |
+| `/kpopper:record` | [record](skills/record/SKILL.md) | Saves findings, their sources and reasons; records decisions, open questions and completed reviews.<br>May use `kpop update --file report.json`, `kpop add`, `kpop set` or `kpop review`. |
+| `/kpopper:map` | [map](skills/map/SKILL.md) | Examines the agreed materials, builds a sourced record and reports coverage and gaps.<br>Starts with `kpop map --json` or `kpop map --deep --json`, then follows the returned workflow. |
+| `/kpopper:consolidate` | [consolidate](skills/consolidate/SKILL.md) | Compares proposals with the record, surfaces disagreements and guides folding or refuting them.<br>May use `kpop consolidate --dry-run`, `kpop consolidate` or `kpop remeasure --run`. |
+| `/kpopper:watch` | [watch](skills/watch/SKILL.md) | Inspects branch checks and shared findings; configures background checks or daily review when requested.<br>May use `kpop watch status`, `kpop watch setup`, `kpop watch shared` or `kpop followups daily install`, plus the host's scheduler. |
+
+The agent chooses the calls for the task and the record's state, using its
+source-reading tools as needed.
+
+For example, `/kpopper:ground workshop.ingredient_plan` asks the agent to retrieve that plan and
+its basis. **`ground` is a skill; the CLI reads use `open`, `pull`, `affects` and `check`.**
+Other hosts expose skills through their [adapters](adapters/README.md).
+
+**Experimental — optional HTML applications**
+
+These skills require the [optional HTML setup](#experimental-applications) and explicit
+selection. Their interfaces and artifact formats may change.
+
+| Command | Application | What happens in practice · possible CLI calls |
+| --- | --- | --- |
+| `/kpopper:hub` | [kpopper Hub](skills/hub/SKILL.md) | Builds a browsable snapshot of the record and checks its layout and coverage.<br>Uses `kpop experimental hub`, for example with `--open` or `--verify`. |
+| `/kpopper:annotated-doc` | [Annotated Documents](skills/annotated-doc/SKILL.md) | Authors or refreshes a standalone HTML document with selected evidence and reviewable copy updates.<br>Uses `kpop experimental annotated-doc` with operations such as `guide`, `build` and `refresh`. |
+
+The CLI entry points are `kpop experimental hub` and `kpop experimental annotated-doc`.
+`page` and `document` remain compatibility aliases. The separate experimental
+[checked-session integration](docs/checked-sessions.md) uses `kpop session` and has its
+own setup; it is optional alongside the default reasoning engine.
+
 ## What you can do with kpopper
 
-| In your work | What kpopper keeps or connects |
-|---|---|
-| Pick up a project in a later session | Relevant facts, goals, decisions, reasons and open questions, with bounded orientation and focused retrieval. [Reading the record](docs/reference.md#find-and-read-the-record). |
-| Trace a recommendation | Sources, their dates and locations, the premises used, and the values seen at the last review. [Record format](#the-knowledge-record). |
-| Notice when a decision needs another look | Changed recorded premises and declared breaking conditions, including facts connected to reviewed measurement recipes. [Checking rules](docs/reference.md#what-check-means). |
-| Keep competing claims in view | Hypotheses, explicit reconciliation and retained refutations. [Consolidation](skills/consolidate/SKILL.md). |
-| Work across branches | Combined-record checks in CI and optional background compatibility checks while work continues. [Coding and CI](docs/coding-and-ci.md). |
-| Return to deferred work | Followups tied to dates, recorded changes or preceding work, with configured host scheduling. [Followups](#followups-and-background-checks). |
-| Share a result people can inspect | Standalone HTML with selected evidence and review choices, plus a separate navigable page for the project record. [Documents](#share-a-document-with-its-reasons). |
-| Share part of the record | A bounded Markdown excerpt with historical and current readings, omitted values marked, and optional Mermaid diagrams. [Focused exports](docs/graph-export.md). |
-| Let the structure grow with the project | Domain-specific subjects and vocabulary within a small set of explicit relationships and checks. [Evolving structure](#a-structure-that-grows-with-the-project). |
-| Build a tool on the record | Versioned assessment JSON with independent findings, explicit scope and task-specific attention policies. [Assessment contract](docs/assessment.md). |
-| Bind a session's reads to a known version | An experimental, optional Lean-backed view checks selected session contracts and rejects reads against an outdated record revision. [Checked sessions](docs/checked-sessions.md). |
+Carry the reasoning into the next session, check it against recorded inputs, and keep
+the earlier evidence available when the work changes.
 
-Use the parts your project needs. Existing documents, tools and memory remain where
-they are; the agent records the relevant connections between them.
+| What you want to do | What kpopper provides | Example |
+| --- | --- | --- |
+| Resume work with its context | Open the project's standing decisions and attention items, then retrieve the facts and reasons relevant to a question. [Before the first answer](#example-2-claude-cowork-and-chatgpt-work). | Resume a job search and recover why three roles were shortlisted. |
+| Trace why a decision was made | Follow its sources, declared dependencies and the values used at its last review. [The knowledge record](#how-it-works). | Trace the upload queue decision back to the test that exposed request timeouts. |
+| Keep earlier decisions inspectable | History-backed records retain immutable claim versions and explicit acceptance, review, correction and refutation acts as the current record evolves. [History](docs/history-contract.md). | See why a trip moved from July to August, without losing the original constraints. |
+| Calculate and check explicit rules | Evaluate exact arithmetic, compound Boolean conditions and conditional expressions with the packaged Lean runtime. Missing inputs and execution errors remain visible. [Deterministic reasoning](#how-it-works). | Check whether 24 guests fit a venue with 18 seats. |
+| Ask questions over a recorded collection | Filter, select, count or sum within a declared scope, or test whether all/any members meet a condition. The result retains scope evidence and diagnostics. [Collection queries](docs/query.md). | Find apartments below $2,000 with an elevator and a lease that allows pets. |
+| Catch a changed basis behind an unchanged answer | Compare the recorded inputs, rules and collection membership with the last review, even when the numeric result stays equal. [Five selected papers, a different basis](examples/dark-matter/advanced/README.md). | The pass rate is still 100%, but the tests behind the release decision have changed. |
+| Reproduce an earlier computation | Replay a retained Snapshot through the public API to recover its earlier result and basis after the live record changes. [Source-free replay example](examples/dark-matter/advanced/README.md#run-it). | Reproduce last quarter's server cost estimate using the prices and traffic assumptions saved then. |
+| Notice which decisions need another look | Trace changed premises, evaluate declared breaking conditions and explicitly rerun configured measurement recipes. [Checks and measurements](docs/reference.md#what-check-means). | Record a babysitter's cancellation and surface the evening plans that depended on it. |
+| Test alternatives and reconcile branch work | Keep named hypotheses, inspect the proposed combination and retain conflicts or refutations. Worktrees keep their code-specific context, with checks available before a merge and in CI. [Two working modes](#example-1-coding-agent). | One branch removes password login; another adds a feature that still requires it. |
+| Keep useful findings across sessions and branches | Capture explicit reports in the background and retain scoped project contributions with their sources and pending/accepted status. [Background capture](#keep-the-conversation-moving) · [Shared contributions](docs/project-modes.md). | A discarded prototype's documented API limit remains available to the next integration task. |
+| Return to work when its conditions change | Tie followups to dates, changed recorded inputs or earlier work, with scheduling and delivery configured in the host. [Followups](#followups-and-background-checks). | Resume tax preparation once the missing bank statement has been recorded. |
+| Share a focused piece of the reasoning | Export selected entries as Markdown, with earlier/current readings, omitted values marked and optional Mermaid diagrams. [Focused exports](docs/graph-export.md). | Share why you chose a school, including the commute times and fee comparisons. |
+| Build a tool on structured findings | Read versioned assessment JSON with computational results, review comparisons, contention, integrity and history evidence kept distinct. [Assessment contract](docs/assessment.md). | Build a grant dashboard that separates budget overruns from missing receipts. |
+| Let the record fit the work | Add domain-specific subjects and vocabulary while preserving explicit sources, dependencies and review conditions. [Evolving structure](#how-it-works). | Organize a garden plan around plants, watering schedules and frost precautions. |
+
+New records use `core/v1` and immutable history by default; existing legacy records
+require explicit adoption. Collection queries use the declared `query/v1` capability.
+The checks cover recorded inputs and supported rules. The agent still interprets sources
+and makes judgments. Your existing documents, tools and memory stay where they are.
+
+**Optional experimental tools**
+
+| What you want to do | Tool and scope | Example |
+| --- | --- | --- |
+| Browse the record visually | **kpopper Hub:** a rendered snapshot with project layouts, source links and an interactive graph. Requires the optional HTML runtime. [Applications](#experimental-applications). | Open a visual overview of a renovation's quotes, decisions and unresolved questions. |
+| Share a document with inspectable evidence | **Annotated Documents:** standalone HTML with selected source snapshots and reviewable copy updates. Requires the optional HTML runtime. [Document workflow](docs/documents.md). | Produce a client report with the source invoices beside each expense total. |
+| Bind an agent's reads to a known revision | **Checked sessions:** a revision-bound view and optional MCP transport, with their own setup and session checks. [Checked-session integration](docs/checked-sessions.md). | An agent refreshes its view after another session changes the recorded API contract. |
+
+
+## Go deeper
+
+Open a topic when you need its details. The examples, commands and explanations
+remain here for reference.
 
 <a id="start-with-the-work"></a>
 
-## One project, across your existing tools
+<a id="one-project-across-your-existing-tools"></a>
+
+<details>
+<summary><strong>One project, across your existing tools</strong></summary>
 
 A project is **work around a goal**. Its materials may span documents, conversations,
 calendars, task systems, files and earlier sessions. In software, they also include code,
 commits and pull requests. One project can cross several tools; one source can serve several
 projects.
 
-kpopper keeps a *picture of the project's reasoning* in `GROUNDING.yaml`: a readable record
-that connects claims to sources and decisions to their premises. Your documents and tools
+kpopper presents a *picture of the project's reasoning* in `GROUNDING.yaml`: a readable
+record that connects claims to sources and decisions to their premises, backed by
+immutable history in `.kpopper/` for new records. Your documents and tools
 keep their own content. The record makes the reasoning between them available to the next
 person or agent working on the goal.
 
@@ -456,39 +901,39 @@ for an [initial map or deeper investigation](docs/first-use.md) of selected mate
 The agent uses the sources available in your context; access to a file alone does not
 make it part of the project.
 
-## Past, present, future
+</details>
+
+<a id="past-present-future"></a>
+
+<details>
+<summary><strong>Past, present, future</strong></summary>
 
 Keep the work connected across time: the sources and decisions behind it, what needs
 attention now, and the checks or actions to return to later.
 
-<p align="center">
-  <a href="assets/diagrams/work-across-time.png">
-    <picture>
-      <source media="(max-width: 600px)" srcset="assets/diagrams/work-across-time-mobile.png">
-      <img src="assets/diagrams/work-across-time.png" width="760" alt="Three ink panels connect past sources, evidence, decisions, reasons and last-review snapshots; present claims, changes, contradictions and new information; and future followups, daily reviews and time or event triggers when configured. A return loop explicitly says the agent records outcomes as evidence.">
-    </picture>
-  </a>
-</p>
+[![Three ink panels connect past sources, evidence, decisions, reasons and last-review snapshots; present claims, changes, contradictions and new information; and future followups, daily reviews and time or event triggers when configured. A return loop explicitly says the agent records outcomes as evidence.](assets/diagrams/work-across-time.png)](assets/diagrams/work-across-time.png)
+
+[Phone layout](assets/diagrams/work-across-time-mobile.png)
 
 The Future panel shows deferred work tracked by followups and scheduled reviews when
 configured in the host. The return arrow is the agent's step of recording useful outcomes
 as evidence; marking a followup complete is a separate operation and does not automatically
 rewrite the knowledge record.
 
-## Keep the conversation moving
+</details>
+
+<a id="keep-the-conversation-moving"></a>
+
+<details>
+<summary><strong>Keep the conversation moving</strong></summary>
 
 New information often arrives halfway through another task. kpopper can retain an explicit
 report and process a supported update in a separate worker. Routine results stay quiet;
 important unresolved findings are available for delivery back to the conversation.
 
-<p align="center">
-  <a href="assets/diagrams/conversation-flow.png">
-    <picture>
-      <source media="(max-width: 600px)" srcset="assets/diagrams/conversation-flow-mobile.png">
-      <img src="assets/diagrams/conversation-flow.png" width="760" alt="Get notified only when something needs attention. The main agent captures an explicit venue-cancellation report and continues with the set list. A software worker in a separate process saves the dated source, records the change from confirmed to cancelled and checks the venue-to-announcement dependency. The announcement needs review; important findings return through the configured delivery route while routine updates stay quiet.">
-    </picture>
-  </a>
-</p>
+[![The main agent captures an explicit venue-cancellation report and continues with the set list. A software worker in a separate process saves the dated source, records the change from confirmed to cancelled and checks the venue-to-announcement dependency. The announcement needs review; important findings return through the configured delivery route while routine updates stay quiet. The closing line reads Get notified only when something needs attention.](assets/diagrams/conversation-flow.png)](assets/diagrams/conversation-flow.png)
+
+[Phone layout](assets/diagrams/conversation-flow-mobile.png)
 
 Today, that worker can update an **existing stored scalar value in a single record file**,
 using a supplied source quote, target, value and report date. It does not infer what an
@@ -501,78 +946,84 @@ after an answer requires the host capabilities described in the
 an update, inspect its outcome before relying on it. Background work is useful precisely
 where the conversation can safely continue without that result.
 
-## How it works
+</details>
 
-### Two working modes
+<a id="how-it-works"></a>
 
-The difference is **whether sessions share one project context or work against different
-versions of the code**. Both modes support several sessions and competing hypotheses.
+<details>
+<summary><strong>How it works — reasoning, record format and review</strong></summary>
 
-<picture>
-  <source media="(max-width: 640px)" srcset="assets/diagrams/two-working-modes-mobile.png">
-  <img src="assets/diagrams/two-working-modes.png" alt="Two working modes. Simple: sessions share one sourced project record and competing hypotheses; consolidation compares and checks proposals, then folds them into the record, refutes them with a reason, or leaves them pending. Advanced: each branch keeps the assumptions and hypotheses for its code. Branch records pass through consolidation before integration into main. A continuing Shared findings, pending review path captures feature-independent findings with their source, scope and status. Dashed arrows show local reading before merge. With permission, findings enter a knowledge PR, where consolidation reconciles them with the target record before acceptance. Both paths reach the same main record; the shared path continues for the next batch.">
-</picture>
+### What deterministic reasoning means here
 
-[View the full-size illustration](assets/diagrams/two-working-modes.png) ·
-[View the vertical version](assets/diagrams/two-working-modes-mobile.png)
+**Deterministic reasoning applies fixed rules to explicit inputs. A completed
+evaluation of the same inputs and rules gives the same result.**
 
-**Simple — one shared context.** Sessions read and contribute to the same project graph.
-Competing ideas are named hypotheses beside it: several sessions can examine the same
-proposal, and one session can work on several. For a research project, for example, sessions
-can read different papers and compare explanations against the same sourced record.
-**Consolidation** is how those proposals become part of the shared record: compare them
-with what it already holds, check the combined dependencies and resolve conflicting claims.
-A proposal can be folded in, refuted with its reason retained, or left pending.
+In kpopper, this means:
 
-**Advanced — branch contexts and shared findings.** Each branch's record describes its
-version of the code. A cache decision on one branch may depend on results being public,
-while another branch introduces private results. Keeping those premises with their branches
-lets review check whether the reasoning still holds when the changes are combined.
-Consolidation reconciles those records: it identifies overlapping subjects and conflicting
-claims, and checks which decisions need another look under the combined premises. Resolve
-what needs judgment before folding a proposal in; unresolved hypotheses remain explicit.
+- **Repeatable checks.** A $1,200 plan exceeds a $1,000 budget:
+  `total_cost > budget` evaluates to `true` each time those values are checked.
+  No fresh model response is needed to decide that comparison.
+- **Explicit assumptions.** The record names what a conclusion depends on and
+  the condition that would make it fail or deserve another look.
+- **Traceable support.** Follow a result through its recorded inputs, rule,
+  source references and last-review snapshot.
 
-Knowledge then follows two paths:
+**The same answer can rest on different evidence.** Consider this illustrative
+exchange after adding LZ to the [research example](examples/dark-matter/advanced/README.md):
 
-- **Feature knowledge travels with its branch.** Its assumptions, measurements and
-  hypotheses stay attached to the code they describe. Consolidation tests their combination
-  with the target record as part of reviewing the change.
-- **Shared findings have a continuing path of their own.** Shareable findings that apply
-  independently of the feature enter `pending_grounding`, with their sources and scope.
-  They remain available even if the originating session closes or its worktree is removed.
+> **User:** “Include the LZ paper. Does our selection of astronomy studies change?”
+>
+> **Agent:** “I'll apply the recorded selection rule and compare its evidence basis
+> with the last review.”
 
-Suppose a session building an integration discovers a documented change to the vendor's
-API limit. **The feature may be abandoned; the finding can still help the project.** Other
-local worktrees can read it immediately, marked as pending, without waiting for the feature
-to merge. It appears alongside their branch record; reading it does not adopt it or replace
-their recorded premises.
+The selection rule requires `in_review` **and** `domain == "astronomy"`.
+The agent runs the following against the generated history-backed record.
+`jq` selects four fields from the actual CLI assessment for display:
 
-With the project's publication permission, shared findings accumulate in one knowledge PR.
-Consolidation reconciles the proposed knowledge with the target record before acceptance;
-conflicts and changed premises need resolution. Accepted contributions are then verified
-in the target branch, shown as `main` above. The same publication branch is reused for
-the next batch, while the local contribution history persists across review cycles. Local
-capture and reading also work without publication.
+```sh
+kpop assess m.astronomy_count m.particle_identities d.review_scope \
+  --record /tmp/dark-matter-query/history/GROUNDING.yaml --history |
+  jq -f examples/dark-matter/advanced/assessment-summary.jq
+```
 
-A measurement of an unmerged commit can be a fact about that commit. A proposed conclusion
-remains a hypothesis. Merging means the team accepted the contribution; it does not prove
-the claim, increase confidence or refresh its last review. Private material and information
-whose sharing permission is unclear stay in a structured private draft.
+```json
+{
+  "studies_scanned": 6,
+  "astronomy_studies_selected": 5,
+  "particle_identity_status": "unknown",
+  "review_basis": "changed"
+}
+```
 
-Projects without Git start in Simple; new Git projects start in Advanced, including those
-with only one checkout. Simple can also be configured for a Git project with one external
-shared record. Existing registered shared records keep their current location and behavior;
-changing mode requires explicit reconciliation.
+Five studies matched before; five still match. LZ is recorded as laboratory evidence,
+so it joins the scope without entering that selection. The retained review still names
+the earlier basis, and missing particle-identity readings stay unknown.
 
-See [project modes and publication](docs/project-modes.md) for routing, reproducible reads
-and the publication lifecycle, and [consolidation](skills/consolidate/SKILL.md) for the
-dry run, folding and refutation commands.
+The agent can now explain: **“The selection is unchanged, but the evidence considered
+has changed. The saved review needs another look.”** The runnable example also replays
+the earlier Snapshot after removing access to the source files, recovering its original
+five-paper scope and basis. [Run it and inspect the full responses](examples/dark-matter/advanced/README.md#run-it).
+
+Agents still interpret sources, choose which assumptions to record and make
+judgments. The reliability of a conclusion depends on that evidence and those
+choices. A free-text review condition remains a prompt for judgment; it is not
+silently treated as an executable rule.
+
+See the [supported calculations and conditions](skills/kpopper/EXPRESSIONS.md)
+and the [reasoning core's formal scope](docs/reasoning-core.md).
 
 ### The knowledge record
 
 The technical term is an **epistemic record**: a record of what is known and how it is
 grounded. These are roles in the method, not six mandatory YAML sections. Start with
 what the work needs; a source and one finding can be enough.
+
+**Since 1.7, new records preserve immutable versions of their claims and recorded acts.**
+`GROUNDING.yaml` presents the current readable record; `.kpopper/` holds the history
+and its authority metadata. Retain both together. Supported CLI writes update the
+record through that history, and ordinary reads automatically use `core/v1`. An
+existing legacy YAML record is not migrated by reading it. See the
+[history contract](docs/history-contract.md) for adoption and editing rules.
 
 | Piece | What it preserves |
 |---|---|
@@ -588,7 +1039,7 @@ preserving a basis for review. A judgment needs the values it was reviewed again
 to make drift detectable, and a meaningful condition for reconsideration. A record
 with no judgments yet does not need invented conclusions, snapshots or derivations
 just to fill a template. Field names and project-specific categories are described
-[below](#a-structure-that-grows-with-the-project).
+[below](#how-it-works).
 
 **Change is compared with the last review.** When a recorded scalar differs from a judgment's
 `seen` snapshot, the reader identifies the movement. A supported `wrong_if` comparison says
@@ -623,9 +1074,9 @@ and experiments; a workshop can name participants and supplies; a codebase can n
 interfaces and deployment assumptions. Add subjects, categories and views when the
 work creates a reason for them.
 
-The record is ordinary YAML, and Git is optional. Keep it with the project or in a
-deliberately configured external location; your source documents stay in their
-existing tools. [Storage and location](docs/reference.md#record-location-and-shape).
+The readable record is YAML, and Git is optional. Keep it and its `.kpopper/`
+directory with the project or in a deliberately configured external location;
+your source documents stay in their existing tools. [Storage and location](docs/reference.md#record-location-and-shape).
 
 The vocabulary is flexible. The ordinary reader recognizes dependency, predicate
 and snapshot roles by their shape; `facts`/`claims` can serve the same purpose as
@@ -664,7 +1115,12 @@ select one flagged decision for attention. A prose condition alone is not an
 automatic background review of every judgment. See [followups](skills/kpopper/FOLLOWUPS.md)
 for triggers, work budgets and scheduling.
 
-## Followups and background checks
+</details>
+
+<a id="followups-and-background-checks"></a>
+
+<details>
+<summary><strong>Followups and background checks</strong></summary>
 
 Deferred work can become ready on a date, after a recorded value changes, when a
 threshold is crossed, or after another task finishes. Keep the task in your existing
@@ -689,7 +1145,12 @@ See [setup and host limits](skills/watch/SKILL.md),
 [followup routing and review budgets](skills/kpopper/FOLLOWUPS.md), and
 [branch compatibility and shared observations](skills/watch/references/compatibility.md).
 
-## “Ready to launch” had a condition
+</details>
+
+<a id="ready-to-launch-had-a-condition"></a>
+
+<details>
+<summary><strong>“Ready to launch” had a condition</strong></summary>
 
 Karl Popper is releasing his debut K-pop single.
 An agent has prepared Friday's launch-party announcement. The venue has confirmed the
@@ -732,7 +1193,12 @@ earlier decision was based on**. It knows to revisit the announcement before reu
 [Try the example](docs/reference.md#try-it-from-the-command-line) ·
 [See a PR and CI case](#coding-check-the-reasoning-behind-a-merge)
 
-## Coding: check the reasoning behind a merge
+</details>
+
+<a id="coding-check-the-reasoning-behind-a-merge"></a>
+
+<details>
+<summary><strong>Coding: check the reasoning behind a merge</strong></summary>
 
 **Two branches can pass their own tests and undermine each other's decisions when merged.**
 Git checks whether their text can be combined. kpopper adds a check on the recorded premises
@@ -777,8 +1243,9 @@ standing judgment folds only when the record's own condition has broken it, or w
 it (`--take`), and what it replaced stays beside the record.
 
 **These commands already run in kpopper's own [CI workflow](.github/workflows/check.yml)** on
-pull requests and pushes to `main`, alongside the test suite and page checks. They use the
-Python reader and do not require the optional Lean core. See
+pull requests and pushes to `main`, alongside the test suite. Record checks use the
+record's declared interpretation; the experimental Hub has a separate HTML verification
+step. See
 [Add reasoning checks to CI](docs/coding-and-ci.md) for setup, including measurement recipes.
 
 The coverage is what the record declares. These checks do not infer intent from arbitrary
@@ -786,7 +1253,12 @@ code or prove that all goals are mutually compatible. Keep relevant readings cur
 review measurement recipes as code. A contradiction expressed only in prose, or hidden behind
 unrelated IDs, can still require human review.
 
-## Popper: give a conclusion a way to fail
+</details>
+
+<a id="popper-give-a-conclusion-a-way-to-fail"></a>
+
+<details>
+<summary><strong>Popper: give a conclusion a way to fail</strong></summary>
 
 The man in the banner is **Karl Popper**, cast here as an unlikely K-pop star.
 
@@ -811,9 +1283,10 @@ If the recorded status is `planned`, that condition fires and `check` fails.
 A green check means no failing condition was found by these checks;
 it does not establish that the recommendation is true, wise, complete or authorized.
 
-The predicate language is deliberately small: one supported comparison over declared
-references and values. Free-form reasoning and compound logical expressions are outside
-that evaluator. If a condition cannot yet be checked, `blocked_on` records why. A decision
+This legacy example uses one comparison over declared inputs. The current core also
+supports [compound conditions](docs/reasoning-core.md#composable-conditions). Free-form
+reasoning still needs interpretation. If a condition cannot yet be checked, `blocked_on`
+records why. A decision
 that needs a person's judgment can instead carry `reopened_by`, describing the sign that
 would bring it back for review. Preferences and open questions need no invented scientific
 certainty. See [the checking rules](docs/reference.md#what-check-means).
@@ -821,7 +1294,12 @@ certainty. See [the checking rules](docs/reference.md#what-check-means).
 This is a practical use of falsification, not an automated implementation of the scientific
 method. Choosing good evidence and meaningful breaking conditions remains intellectual work.
 
-## A third brain for work in progress
+</details>
+
+<a id="a-third-brain-for-work-in-progress"></a>
+
+<details>
+<summary><strong>A third brain for work in progress</strong></summary>
 
 An agent's working instructions and the work it produces serve different readers.
 Plan section numbers can leak into code comments; a website can start describing the
@@ -852,14 +1330,12 @@ this reasoning and review layer a **third brain**; the agent supplies the interp
 **Keep the knowledge system already in use.** A folder of Markdown files, an Obsidian vault,
 a project wiki, or memory files used by Claude or Codex can stay where they are. The agent
 reads relevant material through its available tools and records the claims it relies on,
-with links back to those sources, in `GROUNDING.yaml`. There is no need to migrate the
+with links back to those sources, in the [project record](#how-it-works).
+`GROUNDING.yaml` presents those claims; new records retain their history in `.kpopper/`.
+There is no need to migrate the
 existing notes or replace the agent's memory system.
 
-<p align="center">
-  <a href="assets/knowledge-sources.png">
-    <img src="assets/knowledge-sources.png" width="760" alt="Dense clusters of notes and memory, documents and research, conversations, plans and commitments, and code and data fill the left side. An agent selects relevant evidence. On the right, kpopper arranges claims, decisions and review conditions in GROUNDING.yaml. Sources stay put; reasoning stays connected.">
-  </a>
-</p>
+[![Dense clusters of notes and memory, documents and research, conversations, plans and commitments, and code and data fill the left side. An agent selects relevant evidence. On the right, kpopper arranges claims, decisions and review conditions in GROUNDING.yaml. Sources stay put; reasoning stays connected.](assets/knowledge-sources.png)](assets/knowledge-sources.png)
 
 | Role | Question it helps answer |
 |---|---|
@@ -883,7 +1359,12 @@ with new information, draw attention to a consequential mismatch, and review the
 In kpopper those steps are explicit records and checks. The person or agent supplies the
 interpretation; the software follows the declared connections. You retain the decision.
 
-## The Lean proof assistant: from Fermat to agents
+</details>
+
+<a id="the-lean-proof-assistant-from-fermat-to-agents"></a>
+
+<details>
+<summary><strong>The Lean proof assistant: from Fermat to agents</strong></summary>
 
 <p>
   <a href="https://lean-lang.org/">
@@ -901,18 +1382,24 @@ and the [published proof](https://github.com/anthropics/fermats-last-theorem).
 >
 > — Karl Popper, father of K-pop.
 
-**kpopper's optional, experimental session mode uses the Lean 4 programming language** for
-a smaller, specific job: checking rules about an agent's view of the record. The language
-is also a theorem prover: its kernel checks formal proofs against a precisely defined
-type theory. [The Lean reference](https://lean-lang.org/doc/reference/latest/Elaboration-and-Compilation/)
+**kpopper uses a compiled Lean 4 runtime for deterministic reasoning in new records.**
+It evaluates supported calculations and conditions from explicit inputs. The
+optional, experimental checked-session mode also uses Lean to check rules about
+an agent's view of the record. The language is a theorem prover: its kernel checks
+formal proofs against a precisely defined type theory. [The Lean reference](https://lean-lang.org/doc/reference/latest/Elaboration-and-Compilation/)
 explains how proof checking and compiled execution fit together.
 
-In kpopper, Python reads the record and prepares a normalized snapshot. A local compiled
-Lean core computes assessments and checks the proposed session view. Python then exposes
-the result through CLI or MCP. Reads are bound to the revision returned at opening, so a
-changed record rejects a request using the old revision.
+For the default reasoning core, Python captures the record and the packaged Lean
+runtime evaluates supported rules. [Reasoning and history](docs/reasoning-core.md)
+describes its scope, supported platforms and formal guarantees.
 
-The [Lean source](scripts/session/lean/Main.lean) contains formal proofs of specific properties:
+In checked-session mode, Python prepares a normalized snapshot, a separate local Lean
+core checks the proposed session view, and CLI or MCP exposes the result. Reads are
+bound to the revision returned at opening, so a changed record rejects a request
+using the old revision.
+
+The [checked-session Lean source](scripts/session/lean/Main.lean) contains formal proofs
+of specific properties:
 
 | Property | Why it matters |
 |---|---|
@@ -939,64 +1426,51 @@ The ordinary commands remain available without it.
 
 [Logo source and trademark information](assets/README.md#lean-logo).
 
-## Share a document with its reasons
+</details>
 
-Ask for the document you want:
-
-> Create an HTML project update from these notes, with a recommendation and a checklist.
-
-With kpopper active, the agent writes the content, design and evidence mapping together.
-You do not need to ask for the layer separately or prepare a knowledge record first.
-
-**Open the explanation where you are reading.** Hover over a dotted passage to preview
-its explanation; click to keep it open. The card focuses on that passage, with an explanation
-in ordinary language and technical details collapsed. Click outside or use the close button
-to return to the document.
-
-<p align="center">
-  <a href="assets/standalone-document-reasoning.png">
-    <img src="assets/standalone-document-reasoning.png" width="820" alt="The Autumn Garden Workshop report with its 16-day registration-window passage and a focused explanation visible together. The card marks the author's interpretation as Not checked, explains how it was derived from two dates, and links to the project notes offered as context.">
-  </a>
-</p>
-
-<sub>The card distinguishes the author's interpretation from a fact stated in the source:
-the notes give two dates, but do not define a registration window. Its reasoning,
-**Not checked** status and source link remain visible alongside the document.
-Click the image to inspect it at full size.</sub>
-
-**Follow the source, then come back.** An internal source link opens only the relevant
-reading in the same card. Back returns to the explanation without losing your place.
-The card keeps its position while longer content scrolls inside it.
-
-**Keep or share one file.** The HTML contains the document, selected source snapshots and
-review choices. Open it offline in a browser with JavaScript enabled; no account, server
-or neighboring files are needed to read the document and inspect its evidence.
-
-Give the agent a changed source later and it can prepare a new copy with grouped
-before-and-after corrections. A changed count and the percentage calculated from it stay
-one decision. Accept or keep the original, then choose **Save document copy** to retain
-your choice and the evidence behind it.
-
-A match covers the stated comparison or calculation against a saved reading. Missing
-evidence and unchecked interpretations remain explicit; unmarked text is not checked.
-Opening an old file does not reread sources or discover later changes.
-See [HTML documents with evidence](docs/documents.md) for the workflow and its limits.
-
+<a id="share-a-document-with-its-reasons"></a>
+<a id="explore-the-projects-knowledge-record"></a>
 <a id="regular-html-annotated-with-reasoning"></a>
 
-## Explore the project's knowledge record
+<a id="experimental-applications"></a>
 
-The project record also has its own HTML page. Its views bring together recorded facts,
-decisions and open questions, and can arrange them as a report. See the
-[Greenhouse example record](examples/greenhouse-report/GROUNDING.yaml) and its
-[document layout](examples/greenhouse-report/.kpopper/view.yaml) for a report built from
-recorded readings and a heating judgment.
+<details>
+<summary><strong>Experimental applications</strong></summary>
 
-`kpop page --open` generates this self-contained HTML from the project's record and a
-chosen layout. **Now** and other project tabs can present reports, plans or comparisons;
-**Record** lists the entries directly, and **Tree** offers an optional graph view. The page
-is a rendered snapshot—regenerate it after the record changes. For layouts, components,
-localization and checks on stale explanatory text, see the [page reference](skills/kpopper/PAGE.md).
+kpopper's core keeps claims, their sources and dependencies, and the conditions that
+make decisions worth revisiting. Optional applications build on that core:
+
+| Application | What it produces | Status |
+|---|---|---|
+| kpopper Hub (`hub`) | A browsable snapshot of the record, with layouts and an interactive graph. | Experimental |
+| Annotated Documents (`annotated-doc`) | A standalone document with selected evidence and reviewable copy updates. | Experimental |
+
+From a source checkout, install the optional HTML dependencies:
+
+```sh
+python -m pip install '.[html]'
+kpop experimental hub --open
+kpop experimental annotated-doc guide
+```
+
+For a release that includes these applications, use `kpopper[html]` instead of
+`.[html]`; check the [changelog](CHANGELOG.md) when using an older installation.
+Request these applications explicitly or give the agent a standing preference. Their
+interfaces and artifact formats may change. Ordinary installation, record checks and
+session hooks work without the HTML runtime. Plugin users can add it with
+`plugin_runtime.py setup --applications html` at their active plugin path.
+
+[![Experimental Annotated Documents application: the Autumn Garden Workshop report with an evidence card beside its registration-window passage. The author's interpretation is labelled Not checked and linked to the source notes.](assets/standalone-document-reasoning.png)](assets/standalone-document-reasoning.png)
+
+See [installation, boundaries and maturity](docs/applications.md),
+[Annotated Documents](docs/documents.md), and [kpopper Hub](skills/kpopper/PAGE.md).
+
+</details>
+
+<a id="share-a-focused-excerpt"></a>
+
+<details>
+<summary><strong>Share a focused excerpt</strong></summary>
 
 To share a small part of the record in a task, document or pull request, use
 `kpop export`. The excerpt separates readings captured at review from current recorded
@@ -1011,34 +1485,48 @@ Add `--format markdown-mermaid` to keep the text and append a diagram for destin
 that support Mermaid. See [focused exports](docs/graph-export.md) for selection limits,
 original-field details and output options.
 
-## What is available, and what is next
+</details>
+
+<a id="what-is-available-and-what-is-next"></a>
+
+<details>
+<summary><strong>What is available, and what is next</strong></summary>
 
 This table describes the current repository. Check the [changelog](CHANGELOG.md) when
 updating an older installation; a merged feature may still be awaiting a release.
 
-Records with structured expressions and computed snapshots require kpopper 1.6.0 or later
-across the CLI, plugins and CI. Upgrade them together before writing or reviewing those
-records with another installation; [reader compatibility](skills/kpopper/EXPRESSIONS.md#reader-compatibility)
-explains the old-writer risk and the separate Lean setup requirement. On native Windows,
-use individual `add`/`set` writes and deliberate judgment reviews; durable report batching
-requires POSIX file locking.
+Use kpopper **1.7 or later** across the CLI, plugins and CI for the new default
+history-backed records. The [reasoning runtime is packaged](docs/reasoning-core.md);
+existing legacy records require explicit adoption.
 
-| Status | Capability |
-|---|---|
-| Available | YAML records, source references, judgment checks, dependency tracing, review snapshots, hypotheses and consolidation. |
-| Available | CLI, focused Markdown exports with optional Mermaid, HTML record page and agent integrations, with host-specific setup and limits. |
-| Available | Standalone HTML authoring with contextual explanations, selected source snapshots and grouped corrections saved in the document copy. |
-| Available | Checks on combined records and hypotheses in CI, including before-merge inspection of another branch's record. |
-| Available within stated limits | Background processing of explicit reports and selective delivery of important findings. |
-| Platform import route documented; runtime not yet validated | ChatGPT Work installation and execution of this plugin. |
-| Experimental, opt-in | Lean-checked session views, revision-bound reads and a project-bound MCP server. |
-| Experimental, opt-in | [Deterministic `core/v1` assessment](docs/reasoning-core.md) with a packaged arithmetic runtime; existing commands retain their legacy interpretation. |
-| Available through the agent | Guided starting choices: learn during ordinary work, map selected existing materials, or investigate a defined subject and period in depth. |
-| Available within host limits | Optional first-use explanations, workspace guidance and the ability to skip or turn guidance off. |
+Legacy records with structured expressions and computed snapshots require at least
+1.6.0 and their [documented Lean setup](skills/kpopper/EXPRESSIONS.md#reader-compatibility).
+Upgrade every reader and writer together. On native Windows, legacy records support
+individual `add`/`set` writes and deliberate reviews; durable report batching requires
+POSIX file locking.
+
+New history-backed records also require POSIX locking for creation and writes.
+On native Windows, create and author history on a POSIX host such as WSL;
+read-only assessment and the packaged Windows reasoning runtime remain available.
+
+| Layer | Status | Capability |
+|---|---|---|
+| Core | Available | YAML records, source references, judgment checks, dependency tracing, review snapshots, hypotheses and consolidation. |
+| Core | Available | CLI and focused Markdown exports with optional Mermaid. |
+| Application | Experimental, optional | kpopper Hub and Annotated Documents, with selected evidence and copy updates. |
+| Core | Available | Checks on combined records and hypotheses in CI, including before-merge inspection of another branch's record. |
+| Integration | Available within stated limits | Background processing of explicit reports and selective delivery of important findings. |
+| Integration | Platform import route documented; runtime not yet validated | ChatGPT Work installation and execution of this plugin. |
+| Integration | Experimental, opt-in | Lean-checked session views, revision-bound reads and a project-bound MCP server. |
+| Core | Default for new records | [Deterministic `core/v1` assessment](docs/reasoning-core.md) and [immutable history](docs/history-contract.md), with a packaged arithmetic runtime and automatic reader selection. Existing legacy records require explicit adoption. |
+| Integration | Available through the agent | Guided starting choices: learn during ordinary work, map selected existing materials, or investigate a defined subject and period in depth. |
+| Integration | Available within host limits | Optional first-use explanations, workspace guidance and the ability to skip or turn guidance off. |
 
 Mapping runs in the calling agent session, using its available tools and the sources you
 authorize. It does not install connectors or scan accounts by itself. See
 [starting a knowledge record](docs/first-use.md) for the workflow and host requirements.
+
+</details>
 
 ## Make it earn its place
 

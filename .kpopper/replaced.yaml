@@ -66,3 +66,53 @@ d.fold_passes_the_one_door:
     p.supersede_doors: 1
   ended: the standing judgment holds, and a person takes this over it by name
   day: '2026-09-16'
+d.readme_story_series:
+- rests_on:
+  - s.2026_09_13_story_approval
+  - d.readme_opens_with_what_it_does
+  - d.readme_visual_identity
+  - s.2026_09_13_worker_and_research
+  verdict: 'Open with the approved illustrated series: shared cache and private results, download promise
+    versus retention, the Cowork workshop, then a dark-matter research synthesis. Provide desktop and
+    phone layouts, visible record excerpts, source links and runnable examples.'
+  because: 'Two code cases expose different dependencies: a visibility assumption and a promise across
+    policy and email. The workshop shows the same continuity problem when a changed premise requires judgment
+    rather than an executable failure. The two-input composition and larger consequence scene preserve
+    the narrative energy the maintainer preferred. Published examples make the green branch tests, clean
+    merges and failed recorded conditions inspectable, and show that ordinary integration tests can also
+    detect the problems. The research case adds constructive synthesis across papers: distinct sourced
+    findings feed one judgment with its adopted framework and open questions. It uses selected real abstracts
+    with locators and a runnable replay of three concurrent CLI writers; it does not claim live independent
+    agent research or infer scientific truth from agreement.'
+  reopened_by: An uncoached reader cannot identify the reason invalidated in either code story, treats
+    the Cowork review notice as proof the plan is wrong, believes the tool discovers unrecorded assumptions
+    automatically, or cannot read the essential content on a phone. Revisit the length if readers who
+    want to try the tool cannot find installation. Revisit the research story if readers take schematic
+    figures for measured data, the synthesis for a proof, or the prepared replay for a live model evaluation.
+  seen:
+    s.2026_09_13_story_approval: read 2026-09-13
+    d.readme_opens_with_what_it_does: Keep the hero, explain the practical benefit immediately below it,
+      then show concrete code and non-code examples with visible recorded premises and a direct route
+      to installation. Introduce the third-brain metaphor later.
+    d.readme_visual_identity: Use the large ink portrait of Karl Popper on the left, with a restrained,
+      faintly amused expression and a natural inward gaze toward the lowercase kpopper wordmark and one-line
+      lemma quotation on the right. Keep the separate italic attribution without a final period, the secondary
+      Korean bubble and the white geometric k icon on electric blue. Process overviews use ink illustrations
+      and phone layouts with separate editable schematic references. In the conversation overview, show
+      a person only in the main-session scene.
+    s.2026_09_13_worker_and_research: read 2026-09-13
+  ended: the standing judgment holds, and a person takes this over it by name
+  day: '2026-09-19'
+d.first_meeting_artifact:
+- rests_on:
+  - doc.agent_graph
+  verdict: a record born in this session, on a surface that can publish, is rendered and shown as a live
+    artifact without asking
+  because: The first turn must feel like a normal session, and the first meeting with the record should
+    be the page, alive - not a yaml file. Surfaces that strip script from previews get the browser instead.
+  blocked_on: 'observational: falsified if users close or ignore the unrequested page more often than
+    they touch it'
+  seen:
+    doc.agent_graph: read 2026-09-01
+  ended: the standing judgment holds, and a person takes this over it by name
+  day: '2026-09-18'

@@ -136,7 +136,8 @@ class LegacySeams(unittest.TestCase):
         self.assertTrue(mutation.to_data()['baseline']['source_absent'])
         self.assertIsNone(next(f['before'] for f in mutation.files if f['role'] == 'record'))
         self.assert_recover()
-        self.assertEqual(P.bodies(P.load(self.paths))['p.first']['v'], 3)
+        captured = P._peer('history_store').Store(self.entry).capture()
+        self.assertEqual(captured.state['subjects']['p.first']['body']['v'], 3)
 
     def test_newborn_validation_refusal_creates_no_record(self):
         self.entry.unlink()

@@ -299,6 +299,10 @@ class Snapshot:
                 or not isinstance(data['hypotheses'], dict):
             raise SnapshotError('invalid_snapshot', 'invalid snapshot structure')
         _validate_history(data['document'], data['context'], data['hypotheses'])
+        if 'scenario' in data['context']:
+            from .scenario import validate as validate_scenario
+            validate_scenario(data['document'], data['context'], data['hypotheses'], data['as_of'],
+                              snapshot_data=data)
         _validate_authored_revision(data['authored_revision'])
         if digest(_snapshot_preimage(data)) != data['snapshot_id']:
             raise SnapshotError('stale_snapshot', 'snapshot digest does not match')
@@ -335,6 +339,9 @@ class Snapshot:
             if derived:
                 context.setdefault('history_hypotheses', index)
         _validate_history(document, context, normalized_hypotheses)
+        if 'scenario' in context:
+            from .scenario import validate as validate_scenario
+            validate_scenario(document, context, normalized_hypotheses, normalize_as_of(as_of))
         if context['read_mode'] not in ('supplied', 'live', 'frozen', 'captured-live'):
             raise SnapshotError('invalid_snapshot', 'unknown captured read mode')
         _validate_authored_revision(authored_revision)
@@ -911,6 +918,10 @@ def _capture_load(paths, mode, initial, *, retain_source=False):
     document = adapted.document
     _retained_history_members(document, active[0])
     doc = P.Record(document)
+    # Private reader metadata: the authoritative entry owns this history projection.
+    # Retain it for local consumers without adding paths to the portable Snapshot.
+    doc.origins = {section: {nid: active[0] for nid in members}
+                   for section, members in P.collections_of(doc).items()}
     doc.hypotheses = P.load_hypotheses(routed)
     from .. import history_hypotheses as HH
     doc.hypotheses = HH.active_physical(document, active[0], doc.hypotheses)

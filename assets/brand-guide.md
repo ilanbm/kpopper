@@ -19,10 +19,10 @@ a small number of strong accents.
   Popper-like features. The full-width banner balances character and typography.
 - The slogan is **“It really whips the lemma's ass!”** — a Winamp reference with
   *lemma* in place of *llama*.
-- The playful attribution is **“Karl Popper, the father of K-pop”**, without a
+- The playful attribution is **“- Karl Popper, the father of K-pop”**, without a
   final period. It is a fictional joke, never a historical quotation.
 - In the hero artwork, set the full slogan on one line and the full attribution
-  on another single line, without a leading dash.
+  on another single line, with a leading hyphen and space.
 - A few recognizable logic symbols near *lemma* can help explain the wordplay.
 - The Korean aside, when used with Popper, reads **OMG / 이건 꼭 필요해!**
   (roughly, "OMG, I really need this!"). Keep it secondary to the quotation
@@ -66,14 +66,17 @@ a small number of strong accents.
 The identity includes playfulness as well as precise explanations. Choose the
 density and visual treatment for the image's purpose.
 
-- The [opening story series](stories/README.md) uses strong black and blue headlines,
-  independent source or decision panels, and a larger ink scene showing their
-  consequence or synthesis. Keep the reason visible, alongside its evidence.
+- The [opening story series](stories/README.md) starts with independent source or
+  decision panels, followed by a larger ink scene showing their consequence or
+  synthesis. Keep the reason visible, alongside its evidence. Omit umbrella titles
+  that repeat the surrounding section. A useful punchline belongs after the process,
+  in the series's strong black and blue lettering.
 - The first two stories show code changes; the third shows work in Claude Cowork.
   Red marks a failed declared condition, while amber marks a changed premise needing
   judgment. The illustration must preserve this distinction.
-- The research story uses three paper panels that meet in one shared argument.
-  Keep scientific findings, the synthesis agent's judgment, model assumptions and
+- The research section retains the three-paper ink introduction before the expanded
+  six-paper view and the record close-up. The source panels meet in one shared argument.
+  Keep scientific findings, the authored synthesis, shared inputs, model assumptions and
   open questions distinct. Scientific drawings are identified as schematics; a
   connected graph is not a proof or a confidence score.
 - Story illustrations may carry people, expressive objects and handwritten notes.
@@ -84,10 +87,10 @@ density and visual treatment for the image's purpose.
   recording, a separate parallel worker, and selective return of important findings.
   Choose the layout for the relationship: time panels stack on a phone; parallel
   conversation tracks remain visibly separate.
-- The conversation overview uses the direct headline "Get notified only when
-  something needs attention." Human illustrations belong only in the main-session scene;
-  a software worker must not look like a second person. Remove redundant slogans
-  when the title already states the benefit.
+- The conversation overview closes with "Get notified only when something needs
+  attention." Let the parallel process demonstrate the benefit before stating it.
+  Human illustrations belong only in the main-session scene; a software worker must
+  not look like a second person. Avoid adding a second slogan with the same meaning.
 - The knowledge-source illustration uses a deliberately busy left side to show
   the breadth of existing tools and materials, contrasted with an ordered reasoning
   layer on the right. Its recognizable icons and many small details carry that idea.
@@ -99,14 +102,32 @@ density and visual treatment for the image's purpose.
 - Existing sources remain in place. The organized layer is the selected claims,
   reasons and review conditions the agent records, not a promise to migrate or
   automatically organize every source.
+- Record close-ups select fields from the complete, runnable examples. Generate
+  their context counts and minimaps from those records. Density should come from
+  meaningful source readings, dependencies and open questions, not invented lines.
 
 ## Diagrams and product images
 
-- "More deterministic reasoning" names a shift of selected reasoning steps into
-  explicit dependencies and repeatable checks. Use two clear parts: "Conversations"
-  and "Deterministic checks", joined by "Agent records". Put the YAML and its
-  calculated result together; name the failed decision directly rather than using
-  the ambiguous label "Condition holds". Stack the two parts on phones. The opening
+- Label project and branch record objects **GROUNDING.yaml**, including the shared
+  record in Simple and each branch's record in Advanced, including `main`. Keep
+  pending shared findings and hypotheses visually distinct from those records.
+- The opening reasoning overview introduces **Meet GROUNDING.yaml**, with a small
+  handwritten **your new friend!** aside. Make the file viewer the main object.
+  Blue arrows connect the earlier conversation to its recorded reason and the later
+  conversation to the changed reading. A pink arrow follows `wrong_if` to the
+  deterministic check and its actual returned tool result. Preserve the earlier
+  review snapshot. Keep tool output readable at the README's displayed width;
+  reduce headline size before shrinking it.
+- Close that overview with **Deterministic Reasoning that outlives the conversation.**
+  Set the first two words in large, heavy blue display type, with the same visual
+  weight as the other story punchlines. They may stack on phones. Underline them
+  and connect the underline to the
+  returned result. The timing badge describes the documented local run and stays
+  separate from the CLI output. Keep its evidence beside the example record; it is
+  not a general latency promise.
+- On phones, show consecutive excerpts from the same file, each near the conversation
+  it explains. Label the continuation, preserve all record content, and keep the
+  condition-to-check path separate from the blue recording arrows. The opening
   visual demonstrates the mechanism; the following stories show its value.
 - Make the status of a decision concrete: an email created with a promised window
   is different from a question about whether that window is possible. Show initial
@@ -132,6 +153,9 @@ density and visual treatment for the image's purpose.
 - Check the main message and labels at phone width as well as desktop width.
   Reflow a process diagram whose meaning depends on tiny text. In a source map,
   preserve purposeful detail while keeping the main contrast readable.
+- Use ordinary Markdown image links in repository guides, with an explicit link
+  to the phone layout. This avoids depending on custom `picture` rendering in
+  repository clients. Keep paths relative so branch previews use their own assets.
 - Product screenshots show actual output. A document produced with kpopper can
   have its own visual identity; its content and evidence states stay intact.
 - Third-party marks such as the Lean logo keep their original treatment.
@@ -145,11 +169,20 @@ conditions for review. Here, self-awareness is a metaphor for making that reason
 inspectable; it is not a claim of consciousness or automatic knowledge of everything
 happening in the project.
 
-Lead with the hero, then explain the practical value in ordinary language. Show
-the shared-cache/private-results case, then the download-promise/retention case,
-followed by the Cowork workshop. This gives developers a familiar entrance while
-making the broader scope and the need for judgment visible. Keep a direct
-installation link above the examples.
+Lead with the hero and practical explanation, then introduce the record through
+the download-promise/retention overview. Follow with the shared-cache case, the
+Cowork workshop and the research synthesis, including their record close-ups and
+selected YAML. Link to the full download merge example without repeating its whole
+story in the README. Keep a direct installation link above the examples.
+
+Immediately after Contents, ask **Where would you like to start?** and offer three
+native disclosure sections: **Coding agents**, **Cowork / Work**, and **Research**.
+Keep Contents open by default; the three paths start closed. Each summary includes
+a small crop from its existing illustration and states the practical benefit without
+requiring the reader to open it. Thumbnails link to the full illustrations and have
+short preview labels; the summary text opens the path and remains usable on its own. Keep the opening record overview, installation, quick reference
+and capability overview visible; group longer explanations under **Go deeper**.
+Preserve existing example anchors, images, source links and runnable excerpts.
 
 Essential explanations remain text. Image alt text includes the wordplay and
 attribution. Keep the caption within the hero without repeating it beneath the
@@ -159,11 +192,18 @@ A small curiosity link beneath the hero can lead directly to the Popper explanat
 Let the visual joke stand; that section can introduce his idea without explaining
 each prop or spelling out every piece of the pun.
 The main text heading states the practical value rather than repeating the wordmark.
-Number the illustrated examples and name each case's risk or review problem in its
-section heading. Add a short parenthetical cue for the idea it demonstrates, such
-as assumption checks, consistency or freshness. Keep the narrative headline in the image. Include visible record
-excerpts and links to the executable examples. A compact capabilities overview and a
-collapsible contents list provide routes into the longer explanation.
+Number the illustrated examples by working context: **Coding Agent**,
+**Claude Cowork / ChatGPT Work**, and **Research**. Keep a short parenthetical cue
+for the concept, and name the specific scenario in a subheading. Place the complete
+**Two working modes** explanation and illustration inside the coding example;
+make clear that the project modes also apply to document and research work.
+Let the image start with the situation
+or process, retaining panel labels needed to follow it. Put a distinct result or
+punchline below the process; if the image already ends with a clear conclusion, omit
+the extra headline. Keep this reading order in both desktop and phone layouts.
+Include visible record excerpts and links to the executable examples. A compact
+capabilities overview and a collapsible contents list provide routes into the
+longer explanation.
 
 ## Compact icon
 

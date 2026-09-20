@@ -14,6 +14,16 @@ from unittest import mock
 from scripts import history_runtime as R
 
 
+class ApplicationSources(unittest.TestCase):
+    def test_loaded_application_modules_are_bound_to_the_runtime_manifest(self):
+        from scripts.applications import hub, annotated_doc
+        declaration = R.describe('application_sources_0123456789')
+        paths = {item['path'] for item in declaration['sources']['files']}
+        self.assertIn('applications/__init__.py', paths)
+        self.assertIn('applications/hub.py', paths)
+        self.assertIn('applications/annotated_doc.py', paths)
+
+
 class Runtime(unittest.TestCase):
     def setUp(self):
         temporary = tempfile.TemporaryDirectory()
@@ -26,12 +36,13 @@ class Runtime(unittest.TestCase):
                 target = self.package / path.relative_to(source)
                 target.parent.mkdir(parents=True, exist_ok=True)
                 shutil.copyfile(path, target)
-        for name in ('assessment.schema.json', 'reasoning/assessment.schema.json'):
+        for name in ('assessment.schema.json', 'reasoning/assessment.schema.json',
+                     'reasoning/history_assessment.schema.json'):
             shutil.copyfile(source / name, self.package / name)
         shutil.copytree(source / 'reasoning/lean', self.package / 'reasoning/lean')
         native = self.package / 'reasoning/native'
         native.mkdir()
-        target = R.R.target_name() + '.zip'
+        target = R.R.target_name() + R.R.RUNTIME_ARCHIVE_SUFFIX
         shutil.copyfile(source / 'reasoning/native' / target, native / target)
         self.nonce = '0123456789abcdef0123456789abcdef'
         self.code = (f'import sys,json; sys.path.insert(0,{str(self.root)!r}); '
@@ -65,7 +76,8 @@ class Runtime(unittest.TestCase):
         for name in ('history_paths.py', 'history_identity.py', 'history_edits.py', 'history_branch.py'):
             self.assertIn(name, value['sources']['required'])
         self.assertEqual(value['schemas']['history']['prepared_mutation'], [1, 2])
-        self.assertEqual(value['schemas']['history']['authoring_receipt'], [1, 2, 3, 4, 5, 6])
+        self.assertEqual(value['schemas']['history']['authoring_receipt'],
+                         [1, 2, 3, 4, 5, 6, 7, 8, 9])
         self.assertEqual(value['schemas']['history']['identity_receipt'], [1, 2])
         self.assertEqual(value['schemas']['history']['history_auxiliary'], [1])
         self.assertEqual(value['schemas']['history']['branch_capture'], [1, 2])
@@ -113,6 +125,12 @@ class Runtime(unittest.TestCase):
         with self.assertRaisesRegex(R.RuntimeDeclarationError, 'runtime_digest_mismatch'):
             R.probe_launchers([self.item], self.expected, self.nonce)
         self.assertEqual(before, self.inventory())
+
+    def test_changed_application_source_fails_preconfigured_digest(self):
+        source = self.package / 'applications/hub.py'
+        source.write_bytes(source.read_bytes() + b'\n# changed application deployment\n')
+        with self.assertRaisesRegex(R.RuntimeDeclarationError, 'runtime_digest_mismatch'):
+            R.probe_launchers([self.item], self.expected, self.nonce)
 
     def test_wrong_package_or_interpreter_refuses(self):
         wrong = self.root / 'wrong'

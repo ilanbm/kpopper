@@ -185,7 +185,8 @@ def _records(root, entry, sha=None, *, include_files=False):
                 H.P._CAPTURE_READS.reset(token)
             data = snapshot.to_data()
             document = data['document']
-            hyps = [{'name': name, 'doc': hyp['document'], 'head': hyp['head']}
+            hyps = [{'name': name, 'doc': hyp['document'], 'head': hyp['head'],
+                     **({'kind': hyp['kind']} if hyp.get('kind') else {})}
                     for name, hyp in data['hypotheses'].items() if not hyp['error']]
             if any(hyp['error'] for hyp in data['hypotheses'].values()):
                 raise ValueError('unreadable target hypothesis')
@@ -220,8 +221,20 @@ def _records(root, entry, sha=None, *, include_files=False):
                       digest({name: raw.decode('utf-8') for name, raw in files.items()})}
     if core is not None:
         result['core'] = core
+        result['snapshot'] = observed.to_data()
     if history is not None:
         result['history'] = history
+        # Keep the public, already validated observation.  The history-union
+        # consumer needs its exact temporal basis (including explicit None),
+        # and must not reconstruct that basis from private Store state.
+        result['snapshot'] = data
+    if 'snapshot' not in result:
+        # Retain literal legacy shared readings under their original declared
+        # interpretation. The scenario adapter refuses executable promotion.
+        Snapshot = P._peer('reasoning.snapshot').Snapshot
+        result['snapshot'] = Snapshot.from_data(document,
+            hypotheses={item['name']: {'doc': item['doc'], 'head': item['head']} for item in hyps},
+            context={'read_mode': 'supplied', 'watch_capture': {'hash': result['hash']}}).to_data()
     if include_files:
         result['files'] = {name: raw.decode('utf-8') for name, raw in files.items() if name not in raw_names}
     return result
@@ -272,11 +285,18 @@ def compare(snapshot):
     main = _entries(snapshot['main']['doc'])
     core_records = [snapshot.get(name, {}).get('core') for name in ('ancestor', 'working', 'main')]
     core_mode = all(core_records)
-    has_history = any(snapshot.get(name, {}).get('history') for name in ('ancestor', 'working', 'main'))
-    if has_history or any(core_records) and not core_mode:
+    history_records = [snapshot.get(name, {}).get('history') for name in ('ancestor', 'working', 'main')]
+    if any(history_records):
+        if not all(history_records):
+            finding = {'kind': 'uncheckable', 'id': 'record',
+                       'reason': 'incompatible captured context: history evidence is missing on one branch'}
+            finding['fingerprint'] = digest(finding)
+            return {'state': 'attention', 'findings': [finding], 'changed': [],
+                    'versions': snapshot.get('versions'), 'identity': snapshot.get('identity')}
+        return P._peer('history_watch').compare(snapshot)
+    if any(core_records) and not core_mode:
         finding = {'kind': 'uncheckable', 'id': 'record',
-                   'reason': 'prospective_history_required: use the prepared history operation' if has_history else
-                             'incompatible captured context: core/v1 evidence is missing on one branch'}
+                   'reason': 'incompatible captured context: core/v1 evidence is missing on one branch'}
         finding['fingerprint'] = digest(finding)
         return {'state': 'attention', 'findings': [finding], 'changed': [],
                 'versions': snapshot.get('versions'), 'identity': snapshot.get('identity')}
@@ -530,11 +550,14 @@ class Watch:
         main = git(self.tree, 'rev-parse', '--verify', config['base_ref'] + '^{commit}')
         head = git(self.tree, 'rev-parse', '--verify', 'HEAD^{commit}')
         ancestor = git(self.tree, 'merge-base', head, main)
-        working = _records(self.tree, self.entry)
         shared = None
         if config.get('shared_record'):
             p = Path(config['shared_record'])
-            shared = _records(p.parent, p.name)
+            token = P._CORE_READS.set(True)
+            try:
+                shared = _records(p.parent, p.name)
+            finally:
+                P._CORE_READS.reset(token)
             try:
                 from . import watch_shared as S
             except ImportError:
@@ -542,12 +565,24 @@ class Watch:
             inbox = digest(S.receipts(self))
         else:
             inbox = None
+        # `watch` is the public captured-history consumer.  Its comparison
+        # path validates and retains each revision before giving the pure
+        # history-union adapter any input; ordinary readers still receive the
+        # history refusal in `_records`.
+        token = P._CORE_READS.set(True)
+        try:
+            working = _records(self.tree, self.entry)
+            ancestor_record = _records(self.tree, self.entry, ancestor)
+            main_record = _records(self.tree, self.entry, main)
+        finally:
+            P._CORE_READS.reset(token)
         versions = {'base_ref': config['base_ref'], 'main': main, 'head': head, 'merge_base': ancestor,
+                    'comparison': 'history-scenarios/v1',
                     'working': working['hash'], 'shared': shared['hash'] if shared else None,
                     'inbox': inbox,
                     'config': digest(config), 'freshness': 'local Git objects; remote freshness not verified'}
-        return {'working': working, 'ancestor': _records(self.tree, self.entry, ancestor),
-                'main': _records(self.tree, self.entry, main), 'shared': shared,
+        return {'working': working, 'ancestor': ancestor_record,
+                'main': main_record, 'shared': shared,
                 'versions': versions, 'identity': digest(versions)}
 
     def request(self):

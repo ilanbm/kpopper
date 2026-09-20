@@ -1,43 +1,11 @@
 ---
 name: page
-description: "Render, arrange or verify the knowledge record's page: the two-tab HTML view with its provenance layer. Use whenever the user wants to see, show, open, look at or click around the record or what is known - 'show me the record' is this skill, not a read of the file - and whenever they build or check the page, or write or change a brief, tab, section or arrangement (the Now tab). Not for ordinary HTML documents (the document skill) and not for answering a question from the record (the ground skill). Requests come in any language."
+description: "Compatibility alias for kpopper Hub. Use when explicitly invoked as $page or /kpopper:page. Follow the canonical hub skill; do not select this alias for ordinary requests."
 ---
 
-# Page
+# page compatibility alias
 
-The page is how a person meets the record: hover anything for where it came from, click to walk to a dependency. Build it with the shipped renderer and never by hand. The command line is `kpop` where it is on PATH; otherwise the `command` in the `KPOPPER_AGENT_CONTEXT` line the session opener printed (`python3 <plugin>/scripts/cli.py`) runs the same code. Do not guess a path and do not write a second reader - [the method's reference](../kpopper/references/method.md#finding-the-reader) says how to find the installed copy when neither is at hand.
+Follow [kpopper Hub](../hub/SKILL.md), including its optional installation and explicit-selection rules.
+Use `kpop experimental hub`. This alias preserves existing explicit invocations.
 
 When mentioning this skill to the user, include the plugin name: `kpopper:page` or "page from the kpopper plugin". Use the user's language and fold it into the explanation of the action; no extra announcement is needed.
-
-`render_page.py` turns any record into one self-contained HTML file, in two tabs: **Record**,
-which nobody writes, and **Now**, the arrangement this session chose. What makes it worth
-opening is the provenance layer - hover anything for where it came from, click to walk to a
-dependency, and see the graph around it outlined in place.
-
-```bash
-kpop page                        # the page, at .kpopper/build/page.html
-kpop page --open [--tree]        # and look at it in your own browser
-kpop page --verify               # deterministic, no browser
-kpop page --checks .kpopper/build/page.html   # the browser checks, on a page already written
-```
-
-The same three, by the scripts themselves - `R` is the reader's path, found as [the method's reference](../kpopper/references/method.md#finding-the-reader) says:
-
-```bash
-python3 "$(dirname "$R")/render_page.py" > page.html        # the page
-python3 "$(dirname "$R")/render_page.py" --verify           # deterministic, no browser
-node    "$(dirname "$R")/verify_page.js" page.html          # what only looking catches
-```
-
-**Read [`PAGE.md`](../kpopper/PAGE.md) before writing a brief or choosing a layout** - the brief
-format, the closed set of renderers and what each one requires, and the rules that keep an
-opinionated arrangement honest all live there. It is a reference, not part of the opening
-cost: skip it entirely on a session that never builds a page.
-
-```bash
-sed -n '1,400p' "$(dirname "$R")/../skills/kpopper/PAGE.md"
-```
-
-**Do not write this layer yourself.** It ships here for the same reason the reader does: it
-took a browser and six bugs to get right, and a session rebuilding it will produce something
-worse and not know. Write layout if you need layout; call this for the mechanism.

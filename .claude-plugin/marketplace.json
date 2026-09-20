@@ -1,6 +1,6 @@
 {
   "name": "kpopper",
-  "description": "kpopper: an epistemic record for work that gets revisited - what is known, how each piece is grounded, and what would make each judgment wrong.",
+  "description": "Explicit, persistent, deterministically checkable reasoning for your agents.",
   "owner": {
     "name": "Ilan Bar Magen"
   },
@@ -8,8 +8,8 @@
     {
       "name": "kpopper",
       "source": "./",
-      "description": "Keep a traceable record of what is known, where each piece came from, and what each judgment rests on. Every judgment states what would make it wrong.",
-      "version": "1.6.0"
+      "description": "Make your agents' reasoning explicit, persistent, and deterministically checkable. Connect decisions to evidence and assumptions, and see what needs another look when a recorded premise changes.",
+      "version": "1.8.1"
     }
   ]
 }

@@ -14,6 +14,8 @@ import threading
 import time
 import zipfile
 
+RUNTIME_ARCHIVE_SUFFIX = '.kpopper-runtime'
+
 from .contract import MAX_REQUEST_BYTES, validate_value, operational_bounds, OperationalLimit
 from . import adapter_identity
 
@@ -171,7 +173,8 @@ class Runtime:
         self.operational_limits = operational_bounds(operational_limits)
         source = Path(__file__).resolve().parent
         target = target_name()
-        self.archive = Path(archive) if archive is not None else source / 'native' / (target + '.zip')
+        self.archive = (Path(archive) if archive is not None else
+                        source / 'native' / (target + RUNTIME_ARCHIVE_SUFFIX))
         if not self.archive.is_file():
             raise RuntimeUnavailable('packaged reasoning runtime is unavailable for ' + target)
         archive_digest = _sha(self.archive)

@@ -25,6 +25,7 @@ import yaml
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import provenance as P    # noqa: E402
 import consolidate as C   # noqa: E402
+import history_remeasure as HR  # noqa: E402
 
 ALLOWLIST = "measure.yaml"              # under .kpopper beside the first file the reader opens, and
                                         # only there; PROVENANCE.measure.yaml beside a record under the old name
@@ -403,7 +404,15 @@ def _measure_core(paths, doc, hyps, run=False, timeout=None, cap=None, today=Non
     prospective union is derived from that source and is assessed through the same context;
     this adapter never evaluates a core record through the legacy flag machinery.
     """
-    today = today or datetime.datetime.now(datetime.timezone.utc).date()
+    history = "history" in _operations().snapshot_for(doc).to_data()["context"]
+    history_state = None
+    if history:
+        observed_at = datetime.datetime.now(datetime.timezone.utc)
+        today = observed_at.date()
+        history_state = HR.prepare(paths, doc, observed_at=observed_at)
+        doc, hyps = history_state["candidate"], []
+    else:
+        today = today or datetime.datetime.now(datetime.timezone.utc).date()
     names, problems = _core_declared(doc, hyps)
     apath = allowlist_path(paths)
     allow = read_allowlist(apath) if os.path.isfile(apath) else None
@@ -490,6 +499,57 @@ def _measure_core(paths, doc, hyps, run=False, timeout=None, cap=None, today=Non
             agreed.append(f"  {nid}: {P.scalar(value, fold=False)} - as recorded ({n})")
         else:
             differing[nid] = (n, body, value)
+    if history_state is not None:
+        out.append(f"measured on {today.isoformat()} (UTC){', at ' + said if said else ''}: {len(names)} entr{'ies' if len(names) != 1 else 'y'} by {len(cited)} recipe{'s' if len(cited) != 1 else ''}")
+        out += agreed + failed
+        try:
+            assessed = (HR.measured(paths, history_state, differing,
+                                    lambda name: _by(name, said))
+                        if differing else HR.assessed(history_state))
+        except P.Refused as error:
+            out += ["", str(error)]
+            return out, 1
+        findings = assessed["findings"]
+        for line in findings["falsified"]:
+            out.append("  FALSIFIED " + line)
+        for line in findings["holes"]:
+            out.append("  HOLE " + line)
+        for line in findings["moved"]:
+            out.append("  MOVED " + line)
+        for line in findings["notes"]:
+            out.append("  NOTE " + line)
+        head_failures = []
+        for item in assessed["head_results"]:
+            if item["truth"] is True:
+                line = "hypothesis " + item["name"] + ": wrong_if holds on the measured candidate"
+                head_failures.append(line)
+                out.append("  FALSIFIED " + line)
+            elif item["truth"] is None:
+                status = item["result"].get("status", "unknown")
+                line = "hypothesis " + item["name"] + ": wrong_if " + status
+                head_failures.append(line)
+                out.append("  HOLE " + line)
+        out.append("")
+        out.append("prospective history candidate only - neither the named fold nor the measured values were committed")
+        for nid, (name, body, value) in sorted(differing.items()):
+            was = P.scalar(body.get(_value_field(body)), fold=False)
+            now = P.scalar(value, fold=False)
+            day, dated = P._read_on(body, uraw), _dated_by(body, uraw)
+            out.append(f"  {nid}: {was} recorded" +
+                       (f" ({day}, by {dated})" if day else " (undated)") +
+                       f" -> {now} {_by(name, said)}")
+            out.append("    " + refresh_command(nid, value, name, said, None, paths, today))
+        bad = failed or findings["falsified"] or findings["holes"] or head_failures
+        out.append("")
+        if bad:
+            out.append("not clean: the prospective measured history has a falsifier or incomplete finding")
+            return out, 1
+        if differing:
+            out.append(f"the prospective history reads {len(differing)} entr{'ies' if len(differing) != 1 else 'y'} differently, none across a line - refresh them")
+        else:
+            out.append("the prospective history holds what this tree measures")
+        return out, 0
+
     # A captured operational assessment with an unknown/error is a hole, never a clean read.
     operations = _operations()
     base_findings = operations.findings(operations.world(doc).context)
@@ -538,7 +598,15 @@ def measure(paths, run=False, timeout=None, cap=None, today=None):
     """What `remeasure` prints -> (lines, exit code). The plan, always; the measurements and the
     union's report only with `run`."""
     today = today or datetime.datetime.now(datetime.timezone.utc).date()
-    doc, hyps = C.read(paths)
+    try:
+        doc, hyps = C.read(paths)
+    except (P.Refused, ValueError) as error:
+        if not any(marker in str(error) for marker in
+                   ("prospective_history_required", "history_reader_unsupported")):
+            raise
+        doc = _operations().load(paths, as_of=(today.isoformat() if today else None),
+                                 allow_history=True)
+        hyps = []
     if _operations().selected(doc):
         return _measure_core(paths, doc, hyps, run=run, timeout=timeout, cap=cap, today=today)
     names, problems = declared(doc, hyps)
@@ -640,7 +708,7 @@ def measure(paths, run=False, timeout=None, cap=None, today=None):
     laid = sorted(hyps + [tree], key=lambda h: h["name"])
     # the same day and the same page facts the fold would ask the door with, so this run and
     # the consolidation walk say the same thing about every hypothesis laid over the record
-    c = C.union_of(doc, laid, (fail_b, moved_b), today.isoformat(), C.page_of(paths))
+    c = C.union_of(doc, laid, (fail_b, moved_b), today.isoformat(), C.page_of(paths, laid, doc=doc))
     report = [l for l in C.report(c, today) if l not in GENERIC]
     if report and report[-1] and not c.contested:
         report = report[:-1]           # the fold's verdict: the tree never folds, and the last word is below

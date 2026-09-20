@@ -7,7 +7,9 @@
 # it. An unchanged existing judgment falsified by updated readings remains flagged but
 # does not block recording. A session that did real work - files of the tree changed, or
 # enough prompts went by - and never touched the record is asked once whether there was
-# nothing to keep. The gate yields after one bounce, so it reminds rather than imprisons.
+# nothing to keep. Private write receipts establish authorship; imported or manual
+# changes are not attributed to the session. Delivery receipts suppress each repeated
+# finding independently of the host's stop_hook_active flag. Validation still runs.
 # The host's hook may name itself (--host claude|codex) so the question names the host's
 # record skill.
 export PYTHONIOENCODING=utf-8
@@ -23,7 +25,6 @@ IN=$(cat)
 HERE=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 PYTHON=$(python3 "$HERE/plugin_runtime.py" python) || exit 0
 REC=$(printf '%s' "$IN" | "$PYTHON" "$HERE/workspace.py" --hook --path 2>/dev/null) || exit 0
-echo "$IN" | "$PYTHON" -c 'import json,sys; sys.exit(0 if json.load(sys.stdin).get("stop_hook_active") else 1)' 2>/dev/null && exit 0
 SID=$(printf '%s' "$IN" | "$PYTHON" -c 'import json,re,sys; s=json.load(sys.stdin).get("session_id",""); print(s if isinstance(s,str) and re.fullmatch(r"[A-Za-z0-9_-]{1,200}",s) else "")' 2>/dev/null)
 BASE_FILE="${TMPDIR:-/tmp}/kpopper-base-$SID"
 [ -n "$SID" ] && [ -f "$BASE_FILE" ] || exit 0
@@ -32,7 +33,7 @@ BASE_FILE="${TMPDIR:-/tmp}/kpopper-base-$SID"
 GROUND="${TMPDIR:-/tmp}/kpopper-ground-$SID.json"
 TURNS=$("$PYTHON" -c 'import json,sys; print(int(json.load(open(sys.argv[1])).get("turns", 0)))' "$GROUND" 2>/dev/null || echo 0)
 AT=$("$PYTHON" -c 'import json,sys; v=json.load(open(sys.argv[1])).get("nudged_turn"); print("" if v is None else int(v))' "$GROUND" 2>/dev/null || echo "")
-set -- gate "$BASE_FILE" "$REC" --turns "$TURNS"
+set -- gate "$BASE_FILE" "$REC" --turns "$TURNS" --session "$SID"
 [ -n "$HOST" ] && set -- "$@" --host "$HOST"
 [ -n "$AT" ] && set -- "$@" --nudged-at "$AT"
 # 2 is the gate's own answer: something to say. Any other failure is the reader's, and a

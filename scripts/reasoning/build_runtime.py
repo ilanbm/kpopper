@@ -20,6 +20,7 @@ import urllib.request
 import zipfile
 
 LEAN_VERSION = "4.33.1"
+RUNTIME_ARCHIVE_SUFFIX = ".kpopper-runtime"
 DATA_ONLY_LEAN_IMPORTS = frozenset({'Lean.Data.Json.Parser'})
 GMP_SHA256 = "a3c2b80201b89e68616f4ad30bc66aee4927c3ce50e33929ca819d5c43538898"
 TARGETS = {
@@ -348,7 +349,7 @@ def archive_payload(bundle, output, manifest):
             entry.external_attr = (stat.S_IFREG | mode) << 16
             entry.compress_type = zipfile.ZIP_DEFLATED
             zf.writestr(entry, data, compresslevel=9)
-    output.with_suffix(".zip.sha256").write_bytes((sha256(output) + "  " + output.name + "\n").encode())
+    Path(str(output) + ".sha256").write_bytes((sha256(output) + "  " + output.name + "\n").encode())
     return manifest
 
 
@@ -654,8 +655,8 @@ def check_bundles(native_dir=None, source_root=None):
     if not list(source.glob("*.lean")):
         raise ValueError("runtime source identity is unavailable")
     expected_source = source_hash(source)
-    expected_names = {target + ".zip" for target in TARGETS}
-    actual_names = {path.name for path in native.glob("*.zip")}
+    expected_names = {target + RUNTIME_ARCHIVE_SUFFIX for target in TARGETS}
+    actual_names = {path.name for path in native.glob("*" + RUNTIME_ARCHIVE_SUFFIX)}
     if actual_names != expected_names:
         raise ValueError("runtime archive inventory mismatch: missing=" + repr(sorted(expected_names - actual_names))
                          + "; unexpected=" + repr(sorted(actual_names - expected_names)))
@@ -664,7 +665,7 @@ def check_bundles(native_dir=None, source_root=None):
                     for p in (here / "third_party").iterdir() if p.is_file()}
     notice_files["THIRD_PARTY_NOTICES.txt"] = (here / "third_party/THIRD_PARTY_NOTICES.txt").read_bytes()
     for target in sorted(TARGETS):
-        archive = native / (target + ".zip")
+        archive = native / (target + RUNTIME_ARCHIVE_SUFFIX)
         if archive.is_symlink() or not archive.is_file():
             raise ValueError("runtime archive must be a regular file: " + archive.name)
         try:
@@ -716,7 +717,7 @@ def check_bundles(native_dir=None, source_root=None):
                 if not set(notice_files) <= set(files):
                     raise ValueError("runtime notices are incomplete")
             digest = sha256(archive)
-            sidecar = archive.with_suffix(".zip.sha256")
+            sidecar = Path(str(archive) + ".sha256")
             if sidecar.exists() and sidecar.read_text(encoding="ascii").strip() != digest + "  " + archive.name:
                 raise ValueError("runtime archive sidecar hash mismatch")
             receipts[target] = digest
@@ -789,7 +790,7 @@ def main():
         archive = args.gmp_source or downloads / "gmp-6.3.0.tar.xz"
         download("https://ftp.gnu.org/gnu/gmp/gmp-6.3.0.tar.xz", archive, GMP_SHA256)
         gmp = cached_gmp(archive, args.work_dir / "gmp", args.target, cache_dir=gmp_cache)
-    output = args.output or Path(__file__).parent / "native" / (args.target + ".zip")
+    output = args.output or Path(__file__).parent / "native" / (args.target + RUNTIME_ARCHIVE_SUFFIX)
     print(json.dumps(build_archive(args.source_root, lean, output, args.target, gmp_prefix=gmp), indent=2))
     if args.replacement_library:
         archive = args.gmp_source or downloads / "gmp-6.3.0.tar.xz"

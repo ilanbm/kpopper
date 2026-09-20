@@ -24,8 +24,8 @@ def parser():
     p.add_argument("--state", type=Path, help="pending-proposal state directory")
     p.add_argument("--profile", type=Path, help="declared navigation profile JSON")
     p.add_argument("--assessment-profile", choices=["checked-reader/v1", "core/v1"],
-                   default="checked-reader/v1",
-                   help="explicit semantic reader profile; default preserves the legacy checked reader")
+                   default=None,
+                   help="semantic reader profile; defaults to the selected record's declared profile")
     p.add_argument("--encoding", choices=["o200k_base", "cl100k_base"], default="o200k_base")
     p.add_argument("--tokens", type=int)
     p.add_argument("--ref")
@@ -97,7 +97,7 @@ def main(argv=None):
             return 0
         if args.operation in {"enable", "disable"}:
             from .settings import write
-            if args.assessment_profile != "checked-reader/v1":
+            if args.assessment_profile not in (None, "checked-reader/v1"):
                 raise ValueError("core/v1 session routing is explicit per invocation; default activation is not enabled")
             if args.global_scope and (args.profile or args.project or args.state):
                 raise ValueError("profile, project and state settings require project-scoped enablement")
@@ -131,7 +131,12 @@ def main(argv=None):
             return 0 if result["ready"] else 1
         from .view import CoreGroundingService, GroundingService
         project, path, state, reader, profile = resolve(args)
-        service_type = CoreGroundingService if args.assessment_profile == "core/v1" else GroundingService
+        assessment_profile = args.assessment_profile
+        if assessment_profile is None:
+            from .. import provenance
+            assessment_profile = ("core/v1" if not args.normalized and
+                provenance.core_reader_selected([str(path)]) else "checked-reader/v1")
+        service_type = CoreGroundingService if assessment_profile == "core/v1" else GroundingService
         service = service_type(project, path, state, reader, args.encoding, profile=profile,
                                embedding_dir=args.embedding_dir)
         if args.operation == "serve":
@@ -145,8 +150,8 @@ def main(argv=None):
                        "--state", str(service.state_dir)]
             if args.normalized:
                 command.append("--normalized")
-            if args.assessment_profile != "checked-reader/v1":
-                command += ["--assessment-profile", args.assessment_profile]
+            if assessment_profile != "checked-reader/v1":
+                command += ["--assessment-profile", assessment_profile]
             if profile:
                 command += ["--profile", str(Path(profile).resolve())]
             prefix = shlex.join(command)

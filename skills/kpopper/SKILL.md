@@ -1,6 +1,6 @@
 ---
 name: kpopper
-description: "The kpopper method: a knowledge record (GROUNDING.yaml) for work that gets revisited - what is known, where each piece came from, and what would make each conclusion wrong. Use when asked what kpopper is or how to keep a record, when choosing which kpopper skill fits a moment, or when no narrower one does. The occasions have their own skills: ground (read the record before answering), record (write what the work found), map (map existing materials), document (an HTML document with its evidence), page (the record's page), consolidate (hypotheses and merges), watch (background checks)."
+description: "The kpopper method: a knowledge record (GROUNDING.yaml) for work that gets revisited - what is known, where each piece came from, and what would make each conclusion wrong. Use when asked what kpopper is or how to keep a record, when choosing which kpopper skill fits a moment, or when no narrower one does. The occasions have their own skills: ground (read the record before answering), record (write what the work found), map (map existing materials), annotated-doc (a standalone HTML document with evidence), hub (the record's visual home), consolidate (hypotheses and merges), watch (background checks)."
 ---
 
 # kpopper
@@ -59,10 +59,12 @@ The [record skill](../record/SKILL.md) is where these are written; the
 | before answering about the project's state, a number, a date, a decision or a source; before changing a value the record may hold; when the opener or a grounding line names entries | [ground](../ground/SKILL.md) · `/kpopper:ground` · `$ground` |
 | something worth keeping exists: a fact from a source, a rule, a decision, a measurement, a correction, an open question - and before finishing a session that produced any | [record](../record/SKILL.md) · `/kpopper:record` · `$record` |
 | the user asks to map or investigate what already exists, or a workspace with no record needs the one-time starting offer | [map](../map/SKILL.md) · `/kpopper:map` · `$map` |
-| the requested output is an HTML document, or a saved one is refreshed with new sources | [document](../document/SKILL.md) · `/kpopper:document` · `$document` |
-| see, render or verify the record's page; write or change a brief or arrangement | [page](../page/SKILL.md) · `/kpopper:page` · `$page` |
+| Annotated Documents is explicitly requested or refreshed | [annotated-doc](../annotated-doc/SKILL.md) · `/kpopper:annotated-doc` · `$annotated-doc` |
+| explicitly use kpopper Hub, its layout or verification | [hub](../hub/SKILL.md) · `/kpopper:hub` · `$hub` |
 | hypotheses wait or an id is CONTESTED; a write was refused into a hypothesis; a branch's record must be reconciled before a merge; a dry run or remeasure is red | [consolidate](../consolidate/SKILL.md) · `/kpopper:consolidate` · `$consolidate` |
 | branch compatibility in the background, shared external facts, a daily review | [watch](../watch/SKILL.md) · `/kpopper:watch` · `$watch` |
+
+Compatibility names: [page](../page/SKILL.md) forwards to hub; [document](../document/SKILL.md) forwards to annotated-doc.
 
 The plugin's hooks open every session with the record's head and what needs a person, and name
 the skill for the next move in that host's own syntax. What they never carry is a value: values

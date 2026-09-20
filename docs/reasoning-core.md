@@ -1,8 +1,18 @@
-# Experimental deterministic core
+# Deterministic reasoning and history
 
-`core/v1` is an explicit assessment and authoring profile. Existing ordinary
-records keep their legacy interpretation. Select the profile explicitly for
-the core readers described below.
+On a POSIX host, the first `kpop add` in a workspace without a record creates a `core/v1` record
+with immutable history. Creation and recovery use one guarded transaction, so
+an interrupted first write cannot expose a partial record. Existing ordinary
+records keep their legacy interpretation; reading them never changes authority.
+Ordinary open, check, pull, affects, assess, export, search, page and session reads
+automatically select the declared core interpretation. No profile flag is needed
+for a newly created record. The profile can also be selected explicitly for the
+readers described below.
+
+History authoring and activation require POSIX file locking. On native Windows,
+use a supported POSIX host (for example WSL) for those writes, including first-record
+creation. Read-only assessment and the packaged Windows reasoning runtime remain
+separate supported capabilities; this release does not add a Windows history writer.
 
 ```sh
 kpop assess m.total d.order --profile core/v1 --record example.yaml
@@ -30,7 +40,7 @@ independent integrity/contention findings. An unavailable executor produces an
 operational error, never `false`. Prose remains a declared unknown; it is not
 silently promoted to an executable condition.
 
-The profile remains explicit and default-off. Its scalar fragment supports
+Adopting the profile for an existing legacy record remains explicit. Its scalar fragment supports
 literals, references, exact arithmetic and comparisons through `arithmetic/v1`.
 Records may additionally declare `composition/v1` for finite typed values and
 composable conditions. Finite-scope query and member selection are provided by
@@ -61,7 +71,7 @@ kpop pull d.order --profile core/v1 example.yaml
 kpop affects m.total --profile core/v1 example.yaml
 kpop export d.order --profile core/v1 --record example.yaml
 kpop search "order" --profile core/v1 --record example.yaml
-kpop page --profile core/v1 --out core.html example.yaml
+kpop experimental hub --profile core/v1 --out core.html example.yaml
 kpop session open --assessment-profile core/v1 --input example.yaml
 ```
 
@@ -87,12 +97,24 @@ History fold previews also retain the original pending, target and routing obser
 rebuilding the candidate's committed history and named hypotheses. The preview reports base and
 candidate findings without publishing the candidate or treating pending contributions as accepted.
 
-Watch compatibility/uncertainty and `remeasure` support ordinary declared core records through
-captured assessments. Watch retains the merge-base delta and reports incompatible profile changes;
-remeasure uses only named allowlisted recipes and reports their hypothetical effect without writing
-knowledge. Unknown or failed computations remain explicit. Active-history observer scenarios still
-require prospective history integration and fail closed; they never fall back to the legacy evaluator.
-Default activation remains blocked on complete operational parity.
+Watch compatibility and `remeasure` support declared core and active-history records through
+captured assessments. Watch combines compatible committed histories with the canonical reducer;
+the merge-base delta preserves newer main readings when the local branch did not change them.
+Conflicting claims and incomplete history remain explicit findings.
+
+Hypothetical watch computations use a separate, replay-validated scenario. It retains the complete
+source snapshots and selects only captured hypothesis/shared bodies. New hypothetical values are
+evaluated by the same native core, including `folds: never` layers and already-fired head conditions.
+Standing unchanged hypotheses contribute their head condition without replaying stale values over
+the new base. Scenario findings are labeled with their perspective, source and scenario identity;
+they do not establish history acceptance or permission to fold. Shared literal legacy readings keep
+their original source evidence; executable legacy fields need explicit interpretation first.
+
+Remeasure runs only named allowlisted recipes, prepares admissible named history folds and measured
+values without publishing either, and assesses the final measured world. It verifies the original
+captured source after recipes complete. Existing date, replacement and never-fold rules remain;
+physical hypotheses without an admitted history path are reported as incomplete. Unknown or failed
+computations never become a false condition or a successful measurement.
 
 ## Composable conditions
 

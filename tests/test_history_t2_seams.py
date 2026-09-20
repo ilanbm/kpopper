@@ -114,7 +114,16 @@ class FinalWorldBatches(unittest.TestCase):
         self.assertEqual(final['judgments']['d.old']['seen'], self.old['body']['seen'])
         self.assertEqual(self.store.capture().objects[self.old['id']], self.old)
         self.assertEqual(self.store.capture().inventory, self.baseline.inventory)
-        self.assertNotIn('seen', final['judgments']['d.new'])
+        # New receipts capture the typed basis from the final world, even when
+        # its dependency is authored after the judgment in the same batch.
+        seen = final['judgments']['d.new']['seen']
+        self.assertEqual(set(seen), set(final['judgments']['d.new']['rests_on']))
+        for dependency, observation in seen.items():
+            self.assertEqual(observation['computed']['value'], {
+                'type': 'number', 'numerator': str(final['readings'][dependency]['v']),
+                'denominator': '1'})
+            self.assertEqual(observation['computed']['basis']['expression'], {'ref': dependency})
+            self.assertIsNone(observation['computed']['basis']['as_of'])
         self.assertEqual(mutation.to_data()['receipt']['after']['assessment']['nodes']['d.new']['state']['falsifier']['status'],
                          'does_not_hold')
         return mutation, final

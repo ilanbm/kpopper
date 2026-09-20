@@ -1,6 +1,8 @@
 """The explicit core page is a source-free projection with secondary page identity."""
 import copy
 import html
+import contextlib
+import io
 from pathlib import Path
 import tempfile
 import unittest
@@ -47,6 +49,15 @@ class CorePageConsumerTests(unittest.TestCase):
         return R.core_build_from_context(
             self.context, self.brief if brief is None else brief,
             '/tmp/output/page.html', record_root='/tmp/record')
+
+    def test_core_check_never_builds_a_page(self):
+        output = io.StringIO()
+        with mock.patch.object(R.P, '_core_context', return_value=self.context), \
+                mock.patch.object(R, 'core_build', side_effect=AssertionError('optional renderer')), \
+                contextlib.redirect_stdout(output):
+            self.assertEqual(R.P.core_check(['unused.yaml']), 0)
+        self.assertIn(self.context.snapshot_id, output.getvalue())
+        self.assertNotIn('page', output.getvalue())
 
     def test_pure_seam_uses_retained_v3_without_legacy_truth_or_source_io(self):
         before = self.context.assessment
@@ -162,6 +173,11 @@ class CorePageConsumerTests(unittest.TestCase):
                 page, _, _, _, info = R.build([str(record)])
         self.assertIn('<html', page)
         self.assertNotIn('profile', info)
+
+    def test_captured_core_context_selects_core_without_a_redundant_profile(self):
+        with mock.patch.object(R, 'core_build', return_value='captured core') as build:
+            self.assertEqual(R.build(['record.yaml'], context=self.context), 'captured core')
+        build.assert_called_once_with(['record.yaml'], None, None, read_mode=None, context=self.context)
 
 
 if __name__ == '__main__':

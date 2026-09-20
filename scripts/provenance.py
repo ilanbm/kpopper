@@ -1103,6 +1103,41 @@ def _load(paths, *, read_mode=None):
     return doc
 
 
+def core_reader_selected(paths):
+    """Route only explicitly declared core/history documents to captured readers."""
+    mode = 'frozen' if _RAW_READS.get() else os.environ.get('KPOPPER_READ_MODE', 'live')
+    selected = _peer('knowledge_views').write_paths(paths) if mode == 'live' else paths
+    initial = [path for pattern in selected for path in (sorted(glob.glob(pattern)) or [pattern])]
+    try:
+        closure = _files_of(selected)
+    except (OSError, ValueError, yaml.YAMLError):
+        closure = []  # Initial malformed entries still route by marker/declaration below.
+    for path in dict.fromkeys([*initial, *closure]):
+        marker_path = layout(path)['history_authority']
+        if os.path.lexists(marker_path):
+            try:
+                contract = _peer('history_contract')
+                with io.open(marker_path, 'rb') as stream:
+                    marker_raw = stream.read(contract.MAX_OBJECT_BYTES + 1)
+                if len(marker_raw) > contract.MAX_OBJECT_BYTES:
+                    return True  # CapturedAssessment reports the exact authority failure.
+                marker = contract.validate_authority(contract.decode_document(marker_raw))
+            except (OSError, ValueError):
+                return True  # CapturedAssessment reports the exact authority failure.
+            if marker['authority'] == 'history':
+                return True
+        if not os.path.isfile(path):
+            continue
+        try:
+            document = parse(path) or {}
+        except (OSError, ValueError, yaml.YAMLError):
+            continue
+        meta = document.get('meta') if isinstance(document, dict) else None
+        if isinstance(meta, dict) and ('history' in meta or 'reasoning' in meta):
+            return True
+    return False
+
+
 def collections_of(doc):
     """Any mapping-of-mappings is a candidate collection of entries."""
     out = {}
@@ -2003,6 +2038,8 @@ def with_builtins(doc, ids, jud, fields):
 
 def check(paths):
     fail, note, moved, cont, summary = check_lines(paths)
+    if paths and _brief_beside(paths[0]):
+        print("NOTE page layout not checked; use kpop experimental hub --verify")
     for n in note:
         print("NOTE", n)
     for m in moved:
@@ -2015,10 +2052,20 @@ def check(paths):
     return 1 if fail else 0
 
 
-def _core_context(paths):
+def _core_context(paths, *, _source_out=None):
     """One explicit core/v1 capture for read consumers; legacy callers never enter here."""
     context = _peer('reasoning.context')
     try:
+        if _source_out is not None:
+            stage = 'capture'
+            try:
+                source = _peer('reasoning.snapshot').capture_source(paths)
+                stage = 'assessment'
+                result = context.CapturedAssessment.from_snapshot(source.snapshot)
+            except (Exception, SystemExit) as error:
+                raise context.CaptureError(context.capture_failure(error, stage=stage)) from error
+            _source_out.append(source)
+            return result
         return context.CapturedAssessment.capture(paths)
     except context.CaptureError as error:
         failure = error.envelope
@@ -2027,11 +2074,7 @@ def _core_context(paths):
         return None
 
 
-def core_check(paths):
-    """Apply explicit core check policy to one captured v3 finding set."""
-    context = _core_context(paths)
-    if context is None:
-        return 1
+def _core_check_findings(paths, context):
     report = context.assessment
     failures, notes = [], []
     for nid, node in sorted(report['nodes'].items()):
@@ -2057,23 +2100,27 @@ def core_check(paths):
                 failures.append(line)
             else:
                 notes.append(line + ' (declared prose)')
+        temporal = node.get('temporal')
+        if isinstance(temporal, dict):
+            if temporal.get('status') == 'counterexample' and falsifier['status'] != 'holds':
+                failures.append(nid + ': historical counterexample')
+            elif temporal.get('status') == 'unknown':
+                failures.append(nid + ': historical evidence unknown')
         if node['support']['status'] == 'reserved':
             states = sorted({item['state'] for item in node['support']['reservations']})
             notes.append(nid + ': support reserved (' + ', '.join(states) + ')')
-    try:
-        page = _peer('render_page')
-        page_info = page.core_build(paths, context=context)[4]
-        unresolved = page_info['coverage'].get('unresolved_selectors', [])
-        if unresolved:
-            failures.append('page selectors unresolved (' + ', '.join(unresolved) + ')')
-        misfits = page_info['coverage'].get('renderer_misfits', [])
-        if misfits:
-            failures.append('page renderer mismatch (' + '; '.join(misfits) + ')')
-        stale = page_info['coverage'].get('stale_shapes', [])
-        if stale:
-            failures.append('page shape moved (' + '; '.join(stale) + ')')
-    except (OSError, ValueError, TypeError) as error:
-        failures.append('page projection unavailable (' + str(error) + ')')
+    return failures, notes
+
+
+def core_check(paths):
+    """Apply explicit core check policy to one captured v3 finding set."""
+    context = _core_context(paths)
+    if context is None:
+        return 1
+    report = context.assessment
+    failures, notes = _core_check_findings(paths, context)
+    if paths and _brief_beside(paths[0]):
+        print("NOTE page layout not checked; use kpop experimental hub --verify")
     for line in notes:
         print('NOTE ' + line)
     for line in failures:
@@ -2236,7 +2283,7 @@ def check_lines(paths):
         elif [t for t in predicate_refs(j["pred"]) if t in PAGE]:
             named_page = sorted({t for t in predicate_refs(j["pred"]) if t in PAGE})
             note.append(f"{name}: wrong_if reads {', '.join(named_page)}, which is counted "
-                        f"when the page is built - `page --verify` decides it")
+                        f"when the page is built - `kpop experimental hub --verify` decides it")
         elif condition is None:
             # one comparison, and the reading it needs is not there: a side that holds no
             # value yet, or a truth value held against something that is not one. The shape
@@ -2281,22 +2328,8 @@ def check_lines(paths):
         note.append(priors)
     # A legend the opener could not print, said here since the opener says nothing.
     note += legend_notes(doc.get("meta"), ids)
-    # Coverage, when a brief sits beside the record: which intents no tab of the page serves,
-    # and where what each of them wrote falls - facts the page counted, said here so a session
-    # that never builds the page still hears them. The page decides its own falsifiers; the
-    # brief held against the arrangements that stand is the record's own claim, so a brief
-    # that no longer carries what an arrangement decided fails here too.
-    info = _page_or_error(paths, read_mode=getattr(doc, 'read_mode', None), doc=doc)
-    if info and "error" in info:
-        note.append(f"the brief beside the record could not be built: {info['error']}")
-    elif info:
-        sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-        import render_page as R
-        if info.get("coverage"):
-            note += R.coverage_lines(info["coverage"], full=False)
-        af, an = R.arrangement_lines(info, page_decides=True)
-        fail += af
-        note += an
+    # Presentation is an optional application. Its failures cannot change the
+    # record check; page-dependent predicates above remain explicitly undecided.
     # `also:` where the named id is an entry after all: the retirement reading does not hold
     # there, and the sibling reading is a record's own business - so this is said, and decided
     # by nobody but a person.
@@ -2522,21 +2555,6 @@ def opening(paths, budget=25, chars=None, host=None):
                   "(what a change reaches) · check")
         rest = (" · pull <entry|prefix> (values with sources) · affects <entry> "
                 "(what a change reaches)")
-    # An intent no tab of the page serves is said at every open, in the one line that is
-    # already about what to do next: the newest first and how many more, never the list -
-    # the slot is for what needs a person, and check names the rest with a hint each. An
-    # arrangement whose sign appeared comes first: it is the gap read by a decision.
-    info = _page_or_error(paths, read_mode=getattr(doc, 'read_mode', None), doc=doc)
-    facts = (info.get("arrangements") or {}) if info and "error" not in info else {}
-    fired = sorted(k for k, f in facts.items() if f["fired"])
-    cov = info.get("coverage") if info and "error" not in info else None
-    unserved = [r["id"] for r in cov["rows"] if r["unserved"]] if cov else []
-    if fired:
-        footer = (f"next: check - {fired[0]} fired ({short(jud[fired[0]]['pred'], 40)})"
-                  + (f" (and {len(fired) - 1} more)" if len(fired) > 1 else "") + rest)
-    elif unserved:
-        footer = (f"next: check - {unserved[0]} is served by no tab"
-                  + (f" (and {len(unserved) - 1} more)" if len(unserved) > 1 else "") + rest)
     if moves and doc.hypotheses:
         # hypotheses beside the record are a move of their own on a host that has the skill
         n = len(doc.hypotheses)
@@ -3157,30 +3175,22 @@ def _brief_beside(path):
 
 
 def _page_info(paths, read_mode=None, *, doc=None):
-    """What the page knows when it is built beside this record - its counts, its shape, the
-    coverage report - or None when no brief sits beside the record. A reader that has just
-    loaded the record passes it as `doc` and the page is built from that reading rather than
-    a second one; a caller that must see the record as it stands now passes none."""
-    sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-    import render_page as R
-    mode = read_mode or ('frozen' if _RAW_READS.get() else os.environ.get('KPOPPER_READ_MODE', 'live'))
-    paths = R.record_paths(paths, read_mode=mode)
-    brief = R.find_brief(paths, read_mode=mode)
-    if not brief:
-        return None
-    return R.build(paths, brief, read_mode=mode, doc=doc)[4]
+    """Compatibility seam for an explicitly requested page projection of a captured record."""
+    return _peer('applications.hub').page_info(paths, read_mode=read_mode,
+        reader=(sys.modules.get(__name__) or _Reader()), doc=doc)
 
 
 def _page_side(paths, read_mode=None):
-    """page.* as the page counts them - every name, mentioned or not, since a new judgment
-    may be the first to rest on one - the record's shape, and every arrangement held against
-    the brief: -> (values, shape, arrangements). ({}, None, {}) without a brief; a count the
-    page could not take is left out."""
-    info = _page_info(paths) if read_mode is None else _page_info(paths, read_mode=read_mode)
-    if info is None:
-        return {}, None, {}
-    return ({k: v for k, v in info["page"].items() if v is not None}, info["shape"],
-            info.get("arrangements") or {})
+    """Explicit presentation authoring crosses into the optional page application.
+
+    Ordinary reads, checks and hooks never call this compatibility seam.
+    """
+    try:
+        return _peer('applications.hub').page_side(paths, read_mode=read_mode,
+                                                   reader=(sys.modules.get(__name__) or _Reader()))
+    except (ImportError, ValueError) as error:
+        raise Refused('presentation application unavailable: ' + str(error)) from None
+
 
 
 def _page_or_error(paths, read_mode=None, *, doc=None):
@@ -3196,20 +3206,6 @@ def _page_or_error(paths, read_mode=None, *, doc=None):
     except (Exception, SystemExit) as e:
         return {"error": str(e)}
 
-
-def _coverage(paths):
-    """The page's coverage report, or None: without a brief, or when the brief cannot be
-    built."""
-    info = _page_or_error(paths)
-    if info and "error" in info:
-        return info
-    return info["coverage"] if info and info.get("coverage") else None
-
-
-def _unserved(paths):
-    """Intents no tab of the page serves, newest first."""
-    cov = _coverage(paths)
-    return [r["id"] for r in cov["rows"] if r["unserved"]] if cov and "rows" in cov else []
 
 
 def snapshot_value(dep, raw, ids, jud, page):
@@ -3362,7 +3358,7 @@ def _state(name, j, raw, ids, fields, touched=()):
         if why_undecided(j["pred"]):
             return "UNKNOWN", f"wrong_if is not a comparison this reader decides ({pred})"
         if any(t in PAGE for t in predicate_refs(j["pred"])):
-            return "UNKNOWN", f"wrong_if is counted when the page is built ({pred}) - page --verify decides it"
+            return "UNKNOWN", f"wrong_if is counted when the page is built ({pred}) - kpop experimental hub --verify decides it"
         return "UNKNOWN", f"wrong_if cannot currently be evaluated ({pred}); a value or the Lean core is unavailable, or types differ"
     return "HOLDS", f"wrong_if does not hold ({pred})"
 
@@ -5403,6 +5399,7 @@ def _mutate_legacy(paths, action, callback, *, newborn=False):
         if action.get('kind') in ('same', 'distinct', 'consolidate', 'refute'):
             raise Refused('recovery_required: publication could not finish; run recover: ' + str(error)) from error
         raise
+    _peer('session_activity').published(sys.modules.get(__name__) or _Reader(), root, mutation.files)
     print(output.getvalue(), end='')
     return result
 
@@ -5436,6 +5433,10 @@ def recover_direct(paths, *, direction='after'):
                 # for byte before it can read or finish either mutable image.
                 return direct.recover(paths, project=project,
                                       original_paths=original_paths, direction=direction)
+            bootstrap = retained._data.get('baseline', {}).get('bootstrap', {})
+            if bootstrap.get('kind') == 'new-record-bootstrap/v1':
+                return _peer('history_bootstrap').recover(entry, policy=policy, direction=direction,
+                    verify=lambda prepared: _verify_newborn_route(entry, project, policy))
             if retained.to_data().get('transition') is not None:
                 raise transaction.C.HistoryError('transition_recovery_required',
                     'history_activation.recover requires the original managed-deployment guard')
@@ -5861,14 +5862,62 @@ def untouched(base, paths, turns, host=None, nudged_at=None, workspace=None):
             f"out of this session, {record} keeps it now; if nothing will be revisited, finish.")
 
 
+def _persist_nudge(state_path, turns):
+    try:
+        raw_state = json.loads(io.open(state_path, encoding='utf-8').read())
+        if isinstance(raw_state, dict):
+            raw_state['nudged'], raw_state['nudged_turn'] = True, turns
+            with io.open(state_path, 'w', encoding='utf-8') as stream:
+                json.dump(raw_state, stream)
+    except (OSError, ValueError):
+        pass
+
+
+def _core_gate_judgments(report):
+    """Retain immutable shape and exact v3 dependency readings for stop-gate comparison."""
+    judgments = {}
+    judgment_ids = {identifier for identifier, node in report['nodes'].items()
+                    if isinstance(node.get('body'), dict)
+                    and node.get('fields', {}).get('deps') in node['body']}
+    identity = _peer('pending_grounding').identity
+    for identifier, node in report['nodes'].items():
+        body, fields = node.get('body'), node.get('fields', {})
+        deps_field, predicate_field = fields.get('deps'), fields.get('predicate')
+        if not isinstance(body, dict) or deps_field not in body or predicate_field not in body:
+            continue
+        dependencies = node['state']['basis'].get('dependencies', {})
+        inputs = {dependency: identity(evidence.get('current'))
+                  for dependency, evidence in dependencies.items()
+                  if dependency not in judgment_ids and isinstance(evidence, dict)}
+        judgments[identifier] = {
+            'shape': identity({'body': body, 'fields': fields}),
+            'predicate': node['state']['falsifier'].get('status') == 'holds',
+            'arrangement': 'born' in body,
+            'inputs': inputs,
+        }
+    return judgments
+
+
 def mark(state_path, paths):
-    """Written at session start: how many problems check finds, which intents no tab of the
-    page serves, the ids the record holds, and the record and tree as the session found
-    them."""
+    """Written at session start: record failures, IDs and the initial tree.
+
+    Keep an empty legacy unserved field for older readers; hooks do not assess pages."""
+    if core_reader_selected(paths):
+        context = _peer('reasoning.context').CapturedAssessment.capture(paths)
+        fail, _ = _core_check_findings(paths, context)
+        report = context.assessment
+        state = {'profile': 'core/v1', 'snapshot_id': context.snapshot_id,
+                 'findings_revision': context.findings_revision,
+                 'fails': len(fail), 'failures': fail, 'unserved': [],
+                 'ids': sorted(set(report['nodes']) | set(report['history_subjects'])),
+                 'judgments': _core_gate_judgments(report), 'nudged': False, **tree_state(paths)}
+        with io.open(state_path, 'w', encoding='utf-8') as f:
+            json.dump(state, f)
+        return 0
     doc = load(paths)
     ids, jud, fields = infer(doc)
     fail, _, _, _, _ = check_lines(paths)
-    state = {"fails": len(fail), "failures": fail, "unserved": _unserved(paths),
+    state = {"fails": len(fail), "failures": fail, "unserved": [],
              "ids": sorted(_every_id(doc, ids)),
              "judgments": _gate_judgments(ids, jud, with_builtins(doc, ids, jud, fields)),
              "nudged": False, **tree_state(paths)}
@@ -5879,7 +5928,8 @@ def mark(state_path, paths):
 
 def _marked(state_path):
     """The state the opener wrote - or, from an opener that wrote only the count, that."""
-    text = io.open(state_path, encoding="utf-8").read().strip()
+    with io.open(state_path, encoding="utf-8") as source:
+        text = source.read().strip()
     try:
         state = json.loads(text)
     except ValueError:
@@ -5889,21 +5939,89 @@ def _marked(state_path):
             state = {"fails": int(str(state).strip() or 0)}
         except ValueError:
             state = {"fails": 0}
-    return {"fails": int(state.get("fails") or 0), "unserved": list(state.get("unserved") or []),
+    return {"profile": state.get("profile"), "snapshot_id": state.get("snapshot_id"),
+            "findings_revision": state.get("findings_revision"),
+            "fails": int(state.get("fails") or 0), "unserved": list(state.get("unserved") or []),
             "ids": state.get("ids"), "failures": state.get("failures"),
             "judgments": state.get("judgments") or {}, "digest": state.get("digest"),
             "tree": state.get("tree"), "nudged": bool(state.get("nudged"))}
 
 
-def gate(state_path, paths, turns=0, host=None, nudged_at=None, *, _recording_context=None):
+def gate(state_path, paths, turns=0, host=None, nudged_at=None, *, _recording_context=None,
+         _session_id=None, _issues=None):
     """What a session hears before it can finish, against the mark its opener left: the
-    record failing worse than it found it; an intent the session left unserved; entries it
-    wrote with no intent recorded; and, once, real work that left the record untouched.
+    record failing worse than it found it; entries it wrote with no intent recorded;
+    and, once, real work that left the record untouched. Page coverage is checked by Hub.
     Printed, and 2 when there is anything - the hook bounces once and yields."""
     base = _marked(state_path)
+    issues = _issues if _issues is not None else []
+    if core_reader_selected(paths):
+        source = [] if _session_id is not None else None
+        context = _core_context(paths, _source_out=source) if source is not None else _core_context(paths)
+        if context is None:
+            return 2
+        owned = (_peer('session_activity').owned(sys.modules.get(__name__) or _Reader(),
+                                                source[0].document, _session_id)
+                 if source is not None else None)
+        fail, _ = _core_check_findings(paths, context)
+        previous = set(base['failures'] or []) if base['profile'] == 'core/v1' else set()
+        current_judgments = _core_gate_judgments(context.assessment)
+        allowed = {}
+        for name, old in base['judgments'].items():
+            current = current_judgments.get(name)
+            if not current or old.get('shape') != current['shape'] \
+                    or old.get('arrangement') or current['arrangement'] \
+                    or not isinstance(old.get('inputs'), dict) \
+                    or old.get('predicate') is True or current['predicate'] is not True:
+                continue
+            if any(dependency not in old['inputs'] or value != old['inputs'][dependency]
+                   for dependency, value in current['inputs'].items()):
+                allowed[name + ': falsifier holds'] = name
+        out = []
+        added = [item for item in fail if item not in previous and item not in allowed]
+        if added:
+            out.append(f"{paths[0]} fails core check with {len(fail)} problems "
+                       f"({base['fails']} at session start).")
+            out.extend('FAIL ' + item for item in added[:12])
+            issues.extend(('failure', item, 'FAIL ' + item) for item in added)
+        now_ids = set(context.assessment['nodes']) | set(context.assessment['history_subjects'])
+        if base['ids'] is not None:
+            new = sorted(now_ids - set(base['ids']))
+            if owned is not None:
+                new = [identifier for identifier in new if identifier in owned]
+            nodes = context.assessment['nodes']
+            intents = {identifier for identifier, node in nodes.items()
+                       if identifier not in current_judgments and isinstance(node.get('body'), dict)
+                       and node['body'].get('asked')}
+            attributed = {identifier for identifier, node in nodes.items()
+                          if isinstance(node.get('body'), dict) and
+                          (node['body'].get('from') in intents or
+                           bool(set(node['body'].get(node.get('fields', {}).get('deps'), [])) & intents))}
+            if new and not set(new) & (intents | attributed):
+                names = ', '.join(new[:4]) + (f" and {len(new) - 4} more" if len(new) > 4 else '')
+                out.append(f"this session wrote {len(new)} {'entry' if len(new) == 1 else 'entries'} "
+                           f"({names}); verify its recorded intent before finishing")
+                issues.extend(('unattributed', identifier,
+                    f'this session wrote 1 entry ({identifier}); verify its recorded intent before finishing')
+                    for identifier in new)
+        if not out:
+            nudge = untouched(base, paths, turns, host, nudged_at)
+            if nudge:
+                out.append(nudge)
+                issues.append(('untouched', 'record', nudge))
+                _persist_nudge(state_path, turns)
+        for line in out:
+            print(line)
+        if allowed:
+            print('Updated readings falsified unchanged judgments: ' +
+                  ', '.join(sorted(allowed.values())) +
+                  '. They remain flagged for review; check still reports their failed conditions.')
+        return 2 if out else 0
     fail, _, _, _, _ = check_lines(paths)
     doc = load(paths)
     ids, jud, fields = infer(doc)
+    owned = (_peer('session_activity').owned(sys.modules.get(__name__) or _Reader(), doc, _session_id)
+             if _session_id is not None else None)
     raw = with_builtins(doc, ids, jud, fields)
     now = _gate_judgments(ids, jud, raw)
     allowed = {}
@@ -5930,10 +6048,7 @@ def gate(state_path, paths, turns=0, host=None, nudged_at=None, *, _recording_co
                    f"session start).")
         out.append("Fix the record - or declare the hole with blocked_on - before finishing:")
         out += ["FAIL " + f for f in added[:12]]
-    for s in _unserved(paths):
-        if s not in base["unserved"]:
-            out.append(f"{s} is served by no tab of the page - serve it in a tab whose sections "
-                       f"pick what it wrote, or leave it outside and say why")
+        issues.extend(('failure', f, 'FAIL ' + f) for f in added)
     if base["ids"] is not None:
         raw = bodies(doc)
         # what a hypothesis holds is the session's writing too, attributed the same way
@@ -5946,6 +6061,8 @@ def gate(state_path, paths, turns=0, host=None, nudged_at=None, *, _recording_co
         every = _every_id(doc, ids)
         was = set(base["ids"])
         new = sorted(k for k in every if k not in was)
+        if owned is not None:
+            new = [k for k in new if k in owned]
         intents = {k for k in every if k not in jud and isinstance(raw.get(k), dict)
                    and raw[k].get("asked")}
         # A captured external report records why its evidence entered the graph;
@@ -5975,19 +6092,15 @@ def gate(state_path, paths, turns=0, host=None, nudged_at=None, *, _recording_co
             out.append(f"this session wrote {len(new)} {'entry' if len(new) == 1 else 'entries'} "
                        f"({named_}) and recorded no intent: add s.<date>_<slug> asked=\"...\" "
                        f"name=\"...\", and from: it on what it wrote")
+            issues.extend(('unattributed', k,
+                f'this session wrote 1 entry ({k}) and recorded no intent: '
+                'add s.<date>_<slug> asked="..." name="...", and from: it on what it wrote') for k in new)
     if not out:
         nudge = untouched(base, paths, turns, host, nudged_at)
         if nudge:
             out.append(nudge)
-            # once: the mark remembers that the question was asked, and at which prompt
-            try:
-                raw_state = json.loads(io.open(state_path, encoding="utf-8").read())
-                if isinstance(raw_state, dict):
-                    raw_state["nudged"], raw_state["nudged_turn"] = True, turns
-                    with io.open(state_path, "w", encoding="utf-8") as f:
-                        json.dump(raw_state, f)
-            except (OSError, ValueError):
-                pass
+            issues.append(('untouched', 'record', nudge))
+            _persist_nudge(state_path, turns)
     for l in out:
         print(l)
     if allowed:
@@ -6180,6 +6293,15 @@ def write_command(cmd, rest):
     return code
 
 
+def write_command_cli(cmd, rest):
+    """Translate expected history contract refusals without hiding programming errors."""
+    try:
+        return write_command(cmd, rest)
+    except _peer('history_contract').HistoryError as error:
+        print(str(error), file=sys.stderr)
+        return 1
+
+
 HEAD_LINE = "# Kept with kpopper: read it with `kpop open`, write it with `kpop add`.\n"
 
 
@@ -6230,6 +6352,8 @@ def _apply_first_add(action):
     path = location["record"]
     project = _peer('project_modes').Project(location.get('workspace', os.path.dirname(path)))
     policy = project.config()
+    if location['status'] == 'found' and _peer('history_direct').active([path]):
+        return apply([path], action), []
     try:
         receipt = _peer('recording').route([path], action, sys.modules.get(__name__) or _Reader(),
                                           project=project, expected_policy=policy)
@@ -6255,10 +6379,31 @@ def _apply_first_add(action):
                 path = current
                 continue
             if location["status"] == "found":
+                if _peer('history_direct').active([current]):
+                    return _peer('history_direct').apply([current], action, project=project,
+                                                         original_paths=[current]), []
                 return _apply_unlocked([current], action, project=project), []
-            result = _mutate_legacy([current], action,
-                lambda: _apply_unlocked([current], action, project=project), newborn=True)
-            return result, [current]
+            bootstrap = _peer('history_bootstrap')
+            try:
+                mutation = bootstrap.prepare(current, action, policy=policy)
+            except SystemExit as error:
+                # File-path runtime loading has its own Refused class identity.
+                if error.__class__.__name__ != 'Refused':
+                    raise
+                raise Refused(str(error)) from None
+            bootstrap.publish(current, mutation, policy=policy,
+                verify=lambda prepared: _verify_newborn_route(current, project, policy))
+            _peer('session_activity').published(sys.modules.get(__name__) or _Reader(),
+                os.path.dirname(current), mutation.files, subjects={action['id']})
+            print('history committed: ' + mutation.to_data()['operation'] +
+                  ' (' + action['kind'] + ' ' + action['id'] + ')')
+            return 0, [current]
+
+
+def _verify_newborn_route(entry, project, policy):
+    """Recheck only caller-owned routing; prepared intent is verified separately."""
+    if project.config() != policy:
+        raise Refused('refused - project mode or record destination changed; retry the write')
 
 
 
@@ -6304,9 +6449,13 @@ if __name__ == "__main__":
         turns = int(rest[rest.index("--turns") + 1]) if "--turns" in rest else 0
         host = rest[rest.index("--host") + 1] if "--host" in rest else None
         at = int(rest[rest.index("--nudged-at") + 1]) if "--nudged-at" in rest else None
+        if '--session' in rest:
+            sid = rest[rest.index('--session') + 1]
+            sys.exit(_peer('session_activity').stop(sys.modules.get(__name__) or _Reader(),
+                rest[0], files, sid, turns, host, at))
         sys.exit(gate(rest[0], files, turns, host, at))
     if cmd in ("set", "add", "review"):
-        sys.exit(write_command(cmd, rest))
+        sys.exit(write_command_cli(cmd, rest))
     if cmd in ("same", "distinct"):
         sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
         import sameness
@@ -6314,7 +6463,8 @@ if __name__ == "__main__":
     if cmd == "affects":
         files = [x for x in rest if x.endswith((".yaml", ".yml"))] or default_paths()
         changed = [x for x in rest if not x.endswith((".yaml", ".yml"))]
-        sys.exit(core_affects(files, changed) if profile else affects(files, changed))
+        sys.exit(core_affects(files, changed) if profile or core_reader_selected(files)
+                 else affects(files, changed))
     if cmd == "pull":
         b, seeds, files, history, budget_requested = 40, [], [], False, False
         i = 0
@@ -6325,11 +6475,13 @@ if __name__ == "__main__":
                 history = True; i += 1; continue
             (files if rest[i].endswith((".yaml", ".yml")) else seeds).append(rest[i])
             i += 1
-        if profile and history:
+        selected = files or default_paths()
+        use_core = bool(profile) or core_reader_selected(selected)
+        if use_core and history:
             sys.exit('core_profile_option_unsupported: --history; core pull already includes captured history')
-        if profile and budget_requested:
+        if use_core and budget_requested:
             sys.exit('core_profile_option_unsupported: --budget')
-        code = core_pull(files or default_paths(), seeds) if profile else pull(files or default_paths(), seeds, b)
+        code = core_pull(selected, seeds) if use_core else pull(selected, seeds, b)
         if history:
             lines = history_lines(files or default_paths(), seeds)
             print()
@@ -6338,8 +6490,16 @@ if __name__ == "__main__":
         sys.exit(code)
     files = [x for x in rest if x.lower().endswith((".yaml", ".yml"))] or default_paths()
     if cmd == "open":
+        if profile or core_reader_selected(files):
+            unsupported = [flag for flag in ('--chars', '--budget', '--host') if flag in rest]
+            if unsupported:
+                sys.exit('core_profile_option_unsupported: ' + ', '.join(unsupported))
+            args = ['--profile', 'core/v1', *files]
+            if '--json' in rest:
+                args.insert(0, '--json')
+            sys.exit(_peer('workspace_cli').open_context(args))
         b = int(rest[rest.index("--budget") + 1]) if "--budget" in rest else 25
         c = int(rest[rest.index("--chars") + 1]) if "--chars" in rest else None
         h = rest[rest.index("--host") + 1] if "--host" in rest else None
         sys.exit(opening(files, b, c, h))
-    sys.exit(core_check(files) if profile else check(files))
+    sys.exit(core_check(files) if profile or core_reader_selected(files) else check(files))

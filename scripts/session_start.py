@@ -46,12 +46,19 @@ def read_view(location, reader_args=None, host=None):
         except Exception as error:
             # Opening remains useful offline and never grants publication rights.
             print('kpopper publication retry unavailable: ' + str(error), file=sys.stderr)
+    selected_core = False
     if reader_args is None:
         result = _run("session_hook.py", [location["record"]], location["workspace"])
         if result.returncode != 3:
             return result, True
-        reader_args = ["--chars", str(LEGACY_CHARS), location["record"]]
-    if host:
+        if __package__:
+            from . import provenance
+        else:
+            import provenance
+        selected_core = provenance.core_reader_selected([location["record"]])
+        reader_args = ([location["record"]] if selected_core
+                       else ["--chars", str(LEGACY_CHARS), location["record"]])
+    if host and not selected_core:
         reader_args = [*reader_args, "--host", host]
     return _run("provenance.py", ["open", *reader_args], location["workspace"]), False
 
@@ -99,7 +106,8 @@ def opening(payload, host=None):
             "environment": {"KPOPPER_AGENT_SESSION": sid},
             "command": [sys.executable, str(HERE / "cli.py")],
             "workspace": directory}, ensure_ascii=False)
-            + "\nFor mapping, pass this session environment to the CLI and execute the returned task. "
+            + "\nPass this session environment to record-writing and mapping commands. "
+              "For mapping, execute the returned task. "
               "The identity routes work back to this session; it grants no source access.")
         baseline = Path(tempfile.gettempdir()) / ("kpopper-base-" + sid)
         if not (payload.get("source") in ("compact", "resume") and baseline.exists()):

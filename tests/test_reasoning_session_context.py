@@ -1,5 +1,7 @@
 """The explicit core session route retains one source-free assessment context."""
 import json
+import contextlib
+import io
 from pathlib import Path
 import re
 import subprocess
@@ -66,10 +68,25 @@ class CoreSessionContextTests(unittest.TestCase):
     def test_explicit_profile_has_a_separate_cli_selector(self):
         legacy = parser().parse_args(['open'])
         explicit = parser().parse_args(['open', '--assessment-profile', 'core/v1'])
-        self.assertEqual(legacy.assessment_profile, 'checked-reader/v1')
+        self.assertIsNone(legacy.assessment_profile)
         self.assertEqual(explicit.assessment_profile, 'core/v1')
         with self.assertRaisesRegex(ValueError, 'checked-reader/v1'):
             self.service().core.assess({}, 'd.choice', [])
+
+    def test_declared_core_selects_session_and_hook_without_legacy_executor(self):
+        import yaml
+        from scripts.session import entry
+        self.record.write_text(yaml.safe_dump(self.document), encoding='utf-8')
+        for operation in ('open', 'hook-open'):
+            output = io.StringIO()
+            with self.subTest(operation=operation), contextlib.redirect_stdout(output), \
+                 mock.patch('scripts.session.view.GroundingService', side_effect=AssertionError('legacy service')):
+                code = entry.main([operation, '--no-settings', '--input', str(self.record),
+                                   '--state', str(self.folder / 'auto-state'), '--tokens', '4000'])
+            self.assertEqual(code, 0, output.getvalue())
+            self.assertIn('assessment_profile=core/v1', output.getvalue())
+            if operation == 'hook-open':
+                self.assertIn('--assessment-profile core/v1', output.getvalue())
 
     def test_handle_binds_project_snapshot_findings_and_consumer_version(self):
         context = self.context('review-one')

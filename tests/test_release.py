@@ -72,8 +72,25 @@ class TheVersionFiles(unittest.TestCase):
 
 
 class WhatShips(unittest.TestCase):
+    def test_the_claude_plugin_source_contains_no_nested_zip(self):
+        # Claude downloads a relative-path plugin as one ZIP and refuses any .zip entry
+        # inside it.  Check the tracked source, not a working-tree glob that can see local
+        # caches or test output which never ships.
+        marketplace = json.loads((ROOT / ".claude-plugin/marketplace.json").read_text())
+        entry = next(plugin for plugin in marketplace["plugins"] if plugin["name"] == "kpopper")
+        source = entry["source"]
+        self.assertIsInstance(source, str)
+        self.assertTrue(source.startswith("./"), source)
+        prefix = source[2:].rstrip("/")
+        tracked = subprocess.check_output(
+            ["git", "ls-files", "-z"], cwd=ROOT
+        ).decode("utf-8").split("\0")
+        shipped = [path for path in tracked if not prefix or path == prefix or path.startswith(prefix + "/")]
+        nested = [path for path in shipped if pathlib.PurePosixPath(path).suffix.lower() == ".zip"]
+        self.assertEqual(nested, [], "Claude refuses nested ZIP entries: " + repr(nested))
+
     def test_the_browser_checks_travel_with_the_command_line(self):
-        # `kpop page --checks` runs the file that came with the reader, so a wheel that
+        # `kpop experimental hub --checks` runs the file that came with the reader, so a wheel that
         # declares everything except that file turns the flag into an error message on every
         # installed copy - and nothing else in the suite opens a wheel to notice.
         toml = (ROOT / "pyproject.toml").read_text(encoding="utf-8")
@@ -116,6 +133,35 @@ class TheChangelog(unittest.TestCase):
 
 
 class WhatIsPublished(unittest.TestCase):
+    def test_release_targets_the_exact_commit_that_was_built(self):
+        calls = []
+        commit = 'a' * 40
+        def command(*args):
+            calls.append(args)
+            return commit if args == ('git', 'rev-parse', 'HEAD') else ''
+        with patch.object(P, 'previous_version', return_value='0.0.0'), \
+             patch.object(P, 'published', return_value=False), \
+             patch.object(P, 'tag_elsewhere', return_value=None), \
+             patch.object(P, 'build', return_value=[pathlib.Path('candidate.whl')]), \
+             patch.object(P.release, 'sh', side_effect=command):
+            self.assertEqual(P.main([]), 0)
+        published = next(call for call in calls if call[:3] == ('gh', 'release', 'create'))
+        self.assertEqual(published[published.index('--target') + 1], commit)
+
+    def test_moving_checkout_cannot_publish_mismatched_release_assets(self):
+        calls, heads = [], iter(['a' * 40, 'b' * 40])
+        def command(*args):
+            calls.append(args)
+            return next(heads) if args == ('git', 'rev-parse', 'HEAD') else ''
+        with patch.object(P, 'previous_version', return_value='0.0.0'), \
+             patch.object(P, 'published', return_value=False), \
+             patch.object(P, 'tag_elsewhere', return_value=None), \
+             patch.object(P, 'build', return_value=[pathlib.Path('candidate.whl')]), \
+             patch.object(P.release, 'sh', side_effect=command):
+            with self.assertRaisesRegex(SystemExit, 'checkout changed'):
+                P.main([])
+        self.assertFalse(any(call[:3] == ('gh', 'release', 'create') for call in calls))
+
     def test_bundle_refusal_stops_build_before_output_is_touched(self):
         with tempfile.TemporaryDirectory() as directory:
             dist = pathlib.Path(directory) / "dist"

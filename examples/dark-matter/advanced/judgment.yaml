@@ -1,0 +1,17 @@
+rests_on:
+- m.astronomy_count
+- m.astronomy_members
+- cmb.dark_to_baryon_density
+- research.framework
+- research.shared_data
+verdict: >-
+  Retain the selected astronomical literature as a useful basis for reviewing a
+  dark-matter account under the stated models; keep particle identity unresolved.
+because: >-
+  The count and selection track review coverage, not independent confirmations
+  or a combined likelihood. RAR reuses SPARC. The density ratio uses one
+  cosmological fit. The scientific argument remains in the connected legacy
+  example; neither this query nor the arithmetic proves its synthesis.
+reopened_by: >-
+  The collection, source findings, shared data, or adopted models change, or a
+  worked alternative addresses the same constraints. Review the affected paths.

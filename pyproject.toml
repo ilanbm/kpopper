@@ -6,7 +6,7 @@ build-backend = "setuptools.build_meta"
 name = "kpopper"
 # The plugin manifest carries the same number: one tree, two distribution channels,
 # released together.
-version = "1.6.0"
+version = "1.8.1"
 description = "An epistemic record for work that gets revisited: what is known, how each piece is grounded, and what would make each judgment wrong."
 readme = "README.md"
 requires-python = ">=3.9"
@@ -30,9 +30,10 @@ classifiers = [
   "Topic :: Software Development :: Documentation",
   "Topic :: Software Development :: Quality Assurance",
 ]
-dependencies = ["PyYAML>=5.1", "html5lib>=1.1,<2", "tinycss2>=1.2,<2", "tzdata"]
+dependencies = ["PyYAML>=5.1", "tzdata"]
 
 [project.optional-dependencies]
+html = ["html5lib>=1.1,<2", "tinycss2>=1.2,<2"]
 session = ["tiktoken>=0.14,<1", "mcp>=2.2,<3"]
 retrieval = ["numpy>=1.24,<3", "onnxruntime>=1.18,<2", "tokenizers>=0.20,<1"]
 
@@ -51,13 +52,13 @@ kpopper = "kpopper.cli:main"
 # The editor plugin reads these files out of scripts/ by path, so the package is mapped
 # onto that directory instead of being copied into one of its own. A second copy would
 # be a second thing to edit.
-packages = ["kpopper", "kpopper.session", "kpopper.reasoning"]
+packages = ["kpopper", "kpopper.session", "kpopper.reasoning", "kpopper.applications"]
 package-dir = { kpopper = "scripts" }
 
 [tool.setuptools.package-data]
 # The page's own files ship with the renderer that reads them, and the browser checks ship
-# with the command line that runs them - `kpop page --checks` is only as installable as
+# with the command line that runs them - `kpop experimental hub --checks` is only as installable as
 # the file it hands to node.
 kpopper = ["page/*.css", "page/*.js", "verify_page.js", "start-guide.md", "document-guide.md", "document/*.css", "document/*.js", "assessment.schema.json"]
 "kpopper.session" = ["rules.txt", "bootstrap.txt", "lean/*.lean", "lean/lean-toolchain"]
-"kpopper.reasoning" = ["assessment.schema.json", "history_assessment.schema.json", "lean/*.lean", "lean/Kpopper/*.lean", "lean/lean-toolchain", "lean/lakefile.toml", "native/*.zip", "native/*.tar.gz", "native/*.md", "third_party/*"]
+"kpopper.reasoning" = ["assessment.schema.json", "history_assessment.schema.json", "lean/*.lean", "lean/Kpopper/*.lean", "lean/lean-toolchain", "lean/lakefile.toml", "native/*.kpopper-runtime", "native/*.tar.gz", "native/*.md", "third_party/*"]

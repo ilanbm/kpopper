@@ -5,7 +5,7 @@ description: "Write what the work found into the project's knowledge record, so 
 
 # Record
 
-Keep what the work produced while it is still in your hands: the source with its location, the rule rather than its result, the conclusion with what it rests on and what would make it wrong. It is a byproduct of the work, written when it exists and not at a ceremony. The command line is `kpop` where it is on PATH; otherwise the `command` in the `KPOPPER_AGENT_CONTEXT` line the session opener printed (`python3 <plugin>/scripts/cli.py`) runs the same code. Do not guess a path and do not write a second reader - [the method's reference](../kpopper/references/method.md#finding-the-reader) says how to find the installed copy when neither is at hand.
+Keep what the work produced while it is still in your hands: the source with its location, the rule rather than its result, the conclusion with what it rests on and what would make it wrong. It is a byproduct of the work, written when it exists and not at a ceremony. The command line is `kpop` where it is on PATH; otherwise the `command` in the `KPOPPER_AGENT_CONTEXT` line the session opener printed (`python3 <plugin>/scripts/cli.py`) runs the same code. Pass its `environment` to write commands too: the supplied session identity attributes successful writes but grants no access or permission. Never invent an identity. Do not guess a path and do not write a second reader - [the method's reference](../kpopper/references/method.md#finding-the-reader) says how to find the installed copy when neither is at hand.
 
 When mentioning this skill to the user, include the plugin name: `kpopper:record` or "record from the kpopper plugin". Use the user's language and fold it into the explanation of the action; no extra announcement is needed.
 
@@ -20,7 +20,7 @@ Record the first useful finding within the user's authorization. Sources and fac
 
 Where no record resolves for the workspace, `kpop add` creates `GROUNDING.yaml` at the repository root (the working directory outside git) with that first entry, and a later `add` extends it. A registered record that is unavailable is a location problem: restore it rather than starting another. The [shape reference](../kpopper/references/shape.md) shows the sections, pointer records and how a record lives outside a tree that cannot hold it.
 
-**Make a new record useful to its reader.** Link and briefly explain the finding when its explanation is due. Showing the shipped page is optional, when a visual view helps and is supported.
+**Make a new record useful to its reader.** Link and briefly explain the finding when its explanation is due. Show the optional experimental hub only on an explicit request or standing preference.
 
 ## Record what the work calls for
 
@@ -224,8 +224,8 @@ entries with `src` / `source` fields must reconcile those fields before using th
 judgments and their current inputs as well as check failures. When updated readings make an
 unchanged, pre-existing judgment's explicit condition fire, the stop gate lets the recording
 finish. It does not refresh `seen`, rewrite the verdict or make `check` green. Review that
-judgment before relying on it. New or edited broken judgments, structural errors and page
-arrangement failures still receive the gate's reminder. Older count-only marks retain their
+judgment before relying on it. New or edited broken judgments and structural errors still receive the gate's reminder.
+Page arrangement checks belong to explicit application verification. Older count-only marks retain their
 conservative behavior until the next session opens.
 
 ## Background capture, shared facts and deferred work
