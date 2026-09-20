@@ -1303,6 +1303,204 @@ fn fmt(value: &V) -> String {
     }
 }
 impl World<'_> {
+    /// The ordinary reader's exact post-observation state and explanation. This
+    /// uses captured inputs and the existing computation runtime, never source discovery.
+    pub(crate) fn state(&self, id: &str) -> Result<(String, String)> {
+        let world = self;
+        fn field<'a>(value: &'a V, key: &str) -> &'a V {
+            match value {
+                V::Map(m) => m.get(key).unwrap_or(&V::Null),
+                _ => &V::Null,
+            }
+        }
+        fn names(value: &V) -> Vec<String> {
+            match value {
+                V::List(a) => a
+                    .iter()
+                    .map(crate::source_text::ordinary_python_str)
+                    .collect(),
+                V::Map(m) => m.keys().cloned().collect(),
+                V::Text(s) => s.chars().map(|c| c.to_string()).collect(),
+                _ => vec![],
+            }
+        }
+
+        let body = &world.judgments[id];
+        let fields = world.reader.fields();
+        let deps = names(field(body, text(&fields["deps"])?));
+        let pred = R::predicate_of(body, fields);
+        let blocked = blocked_text(body);
+        let missing = deps
+            .iter()
+            .filter(|d| !world.reader.ids.contains(*d))
+            .cloned()
+            .collect::<Vec<_>>();
+        let result = |tag: &str, reason: String| Ok((tag.into(), reason));
+        if !missing.is_empty() {
+            return if blocked.is_empty() {
+                result(
+                    "BROKEN",
+                    format!("rests on {}, which is not an entry", missing.join(", ")),
+                )
+            } else {
+                result(
+                    "BLOCKED",
+                    format!(
+                        "waiting on {} - {}",
+                        missing.join(", "),
+                        blocked.chars().take(70).collect::<String>()
+                    ),
+                )
+            };
+        }
+        let named = R::predicate_refs(&pred)
+            .into_iter()
+            .filter(|id| world.reader.ids.contains(id))
+            .collect::<Vec<_>>();
+        let evaluated = world.reader.predicate(&pred)?;
+        if !named.is_empty() && evaluated == Some(true) {
+            return result(
+                "FIRED",
+                format!(
+                    "wrong_if holds ({}) - broken by its own condition",
+                    predicate_text(&pred)
+                ),
+            );
+        }
+        let snapshot = text(&fields["snapshot"])?;
+        let seen = field(body, snapshot);
+        let unchecked = deps
+            .iter()
+            .filter(|d| !snapshot.is_empty() && !map(seen).is_ok_and(|m| m.contains_key(*d)))
+            .cloned()
+            .collect::<Vec<_>>();
+        let empty = Map::new();
+        let seen = map(seen).unwrap_or(&empty);
+        let formula_only = seen
+            .iter()
+            .filter(|(id, old)| {
+                world.reader.raw().get(*id).is_some_and(|b| {
+                    let rule = field(b, "rule");
+                    crate::ordinary_counts::legacy_rule(old, rule)
+                        .is_some_and(|old| crate::ordinary_counts::same_rule(&old, rule))
+                })
+            })
+            .map(|(id, _)| id.clone())
+            .collect::<Vec<_>>();
+        let moves = world.moved(id)?;
+        if let Some((dep, old, new, _)) = moves.iter().find(|(_, _, _, s)| *s == "moved") {
+            let snapshot = seen.get(dep).unwrap_or(&V::Null);
+            let current = world.reader.raw().get(dep).unwrap_or(&V::Null);
+            if matches!(field(snapshot, "computed"), V::Map(_))
+                && !crate::ordinary_counts::same_rule(
+                    field(field(snapshot, "computed"), "rule"),
+                    field(current, "rule"),
+                )
+            {
+                return result("MOVED", format!("{dep}: formula changed since review"));
+            }
+            if crate::ordinary_counts::legacy_rule(snapshot, field(current, "rule")).is_some() {
+                return result(
+                    "MOVED",
+                    format!(
+                        "{dep}: formula changed since legacy review; no historical result was recorded"
+                    ),
+                );
+            }
+            let (was, now) = apart(old, new, 40);
+            return result(
+                "MOVED",
+                format!(
+                    "{dep} moved {was} -> {now} since it was reviewed - if it still holds: review {id}"
+                ),
+            );
+        }
+        if !unchecked.is_empty() {
+            return result(
+                "UNCHECKED",
+                format!(
+                    "never checked against {} - if it holds: review {id}",
+                    unchecked.join(", ")
+                ),
+            );
+        }
+        if !formula_only.is_empty() {
+            return result(
+                "UNCHECKED",
+                format!(
+                    "legacy snapshot records only the formula for {}, not a historical result; review {id} to record the current calculation",
+                    formula_only.join(", ")
+                ),
+            );
+        }
+        if let Some((dep, old, new, _)) = moves.iter().find(|(_, _, _, s)| *s == "muted") {
+            let (was, now) = apart(old, new, 40);
+            return result(
+                "MUTED",
+                format!(
+                    "{dep} moved {was} -> {now}, inside wrong_if ({}) - nothing is asked",
+                    predicate_text(&pred)
+                ),
+            );
+        }
+        if named.is_empty() && blocked.is_empty() {
+            let reopened = if !truth(&pred) {
+                reopened_text(body)
+            } else {
+                String::new()
+            };
+            return if reopened.is_empty() {
+                result(
+                    "NO_PREDICATE",
+                    "nothing evaluable would say otherwise".into(),
+                )
+            } else {
+                result(
+                    "HOLDS",
+                    format!("decided; reopened by {}", short(&V::Text(reopened), 80)),
+                )
+            };
+        }
+        if named.is_empty() {
+            return result(
+                "DECLARED",
+                format!(
+                    "no predicate to evaluate; declared - {}",
+                    short(&V::Text(blocked), 80)
+                ),
+            );
+        }
+        let short = short(&pred, 80);
+        if evaluated.is_none() {
+            if !R::why_undecided(&pred).is_empty() {
+                return result(
+                    "UNKNOWN",
+                    format!("wrong_if is not a comparison this reader decides ({short})"),
+                );
+            }
+            if R::predicate_refs(&pred)
+                .iter()
+                .any(|id| id.starts_with("page."))
+            {
+                return result(
+                    "UNKNOWN",
+                    format!(
+                        "wrong_if is counted when the page is built ({short}) - kpop experimental hub --verify decides it"
+                    ),
+                );
+            }
+            return result(
+                "UNKNOWN",
+                format!(
+                    "wrong_if cannot currently be evaluated ({short}); a value or the Lean core is unavailable, or types differ"
+                ),
+            );
+        }
+        result("HOLDS", format!("wrong_if does not hold ({short})"))
+    }
+}
+
+impl World<'_> {
     pub(crate) fn moved(&self, id: &str) -> Result<Vec<(String, V, V, &'static str)>> {
         let body = map(&self.judgments[id])?;
         let empty = Map::new();
