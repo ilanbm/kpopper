@@ -17,7 +17,9 @@ use std::path::Path;
 
 use crate::history_contribution_prepare as history_prepare;
 
-fn s(value: &str) -> V { V::Text(value.into()) }
+fn s(value: &str) -> V {
+    V::Text(value.into())
+}
 
 pub(crate) struct Context<'a> {
     pub route: WriteRoute,
@@ -28,6 +30,25 @@ pub(crate) struct Context<'a> {
     pub expected_target: Option<&'a J>,
     pub supplied_runtime: Option<&'a crate::reasoning_runtime::Runtime>,
     pub after_capture: &'a mut dyn FnMut() -> Result<()>,
+}
+#[derive(Clone, Copy)]
+struct ReceiptContext<'a> {
+    record: &'a Path,
+    state_root: &'a Path,
+    source_path: &'a Path,
+    envelope_sha256: &'a str,
+    supplied_runtime: Option<&'a crate::reasoning_runtime::Runtime>,
+}
+impl<'a> From<&Context<'a>> for ReceiptContext<'a> {
+    fn from(c: &Context<'a>) -> Self {
+        Self {
+            record: c.record,
+            state_root: c.state_root,
+            source_path: c.source_path,
+            envelope_sha256: c.envelope_sha256,
+            supplied_runtime: c.supplied_runtime,
+        }
+    }
 }
 
 pub(crate) struct PreparedHistory {
@@ -48,14 +69,28 @@ pub(crate) fn prepare_history(
     record: &Path,
     diagnostics: Vec<String>,
 ) -> Result<PreparedHistory> {
-    let scope = scope(report).transpose()?.ok_or_else(|| Error("missing report scope".into()))?;
+    let scope = scope(report)
+        .transpose()?
+        .ok_or_else(|| Error("missing report scope".into()))?;
     let source_id = format!("s.ingest_{event}");
     let roots = roots(report, &source_id);
-    let disclosures = report.raw.get("disclosed_locators").map(V::from_json).transpose()?.unwrap_or_else(||V::List(vec![]));
+    let disclosures = report
+        .raw
+        .get("disclosed_locators")
+        .map(V::from_json)
+        .transpose()?
+        .unwrap_or_else(|| V::List(vec![]));
     let (artifact, history_files) = history_prepare::prepare_subset(
-        captured, &roots, &scope, &format!("report-subset-{event}"), recorded_at,
-        source_entry, &disclosures, mutation,
-    ).map_err(|e| Error(format!("history subset preparation: {e}")))?;
+        captured,
+        &roots,
+        &scope,
+        &format!("report-subset-{event}"),
+        recorded_at,
+        source_entry,
+        &disclosures,
+        mutation,
+    )
+    .map_err(|e| Error(format!("history subset preparation: {e}")))?;
     let historical = crate::history_bundle::validate_artifact(
         field(map(&artifact)?, "manifest")?,
         field(map(&artifact)?, "revision")?,
@@ -73,48 +108,97 @@ pub(crate) fn prepare_history(
             evidence.insert(name.clone(), captured_evidence(captured, &name)?);
         }
     }
-    require(evidence.get(&portable).is_some_and(|raw|raw==report.quote.as_bytes()), "scoped report source bytes differ from retained quote")?;
-    let mut files=evidence;
-    for (path,raw) in &history_files { files.insert(format!("history-closure/{path}"),raw.clone()); }
-    let mut plain=document.clone();
-    if let Some(meta)=map_mut(&mut plain)?.get_mut("meta") { map_mut(meta)?.remove("history"); }
-    let reasoning=crate::reasoning_capabilities::document_capabilities(&plain)?;
-    let artifact_fields=map(&artifact)?;
-    let manifest=obj([
-        ("version",V::Integer(crate::value::Integer::new("3")?)),
-        ("requires",map(field(artifact_fields,"manifest")?)?["requires"].clone()),
-        ("roots",map(field(artifact_fields,"manifest")?)?["roots"].clone()),
-        ("document",document),("scope",scope),("reasoning",reasoning),
-        ("history",obj([("revision",artifact_fields["revision"].clone()),("manifest",artifact_fields["manifest"].clone())])),
-        ("evidence",V::Map(files.iter().map(|(p,b)|(p.clone(),s(&crate::identity::sha256(b)))).collect())),
+    require(
+        evidence
+            .get(&portable)
+            .is_some_and(|raw| raw == report.quote.as_bytes()),
+        "scoped report source bytes differ from retained quote",
+    )?;
+    let mut files = evidence;
+    for (path, raw) in &history_files {
+        files.insert(format!("history-closure/{path}"), raw.clone());
+    }
+    let mut plain = document.clone();
+    if let Some(meta) = map_mut(&mut plain)?.get_mut("meta") {
+        map_mut(meta)?.remove("history");
+    }
+    let reasoning = crate::reasoning_capabilities::document_capabilities(&plain)?;
+    let artifact_fields = map(&artifact)?;
+    let manifest = obj([
+        ("version", V::Integer(crate::value::Integer::new("3")?)),
+        (
+            "requires",
+            map(field(artifact_fields, "manifest")?)?["requires"].clone(),
+        ),
+        (
+            "roots",
+            map(field(artifact_fields, "manifest")?)?["roots"].clone(),
+        ),
+        ("document", document),
+        ("scope", scope),
+        ("reasoning", reasoning),
+        (
+            "history",
+            obj([
+                ("revision", artifact_fields["revision"].clone()),
+                ("manifest", artifact_fields["manifest"].clone()),
+            ]),
+        ),
+        (
+            "evidence",
+            V::Map(
+                files
+                    .iter()
+                    .map(|(p, b)| (p.clone(), s(&crate::identity::sha256(b))))
+                    .collect(),
+            ),
+        ),
     ]);
-    let bundle=obj([("revision",s(&manifest.digest()?)),("manifest",manifest)]);
-    pending_bundle::validate(&bundle,&files)
+    let bundle = obj([("revision", s(&manifest.digest()?)), ("manifest", manifest)]);
+    pending_bundle::validate(&bundle, &files)
         .map_err(|e| Error(format!("history contribution wrapper: {e}")))?;
-    Ok(PreparedHistory{bundle,files,diagnostics,source_capture:captured.clone()})
+    Ok(PreparedHistory {
+        bundle,
+        files,
+        diagnostics,
+        source_capture: captured.clone(),
+    })
 }
 
 fn captured_evidence(captured: &crate::history_capture::Capture, name: &str) -> Result<Vec<u8>> {
     crate::history_authority::relative_path(name)?;
-    let expected = captured.inventory.get(&("bytes".into(), name.into()))
+    let expected = captured
+        .inventory
+        .get(&("bytes".into(), name.into()))
         .ok_or_else(|| Error(format!("uncaptured report contribution evidence: {name}")))?;
     let crate::history_capture::Observation::Bytes { sha256, maximum } = expected else {
-        return Err(Error(format!("uncaptured report contribution evidence: {name}")));
+        return Err(Error(format!(
+            "uncaptured report contribution evidence: {name}"
+        )));
     };
     let mut path = captured.root.clone();
     for part in name.split('/') {
         path.push(part);
-        require(!std::fs::symlink_metadata(&path)?.file_type().is_symlink(), "symlink_path")?;
+        require(
+            !std::fs::symlink_metadata(&path)?.file_type().is_symlink(),
+            "symlink_path",
+        )?;
     }
-    let metadata=path.metadata()?;
-    require(metadata.is_file() && metadata.len() <= *maximum as u64, "history_limit")?;
-    let raw=std::fs::read(path)?;
-    require(raw.len() <= *maximum && crate::identity::sha256(&raw)==*sha256, "snapshot_changed")?;
+    let metadata = path.metadata()?;
+    require(
+        metadata.is_file() && metadata.len() <= *maximum as u64,
+        "history_limit",
+    )?;
+    let raw = std::fs::read(path)?;
+    require(
+        raw.len() <= *maximum && crate::identity::sha256(&raw) == *sha256,
+        "snapshot_changed",
+    )?;
     Ok(raw)
 }
 
-fn obj(items: impl IntoIterator<Item=(&'static str,V)>) -> V {
-    V::Map(items.into_iter().map(|(k,v)|(k.into(),v)).collect())
+fn obj(items: impl IntoIterator<Item = (&'static str, V)>) -> V {
+    V::Map(items.into_iter().map(|(k, v)| (k.into(), v)).collect())
 }
 
 /// Finalize the existing history report pipeline after its batch, graph and
@@ -129,7 +213,10 @@ pub(crate) fn capture_prepared_history(
     if let Some(reason) = super::private_reason(report)? {
         return Err(Error(reason.into()));
     }
-    require(applies(report, &context.route)?, "advanced history report is not project scoped")?;
+    require(
+        applies(report, &context.route)?,
+        "advanced history report is not project scoped",
+    )?;
     pending_bundle::validate(&prepared.bundle, &prepared.files)?;
     prepared.source_capture.verify_current()?;
     let manifest = map(field(map(&prepared.bundle)?, "manifest")?)?;
@@ -143,7 +230,10 @@ pub(crate) fn capture_prepared_history(
         let _state_lock =
             crate::history_transaction_fs::DirectoryGuard::acquire(context.state_root, true)?;
         super::save(
-            &context.state_root.join("journals").join(format!("{event}.json")),
+            &context
+                .state_root
+                .join("journals")
+                .join(format!("{event}.json")),
             &retained(
                 event,
                 &pending_event,
@@ -151,15 +241,13 @@ pub(crate) fn capture_prepared_history(
                 &prepared.bundle,
                 &prepared.files,
                 &prepared.diagnostics,
-                context.record,
-                context.route.config(),
-                &crate::source_capture::routing_observation(context.route.paths(), &context.route.project().root)?,
-                context.envelope_sha256,
+                &context,
             )?,
         )?;
     }
     let project = context.route.project().clone();
     let expected_policy = context.route.config().clone();
+    let receipt_context = ReceiptContext::from(&context);
     context.route.verify()?;
     drop(context.route);
     let pending = crate::public_knowledge::import_helper::capture_pending(
@@ -185,11 +273,7 @@ pub(crate) fn capture_prepared_history(
     finish(
         report,
         event,
-        context.record,
-        context.state_root,
-        context.source_path,
-        context.envelope_sha256,
-        context.supplied_runtime,
+        receipt_context,
         &source_id,
         prepared.diagnostics,
         pending,
@@ -317,10 +401,7 @@ fn retained(
     bundle: &V,
     files: &Files,
     diagnostics: &[String],
-    record: &Path,
-    policy: &V,
-    routing: &V,
-    envelope_sha256: &str,
+    context: &Context<'_>,
 ) -> Result<J> {
     Ok(json!({
         "version":1,
@@ -334,8 +415,9 @@ fn retained(
             path.clone(), J::String(base64::engine::general_purpose::STANDARD.encode(raw))
         )).collect::<serde_json::Map<_,_>>(),
         "diagnostics":diagnostics,
-        "record":record, "policy":policy.to_json()?, "routing":routing.to_json()?,
-        "envelope_sha256":envelope_sha256,
+        "record":context.record, "policy":context.route.config().to_json()?,
+        "routing":crate::source_capture::routing_observation(context.route.paths(), &context.route.project().root)?.to_json()?,
+        "envelope_sha256":context.envelope_sha256,
     }))
 }
 
@@ -371,43 +453,49 @@ fn retained_bundle(value: &J) -> Result<(V, Files)> {
 fn finish(
     report: &Report,
     event: &str,
-    record: &Path,
-    state_root: &Path,
-    source_path: &Path,
-    envelope_sha256: &str,
-    supplied_runtime: Option<&crate::reasoning_runtime::Runtime>,
+    context: ReceiptContext<'_>,
     source_id: &str,
     diagnostics: Vec<String>,
     pending: V,
 ) -> Result<Output> {
     let (mut answer, signals) = super::receipt(
         report,
-        record,
-        state_root,
+        context.record,
+        context.state_root,
         event,
-        source_path,
-        envelope_sha256,
+        context.source_path,
+        context.envelope_sha256,
         "project_captured",
         Some("Complete report captured in pending_grounding"),
         false,
         None,
         None,
-        supplied_runtime,
+        context.supplied_runtime,
     )?;
     answer["source"] = J::String(source_id.into());
     answer["pending"] = pending.to_json()?;
     answer["diagnostics"] = J::Array(diagnostics.into_iter().map(J::String).collect());
-    let _state_lock = crate::history_transaction_fs::DirectoryGuard::acquire(state_root, true)?;
+    let _state_lock =
+        crate::history_transaction_fs::DirectoryGuard::acquire(context.state_root, true)?;
     super::save(
-        &state_root.join("receipts").join(format!("{event}.json")),
+        &context
+            .state_root
+            .join("receipts")
+            .join(format!("{event}.json")),
         &answer,
     )?;
     super::save(
-        &state_root.join("results").join(format!("{event}.json")),
+        &context
+            .state_root
+            .join("results")
+            .join(format!("{event}.json")),
         &json!({"receipt":answer,"signals":signals}),
     )?;
     crate::history_transaction_fs::remove(
-        &state_root.join("journals").join(format!("{event}.json")),
+        &context
+            .state_root
+            .join("journals")
+            .join(format!("{event}.json")),
     )?;
     Ok(Output {
         text: format!("{}\n", serde_json::to_string(&answer)?),
@@ -540,15 +628,13 @@ pub(crate) fn capture(
                 &bundle,
                 &files,
                 &prepared.diagnostics,
-                context.record,
-                context.route.config(),
-                &crate::source_capture::routing_observation(context.route.paths(), &context.route.project().root)?,
-                context.envelope_sha256,
+                &context,
             )?,
         )?;
     }
     let project = context.route.project().clone();
     let expected_policy = context.route.config().clone();
+    let receipt_context = ReceiptContext::from(&context);
     inventory.verify()?;
     context.route.verify()?;
     drop(context.route);
@@ -575,11 +661,7 @@ pub(crate) fn capture(
     Ok(Some(finish(
         report,
         event,
-        context.record,
-        context.state_root,
-        context.source_path,
-        context.envelope_sha256,
-        context.supplied_runtime,
+        receipt_context,
         &source_id,
         prepared.diagnostics,
         pending,
@@ -640,8 +722,7 @@ pub(crate) fn recover(
         .as_str()
         .ok_or_else(|| Error("invalid advanced report journal".into()))?;
     require(
-        pending_event == format!("report-{event}")
-            && source_id == format!("s.ingest_{event}"),
+        pending_event == format!("report-{event}") && source_id == format!("s.ingest_{event}"),
         "advanced report journal context mismatch",
     )?;
     let diagnostics = journal["diagnostics"]
@@ -657,22 +738,29 @@ pub(crate) fn recover(
         .collect::<Result<Vec<_>>>()?;
     let project = context.route.project().clone();
     let expected_policy = context.route.config().clone();
+    let receipt_context = ReceiptContext::from(&context);
     let revision = text(field(map(&bundle)?, "revision")?)?;
-    let already_captured = crate::pending_state::Ledger::capture(&project)?.events.iter().any(|item| {
-        map(item).is_ok_and(|fields| {
-            fields.get("event_id") == Some(&V::Text(pending_event.into()))
-                && fields.get("contribution_id") == Some(&V::Text(pending_event.into()))
-                && fields.get("revision") == Some(&V::Text(revision.into()))
-        })
-    });
+    let already_captured = crate::pending_state::Ledger::capture(&project)?
+        .events
+        .iter()
+        .any(|item| {
+            map(item).is_ok_and(|fields| {
+                fields.get("event_id") == Some(&V::Text(pending_event.into()))
+                    && fields.get("contribution_id") == Some(&V::Text(pending_event.into()))
+                    && fields.get("revision") == Some(&V::Text(revision.into()))
+            })
+        });
     if !already_captured {
         require(
             journal["record"] == json!(context.record)
                 && journal["envelope_sha256"] == context.envelope_sha256
                 && journal["policy"] == context.route.config().to_json()?
-                && journal["routing"] == crate::source_capture::routing_observation(
-                    context.route.paths(), &context.route.project().root
-                )?.to_json()?,
+                && journal["routing"]
+                    == crate::source_capture::routing_observation(
+                        context.route.paths(),
+                        &context.route.project().root,
+                    )?
+                    .to_json()?,
             "advanced report journal context mismatch",
         )?;
     }
@@ -684,19 +772,21 @@ pub(crate) fn recover(
         &files,
         pending_event,
         pending_event,
-        &mut || if already_captured { Ok(()) } else { require(
-            project.config()? == expected_policy,
-            "project policy or destination changed before capture; retry",
-        ) },
+        &mut || {
+            if already_captured {
+                Ok(())
+            } else {
+                require(
+                    project.config()? == expected_policy,
+                    "project policy or destination changed before capture; retry",
+                )
+            }
+        },
     )?;
     Ok(Some(finish(
         report,
         event,
-        context.record,
-        context.state_root,
-        context.source_path,
-        context.envelope_sha256,
-        context.supplied_runtime,
+        receipt_context,
         source_id,
         diagnostics,
         pending,

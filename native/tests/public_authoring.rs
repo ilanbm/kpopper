@@ -192,6 +192,32 @@ fn advanced_first_explicit_add_enters_pending_without_creating_a_record() {
 }
 
 #[test]
+fn advanced_history_add_captures_a_version_three_contribution() {
+    use kpop_native::value::TypedValue as V;
+    let temp = tempfile::tempdir().unwrap();
+    let root = temp.path().canonicalize().unwrap();
+    git(&root, &["init", "-q", "-b", "main"]);
+    git(&root, &["config", "user.name", "Fixture"]);
+    git(&root, &["config", "user.email", "fixture@example.test"]);
+    success(run(&root, &["add", "p.base", "v=1"]));
+    let before = fs::read(root.join("GROUNDING.yaml")).unwrap();
+    let receipt: Value = serde_json::from_str(&success(run(
+        &root,
+        &[
+            "add", "p.history", "v=2", "--shareability", "project", "--scope", "external",
+            "--environment", "vendor", "--event-id", "history-authoring",
+        ],
+    )))
+    .unwrap();
+    assert_eq!(receipt["state"], "captured");
+    assert_eq!(fs::read(root.join("GROUNDING.yaml")).unwrap(), before);
+    let manifest = pending_manifest(&root, receipt["revision"].as_str().unwrap());
+    let V::Map(manifest) = manifest else { panic!("manifest") };
+    assert_eq!(manifest["version"], V::Integer(kpop_native::value::Integer::new("3").unwrap()));
+    assert!(manifest.contains_key("history"));
+}
+
+#[test]
 fn advanced_local_scopes_are_written_and_project_review_is_refused() {
     let (_temp, root) = advanced_ordinary("known:\n  p.base: {v: 1}\n");
     success(run_unbundled(

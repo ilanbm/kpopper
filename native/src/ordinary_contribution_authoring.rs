@@ -211,6 +211,13 @@ fn evidence(document: &V, root: Option<&Path>) -> Result<(Files, BTreeMap<PathBu
 fn load_document(
     route: &WriteRoute,
 ) -> Result<(V, Inventory, Option<crate::history_capture::Capture>)> {
+    if crate::legacy_authoring::authority_route(&route.paths()[0])?
+        == crate::legacy_authoring::AuthorityRoute::History
+    {
+        let capture = crate::history_store::Store::new(&route.paths()[0])?.capture()?;
+        let document = crate::history_authoring::document(&capture)?;
+        return Ok((document, Inventory::default(), Some(capture)));
+    }
     let mut inventory = Inventory::default();
     let document = crate::source_document::load(route.paths(), &mut inventory, false)?;
     Ok((document.source.projected(), inventory, document.history))
@@ -303,7 +310,7 @@ pub(crate) fn route(
         let (files, observations) = evidence(&selection, options.evidence_root.as_deref())?;
         let bundle = pending_bundle::prepare(
             &candidate,
-        std::slice::from_ref(&options.subject),
+            std::slice::from_ref(&options.subject),
             &scope,
             "project",
             &files,
@@ -397,9 +404,13 @@ pub(crate) fn route(
         "a project contribution requires a complete add or set, not a review refresh",
     )?;
 
-    let (candidate, inventory, diagnostics) = if let Some(captured) = history {
+    let (candidate, inventory, diagnostics, history_prepared) = if let Some(captured) = history {
         let store = crate::history_store::Store::new(&route.paths()[0])?;
-        let runtime = crate::public_workspace::runtime_for_document(&document)?;
+        let mut runtime_document = document.clone();
+        if let Some(meta) = map_mut(&mut runtime_document)?.get_mut("meta") {
+            map_mut(meta)?.remove("history");
+        }
+        let runtime = crate::public_workspace::runtime_for_document(&runtime_document)?;
         let now = chrono::Utc::now();
         let mutation = crate::history_authoring::prepare(
             &store,
@@ -415,12 +426,19 @@ pub(crate) fn route(
                 receipt_version: None,
             },
             runtime.as_ref(),
-        )?;
+        )
+        .map_err(|e| Error(format!("history contribution authoring: {e}")))?;
         let candidate = crate::history_authoring::candidate(&captured, &mutation)?;
         let document = crate::history_adapter::from_store_capture(&candidate)?
             .document()
             .clone();
-        (document, initial_inventory, Vec::new())
+        let recorded_at = now.to_rfc3339();
+        (
+            document,
+            initial_inventory,
+            Vec::new(),
+            Some((captured, mutation, recorded_at)),
+        )
     } else {
         let prepared = legacy_authoring::prepare_pending_candidate(&action, &route, source_body)?;
         match prepared {
@@ -446,12 +464,18 @@ pub(crate) fn route(
                     inventory.stage(&prepared.root.join(&image.path), image.after.clone())?;
                 }
                 let document = crate::source_document::load(route.paths(), &mut inventory, false)?;
-                (document.source.projected(), inventory, diagnostics)
+                (document.source.projected(), inventory, diagnostics, None)
             }
         }
     };
-    let selection = selected(&candidate, id)?;
-    if let Some(draft) = Privacy::candidate_draft(route.project(), &action, &candidate)? {
+    let selection = if history_prepared.is_some() {
+        candidate.clone()
+    } else {
+        selected(&candidate, id)?
+    };
+    if let Some(draft) = Privacy::candidate_draft(route.project(), &action, &candidate)
+        .map_err(|e| Error(format!("history candidate privacy: {e}")))?
+    {
         inventory.verify()?;
         route.verify()?;
         return Ok(Outcome::Handled(draft));
@@ -466,12 +490,39 @@ pub(crate) fn route(
             "private source locator needs explicit portable evidence reconciliation",
         )?));
     }
-    let (files, evidence_observations) = evidence(&selection, options.evidence_root.as_deref())?;
-    let bundle = pending_bundle::prepare(&candidate, &[id.into()], &scope, "project", &files)?;
     let event_id = options
         .event_id
         .clone()
         .unwrap_or_else(|| uuid::Uuid::new_v4().simple().to_string());
+    let (mut files, evidence_observations) =
+        evidence(&selection, options.evidence_root.as_deref())?;
+    let bundle = if let Some((captured, mutation, recorded_at)) = history_prepared {
+        let disclosures = map(&action)?
+            .get("disclosed_locators")
+            .cloned()
+            .unwrap_or_else(|| V::List(vec![]));
+        let entry = route.paths()[0]
+            .file_name()
+            .and_then(|v| v.to_str())
+            .ok_or_else(|| Error("invalid_path".into()))?;
+        let (artifact, history_files) = crate::history_contribution_prepare::prepare_subset(
+            &captured,
+            &[id.into()],
+            &scope,
+            &format!("contribution-subset-{event_id}"),
+            &recorded_at,
+            entry,
+            &disclosures,
+            &mutation,
+        )
+        .map_err(|e| Error(format!("history contribution subset: {e}")))?;
+        let wrapped = crate::history_contribution_prepare::wrap(&artifact, &history_files, &files)
+            .map_err(|e| Error(format!("history contribution wrapper: {e}")))?;
+        files = wrapped.1;
+        wrapped.0
+    } else {
+        pending_bundle::prepare(&candidate, &[id.into()], &scope, "project", &files)?
+    };
     let contribution_id = options.contribution_id.clone().unwrap_or_else(|| id.into());
     token(&s(&event_id))?;
     token(&s(&contribution_id))?;
@@ -499,7 +550,8 @@ pub(crate) fn route(
                 "snapshot_changed",
             )
         },
-    )?;
+    )
+    .map_err(|e| Error(format!("history contribution capture: {e}")))?;
     if !diagnostics.is_empty() {
         map_mut(&mut receipt)?.insert(
             "diagnostics".into(),
