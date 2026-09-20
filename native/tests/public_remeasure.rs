@@ -452,3 +452,23 @@ fn python_18_oracle_matches_nested_record_checkout_root() {
     assert_oracle(&record, false);
     assert_oracle(&record, true);
 }
+
+#[test]
+#[cfg(unix)]
+#[ignore = "requires explicit Python 1.8 oracle runtime and source root"]
+fn python_18_oracle_matches_legacy_allowlist_layout() {
+    use std::os::unix::fs::PermissionsExt;
+    let temp = tempfile::tempdir().unwrap();
+    let root = temp.path().canonicalize().unwrap();
+    let record = root.join("PROVENANCE.yaml");
+    fs::write(
+        &record,
+        "known:\n  p.a:\n    v: 1\n    measure: echo\n",
+    )
+    .unwrap();
+    fs::write(root.join("PROVENANCE.measure.yaml"), "echo: [./recipe]\n").unwrap();
+    fs::write(root.join("recipe"), "#!/bin/sh\nprintf '1\\n'\n").unwrap();
+    fs::set_permissions(root.join("recipe"), fs::Permissions::from_mode(0o700)).unwrap();
+    assert_oracle(&record, false);
+    assert_oracle(&record, true);
+}

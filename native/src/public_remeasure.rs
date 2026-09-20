@@ -47,11 +47,22 @@ fn output(lines: Vec<String>, code: i32) -> Output {
     }
 }
 
-fn recipe_path(record: &Path) -> PathBuf {
-    record
-        .parent()
-        .unwrap_or(Path::new("."))
-        .join(".kpopper/measure.yaml")
+fn recipe_file(record: &Path) -> (PathBuf, &'static str) {
+    let parent = record.parent().unwrap_or(Path::new("."));
+    if record
+        .file_name()
+        .is_some_and(|name| name == "GROUNDING.yaml")
+    {
+        (
+            parent.join(".kpopper/measure.yaml"),
+            ".kpopper/measure.yaml",
+        )
+    } else {
+        (
+            parent.join("PROVENANCE.measure.yaml"),
+            "PROVENANCE.measure.yaml",
+        )
+    }
 }
 fn scalar(v: &V) -> String {
     v.python_str()
@@ -187,7 +198,7 @@ fn remeasure_report(report: &str) -> Vec<String> {
     }
     lines
 }
-fn allowlist(path: &Path) -> Result<BTreeMap<String, Vec<String>>> {
+fn allowlist(path: &Path, display_name: &str) -> Result<BTreeMap<String, Vec<String>>> {
     if !path.is_file() {
         return Ok(BTreeMap::new());
     }
@@ -198,7 +209,7 @@ fn allowlist(path: &Path) -> Result<BTreeMap<String, Vec<String>>> {
         require(
             RECIPE_NAME.is_match(name),
             &format!(
-                "refused - .kpopper/measure.yaml:\n  '{name}' is not a recipe name - letters, digits, underscores and dashes, opening with a letter; quote it if the loader read it as something else"
+                "refused - {display_name}:\n  '{name}' is not a recipe name - letters, digits, underscores and dashes, opening with a letter; quote it if the loader read it as something else"
             ),
         )?;
         let values = hlist(argv)?
@@ -457,9 +468,9 @@ pub fn run(options: &Options, cwd: &Path, frozen: bool) -> Result<Output> {
         return Ok(output(lines, 1));
     }
     let collections = crate::ordinary_fields::collections(&current)?;
-    let allowlist_path = recipe_path(&record);
+    let (allowlist_path, allowlist_name) = recipe_file(&record);
     let allowlist_exists = allowlist_path.is_file();
-    let recipes = match allowlist(&allowlist_path) {
+    let recipes = match allowlist(&allowlist_path, allowlist_name) {
         Ok(recipes) => recipes,
         Err(error) => {
             return Ok(Output {
@@ -474,7 +485,7 @@ pub fn run(options: &Options, cwd: &Path, frozen: bool) -> Result<Output> {
             vec!["no measures beside the record - nothing to re-measure".into()]
         } else {
             vec![format!(
-                ".kpopper/measure.yaml holds {} recipe{}, and no entry names one - nothing to re-measure",
+                "{allowlist_name} holds {} recipe{}, and no entry names one - nothing to re-measure",
                 recipes.len(),
                 if recipes.len() == 1 { "" } else { "s" }
             )]
@@ -486,7 +497,7 @@ pub fn run(options: &Options, cwd: &Path, frozen: bool) -> Result<Output> {
     if !allowlist_exists {
         return Ok(output(
             vec![format!(
-                "refused - {} recipe{} named and no .kpopper/measure.yaml beside the record to hold {}: {}",
+                "refused - {} recipe{} named and no {allowlist_name} beside the record to hold {}: {}",
                 cited.len(),
                 if cited.len() == 1 { "" } else { "s" },
                 if cited.len() == 1 { "it" } else { "them" },
@@ -503,7 +514,7 @@ pub fn run(options: &Options, cwd: &Path, frozen: bool) -> Result<Output> {
     if !missing.is_empty() {
         return Ok(output(
             vec![format!(
-                "refused - the record names recipe{} .kpopper/measure.yaml does not hold: {} - a measurement nothing takes is a hole, and a falsifier reading it tests nothing",
+                "refused - the record names recipe{} {allowlist_name} does not hold: {} - a measurement nothing takes is a hole, and a falsifier reading it tests nothing",
                 if missing.len() == 1 { "" } else { "s" },
                 missing.join(", ")
             )],
@@ -512,7 +523,7 @@ pub fn run(options: &Options, cwd: &Path, frozen: bool) -> Result<Output> {
     }
     let entries = named.values().map(Vec::len).sum::<usize>();
     let mut out = vec![format!(
-        "{} recipe{} named by {} entr{}, from .kpopper/measure.yaml, run from {}:",
+        "{} recipe{} named by {} entr{}, from {allowlist_name}, run from {}:",
         cited.len(),
         if cited.len() == 1 { "" } else { "s" },
         entries,
