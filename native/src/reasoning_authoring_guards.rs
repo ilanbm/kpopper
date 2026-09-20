@@ -517,94 +517,61 @@ pub(crate) fn may_supersede(
     page: Option<&V>,
     by_hand: bool,
 ) -> Result<SupersessionDecision> {
+    use crate::public_consolidation::supersession as S;
     if judgment(world, id) || shaped(existing, world.role("deps")) {
-        let deps = world.role("deps");
-        if !shaped(new, deps) {
-            return Ok(SupersessionDecision {
-                allowed: false,
-                reason: format!(
-                    "what replaces a judgment must rest on something, and this carries no {}",
-                    deps
-                ),
-            });
-        }
-        let facts = page_facts(page, id)?;
-        let stamp = captured_day
-            .map(str::to_owned)
-            .or_else(|| world.as_of().and_then(day))
-            .ok_or_else(|| Error("write requires an explicitly captured day".into()))?;
-        if let Some(facts) = facts {
-            let (linked, fired) = validate_page_facts(facts)?;
-            if let Some(born) = map(existing)?.get("born").and_then(day)
-                && born >= stamp
-            {
-                return Ok(SupersessionDecision {
-                    allowed: false,
-                    reason: format!(
-                        "it was decided on {born} - a second decision on the same day is a contradiction, not a change"
-                    ),
-                });
-            }
-            if !linked {
-                let cut =
-                    page_text(facts, "cut").ok_or_else(|| Error("invalid_page_facts".into()))?;
-                return Ok(SupersessionDecision {
-                    allowed: false,
-                    reason: format!(
-                        "the brief no longer carries what it decided - {cut} - restore the tab, then re-decide"
-                    ),
-                });
-            }
-            if fired {
+        let decision = S::judgment(
+            shaped(new, world.role("deps")),
+            world.role("deps"),
+            by_hand,
+            || {
+                let facts = page_facts(page, id)?;
+                let stamp = captured_day
+                    .map(str::to_owned)
+                    .or_else(|| world.as_of().and_then(day))
+                    .ok_or_else(|| Error("write requires an explicitly captured day".into()))?;
+                let page = facts
+                    .map(|facts| {
+                        let (linked, fired) = validate_page_facts(facts)?;
+                        Ok::<_, Error>(S::PageFacts {
+                            linked,
+                            fired,
+                            cut: page_text(facts, "cut"),
+                            reading: page_text(facts, "reading"),
+                        })
+                    })
+                    .transpose()?;
                 let pred = map(existing)?
                     .get(world.role("predicate"))
                     .unwrap_or(&V::Null);
-                let reading = page_text(facts, "reading");
-                return Ok(SupersessionDecision {
-                    allowed: true,
-                    reason: format!(
-                        "its sign holds ({}) with its tab intact{}",
-                        short(pred, 60),
-                        reading
-                            .map(|value| format!(" - {value}"))
-                            .unwrap_or_default()
-                    ),
-                });
-            }
-        }
-        let pred = map(existing)?
-            .get(world.role("predicate"))
-            .unwrap_or(&V::Null);
-        let fired = world.standing_predicate(id, pred)? == Some(true);
-        let reason = if fired {
-            format!("its wrong_if holds ({})", short(pred, 60))
-        } else if by_hand {
-            "the standing judgment holds, and a person takes this over it by name".into()
-        } else {
-            "the standing judgment holds, and its wrong_if has not fired".into()
-        };
+                Ok(S::JudgmentEvidence {
+                    stamp,
+                    page,
+                    born: map(existing)?.get("born").and_then(day),
+                    predicate: short(pred, 60),
+                })
+            },
+            || {
+                let pred = map(existing)?
+                    .get(world.role("predicate"))
+                    .unwrap_or(&V::Null);
+                world.standing_predicate(id, pred)
+            },
+        )?;
         return Ok(SupersessionDecision {
-            allowed: fired || by_hand,
-            reason,
+            allowed: decision.allowed,
+            reason: decision.reason,
         });
     }
-
-    let old_value = existing;
-    let when = read_on(old_value, world);
+    let when = read_on(existing, world);
     let stamp = captured_day
         .map(str::to_owned)
         .or_else(|| world.as_of().and_then(day))
         .ok_or_else(|| Error("write requires an explicitly captured day".into()))?;
-    let allowed = when.as_ref().is_none_or(|day| stamp > *day);
-    let reason = match &when {
-        None => "nothing dates the reading the base holds".into(),
-        Some(day) if stamp > *day => {
-            format!("a reading from {stamp} that is newer than the base's")
-        }
-        Some(day) if stamp == *day => "a reading of the same day".into(),
-        Some(_day) => format!("a reading from {stamp} that is older than the base's"),
-    };
-    Ok(SupersessionDecision { allowed, reason })
+    let decision = S::reading(&stamp, when.as_deref());
+    Ok(SupersessionDecision {
+        allowed: decision.allowed,
+        reason: decision.reason,
+    })
 }
 
 struct Disagreement {
