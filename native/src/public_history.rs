@@ -34,6 +34,15 @@ pub struct Options {
     pub because: Option<String>,
     #[arg(long)]
     pub by: Option<String>,
+    /// Retained pending contribution revision to adopt.
+    #[arg(long)]
+    pub revision: Option<String>,
+    /// SUBJECT=VERSION for every overlapping subject; repeat as needed.
+    #[arg(long)]
+    pub choose: Vec<String>,
+    /// Show adoption choices without writing.
+    #[arg(long)]
+    pub preview: bool,
     #[arg(long)]
     pub record_proposals: bool,
     #[arg(long)]
@@ -50,6 +59,9 @@ impl Options {
             || !self.over.is_empty()
             || self.because.is_some()
             || self.by.is_some()
+            || self.revision.is_some()
+            || !self.choose.is_empty()
+            || self.preview
             || self.record_proposals
             || !self.proposal_subject.is_empty()
     }
@@ -103,6 +115,7 @@ pub fn run(options: &Options, cwd: &Path) -> Result<Value> {
             "correct",
             "propose",
             "retire",
+            "adopt",
         ]
         .contains(&operation),
         "history operation unsupported",
@@ -120,6 +133,22 @@ pub fn run(options: &Options, cwd: &Path) -> Result<Value> {
     require(paths.len() == 1, "choose one logical record entry")?;
     let entry = &paths[0];
     let result = match operation {
+        "adopt" => {
+            let revision = options
+                .revision
+                .as_deref()
+                .filter(|s| !s.is_empty())
+                .ok_or_else(|| error("adoption requires --revision"))?;
+            let choices = crate::public_history_adopt::choices(&options.choose)?;
+            json_value(&crate::public_history_adopt::run(
+                &original,
+                &cwd,
+                revision,
+                &choices,
+                options.by.as_deref(),
+                options.preview,
+            )?)?
+        }
         "accept" | "refute" | "correct" | "propose" | "retire" => {
             require(
                 options.subject.as_ref().is_some_and(|s| !s.is_empty())

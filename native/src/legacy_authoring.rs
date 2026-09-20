@@ -422,6 +422,70 @@ pub(crate) fn entry_lines_ordered(
     Ok(lines)
 }
 
+/// Replace just the fields changed by explicit ordinary expression migration.
+/// Source order, untouched fields and newline handling remain the caller's inputs.
+pub(crate) fn replace_fields(
+    lines: &mut Vec<String>,
+    id: &str,
+    body: &Source,
+    was: &Source,
+) -> Result<()> {
+    let (_, mut member) =
+        locate(lines, id).ok_or_else(|| error(&format!("no file of the record holds {id}")))?;
+    let group = Collection {
+        name: String::new(),
+        start: member.start,
+        end: member.end,
+    };
+    let field_indent = members(lines, &group)
+        .first()
+        .map(|m| m.indent)
+        .unwrap_or(member.indent + 2);
+    if inline(&lines[member.start]).starts_with('{') {
+        let comments = lines[member.start + 1..member.end]
+            .iter()
+            .filter(|l| l.trim().starts_with('#'))
+            .cloned()
+            .collect::<Vec<_>>();
+        let mut replacement = entry_lines_ordered(id, body, member.indent, field_indent, true)?;
+        replacement.extend(comments);
+        lines.splice(member.start..member.end, replacement);
+        return Ok(());
+    }
+    let (Source::Map(body), Source::Map(was)) = (body, was) else {
+        return Err(error("migration body must be a mapping"));
+    };
+    for (field, _) in was {
+        if field != "also"
+            && !body.iter().any(|(key, _)| key == field)
+            && let Some(span) = field_span(lines, &member, field)
+        {
+            let removed = span.end - span.start;
+            lines.drain(span.start..span.end);
+            member.end -= removed;
+        }
+    }
+    for (field, value) in body {
+        if was
+            .iter()
+            .any(|(key, old)| key == field && old.typed() == value.typed())
+        {
+            continue;
+        }
+        let replacement = field_lines_ordered(field, value, field_indent)?;
+        if let Some(span) = field_span(lines, &member, field) {
+            let end = member.end + replacement.len() - (span.end - span.start);
+            lines.splice(span.start..span.end, replacement);
+            member.end = end;
+        } else {
+            let end = member.end + replacement.len();
+            lines.splice(member.end..member.end, replacement);
+            member.end = end;
+        }
+    }
+    Ok(())
+}
+
 fn common_prefix(left: &str, right: &str) -> usize {
     left.split('.')
         .zip(right.split('.'))

@@ -26,7 +26,7 @@ fn invalid() -> Error {
     Error("invalid_history_yaml".into())
 }
 // Merge/value tags are meaningful only as mapping keys, before flattening.
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 enum Node {
     Scalar(TypedValue),
     List(Vec<Node>),
@@ -300,6 +300,9 @@ struct Reader<'a> {
     parser: Parser<&'a [u8]>,
     nodes: usize,
     anchors: BTreeSet<String>,
+    ordinary_aliases: bool,
+    completed: std::collections::BTreeMap<String, Node>,
+    expanded_bytes: usize,
 }
 impl<'a> Reader<'a> {
     fn next(&mut self) -> Result<Event> {
@@ -308,7 +311,7 @@ impl<'a> Reader<'a> {
             Event::Scalar { anchor, .. }
             | Event::SequenceStart { anchor, .. }
             | Event::MappingStart { anchor, .. } => anchor,
-            Event::Alias { .. } => return Err(invalid()),
+            Event::Alias { .. } if !self.ordinary_aliases => return Err(invalid()),
             _ => return Ok(event),
         };
         if let Some(anchor) = anchor {
@@ -323,10 +326,33 @@ impl<'a> Reader<'a> {
             depth <= MAX_DEPTH + 1 && self.nodes <= MAX_VALUES * 2,
             "history_limit",
         )?;
-        match event {
+        let anchor = match &event {
+            Event::Scalar { anchor, .. }
+            | Event::SequenceStart { anchor, .. }
+            | Event::MappingStart { anchor, .. } => anchor.clone(),
+            _ => None,
+        };
+        let node = match event {
+            Event::Alias { anchor } if self.ordinary_aliases => {
+                // Only completed anchors can be expanded: undefined and recursive
+                // aliases fail before cloning. Charge the complete expansion first.
+                let original = self.completed.get(&anchor).ok_or_else(invalid)?;
+                let (nodes, bytes) = node_cost(original, depth)?;
+                self.nodes = self.nodes.saturating_add(nodes);
+                self.expanded_bytes = self.expanded_bytes.saturating_add(bytes);
+                require(
+                    self.nodes <= MAX_VALUES * 2 && self.expanded_bytes <= MAX_DOCUMENT_BYTES,
+                    "history_limit",
+                )?;
+                Ok(original.clone())
+            }
             Event::Scalar {
                 value, style, tag, ..
-            } => scalar(&value, style, tag.as_deref()),
+            } => {
+                self.expanded_bytes = self.expanded_bytes.saturating_add(value.len());
+                require(self.expanded_bytes <= MAX_DOCUMENT_BYTES, "history_limit")?;
+                scalar(&value, style, tag.as_deref())
+            }
             Event::SequenceStart { tag, .. } => {
                 collection_tag(tag.as_deref(), "seq")?;
                 let mut values = Vec::new();
@@ -354,8 +380,52 @@ impl<'a> Reader<'a> {
                 Ok(Node::Map(pairs))
             }
             _ => Err(invalid()),
+        }?;
+        if self.ordinary_aliases
+            && let Some(anchor) = anchor
+        {
+            let (nodes, bytes) = node_cost(&node, depth)?;
+            self.nodes = self.nodes.saturating_add(nodes);
+            self.expanded_bytes = self.expanded_bytes.saturating_add(bytes);
+            require(
+                self.nodes <= MAX_VALUES * 2 && self.expanded_bytes <= MAX_DOCUMENT_BYTES,
+                "history_limit",
+            )?;
+            self.completed.insert(anchor, node.clone());
         }
+        Ok(node)
     }
+}
+fn node_cost(node: &Node, depth: usize) -> Result<(usize, usize)> {
+    require(depth <= MAX_DEPTH + 1, "history_limit")?;
+    let mut nodes = 1usize;
+    let mut bytes = 0usize;
+    match node {
+        Node::Scalar(v) => bytes = v.canonical_bytes()?.len(),
+        Node::ValueKey(v) => bytes = v.len(),
+        Node::List(a) => {
+            for child in a {
+                let (n, b) = node_cost(child, depth + 1)?;
+                nodes = nodes.saturating_add(n);
+                bytes = bytes.saturating_add(b);
+            }
+        }
+        Node::Map(a) => {
+            for (key, value) in a {
+                for child in [key, value] {
+                    let (n, b) = node_cost(child, depth + 1)?;
+                    nodes = nodes.saturating_add(n);
+                    bytes = bytes.saturating_add(b);
+                }
+            }
+        }
+        Node::Merge => {}
+    }
+    require(
+        nodes <= MAX_VALUES * 2 && bytes <= MAX_DOCUMENT_BYTES,
+        "history_limit",
+    )?;
+    Ok((nodes, bytes))
 }
 fn tag_name(tag: &str) -> Result<String> {
     if tag == "!" {
@@ -712,7 +782,7 @@ pub fn decode_source_value(raw: &[u8]) -> Result<SourceValue> {
 /// Decode the permissive scalar-keyed mapping used by legacy ordinary reads.
 /// Strict history callers must continue to use `decode_source_*` above.
 pub fn decode_ordinary_source_value(raw: &[u8]) -> Result<OrdinaryValue> {
-    let (node, empty) = decode_node(raw, false)?;
+    let (node, empty) = decode_node(raw, false, true)?;
     if empty {
         return Ok(OrdinaryValue::Scalar(TypedValue::Null));
     }
@@ -722,7 +792,7 @@ pub fn decode_ordinary_source_value(raw: &[u8]) -> Result<OrdinaryValue> {
 }
 
 fn decode_source(raw: &[u8], mapping: bool) -> Result<SourceValue> {
-    let (node, empty) = decode_node(raw, mapping)?;
+    let (node, empty) = decode_node(raw, mapping, false)?;
     if empty {
         return Ok(SourceValue::Scalar(TypedValue::Null));
     }
@@ -735,7 +805,7 @@ fn decode_source(raw: &[u8], mapping: bool) -> Result<SourceValue> {
     Ok(value)
 }
 
-fn decode_node(raw: &[u8], mapping: bool) -> Result<(Option<Node>, bool)> {
+fn decode_node(raw: &[u8], mapping: bool, ordinary_aliases: bool) -> Result<(Option<Node>, bool)> {
     require(raw.len() <= MAX_DOCUMENT_BYTES, "history_limit")?;
     std::str::from_utf8(raw).map_err(|_| invalid())?;
     let source = source_for_parser(raw)?;
@@ -745,6 +815,9 @@ fn decode_node(raw: &[u8], mapping: bool) -> Result<(Option<Node>, bool)> {
         parser,
         nodes: 0,
         anchors: BTreeSet::new(),
+        ordinary_aliases,
+        completed: std::collections::BTreeMap::new(),
+        expanded_bytes: 0,
     };
     require(
         matches!(reader.next()?, Event::StreamStart { .. }),
@@ -968,5 +1041,63 @@ mod ordinary_tests {
     fn ordinary_collection_keys_must_still_be_scalar() {
         let error = decode_ordinary_source_value(b"? [a, b]\n: value\n").unwrap_err();
         assert_eq!(error.0, "invalid_yaml_key");
+    }
+}
+
+#[cfg(test)]
+mod ordinary_alias_tests {
+    use super::*;
+    #[test]
+    fn ordinary_aliases_preserve_merge_precedence_and_typed_values() {
+        let raw=b"defaults: &base {p.a: {v: 2}, p.b: {v: 3}}\nknown:\n  <<: *base\n  p.a: {v: 4}\nalso_known: *base\n";
+        let actual = decode_ordinary_source_value(raw)
+            .unwrap()
+            .strict_typed()
+            .unwrap();
+        let expected=decode_document(b"defaults: {p.a: {v: 2}, p.b: {v: 3}}\nknown: {p.a: {v: 4}, p.b: {v: 3}}\nalso_known: {p.a: {v: 2}, p.b: {v: 3}}\n").unwrap();
+        assert_eq!(actual, expected);
+        for decode in [decode_source_document, decode_source_value] {
+            assert_eq!(decode(raw).unwrap_err().0, "invalid_history_yaml");
+        }
+        assert_eq!(decode_document(raw).unwrap_err().0, "invalid_history_yaml");
+    }
+    #[test]
+    fn ordinary_aliases_refuse_unknown_duplicate_and_recursive_anchors() {
+        for raw in [
+            b"x: *missing\n".as_slice(),
+            b"x: &x {next: *x}\n",
+            b"x: &x 1\ny: &x 2\n",
+        ] {
+            assert_eq!(
+                decode_ordinary_source_value(raw).unwrap_err().0,
+                "invalid_history_yaml"
+            );
+        }
+    }
+    #[test]
+    fn ordinary_alias_expansion_is_bounded_before_clone() {
+        let mut raw = "a0: &a0 [one, two, three, four]\n".to_owned();
+        for i in 1..24 {
+            raw += &format!(
+                "a{i}: &a{i} [*a{}, *a{}, *a{}, *a{}]\n",
+                i - 1,
+                i - 1,
+                i - 1,
+                i - 1
+            );
+        }
+        assert_eq!(
+            decode_ordinary_source_value(raw.as_bytes()).unwrap_err().0,
+            "history_limit"
+        );
+        let text = "x".repeat(300_000);
+        let raw = format!(
+            "base: &base '{text}'\naliases: [{}]\n",
+            vec!["*base"; 100].join(", ")
+        );
+        assert_eq!(
+            decode_ordinary_source_value(raw.as_bytes()).unwrap_err().0,
+            "history_limit"
+        );
     }
 }

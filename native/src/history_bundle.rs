@@ -256,7 +256,7 @@ pub(crate) fn privacy(value: &V) -> Result<()> {
     }
     Ok(())
 }
-fn validate_artifact(manifest: &V, revision: &V, files: &Files) -> Result<Capture> {
+pub(crate) fn validate_artifact(manifest: &V, revision: &V, files: &Files) -> Result<Capture> {
     Y::validate_value(manifest, 16 * 1024 * 1024)?;
     let m = schema(
         manifest,

@@ -72,7 +72,7 @@ fn decode(raw: &[u8]) -> Result<(PreparedMutation, V)> {
 }
 fn options(prefix: &str, by: V) -> Result<A::Options> {
     let now = chrono::Utc::now();
-    let day = now.date_naive().max(chrono::Local::now().date_naive());
+    let day = chrono::Local::now().date_naive();
     Ok(A::Options {
         operation: fresh_id(prefix)?,
         recorded_at: now.to_rfc3339(),
@@ -525,6 +525,12 @@ pub(crate) fn recover_with_runtime(
     }
     let path = F::target(&store.root, &journal(&store))?;
     let raw = F::read(&path)?.ok_or_else(|| error("no_recovery_pending"))?;
+    if map(&history_yaml::decode_document(&raw)?)?
+        .get("kind")
+        .is_some_and(|kind| string_is(kind, crate::public_history_adopt::KIND))
+    {
+        return crate::public_history_adopt::recover(&store, &route, original, &path, &raw, before);
+    }
     let (mutation, retained) = decode(&raw)?;
     require(
         routing(&route, original)? == retained,

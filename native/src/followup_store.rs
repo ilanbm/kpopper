@@ -161,11 +161,16 @@ pub fn digest(value: &Value) -> Result<String> {
     Ok(sha256(&serde_json::to_vec(&canonical(value)?)?))
 }
 
-fn text(value: Option<&Value>, field: &str) -> Result<String> {
+pub(crate) fn text(value: Option<&Value>, field: &str) -> Result<String> {
     let value = value
         .and_then(Value::as_str)
-        .map(str::trim)
-        .filter(|value| !value.is_empty() && value.chars().count() <= 12_000)
+        .filter(|value| value.chars().count() <= 12_000)
+        .map(|value| {
+            value.trim_matches(|character: char| {
+                character.is_whitespace() || ('\u{1c}'..='\u{1f}').contains(&character)
+            })
+        })
+        .filter(|value| !value.is_empty())
         .ok_or_else(|| {
             error(format!(
                 "{field} must be nonempty text (at most 12000 characters)"
@@ -239,7 +244,7 @@ fn local_absolute(value: &str) -> Result<PathBuf> {
     Ok(normalized)
 }
 
-fn task_reference(value: &str) -> Result<String> {
+pub(crate) fn task_reference(value: &str) -> Result<String> {
     let value = text(Some(&json!(value)), "task reference")?;
     if let Some(authority) = value.strip_prefix("https://") {
         let host = authority.split('/').next().unwrap_or("");
@@ -347,7 +352,7 @@ fn serialized_value(value: &Value) -> Result<Vec<u8>> {
     Ok(raw)
 }
 
-fn python_json(value: &Value) -> Result<String> {
+pub(crate) fn python_json(value: &Value) -> Result<String> {
     let compact = serde_json::to_string(value)?;
     let mut output = String::with_capacity(compact.len() + compact.len() / 8);
     let mut quoted = false;
@@ -474,8 +479,24 @@ impl Store {
         })
     }
 
-    fn now(&self) -> DateTime<Utc> {
+    pub(crate) fn now(&self) -> DateTime<Utc> {
         (self.now)()
+    }
+
+    pub(crate) fn workspace_key(&self) -> &str {
+        &self.location.key
+    }
+    pub(crate) fn workspace(&self) -> &Path {
+        &self.location.workspace
+    }
+    pub(crate) fn record(&self) -> &Path {
+        &self.location.record
+    }
+    pub(crate) fn state_home(&self) -> Result<&Path> {
+        self.root
+            .ancestors()
+            .nth(3)
+            .ok_or_else(|| error("invalid followups state path"))
     }
 
     fn lock(&self) -> Result<File> {
@@ -672,7 +693,10 @@ impl Store {
         Ok(())
     }
 
-    fn transaction<T>(&self, mutation: impl FnOnce(&mut Value) -> Result<T>) -> Result<T> {
+    pub(crate) fn transaction<T>(
+        &self,
+        mutation: impl FnOnce(&mut Value) -> Result<T>,
+    ) -> Result<T> {
         self.load(true)?;
         let _lock = self.lock()?;
         let mut data = self.load(true)?.unwrap();
@@ -1250,7 +1274,15 @@ impl Store {
             "limit must be between 1 and 100",
         )?;
         let data = self.load(true)?.unwrap();
-        let (graph, graph_error) = match self.graph(&data) {
+        self.scan_data(limit, &data)
+    }
+
+    pub(crate) fn scan_data(&self, limit: usize, data: &Value) -> Result<Value> {
+        require(
+            (1..=100).contains(&limit),
+            "limit must be between 1 and 100",
+        )?;
+        let (graph, graph_error) = match self.graph(data) {
             Ok(graph) => (graph, None),
             Err(reason) => (Graph::default(), Some(reason.to_string())),
         };
@@ -1259,7 +1291,7 @@ impl Store {
             .as_object()
             .unwrap()
             .values()
-            .map(|item| self.row(item, &data, &graph, graph_error.as_deref(), now))
+            .map(|item| self.row(item, data, &graph, graph_error.as_deref(), now))
             .collect::<Result<Vec<_>>>()?;
         let order = [
             "interrupted",
@@ -1628,5 +1660,28 @@ impl Store {
     }
     pub fn show(&self, key: &str) -> Result<Value> {
         Ok(Self::item(&self.load(true)?.unwrap(), key)?.clone())
+    }
+}
+
+#[cfg(test)]
+mod text_contract_tests {
+    use super::text;
+    use serde_json::json;
+
+    #[test]
+    fn raw_length_is_checked_before_python_whitespace_is_stripped() {
+        assert!(text(Some(&json!(format!("{}x", " ".repeat(12_000)))), "value").is_err());
+        assert!(text(Some(&json!("\u{1c}\u{1d}\u{1e}\u{1f}")), "value").is_err());
+        assert_eq!(
+            text(Some(&json!("\u{1c}  retained\u{1f}")), "value").unwrap(),
+            "retained"
+        );
+    }
+
+    #[test]
+    fn text_limit_counts_unicode_characters_not_encoded_bytes() {
+        let value = "日".repeat(12_000);
+        assert_eq!(text(Some(&json!(value)), "value").unwrap(), value);
+        assert!(text(Some(&json!("日".repeat(12_001))), "value").is_err());
     }
 }

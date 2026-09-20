@@ -28,6 +28,8 @@ struct Args {
 }
 #[derive(Subcommand)]
 enum Command {
+    /// Convert formulas or preview an explicit expression migration.
+    Expressions(kpop_native::public_expressions::Args),
     /// Read versioned assessment findings and scoped attention from actual records.
     Assess(kpop_native::public_assessment::Options),
     Init {
@@ -403,6 +405,7 @@ fn run(args: Args) -> Result<Value> {
         | Command::Export(_)
         | Command::Knowledge(_)
         | Command::Pending(_)
+        | Command::Expressions(_)
         | Command::Followups(_)
         | Command::Check(_)
         | Command::Pull(_)
@@ -415,7 +418,41 @@ fn run(args: Args) -> Result<Value> {
     }
 }
 fn main() {
-    let args = Args::parse();
+    let argv = std::env::args_os().collect::<Vec<_>>();
+    let args = match Args::try_parse_from(&argv) {
+        Ok(args) => args,
+        Err(error) => {
+            if let Some(output) = kpop_native::public_expressions::parse_failure(&argv, &error) {
+                print!("{}", output.stdout);
+                eprint!("{}", output.stderr);
+                std::process::exit(output.code);
+            }
+            error.exit();
+        }
+    };
+    if let Command::Expressions(options) = &args.command {
+        let cwd = match args
+            .workspace
+            .clone()
+            .map(Ok)
+            .unwrap_or_else(std::env::current_dir)
+        {
+            Ok(cwd) => cwd,
+            Err(error) => {
+                eprintln!("{error}");
+                std::process::exit(2);
+            }
+        };
+        let mode = if args.frozen || std::env::var("KPOPPER_READ_MODE").as_deref() == Ok("frozen") {
+            kpop_native::source_capture::ReadMode::Frozen
+        } else {
+            kpop_native::source_capture::ReadMode::Live
+        };
+        let output = kpop_native::public_expressions::dispatch(options, &cwd, mode);
+        print!("{}", output.stdout);
+        eprint!("{}", output.stderr);
+        std::process::exit(output.code);
+    }
     if matches!(args.command, Command::Same(_) | Command::Distinct(_)) {
         let result = (|| {
             let cwd = args

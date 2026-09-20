@@ -314,10 +314,10 @@ fn ordinary_readings(
                 "current".into(),
                 value.map(ordinary_json).transpose()?.unwrap_or(J::Null),
             );
-        } else if status == "unavailable" {
-            if let Some(reason) = current.get("detail").or_else(|| current.get("reason")) {
-                row.insert("unavailable_reason".into(), ordinary_json(reason)?);
-            }
+        } else if status == "unavailable"
+            && let Some(reason) = current.get("detail").or_else(|| current.get("reason"))
+        {
+            row.insert("unavailable_reason".into(), ordinary_json(reason)?);
         }
         let calculated = nodes.get(internal_dep).is_some_and(|node| {
             map(node)
@@ -349,10 +349,9 @@ fn ordinary_readings(
                 .get("body")
                 .and_then(|body| map(body).ok())?
                 .get("unit")
-        }) {
-            if crate::history_view::truth(unit) {
-                row.insert("unit".into(), ordinary_json(unit)?);
-            }
+        }) && crate::history_view::truth(unit)
+        {
+            row.insert("unit".into(), ordinary_json(unit)?);
         }
         let comparison = if status == "missing" {
             "unavailable"
@@ -553,10 +552,10 @@ fn project_ordinary_assessed(
                 edges.insert((id.clone(), "rests_on".into(), dep));
             }
         }
-        if let Some(V::Text(source)) = body_map.get("from") {
-            if public_to_internal.contains_key(source) {
-                edges.insert((id.clone(), "from".into(), source.clone()));
-            }
+        if let Some(V::Text(source)) = body_map.get("from")
+            && public_to_internal.contains_key(source)
+        {
+            edges.insert((id.clone(), "from".into(), source.clone()));
         }
         if !judgment {
             let refs = if matches!(body_map.get("rule"), Some(V::Map(_))) {
@@ -573,12 +572,13 @@ fn project_ordinary_assessed(
                 }
             }
         }
-        if id.starts_with("hyp.") && body_map.get("v") == Some(&V::Text("refuted".into())) {
-            if let Some(V::List(values)) = body_map.get("refutes") {
-                for value in values {
-                    if let V::Text(dep) = value {
-                        edges.insert((id.clone(), "refutes".into(), dep.clone()));
-                    }
+        if id.starts_with("hyp.")
+            && body_map.get("v") == Some(&V::Text("refuted".into()))
+            && let Some(V::List(values)) = body_map.get("refutes")
+        {
+            for value in values {
+                if let V::Text(dep) = value {
+                    edges.insert((id.clone(), "refutes".into(), dep.clone()));
                 }
             }
         }
@@ -1757,12 +1757,12 @@ pub fn render(context: &CapturedAssessment, seeds: &[String], options: &Options)
 
 fn render_packet(packet: &J, options: &Options) -> Result<String> {
     Ok(match options.format {
-        Format::Markdown => render_markdown(&packet, options.details),
-        Format::Mermaid => render_mermaid(&packet),
+        Format::Markdown => render_markdown(packet, options.details),
+        Format::Mermaid => render_mermaid(packet),
         Format::MarkdownMermaid => format!(
             "{}\n### Optional Mermaid diagram\n\nRequires a Mermaid renderer; otherwise this is a code block. The text above is the readable representation.\n\n```mermaid\n{}```\n",
-            render_markdown(&packet, options.details),
-            render_mermaid(&packet)
+            render_markdown(packet, options.details),
+            render_mermaid(packet)
         ),
     })
 }
