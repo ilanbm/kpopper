@@ -87,6 +87,46 @@ fn saved(root: &Path) -> (String, PathBuf) {
 }
 
 #[test]
+fn hook_open_uses_explicit_profile_path_and_stays_within_budget() {
+    let temp = fixture();
+    let root = temp.path();
+    let profile_a = root.join("profile-a.json");
+    let profile_b = root.join("profile with space.json");
+    fs::write(&profile_a, br#"{"groups":{}}"#).unwrap();
+    fs::write(&profile_b, br#"{"groups":{}}"#).unwrap();
+    let budget = 1000usize;
+    let profile_b = profile_b.canonicalize().unwrap();
+    let output = ok(command(root, "hook-open", true)
+        .args(["--profile", profile_b.to_str().unwrap(), "--tokens", "1000"])
+        .output()
+        .unwrap());
+    assert!(kpop_native::tokenizer::Encoding::O200kBase.count(&output) <= budget);
+    assert!(output.contains(&format!("--profile '{}'", profile_b.display())));
+    assert!(!output.contains(&profile_a.to_string_lossy().to_string()));
+    let revision = output
+        .split("revision=")
+        .nth(1)
+        .and_then(|tail| tail.split_whitespace().next())
+        .unwrap();
+    let read = ok(command(root, "read", false)
+        .args(["--profile", profile_b.to_str().unwrap(), "--ref", "node:p.a", "--revision", revision])
+        .output()
+        .unwrap());
+    assert!(read.contains(revision));
+}
+
+#[test]
+fn hook_open_refuses_budget_that_cannot_carry_route() {
+    let temp = fixture();
+    let output = command(temp.path(), "hook-open", true)
+        .args(["--tokens", "32"])
+        .output()
+        .unwrap();
+    assert_eq!(output.status.code(), Some(2));
+    assert!(String::from_utf8_lossy(&output.stderr).contains("hook budget cannot carry"));
+}
+
+#[test]
 fn cli_reopens_retained_findings_without_runtime_and_rejects_stale_source() {
     let temp = fixture();
     let root = temp.path();

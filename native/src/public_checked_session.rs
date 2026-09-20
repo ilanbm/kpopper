@@ -20,6 +20,7 @@ use std::path::{Path, PathBuf};
 #[derive(Clone, Debug, clap::ValueEnum)]
 pub enum Operation {
     Open,
+    HookOpen,
     Read,
     Context,
     Search,
@@ -164,7 +165,9 @@ pub struct Service {
     project: String,
     navigation: Option<V>,
     navigation_source: Option<Vec<u8>>,
+    profile_path: Option<PathBuf>,
     requested_profile: Option<String>,
+    state: PathBuf,
 }
 impl Service {
     pub fn new(options: &Options, cwd: &Path, mode: ReadMode) -> Result<Self> {
@@ -257,6 +260,7 @@ impl Service {
         // JSON ingress above remains authoritative. Retain source order only
         // for ordinary read-directory presentation, using captured bytes.
         let navigation_source = profile.as_ref().map(|path| inputs.files[path].clone());
+        let profile_path = profile.clone();
         let store =
             CheckedSessionStore::open(&state, &name, &input, navigation.clone(), options.encoding)?;
         inputs.verify()?;
@@ -269,8 +273,47 @@ impl Service {
             project: name,
             navigation,
             navigation_source,
+            profile_path,
             requested_profile: options.assessment_profile.clone(),
+            state,
         })
+    }
+
+    fn shell_quote(value: &Path) -> String {
+        let text = value.to_string_lossy();
+        format!("'{}'", text.replace('\'', "'\\''"))
+    }
+
+    pub fn hook_open(&self, budget: usize) -> Result<String> {
+        let executable = std::env::current_exe()?.canonicalize()?;
+        let mut command = vec![
+            Self::shell_quote(&executable), "session".into(), "read".into(),
+            "--no-settings".into(), "--input".into(), Self::shell_quote(&self.input),
+            "--project".into(), Self::shell_quote(Path::new(&self.project)),
+            "--state".into(), Self::shell_quote(&self.state),
+        ];
+        let ordinary = self.ordinary()?;
+        if !ordinary {
+            command.extend(["--assessment-profile".into(), "core/v1".into()]);
+        }
+        if let Some(profile) = &self.profile_path {
+            command.extend(["--profile".into(), Self::shell_quote(profile)]);
+        }
+        let hint = format!("Read via MCP kpopper_read, or (POSIX shell): {} --ref REF --revision REV_FROM_ABOVE\n", command.join(" "));
+        let hint_tokens = self.store.encoding().count(&hint);
+        let mut available = budget.saturating_sub(hint_tokens + 1);
+        for _ in 0..3 {
+            if available < 64 {
+                break;
+            }
+            let result = self.opening(available)? + &hint;
+            if self.store.encoding().count(&result) <= budget {
+                return Ok(result);
+            }
+            let overflow = self.store.encoding().count(&result) - budget;
+            available = available.saturating_sub(overflow);
+        }
+        Err(error("hook budget cannot carry the complete view and read route"))
     }
 
     fn ordinary(&self) -> Result<bool> {
@@ -537,6 +580,7 @@ pub fn run(options: &Options, cwd: &Path, mode: ReadMode) -> Result<String> {
     let service = Service::new(options, cwd, mode)?;
     match options.operation {
         Operation::Open => service.opening(options.tokens.unwrap_or(700)),
+        Operation::HookOpen => service.hook_open(options.tokens.unwrap_or(1000)),
         Operation::Read => service.reading(
             options
                 .reference
@@ -788,5 +832,19 @@ pub fn run(options: &Options, cwd: &Path, mode: ReadMode) -> Result<String> {
             .map_err(|e| error(&format!("MCP transport: {e:?}")))?;
             Ok(String::new())
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::Service;
+    use std::path::Path;
+
+    #[test]
+    fn hook_route_uses_posix_safe_single_quotes() {
+        assert_eq!(
+            Service::shell_quote(Path::new("/tmp/project with 'quote'")),
+            "'/tmp/project with '\\''quote'\\'''"
+        );
     }
 }
