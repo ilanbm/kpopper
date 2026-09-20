@@ -29,6 +29,7 @@ pub const DIRECTORIES: &[&str] = &[
     "receipts",
     "delivery-jobs",
     "delivery",
+    "watchers",
 ];
 
 pub fn now() -> f64 {
@@ -71,7 +72,7 @@ pub fn resolve_root_from(record: &Path, selected: Option<&Path>, cwd: &Path) -> 
     Ok(root)
 }
 
-fn private_directory(path: &Path) -> Result<()> {
+pub(crate) fn private_directory(path: &Path) -> Result<()> {
     fs::create_dir_all(path)?;
     #[cfg(unix)]
     {

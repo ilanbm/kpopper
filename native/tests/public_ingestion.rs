@@ -130,6 +130,33 @@ fn permanent_write_failure_becomes_terminal_without_automatic_retries() {
 }
 
 #[test]
+fn acknowledgement_uses_workspace_state_and_preserves_the_first_handled_time() {
+    let temp = fixture(false);
+    let record = temp.path().join("PROVENANCE.yaml");
+    let state = temp.path().join("relstate");
+    ingestion::capture(&custom_envelope("ack", "missing", json!(4), "2026-09-20"),
+        Some(&record), Some(&state), temp.path(), false).unwrap();
+    ingestion::process(Some(&record), Some(&state), temp.path(), None, 32).unwrap();
+    let notices = ingestion::pending(Some(&record), Some(&state), temp.path(), false).unwrap();
+    let signal = notices[0]["id"].as_str().unwrap();
+    let elsewhere = tempfile::tempdir().unwrap();
+    let acknowledge = || {
+        let output = Command::new(env!("CARGO_BIN_EXE_kpop-native"))
+            .current_dir(elsewhere.path())
+            .arg("--workspace").arg(temp.path())
+            .args(["ingest", "acknowledge", "--record", "PROVENANCE.yaml", "--state-dir", "relstate", signal])
+            .output().unwrap();
+        assert!(output.status.success(), "{}", String::from_utf8_lossy(&output.stderr));
+        serde_json::from_slice::<J>(&output.stdout).unwrap()
+    };
+    let first = acknowledge();
+    let second = acknowledge();
+    assert_eq!(first["signals"][signal], second["signals"][signal]);
+    assert!(first["signals"][signal].as_f64().is_some());
+    assert!(!elsewhere.path().join("relstate").exists());
+}
+
+#[test]
 fn process_uses_the_single_writer_and_is_idempotent() {
     let temp = fixture(false);
     let record = temp.path().join("PROVENANCE.yaml");

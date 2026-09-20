@@ -193,9 +193,8 @@ fn lease_active(value: Option<&J>) -> bool {
         nix::unistd::Pid::from_raw(pid as i32),
         None,
     ) {
-        Ok(()) | Err(nix::errno::Errno::EPERM) => Some(true),
-        Err(nix::errno::Errno::ESRCH) => Some(false),
-        Err(_) => None,
+        Ok(()) => Some(true),
+        Err(_) => Some(false),
     };
     #[cfg(windows)]
     let alive = windows_process_alive(pid as u32);
@@ -230,6 +229,12 @@ fn record_writer_journal(record: &Path) -> bool {
     let primary = store.root.join(&store.layout.journal);
     let shared = store.root.join(crate::direct_history::journal(&store));
     primary.is_file() || shared.is_file()
+}
+
+fn retryable_capture_io(layout: &S::Layout, event: &str, error: &crate::Error) -> bool {
+    error.0.starts_with("io: ")
+        && S::read_json(&layout.path("journals", event)).ok().flatten()
+            .is_some_and(|journal| journal["kind"] == "native-advanced-report/v1")
 }
 
 fn reserve_worker(layout: &S::Layout) -> Result<Option<String>> {
@@ -444,7 +449,7 @@ pub fn process(
                 output.push(receipt);
             }
             Err(error) => {
-                if record_writer_journal(&record) {
+                if record_writer_journal(&record) || retryable_capture_io(&layout, &id, &error) {
                     event["state"] = json!("recovery_required");
                     event["reason"] = json!(error.to_string());
                     S::save_json(&layout.path("events", &id), &event)?;
@@ -598,7 +603,7 @@ pub fn acknowledge(
 ) -> Result<J> {
     require(!ids.is_empty(), "one or more signal IDs are required")?;
     let (record, _, _) = selected_record(record, cwd)?;
-    let layout = S::Layout::create(&record, state_dir)?;
+    let layout = S::Layout::create_from(&record, state_dir, cwd)?;
     let _lock = S::FileLock::acquire(&layout.root.join("delivery.lock"))?;
     for id in ids {
         require(layout.path("signals", id).is_file(), "unknown signal ID")?;
@@ -607,8 +612,10 @@ pub fn acknowledge(
     let mut handled = validated_handled(
         S::read_json(&path)?.unwrap_or_else(|| json!({"signals":{}})),
     )?;
+    let now = S::now();
     for id in ids {
-        handled["signals"][id] = json!(S::now());
+        handled["signals"].as_object_mut().unwrap()
+            .entry(id.clone()).or_insert_with(|| json!(now));
     }
     S::save_json(&path, &handled)?;
     Ok(handled)
@@ -724,6 +731,30 @@ mod tests {
         assert!(lease_active(Some(&json!({"pid":null,"started_at":S::now()}))));
         assert!(!lease_active(Some(&json!({"pid":null,"started_at":S::now()-6.0,
             "expires_at":S::now()+300.0}))));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn inaccessible_recycled_pid_cannot_hold_an_expired_worker_lease() {
+        if nix::sys::signal::kill(nix::unistd::Pid::from_raw(1), None)
+            == Err(nix::errno::Errno::EPERM)
+        {
+            assert!(!lease_active(Some(&json!({"pid":1,"started_at":0,"expires_at":0}))));
+        }
+    }
+
+    #[test]
+    fn only_retained_advanced_capture_io_is_retryable_without_writer_journal() {
+        let temp = tempfile::tempdir().unwrap();
+        let record = temp.path().join("GROUNDING.yaml");
+        std::fs::write(&record, "known: {p.a: {v: 1}}\n").unwrap();
+        let layout = S::Layout::create(&record, Some(&temp.path().join("state"))).unwrap();
+        let failure = crate::Error("io: Permission denied".into());
+        S::save_json(&layout.path("journals", "event"), &json!({"kind":"ordinary-report"})).unwrap();
+        assert!(!retryable_capture_io(&layout, "event", &failure));
+        S::save_json(&layout.path("journals", "event"), &json!({"kind":"native-advanced-report/v1"})).unwrap();
+        assert!(retryable_capture_io(&layout, "event", &failure));
+        assert!(!retryable_capture_io(&layout, "event", &crate::Error("stale_baseline".into())));
     }
 
     #[test]

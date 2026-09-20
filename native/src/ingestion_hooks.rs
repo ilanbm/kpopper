@@ -3,7 +3,9 @@ use crate::{Result, ingestion_delivery as D, ingestion_orchestration as O, inges
 use clap::Args;
 use fs2::FileExt;
 use serde_json::{Value as J, json};
-use std::{fs::{self, File, OpenOptions}, path::{Path, PathBuf}, thread, time::{Duration, Instant}};
+use std::{fs::{File, OpenOptions}, path::{Path, PathBuf}, thread, time::{Duration, Instant}};
+#[cfg(unix)]
+use std::os::unix::fs::OpenOptionsExt;
 
 const WAIT_SECONDS: f64 = 120.0;
 const MAX_WAIT_SECONDS: f64 = 86_400.0;
@@ -84,8 +86,12 @@ fn output(notices: &[J], host: &str, mode: &str, event: &str) -> Output {
 
 fn watcher(root: &Path, id: &str, epoch: &str) -> Result<Option<File>> {
     let key = crate::identity::sha256(format!("{id}{epoch}").as_bytes());
-    let dir = root.join("watchers"); fs::create_dir_all(&dir)?;
-    let file = OpenOptions::new().create(true).truncate(false).read(true).write(true).open(dir.join(format!("{key}.lock")))?;
+    let dir = root.join("watchers"); S::private_directory(&dir)?;
+    let mut options = OpenOptions::new();
+    options.create(true).truncate(false).read(true).write(true);
+    #[cfg(unix)]
+    options.mode(0o600);
+    let file = options.open(dir.join(format!("{key}.lock")))?;
     match file.try_lock_exclusive() {
         Ok(()) => Ok(Some(file)),
         Err(error) if error.kind() == std::io::ErrorKind::WouldBlock
@@ -141,6 +147,7 @@ pub fn run(options: &Options, payload: J, cwd: &Path) -> Result<Output> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::fs;
     use tempfile::tempdir;
 
     #[test]
@@ -190,6 +197,12 @@ mod tests {
         assert!(first.is_some());
         let second = watcher(tmp.path(), "identity", "epoch").unwrap();
         assert!(second.is_none());
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            assert_eq!(fs::metadata(tmp.path().join("watchers")).unwrap().permissions().mode() & 0o777, 0o700);
+            assert_eq!(first.unwrap().metadata().unwrap().permissions().mode() & 0o777, 0o600);
+        }
     }
 
     #[test]

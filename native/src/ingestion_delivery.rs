@@ -281,7 +281,7 @@ fn message(notices: &[J], record: &Path) -> String {
                 .collect::<String>()
         };
         let quote = compact(&notice["source_quote"], 500);
-        let reason = if notice.get("question").and_then(J::as_str).is_some() {
+        let reason = if notice.get("question").and_then(J::as_str).is_some_and(|s| !s.is_empty()) {
             compact(&notice["question"], 900)
         } else {
             compact(&notice["reason"], 900)
@@ -303,7 +303,10 @@ fn message(notices: &[J], record: &Path) -> String {
             .chars()
             .take(MAX_TARGET_CHARS)
             .collect::<String>();
-        let affected = affected.chars().take(MAX_AFFECTED_CHARS).collect::<String>();
+        let mut affected = affected.chars().take(MAX_AFFECTED_CHARS).collect::<String>();
+        if notice["affected_judgments"].as_array().is_some_and(|items| items.len() > 16) {
+            affected.push_str(" (more in ingest pending)");
+        }
         lines.push(format!(
             "- signal {} [{}] target={}; affected={}: {} | source: {}",
             notice["id"].as_str().unwrap_or(""),
@@ -648,5 +651,15 @@ mod tests {
         assert!(rendered.contains(&format!("target={}", "t".repeat(MAX_TARGET_CHARS))));
         assert!(!rendered.contains(&"t".repeat(MAX_TARGET_CHARS + 1)));
         assert!(rendered.contains(&"a".repeat(MAX_AFFECTED_CHARS)));
+    }
+
+    #[test]
+    fn attention_marks_omitted_judgments_and_uses_reason_when_question_is_empty() {
+        let notice = json!({"id":"a","question":"","reason":"retained reason",
+            "affected_judgments":(0..17).map(|i| format!("d.{i}")).collect::<Vec<_>>()});
+        let rendered = message(&[notice], Path::new("GROUNDING.yaml"));
+        assert!(rendered.contains("d.15 (more in ingest pending)"));
+        assert!(!rendered.contains("d.16"));
+        assert!(rendered.contains("retained reason"));
     }
 }
