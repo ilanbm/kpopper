@@ -71,7 +71,7 @@ jobs:
         shell: bash
         run: |
           set -o pipefail
-          cargo test --locked --config 'profile.test.package.sha2.opt-level=3' 2>&1 | tee "$RUNNER_TEMP/native-evidence/native-suite.log"
+          cargo test --locked --no-fail-fast --config 'profile.test.package.sha2.opt-level=3' 2>&1 | tee "$RUNNER_TEMP/native-evidence/native-suite.log"
           cargo build --locked --release 2>&1 | tee "$RUNNER_TEMP/native-evidence/release-build.log"
       - name: Copy the executable and its verified native resources
         shell: python
