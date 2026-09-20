@@ -311,6 +311,36 @@ fn advanced_scoped_flow_set_matches_python_field_order() {
 }
 
 #[test]
+fn advanced_scoped_block_set_quotes_multiword_name_like_python() {
+    let (_temp, root) = advanced_ordinary(
+        "known:\n  p.base:\n    name: Package count\n    v: 1\n    of: \"2026-09-01\"\n",
+    );
+    success(run_unbundled(
+        &root,
+        &["set", "p.base", "5", "--shareability", "project", "--scope", "feature", "--environment", "x"],
+    ));
+    assert_eq!(
+        fs::read_to_string(root.join("GROUNDING.yaml")).unwrap(),
+        "known:\n  p.base:\n    name: \"Package count\"\n    v: 5\n    of: \"2026-09-20\"\n    scope: {kind: feature, environment: x}\n"
+    );
+}
+
+#[test]
+fn advanced_scoped_block_set_quotes_multiword_at_like_python() {
+    let (_temp, root) = advanced_ordinary(
+        "known:\n  p.base:\n    v: 1\n    of: \"2026-09-01\"\n    at: line 2\n",
+    );
+    success(run_unbundled(
+        &root,
+        &["set", "p.base", "5", "--shareability", "project", "--scope", "feature", "--environment", "x"],
+    ));
+    assert_eq!(
+        fs::read_to_string(root.join("GROUNDING.yaml")).unwrap(),
+        "known:\n  p.base:\n    v: 5\n    of: \"2026-09-20\"\n    at: \"line 2\"\n    scope: {kind: feature, environment: x}\n"
+    );
+}
+
+#[test]
 fn advanced_set_and_judgment_capture_complete_authored_bodies() {
     use kpop_native::value::TypedValue as V;
     let (_temp, root) = advanced_ordinary(

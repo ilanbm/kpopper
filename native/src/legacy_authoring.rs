@@ -1790,29 +1790,23 @@ fn prepare_with_inventory_mode(
                     .and_then(|body| body.get("scope"))
                     .cloned()
                     .unwrap_or(ordered_scope(scope)?);
-                let (_, member) = locate(&lines, &id)
-                    .ok_or_else(|| error("scoped set target disappeared during preparation"))?;
-                if inline(&lines[member.start]).starts_with('{') {
-                    let collections = crate::reasoning_fields::collections(&candidate)?;
-                    let body = collections
-                        .get(&collection)
-                        .and_then(|members| members.get(&id))
-                        .ok_or_else(|| error("scoped set candidate is incomplete"))?;
-                    let prior = document
-                        .source
-                        .get(&collection)
-                        .and_then(|members| members.get(&id))
-                        .and_then(ordinary_template);
-                    let mut body = preserve_order(body, prior.as_ref());
-                    if let Source::Map(fields) = &mut body
-                        && let Some((_, value)) = fields.iter_mut().find(|(key, _)| key == "scope")
-                    {
-                        *value = rendered_scope.clone();
-                    }
-                    replace_entry(&mut lines, &id, &body)?;
-                } else {
-                    replace_field_ordered(&mut lines, &member, "scope", &rendered_scope)?;
+                let collections = crate::reasoning_fields::collections(&candidate)?;
+                let body = collections
+                    .get(&collection)
+                    .and_then(|members| members.get(&id))
+                    .ok_or_else(|| error("scoped set candidate is incomplete"))?;
+                let prior = document
+                    .source
+                    .get(&collection)
+                    .and_then(|members| members.get(&id))
+                    .and_then(ordinary_template);
+                let mut body = preserve_order(body, prior.as_ref());
+                if let Source::Map(fields) = &mut body
+                    && let Some((_, value)) = fields.iter_mut().find(|(key, _)| key == "scope")
+                {
+                    *value = rendered_scope;
                 }
+                replace_entry(&mut lines, &id, &body)?;
             }
             output.push(format!(
                 "set {id}: {old} -> {} (as of {stamp})",
