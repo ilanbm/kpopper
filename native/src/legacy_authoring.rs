@@ -1783,9 +1783,14 @@ fn prepare_with_inventory_mode(
                 action.get("at").and_then(|value| text(value).ok()),
             )?;
             if let Some(scope) = action.get("_record_scope") {
-                let (_, member) = locate(&lines, &id).unwrap();
+                let (_, member) = locate(&lines, &id)
+                    .ok_or_else(|| error("scoped set target disappeared during preparation"))?;
                 if inline(&lines[member.start]).starts_with('{') {
-                    let body = &crate::reasoning_fields::collections(&candidate)?[&collection][&id];
+                    let collections = crate::reasoning_fields::collections(&candidate)?;
+                    let body = collections
+                        .get(&collection)
+                        .and_then(|members| members.get(&id))
+                        .ok_or_else(|| error("scoped set candidate is incomplete"))?;
                     let mut body = preserve_order(body, None);
                     if let Source::Map(fields) = &mut body
                         && let Some((_, value)) = fields.iter_mut().find(|(key, _)| key == "scope")
