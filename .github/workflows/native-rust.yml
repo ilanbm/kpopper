@@ -23,7 +23,7 @@ concurrency:
 
 jobs:
   platform:
-    timeout-minutes: 45
+    timeout-minutes: 60
     strategy:
       fail-fast: false
       matrix:
@@ -67,6 +67,15 @@ jobs:
         run: |
           KPOPPER_CI_ORDINARY=$(python -c 'import os; from scripts.session.core import setup; print(setup(os.environ["KPOPPER_LEAN_ROOT"])["cache"])')
           echo "KPOP_TEST_ORDINARY_PROGRAM=$KPOPPER_CI_ORDINARY" >> "$GITHUB_ENV"
+      - name: Restore Rust dependency and build cache
+        id: rust-cache
+        uses: actions/cache/restore@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            native/target
+          key: native-rust-${{ matrix.target }}-${{ hashFiles('native/Cargo.lock') }}
       - name: Initialize the platform evidence archive
         shell: bash
         run: |
@@ -194,3 +203,12 @@ jobs:
           name: native-rust-${{ matrix.target }}
           path: ${{ runner.temp }}/native-evidence
           if-no-files-found: error
+      - name: Save reusable Rust dependencies after diagnostic runs
+        if: ${{ !cancelled() && steps.rust-cache.outputs.cache-hit != 'true' }}
+        uses: actions/cache/save@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            native/target
+          key: ${{ steps.rust-cache.outputs.cache-primary-key }}
