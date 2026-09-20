@@ -121,3 +121,29 @@ pub fn run(args: &Args, workspace: &Path) -> Result<Value> {
     }
     Ok(result)
 }
+
+pub fn cli_json(args: &Args, value: &Value) -> String {
+    if matches!(args.command, Command::Setup { .. }) {
+        let keys = [
+            "configured",
+            "base_ref",
+            "shared_record",
+            "enabled",
+            "entry",
+            "schema",
+            "freshness",
+        ];
+        let mut lines = Vec::new();
+        for key in keys {
+            if let Some(value) = value.get(key) {
+                lines.push(format!(
+                    "  {}: {}",
+                    serde_json::to_string(key).unwrap(),
+                    serde_json::to_string(value).unwrap()
+                ));
+            }
+        }
+        return format!("{{\n{}\n}}", lines.join(",\n"));
+    }
+    serde_json::to_string_pretty(value).unwrap()
+}

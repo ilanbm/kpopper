@@ -1023,8 +1023,18 @@ fn main() {
         return;
     }
     let is_watch = matches!(&args.command, Command::Watch(_));
+    let watch_args = match &args.command {
+        Command::Watch(watch) => Some(watch.clone()),
+        _ => None,
+    };
     match run(args) {
-        Ok(value) if is_watch => println!("{}", serde_json::to_string_pretty(&value).unwrap()),
+        Ok(value) if is_watch => {
+            if let Some(watch) = watch_args {
+                println!("{}", kpop_native::public_watch::cli_json(&watch, &value));
+            } else {
+                println!("{}", serde_json::to_string_pretty(&value).unwrap());
+            }
+        }
         Ok(value) => println!("{}", value),
         Err(error) => {
             if is_watch {
