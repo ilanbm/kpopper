@@ -1517,7 +1517,17 @@ fn apply_profile(graph: &mut J, profile: Option<&V>) -> Result<()> {
             .as_array()
             .ok_or_else(|| Error("profile group must list IDs".into()))?
         {
-            if assigned_values.iter().any(|assigned| assigned == id) {
+            if id.is_array() || id.is_object() {
+                return Err(Error(format!(
+                    "unhashable type: '{}'",
+                    if id.is_array() { "list" } else { "dict" }
+                )));
+            }
+            if assigned_values.iter().any(|assigned| {
+                let left = V::from_json(assigned).unwrap();
+                let right = V::from_json(id).unwrap();
+                crate::source_clock::python_equal(&left, &right)
+            }) {
                 return Err(Error("profile assigns an ID more than once".into()));
             }
             assigned_values.push(id.clone());
@@ -1599,7 +1609,56 @@ fn apply_profile(graph: &mut J, profile: Option<&V>) -> Result<()> {
         !mixed_unmatched,
         "'<' not supported between instances of 'str' and 'int'",
     )?;
-    unmatched_ids.sort_by(|left, right| left.to_string().cmp(&right.to_string()));
+    let type_name = |value: &J| {
+        if value.is_string() {
+            "str"
+        } else if value.is_number() {
+            "int"
+        } else if value.is_boolean() {
+            "bool"
+        } else {
+            "NoneType"
+        }
+    };
+    let kind = unmatched_ids.first().map(|value| {
+        if value.is_string() {
+            0
+        } else if value.is_number() || value.is_boolean() {
+            1
+        } else {
+            2
+        }
+    });
+    if unmatched_ids
+        .iter()
+        .any(|value| kind != Some(if value.is_string() { 0 } else if value.is_number() || value.is_boolean() { 1 } else { 2 }))
+    {
+        let left = unmatched_ids.first().unwrap();
+        let right = unmatched_ids
+            .iter()
+            .find(|value| type_name(value) != type_name(left))
+            .unwrap();
+        return Err(Error(format!(
+            "'<' not supported between instances of '{}' and '{}'",
+            type_name(right),
+            type_name(left)
+        )));
+    }
+    unmatched_ids.sort_by(|left, right| {
+        if kind == Some(0) {
+            left.as_str().cmp(&right.as_str())
+        } else if kind == Some(1) {
+            let number = |value: &J| {
+                value
+                    .as_f64()
+                    .or_else(|| value.as_bool().map(|v| if v { 1.0 } else { 0.0 }))
+                    .unwrap_or(0.0)
+            };
+            number(left).partial_cmp(&number(right)).unwrap()
+        } else {
+            std::cmp::Ordering::Equal
+        }
+    });
     graph["navigation_profile"] = json!({"description":profile["description"].as_str().unwrap_or("Declared navigation."),"sha256":sha256(canonical(&profile)?.as_bytes()),"unmatched_ids":unmatched_ids,"opening_depth":depth});
     Ok(())
 }
@@ -2079,15 +2138,17 @@ mod tests {
             graph["navigation_leaf_routes"] = json!(navigation.leaves);
             assert_eq!(graph, case["graph"], "{}", case["name"]);
         }
-        let mut numeric = fixtures["cases"][0]["authored_graph"].clone();
-        let numeric_profile = V::from_json(&json!({"groups": {"mixed": [1]}})).unwrap();
-        apply_profile(&mut numeric, Some(&numeric_profile)).unwrap();
-        assert_eq!(numeric["navigation_profile"]["unmatched_ids"], json!([1]));
-        let mixed = V::from_json(&json!({"groups": {"mixed": [1, "1"]}})).unwrap();
-        assert_eq!(
-            apply_profile(&mut numeric, Some(&mixed)).unwrap_err().0,
-            "'<' not supported between instances of 'str' and 'int'"
-        );
+        let numeric_cases: J = serde_json::from_str(include_str!("../tests/fixtures/session-profile-numeric.json")).unwrap();
+        for case in numeric_cases["cases"].as_array().unwrap() {
+            let mut graph = fixtures["cases"][0]["authored_graph"].clone();
+            let profile = V::from_json(&case["profile"]).unwrap();
+            let result = apply_profile(&mut graph, Some(&profile));
+            if let Some(error) = case.get("error") {
+                assert_eq!(result.unwrap_err().0, error.as_str().unwrap(), "{}", case["name"]);
+            } else {
+                assert_eq!(graph["navigation_profile"]["unmatched_ids"], case["unmatched_ids"], "{}", case["name"]);
+            }
+        }
         for case in fixtures["invalid_profiles"].as_array().unwrap() {
             let mut graph = fixtures["cases"][0]["authored_graph"].clone();
             let profile = V::from_json(&case["profile"]).unwrap();
