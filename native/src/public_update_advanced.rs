@@ -26,6 +26,85 @@ pub(crate) struct Context<'a> {
     pub after_capture: &'a mut dyn FnMut() -> Result<()>,
 }
 
+pub(crate) struct PreparedHistory {
+    pub bundle: V,
+    pub files: Files,
+    pub diagnostics: Vec<String>,
+}
+
+/// Finalize the existing history report pipeline after its batch, graph and
+/// core-gate preparation have succeeded. The caller supplies the versioned
+/// history contribution; this function owns durable pending capture and replay.
+pub(crate) fn capture_prepared_history(
+    report: &Report,
+    event: &str,
+    context: Context<'_>,
+    prepared: PreparedHistory,
+) -> Result<Output> {
+    if let Some(reason) = super::private_reason(report)? {
+        return Err(Error(reason.into()));
+    }
+    require(applies(report, &context.route)?, "advanced history report is not project scoped")?;
+    pending_bundle::validate(&prepared.bundle, &prepared.files)?;
+    let manifest = map(field(map(&prepared.bundle)?, "manifest")?)?;
+    require(
+        crate::history_contract::is_int(field(manifest, "version")?, "3"),
+        "history report requires a versioned history contribution",
+    )?;
+    let source_id = format!("s.ingest_{event}");
+    let pending_event = format!("report-{event}");
+    {
+        let _state_lock =
+            crate::history_transaction_fs::DirectoryGuard::acquire(context.state_root, true)?;
+        super::save(
+            &context.state_root.join("journals").join(format!("{event}.json")),
+            &retained(
+                event,
+                &pending_event,
+                &source_id,
+                &prepared.bundle,
+                &prepared.files,
+                &prepared.diagnostics,
+            )?,
+        )?;
+    }
+    let project = context.route.project().clone();
+    let expected_policy = context.route.config().clone();
+    context.route.verify()?;
+    drop(context.route);
+    let pending = crate::public_knowledge::import_helper::capture_pending(
+        &project,
+        &prepared.bundle,
+        &prepared.files,
+        &pending_event,
+        &pending_event,
+        &mut || {
+            require(
+                project.config()? == expected_policy,
+                "project policy or destination changed before capture; retry",
+            )?;
+            require(
+                crate::history_transaction_fs::read(context.source_path)?.as_deref()
+                    == Some(report.quote.as_bytes()),
+                "scoped report source bytes differ from retained quote",
+            )
+        },
+    )?;
+    (context.after_capture)()?;
+    finish(
+        report,
+        event,
+        context.record,
+        context.state_root,
+        context.source_path,
+        context.envelope_sha256,
+        context.supplied_runtime,
+        &source_id,
+        prepared.diagnostics,
+        pending,
+    )
+}
+
 fn scope(report: &Report) -> Option<Result<V>> {
     report.raw.get("scope").map(V::from_json)
 }
