@@ -1,8 +1,18 @@
 use kpop_native::history_group::GroupPrepared;
+use std::{env, fs, path::PathBuf};
+
+fn fixture() -> serde_json::Value {
+    let path = env::var_os("KPOP_HISTORY_GROUP_FIXTURE")
+        .map(PathBuf::from)
+        .unwrap_or_else(|| {
+            PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/history-group.json")
+        });
+    serde_json::from_str(&fs::read_to_string(path).unwrap()).unwrap()
+}
+
 #[test]
 fn complete_group_envelopes_match_python_membership_and_canonical_bytes() {
-    let data: serde_json::Value =
-        serde_json::from_str(include_str!("fixtures/history-group.json")).unwrap();
+    let data = fixture();
     let mut failures = Vec::new();
     for c in data["cases"].as_array().unwrap() {
         match GroupPrepared::from_bytes(c["raw"].as_str().unwrap().as_bytes()) {
