@@ -683,10 +683,10 @@ fn main() {
                 .clone()
                 .map(Ok)
                 .unwrap_or_else(std::env::current_dir)?;
-            kpop_native::public_consolidation::run(&arguments.options()?, &cwd)
+            Ok::<_,kpop_native::Error>(kpop_native::public_consolidation::dispatch(&arguments.options()?, &cwd))
         })();
         let (output, error, code) = match result {
-            Ok(output) => (output, String::new(), 0),
+            Ok(output) => (output.stdout, output.stderr, output.code),
             Err(error) => (String::new(), format!("{error}\n"), 1),
         };
         if args.json {
