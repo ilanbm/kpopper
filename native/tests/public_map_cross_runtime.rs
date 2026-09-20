@@ -11,6 +11,7 @@ fn invoke(program: &Path, script: Option<&Path>, workspace: &Path, state: &Path)
     assert!(o.status.success(), "{}", String::from_utf8_lossy(&o.stderr)); serde_json::from_slice(&o.stdout).unwrap()
 }
 fn request(v:&Value)->&str { v["request"].as_str().unwrap() }
+fn raw(program:&Path, script:Option<&Path>, workspace:&Path, state:&Path, args:&[&str], session:Option<&str>)->std::process::Output { let mut c=Command::new(program); if let Some(s)=script { c.arg(s); } let mut c=c.args(["--workspace",workspace.to_str().unwrap()]).args(args).env("XDG_STATE_HOME",state).env_remove("CODEX_THREAD_ID"); c=if let Some(s)=session { c.env("KPOPPER_AGENT_SESSION",s) } else { c.env_remove("KPOPPER_AGENT_SESSION") }; c.output().unwrap() }
 #[test]
 #[ignore = "requires KPOP_SESSION_ORACLE_PYTHON and KPOP_SESSION_ORACLE_ROOT"]
 fn python_and_native_map_packets_match_except_explicit_provenance() {
@@ -44,4 +45,12 @@ fn native_protocol_receipt_refusals_and_completion() {
     let status=run(&["--workspace",root.to_str().unwrap(),"--json","_agent","status"]); assert!(status.0); let value:Value=serde_json::from_str(&status.1).unwrap(); assert_eq!(value["mapping"],"complete"); assert_eq!(value["report"],report.to_str().unwrap());
     let bad=root.join("state/kpopper/first-use/projects").join(fs::read_dir(root.join("state/kpopper/first-use/projects")).unwrap().next().unwrap().unwrap().file_name()).join("mapping.json"); fs::write(&bad,b"{\"schema\":1,\"mode\":\"map\",\"mapping\":\"ready\",\"request\":\"BAD\",\"owner\":\"fixture\"}\n").unwrap();
     assert!(!run(&["--workspace",root.to_str().unwrap(),"--json","_agent","status"]).0);
+}
+
+#[test]
+#[ignore = "requires immutable Python oracle"]
+fn framing_matches_python_for_no_session_and_text_map() {
+    let python=PathBuf::from(std::env::var_os("KPOP_SESSION_ORACLE_PYTHON").expect("oracle python")); let oracle=PathBuf::from(std::env::var_os("KPOP_SESSION_ORACLE_ROOT").expect("oracle root")); let native=PathBuf::from(env!("CARGO_BIN_EXE_kpop-native")); let t=tempfile::tempdir().unwrap(); let root=t.path().canonicalize().unwrap(); let py_state=root.join("py-state"); let nat_state=root.join("nat-state");
+    let p=raw(&python,Some(&oracle.join("scripts/cli.py")),&root,&py_state,&["map"],None); let n=raw(&native,None,&root,&nat_state,&["map"],None); assert_eq!(p.status.code(),n.status.code()); assert_eq!(p.stdout,n.stdout); assert_eq!(p.stderr,n.stderr);
+    let p=raw(&python,Some(&oracle.join("scripts/cli.py")),&root,&py_state,&["--json","map"],None); let n=raw(&native,None,&root,&nat_state,&["--json","map"],None); assert_eq!(p.status.code(),n.status.code()); assert_eq!(p.stdout,n.stdout); assert_eq!(p.stderr,n.stderr);
 }

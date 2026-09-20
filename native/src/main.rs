@@ -268,11 +268,11 @@ fn session() -> Result<()> {
 }
 fn run(args: Args) -> Result<Value> {
     if let Command::Map(options) = &args.command {
-        let root = args.workspace.clone().ok_or_else(|| kpop_native::Error("workspace_required".into()))?;
+        let root = args.workspace.clone().unwrap_or(std::env::current_dir()?);
         return kpop_native::public_map::run(options, &root);
     }
     if let Command::Agent(options) = &args.command {
-        let root = args.workspace.clone().ok_or_else(|| kpop_native::Error("workspace_required".into()))?;
+        let root = args.workspace.clone().unwrap_or(std::env::current_dir()?);
         return kpop_native::public_map::run_agent(options, &root);
     }
     if let Command::Watch(options) = &args.command {
@@ -1041,6 +1041,9 @@ fn main() {
         Command::Watch(watch) => Some(watch.clone()),
         _ => None,
     };
+    let is_map = matches!(args.command, Command::Map(_));
+    let is_agent = matches!(args.command, Command::Agent(_));
+    let as_json = args.json;
     match run(args) {
         Ok(value) if is_watch => {
             if let Some(watch) = watch_args {
@@ -1049,9 +1052,18 @@ fn main() {
                 println!("{}", serde_json::to_string_pretty(&value).unwrap());
             }
         }
+        Ok(value) if is_map => {
+            if as_json { println!("{}", serde_json::to_string_pretty(&value).unwrap()); }
+            else { println!("Mapping task {} is {} for the current agent session.\nWork is complete only after the agent returns a report.", value["request"].as_str().unwrap_or(""), value["status"].as_str().unwrap_or("")); }
+        }
+        Ok(value) if is_agent => println!("{}", serde_json::to_string_pretty(&value).unwrap()),
         Ok(value) => println!("{}", value),
         Err(error) => {
-            if is_watch {
+            if is_map && as_json {
+                println!("{}", serde_json::to_string_pretty(&json!({"status":"unavailable", "error":error.to_string()})).unwrap());
+            } else if is_agent { eprintln!("kpopper _agent: {error}"); }
+            else if is_map { eprintln!("{error}"); }
+            else if is_watch {
                 eprintln!("{}", json!({"error":error.to_string()}));
             } else {
                 eprintln!("{}", json!({"status":"refused","error":error.to_string()}));
