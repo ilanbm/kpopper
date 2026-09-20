@@ -88,7 +88,8 @@ fn watcher(root: &Path, id: &str, epoch: &str) -> Result<Option<File>> {
     let file = OpenOptions::new().create(true).truncate(false).read(true).write(true).open(dir.join(format!("{key}.lock")))?;
     match file.try_lock_exclusive() {
         Ok(()) => Ok(Some(file)),
-        Err(error) if error.kind() == std::io::ErrorKind::WouldBlock => Ok(None),
+        Err(error) if error.kind() == std::io::ErrorKind::WouldBlock
+            || (cfg!(windows) && error.raw_os_error() == Some(33)) => Ok(None),
         Err(error) => Err(error.into()),
     }
 }
