@@ -2,6 +2,7 @@ use kpop_native::public_remeasure::{self, Options};
 use std::fs;
 #[cfg(unix)]
 use std::{
+    collections::BTreeMap,
     path::{Path, PathBuf},
     process::Command,
 };
@@ -78,6 +79,72 @@ fn assert_oracle(record: &Path, run: bool) {
         "native remeasure changed the record"
     );
     assert_eq!(actual, expected);
+}
+
+#[cfg(unix)]
+fn assert_core_oracle(record: &Path, run: bool) {
+    fn files(root: &Path, at: &Path, out: &mut BTreeMap<PathBuf, Vec<u8>>) {
+        for entry in fs::read_dir(at).unwrap() {
+            let path = entry.unwrap().path();
+            if path.is_dir() {
+                files(root, &path, out);
+            } else {
+                out.insert(
+                    path.strip_prefix(root).unwrap().to_path_buf(),
+                    fs::read(path).unwrap(),
+                );
+            }
+        }
+    }
+    let root = record.parent().unwrap();
+    let mut before = BTreeMap::new();
+    files(root, root, &mut before);
+    let expected = oracle(record, run);
+    let actual = native(record, run);
+    let mut after = BTreeMap::new();
+    files(root, root, &mut after);
+    assert_eq!(after, before, "remeasure changed the captured tree");
+    assert_eq!(
+        actual.code, expected.code,
+        "actual={actual:?}\nexpected={expected:?}"
+    );
+    assert_eq!(actual.stderr, expected.stderr);
+    let revision = regex::Regex::new(r"findings [0-9a-f]{64}").unwrap();
+    let basis = regex::Regex::new(r"\[[0-9a-f]{16}\]").unwrap();
+    let actual = revision.replace_all(&actual.stdout, "findings <runtime-provenance>");
+    let expected = revision.replace_all(&expected.stdout, "findings <runtime-provenance>");
+    assert_eq!(
+        basis.replace_all(&actual, "[runtime-provenance]"),
+        basis.replace_all(&expected, "[runtime-provenance]")
+    );
+}
+
+#[cfg(unix)]
+fn review_case(name: &str) -> (tempfile::TempDir, PathBuf) {
+    use std::os::unix::fs::PermissionsExt;
+    let source = PathBuf::from(
+        std::env::var("KPOP_SESSION_REMEASURE_CASES").expect("set KPOP_SESSION_REMEASURE_CASES"),
+    )
+    .join(name);
+    let temp = tempfile::tempdir().unwrap();
+    let root = temp.path().canonicalize().unwrap();
+    fs::create_dir_all(root.join(".kpopper/hypotheses")).unwrap();
+    for relative in [
+        "GROUNDING.yaml",
+        ".kpopper/measure.yaml",
+        ".kpopper/view.yaml",
+        ".kpopper/hypotheses/proposal.yaml",
+    ] {
+        let from = source.join(relative);
+        if from.is_file() {
+            let to = root.join(relative);
+            fs::create_dir_all(to.parent().unwrap()).unwrap();
+            fs::copy(from, to).unwrap();
+        }
+    }
+    fs::copy(source.join("recipe"), root.join("recipe")).unwrap();
+    fs::set_permissions(root.join("recipe"), fs::Permissions::from_mode(0o700)).unwrap();
+    (temp, root.join("GROUNDING.yaml"))
 }
 
 #[test]
@@ -400,6 +467,19 @@ fn python_18_oracle_matches_nonfinite_record_plan_and_failure() {
 #[test]
 #[cfg(unix)]
 #[ignore = "requires explicit Python 1.8 oracle runtime and source root"]
+fn python_18_oracle_matches_changed_reading_beside_nonfinite_value() {
+    let (_temp, record) = fixture("2", 0, "", "1", "echo: [./recipe]\n");
+    fs::write(
+        &record,
+        "known:\n  p.a: {v: 1, of: 2026-09-01, measure: echo}\n  p.infinity: {v: .inf}\n",
+    )
+    .unwrap();
+    assert_oracle(&record, true);
+}
+
+#[test]
+#[cfg(unix)]
+#[ignore = "requires explicit Python 1.8 oracle runtime and source root"]
 fn python_18_oracle_matches_missing_allowlist_and_recipe() {
     let (temp, record) = fixture("1", 0, "", "1", "spare: [./recipe]\n");
     assert_oracle(&record, false);
@@ -479,7 +559,7 @@ fn python_18_oracle_matches_legacy_allowlist_layout() {
 fn python_18_oracle_matches_core_changed_falsifier() {
     let (temp, record) = fixture("30", 0, "", "10", "echo: [./recipe]\n");
     fs::write(&record, "meta:\n  reasoning: {version: 2, profile: core/v1, requires: [arithmetic/v1]}\nknown:\n  p.a: {v: 10, of: 2026-09-01, measure: echo}\njudgments:\n  d.limit:\n    rests_on: [p.a]\n    seen: {p.a: 10}\n    verdict: okay\n    wrong_if: {op: gt, args: [{ref: p.a}, {num: '20'}]}\n").unwrap();
-    assert_oracle(&record, true);
+    assert_core_oracle(&record, true);
     drop(temp);
 }
 
@@ -489,7 +569,7 @@ fn python_18_oracle_matches_core_changed_falsifier() {
 fn python_18_oracle_matches_core_changed_without_crossing() {
     let (temp, record) = fixture("15", 0, "", "10", "echo: [./recipe]\n");
     fs::write(&record, "meta:\n  reasoning: {version: 2, profile: core/v1, requires: [arithmetic/v1]}\nknown:\n  p.a: {v: 10, of: 2026-09-01, measure: echo}\njudgments:\n  d.limit:\n    rests_on: [p.a]\n    seen: {p.a: 10}\n    verdict: okay\n    wrong_if: {op: gt, args: [{ref: p.a}, {num: '20'}]}\n").unwrap();
-    assert_oracle(&record, true);
+    assert_core_oracle(&record, true);
     drop(temp);
 }
 
@@ -499,6 +579,162 @@ fn python_18_oracle_matches_core_changed_without_crossing() {
 fn python_18_oracle_matches_core_unchanged_hole() {
     let (temp, record) = fixture("10", 0, "", "10", "echo: [./recipe]\n");
     fs::write(&record, "meta:\n  reasoning: {version: 2, profile: core/v1, requires: [arithmetic/v1]}\nknown:\n  p.a: {v: 10, measure: echo}\njudgments:\n  d.limit:\n    rests_on: [p.a]\n    seen: {p.a: 10}\n    verdict: okay\n    wrong_if: {op: gt, args: [{ref: missing.x}, {num: '20'}]}\n").unwrap();
-    assert_oracle(&record, true);
+    assert_core_oracle(&record, true);
     drop(temp);
+}
+
+#[test]
+#[cfg(unix)]
+#[ignore = "requires explicit Python 1.8 oracle runtime/source and native runtime resources"]
+fn python_18_oracle_matches_active_history_changed_falsifier() {
+    let temp = tempfile::tempdir().unwrap();
+    let target = temp.path().canonicalize().unwrap().join("history");
+    let python = std::env::var("KPOP_SESSION_ORACLE_PYTHON").unwrap();
+    let root = std::env::var("KPOP_SESSION_ORACLE_ROOT").unwrap();
+    let setup = r#"import pathlib, shutil, sys
+sys.path.insert(0, sys.argv[1])
+from tests.test_history_remeasure import HistoryRemeasure
+case = HistoryRemeasure('test_changed_value_is_final_prospective_state_and_trips_falsifier')
+case.setUp()
+case.fixture()
+shutil.copytree(case.root, pathlib.Path(sys.argv[2]))
+"#;
+    let output = Command::new(python)
+        .args(["-c", setup, &root, target.to_str().unwrap()])
+        .output()
+        .unwrap();
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert_core_oracle(&target.join("GROUNDING.yaml"), true);
+}
+
+#[test]
+#[cfg(unix)]
+#[ignore = "requires explicit Python 1.8 oracle runtime/source and native runtime resources"]
+fn python_18_oracle_matches_active_history_named_head() {
+    let temp = tempfile::tempdir().unwrap();
+    let target = temp.path().canonicalize().unwrap().join("history");
+    let python = std::env::var("KPOP_SESSION_ORACLE_PYTHON").unwrap();
+    let root = std::env::var("KPOP_SESSION_ORACLE_ROOT").unwrap();
+    let setup = r#"import datetime, pathlib, shutil, sys
+sys.path.insert(0, sys.argv[1])
+from tests.test_history_remeasure import HistoryRemeasure
+from scripts import history_hypotheses as HH
+case = HistoryRemeasure('test_named_fold_and_measurement_share_final_scope_and_recheck_head')
+case.setUp()
+case.fixture(limit=100)
+day = (datetime.datetime.now(datetime.timezone.utc).date() - datetime.timedelta(days=1)).isoformat()
+proposal = HH.prepare(case.entry, 'candidate', {'kind':'set','id':'p.input','value':15,'as_of':day},
+                      head={'claim':'candidate','wrong_if':{'expr':'p.input > 25'}},
+                      by='writer', operation='candidate-proposal')
+HH.commit(case.entry, proposal, verify=lambda _data: None)
+shutil.copytree(case.root, pathlib.Path(sys.argv[2]))
+"#;
+    let output = Command::new(python)
+        .args(["-c", setup, &root, target.to_str().unwrap()])
+        .output()
+        .unwrap();
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert_core_oracle(&target.join("GROUNDING.yaml"), true);
+}
+
+#[test]
+#[cfg(unix)]
+#[ignore = "requires explicit Python 1.8 oracle runtime/source and native runtime resources"]
+fn python_18_oracle_matches_active_history_unchanged_and_recipe_failure() {
+    use std::os::unix::fs::PermissionsExt;
+    let temp = tempfile::tempdir().unwrap();
+    let target = temp.path().canonicalize().unwrap().join("history");
+    let python = std::env::var("KPOP_SESSION_ORACLE_PYTHON").unwrap();
+    let root = std::env::var("KPOP_SESSION_ORACLE_ROOT").unwrap();
+    let setup = r#"import pathlib, shutil, sys
+sys.path.insert(0, sys.argv[1])
+from tests.test_history_remeasure import HistoryRemeasure
+case = HistoryRemeasure('test_unchanged_and_scalar_values_are_clean_and_use_real_utc_day')
+case.setUp()
+case.fixture(value=10, recipe='10', judgment=False)
+shutil.copytree(case.root, pathlib.Path(sys.argv[2]))
+"#;
+    let output = Command::new(python)
+        .args(["-c", setup, &root, target.to_str().unwrap()])
+        .output()
+        .unwrap();
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let record = target.join("GROUNDING.yaml");
+    assert_core_oracle(&record, true);
+    fs::write(
+        target.join(".kpopper/measure.yaml"),
+        "base_value: [./recipe]\n",
+    )
+    .unwrap();
+    fs::write(
+        target.join("recipe"),
+        "#!/bin/sh\nprintf 'bad recipe' >&2\nexit 7\n",
+    )
+    .unwrap();
+    fs::set_permissions(target.join("recipe"), fs::Permissions::from_mode(0o700)).unwrap();
+    assert_core_oracle(&record, true);
+}
+
+#[test]
+#[cfg(unix)]
+#[ignore = "requires explicit Python 1.8 oracle runtime/source and native runtime resources"]
+fn python_18_oracle_matches_active_history_same_day_refusal() {
+    let temp = tempfile::tempdir().unwrap();
+    let target = temp.path().canonicalize().unwrap().join("history");
+    let python = std::env::var("KPOP_SESSION_ORACLE_PYTHON").unwrap();
+    let root = std::env::var("KPOP_SESSION_ORACLE_ROOT").unwrap();
+    let setup = r#"import datetime, pathlib, shutil, sys
+sys.path.insert(0, sys.argv[1])
+from tests.test_history_remeasure import HistoryRemeasure
+from scripts import history_authoring
+case = HistoryRemeasure('test_same_day_measurement_refuses_instead_of_forcing_acceptance')
+case.setUp()
+case.fixture(limit=100)
+today = datetime.datetime.now(datetime.timezone.utc).date().isoformat()
+mutation = history_authoring.prepare_batch(case.entry, [{'kind':'set','id':'p.input','value':15,'as_of':today}], by='writer', operation='same-day-base')
+history_authoring.commit(case.entry, mutation, verify=lambda _data: None)
+shutil.copytree(case.root, pathlib.Path(sys.argv[2]))
+"#;
+    let output = Command::new(python)
+        .args(["-c", setup, &root, target.to_str().unwrap()])
+        .output()
+        .unwrap();
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert_core_oracle(&target.join("GROUNDING.yaml"), true);
+}
+
+#[test]
+#[cfg(unix)]
+#[ignore = "requires explicit Python 1.8 oracle runtime/source and review cases"]
+fn python_18_oracle_matches_scalar_replacement_and_safe_refresh_cases() {
+    for name in ["flatbody", "helpval", "retyped", "negvalue", "hyponly"] {
+        let (_temp, record) = review_case(name);
+        assert_oracle(&record, true);
+    }
+}
+
+#[test]
+#[cfg(unix)]
+#[ignore = "requires explicit Python 1.8 oracle runtime/source and review cases"]
+fn python_18_oracle_matches_structured_remeasure_decisions() {
+    for name in ["reversal", "twoids", "movedonly", "pagebound"] {
+        let (_temp, record) = review_case(name);
+        assert_oracle(&record, true);
+    }
 }

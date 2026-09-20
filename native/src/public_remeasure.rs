@@ -5,7 +5,9 @@ use crate::{
     history_view::list as hlist,
     history_yaml,
     ordinary_value::{Map, Value as V, map, map_mut, text},
-    public_consolidation::{PreviewHypothesis, PreviewRequest},
+    public_consolidation::{
+        OrdinaryPreviewHypothesis, OrdinaryPreviewRequest, PreviewEvidence, PreviewHypothesis,
+    },
     public_workspace,
     reasoning_runtime::OperationalBounds,
     require,
@@ -24,8 +26,17 @@ static RECIPE_NAME: LazyLock<regex::Regex> =
     LazyLock::new(|| regex::Regex::new(r"^[A-Za-z][A-Za-z0-9_-]*$").unwrap());
 static NUMBER: LazyLock<regex::Regex> =
     LazyLock::new(|| regex::Regex::new(r"^-?\d+(?:\.\d+)?$").unwrap());
+static BARE_TEXT: LazyLock<regex::Regex> =
+    LazyLock::new(|| regex::Regex::new(r"^[A-Za-z_][A-Za-z0-9_.-]*$").unwrap());
 type NamedRecipes = BTreeMap<String, Vec<String>>;
 type RecipeHolders = BTreeMap<String, BTreeMap<String, Vec<Option<String>>>>;
+struct CorePreview {
+    report: String,
+    code: i32,
+    falsified: bool,
+    holes: bool,
+    moved: usize,
+}
 
 #[derive(Clone, Debug, clap::Args)]
 pub struct Options {
@@ -66,8 +77,92 @@ fn recipe_file(record: &Path) -> (PathBuf, &'static str) {
         )
     }
 }
+fn brief_file(record: &Path) -> PathBuf {
+    let parent = record.parent().unwrap_or(Path::new("."));
+    if record
+        .file_name()
+        .is_some_and(|name| name == "GROUNDING.yaml")
+    {
+        parent.join(".kpopper/view.yaml")
+    } else {
+        let stem = record
+            .file_stem()
+            .and_then(|value| value.to_str())
+            .unwrap_or("PROVENANCE");
+        parent.join(format!("{stem}.view.yaml"))
+    }
+}
 fn scalar(v: &V) -> String {
-    v.python_str()
+    match v {
+        V::Text(value)
+            if BARE_TEXT.is_match(value)
+                && !matches!(
+                    value.as_str(),
+                    "null"
+                        | "Null"
+                        | "NULL"
+                        | "true"
+                        | "True"
+                        | "TRUE"
+                        | "false"
+                        | "False"
+                        | "FALSE"
+                        | "yes"
+                        | "Yes"
+                        | "YES"
+                        | "no"
+                        | "No"
+                        | "NO"
+                        | "on"
+                        | "On"
+                        | "ON"
+                        | "off"
+                        | "Off"
+                        | "OFF"
+                ) =>
+        {
+            value.clone()
+        }
+        V::Text(value) => serde_json::to_string(value).unwrap(),
+        _ => v.python_str(),
+    }
+}
+fn refresh_line(
+    id: &str,
+    value: &V,
+    recipe: &str,
+    said: Option<&str>,
+    today: &str,
+    record: &Path,
+    holder: Option<&str>,
+) -> String {
+    let text = value.python_str();
+    let reason = if text.starts_with('-') || text.contains(['\n', '\r']) {
+        Some("a value shaped like an option or spanning lines is not carried by set".into())
+    } else if matches!(value, V::Text(_))
+        && (NUMBER.is_match(&text) || matches!(text.as_str(), "true" | "false" | "null"))
+    {
+        Some(format!(
+            "set would read {} as {}, which is not what was measured",
+            value.python_repr(),
+            text
+        ))
+    } else {
+        None
+    };
+    if let Some(reason) = reason {
+        let shown = format!("'{}'", text.replace('\'', "''"));
+        return format!("edit it by hand in this pull request - {id}: v: {shown} - {reason}");
+    }
+    format!(
+        "refresh: kpop set {id} {} --why {} --as-of {today}{} {}",
+        shell_quote(&text),
+        shell_quote(&measured_by(recipe, said)),
+        holder
+            .map(|name| format!(" --hypothesis {}", shell_quote(name)))
+            .unwrap_or_default(),
+        shell_quote(record.to_str().unwrap_or("GROUNDING.yaml"))
+    )
 }
 fn executable(path: &Path) -> bool {
     if !path.is_file() {
@@ -184,14 +279,39 @@ fn reading_day(body: &Map, raw: &BTreeMap<String, V>) -> Option<(String, String)
     }
     None
 }
+fn hypothesis_holder(id: &str, base: &V, hypotheses: &V) -> Option<String> {
+    if crate::ordinary_fields::collections(base)
+        .ok()?
+        .values()
+        .any(|members| members.contains_key(id))
+    {
+        return None;
+    }
+    map(hypotheses).ok()?.iter().find_map(|(name, hypothesis)| {
+        let hypothesis = map(hypothesis).ok()?;
+        let document = hypothesis
+            .get("doc")
+            .or_else(|| hypothesis.get("document"))?;
+        crate::ordinary_fields::collections(document)
+            .ok()?
+            .values()
+            .any(|members| members.contains_key(id))
+            .then(|| name.clone())
+    })
+}
 fn remeasure_report(report: &str, core: bool) -> Vec<String> {
+    const GENERIC_CONTESTED: &str = "re-read against the merged tree: pull each id to see every reading beside the base's, then set what holds today - in the base with a later day, or in the hypothesis that read it - or refute one, and consolidate again";
+    const GENERIC_LATER: &str = "  read again on a later day - set it in the base or in the hypothesis with --as-of - or refute the hypothesis";
     let mut lines = report
         .lines()
         .filter(|line| {
             !line.starts_with("clean - and nothing here folds:")
-                && (core || !line.starts_with("not clean:"))
-                && !line.starts_with("re-read against the merged tree:")
-                && !line.starts_with("  read again on a later day")
+                && (core
+                    || *line
+                        != "not clean: a falsifier holds - nothing folds until it is read again")
+                && *line != GENERIC_CONTESTED
+                && *line != GENERIC_LATER
+                && !line.starts_with("  consolidate ")
         })
         .map(str::to_owned)
         .collect::<Vec<_>>();
@@ -220,7 +340,7 @@ fn core_preview(
     differing: &BTreeMap<String, (String, V, V, String)>,
     runtime: Option<&crate::reasoning_runtime::Runtime>,
     today: &str,
-) -> Result<(String, i32)> {
+) -> Result<CorePreview> {
     let candidate = typed_layer(current, &tree.document)?;
     let mut selection = hmap(hypotheses)?.keys().cloned().collect::<Vec<_>>();
     selection.push(tree.name.clone());
@@ -373,10 +493,48 @@ fn core_preview(
             if moved.len() == 1 { "it" } else { "them" }
         ));
     }
-    Ok((
-        out.join("\n") + "\n",
-        i32::from(!falsified.is_empty() || !holes.is_empty()),
-    ))
+    Ok(CorePreview {
+        report: out.join("\n") + "\n",
+        code: i32::from(!falsified.is_empty() || !holes.is_empty()),
+        falsified: !falsified.is_empty(),
+        holes: !holes.is_empty(),
+        moved: moved.len(),
+    })
+}
+fn history_head_lines(
+    snapshot: crate::reasoning_snapshot::Snapshot,
+    heads: &[(String, CV)],
+    runtime: Option<&crate::reasoning_runtime::Runtime>,
+) -> Result<(Vec<String>, bool)> {
+    let operation = crate::reasoning_operations::OperationDocument::from_snapshot(snapshot, true)?;
+    let world = crate::reasoning_operations::OperationWorld::new(
+        &operation,
+        runtime,
+        OperationalBounds::default(),
+    )?;
+    let mut lines = Vec::new();
+    let mut bad = false;
+    for (name, head) in heads {
+        let Some(condition) = hmap(head)?.get("wrong_if") else {
+            continue;
+        };
+        let (truth, result) = world.condition(condition)?;
+        if truth == Some(true) {
+            bad = true;
+            lines.push(format!(
+                "  FALSIFIED hypothesis {name}: wrong_if holds on the measured candidate"
+            ));
+        } else if truth.is_none() {
+            bad = true;
+            let status = result
+                .as_ref()
+                .and_then(|value| value.get("status"))
+                .and_then(|value| value.as_str())
+                .unwrap_or("unavailable");
+            lines.push(format!("  HOLE hypothesis {name}: wrong_if {status}"));
+        }
+    }
+    Ok((lines, bad))
 }
 fn allowlist(path: &Path, display_name: &str) -> Result<BTreeMap<String, Vec<String>>> {
     if !path.is_file() {
@@ -640,8 +798,101 @@ pub fn run(options: &Options, cwd: &Path, frozen: bool) -> Result<Output> {
         None,
         runtime.as_ref(),
     )?;
-    let doc = capture.ordinary_document();
-    let (named, current, problems) = measurement_declarations(doc, capture.hypotheses())?;
+    let mut history_candidate = None;
+    let mut history_document = None;
+    let mut history_heads = Vec::new();
+    if let Some(history) = capture.history_capture() {
+        use crate::history_authoring::{Options as AuthoringOptions, s as hs};
+        use crate::history_hypothesis_authoring::{Fold, prepare_fold};
+        use crate::history_paths::Scheme;
+        use crate::history_store::Store;
+        let mut selected = Vec::new();
+        let mut physical = Vec::new();
+        for (name, hypothesis) in map(capture.hypotheses())? {
+            let kind = map(hypothesis)?
+                .get("kind")
+                .and_then(|value| text(value).ok())
+                .unwrap_or("");
+            if kind == crate::history_hypotheses::KIND {
+                selected.push(name.clone());
+                history_heads.push((
+                    name.clone(),
+                    map(hypothesis)?
+                        .get("head")
+                        .unwrap_or(&V::Null)
+                        .finite_projection()?,
+                ));
+            } else if kind != "contribution" {
+                physical.push(name.clone());
+            }
+        }
+        if !physical.is_empty() {
+            return Ok(Output {
+                text: String::new(),
+                stderr: format!(
+                    "incomplete - physical hypotheses have no faithful admitted history path: {}\n",
+                    physical.join(", ")
+                ),
+                code: 1,
+            });
+        }
+        let mut virtual_capture = history.clone();
+        if !selected.is_empty() {
+            let now = chrono::Utc::now();
+            let authoring = AuthoringOptions {
+                operation: format!(
+                    "remeasure-fold-{}",
+                    now.timestamp_nanos_opt().unwrap_or_default()
+                ),
+                recorded_at: now.to_rfc3339(),
+                recording_day: utc_day(),
+                by: hs("remeasure"),
+                strict: true,
+                paths: Scheme::Hashed,
+                receipt_version: Some(8),
+            };
+            let fold = Fold {
+                names: selected,
+                because: "prospective remeasure of selected named history".into(),
+                take: vec![],
+                drops: CV::Map(BTreeMap::new()),
+                assessment_version: 1,
+            };
+            let store = Store::new(&record)?;
+            let mutation = match prepare_fold(&store, history, &fold, &authoring, runtime.as_ref())
+            {
+                Ok(mutation) => mutation,
+                Err(error) => {
+                    return Ok(Output {
+                        text: String::new(),
+                        stderr: format!(
+                            "refused - history remeasure cannot admit the named fold: {error}\n"
+                        ),
+                        code: 1,
+                    });
+                }
+            };
+            virtual_capture = crate::history_prospective::capture_after(history, &mutation)?;
+        }
+        history_document = Some(V::from_typed(&crate::history_authoring::document(
+            &virtual_capture,
+        )?));
+        history_candidate = Some(virtual_capture);
+    }
+    let doc = history_document
+        .as_ref()
+        .unwrap_or_else(|| capture.ordinary_document());
+    let no_hypotheses = V::Map(Map::new());
+    let hypotheses = if history_candidate.is_some() {
+        &no_hypotheses
+    } else {
+        capture.hypotheses()
+    };
+    let (named, current, problems) = measurement_declarations(doc, hypotheses)?;
+    let capabilities = crate::ordinary_fields::capabilities(doc, None)?;
+    let is_core = map(&capabilities)?
+        .get("profile")
+        .is_some_and(|value| value == &V::Text("core/v1".into()));
     if !problems.is_empty() {
         let mut lines = vec!["refused - the record names recipes it cannot: ".into()];
         lines.extend(problems.into_iter().map(|problem| format!("  {problem}")));
@@ -772,6 +1023,11 @@ pub fn run(options: &Options, cwd: &Path, frozen: bool) -> Result<Output> {
             }
         }
     }
+    if (is_core || capture.files().contains_key(&brief_file(&record)))
+        && let Err(error) = capture.verify()
+    {
+        return Ok(output(vec![format!("refused - {}: {error}", error.0)], 1));
+    }
     let by_id = named
         .iter()
         .flat_map(|(recipe, ids)| ids.iter().map(move |id| (id.clone(), recipe.clone())))
@@ -792,11 +1048,16 @@ pub fn run(options: &Options, cwd: &Path, frozen: bool) -> Result<Output> {
                 members.get(&id).map(|body| (section.clone(), body.clone()))
             })
             .unwrap();
-        let fields = map(&body)?;
-        let field = fields
-            .get("v")
-            .or_else(|| fields.get("quoted"))
-            .ok_or_else(|| Error(format!("{id} has no stored reading")))?;
+        let Ok(fields) = map(&body) else {
+            failed += 1;
+            failed_lines.push(format!("  FAIL {name} ({id}): what holds this id now is not an entry with a reading of its own, so there is nothing to measure against"));
+            continue;
+        };
+        let Some(field) = fields.get("v").or_else(|| fields.get("quoted")) else {
+            failed += 1;
+            failed_lines.push(format!("  FAIL {name} ({id}): what holds this id now is not an entry with a reading of its own, so there is nothing to measure against"));
+            continue;
+        };
         match parse_reading(result, field) {
             Ok(measured) if agrees(field, &measured) => agreed.push(format!(
                 "  {id}: {} - as recorded ({name})",
@@ -813,8 +1074,8 @@ pub fn run(options: &Options, cwd: &Path, frozen: bool) -> Result<Output> {
     }
     out.extend(agreed);
     out.extend(failed_lines);
-    let finite_document = doc.finite_projection()?;
-    let is_core = crate::reasoning_operations::selected(&finite_document)?;
+    let mut unchanged_history_findings = None;
+    let mut unchanged_history_heads = (Vec::new(), false);
     if is_core {
         let operation = crate::reasoning_operations::OperationDocument::from_snapshot(
             capture.snapshot()?.clone(),
@@ -826,20 +1087,177 @@ pub fn run(options: &Options, cwd: &Path, frozen: bool) -> Result<Output> {
             OperationalBounds::default(),
         )?;
         let findings = crate::reasoning_operations::findings(world.context())?;
-        let holes = hlist(&hmap(&findings)?["holes"])?;
-        failed += holes.len();
-        for hole in holes {
-            out.push(format!("  FAIL core assessment: {}", htext(hole)?));
+        if history_candidate.is_some() {
+            unchanged_history_findings = Some(findings);
+            let snapshot = if let Some(candidate) = history_candidate.as_ref() {
+                crate::history_adapter::from_store_capture(candidate)?
+                    .snapshot(Default::default())?
+            } else {
+                unreachable!()
+            };
+            unchanged_history_heads =
+                history_head_lines(snapshot, &history_heads, runtime.as_ref())?;
+        } else {
+            let holes = hlist(&hmap(&findings)?["holes"])?;
+            failed += holes.len();
+            for hole in holes {
+                out.push(format!("  FAIL core assessment: {}", htext(hole)?));
+            }
         }
     }
     if differing.is_empty() {
+        if let Some(findings) = unchanged_history_findings {
+            let findings = hmap(&findings)?;
+            for (label, key) in [
+                ("FALSIFIED", "falsified"),
+                ("HOLE", "holes"),
+                ("MOVED", "moved"),
+                ("NOTE", "notes"),
+            ] {
+                for line in hlist(&findings[key])? {
+                    out.push(format!("  {label} {}", htext(line)?));
+                }
+            }
+            out.extend(unchanged_history_heads.0);
+            let red = failed != 0
+                || unchanged_history_heads.1
+                || ["falsified", "holes"]
+                    .iter()
+                    .any(|key| hlist(&findings[*key]).is_ok_and(|items| !items.is_empty()));
+            out.push(String::new());
+            out.push("prospective history candidate only - neither the named fold nor the measured values were committed".into());
+            out.push(String::new());
+            out.push(if red {
+                "not clean: the prospective measured history has a falsifier or incomplete finding"
+                    .into()
+            } else {
+                "the prospective history holds what this tree measures".into()
+            });
+            return Ok(output(out, i32::from(red)));
+        }
         out.push("".into());
         out.push(if failed != 0 {
         format!("not clean: a hole - {failed} recipe{} failed, and a measurement nothing takes is a hole", if failed == 1 { "" } else { "s" })
         } else {
-            "the record holds what this tree measures".into()
+            if history_candidate.is_some() {
+                "the prospective history holds what this tree measures".into()
+            } else {
+                "the record holds what this tree measures".into()
+            }
         });
         return Ok(output(out, i32::from(failed != 0)));
+    }
+    if let Some(history) = history_candidate.as_ref() {
+        use crate::history_authoring::{Options as AuthoringOptions, obj as hobj, s as hs};
+        use crate::history_authoring_batch::{BatchOptions, prepare_batch};
+        use crate::history_paths::Scheme;
+        use crate::history_store::Store;
+        let store = Store::new(&record)?;
+        let actions = differing
+            .iter()
+            .map(|(id, (recipe, _body, measured, _section))| {
+                Ok(hobj([
+                    ("kind", hs("set")),
+                    ("id", hs(id)),
+                    ("value", measured.try_typed()?),
+                    ("as_of", hs(&today)),
+                    ("why", hs(&measured_by(recipe, said.as_deref()))),
+                ]))
+            })
+            .collect::<Result<Vec<_>>>()?;
+        let now = chrono::Utc::now();
+        let operation = format!(
+            "remeasure-values-{}",
+            now.timestamp_nanos_opt().unwrap_or_default()
+        );
+        let options = BatchOptions {
+            authoring: AuthoringOptions {
+                operation,
+                recorded_at: now.to_rfc3339(),
+                recording_day: today.clone(),
+                by: hs("remeasure"),
+                strict: true,
+                paths: Scheme::Hashed,
+                receipt_version: Some(8),
+            },
+            receipt_version: 8,
+            context: hobj([
+                ("kind", hs("prospective_remeasure")),
+                ("observation_date", hs(&today)),
+            ]),
+            evidence: BTreeMap::new(),
+        };
+        let mutation = match prepare_batch(&store, history, &actions, &options, runtime.as_ref()) {
+            Ok(mutation) => mutation,
+            Err(error) => {
+                out.push(String::new());
+                out.push(format!(
+                    "refused - history remeasure cannot admit the measured values: {error}"
+                ));
+                return Ok(output(out, 1));
+            }
+        };
+        let assessment =
+            crate::history_prospective::assess(history, &mutation, None, None, runtime.as_ref())?;
+        let findings = crate::reasoning_operations::findings(&assessment.after)?;
+        let findings = hmap(&findings)?;
+        for (label, key) in [
+            ("FALSIFIED", "falsified"),
+            ("HOLE", "holes"),
+            ("MOVED", "moved"),
+            ("NOTE", "notes"),
+        ] {
+            for line in hlist(&findings[key])? {
+                out.push(format!("  {label} {}", htext(line)?));
+            }
+        }
+        let (head_lines, head_bad) = history_head_lines(
+            assessment.after.snapshot().clone(),
+            &history_heads,
+            runtime.as_ref(),
+        )?;
+        out.extend(head_lines);
+        out.push(String::new());
+        out.push("prospective history candidate only - neither the named fold nor the measured values were committed".into());
+        for (id, (recipe, body, measured, _section)) in &differing {
+            let body = map(body)?;
+            let field = body.get("v").or_else(|| body.get("quoted")).unwrap();
+            let dated = reading_day(body, &raw);
+            out.push(format!(
+                "  {id}: {} recorded{} -> {} {}",
+                scalar(field),
+                dated
+                    .as_ref()
+                    .map(|(day, by)| format!(" ({day}, by {by})"))
+                    .unwrap_or_else(|| " (undated)".into()),
+                scalar(measured),
+                measured_by(recipe, said.as_deref())
+            ));
+            out.push(format!(
+                "    {}",
+                refresh_line(
+                    id,
+                    measured,
+                    recipe,
+                    said.as_deref(),
+                    &today,
+                    &record,
+                    hypothesis_holder(id, doc, capture.hypotheses()).as_deref(),
+                )
+            ));
+        }
+        let red = failed != 0
+            || head_bad
+            || ["falsified", "holes"]
+                .iter()
+                .any(|key| hlist(&findings[*key]).is_ok_and(|items| !items.is_empty()));
+        out.push(String::new());
+        out.push(if red {
+            "not clean: the prospective measured history has a falsifier or incomplete finding".into()
+        } else {
+            format!("the prospective history reads {} entr{} differently, none across a line - refresh them", differing.len(), if differing.len() == 1 { "y" } else { "ies" })
+        });
+        return Ok(output(out, i32::from(red)));
     }
     let mut proposal_document = V::Map(Map::new());
     for (id, (recipe, body, measured, section)) in &differing {
@@ -861,53 +1279,104 @@ pub fn run(options: &Options, cwd: &Path, frozen: bool) -> Result<Output> {
         )?;
         members.insert(id.clone(), V::Map(body));
     }
-    let tree_proposal = PreviewHypothesis {
-        name: format!("tree/{}", commit.as_deref().unwrap_or("here")),
-        document: proposal_document.finite_projection()?,
-        head: CV::Map(BTreeMap::from([
+    let tree_name = format!("tree/{}", commit.as_deref().unwrap_or("here"));
+    let tree_claim = format!(
+        "what the tree{} measures",
+        commit
+            .as_ref()
+            .map(|value| format!(" at {value}"))
+            .unwrap_or_default()
+    );
+    let (preview_report, preview_code, preview_facts, core_falsified, core_holes, core_moved) =
+        if is_core {
+            let tree_proposal = PreviewHypothesis {
+                name: tree_name,
+                document: proposal_document.finite_projection()?,
+                head: CV::Map(BTreeMap::from([
+                    ("claim".into(), CV::Text(tree_claim)),
+                    ("born".into(), CV::Text(today.clone())),
+                    ("folds".into(), CV::Text("never".into())),
+                ])),
+            };
+            let finite_hypotheses = capture.hypotheses().finite_projection()?;
+            core_preview(
+                &capture,
+                &current.finite_projection()?,
+                &finite_hypotheses,
+                &tree_proposal,
+                &differing,
+                runtime.as_ref(),
+                &today,
+            )
+            .map(|preview| {
+                (
+                    preview.report,
+                    preview.code,
+                    None,
+                    preview.falsified,
+                    preview.holes,
+                    preview.moved,
+                )
+            })?
+        } else {
+            let proposals = [OrdinaryPreviewHypothesis {
+                name: tree_name,
+                document: proposal_document,
+                head: V::Map(Map::from([
+                    ("claim".into(), V::Text(tree_claim)),
+                    ("born".into(), V::Text(today.clone())),
+                    ("folds".into(), V::Text("never".into())),
+                ])),
+            }];
+            let request = OrdinaryPreviewRequest {
+                document: doc,
+                hypotheses: map(capture.hypotheses())?,
+                proposals: &proposals,
+                context: None,
+                as_of: Some(&today),
+                runtime: runtime.as_ref(),
+            };
+            let brief_path = brief_file(&record);
+            let brief = capture.files().get(&brief_path);
+            let preview = crate::public_consolidation::preview_ordinary_with_evidence(
+                &request,
+                &PreviewEvidence {
+                    brief: brief.map(Vec::as_slice),
+                },
+            )?;
             (
-                "claim".into(),
-                CV::Text(format!(
-                    "what the tree{} measures",
-                    commit
-                        .as_ref()
-                        .map(|value| format!(" at {value}"))
-                        .unwrap_or_default()
-                )),
-            ),
-            ("born".into(), CV::Text(today.clone())),
-            ("folds".into(), CV::Text("never".into())),
-        ])),
-    };
-    let finite_hypotheses = capture.hypotheses().finite_projection()?;
-    let (preview_report, preview_code) = if is_core {
-        core_preview(
-            &capture,
-            &current.finite_projection()?,
-            &finite_hypotheses,
-            &tree_proposal,
-            &differing,
-            runtime.as_ref(),
-            &today,
-        )?
-    } else {
-        let proposals = [tree_proposal];
-        let preview = crate::public_consolidation::preview(&PreviewRequest {
-            document: &finite_document,
-            hypotheses: hmap(&finite_hypotheses)?,
-            proposals: &proposals,
-            context: None,
-            as_of: Some(&today),
-            runtime: runtime.as_ref(),
-        })?;
-        (preview.report, preview.exit_code)
-    };
+                preview.report,
+                preview.exit_code,
+                Some(preview.facts),
+                false,
+                false,
+                0,
+            )
+        };
+    let changed_ids = differing
+        .keys()
+        .cloned()
+        .collect::<std::collections::BTreeSet<_>>();
+    let page_bound = preview_facts
+        .as_ref()
+        .map(|facts| facts.page_bound(&changed_ids))
+        .unwrap_or_default();
+    let mut report_lines = remeasure_report(&preview_report, is_core);
+    if !page_bound.is_empty() {
+        report_lines.retain(|line| !line.starts_with("moved:"));
+        while report_lines.last().is_some_and(String::is_empty) {
+            report_lines.pop();
+        }
+    }
     out.push("".into());
-    out.extend(remeasure_report(&preview_report, is_core));
+    out.extend(report_lines);
     out.push("".into());
-    let contested = preview_report
-        .lines()
-        .any(|line| line.starts_with("contested (") && line != "contested (0)");
+    if !page_bound.is_empty() {
+        for item in &page_bound {
+            out.push(format!("  FAIL {}: wrong_if reads {} beside {}, which the tree measured differently - the page decides it, and the page does not see the tree", item.id, item.pages.join(", "), item.readings.join(", ")));
+        }
+        out.push(String::new());
+    }
     for (id, (recipe, body, measured, _section)) in &differing {
         let body = map(body)?;
         let field = body.get("v").or_else(|| body.get("quoted")).unwrap();
@@ -922,44 +1391,54 @@ pub fn run(options: &Options, cwd: &Path, frozen: bool) -> Result<Output> {
             scalar(measured),
             measured_by(recipe, said.as_deref())
         ));
-        if contested {
+        let refused = preview_facts.as_ref().is_some_and(|facts| {
+            facts.contested.contains_key(id) || facts.refused.contains_key(id)
+        });
+        if refused {
             out.push("    correct the recorded claim in this pull request, or run the measurement again on a later day; do not future-date this result".into());
         } else {
             out.push(format!(
-                "    refresh: kpop set {id} {} --why {} --as-of {today} {}",
-                shell_quote(&scalar(measured)),
-                shell_quote(&measured_by(recipe, said.as_deref())),
-                shell_quote(record.to_str().unwrap_or("GROUNDING.yaml"))
+                "    {}",
+                refresh_line(
+                    id,
+                    measured,
+                    recipe,
+                    said.as_deref(),
+                    &today,
+                    &record,
+                    hypothesis_holder(id, doc, capture.hypotheses()).as_deref(),
+                )
             ));
         }
     }
     out.push("".into());
-    let code = if preview_code != 0 || failed != 0 {
-        1
+    let facts_red = preview_facts.as_ref().is_some_and(|facts| facts.red);
+    let code = if preview_facts.is_some() {
+        i32::from(facts_red || failed != 0 || !page_bound.is_empty())
     } else {
-        0
+        i32::from(preview_code != 0 || failed != 0)
     };
+    let moved = preview_facts
+        .as_ref()
+        .map(|facts| facts.moved.len())
+        .unwrap_or(core_moved);
     out.push(if code != 0 {
+        let facts = preview_facts.as_ref();
         let mut causes = Vec::new();
-        if contested {
-            causes.push("a reading the tree contests");
-        }
-        if preview_report.contains("  FALSIFIED ") {
-            causes.push("a falsifier that holds on what the tree measures");
-        }
-        if failed != 0 || preview_report.contains("  HOLE ") {
-            causes.push("a hole");
-        }
-        format!(
-            "not clean: {} - red until the record and the tree agree",
-            causes.join(", ")
-        )
+        if facts.is_some_and(|facts| !facts.contested.is_empty() || !facts.refused.is_empty()) { causes.push("a reading the tree contests"); }
+        if facts.is_some_and(|facts| !facts.falsified.is_empty() || !facts.head_falsified.is_empty())
+            || core_falsified
+        { causes.push("a falsifier that holds on what the tree measures"); }
+        if failed != 0 || facts.is_some_and(|facts| !facts.holes.is_empty()) || core_holes
+        { causes.push("a hole"); }
+        if !page_bound.is_empty() { causes.push("a sign the page decides"); }
+        if facts.is_some_and(|facts| !facts.untaken.is_empty()) { causes.push("a reversal a person has not taken by name"); }
+        if facts.is_some_and(|facts| !facts.drops_needed.is_empty()) { causes.push("a dropped dependency to name at the fold"); }
+        format!("not clean: {} - red until the record and the tree agree", causes.join(", "))
+    } else if preview_facts.is_some() && moved != 0 {
+        format!("the tree moved {} reading{} under {moved} judgment{} - refresh, then re-review; a move flags and fails nothing", differing.len(), if differing.len() == 1 { "" } else { "s" }, if moved == 1 { "" } else { "s" })
     } else {
-        format!(
-            "the tree reads {} entr{} differently, none across a line - refresh them",
-            differing.len(),
-            if differing.len() == 1 { "y" } else { "ies" }
-        )
+        format!("the tree reads {} entr{} differently, none across a line - refresh them", differing.len(), if differing.len() == 1 { "y" } else { "ies" })
     });
     Ok(output(out, code))
 }
