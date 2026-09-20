@@ -2331,8 +2331,8 @@ impl Projection<'_> {
         let mut moved = vec![];
 
         // Keep manual edits under the same structured-expression admission rules as
-        // tool-authored writes.  Check validates shape and graph reach only; it does
-        // not evaluate an optional page or create a second expression runtime.
+        // tool-authored writes. Computed entries use the same ordinary evaluator
+        // as value reads; optional page evaluation remains separate.
         let predicate_field = text(&self.base.reader.fields["predicate"]).ok();
         let dependency_field = text(&self.base.reader.fields["deps"])?;
         for (id, body) in self
@@ -2345,6 +2345,7 @@ impl Projection<'_> {
             let Ok(fields) = map(body) else {
                 continue;
             };
+            let problems_before = fail.len();
             let mut expressions = vec![("rule", false)];
             if let Some(field) = predicate_field {
                 expressions.push((field, true));
@@ -2390,6 +2391,26 @@ impl Projection<'_> {
                     fail.push(format!(
                         "{id}: a structured rule cannot also store v or quoted"
                     ));
+                }
+            }
+            if fail.len() == problems_before && matches!(fields.get("rule"), Some(V::Map(_))) {
+                let result = R::compute(
+                    &self.base.reader.raw,
+                    &self.base.reader.ids,
+                    None,
+                    self.base.reader.program(),
+                );
+                if result["values"][id]["value"].is_null() {
+                    let reason = result["values"][id]["reason"]
+                        .as_str()
+                        .or_else(|| result["error"].as_str())
+                        .unwrap_or("unavailable");
+                    let finding = format!("{id}: rule cannot be computed: {reason}");
+                    if blocked_text(body).is_empty() {
+                        fail.push(finding);
+                    } else {
+                        note.push(finding);
+                    }
                 }
             }
         }

@@ -141,5 +141,47 @@ pub fn run(options: &Options, cwd: &Path, mode: ReadMode) -> Result<String> {
     let runtime =
         crate::public_workspace::runtime_for_paths(&paths, cwd, options.profile.as_deref())?;
     let report = report_value(options, cwd, mode, runtime.as_ref())?;
-    report.python_json(false)
+    if string_is(&map(&report)?["assessment_profile"], A::PROFILE) {
+        report.python_pretty_json()
+    } else {
+        report.python_json(false)
+    }
+}
+
+#[cfg(test)]
+mod ordinary_stdout_tests {
+    use super::*;
+    #[test]
+    fn complete_nonfinite_assessment_stdout_matches_python() {
+        let fixture: serde_json::Value = serde_json::from_str(include_str!(
+            "../tests/fixtures/ordinary-nonfinite-cli.json"
+        ))
+        .unwrap();
+        let cache = tempfile::tempdir().unwrap();
+        let runtime = crate::history_authoring::tests::runtime(cache.path())
+            .with_ordinary_program(crate::ordinary_reader::tests::program());
+        for case in fixture["cases"].as_array().unwrap() {
+            let temp = tempfile::tempdir().unwrap();
+            let root = temp.path().canonicalize().unwrap();
+            let entry = root.join("GROUNDING.yaml");
+            let source = case["source"].as_str().unwrap();
+            std::fs::write(&entry, source).unwrap();
+            let options = Options {
+                ids: vec!["p.value".into()],
+                records: vec![entry.clone()],
+                policy: A::POLICY.into(),
+                profile: None,
+                as_of: None,
+                history: false,
+                attention_only: false,
+            };
+            let output = report_value(&options, &root, ReadMode::Frozen, Some(&runtime))
+                .unwrap()
+                .python_pretty_json()
+                .unwrap()
+                + "\n";
+            assert_eq!(output, case["stdout"].as_str().unwrap(), "{}", case["name"]);
+            assert_eq!(std::fs::read_to_string(&entry).unwrap(), source);
+        }
+    }
 }

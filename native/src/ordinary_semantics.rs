@@ -186,10 +186,10 @@ pub fn compute(
             program.ok_or_else(|| Error("ordinary expression program is not configured".into()))?;
         let mut nodes = crate::ordinary_value::compute_record(raw, ids)?.value;
         for node in nodes["nodes"].as_object_mut().unwrap().values_mut() {
-            if let Some(rule) = node["body"].get_mut("rule").filter(|r| r.is_object()) {
-                if let Ok(tree) = L::legacy_expression(&V::from_json(rule)?, false) {
-                    *rule = tree.json_value()?;
-                }
+            if let Some(rule) = node["body"].get_mut("rule").filter(|r| r.is_object())
+                && let Ok(tree) = L::legacy_expression(&V::from_json(rule)?, false)
+            {
+                *rule = tree.json_value()?;
             }
         }
         let pred = predicate.map(|p| L::legacy_expression(p, true).unwrap_or_else(|_| p.clone()));
@@ -253,7 +253,7 @@ pub fn evaluate(
     let rhs = c[3].trim();
     let op = &c[2];
     if [&c[1], rhs].iter().any(|k| {
-        raw.get(*k)
+        raw.get(k)
             .and_then(|v| map(v).ok())
             .is_some_and(|m| matches!(m.get("rule"), Some(V::Map(_))))
     }) {
@@ -478,10 +478,10 @@ pub(crate) fn layer(base: &V, groups: &V, names: &[String]) -> Result<V> {
         for (collection, members) in F::collections(field(group, "doc")?)? {
             for id in members.keys() {
                 for (other, values) in crate::ordinary_value::map_mut(&mut doc)?.iter_mut() {
-                    if other != &collection {
-                        if let V::Map(values) = values {
-                            values.remove(id);
-                        }
+                    if other != &collection
+                        && let V::Map(values) = values
+                    {
+                        values.remove(id);
                     }
                 }
             }

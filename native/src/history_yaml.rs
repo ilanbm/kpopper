@@ -360,7 +360,11 @@ pub(crate) fn ordinary_atom(
     } else {
         parse(body)?
     };
-    Ok(crate::ordinary_value::Scalar::from_float(sign * number))
+    Ok(if number.is_nan() && body != ".nan" {
+        crate::ordinary_value::Scalar::NonFinite(crate::ordinary_value::NonFiniteFloat::fresh_nan())
+    } else {
+        crate::ordinary_value::Scalar::from_float(sign * number)
+    })
 }
 pub(crate) fn ordinary_atom_key(
     value: crate::ordinary_value::Scalar,
@@ -427,9 +431,7 @@ impl<'a> Reader<'a> {
                     match ordinary_atom(&value, style, tag.as_deref()) {
                         Ok(crate::ordinary_value::Scalar::NonFinite(v)) => Ok(Node::NonFinite(
                             v,
-                            if v == crate::ordinary_value::NonFiniteFloat::NaN
-                                && value.replace('_', "").to_ascii_lowercase() == ".nan"
-                            {
+                            if v == crate::ordinary_value::NonFiniteFloat::NaN {
                                 None
                             } else {
                                 Some(self.nodes)

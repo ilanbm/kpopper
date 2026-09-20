@@ -26,7 +26,10 @@ pub(crate) struct Document {
     pub overlay: Option<crate::source_overlay::Overlay<V>>,
 }
 fn parse(inventory: &mut Inventory, path: &Path) -> Result<S> {
-    let value = Y::decode_full_ordinary_source_value(&inventory.read(path)?)?;
+    parse_bytes(&inventory.read(path)?)
+}
+fn parse_bytes(raw: &[u8]) -> Result<S> {
+    let value = Y::decode_full_ordinary_source_value(raw)?;
     Ok(if truth(&value.projected()) {
         value
     } else {
@@ -202,8 +205,9 @@ fn physical(directory: &Path, inventory: &mut Inventory) -> Result<V> {
         )?;
         let mut head = V::Map(Map::new());
         let mut doc = V::Map(Map::new());
+        let raw = inventory.read(&path)?;
         let err = (|| -> Result<()> {
-            let source = parse(inventory, &path)?;
+            let source = parse_bytes(&raw)?;
             validate_structure(&source)?;
             let value = source.projected();
             let mut body = map(&value)
@@ -234,8 +238,11 @@ fn physical(directory: &Path, inventory: &mut Inventory) -> Result<V> {
                 ("doc".into(), doc),
                 (
                     "error".into(),
-                    err.map(|e| V::Text(e.0.chars().take(120).collect()))
-                        .unwrap_or(V::Null),
+                    err.and_then(|e| {
+                        crate::ordinary_yaml_diagnostic::hypothesis_error(&raw, Some(&e))
+                            .map(V::Text)
+                    })
+                    .unwrap_or(V::Null),
                 ),
             ])),
         );

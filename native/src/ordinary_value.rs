@@ -11,34 +11,47 @@ use std::collections::{BTreeMap, BTreeSet};
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum NonFiniteFloat {
     NaN,
+    /// A Python float constructor creates a distinct NaN; aliases retain this identity.
+    ConstructedNaN(u64),
     PositiveInfinity,
     NegativeInfinity,
 }
 impl NonFiniteFloat {
+    pub(crate) fn fresh_nan() -> Self {
+        static NEXT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(1);
+        Self::ConstructedNaN(NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed))
+    }
+    pub(crate) fn constructor(self) -> Option<u64> {
+        if let Self::ConstructedNaN(id) = self {
+            Some(id)
+        } else {
+            None
+        }
+    }
     pub fn get(self) -> f64 {
         match self {
-            Self::NaN => f64::NAN,
+            Self::NaN | Self::ConstructedNaN(_) => f64::NAN,
             Self::PositiveInfinity => f64::INFINITY,
             Self::NegativeInfinity => f64::NEG_INFINITY,
         }
     }
     pub fn python_str(self) -> &'static str {
         match self {
-            Self::NaN => "nan",
+            Self::NaN | Self::ConstructedNaN(_) => "nan",
             Self::PositiveInfinity => "inf",
             Self::NegativeInfinity => "-inf",
         }
     }
     pub fn python_json(self) -> &'static str {
         match self {
-            Self::NaN => "NaN",
+            Self::NaN | Self::ConstructedNaN(_) => "NaN",
             Self::PositiveInfinity => "Infinity",
             Self::NegativeInfinity => "-Infinity",
         }
     }
     pub fn yaml(self) -> &'static str {
         match self {
-            Self::NaN => ".nan",
+            Self::NaN | Self::ConstructedNaN(_) => ".nan",
             Self::PositiveInfinity => ".inf",
             Self::NegativeInfinity => "-.inf",
         }
@@ -111,14 +124,13 @@ impl Map {
         self.entries.is_empty()
     }
     fn index_for_text(&self, key: &str) -> Option<usize> {
-        if let Some(i) = self.index.get(key).copied() {
-            if self
+        if let Some(i) = self.index.get(key).copied()
+            && self
                 .source_keys
                 .get(key)
                 .is_none_or(|s| matches!(s,Scalar::Finite(TypedValue::Text(t))if t==key))
-            {
-                return Some(i);
-            }
+        {
+            return Some(i);
         }
         self.entries.iter().position(|(index, _)| {
             self.source_keys
@@ -441,6 +453,48 @@ impl Value {
     }
     /// Python's JSON extension is intentionally output-only. A generic strict
     /// JSON parser must not begin accepting these tokens as canonical values.
+    /// Public Python json.dumps(indent=2, ensure_ascii=False) packet rendering.
+    /// Keep insertion order and repeated rendered keys; this is not a revision digest.
+    pub fn python_pretty_json(&self) -> Result<String> {
+        fn write(value: &Value, out: &mut String, depth: usize) -> Result<()> {
+            require(depth <= 400, "assessment nesting limit")?;
+            match value {
+                Value::List(values) if !values.is_empty() => {
+                    out.push_str("[\n");
+                    for (i, item) in values.iter().enumerate() {
+                        if i > 0 {
+                            out.push_str(",\n");
+                        }
+                        out.push_str(&"  ".repeat(depth + 1));
+                        write(item, out, depth + 1)?;
+                    }
+                    out.push('\n');
+                    out.push_str(&"  ".repeat(depth));
+                    out.push(']');
+                }
+                Value::Map(values) if !values.is_empty() => {
+                    out.push_str("{\n");
+                    for (i, (key, item)) in values.iter().enumerate() {
+                        if i > 0 {
+                            out.push_str(",\n");
+                        }
+                        out.push_str(&"  ".repeat(depth + 1));
+                        out.push_str(&serde_json::to_string(&json_key(&values.source_key(key))?)?);
+                        out.push_str(": ");
+                        write(item, out, depth + 1)?;
+                    }
+                    out.push('\n');
+                    out.push_str(&"  ".repeat(depth));
+                    out.push('}');
+                }
+                _ => out.push_str(&value.python_json(false)?),
+            }
+            require(out.len() <= 512 * 1024 * 1024, "assessment byte limit")
+        }
+        let mut output = String::new();
+        write(self, &mut output, 0)?;
+        Ok(output)
+    }
     pub fn python_json(&self, spaces: bool) -> Result<String> {
         fn category(key: &Scalar) -> u8 {
             match key {
@@ -497,8 +551,10 @@ impl Value {
                 (Scalar::Finite(TypedValue::Text(a)), Scalar::Finite(TypedValue::Text(b))) => {
                     a.cmp(b)
                 }
-                (Scalar::NonFinite(NonFiniteFloat::NaN), _)
-                | (_, Scalar::NonFinite(NonFiniteFloat::NaN)) => Equal,
+                (Scalar::NonFinite(NonFiniteFloat::NaN | NonFiniteFloat::ConstructedNaN(_)), _)
+                | (_, Scalar::NonFinite(NonFiniteFloat::NaN | NonFiniteFloat::ConstructedNaN(_))) => {
+                    Equal
+                }
                 (Scalar::NonFinite(a), Scalar::NonFinite(b)) => {
                     a.get().partial_cmp(&b.get()).unwrap_or(Equal)
                 }
@@ -858,7 +914,7 @@ pub fn python_equal(a: &Value, b: &Value) -> bool {
         return crate::source_clock::python_equal(&a, &b);
     }
     match (a, b) {
-        (Value::NonFinite(NonFiniteFloat::NaN), Value::NonFinite(NonFiniteFloat::NaN)) => false,
+        (Value::NonFinite(a), Value::NonFinite(b)) if a.get().is_nan() || b.get().is_nan() => false,
         (Value::NonFinite(a), Value::NonFinite(b)) => a == b,
         (Value::List(a), Value::List(b)) => {
             a.len() == b.len() && a.iter().zip(b).all(|(a, b)| a == b || python_equal(a, b))
@@ -866,7 +922,7 @@ pub fn python_equal(a: &Value, b: &Value) -> bool {
         (Value::Map(a), Value::Map(b)) => {
             a.len() == b.len()
                 && a.iter()
-                    .all(|(k, a)| b.get(k).is_some_and(|b| a == b || python_equal(a, b)))
+                    .all(|(k, a)| b.by_index(k).is_some_and(|b| a == b || python_equal(a, b)))
         }
         _ => false,
     }

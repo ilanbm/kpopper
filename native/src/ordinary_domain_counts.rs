@@ -232,7 +232,7 @@ pub(crate) fn builtins(reader: &Reader<'_>) -> Result<Map> {
     let doc = map(&reader.document)?;
     let open = ["open", "questions"]
         .iter()
-        .filter_map(|k| doc.get(*k))
+        .filter_map(|k| doc.get(k))
         .filter_map(|v| map(v).ok())
         .flat_map(|m| m.keys())
         .collect::<BTreeSet<_>>();

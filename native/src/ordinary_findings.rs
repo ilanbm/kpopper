@@ -78,7 +78,7 @@ fn computation_error(reader: &Reader<'_>, pred: &V) -> String {
         if ![&c[1], c[3].trim()].iter().any(|key| {
             reader
                 .raw
-                .get(*key)
+                .get(key)
                 .and_then(|b| map(b).ok())
                 .is_some_and(|b| matches!(b.get("rule"), Some(V::Map(_))))
         }) {
@@ -229,7 +229,7 @@ pub fn judgment_state(reader: &Reader<'_>, body: &V) -> Result<V> {
         let old = get(seen, dep);
         let prior = if invalid_snapshot {
             unavailable("invalid_snapshot")
-        } else if seen.contains_key(*dep) {
+        } else if seen.contains_key(dep) {
             recorded(old.clone())
         } else {
             side("missing")
@@ -335,7 +335,7 @@ pub fn judgment_state(reader: &Reader<'_>, body: &V) -> Result<V> {
         if !reader.ids.contains(*dep) {
             issues.push(issue("missing_dependency", &fields["deps"], Some(dep)))
         }
-        if !invalid_snapshot && !seen.contains_key(*dep) {
+        if !invalid_snapshot && !seen.contains_key(dep) {
             issues.push(issue("missing_snapshot", &fields["snapshot"], Some(dep)))
         }
         readings.insert((*dep).into(), reading);

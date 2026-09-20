@@ -2,15 +2,14 @@
 //! nonfinite source values into the canonical expression language.
 use crate::{Result, ordinary_value::Value, value::TypedValue};
 fn syntax(value: &Value) -> Result<TypedValue> {
-    if let Value::Map(m) = value {
-        if m.len() == 1
-            && let Some(Value::Text(expr)) = m.get("expr")
-        {
-            return Ok(TypedValue::Map(std::collections::BTreeMap::from([(
-                "expr".into(),
-                TypedValue::Text(expr.clone()),
-            )])));
-        }
+    if let Value::Map(m) = value
+        && m.len() == 1
+        && let Some(Value::Text(expr)) = m.get("expr")
+    {
+        return Ok(TypedValue::Map(std::collections::BTreeMap::from([(
+            "expr".into(),
+            TypedValue::Text(expr.clone()),
+        )])));
     }
     value.try_typed()
 }

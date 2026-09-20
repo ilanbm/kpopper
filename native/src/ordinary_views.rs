@@ -226,7 +226,7 @@ impl<'a> World<'a> {
             } else {
                 ["rule", "v"]
                     .iter()
-                    .filter_map(|f| b.get(*f))
+                    .filter_map(|f| b.get(f))
                     .filter(|v| matches!(v,V::Text(t) if R::EXPR.is_match(t)))
                     .flat_map(R::predicate_refs)
                     .filter(|id| self.reader.ids.contains(id))
@@ -680,7 +680,7 @@ impl World<'_> {
         let seen = field(body, snapshot);
         let unchecked = deps
             .iter()
-            .filter(|d| !snapshot.is_empty() && !map(seen).is_ok_and(|m| m.contains_key(*d)))
+            .filter(|d| !snapshot.is_empty() && !map(seen).is_ok_and(|m| m.contains_key(d)))
             .cloned()
             .collect::<Vec<_>>();
         let empty = Map::new();
@@ -688,7 +688,7 @@ impl World<'_> {
         let formula_only = seen
             .iter()
             .filter(|(id, old)| {
-                world.reader.raw().get(*id).is_some_and(|b| {
+                world.reader.raw().get(id).is_some_and(|b| {
                     let rule = field(b, "rule");
                     crate::ordinary_domain_counts::legacy_rule(old, rule)
                         .is_some_and(|old| crate::ordinary_domain_counts::same_rule(&old, rule))
@@ -1046,7 +1046,7 @@ impl World<'_> {
             map(get(b, text(&self.reader.fields["snapshot"]).unwrap_or(""))).unwrap_or(&empty);
         let stale = deps
             .iter()
-            .filter(|d| !seen.contains_key(*d))
+            .filter(|d| !seen.contains_key(d))
             .cloned()
             .collect::<Vec<_>>();
         let state = if !missing.is_empty() {
@@ -1330,7 +1330,7 @@ impl Projection<'_> {
             .count();
         let mut prefixes = BTreeMap::new();
         for id in self.base.reader.ids.iter().filter(|id| {
-            !F::BUILTINS.contains(&id.as_str()) && !self.base.judgments.contains_key(*id)
+            !F::BUILTINS.contains(&id.as_str()) && !self.base.judgments.contains_key(id)
         }) {
             let prefix = id.split_once('.').map_or(id.as_str(), |(head, _)| head);
             *prefixes.entry(prefix.to_owned()).or_insert(0) += 1;
@@ -1625,8 +1625,8 @@ impl Projection<'_> {
         let mut moved = vec![];
 
         // Keep manual edits under the same structured-expression admission rules as
-        // tool-authored writes.  Check validates shape and graph reach only; it does
-        // not evaluate an optional page or create a second expression runtime.
+        // tool-authored writes. Computed entries use the same ordinary evaluator
+        // as value reads; optional page evaluation remains separate.
         let predicate_field = text(&self.base.reader.fields["predicate"]).ok();
         let dependency_field = text(&self.base.reader.fields["deps"])?;
         for (id, body) in self
@@ -1639,6 +1639,7 @@ impl Projection<'_> {
             let Ok(fields) = map(body) else {
                 continue;
             };
+            let problems_before = fail.len();
             let mut expressions = vec![("rule", false)];
             if let Some(field) = predicate_field {
                 expressions.push((field, true));
@@ -1686,6 +1687,26 @@ impl Projection<'_> {
                     ));
                 }
             }
+            if fail.len() == problems_before && matches!(fields.get("rule"), Some(V::Map(_))) {
+                let result = R::compute(
+                    &self.base.reader.raw,
+                    &self.base.reader.ids,
+                    None,
+                    self.base.reader.program(),
+                );
+                if result["values"][id]["value"].is_null() {
+                    let reason = result["values"][id]["reason"]
+                        .as_str()
+                        .or_else(|| result["error"].as_str())
+                        .unwrap_or("unavailable");
+                    let finding = format!("{id}: rule cannot be computed: {reason}");
+                    if blocked_text(body).is_empty() {
+                        fail.push(finding);
+                    } else {
+                        note.push(finding);
+                    }
+                }
+            }
         }
 
         for (id, body) in &self.base.judgments {
@@ -1722,7 +1743,7 @@ impl Projection<'_> {
                 .unwrap_or(&empty);
                 for dep in dependencies
                     .iter()
-                    .filter(|dep| self.base.reader.ids.contains(*dep) && !seen.contains_key(*dep))
+                    .filter(|dep| self.base.reader.ids.contains(*dep) && !seen.contains_key(dep))
                 {
                     fail.push(format!(
                         "{id}: no snapshot for {dep} - never checked against it"
@@ -2049,5 +2070,36 @@ impl Projection<'_> {
         }
         lines.push("\naffects <entry> shows what a change reaches".into());
         Ok(lines.join("\n") + "\n")
+    }
+}
+
+#[cfg(test)]
+mod nonfinite_check_tests {
+    use super::*;
+    #[test]
+    fn unavailable_rule_is_reported_without_rewriting_its_source() {
+        let cache = tempfile::tempdir().unwrap();
+        let runtime = crate::history_authoring::tests::runtime(cache.path())
+            .with_ordinary_program(crate::ordinary_reader::tests::program());
+        for scalar in [".nan", ".inf", "-.inf"] {
+            let source = format!(
+                "known:\n  p.value: {{v: {scalar}}}\n  p.result: {{rule: {{expr: 'p.value + 1'}}}}\n"
+            );
+            let document =
+                crate::history_yaml::decode_full_ordinary_source_value(source.as_bytes())
+                    .unwrap()
+                    .projected();
+            let projection =
+                Projection::new(&document, &Map::new(), &Map::new(), vec![], Some(&runtime))
+                    .unwrap();
+            let result = projection.check(None).unwrap();
+            assert_eq!(result, ("FAIL p.result: rule cannot be computed: unavailable\n\n0 judgments, 2 entries, 1 problems\n".into(), 1));
+            assert_eq!(
+                document,
+                crate::history_yaml::decode_full_ordinary_source_value(source.as_bytes())
+                    .unwrap()
+                    .projected()
+            );
+        }
     }
 }

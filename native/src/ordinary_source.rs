@@ -20,6 +20,11 @@ impl Key {
         if let Scalar::Finite(v) = &scalar {
             Y::ordinary_key(v.clone())?;
         }
+        let constructor = if matches!(scalar, Scalar::NonFinite(NonFiniteFloat::NaN)) {
+            None
+        } else {
+            constructor
+        };
         Ok(Self {
             scalar,
             constructor,
@@ -58,7 +63,7 @@ impl Key {
             Scalar::NonFinite(v) => format!(
                 "\0kpopper:ordinary-key:k:nonfinite:{}:{:020}",
                 v.python_str(),
-                self.constructor.unwrap_or(usize::MAX)
+                v.constructor().unwrap_or(u64::MAX)
             ),
         }
     }
@@ -149,7 +154,7 @@ impl Source {
     /// never the scalar kind, duplicate-key multiplicity or authored value.
     pub fn same_content(&self, other: &Self) -> bool {
         match (self, other) {
-            (Self::Scalar(a), Self::Scalar(b)) => a == b,
+            (Self::Scalar(a), Self::Scalar(b)) => scalar_content(a, b),
             (Self::List(a), Self::List(b)) => {
                 a.len() == b.len() && a.iter().zip(b).all(|(a, b)| a.same_content(b))
             }
@@ -160,7 +165,7 @@ impl Source {
                 let mut used = vec![false; b.len()];
                 for (k, v) in a {
                     let Some(i) = b.iter().enumerate().position(|(i, (l, w))| {
-                        !used[i] && k.scalar == l.scalar && v.same_content(w)
+                        !used[i] && scalar_content(&k.scalar, &l.scalar) && v.same_content(w)
                     }) else {
                         return false;
                     };
@@ -170,6 +175,14 @@ impl Source {
             }
             _ => false,
         }
+    }
+}
+fn scalar_content(a: &Scalar, b: &Scalar) -> bool {
+    match (a, b) {
+        (Scalar::NonFinite(a), Scalar::NonFinite(b)) if a.get().is_nan() && b.get().is_nan() => {
+            true
+        }
+        _ => a == b,
     }
 }
 pub fn update(map: &mut Vec<(Key, Source)>, key: Key, value: Source) {
@@ -259,5 +272,50 @@ mod tests {
         )
         .unwrap();
         assert!(source.same_content(&replay));
+    }
+}
+
+#[cfg(test)]
+mod constructor_equality_tests {
+    use super::*;
+    #[test]
+    fn nan_container_equality_preserves_constructor_and_alias_identity() {
+        for (source, expected) in [
+            ("a: [.nan]\nb: [.nan]\n", true),
+            ("a: [!!float nan]\nb: [!!float nan]\n", false),
+            ("a: [&v !!float nan]\nb: [*v]\n", true),
+            ("a: {.nan: x}\nb: {.nan: x}\n", true),
+            ("a: {&k !!float nan: x}\nb: {*k: x}\n", true),
+            ("a: {!!float nan: x}\nb: {!!float nan: x}\n", false),
+        ] {
+            let doc = Y::decode_full_ordinary_source_value(source.as_bytes())
+                .unwrap()
+                .projected();
+            let values = crate::ordinary_value::map(&doc).unwrap();
+            assert_eq!(
+                crate::ordinary_value::python_equal(&values["a"], &values["b"]),
+                expected,
+                "{source}"
+            );
+        }
+        for (source, expected) in [
+            ("v: [!!float nan]\n", false),
+            ("v: [.nan]\n", true),
+            ("v: {.inf: x}\n", true),
+        ] {
+            let first = Y::decode_full_ordinary_source_value(source.as_bytes()).unwrap();
+            let second = Y::decode_full_ordinary_source_value(source.as_bytes()).unwrap();
+            assert!(first.same_content(&second));
+            let first = first.projected();
+            let second = second.projected();
+            assert_eq!(
+                crate::ordinary_value::python_equal(
+                    &crate::ordinary_value::map(&first).unwrap()["v"],
+                    &crate::ordinary_value::map(&second).unwrap()["v"]
+                ),
+                expected,
+                "{source}"
+            );
+        }
     }
 }

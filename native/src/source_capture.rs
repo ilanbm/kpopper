@@ -936,7 +936,7 @@ mod nonfinite_target_tests {
             let hypothesis = dir.join("other.yaml");
             std::fs::write(&hypothesis, "known: {p.value: {v: .inf}}\n").unwrap();
             let error = match capture_ordinary_with(
-                &[entry.clone()],
+                std::slice::from_ref(&entry),
                 &root,
                 ReadMode::Frozen,
                 None,
@@ -959,6 +959,40 @@ mod nonfinite_target_tests {
                 Err(error) => error,
             };
             assert_eq!(error.0, "snapshot_changed");
+        }
+    }
+}
+
+#[cfg(test)]
+mod malformed_ordinary_hypothesis_tests {
+    use super::*;
+    #[test]
+    fn captured_hypothesis_diagnostics_match_python_without_new_reads() {
+        let fixture: serde_json::Value = serde_json::from_str(include_str!(
+            "../tests/fixtures/ordinary-yaml-diagnostics.json"
+        ))
+        .unwrap();
+        for case in fixture["cases"].as_array().unwrap() {
+            let temp = tempfile::tempdir().unwrap();
+            let root = temp.path().canonicalize().unwrap();
+            let entry = root.join("GROUNDING.yaml");
+            std::fs::write(&entry, "known: {p.value: {v: .nan}}\n").unwrap();
+            let directory = root.join(".kpopper/hypotheses");
+            std::fs::create_dir_all(&directory).unwrap();
+            let hypothesis = directory.join("broken.yaml");
+            let raw = case["source"].as_str().unwrap();
+            std::fs::write(&hypothesis, raw).unwrap();
+            let capture = capture_ordinary_source(&[entry], &root, ReadMode::Frozen, None).unwrap();
+            let hypotheses = crate::ordinary_value::map(capture.hypotheses()).unwrap();
+            let error = &crate::ordinary_value::map(&hypotheses["broken"]).unwrap()["error"];
+            assert_eq!(
+                error,
+                &crate::ordinary_value::Value::Text(case["expected"].as_str().unwrap().into()),
+                "{}",
+                case["name"]
+            );
+            assert_eq!(capture.files()[&hypothesis], raw.as_bytes());
+            capture.verify().unwrap();
         }
     }
 }

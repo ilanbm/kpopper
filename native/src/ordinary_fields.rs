@@ -214,7 +214,7 @@ fn inferred_fields(document: &V, semantic: bool) -> Result<Map> {
             judgment_fields.extend(
                 ["deps", "snapshot", "predicate"]
                     .iter()
-                    .filter_map(|k| schema.get(*k))
+                    .filter_map(|k| schema.get(k))
                     .filter_map(|v| text(v).ok())
                     .map(str::to_owned),
             );
@@ -231,7 +231,7 @@ fn inferred_fields(document: &V, semantic: bool) -> Result<Map> {
                 .any(|m| {
                     let matched = judgment_fields
                         .iter()
-                        .filter(|k| m.contains_key(*k))
+                        .filter(|k| m.contains_key(k))
                         .map(String::as_str)
                         .collect::<Vec<_>>();
                     !matched.is_empty()
@@ -245,7 +245,7 @@ fn inferred_fields(document: &V, semantic: bool) -> Result<Map> {
                     .all(|k| ["known", "sources", "open", "questions"].contains(&k.as_str()))
                 && ["deps", "snapshot", "predicate"]
                     .iter()
-                    .all(|k| schema.get(*k).is_some_and(truth))
+                    .all(|k| schema.get(k).is_some_and(truth))
                 && deps.is_empty()
                 && unresolved
                     .iter()
@@ -280,7 +280,7 @@ fn inferred_fields(document: &V, semantic: bool) -> Result<Map> {
                         "blocked_on",
                     ]
                     .into_iter()
-                    .filter(|k| m.contains_key(*k))
+                    .filter(|k| m.contains_key(k))
                     .collect::<Vec<_>>();
                     !matched.is_empty()
                         && !(matched == ["blocked_on"]
@@ -367,7 +367,7 @@ pub fn capabilities(document: &V, profile: Option<&str>) -> Result<V> {
             d.len() == 3
                 && ["version", "profile", "requires"]
                     .iter()
-                    .all(|k| d.contains_key(*k)),
+                    .all(|k| d.contains_key(k)),
             "invalid_capability",
         )?;
         require(
