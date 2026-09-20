@@ -448,7 +448,7 @@ fn publish_creates_target_only_commit_and_verify_tracks_content_acceptance() {
     let target = remote_head(&provider.remote, "trunk").unwrap();
     let commit = String::from_utf8(git(
         &provider.remote,
-        &["commit-tree", tree.trim(), "-p", &target],
+        &["-c", "user.name=Fixture", "-c", "user.email=fixture@example.test", "commit-tree", tree.trim(), "-p", &target],
         Some(b"accept\n"),
     ))
     .unwrap();
@@ -766,7 +766,7 @@ fn history_publication_unions_complete_same_authority_bytes() {
     let target = remote_head(&provider.remote, "trunk").unwrap();
     let commit = String::from_utf8(git(
         &provider.remote,
-        &["commit-tree", tree.trim(), "-p", &target],
+        &["-c", "user.name=Fixture", "-c", "user.email=fixture@example.test", "commit-tree", tree.trim(), "-p", &target],
         Some(b"accept history\n"),
     ))
     .unwrap();

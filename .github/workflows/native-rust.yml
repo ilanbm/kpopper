@@ -66,6 +66,21 @@ jobs:
           mkdir -p "$RUNNER_TEMP/native-evidence"
           git rev-parse HEAD > "$RUNNER_TEMP/native-evidence/commit.txt"
           rustc --version --verbose > "$RUNNER_TEMP/native-evidence/rustc.txt"
+      - name: Prepare resources for native integration tests
+        shell: python
+        env:
+          KPOPPER_CI_TARGET: ${{ matrix.target }}
+        run: |
+          import os, pathlib, shutil
+          root = pathlib.Path.cwd()
+          resources = pathlib.Path(os.environ['RUNNER_TEMP'])/'native-test-resources'
+          reasoning = resources/'reasoning'
+          reasoning.mkdir(parents=True)
+          target = os.environ['KPOPPER_CI_TARGET']
+          shutil.copy2(root/'scripts'/'reasoning'/'native'/(target + '.kpopper-runtime'), reasoning/(target + '.kpopper-runtime'))
+          shutil.copytree(pathlib.Path(os.environ['KPOP_TEST_ORDINARY_PROGRAM']), resources/'ordinary'/target)
+          with open(os.environ['GITHUB_ENV'], 'a', encoding='utf-8') as output:
+              output.write('KPOP_CONSOLIDATION_RESOURCES=' + str(resources) + '\n')
       - name: Test the native implementation and build the platform release
         working-directory: native
         shell: bash
