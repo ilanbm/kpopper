@@ -171,6 +171,14 @@ struct ConsolidateArgs {
     take: Vec<String>,
     #[arg(long = "drop")]
     drops: Vec<String>,
+    #[arg(long = "from")]
+    from_refs: Vec<String>,
+    #[arg(long)]
+    by: Option<String>,
+    #[arg(long = "choose")]
+    choices: Vec<String>,
+    #[arg(long)]
+    source_revision: Option<String>,
 }
 impl ConsolidateArgs {
     fn options(&self) -> Result<kpop_native::public_consolidation::Options> {
@@ -182,6 +190,10 @@ impl ConsolidateArgs {
             as_of: self.as_of.clone(),
             take: self.take.clone(),
             drops: self.drops.clone(),
+            from_refs: self.from_refs.clone(),
+            by: self.by.clone(),
+            choices: self.choices.clone(),
+            source_revision: self.source_revision.clone(),
             ..Default::default()
         };
         for subject in &self.subjects {
