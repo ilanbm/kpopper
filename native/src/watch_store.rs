@@ -133,12 +133,18 @@ fn git_with_program(
     let stdout_thread = std::thread::spawn(move || {
         use std::io::Read;
         let mut bytes = Vec::new();
-        stdout.take(4 * 1024 * 1024 + 1).read_to_end(&mut bytes).map(|_| bytes)
+        stdout
+            .take(4 * 1024 * 1024 + 1)
+            .read_to_end(&mut bytes)
+            .map(|_| bytes)
     });
     let stderr_thread = std::thread::spawn(move || {
         use std::io::Read;
         let mut bytes = Vec::new();
-        stderr.take(4 * 1024 * 1024 + 1).read_to_end(&mut bytes).map(|_| bytes)
+        stderr
+            .take(4 * 1024 * 1024 + 1)
+            .read_to_end(&mut bytes)
+            .map(|_| bytes)
     });
     let deadline = std::time::Instant::now() + timeout;
     loop {
@@ -164,7 +170,11 @@ fn git_with_program(
     let stderr = stderr_thread
         .join()
         .map_err(|_| error("Git error reader failed"))??;
-    let out = std::process::Output { status, stdout, stderr };
+    let out = std::process::Output {
+        status,
+        stdout,
+        stderr,
+    };
     require(
         out.status.success(),
         &format!(
@@ -195,9 +205,14 @@ mod git_tests {
         fs::write(&fake, b"#!/bin/sh\nsleep 1\n").unwrap();
         fs::set_permissions(&fake, fs::Permissions::from_mode(0o700)).unwrap();
         assert_eq!(
-            git_with_program(&fake.to_string_lossy(), Path::new("."), &["status"], Duration::from_millis(20))
-                .unwrap_err()
-                .0,
+            git_with_program(
+                &fake.to_string_lossy(),
+                Path::new("."),
+                &["status"],
+                Duration::from_millis(20)
+            )
+            .unwrap_err()
+            .0,
             "Git command timed out after 0 seconds"
         );
     }
@@ -209,9 +224,14 @@ mod git_tests {
         fs::write(&fake, b"#!/bin/sh\nyes x | head -c 200000\n").unwrap();
         fs::set_permissions(&fake, fs::Permissions::from_mode(0o700)).unwrap();
         assert_eq!(
-            git_with_program(&fake.to_string_lossy(), Path::new("."), &["status"], Duration::from_secs(3))
-                .unwrap()
-                .len(),
+            git_with_program(
+                &fake.to_string_lossy(),
+                Path::new("."),
+                &["status"],
+                Duration::from_secs(3)
+            )
+            .unwrap()
+            .len(),
             199999
         );
     }

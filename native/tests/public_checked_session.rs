@@ -109,7 +109,14 @@ fn hook_open_uses_explicit_profile_path_and_stays_within_budget() {
         .and_then(|tail| tail.split_whitespace().next())
         .unwrap();
     let read = ok(command(root, "read", false)
-        .args(["--profile", profile_b.to_str().unwrap(), "--ref", "node:p.a", "--revision", revision])
+        .args([
+            "--profile",
+            profile_b.to_str().unwrap(),
+            "--ref",
+            "node:p.a",
+            "--revision",
+            revision,
+        ])
         .output()
         .unwrap());
     assert!(read.contains(revision));

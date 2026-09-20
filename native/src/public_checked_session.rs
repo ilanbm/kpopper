@@ -287,10 +287,16 @@ impl Service {
     pub fn hook_open(&self, budget: usize) -> Result<String> {
         let executable = std::env::current_exe()?.canonicalize()?;
         let mut command = vec![
-            Self::shell_quote(&executable), "session".into(), "read".into(),
-            "--no-settings".into(), "--input".into(), Self::shell_quote(&self.input),
-            "--project".into(), Self::shell_quote(Path::new(&self.project)),
-            "--state".into(), Self::shell_quote(&self.state),
+            Self::shell_quote(&executable),
+            "session".into(),
+            "read".into(),
+            "--no-settings".into(),
+            "--input".into(),
+            Self::shell_quote(&self.input),
+            "--project".into(),
+            Self::shell_quote(Path::new(&self.project)),
+            "--state".into(),
+            Self::shell_quote(&self.state),
         ];
         let ordinary = self.ordinary()?;
         if !ordinary {
@@ -299,7 +305,10 @@ impl Service {
         if let Some(profile) = &self.profile_path {
             command.extend(["--profile".into(), Self::shell_quote(profile)]);
         }
-        let hint = format!("Read via MCP kpopper_read, or (POSIX shell): {} --ref REF --revision REV_FROM_ABOVE\n", command.join(" "));
+        let hint = format!(
+            "Read via MCP kpopper_read, or (POSIX shell): {} --ref REF --revision REV_FROM_ABOVE\n",
+            command.join(" ")
+        );
         let hint_tokens = self.store.encoding().count(&hint);
         let mut available = budget.saturating_sub(hint_tokens + 1);
         for _ in 0..3 {
@@ -313,7 +322,9 @@ impl Service {
             let overflow = self.store.encoding().count(&result) - budget;
             available = available.saturating_sub(overflow);
         }
-        Err(error("hook budget cannot carry the complete view and read route"))
+        Err(error(
+            "hook budget cannot carry the complete view and read route",
+        ))
     }
 
     fn ordinary(&self) -> Result<bool> {

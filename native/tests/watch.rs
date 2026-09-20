@@ -64,7 +64,7 @@ fn cli_watch_uses_python_stream_and_pretty_json_contract() {
     assert_eq!(output.stderr, b"");
     assert_eq!(
         output.stdout,
-br#"{
+        br#"{
   "state": "disabled"
 }
 "#
@@ -99,7 +99,15 @@ fn empty_notify_task_is_falsey_and_does_not_reserve_delivery() {
         .unwrap();
     assert!(setup.status.success());
     let scan = Command::new(env!("CARGO_BIN_EXE_kpop-native"))
-        .args(["--workspace", root.to_str().unwrap(), "watch", "scan", "--all", "--notify-task", ""])
+        .args([
+            "--workspace",
+            root.to_str().unwrap(),
+            "watch",
+            "scan",
+            "--all",
+            "--notify-task",
+            "",
+        ])
         .env("XDG_STATE_HOME", &state)
         .output()
         .unwrap();
