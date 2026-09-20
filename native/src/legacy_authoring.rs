@@ -2013,6 +2013,13 @@ fn verify_recovery(route: &WriteRoute, root: &Path, mutation: &PreparedMutation)
                 || recorded_policy == Some(route.config())),
         "project_route_changed",
     )?;
+    if let Some(expected) = baseline.get("routing") {
+        require(
+            crate::source_capture::routing_observation(route.paths(), &route.project().root)?
+                == *expected,
+            "project_route_changed",
+        )?;
+    }
     legacy_named::verify_recovery(route, root, mutation, baseline)?;
     require(
         baseline
