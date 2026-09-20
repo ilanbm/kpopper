@@ -192,6 +192,96 @@ struct Union<'a> {
     candidates: Vec<String>,
 }
 impl Union<'_> {
+    fn facts(&self) -> super::PreviewFacts {
+        use super::{PreviewDecision, PreviewFacts, PreviewJudgment};
+        let reversal = |r: &Reversal| PreviewDecision {
+            hypothesis: self.hyps[r.hyp].name.clone(),
+            allowed: r.allowed,
+            reason: r.why.clone(),
+        };
+        PreviewFacts {
+            base_ids: self.base.base.reader.ids.clone(),
+            contested: self
+                .contested
+                .iter()
+                .map(|(id, holders)| {
+                    (
+                        id.clone(),
+                        holders.iter().map(|i| self.hyps[*i].name.clone()).collect(),
+                    )
+                })
+                .collect(),
+            refused: self
+                .refused
+                .iter()
+                .map(|i| {
+                    let update = &self.updates[*i];
+                    (
+                        update.id.clone(),
+                        PreviewDecision {
+                            hypothesis: self.hyps[update.hyp].name.clone(),
+                            allowed: update.allowed,
+                            reason: update.why.clone(),
+                        },
+                    )
+                })
+                .collect(),
+            reversals: self
+                .reversed
+                .iter()
+                .map(|r| (r.id.clone(), reversal(r)))
+                .collect(),
+            untaken: self
+                .untaken
+                .iter()
+                .map(|i| {
+                    let r = &self.reversed[*i];
+                    (r.id.clone(), reversal(r))
+                })
+                .collect(),
+            untakeable: self.untakeable.clone(),
+            drops_needed: self.drops_needed.clone(),
+            moved: self.moved.clone(),
+            falsified: self.falsified.clone(),
+            holes: self.holes.clone(),
+            head_falsified: self
+                .head_falsified
+                .iter()
+                .map(|(i, predicate)| (self.hyps[*i].name.clone(), predicate.clone()))
+                .collect(),
+            judgments: self
+                .view
+                .as_ref()
+                .map(|view| {
+                    view.base
+                        .judgments
+                        .iter()
+                        .map(|(id, body)| {
+                            let references =
+                                R::predicate_refs(&R::predicate_of(body, &view.base.reader.fields))
+                                    .into_iter()
+                                    .collect::<BTreeSet<_>>();
+                            let page_references = references
+                                .iter()
+                                .filter(|id| {
+                                    id.starts_with("page.") && F::BUILTINS.contains(&id.as_str())
+                                })
+                                .cloned()
+                                .collect();
+                            (
+                                id.clone(),
+                                PreviewJudgment {
+                                    predicate_references: references.into_iter().collect(),
+                                    page_references,
+                                },
+                            )
+                        })
+                        .collect()
+                })
+                .unwrap_or_default(),
+            red: self.red(),
+        }
+    }
     fn red(&self) -> bool {
         !self.contested.is_empty()
             || !self.refused.is_empty()
@@ -203,6 +293,37 @@ impl Union<'_> {
     fn blocked(&self) -> bool {
         self.red() || !self.moved.is_empty()
     }
+}
+
+/// Match the optional page application's relevance check over proposed shapes,
+/// while retaining the base as the only source of page measurements.
+fn needs_page(
+    doc: &V,
+    base: &Projection<'_>,
+    hyps: &[Hypothesis],
+    runtime: Option<&Runtime>,
+) -> Result<bool> {
+    let mut candidate = doc.clone();
+    for h in hyps {
+        candidate = layer(&candidate, &h.doc)?;
+    }
+    let candidate = Reader::new(&candidate, runtime)?;
+    let reads_page = |body: &V, fields: &Map| {
+        strings(get(body, text(&fields["deps"]).unwrap_or("")))
+            .iter()
+            .any(|id| id.starts_with("page.") && F::BUILTINS.contains(&id.as_str()))
+            || R::predicate_refs(&R::predicate_of(body, fields))
+                .iter()
+                .any(|id| id.starts_with("page.") && F::BUILTINS.contains(&id.as_str()))
+    };
+    Ok(hyps.iter().flat_map(|h| h.raw.iter()).any(|(id, body)| {
+        let old = base.base.reader.raw.get(id).unwrap_or(&V::Null);
+        matches!(body, V::Map(_))
+            && body != old
+            && (G::arrangement(&candidate, body)
+                || (base.base.judgments.contains_key(id) && G::arrangement(&base.base.reader, old)))
+            && (reads_page(body, &candidate.fields) || reads_page(old, &base.base.reader.fields))
+    }))
 }
 
 struct UnionInput<'i, 'r> {

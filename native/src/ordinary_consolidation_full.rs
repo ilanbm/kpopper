@@ -132,6 +132,7 @@ fn read_hypotheses(
 
 pub(super) fn preview(
     request: &super::OrdinaryPreviewRequest<'_>,
+    evidence: &super::PreviewEvidence<'_>,
 ) -> Result<super::OrdinaryPreview> {
     let empty = Map::new();
     let context = request.context.map(map).transpose()?;
@@ -216,7 +217,29 @@ pub(super) fn preview(
             },
         );
     }
-    let proposals = pool.into_values().collect();
+    let proposals = pool.into_values().collect::<Vec<_>>();
+    let brief = evidence
+        .brief
+        .and_then(|raw| crate::history_yaml::decode_full_ordinary_source_value(raw).ok())
+        .map(|v| v.projected());
+    let page = if let Some(raw) = evidence.brief {
+        if needs_page(request.document, &base, &proposals, request.runtime)? {
+            Some(
+                page_evidence(
+                    request.document,
+                    request.hypotheses,
+                    request.context,
+                    raw,
+                    request.runtime,
+                )
+                .map_err(|e| error(&format!("presentation contribution cannot be checked: {e}")))?,
+            )
+        } else {
+            None
+        }
+    } else {
+        None
+    };
     let stamp = request
         .as_of
         .map(str::to_owned)
@@ -230,8 +253,8 @@ pub(super) fn preview(
         stamp: &stamp,
         take: &[],
         drops: &empty,
-        brief: None,
-        page: None,
+        brief: brief.as_ref(),
+        page: page.as_ref(),
     })?;
     let report = report::lines(&c, chrono::Local::now().date_naive())?.join("\n") + "\n";
     Ok(super::OrdinaryPreview {
@@ -239,7 +262,25 @@ pub(super) fn preview(
         exit_code: i32::from(c.red() || !c.drops_needed.is_empty()),
         blocked: c.blocked() || !c.drops_needed.is_empty(),
         candidate_document: c.view.as_ref().map(|_| c.doc.clone()),
+        facts: c.facts(),
     })
+}
+
+pub(super) fn page_evidence(
+    document: &V,
+    hypotheses: &Map,
+    context: Option<&V>,
+    raw: &[u8],
+    runtime: Option<&Runtime>,
+) -> Result<V> {
+    page::from_document(
+        document,
+        hypotheses,
+        context.unwrap_or(&V::Map(Map::new())),
+        vec![],
+        raw,
+        runtime,
+    )
 }
 
 pub(super) fn run(
@@ -310,29 +351,7 @@ pub(super) fn run(
     let page =
         if let Some(raw) = &brief_raw {
             let base = captured_projection(&capture, runtime)?;
-            let mut candidate = capture.ordinary_document().clone();
-            for h in &hyps {
-                candidate = layer(&candidate, &h.doc)?;
-            }
-            let candidate = Reader::new(&candidate, runtime)?;
-            let reads_page = |body: &V, fields: &Map| {
-                strings(get(body, text(&fields["deps"]).unwrap_or("")))
-                    .iter()
-                    .any(|id| id.starts_with("page.") && F::BUILTINS.contains(&id.as_str()))
-                    || R::predicate_refs(&R::predicate_of(body, fields))
-                        .iter()
-                        .any(|id| id.starts_with("page.") && F::BUILTINS.contains(&id.as_str()))
-            };
-            let relevant = hyps.iter().flat_map(|h| h.raw.iter()).any(|(id, body)| {
-                let old = base.base.reader.raw.get(id).unwrap_or(&V::Null);
-                matches!(body, V::Map(_))
-                    && body != old
-                    && (G::arrangement(&candidate, body)
-                        || (base.base.judgments.contains_key(id)
-                            && G::arrangement(&base.base.reader, old)))
-                    && (reads_page(body, &candidate.fields)
-                        || reads_page(old, &base.base.reader.fields))
-            });
+            let relevant = needs_page(capture.ordinary_document(), &base, &hyps, runtime)?;
             if relevant {
                 Some(page::facts(&capture, raw, runtime).map_err(|e| {
                     error(&format!("presentation contribution cannot be checked: {e}"))

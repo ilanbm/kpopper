@@ -1,6 +1,11 @@
 //! Public named-hypothesis consolidation over ordinary records and active history.
 #[path = "ordinary_consolidation_full.rs"]
 mod full;
+#[path = "consolidation_preview_facts.rs"]
+mod preview_facts;
+pub use preview_facts::{
+    PreviewDecision, PreviewEvidence, PreviewFacts, PreviewJudgment, PreviewPageBound,
+};
 #[path = "ordinary_consolidation.rs"]
 mod ordinary;
 #[path = "consolidation_supersession.rs"]
@@ -253,9 +258,16 @@ pub struct Preview {
     /// Includes movement and unnamed dropped dependencies that prevent a fold.
     pub blocked: bool,
     pub candidate_document: Option<V>,
+    pub facts: PreviewFacts,
 }
 pub fn preview(request: &PreviewRequest<'_>) -> Result<Preview> {
-    ordinary::preview(request)
+    preview_with_evidence(request, &PreviewEvidence::default())
+}
+pub fn preview_with_evidence(
+    request: &PreviewRequest<'_>,
+    evidence: &PreviewEvidence<'_>,
+) -> Result<Preview> {
+    ordinary::preview(request, evidence)
 }
 
 /// Read-only ordinary preview. Its source values never enter a finite writer.
@@ -277,9 +289,16 @@ pub struct OrdinaryPreview {
     pub exit_code: i32,
     pub blocked: bool,
     pub candidate_document: Option<crate::ordinary_value::Value>,
+    pub facts: PreviewFacts,
 }
 pub fn preview_ordinary(request: &OrdinaryPreviewRequest<'_>) -> Result<OrdinaryPreview> {
-    full::preview(request)
+    preview_ordinary_with_evidence(request, &PreviewEvidence::default())
+}
+pub fn preview_ordinary_with_evidence(
+    request: &OrdinaryPreviewRequest<'_>,
+    evidence: &PreviewEvidence<'_>,
+) -> Result<OrdinaryPreview> {
+    full::preview(request, evidence)
 }
 
 pub struct CommandOutput {

@@ -23,12 +23,28 @@ mod shared {
         raw: &[u8],
         runtime: Option<&Runtime>,
     ) -> Result<V> {
-        let document = capture.ordinary_document();
         let context = V::from_typed(&capture.ordinary_context());
-        let assessment = crate::ordinary_report::assess(
-            document,
+        from_document(
+            capture.ordinary_document(),
             map(capture.hypotheses())?,
             &context,
+            capture.reader_lines()?,
+            raw,
+            runtime,
+        )
+    }
+    pub(crate) fn from_document(
+        document: &V,
+        hypotheses: &Map,
+        context: &V,
+        reader_lines: Vec<String>,
+        raw: &[u8],
+        runtime: Option<&Runtime>,
+    ) -> Result<V> {
+        let assessment = crate::ordinary_report::assess(
+            document,
+            hypotheses,
+            context,
             runtime,
             crate::ordinary_assessment::POLICY,
         )?;
@@ -46,13 +62,14 @@ mod shared {
             .cloned()
             .collect::<BTreeSet<_>>();
         let (brief, tabs) = parse_brief(Some(raw))?;
-        let mut projection = Projection::new(
-            document,
-            map(capture.hypotheses())?,
-            map(&map(&context)?["conflicts"])?,
-            capture.reader_lines()?,
-            runtime,
-        )?;
+        let empty = Map::new();
+        let conflicts = map(context)?
+            .get("conflicts")
+            .map(map)
+            .transpose()?
+            .unwrap_or(&empty);
+        let mut projection =
+            Projection::new(document, hypotheses, conflicts, reader_lines, runtime)?;
         let hub = projection.hub_data()?;
         let states = ids
             .iter()
@@ -73,4 +90,4 @@ mod shared {
         ))
     }
 }
-pub(super) use shared::facts;
+pub(super) use shared::{facts, from_document};

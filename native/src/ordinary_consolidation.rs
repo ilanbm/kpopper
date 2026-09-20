@@ -465,7 +465,10 @@ pub(super) fn run(
     }
 }
 
-pub(super) fn preview(request: &super::PreviewRequest<'_>) -> Result<super::Preview> {
+pub(super) fn preview(
+    request: &super::PreviewRequest<'_>,
+    evidence: &super::PreviewEvidence<'_>,
+) -> Result<super::Preview> {
     let empty = Map::new();
     let context = request.context.map(map).transpose()?;
     let conflicts = context
@@ -553,7 +556,34 @@ pub(super) fn preview(request: &super::PreviewRequest<'_>) -> Result<super::Prev
             },
         );
     }
-    let proposals = pool.into_values().collect();
+    let proposals = pool.into_values().collect::<Vec<_>>();
+    let brief = evidence
+        .brief
+        .and_then(|raw| crate::history_yaml::decode_ordinary_source_value(raw).ok())
+        .map(|v| v.projected());
+    let page = if let Some(raw) = evidence.brief {
+        if needs_page(request.document, &base, &proposals, request.runtime)? {
+            use crate::ordinary_value::{Value as Full, map as full_map};
+            let document = Full::from_finite_projection(request.document);
+            let hypotheses = Full::from_finite_projection(&V::Map(request.hypotheses.clone()));
+            let context = request.context.map(Full::from_finite_projection);
+            Some(
+                super::full::page_evidence(
+                    &document,
+                    full_map(&hypotheses)?,
+                    context.as_ref(),
+                    raw,
+                    request.runtime,
+                )
+                .and_then(|facts| facts.try_typed())
+                .map_err(|e| error(&format!("presentation contribution cannot be checked: {e}")))?,
+            )
+        } else {
+            None
+        }
+    } else {
+        None
+    };
     let stamp = request
         .as_of
         .map(str::to_owned)
@@ -567,8 +597,8 @@ pub(super) fn preview(request: &super::PreviewRequest<'_>) -> Result<super::Prev
         stamp: &stamp,
         take: &[],
         drops: &empty,
-        brief: None,
-        page: None,
+        brief: brief.as_ref(),
+        page: page.as_ref(),
     })?;
     let report = report::lines(&c, chrono::Local::now().date_naive())?.join("\n") + "\n";
     Ok(super::Preview {
@@ -576,5 +606,6 @@ pub(super) fn preview(request: &super::PreviewRequest<'_>) -> Result<super::Prev
         exit_code: i32::from(c.red() || !c.drops_needed.is_empty()),
         blocked: c.blocked() || !c.drops_needed.is_empty(),
         candidate_document: c.view.as_ref().map(|_| c.doc.clone()),
+        facts: c.facts(),
     })
 }
