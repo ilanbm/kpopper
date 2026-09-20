@@ -231,6 +231,12 @@ pub fn mark_key(
 
 /// First-use guidance for the host. Reading it never records an acknowledgement.
 pub fn context(location: &crate::public_workspace::Location) -> Result<String> {
+    context_with_host(location, None)
+}
+pub fn context_with_host(
+    location: &crate::public_workspace::Location,
+    host: Option<&str>,
+) -> Result<String> {
     let current = status_at(
         &location.workspace,
         &location.key,
@@ -253,7 +259,12 @@ pub fn context(location: &crate::public_workspace::Location) -> Result<String> {
         lines.push("An older mapping preference was saved but never dispatched. Run `kpop map` in an active session if the user still wants that work.".into());
     }
     if string("status") == "missing" {
-        lines.push("No knowledge record in this workspace. For work that will be revisited, `kpop add` keeps findings as they arise - the first write creates GROUNDING.yaml; `kpop map` builds an initial map of existing materials on request. A one-off needs nothing. Never offer any of this on a greeting.".into());
+        let (record, mapping) = match host {
+            Some("claude") => ("/kpopper:record", "/kpopper:map"),
+            Some("codex") => ("$record", "$map"),
+            _ => ("`kpop add`", "`kpop map`"),
+        };
+        lines.push(format!("No knowledge record in this workspace. For work that will be revisited, {record} keeps findings as they arise - the first write creates GROUNDING.yaml; {mapping} builds an initial map of existing materials on request. A one-off needs nothing. Never offer any of this on a greeting."));
         lines.push(if current["offered"] == true {
             "The starting choices were already offered here; do not repeat them. Mapping remains available on request."
         } else if current["guidance"] == false {

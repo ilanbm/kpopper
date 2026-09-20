@@ -20,6 +20,76 @@ pub fn handles(operation: &Operation) -> bool {
         Operation::Status | Operation::Setup | Operation::Enable | Operation::Disable
     )
 }
+
+pub fn followup_summary(cwd: &Path) -> Result<Option<String>> {
+    let store = crate::followup_store::Store::open(cwd)?;
+    if store.load(false)?.is_none() {
+        return Ok(None);
+    }
+    let report = store.scan(3)?;
+    let visible = report["items"].as_array().is_some_and(|items| {
+        items.iter().any(|item| {
+            !matches!(
+                item["state"].as_str(),
+                Some("waiting" | "done" | "cancelled")
+            )
+        })
+    });
+    if !visible && report["graph_error"].is_null() {
+        return Ok(None);
+    }
+    Ok(Some(format!(
+        "KPOPPER_FOLLOWUPS {}\n`kpop followups scan` explains which work is ready and the dependencies behind it.",
+        serde_json::to_string(&json!({"counts":report["counts"],"record":report["record"]}))?
+    )))
+}
+
+/// Host opening uses the invoking project's preferences, even for an external
+/// record. The selected record cannot redirect configuration or execution.
+pub fn hook_opening(cwd: &Path, mode: crate::source_capture::ReadMode) -> Result<Option<String>> {
+    let cwd = cwd.canonicalize()?;
+    let mut inventory = crate::source_inventory::Inventory::default();
+    let config = session_settings::current(&mut inventory, &cwd, &cwd)?;
+    if config["enabled"] != true {
+        return Ok(None);
+    }
+    let record = crate::public_workspace::records(&cwd)?
+        .into_iter()
+        .next()
+        .ok_or_else(|| Error("record_required".into()))?;
+    let options = Options {
+        operation: Operation::HookOpen,
+        input: Some(record),
+        no_settings: true,
+        global_scope: false,
+        rebuild: false,
+        project: config["project"].as_str().map(str::to_owned),
+        state: config["state"].as_str().map(PathBuf::from),
+        profile: config["profile"].as_str().map(PathBuf::from),
+        assessment_profile: None,
+        encoding: crate::tokenizer::Encoding::default(),
+        tokens: config["tokens"].as_u64().map(|n| n as usize),
+        reference: None,
+        revision: None,
+        offset: None,
+        ids: Vec::new(),
+        direction: None,
+        depth: 1,
+        max_nodes: 16,
+        query: String::new(),
+        limit: 8,
+        branch: None,
+        search_mode: crate::session_search::SearchMode::Hybrid,
+        cursor: None,
+        kind: None,
+        text: None,
+        basis: Vec::new(),
+        revisit: String::new(),
+    };
+    let opened = crate::public_checked_session::run(&options, &cwd, mode)?;
+    inventory.verify()?;
+    Ok(Some(opened))
+}
 struct Readiness {
     value: Value,
     archive: PathBuf,

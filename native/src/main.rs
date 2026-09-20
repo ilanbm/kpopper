@@ -94,7 +94,7 @@ enum Command {
         rollback: bool,
     },
     /// Consume a SessionStart JSON payload; never installs a hook or runtime.
-    SessionStart,
+    SessionStart(kpop_native::public_session::StartOptions),
     /// Consume a Stop payload and deliver each new finding once per session.
     SessionStop(kpop_native::public_session::HookOptions),
     /// Save a private session-start baseline.
@@ -206,70 +206,120 @@ fn stdin_bytes() -> Result<Vec<u8>> {
     require(raw.len() <= MAX_BYTES, "byte_limit")?;
     Ok(raw)
 }
-fn session() -> Result<()> {
-    let payload = stdin()?;
+fn session(options: &kpop_native::public_session::StartOptions) -> Result<String> {
+    let raw = stdin_bytes()?;
+    let mut payload = if raw.iter().all(u8::is_ascii_whitespace) {
+        json!({})
+    } else {
+        serde_json::from_slice(&raw)?
+    };
     require(payload.is_object(), "invalid_hook_payload")?;
     if payload
         .get("agent_id")
         .is_some_and(|v| !v.is_null() && v != false && v != "")
     {
-        return Ok(());
+        return Ok(String::new());
     }
-    let root = PathBuf::from(
-        payload["cwd"]
+    if options.cursor {
+        payload["session_id"] = payload["conversation_id"]
             .as_str()
-            .ok_or_else(|| kpop_native::Error("missing_workspace".into()))?,
-    );
+            .filter(|s| !s.is_empty())
+            .map(|s| json!(format!("cursor-{s}")))
+            .unwrap_or(json!(""));
+    }
+    let cwd = payload["cwd"]
+        .as_str()
+        .map(PathBuf::from)
+        .map(Ok)
+        .unwrap_or_else(std::env::current_dir)?;
+    let mode = if std::env::var("KPOPPER_READ_MODE").as_deref() == Ok("frozen") {
+        kpop_native::source_capture::ReadMode::Frozen
+    } else {
+        kpop_native::source_capture::ReadMode::Live
+    };
+    let location = kpop_native::public_workspace::locate(&cwd, mode)?;
+    let root = location.workspace.clone();
+    payload["cwd"] = json!(root);
     let command = std::env::current_exe()?.canonicalize()?;
     let feasibility = root.join(".kpopper/native-feasibility.json").is_file();
+    let mut output = Vec::<String>::new();
+    let first_use = if feasibility {
+        None
+    } else {
+        Some(
+            kpop_native::onboarding::context_with_host(&location, options.host.as_deref())
+                .unwrap_or_else(|e| format!("kpopper first-use preferences unavailable: {e}")),
+        )
+    };
+    if location.status == "unavailable" {
+        return Ok(first_use.unwrap_or_default());
+    }
     if feasibility {
         let result = Store::open(&root)?;
-        println!(
-            "Native feasibility record: {} committed operations; linear readings only; semantic assessment not performed.\n{}",
-            result["commits"],
-            serde_json::to_string(&result["document"]["readings"])?
-        );
-    } else {
-        let mode = if std::env::var("KPOPPER_READ_MODE").as_deref() == Ok("frozen") {
-            kpop_native::source_capture::ReadMode::Frozen
-        } else {
-            kpop_native::source_capture::ReadMode::Live
-        };
-        let opening = kpop_native::public_readers::run_auto(
-            "open",
-            &kpop_native::public_readers::Options::default(),
-            &root,
-            mode,
-            false,
-        )?;
-        print!("{}", opening.text);
+        output.push(format!("Native feasibility record: {} committed operations; linear readings only; semantic assessment not performed.\n{}", result["commits"], serde_json::to_string(&result["document"]["readings"])?));
+    } else if location.status != "missing" {
+        match kpop_native::session_admin::hook_opening(&root, mode) {
+            Ok(Some(text)) => {
+                output.push(text.trim_end().into());
+                if let Some(host) = options.host.as_deref() {
+                    let (ground, record) = if host == "claude" {
+                        ("/kpopper:ground", "/kpopper:record")
+                    } else {
+                        ("$ground", "$record")
+                    };
+                    output.push(format!("next: {ground} <entry|prefix> (values with sources, what a change reaches) · {record} (what this session found) · check"));
+                }
+            }
+            Ok(None) => {
+                let options = kpop_native::public_readers::Options {
+                    host: options.host.clone(),
+                    ..Default::default()
+                };
+                match kpop_native::public_readers::run_auto("open", &options, &root, mode, false) {
+                    Ok(opening) => {
+                        if !opening.text.is_empty() {
+                            output.push(opening.text.trim_end().into());
+                        }
+                    }
+                    Err(error) => {
+                        output.push(format!("The knowledge record could not be opened. Read it before relying on it: {}", location.record.display()));
+                        eprintln!("{error}");
+                    }
+                }
+            }
+            Err(error) => {
+                output.push(format!(
+                    "Checked session view unavailable. Read the record before relying on it: {}",
+                    location.record.display()
+                ));
+                eprintln!("{error}");
+            }
+        }
     }
-    let sid = payload["session_id"].as_str().filter(|s| {
-        !s.is_empty()
-            && s.len() <= 200
-            && s.bytes()
-                .all(|c| c.is_ascii_alphanumeric() || b"_-".contains(&c))
-    });
+    if let Some(first_use) = first_use.filter(|s| !s.is_empty()) {
+        output.push(first_use);
+    }
+    if !feasibility {
+        match kpop_native::session_admin::followup_summary(&root) {
+            Ok(Some(summary)) => output.push(summary),
+            Ok(None) => (),
+            Err(error) => output.push(format!("Followups unavailable: {error}")),
+        }
+    }
+    let sid = payload["session_id"]
+        .as_str()
+        .filter(|s| kpop_native::public_session::valid_session(s));
     let environment = sid
         .map(|s| json!({"KPOPPER_AGENT_SESSION":s}))
         .unwrap_or_else(|| json!({}));
-    println!(
-        "KPOPPER_AGENT_CONTEXT {}",
-        json!({"command":[command,"--workspace",root],"workspace":root,"environment":environment,"profile":if feasibility{"native-feasibility/v1"}else{"native-public/v1"}})
-    );
+    output.push(format!("KPOPPER_AGENT_CONTEXT {}", json!({"command":[command,"--workspace",root],"workspace":root,"environment":environment,"profile":if feasibility{"native-feasibility/v1"}else{"native-public/v1"}})));
     if !feasibility {
-        println!(
-            "Pass this session environment to record-writing and mapping commands. For mapping, execute the returned task. The identity routes work back to this session; it grants no source access."
-        );
-        let mode = if std::env::var("KPOPPER_READ_MODE").as_deref() == Ok("frozen") {
-            kpop_native::source_capture::ReadMode::Frozen
-        } else {
-            kpop_native::source_capture::ReadMode::Live
-        };
+        output.push("Pass this session environment to record-writing and mapping commands. For mapping, execute the returned task. The identity routes work back to this session; it grants no source access.".into());
         kpop_native::public_session::start_mark(&root, &payload, mode)?;
     }
-    Ok(())
+    Ok(output.join("\n"))
 }
+
 fn run(args: Args) -> Result<Value> {
     if let Command::Map(options) = &args.command {
         let root = args.workspace.clone().unwrap_or(std::env::current_dir()?);
@@ -425,7 +475,7 @@ fn run(args: Args) -> Result<Value> {
         | Command::HistoryValidate { .. }
         | Command::HistoryEnvelope { .. }
         | Command::HistoryCapture { .. }
-        | Command::SessionStart
+        | Command::SessionStart(_)
         | Command::SessionStop(_)
         | Command::Mark(_)
         | Command::Gate(_) => {
@@ -1074,9 +1124,18 @@ fn main() {
         }
         return;
     }
-    if matches!(args.command, Command::SessionStart) {
-        if let Err(error) = session() {
-            eprintln!("kpop-native: record was not opened: {error}");
+    if let Command::SessionStart(options) = &args.command {
+        let text = match session(options) {
+            Ok(text) => text,
+            Err(error) => {
+                eprintln!("kpop-native: record was not opened: {error}");
+                String::new()
+            }
+        };
+        if options.cursor {
+            println!("{}", json!({"additional_context":text}));
+        } else if !text.is_empty() {
+            println!("{text}");
         }
         return;
     }

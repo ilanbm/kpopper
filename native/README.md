@@ -234,7 +234,11 @@ operation with the exact same request is idempotent; different content under tha
 operation refuses. Optional `--expected-revision` compares the revision returned
 by `open`. Each new observation requires a new operation and an explicit recorded time.
 
-`session-start` consumes a host JSON payload containing an absolute `cwd` on stdin.
+`session-start` consumes a host JSON payload on stdin and resolves its `cwd` (or the current directory).
+`--host claude|codex` supplies the matching skill guidance; `--cursor` returns
+`additional_context` JSON and binds the cursor conversation identity. Enabled checked
+sessions use the invoking project preferences, including when its record is external.
+Opening also carries first-use guidance and a bounded followup summary.
 For ordinary public records it runs the same captured opener and returns an executable
 `KPOPPER_AGENT_CONTEXT.command`; explicitly marked feasibility stores retain their
 older private opener. It ignores subagent payloads, and reports failed opening visibly

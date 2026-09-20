@@ -27,6 +27,13 @@ pub struct Options {
     pub session: Option<String>,
 }
 #[derive(Clone, Debug, Default, clap::Args)]
+pub struct StartOptions {
+    #[arg(long, value_parser = ["claude", "codex"])]
+    pub host: Option<String>,
+    #[arg(long)]
+    pub cursor: bool,
+}
+#[derive(Clone, Debug, Default, clap::Args)]
 pub struct HookOptions {
     #[arg(long,value_parser=["claude","codex"])]
     pub host: Option<String>,

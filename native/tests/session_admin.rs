@@ -149,3 +149,137 @@ fn verified_programs_enable_native_preferences_and_existing_legacy_settings_are_
     );
     assert!(selected.is_dir());
 }
+
+#[test]
+fn enabled_host_open_uses_checked_native_route_and_keeps_failures_explicit() {
+    use std::io::Write;
+    let temp = tempfile::tempdir().unwrap();
+    let root = temp.path().canonicalize().unwrap();
+    let resources = resources(&root);
+    fs::write(root.join("GROUNDING.yaml"), "known:\n  p.a: {v: 1}\n").unwrap();
+    packet(run(
+        &root,
+        Some(&resources),
+        &["enable", "--tokens", "1200"],
+    ));
+    let hook = |available: bool| {
+        let mut child = Command::new(env!("CARGO_BIN_EXE_kpop-native"))
+            .arg("session-start")
+            .env("XDG_CONFIG_HOME", root.join("config"))
+            .env("XDG_STATE_HOME", root.join("state"))
+            .env("KPOPPER_NATIVE_CACHE", root.join("cache"))
+            .env(
+                "KPOPPER_NATIVE_RESOURCES",
+                if available {
+                    resources.clone()
+                } else {
+                    root.join("missing-resources")
+                },
+            )
+            .env_remove("KPOPPER_SESSION_CONFIG")
+            .env_remove("KPOPPER_SESSION_DISABLE")
+            .stdin(std::process::Stdio::piped())
+            .stdout(std::process::Stdio::piped())
+            .stderr(std::process::Stdio::piped())
+            .spawn()
+            .unwrap();
+        child
+            .stdin
+            .take()
+            .unwrap()
+            .write_all(serde_json::to_vec(&json!({"cwd":root})).unwrap().as_slice())
+            .unwrap();
+        child.wait_with_output().unwrap()
+    };
+    let opened = hook(true);
+    assert!(opened.status.success());
+    let output = String::from_utf8(opened.stdout).unwrap();
+    assert!(output.contains("Read via MCP kpopper_read"), "{output}");
+    assert!(output.contains("KPOPPER_AGENT_CONTEXT"));
+    let failed = hook(false);
+    assert!(failed.status.success(), "host startup must not be blocked");
+    assert!(
+        String::from_utf8(failed.stdout)
+            .unwrap()
+            .contains("Checked session view unavailable")
+    );
+    assert!(!failed.stderr.is_empty());
+
+    let external = tempfile::tempdir().unwrap();
+    let external = external.path().canonicalize().unwrap();
+    let external_record = external.join("GROUNDING.yaml");
+    fs::write(&external_record, "known:\n  p.a: {v: 1}\n").unwrap();
+    fs::create_dir_all(root.join(".kpopper")).unwrap();
+    fs::write(
+        root.join(".kpopper/project.json"),
+        serde_json::to_vec(
+            &json!({"version":1,"mode":"simple","generation":1,"record":external_record}),
+        )
+        .unwrap(),
+    )
+    .unwrap();
+    let foreign_state = root.join("foreign-selected-state");
+    let foreign_config = root.join("config/kpopper/native-projects").join(format!(
+        "{}.json",
+        kpop_native::identity::sha256(external.to_string_lossy().as_bytes())
+    ));
+    fs::create_dir_all(foreign_config.parent().unwrap()).unwrap();
+    fs::write(&foreign_config, serde_json::to_vec(&json!({"schema":1,"enabled":true,"native":root.join("wrong-program"),"tokens":1200,"state":foreign_state})).unwrap()).unwrap();
+    let external_open = hook(true);
+    assert!(external_open.status.success());
+    assert!(
+        String::from_utf8(external_open.stdout)
+            .unwrap()
+            .contains("Read via MCP kpopper_read")
+    );
+    assert!(
+        !foreign_state.exists(),
+        "an external record must not redirect the host configuration"
+    );
+}
+
+#[test]
+fn cursor_start_returns_host_guidance_without_creating_a_record() {
+    use std::io::Write;
+    let temp = tempfile::tempdir().unwrap();
+    let root = temp.path().canonicalize().unwrap();
+    let private_tmp = root.join("tmp");
+    fs::create_dir(&private_tmp).unwrap();
+    let mut child = Command::new(env!("CARGO_BIN_EXE_kpop-native"))
+        .args(["session-start", "--cursor", "--host", "codex"])
+        .env("XDG_CONFIG_HOME", root.join("config"))
+        .env("XDG_STATE_HOME", root.join("state"))
+        .env("TMPDIR", &private_tmp)
+        .env_remove("KPOPPER_SESSION_CONFIG")
+        .env_remove("KPOPPER_SESSION_DISABLE")
+        .stdin(std::process::Stdio::piped())
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::piped())
+        .spawn()
+        .unwrap();
+    child
+        .stdin
+        .take()
+        .unwrap()
+        .write_all(
+            serde_json::to_vec(&json!({"cwd":root,"conversation_id":"fixture"}))
+                .unwrap()
+                .as_slice(),
+        )
+        .unwrap();
+    let output = child.wait_with_output().unwrap();
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let packet: Value = serde_json::from_slice(&output.stdout).unwrap();
+    let text = packet["additional_context"].as_str().unwrap();
+    assert!(text.contains("$record keeps findings"), "{text}");
+    assert!(text.contains("cursor-fixture"));
+    assert!(!root.join("GROUNDING.yaml").exists());
+    let baseline: Value =
+        serde_json::from_slice(&fs::read(private_tmp.join("kpopper-base-cursor-fixture")).unwrap())
+            .unwrap();
+    assert_eq!(baseline["fails"], 0);
+}
