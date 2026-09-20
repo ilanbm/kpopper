@@ -59,6 +59,10 @@ enum Command {
     Review(WriteArgs),
     /// Preview, fold or refute named hypotheses in active history.
     Consolidate(ConsolidateArgs),
+    /// Record that two subjects refer to the same thing.
+    Same(kpop_native::public_identity::SameOptions),
+    /// Record why two similar subjects are distinct.
+    Distinct(kpop_native::public_identity::DistinctOptions),
     /// Export a bounded core assessment as Markdown or Mermaid.
     Export(kpop_native::public_export::CommandOptions),
     /// Inspect or materialize captured knowledge contributions.
@@ -394,6 +398,8 @@ fn run(args: Args) -> Result<Value> {
         | Command::Where
         | Command::Session(_)
         | Command::Consolidate(_)
+        | Command::Same(_)
+        | Command::Distinct(_)
         | Command::Export(_)
         | Command::Knowledge(_)
         | Command::Pending(_)
@@ -410,6 +416,30 @@ fn run(args: Args) -> Result<Value> {
 }
 fn main() {
     let args = Args::parse();
+    if matches!(args.command, Command::Same(_) | Command::Distinct(_)) {
+        let result = (|| {
+            let cwd = args
+                .workspace
+                .clone()
+                .map(Ok)
+                .unwrap_or_else(std::env::current_dir)?;
+            match &args.command {
+                Command::Same(options) => kpop_native::public_identity::run_same(options, &cwd),
+                Command::Distinct(options) => {
+                    kpop_native::public_identity::run_distinct(options, &cwd)
+                }
+                _ => unreachable!(),
+            }
+        })();
+        match result {
+            Ok(output) => print!("{output}"),
+            Err(error) => {
+                eprintln!("refused: {error}");
+                std::process::exit(1);
+            }
+        }
+        return;
+    }
     if matches!(args.command, Command::Knowledge(_) | Command::Pending(_)) {
         let cwd = match args
             .workspace

@@ -83,6 +83,7 @@ pub mod public_export;
 pub mod public_followups;
 pub mod public_history;
 pub mod public_hub;
+pub mod public_identity;
 pub mod public_knowledge;
 pub mod public_pending;
 pub mod public_workspace;
