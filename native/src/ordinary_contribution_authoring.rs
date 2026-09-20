@@ -10,7 +10,6 @@ use crate::{
     legacy_authoring::{self, Preparation},
     pending_bundle,
     project_modes::WriteRoute,
-    public_history::fresh_id,
     recording_privacy as Privacy, require,
     source_inventory::Inventory,
     value::TypedValue as V,
@@ -313,7 +312,7 @@ pub(crate) fn route(
             .event_id
             .clone()
             .map(Ok)
-            .unwrap_or_else(|| fresh_id("event"))?;
+            .unwrap_or_else(|| Ok(uuid::Uuid::new_v4().simple().to_string()))?;
         let contribution_id = options
             .contribution_id
             .clone()
@@ -430,12 +429,25 @@ pub(crate) fn route(
                 return Err(Error(output.trim().into()));
             }
             Preparation::Mutation(prepared) => {
+                let mut diagnostics = prepared.diagnostics;
+                diagnostics.extend(
+                    prepared
+                        .output
+                        .lines()
+                        .take_while(|line| {
+                            !line.starts_with("add ")
+                                && !line.starts_with("set ")
+                                && !line.starts_with("review ")
+                        })
+                        .filter(|line| !line.trim().is_empty())
+                        .map(str::to_owned),
+                );
                 let mut inventory = prepared.inventory;
                 for image in prepared.mutation.files() {
                     inventory.stage(&prepared.root.join(&image.path), image.after.clone())?;
                 }
                 let document = crate::source_document::load(route.paths(), &mut inventory, false)?;
-                (document.source.projected(), inventory, prepared.diagnostics)
+                (document.source.projected(), inventory, diagnostics)
             }
         }
     };
@@ -461,7 +473,7 @@ pub(crate) fn route(
         .event_id
         .clone()
         .map(Ok)
-        .unwrap_or_else(|| fresh_id("event"))?;
+        .unwrap_or_else(|| Ok(uuid::Uuid::new_v4().simple().to_string()))?;
     let contribution_id = options.contribution_id.clone().unwrap_or_else(|| id.into());
     token(&s(&event_id))?;
     token(&s(&contribution_id))?;

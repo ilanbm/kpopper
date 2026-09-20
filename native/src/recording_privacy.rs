@@ -66,7 +66,7 @@ pub fn draft(project: &Project, action: &V, document: &V, reason: &str) -> Resul
         .map(text)
         .transpose()?
         .map(str::to_owned)
-        .unwrap_or(crate::public_history::fresh_id("draft")?);
+        .unwrap_or_else(|| uuid::Uuid::new_v4().simple().to_string());
     token(&s(&ident))?;
     #[cfg(unix)]
     {
