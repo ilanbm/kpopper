@@ -218,10 +218,23 @@ fn windows_process_alive(pid: u32) -> Option<bool> {
     if !output.status.success() {
         return None;
     }
+    tasklist_liveness(&String::from_utf8_lossy(&output.stdout), pid)
+}
+
+#[cfg(any(windows, test))]
+fn tasklist_liveness(output: &str, pid: u32) -> Option<bool> {
     let row = regex::Regex::new(r#"^"(?:[^"]|"")*","([0-9]+)","#).ok()?;
-    Some(String::from_utf8_lossy(&output.stdout).lines().any(|line| {
-        row.captures(line).and_then(|row| row[1].parse::<u32>().ok()) == Some(pid)
-    }))
+    let rows = output.lines().filter_map(|line| row.captures(line)
+        .and_then(|row| row[1].parse::<u32>().ok())).collect::<Vec<_>>();
+    if !rows.is_empty() {
+        return Some(rows.contains(&pid));
+    }
+    if output.trim() == "INFO: No tasks are running which match the specified criteria." {
+        Some(false)
+    } else {
+        // Unknown/partial/localized replies are not evidence that a worker died.
+        None
+    }
 }
 
 fn record_writer_journal(record: &Path) -> bool {
@@ -731,6 +744,14 @@ mod tests {
         assert!(lease_active(Some(&json!({"pid":null,"started_at":S::now()}))));
         assert!(!lease_active(Some(&json!({"pid":null,"started_at":S::now()-6.0,
             "expires_at":S::now()+300.0}))));
+    }
+
+    #[test]
+    fn windows_tasklist_replies_distinguish_rows_absence_and_unusable_output() {
+        assert_eq!(tasklist_liveness("\"a,b.exe\",\"123\",\"Console\",\"1\",\"1,000 K\"\r\n", 123), Some(true));
+        assert_eq!(tasklist_liveness("INFO: No tasks are running which match the specified criteria.\r\n", 123), Some(false));
+        assert_eq!(tasklist_liveness("", 123), None);
+        assert_eq!(tasklist_liveness("query failed or inaccessible", 123), None);
     }
 
     #[cfg(unix)]
