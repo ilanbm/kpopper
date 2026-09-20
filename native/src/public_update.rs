@@ -183,6 +183,11 @@ fn parse(raw: &[u8]) -> Result<Report> {
     })
 }
 
+/// Validate a captured report without retaining it or changing its original envelope.
+pub fn validate_report(raw: &[u8]) -> Result<J> {
+    Ok(parse(raw)?.raw)
+}
+
 fn private_dir(path: &Path) -> Result<()> {
     fs::create_dir_all(path)?;
     #[cfg(unix)]
@@ -825,13 +830,36 @@ fn private_reason(report: &Report) -> Result<Option<&'static str>> {
 }
 
 pub fn run(options: &Options, cwd: &Path, stdin: Option<&[u8]>) -> Result<Output> {
-    run_with_probe(options, cwd, stdin, None, &mut |_| Ok(()))
+    run_with_event(options, cwd, stdin, None)
 }
 
+/// Process an already captured report using its retained, filesystem-safe event identity.
+/// A caller-supplied envelope identity must still resolve to the same record-bound identity.
+pub fn run_with_event(
+    options: &Options,
+    cwd: &Path,
+    stdin: Option<&[u8]>,
+    event_override: Option<&str>,
+) -> Result<Output> {
+    run_bound(options, cwd, stdin, event_override, None, &mut |_| Ok(()))
+}
+
+#[cfg(test)]
 fn run_with_probe(
     options: &Options,
     cwd: &Path,
     stdin: Option<&[u8]>,
+    supplied_runtime: Option<&crate::reasoning_runtime::Runtime>,
+    probe: &mut dyn FnMut(&str) -> Result<()>,
+) -> Result<Output> {
+    run_bound(options, cwd, stdin, None, supplied_runtime, probe)
+}
+
+fn run_bound(
+    options: &Options,
+    cwd: &Path,
+    stdin: Option<&[u8]>,
+    event_override: Option<&str>,
     supplied_runtime: Option<&crate::reasoning_runtime::Runtime>,
     probe: &mut dyn FnMut(&str) -> Result<()>,
 ) -> Result<Output> {
@@ -854,8 +882,27 @@ fn run_with_probe(
         "ingestion requires one record path",
     )?;
     let record = route.paths()[0].clone();
+    let event = match event_override {
+        Some(event) => {
+            crate::require(
+                !event.is_empty()
+                    && event.len() <= 128
+                    && event
+                        .bytes()
+                        .all(|b| b.is_ascii_alphanumeric() || b == b'-' || b == b'_'),
+                "invalid captured event identity",
+            )?;
+            if report.raw.get("event_id").is_some() {
+                crate::require(
+                    event_id(&record, &report)? == event,
+                    "captured event identity mismatch",
+                )?;
+            }
+            event.to_owned()
+        }
+        None => event_id(&record, &report)?,
+    };
     let root = prepare_state(&record, options.state_dir.as_deref())?;
-    let event = event_id(&record, &report)?;
     let envelope_path = root.join("envelopes").join(format!("{event}.json"));
     let source_path = root.join("sources").join(format!("{event}.txt"));
     let receipt_path = root.join("receipts").join(format!("{event}.json"));
@@ -1295,6 +1342,83 @@ fn run_with_probe(
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn capture_validation_preserves_original_envelope() {
+        let raw = br#"{"date":"2026-09-20","source_quote":"original quote","target":"p.x","value":2,"shareability":"private","scope":{"kind":"unclear"}}"#;
+        assert_eq!(
+            validate_report(raw).unwrap(),
+            serde_json::from_slice::<J>(raw).unwrap()
+        );
+        assert!(validate_report(br#"{"date":"2026-09-20","date":"2026-09-21"}"#).is_err());
+    }
+
+    #[test]
+    fn captured_event_reuses_original_envelope_and_receipt() {
+        let temp = tempfile::tempdir().unwrap();
+        let entry = temp.path().join("GROUNDING.yaml");
+        let before = b"sources:\n  s.old: {url: 'https://example.test', read: 2026-09-01}\nknown:\n  p.x: {v: 1, from: s.old, of: 2026-09-01}\n";
+        fs::write(&entry, before).unwrap();
+        let state = temp.path().join("state");
+        let options = Options {
+            file: "-".into(),
+            record: None,
+            state_dir: Some(state.clone()),
+        };
+        let report = json!({"date":"2026-09-20","source_quote":"private original quote",
+            "target":"p.x","value":2,"shareability":"private"});
+        let raw = serde_json::to_vec(&report).unwrap();
+        let first =
+            run_with_event(&options, temp.path(), Some(&raw), Some("captured-123")).unwrap();
+        let second =
+            run_with_event(&options, temp.path(), Some(&raw), Some("captured-123")).unwrap();
+        assert_eq!(first.text, second.text);
+        let receipt: J = serde_json::from_str(&first.text).unwrap();
+        assert_eq!(receipt["event_id"], "captured-123");
+        assert_eq!(receipt["state"], "needs_primary");
+        assert_eq!(fs::read(&entry).unwrap(), before);
+        assert_eq!(
+            serde_json::from_slice::<J>(
+                &fs::read(state.join("envelopes/captured-123.json")).unwrap()
+            )
+            .unwrap(),
+            report
+        );
+        assert_eq!(
+            fs::read(state.join("sources/captured-123.txt")).unwrap(),
+            b"private original quote"
+        );
+        let mut changed = report;
+        changed["value"] = json!(3);
+        assert!(
+            run_with_event(
+                &options,
+                temp.path(),
+                Some(&serde_json::to_vec(&changed).unwrap()),
+                Some("captured-123")
+            )
+            .is_err()
+        );
+        assert_eq!(fs::read_dir(state.join("receipts")).unwrap().count(), 1);
+    }
+
+    #[test]
+    fn captured_event_rejects_unsafe_or_conflicting_identity_before_retention() {
+        let temp = tempfile::tempdir().unwrap();
+        let entry = temp.path().join("GROUNDING.yaml");
+        fs::write(&entry, "known:\n  p.x: {v: 1}\n").unwrap();
+        let state = temp.path().join("state");
+        let options = Options {
+            file: "-".into(),
+            record: None,
+            state_dir: Some(state.clone()),
+        };
+        let report = br#"{"event_id":"caller-event","date":"2026-09-20","source_quote":"x","target":"p.x","value":2}"#;
+        for event in ["../outside", "", "wrong-event"] {
+            assert!(run_with_event(&options, temp.path(), Some(report), Some(event)).is_err());
+            assert!(!state.exists());
+        }
+    }
+
     #[test]
     fn parser_rejects_duplicate_ids_and_accepts_dependent_actions() {
         let report = parse(br#"{"date":"2026-09-20","source_quote":"x","updates":[{"kind":"add","id":"p.x","body":{"v":1}},{"kind":"add","id":"c.x","body":{"rests_on":["p.x"],"verdict":"x","wrong_if":"p.x > 1"}}]}"#).unwrap();
