@@ -1,0 +1,415 @@
+{
+  "oracle": "f480ea6",
+  "values": [
+    {
+      "value": [
+        "nonfinite",
+        "nan"
+      ],
+      "json": "NaN",
+      "compact": "NaN",
+      "str": "nan",
+      "repr": "nan",
+      "finite": "null"
+    },
+    {
+      "value": [
+        "nonfinite",
+        "inf"
+      ],
+      "json": "Infinity",
+      "compact": "Infinity",
+      "str": "inf",
+      "repr": "inf",
+      "finite": "null"
+    },
+    {
+      "value": [
+        "nonfinite",
+        "-inf"
+      ],
+      "json": "-Infinity",
+      "compact": "-Infinity",
+      "str": "-inf",
+      "repr": "-inf",
+      "finite": "null"
+    },
+    {
+      "value": [
+        "map",
+        [
+          [
+            "a",
+            [
+              "nonfinite",
+              "nan"
+            ]
+          ],
+          [
+            "b",
+            [
+              "list",
+              [
+                [
+                  "nonfinite",
+                  "inf"
+                ],
+                [
+                  "nonfinite",
+                  "-inf"
+                ],
+                [
+                  "null"
+                ],
+                [
+                  "text",
+                  "NaN"
+                ],
+                [
+                  "text",
+                  ".nan"
+                ],
+                [
+                  "map",
+                  [
+                    [
+                      "kind",
+                      [
+                        "text",
+                        "nonfinite"
+                      ]
+                    ],
+                    [
+                      "value",
+                      [
+                        "text",
+                        "nan"
+                      ]
+                    ]
+                  ]
+                ]
+              ]
+            ]
+          ]
+        ]
+      ],
+      "json": "{\"a\": NaN, \"b\": [Infinity, -Infinity, null, \"NaN\", \".nan\", {\"kind\": \"nonfinite\", \"value\": \"nan\"}]}",
+      "compact": "{\"a\":NaN,\"b\":[Infinity,-Infinity,null,\"NaN\",\".nan\",{\"kind\":\"nonfinite\",\"value\":\"nan\"}]}",
+      "str": "{'a': nan, 'b': [inf, -inf, None, 'NaN', '.nan', {'kind': 'nonfinite', 'value': 'nan'}]}",
+      "repr": "{'a': nan, 'b': [inf, -inf, None, 'NaN', '.nan', {'kind': 'nonfinite', 'value': 'nan'}]}",
+      "finite": "{\"a\": null, \"b\": [null, null, null, \"NaN\", \".nan\", {\"kind\": \"nonfinite\", \"value\": \"nan\"}]}"
+    },
+    {
+      "value": [
+        "map",
+        [
+          [
+            "date",
+            [
+              "date",
+              "2026-09-20"
+            ]
+          ],
+          [
+            "float",
+            [
+              "float",
+              "-0x0.0p+0"
+            ]
+          ]
+        ]
+      ],
+      "json": "{\"date\": \"2026-09-20\", \"float\": -0.0}",
+      "compact": "{\"date\":\"2026-09-20\",\"float\":-0.0}",
+      "str": "{'date': datetime.date(2026, 9, 20), 'float': -0.0}",
+      "repr": "{'date': datetime.date(2026, 9, 20), 'float': -0.0}",
+      "finite": "{\"date\": \"2026-09-20\", \"float\": -0.0}"
+    },
+    {
+      "value": [
+        "map",
+        [
+          [
+            "meta",
+            [
+              "map",
+              [
+                [
+                  "note",
+                  [
+                    "nonfinite",
+                    "nan"
+                  ]
+                ]
+              ]
+            ]
+          ],
+          [
+            "known",
+            [
+              "map",
+              [
+                [
+                  "p.value",
+                  [
+                    "map",
+                    [
+                      [
+                        "v",
+                        [
+                          "int",
+                          "1"
+                        ]
+                      ]
+                    ]
+                  ]
+                ]
+              ]
+            ]
+          ]
+        ]
+      ],
+      "json": "{\"known\": {\"p.value\": {\"v\": 1}}, \"meta\": {\"note\": NaN}}",
+      "compact": "{\"known\":{\"p.value\":{\"v\":1}},\"meta\":{\"note\":NaN}}",
+      "str": "{'meta': {'note': nan}, 'known': {'p.value': {'v': 1}}}",
+      "repr": "{'meta': {'note': nan}, 'known': {'p.value': {'v': 1}}}",
+      "finite": "{\"known\": {\"p.value\": {\"v\": 1}}, \"meta\": {\"note\": null}}"
+    }
+  ],
+  "bodies": [
+    {
+      "body": [
+        "nonfinite",
+        "nan"
+      ],
+      "expected": [
+        "map",
+        [
+          [
+            "v",
+            [
+              "null"
+            ]
+          ]
+        ]
+      ],
+      "wire": "{\"nodes\": {\"p.value\": {\"body\": {\"v\": null}}}}"
+    },
+    {
+      "body": [
+        "map",
+        [
+          [
+            "v",
+            [
+              "nonfinite",
+              "nan"
+            ]
+          ],
+          [
+            "quoted",
+            [
+              "int",
+              "99"
+            ]
+          ],
+          [
+            "verdict",
+            [
+              "text",
+              "Ready"
+            ]
+          ],
+          [
+            "read",
+            [
+              "text",
+              "2026-09-17"
+            ]
+          ]
+        ]
+      ],
+      "expected": [
+        "map",
+        [
+          [
+            "v",
+            [
+              "null"
+            ]
+          ]
+        ]
+      ],
+      "wire": "{\"nodes\": {\"p.value\": {\"body\": {\"v\": null}}}}"
+    },
+    {
+      "body": [
+        "map",
+        [
+          [
+            "v",
+            [
+              "null"
+            ]
+          ],
+          [
+            "quoted",
+            [
+              "int",
+              "99"
+            ]
+          ]
+        ]
+      ],
+      "expected": [
+        "map",
+        [
+          [
+            "v",
+            [
+              "null"
+            ]
+          ],
+          [
+            "quoted",
+            [
+              "int",
+              "99"
+            ]
+          ]
+        ]
+      ],
+      "wire": "{\"nodes\": {\"p.value\": {\"body\": {\"quoted\": 99, \"v\": null}}}}"
+    },
+    {
+      "body": [
+        "map",
+        [
+          [
+            "v",
+            [
+              "nonfinite",
+              "inf"
+            ]
+          ],
+          [
+            "rule",
+            [
+              "map",
+              [
+                [
+                  "num",
+                  [
+                    "text",
+                    "42"
+                  ]
+                ]
+              ]
+            ]
+          ]
+        ]
+      ],
+      "expected": [
+        "map",
+        [
+          [
+            "v",
+            [
+              "nonfinite",
+              "inf"
+            ]
+          ],
+          [
+            "rule",
+            [
+              "map",
+              [
+                [
+                  "num",
+                  [
+                    "text",
+                    "42"
+                  ]
+                ]
+              ]
+            ]
+          ]
+        ]
+      ],
+      "wire": "{\"nodes\": {\"p.value\": {\"body\": {\"rule\": {\"num\": \"42\"}, \"v\": null}}}}"
+    },
+    {
+      "body": [
+        "map",
+        [
+          [
+            "file",
+            [
+              "text",
+              "note.txt"
+            ]
+          ],
+          [
+            "score",
+            [
+              "nonfinite",
+              "-inf"
+            ]
+          ]
+        ]
+      ],
+      "expected": [
+        "map",
+        [
+          [
+            "file",
+            [
+              "text",
+              "note.txt"
+            ]
+          ],
+          [
+            "score",
+            [
+              "nonfinite",
+              "-inf"
+            ]
+          ]
+        ]
+      ],
+      "wire": "{\"nodes\": {\"p.value\": {\"body\": {\"file\": \"note.txt\", \"score\": null}}}}"
+    },
+    {
+      "body": [
+        "map",
+        [
+          [
+            "v",
+            [
+              "null"
+            ]
+          ],
+          [
+            "quoted",
+            [
+              "nonfinite",
+              "nan"
+            ]
+          ]
+        ]
+      ],
+      "expected": [
+        "map",
+        [
+          [
+            "v",
+            [
+              "null"
+            ]
+          ]
+        ]
+      ],
+      "wire": "{\"nodes\": {\"p.value\": {\"body\": {\"v\": null}}}}"
+    }
+  ]
+}
