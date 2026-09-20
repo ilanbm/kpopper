@@ -36,6 +36,8 @@ pub struct Page {
     /// Captured arrangement facts consumed by guarded authoring. This is
     /// derived from the same record assessment and brief bytes rendered here.
     pub arrangement_facts: V,
+    /// Typed page readings; an undefined reading is Null, not a guessed zero.
+    pub page_values: Map,
 }
 
 #[derive(Clone)]
@@ -430,7 +432,63 @@ pub fn build(
     max: usize,
     runtime: Option<&Runtime>,
 ) -> Result<Page> {
-    let document = capture.ordinary_document();
+    build_document(
+        PageDocument {
+            capture,
+            document: capture.ordinary_document(),
+        },
+        assessment,
+        brief_content,
+        entry,
+        page_path,
+        max,
+        runtime,
+    )
+}
+
+struct PageDocument<'a> {
+    capture: &'a CapturedSource,
+    document: &'a V,
+}
+
+/// Calculate page facts from staged values without manufacturing a new source capture.
+pub(crate) fn arrangement_projection_for_document(
+    capture: &CapturedSource,
+    document: &V,
+    brief: &[u8],
+    entry: &Path,
+    page_path: &Path,
+    runtime: Option<&Runtime>,
+) -> Result<(V, Map)> {
+    let assessment = crate::ordinary_assessment_report::assess(
+        document,
+        map(capture.hypotheses())?,
+        &capture.ordinary_context(),
+        runtime,
+        crate::ordinary_assessment::POLICY,
+    )?;
+    let page = build_document(
+        PageDocument { capture, document },
+        &assessment,
+        Some(brief),
+        entry,
+        page_path,
+        16 * 1024 * 1024,
+        runtime,
+    )?;
+    Ok((page.arrangement_facts, page.page_values))
+}
+
+fn build_document(
+    input: PageDocument<'_>,
+    assessment: &V,
+    brief_content: Option<&[u8]>,
+    entry: &Path,
+    page_path: &Path,
+    max: usize,
+    runtime: Option<&Runtime>,
+) -> Result<Page> {
+    let PageDocument { capture, document } = input;
     let doc = map(document)?;
     let report = map(assessment)?;
     let nodes = map(&report["nodes"])?;
@@ -637,6 +695,7 @@ pub fn build(
                 .collect::<BTreeSet<_>>()
         })
         .collect::<Vec<_>>();
+    let mut page_values = Map::new();
     if !brief.is_empty() {
         let integer =
             |count: usize| V::Integer(crate::value::Integer::new(&count.to_string()).unwrap());
@@ -718,6 +777,7 @@ pub fn build(
                 drift.map(|v| V::Float(crate::value::FiniteFloat::new(v).unwrap())),
             ),
         ] {
+            page_values.insert(key.into(), value.clone().unwrap_or(V::Null));
             if let Some(value) = value
                 && let Some(V::Map(body)) = projection.base.reader.raw.get_mut(key)
             {
@@ -1198,6 +1258,7 @@ pub fn build(
         failures,
         notes,
         arrangement_facts: V::Map(arrangement_facts),
+        page_values,
     })
 }
 fn root_of(entry: &Path) -> &Path {

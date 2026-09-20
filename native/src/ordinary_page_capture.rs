@@ -7,7 +7,7 @@
 use crate::{
     Error, Result,
     history_transaction::Layout,
-    ordinary_assessment, ordinary_assessment_report, ordinary_hub,
+    ordinary_hub,
     reasoning_runtime::Runtime,
     source_capture::{self, ReadMode},
     source_inventory::{Inventory, absolute, name},
@@ -20,6 +20,7 @@ use std::{
 
 #[derive(Clone)]
 pub(crate) struct PageCapture {
+    entry: PathBuf,
     pub facts: V,
     pub view_path: PathBuf,
     pub view_before: Option<Vec<u8>>,
@@ -64,36 +65,47 @@ impl PageCapture {
         } else {
             None
         };
-        let facts = if let Some(view_before) = &view_before {
-            let report = ordinary_assessment_report::from_capture(
-                &captured,
-                runtime,
-                ordinary_assessment::POLICY,
-            )?;
-            ordinary_hub::build(
-                &captured,
-                &report,
-                Some(view_before),
-                entry,
-                &view_path,
-                16 * 1024 * 1024,
-                runtime,
-            )?
-            .arrangement_facts
-        } else {
-            V::Map(crate::history_contract::Map::new())
-        };
         let routing = source_capture::routing_observation(paths, cwd)?;
-        captured.verify()?;
-        view_inventory.verify()?;
-        Ok(Self {
-            facts,
+        let mut capture = Self {
+            entry: absolute(entry)?,
+            facts: V::Map(crate::history_contract::Map::new()),
             view_path,
             view_before,
             view_inventory,
             source: Rc::new(captured),
             routing,
-        })
+        };
+        capture.facts = capture
+            .facts_for_document(capture.source.ordinary_document(), runtime)?
+            .0;
+        Ok(capture)
+    }
+
+    /// Use staged record values only for calculation. Publication authority stays
+    /// with the unchanged captured source and view preimage.
+    pub(crate) fn facts_for_document(
+        &self,
+        document: &V,
+        runtime: Option<&Runtime>,
+    ) -> Result<(V, crate::history_contract::Map)> {
+        self.verify()?;
+        let facts = if let Some(view) = &self.view_before {
+            ordinary_hub::arrangement_projection_for_document(
+                &self.source,
+                document,
+                view,
+                &self.entry,
+                &self.view_path,
+                runtime,
+            )?
+        } else {
+            (
+                V::Map(crate::history_contract::Map::new()),
+                crate::history_contract::Map::new(),
+            )
+        };
+        self.verify()?;
+        Ok(facts)
     }
 
     pub(crate) fn verify(&self) -> Result<()> {
@@ -136,6 +148,38 @@ mod tests {
             );
             captured.verify().unwrap();
         }
+    }
+
+    #[test]
+    fn staged_values_change_page_facts_without_replacing_captured_authority() {
+        let temp = tempfile::tempdir().unwrap();
+        let entry = temp.path().join("GROUNDING.yaml");
+        let raw = "sources:\n  s.q: {asked: Inspect this record}\nknown:\n  p.a: {v: 1}\njudgments:\n  d.arr:\n    verdict: continue\n    rests_on: [s.q, graph.entries]\n    seen: {s.q: Inspect this record, graph.entries: 2}\n    wrong_if: graph.entries > 2\n";
+        fs::write(&entry, raw).unwrap();
+        fs::create_dir_all(temp.path().join(".kpopper")).unwrap();
+        let view = temp.path().join(".kpopper/view.yaml");
+        fs::write(&view, "tabs:\n- title: Decision\n  serves: [s.q]\n  sections:\n  - {title: d.arr, pick: judgments, as: cards}\n").unwrap();
+        let captured = PageCapture::capture(
+            std::slice::from_ref(&entry),
+            temp.path(),
+            Some(s("2026-09-20")),
+            None,
+        )
+        .unwrap();
+        assert_eq!(captured.facts.to_json().unwrap()["d.arr"]["fired"], false);
+        let staged_raw = raw.replace("  p.a: {v: 1}\n", "  p.a: {v: 1}\n  p.b: {v: 2}\n");
+        let staged = crate::history_yaml::decode_ordinary_source_value(staged_raw.as_bytes())
+            .unwrap()
+            .projected();
+        let (actual, page_values) = captured.facts_for_document(&staged, None).unwrap();
+        assert_eq!(page_values.len(), 5);
+        assert_eq!(page_values["page.drift"], V::Null);
+        assert_eq!(actual.to_json().unwrap()["d.arr"]["fired"], true);
+        assert_eq!(fs::read_to_string(&entry).unwrap(), raw);
+        assert_eq!(captured.facts.to_json().unwrap()["d.arr"]["fired"], false);
+        captured.verify().unwrap();
+        fs::write(&view, "tabs: []\n").unwrap();
+        assert!(captured.facts_for_document(&staged, None).is_err());
     }
 
     #[test]
