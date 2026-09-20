@@ -910,11 +910,13 @@ fn run_with_probe(
     }
 
     let outcome = (|| {
-        if report.raw.get("privacy").is_some_and(|v| match v {
-            J::Null | J::Bool(false) => false,
-            J::String(s) => !s.is_empty(),
-            _ => true,
-        }) {
+        if crate::recording_privacy::private_marker(&V::from_json(&report.raw)?)
+            || report.raw.get("privacy").is_some_and(|v| match v {
+                J::Null | J::Bool(false) => false,
+                J::String(s) => !s.is_empty(),
+                _ => true,
+            })
+        {
             return Err(error(
                 "private or unclear original source permission; report retained privately",
             ));
