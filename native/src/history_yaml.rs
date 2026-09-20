@@ -29,6 +29,7 @@ fn invalid() -> Error {
 #[derive(Clone, Debug)]
 enum Node {
     Scalar(TypedValue),
+    NonFinite(crate::ordinary_value::NonFiniteFloat, Option<usize>),
     List(Vec<Node>),
     Map(Vec<(Node, Node)>),
     Merge,
@@ -312,6 +313,61 @@ pub(crate) fn ordinary_scalar(
 pub(crate) fn ordinary_key(value: TypedValue) -> Result<OrdinaryKey> {
     OrdinaryKey::new(value)
 }
+pub(crate) fn ordinary_key_index(key: &OrdinaryKey) -> String {
+    key.projected()
+}
+/// Complete ordinary scalar construction. Strict scalar callers retain the
+/// finite-only ordinary_scalar/TypedValue façade above.
+pub(crate) fn ordinary_atom(
+    value: &str,
+    style: ScalarStyle,
+    tag: Option<&str>,
+) -> Result<crate::ordinary_value::Scalar> {
+    let explicit = tag.map(tag_name).transpose()?;
+    let kind = if let Some(ref name) = explicit {
+        if name.is_empty() {
+            resolve(value)
+        } else {
+            name
+        }
+    } else if style == ScalarStyle::Plain {
+        resolve(value)
+    } else {
+        "str"
+    };
+    if kind != "float" {
+        return ordinary_scalar(value, style, tag).map(crate::ordinary_value::Scalar::Finite);
+    }
+    let clean = value.replace('_', "").to_ascii_lowercase();
+    let (sign, body) = if let Some(v) = clean.strip_prefix('-') {
+        (-1., v)
+    } else {
+        (1., clean.strip_prefix('+').unwrap_or(&clean))
+    };
+    let parse = |v: &str| numeric_text(v).trim().parse::<f64>().map_err(|_| invalid());
+    let number = if body == ".nan" {
+        f64::NAN
+    } else if body == ".inf" {
+        f64::INFINITY
+    } else if body.contains(':') {
+        let mut value = 0.;
+        let mut base = 1.;
+        for part in body.rsplit(':') {
+            value += parse(part)? * base;
+            base *= 60.;
+        }
+        value
+    } else {
+        parse(body)?
+    };
+    Ok(crate::ordinary_value::Scalar::from_float(sign * number))
+}
+pub(crate) fn ordinary_atom_key(
+    value: crate::ordinary_value::Scalar,
+    constructor: Option<usize>,
+) -> Result<crate::ordinary_source::Key> {
+    crate::ordinary_source::Key::new(value, constructor)
+}
 struct Reader<'a> {
     parser: Parser<&'a [u8]>,
     nodes: usize,
@@ -367,7 +423,23 @@ impl<'a> Reader<'a> {
             } => {
                 self.expanded_bytes = self.expanded_bytes.saturating_add(value.len());
                 require(self.expanded_bytes <= MAX_DOCUMENT_BYTES, "history_limit")?;
-                scalar(&value, style, tag.as_deref())
+                if self.ordinary_aliases {
+                    match ordinary_atom(&value, style, tag.as_deref()) {
+                        Ok(crate::ordinary_value::Scalar::NonFinite(v)) => Ok(Node::NonFinite(
+                            v,
+                            if v == crate::ordinary_value::NonFiniteFloat::NaN
+                                && value.replace('_', "").to_ascii_lowercase() == ".nan"
+                            {
+                                None
+                            } else {
+                                Some(self.nodes)
+                            },
+                        )),
+                        _ => scalar(&value, style, tag.as_deref()),
+                    }
+                } else {
+                    scalar(&value, style, tag.as_deref())
+                }
             }
             Event::SequenceStart { tag, .. } => {
                 collection_tag(tag.as_deref(), "seq")?;
@@ -418,6 +490,7 @@ fn node_cost(node: &Node, depth: usize) -> Result<(usize, usize)> {
     let mut bytes = 0usize;
     match node {
         Node::Scalar(v) => bytes = v.canonical_bytes()?.len(),
+        Node::NonFinite(_, _) => bytes = 24,
         Node::ValueKey(v) => bytes = v.len(),
         Node::List(a) => {
             for child in a {
@@ -681,40 +754,6 @@ fn construct(node: Node) -> Result<SourceValue> {
     }
 }
 
-fn construct_ordinary(node: Node) -> Result<OrdinaryValue> {
-    match node {
-        Node::Scalar(value) => Ok(OrdinaryValue::Scalar(value)),
-        Node::List(values) => Ok(OrdinaryValue::List(
-            values
-                .into_iter()
-                .map(construct_ordinary)
-                .collect::<Result<_>>()?,
-        )),
-        Node::Map(pairs) => {
-            let mut values: Vec<(OrdinaryKey, OrdinaryValue)> = Vec::new();
-            for (key, value) in flatten(pairs)? {
-                let Node::Scalar(key) = key else {
-                    return Err(Error("invalid_yaml_key".into()));
-                };
-                let key = OrdinaryKey::new(key)?;
-                let value = construct_ordinary(value)?;
-                if let Some((_, previous)) = values
-                    .iter_mut()
-                    .find(|(candidate, _)| candidate.python_eq(&key))
-                {
-                    // Python dict assignment keeps the first inserted key object
-                    // and position while replacing its value.
-                    *previous = value;
-                } else {
-                    values.push((key, value));
-                }
-            }
-            Ok(OrdinaryValue::Map(values))
-        }
-        _ => Err(invalid()),
-    }
-}
-
 // Pure PyYAML differs from LibYAML in two lexical policies. Tabs may occur in
 // quoted/block content or comments, never token separators or plain scalars.
 // Version directives accept any 1.x; they do not change the 1.1 scalar resolver.
@@ -798,13 +837,43 @@ pub fn decode_source_value(raw: &[u8]) -> Result<SourceValue> {
 /// Decode the permissive scalar-keyed mapping used by legacy ordinary reads.
 /// Strict history callers must continue to use `decode_source_*` above.
 pub fn decode_ordinary_source_value(raw: &[u8]) -> Result<OrdinaryValue> {
+    decode_full_ordinary_source_value(raw)?.try_finite()
+}
+/// Read ordinary source without claiming that it is a canonical history value.
+pub fn decode_full_ordinary_source_value(raw: &[u8]) -> Result<crate::ordinary_source::Source> {
     let (node, empty) = decode_node(raw, false, true)?;
     if empty {
-        return Ok(OrdinaryValue::Scalar(TypedValue::Null));
+        return Ok(crate::ordinary_source::Source::from_typed(
+            &TypedValue::Null,
+        ));
     }
-    let value = construct_ordinary(node.ok_or_else(invalid)?)?;
+    let value = construct_full(node.ok_or_else(invalid)?)?;
     value.projected().validate()?;
     Ok(value)
+}
+fn construct_full(node: Node) -> Result<crate::ordinary_source::Source> {
+    use crate::{
+        ordinary_source::{Key, Source as S},
+        ordinary_value::Scalar,
+    };
+    Ok(match node {
+        Node::Scalar(v) => S::Scalar(Scalar::Finite(v)),
+        Node::NonFinite(v, _) => S::Scalar(Scalar::NonFinite(v)),
+        Node::List(v) => S::List(v.into_iter().map(construct_full).collect::<Result<_>>()?),
+        Node::Map(v) => {
+            let mut out = Vec::new();
+            for (k, v) in flatten(v)? {
+                let key = match k {
+                    Node::Scalar(v) => Key::new(Scalar::Finite(v), None)?,
+                    Node::NonFinite(v, c) => Key::new(Scalar::NonFinite(v), c)?,
+                    _ => return Err(Error("invalid_yaml_key".into())),
+                };
+                crate::ordinary_source::update(&mut out, key, construct_full(v)?);
+            }
+            S::Map(out)
+        }
+        _ => return Err(invalid()),
+    })
 }
 
 fn decode_source(raw: &[u8], mapping: bool) -> Result<SourceValue> {

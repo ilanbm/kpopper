@@ -98,6 +98,7 @@ pub enum Value {
 pub struct Map {
     entries: Vec<(String, Value)>,
     index: BTreeMap<String, usize>,
+    source_keys: BTreeMap<String, Scalar>,
 }
 impl Map {
     pub fn new() -> Self {
@@ -109,14 +110,33 @@ impl Map {
     pub fn is_empty(&self) -> bool {
         self.entries.is_empty()
     }
+    fn index_for_text(&self, key: &str) -> Option<usize> {
+        if let Some(i) = self.index.get(key).copied() {
+            if self
+                .source_keys
+                .get(key)
+                .is_none_or(|s| matches!(s,Scalar::Finite(TypedValue::Text(t))if t==key))
+            {
+                return Some(i);
+            }
+        }
+        self.entries.iter().position(|(index, _)| {
+            self.source_keys
+                .get(index)
+                .is_some_and(|s| matches!(s,Scalar::Finite(TypedValue::Text(t))if t==key))
+        })
+    }
     pub fn get(&self, key: &str) -> Option<&Value> {
-        self.index.get(key).map(|i| &self.entries[*i].1)
+        self.index_for_text(key).map(|i| &self.entries[i].1)
     }
     pub fn get_mut(&mut self, key: &str) -> Option<&mut Value> {
-        self.index.get(key).copied().map(|i| &mut self.entries[i].1)
+        self.index_for_text(key).map(|i| &mut self.entries[i].1)
     }
     pub fn contains_key(&self, key: &str) -> bool {
-        self.index.contains_key(key)
+        self.get(key).is_some()
+    }
+    fn by_index(&self, key: &str) -> Option<&Value> {
+        self.index.get(key).map(|i| &self.entries[*i].1)
     }
     pub fn insert(&mut self, key: String, value: Value) -> Option<Value> {
         if let Some(i) = self.index.get(&key) {
@@ -126,6 +146,32 @@ impl Map {
             self.entries.push((key, value));
             None
         }
+    }
+    pub fn retain(&mut self, mut keep: impl FnMut(&String, &mut Value) -> bool) {
+        self.entries.retain_mut(|(k, v)| keep(k, v));
+        self.index = self
+            .entries
+            .iter()
+            .enumerate()
+            .map(|(i, (k, _))| (k.clone(), i))
+            .collect();
+    }
+    pub fn insert_source_key(&mut self, index: String, key: Scalar, value: Value) -> Option<Value> {
+        if !self.index.contains_key(&index) {
+            self.source_keys.insert(index.clone(), key);
+        }
+        self.insert(index, value)
+    }
+    pub fn source_key(&self, key: &str) -> Scalar {
+        self.source_keys
+            .get(key)
+            .cloned()
+            .unwrap_or_else(|| Scalar::Finite(TypedValue::Text(key.into())))
+    }
+    pub fn has_nonfinite_key(&self) -> bool {
+        self.source_keys
+            .values()
+            .any(|k| matches!(k, Scalar::NonFinite(_)))
     }
     pub fn iter(&self) -> impl Iterator<Item = (&String, &Value)> {
         self.entries.iter().map(|(k, v)| (k, v))
@@ -144,6 +190,7 @@ impl Map {
     }
     pub fn remove(&mut self, key: &str) -> Option<Value> {
         let i = self.index.remove(key)?;
+        self.source_keys.remove(key);
         let (_, value) = self.entries.remove(i);
         for (j, (k, _)) in self.entries.iter().enumerate().skip(i) {
             self.index.insert(k.clone(), j);
@@ -153,7 +200,7 @@ impl Map {
 }
 impl PartialEq for Map {
     fn eq(&self, other: &Self) -> bool {
-        self.len() == other.len() && self.iter().all(|(k, v)| other.get(k) == Some(v))
+        self.len() == other.len() && self.iter().all(|(k, v)| other.by_index(k) == Some(v))
     }
 }
 impl Eq for Map {}
@@ -193,13 +240,13 @@ impl<'a> IntoIterator for &'a Map {
 impl std::ops::Index<&str> for Map {
     type Output = Value;
     fn index(&self, key: &str) -> &Value {
-        self.get(key).expect("known ordinary field")
+        self.by_index(key).expect("known ordinary field")
     }
 }
 impl std::ops::Index<&String> for Map {
     type Output = Value;
     fn index(&self, key: &String) -> &Value {
-        self.get(key.as_str()).expect("known ordinary field")
+        self.by_index(key.as_str()).expect("known ordinary field")
     }
 }
 impl Value {
@@ -240,19 +287,72 @@ impl Value {
                         .map(|v| convert(v, depth + 1))
                         .collect::<Result<_>>()?,
                 ),
-                Value::Map(v) => TypedValue::Map(
-                    v.iter()
-                        .map(|(k, v)| Ok((k.clone(), convert(v, depth + 1)?)))
-                        .collect::<Result<_>>()?,
-                ),
+                Value::Map(v) => {
+                    let mut result = BTreeMap::new();
+                    for (k, item) in v.iter() {
+                        let key = match v.source_key(k) {
+                            Scalar::Finite(TypedValue::Text(k)) => k,
+                            _ => return Err(Error("invalid_yaml_key".into())),
+                        };
+                        require(
+                            result.insert(key, convert(item, depth + 1)?).is_none(),
+                            "invalid_yaml_key",
+                        )?;
+                    }
+                    TypedValue::Map(result)
+                }
             })
         }
         let value = convert(self, 0)?;
         value.validate()?;
         Ok(value)
     }
+    pub fn finite_projection(&self) -> Result<TypedValue> {
+        Ok(match self {
+            Self::Map(m) => {
+                require(
+                    !m.has_nonfinite_key(),
+                    "invalid_history_value: snapshot mappings require string keys",
+                )?;
+                TypedValue::Map(
+                    m.iter()
+                        .map(|(k, v)| Ok((k.clone(), v.finite_projection()?)))
+                        .collect::<Result<_>>()?,
+                )
+            }
+            Self::List(v) => TypedValue::List(
+                v.iter()
+                    .map(Self::finite_projection)
+                    .collect::<Result<_>>()?,
+            ),
+            Self::NonFinite(_) => {
+                return Err(Error(
+                    "invalid_history_value: snapshot data contains a nonfinite value".into(),
+                ));
+            }
+            _ => self.try_typed()?,
+        })
+    }
+    pub fn validate(&self) -> Result<()> {
+        let mut pending = vec![(self, 0)];
+        let mut count = 0;
+        while let Some((v, depth)) = pending.pop() {
+            count += 1;
+            require(depth <= crate::value::MAX_DEPTH, "value_depth")?;
+            require(count <= crate::value::MAX_VALUES, "value_limit")?;
+            match v {
+                Self::List(v) => pending.extend(v.iter().map(|v| (v, depth + 1))),
+                Self::Map(v) => pending.extend(v.values().map(|v| (v, depth + 1))),
+                _ => {}
+            }
+        }
+        Ok(())
+    }
     /// Strict JSON with ordinary date formatting; nonfinite values do not become
     /// null. Use python_json for Python-compatible ordinary output instead.
+    pub fn to_json(&self) -> Result<Json> {
+        self.json_value()
+    }
     pub fn json_value(&self) -> Result<Json> {
         match self {
             Self::NonFinite(_) => Err(Error("nonfinite_value_not_json".into())),
@@ -261,11 +361,22 @@ impl Value {
             Self::List(v) => Ok(Json::Array(
                 v.iter().map(Self::json_value).collect::<Result<_>>()?,
             )),
-            Self::Map(v) => Ok(Json::Object(
-                v.iter()
-                    .map(|(k, v)| Ok((k.clone(), v.json_value()?)))
-                    .collect::<Result<_>>()?,
-            )),
+            Self::Map(m) => {
+                let mut out = serde_json::Map::new();
+                for (k, v) in m.iter() {
+                    let key = m.source_key(k);
+                    require(
+                        !matches!(key, Scalar::NonFinite(_)),
+                        "nonfinite_value_not_json",
+                    )?;
+                    let key = json_key(&key)?;
+                    require(
+                        out.insert(key, v.json_value()?).is_none(),
+                        "ordinary_json_key_collision",
+                    )?;
+                }
+                Ok(Json::Object(out))
+            }
             _ => self.try_typed()?.to_json(),
         }
     }
@@ -285,7 +396,83 @@ impl Value {
     /// Python's JSON extension is intentionally output-only. A generic strict
     /// JSON parser must not begin accepting these tokens as canonical values.
     pub fn python_json(&self, spaces: bool) -> Result<String> {
-        fn write(value: &Value, out: &mut String, depth: usize, spaces: bool) -> Result<()> {
+        fn category(key: &Scalar) -> u8 {
+            match key {
+                Scalar::Finite(TypedValue::Text(_)) => 0,
+                Scalar::Finite(
+                    TypedValue::Bool(_) | TypedValue::Integer(_) | TypedValue::Float(_),
+                )
+                | Scalar::NonFinite(_) => 1,
+                Scalar::Finite(TypedValue::Null) => 2,
+                _ => 3,
+            }
+        }
+        fn sortable(value: &Value) -> bool {
+            match value {
+                Value::Map(m) => {
+                    let mut kind = None;
+                    for (k, v) in m.iter() {
+                        let c = category(&m.source_key(k));
+                        if kind.is_some_and(|old| old != c) || !sortable(v) {
+                            return false;
+                        }
+                        kind = Some(c);
+                    }
+                    true
+                }
+                Value::List(v) => v.iter().all(sortable),
+                _ => true,
+            }
+        }
+        fn numeric(key: &Scalar) -> Option<(num_bigint::BigInt, num_bigint::BigInt)> {
+            let v = match key {
+                Scalar::Finite(TypedValue::Bool(v)) => {
+                    TypedValue::Integer(Integer::new(if *v { "1" } else { "0" }).unwrap())
+                }
+                Scalar::Finite(v) => v.clone(),
+                _ => return None,
+            };
+            let value = crate::reasoning_scope::query_value(&v, 0).ok()?;
+            let m = crate::history_contract::map(&value).ok()?;
+            Some((
+                crate::history_contract::text(m.get("numerator")?)
+                    .ok()?
+                    .parse()
+                    .ok()?,
+                crate::history_contract::text(m.get("denominator")?)
+                    .ok()?
+                    .parse()
+                    .ok()?,
+            ))
+        }
+        fn compare(a: &Scalar, b: &Scalar) -> std::cmp::Ordering {
+            use std::cmp::Ordering::*;
+            match (a, b) {
+                (Scalar::Finite(TypedValue::Text(a)), Scalar::Finite(TypedValue::Text(b))) => {
+                    a.cmp(b)
+                }
+                (Scalar::NonFinite(NonFiniteFloat::NaN), _)
+                | (_, Scalar::NonFinite(NonFiniteFloat::NaN)) => Equal,
+                (Scalar::NonFinite(a), Scalar::NonFinite(b)) => {
+                    a.get().partial_cmp(&b.get()).unwrap_or(Equal)
+                }
+                (Scalar::NonFinite(NonFiniteFloat::PositiveInfinity), _)
+                | (_, Scalar::NonFinite(NonFiniteFloat::NegativeInfinity)) => Greater,
+                (Scalar::NonFinite(NonFiniteFloat::NegativeInfinity), _)
+                | (_, Scalar::NonFinite(NonFiniteFloat::PositiveInfinity)) => Less,
+                _ => match (numeric(a), numeric(b)) {
+                    (Some((a, b)), Some((c, d))) => (a * d).cmp(&(c * b)),
+                    _ => Equal,
+                },
+            }
+        }
+        fn write(
+            value: &Value,
+            out: &mut String,
+            depth: usize,
+            spaces: bool,
+            sorted: bool,
+        ) -> Result<()> {
             require(depth <= 400, "assessment nesting limit")?;
             match value {
                 Value::Null => out.push_str("null"),
@@ -304,21 +491,26 @@ impl Value {
                         if i > 0 {
                             out.push_str(if spaces { ", " } else { "," });
                         }
-                        write(v, out, depth + 1, spaces)?;
+                        write(v, out, depth + 1, spaces, sorted)?;
                     }
                     out.push(']');
                 }
                 Value::Map(values) => {
+                    let mut entries = values
+                        .iter()
+                        .map(|(k, v)| (values.source_key(k), v))
+                        .collect::<Vec<_>>();
+                    if sorted {
+                        entries.sort_by(|(a, _), (b, _)| compare(a, b));
+                    }
                     out.push('{');
-                    let mut sorted = values.iter().collect::<Vec<_>>();
-                    sorted.sort_by(|a, b| a.0.cmp(b.0));
-                    for (i, (k, v)) in sorted.into_iter().enumerate() {
+                    for (i, (k, v)) in entries.into_iter().enumerate() {
                         if i > 0 {
                             out.push_str(if spaces { ", " } else { "," });
                         }
-                        out.push_str(&serde_json::to_string(k)?);
+                        out.push_str(&serde_json::to_string(&json_key(&k)?)?);
                         out.push_str(if spaces { ": " } else { ":" });
-                        write(v, out, depth + 1, spaces)?;
+                        write(v, out, depth + 1, spaces, sorted)?;
                     }
                     out.push('}');
                 }
@@ -326,7 +518,7 @@ impl Value {
             require(out.len() <= 512 * 1024 * 1024, "assessment byte limit")
         }
         let mut out = String::new();
-        write(self, &mut out, 0, spaces)?;
+        write(self, &mut out, 0, spaces, sortable(self))?;
         Ok(out)
     }
     pub fn python_str(&self) -> String {
@@ -360,12 +552,12 @@ impl Value {
                     .collect::<Vec<_>>()
                     .join(", ")
             ),
-            Self::Map(v) => format!(
+            Self::Map(m) => format!(
                 "{{{}}}",
-                v.iter()
+                m.iter()
                     .map(|(k, v)| format!(
                         "{}: {}",
-                        Self::Text(k.clone()).python_repr(),
+                        m.source_key(k).value().python_repr(),
                         v.python_repr()
                     ))
                     .collect::<Vec<_>>()
@@ -380,6 +572,24 @@ impl From<&TypedValue> for Value {
         Self::from_typed(value)
     }
 }
+pub fn json_key(key: &Scalar) -> Result<String> {
+    match key {
+        Scalar::NonFinite(v) => Ok(v.python_json().into()),
+        Scalar::Finite(v) => Ok(match v {
+            TypedValue::Text(v) => v.clone(),
+            TypedValue::Null => "null".into(),
+            TypedValue::Bool(v) => v.to_string(),
+            TypedValue::Integer(v) => v.as_str().into(),
+            TypedValue::Float(v) => crate::identity::python_float(v.get()),
+            _ => {
+                return Err(Error(
+                    "ordinary JSON requires scalar JSON-compatible keys".into(),
+                ));
+            }
+        }),
+    }
+}
+
 pub fn map(value: &Value) -> Result<&Map> {
     if let Value::Map(v) = value {
         Ok(v)
@@ -439,16 +649,38 @@ pub fn finite_payload(value: &Value) -> Result<FinitePayload> {
                     })
                     .collect::<Result<_>>()?,
             ),
-            Value::Map(v) => Json::Object(
-                v.iter()
-                    .map(|(k, v)| {
-                        path.push(k.clone());
-                        let result = lower(v, path, unavailable, depth + 1);
-                        path.pop();
-                        Ok((k.clone(), result?))
-                    })
-                    .collect::<Result<_>>()?,
-            ),
+            Value::Map(m) => {
+                let mut out = serde_json::Map::new();
+                let mut key_kind = None;
+                for (k, v) in m.iter() {
+                    let key = m.source_key(k);
+                    require(
+                        !matches!(key, Scalar::NonFinite(_)),
+                        "nonfinite_value_not_json",
+                    )?;
+                    let kind = match &key {
+                        Scalar::Finite(TypedValue::Text(_)) => 0,
+                        Scalar::Finite(
+                            TypedValue::Bool(_) | TypedValue::Integer(_) | TypedValue::Float(_),
+                        ) => 1,
+                        _ => 2,
+                    };
+                    require(
+                        key_kind.is_none_or(|old| old == kind),
+                        "ordinary_json_key_order",
+                    )?;
+                    key_kind = Some(kind);
+                    let key = json_key(&key)?;
+                    path.push(key.clone());
+                    let item = lower(v, path, unavailable, depth + 1)?;
+                    path.pop();
+                    require(
+                        out.insert(key, item).is_none(),
+                        "ordinary_json_key_collision",
+                    )?;
+                }
+                Json::Object(out)
+            }
             _ => value.json_value()?,
         })
     }
@@ -507,10 +739,104 @@ pub fn compute_record(raw: &Map, ids: &BTreeSet<String>) -> Result<FinitePayload
     Ok(payload)
 }
 
+pub fn list(value: &Value) -> Result<&Vec<Value>> {
+    if let Value::List(v) = value {
+        Ok(v)
+    } else {
+        Err(Error("expected_sequence".into()))
+    }
+}
+pub fn truth(value: &Value) -> bool {
+    value.truth()
+}
+pub fn is_int(value: &Value, expected: &str) -> bool {
+    matches!(value,Value::Integer(n)if n.as_str()==expected)
+}
+pub fn field<'a>(fields: &'a Map, key: &str) -> Result<&'a Value> {
+    fields
+        .get(key)
+        .ok_or_else(|| Error(format!("missing_field: {key}")))
+}
+pub fn py(value: &Value) -> String {
+    value.python_str()
+}
+pub fn named(body: &Value) -> String {
+    map(body)
+        .ok()
+        .and_then(|m| {
+            ["name", "title", "label", "what", "desc"]
+                .into_iter()
+                .find_map(|k| m.get(k).filter(|v| truth(v)))
+        })
+        .map(|v| py(v).trim().into())
+        .unwrap_or_default()
+}
+pub fn blocked_text(body: &Value) -> String {
+    let Ok(m) = map(body) else {
+        return String::new();
+    };
+    for k in ["blocked_on", "unverified", "status"] {
+        if let Some(v) = m.get(k).filter(|v| truth(v)) {
+            if let Value::Map(m) = v {
+                let why = m
+                    .iter()
+                    .filter(|(k, _)| *k != "missing")
+                    .filter_map(|(_, v)| text(v).ok())
+                    .collect::<Vec<_>>()
+                    .join(" ");
+                if !why.is_empty() {
+                    return why.trim().into();
+                }
+                let missing = match m.get("missing") {
+                    Some(Value::Text(v)) => vec![v.clone()],
+                    Some(Value::List(a)) => a.iter().map(py).collect(),
+                    _ => vec![],
+                };
+                return format!("waiting on {}", missing.join(", ")).trim().into();
+            }
+            return py(v);
+        }
+    }
+    String::new()
+}
+pub fn reopened_text(body: &Value) -> String {
+    map(body)
+        .ok()
+        .and_then(|m| m.get("reopened_by"))
+        .filter(|v| truth(v))
+        .map(py)
+        .unwrap_or_default()
+}
+pub fn python_equal(a: &Value, b: &Value) -> bool {
+    if let (Ok(a), Ok(b)) = (a.try_typed(), b.try_typed()) {
+        return crate::source_clock::python_equal(&a, &b);
+    }
+    match (a, b) {
+        (Value::NonFinite(NonFiniteFloat::NaN), Value::NonFinite(NonFiniteFloat::NaN)) => false,
+        (Value::NonFinite(a), Value::NonFinite(b)) => a == b,
+        (Value::List(a), Value::List(b)) => {
+            a.len() == b.len() && a.iter().zip(b).all(|(a, b)| a == b || python_equal(a, b))
+        }
+        (Value::Map(a), Value::Map(b)) => {
+            a.len() == b.len()
+                && a.iter()
+                    .all(|(k, a)| b.get(k).is_some_and(|b| a == b || python_equal(a, b)))
+        }
+        _ => false,
+    }
+}
+
+pub fn same(a: &Value, b: &Value) -> Result<bool> {
+    match (a.try_typed(), b.try_typed()) {
+        (Ok(a), Ok(b)) => crate::reasoning_authoring::same(&a, &b),
+        _ => Ok(python_equal(a, b)),
+    }
+}
+
 #[cfg(test)]
-mod tests {
+pub(crate) mod tests {
     use super::*;
-    fn value(j: &Json) -> Value {
+    pub(crate) fn value(j: &Json) -> Value {
         let a = j.as_array().unwrap();
         match a[0].as_str().unwrap() {
             "nonfinite" => Value::NonFinite(match a[1].as_str().unwrap() {
