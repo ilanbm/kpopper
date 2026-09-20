@@ -261,6 +261,8 @@ fn python_18_oracle_matches_nested_record_checkout_root() {
     fs::write(nested.join(".kpopper/measure.yaml"), "echo: [./recipe]\n").unwrap();
     fs::write(root.join("recipe"), "#!/bin/sh\nprintf '1\\n'\n").unwrap();
     fs::set_permissions(root.join("recipe"), fs::Permissions::from_mode(0o700)).unwrap();
+    assert!(Command::new("git").args(["add", "."]).current_dir(&root).status().unwrap().success());
+    assert!(Command::new("git").args(["-c", "user.name=Oracle", "-c", "user.email=oracle@example.invalid", "commit", "-qm", "fixture"]).current_dir(&root).status().unwrap().success());
     assert_oracle(&record, false);
     assert_oracle(&record, true);
 }

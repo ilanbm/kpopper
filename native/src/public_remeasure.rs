@@ -57,6 +57,26 @@ fn checkout_root(record: &Path) -> PathBuf {
         .map(PathBuf::from)
         .unwrap_or_else(|| parent.to_path_buf())
 }
+fn git_output(root: &Path, args: &[&str]) -> Option<String> {
+    let mut command = Command::new("git");
+    command.arg("-C").arg(root).args(args);
+    crate::reasoning_runtime::run_command_capture(&mut command, vec![], Duration::from_secs(5), 16 * 1024)
+        .ok()
+        .filter(|output| output.status.success())
+        .and_then(|output| String::from_utf8(output.stdout).ok())
+        .map(|output| output.trim().to_owned())
+}
+fn tree_identity(root: &Path) -> (Option<String>, Option<String>) {
+    let commit = git_output(root, &["rev-parse", "--short=7", "HEAD"]).filter(|value| !value.is_empty());
+    let said = commit.as_ref().map(|commit| {
+        if git_output(root, &["status", "--porcelain"]).is_some_and(|value| !value.is_empty()) {
+            format!("{commit} with the working tree changed")
+        } else {
+            commit.clone()
+        }
+    });
+    (commit, said)
+}
 fn allowlist(path: &Path) -> Result<BTreeMap<String, Vec<String>>> {
     if !path.is_file() { return Ok(BTreeMap::new()); }
     let value = history_yaml::decode_document(&std::fs::read(path)?)?;
@@ -229,7 +249,8 @@ pub fn run(options: &Options, cwd: &Path, frozen: bool) -> Result<Output> {
     for name in recipes.keys().filter(|name| !named.contains_key(name.as_str())) { out.push(format!("  named by no entry, never run: {name}")); }
     if !options.run { out.extend(["".into(), "nothing ran - add --run to measure this tree".into()]); return Ok(output(out, 0)); }
     out.push("".into());
-    out.push(format!("measured on {} (UTC): {} entr{} by {} recipe{}", utc_day(), entries, if entries==1{"y"}else{"ies"}, cited.len(), if cited.len()==1{""}else{"s"}));
+    let (_commit, said) = tree_identity(&root);
+    out.push(format!("measured on {} (UTC){}: {} entr{} by {} recipe{}", utc_day(), said.as_ref().map(|value| format!(", at {value}")).unwrap_or_default(), entries, if entries==1{"y"}else{"ies"}, cited.len(), if cited.len()==1{""}else{"s"}));
     let mut changed = false;
     let mut failed = 0usize;
     for (name, ids) in named {
