@@ -33,6 +33,7 @@ pub mod history_emit;
 pub mod history_group;
 pub mod history_group_activation;
 pub mod history_hypotheses;
+pub mod ingestion_target;
 pub mod history_hypothesis_authoring;
 pub mod history_hypothesis_import;
 pub mod history_hypothesis_import_prepare;

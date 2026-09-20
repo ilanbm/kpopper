@@ -88,6 +88,12 @@ fn parse(raw: &[u8]) -> Result<Report> {
         &format!("unknown envelope fields: {}", unknown.join(", ")),
     )?;
     let quote = required_text(top, "source_quote")?;
+    if let Some(event) = top.get("event_id").filter(|v| !v.is_null()) {
+        crate::require(
+            event.as_str().is_some_and(|s| !s.trim().is_empty()),
+            "event_id must be non-empty when supplied",
+        )?;
+    }
     let date = required_text(top, "date")?;
     crate::value::Date::new(&date)?;
     if let Some(profile) = top.get("profile").filter(|v| !v.is_null()) {
@@ -188,6 +194,61 @@ pub fn validate_report(raw: &[u8]) -> Result<J> {
     Ok(parse(raw)?.raw)
 }
 
+/// Inspect one routed target without retaining an event or applying a report.
+pub fn capture_target(envelope: &J, record: &Path, cwd: &Path) -> Result<J> {
+    let report = parse(&serde_json::to_vec(envelope)?)?;
+    let original = vec![cwd.join(record)];
+    let paths = crate::project_modes::write_paths(&original, cwd)?
+        .iter()
+        .map(|p| crate::project_modes::resolved(p))
+        .collect::<Result<Vec<_>>>()?;
+    crate::require(paths.len() == 1, "ingestion requires one record path")?;
+    let routing = crate::source_capture::routing_observation(&original, cwd)?;
+    let mut inventory = Inventory::default();
+    let captured = crate::source_document::load(&paths, &mut inventory, false)?;
+    crate::require(
+        captured.members == paths,
+        "multi-file and pointer records require primary review",
+    )?;
+    crate::require(
+        map(&captured.hypotheses)?.is_empty(),
+        "a record with hypothesis context requires primary review",
+    )?;
+    let bytes = inventory
+        .files
+        .get(&paths[0])
+        .ok_or_else(|| error("snapshot_changed"))?;
+    let snapshot =
+        crate::ingestion_target::snapshot(&captured.source.projected(), bytes, &report.raw)?;
+    inventory.verify()?;
+    crate::require(
+        crate::project_modes::write_paths(&original, cwd)?
+            .iter()
+            .map(|p| crate::project_modes::resolved(p))
+            .collect::<Result<Vec<_>>>()?
+            == paths
+            && crate::source_capture::routing_observation(&original, cwd)? == routing,
+        "project_route_changed",
+    )?;
+    Ok(snapshot)
+}
+
+fn verify_captured_target(
+    document: &V,
+    bytes: &[u8],
+    report: &Report,
+    expected: Option<&J>,
+) -> Result<()> {
+    if let Some(expected) = expected {
+        let current = crate::ingestion_target::snapshot(document, bytes, &report.raw)?;
+        crate::require(
+            current["body_sha256"] == expected["body_sha256"],
+            "target changed since capture; reread the premises before resubmitting",
+        )?;
+    }
+    Ok(())
+}
+
 fn private_dir(path: &Path) -> Result<()> {
     fs::create_dir_all(path)?;
     #[cfg(unix)]
@@ -258,7 +319,7 @@ fn prepare_state(record: &Path, selected: Option<&Path>) -> Result<PathBuf> {
 }
 
 fn event_id(record: &Path, report: &Report) -> Result<String> {
-    if let Some(value) = report.raw.get("event_id") {
+    if let Some(value) = report.raw.get("event_id").filter(|v| !v.is_null()) {
         let supplied = value
             .as_str()
             .filter(|s| !s.trim().is_empty())
@@ -268,7 +329,7 @@ fn event_id(record: &Path, report: &Report) -> Result<String> {
                 .into(),
         )
     } else {
-        crate::public_history::fresh_id("report")
+        Ok(uuid::Uuid::new_v4().simple().to_string())
     }
 }
 
@@ -833,7 +894,7 @@ pub fn run(options: &Options, cwd: &Path, stdin: Option<&[u8]>) -> Result<Output
     run_with_event(options, cwd, stdin, None)
 }
 
-/// Process an already captured report using its retained, filesystem-safe event identity.
+/// Process an already captured report using its retained, canonical 32-character event identity.
 /// A caller-supplied envelope identity must still resolve to the same record-bound identity.
 pub fn run_with_event(
     options: &Options,
@@ -841,7 +902,29 @@ pub fn run_with_event(
     stdin: Option<&[u8]>,
     event_override: Option<&str>,
 ) -> Result<Output> {
-    run_bound(options, cwd, stdin, event_override, None, &mut |_| Ok(()))
+    run_bound(options, cwd, stdin, event_override, None, None, &mut |_| {
+        Ok(())
+    })
+}
+
+/// Process a queued report only if its target still matches the supplied capture.
+/// The check shares the writer's locked source capture and publication guards.
+pub fn run_captured(
+    options: &Options,
+    cwd: &Path,
+    stdin: Option<&[u8]>,
+    event: &str,
+    expected_target: &J,
+) -> Result<Output> {
+    run_bound(
+        options,
+        cwd,
+        stdin,
+        Some(event),
+        Some(expected_target),
+        None,
+        &mut |_| Ok(()),
+    )
 }
 
 #[cfg(test)]
@@ -852,7 +935,7 @@ fn run_with_probe(
     supplied_runtime: Option<&crate::reasoning_runtime::Runtime>,
     probe: &mut dyn FnMut(&str) -> Result<()>,
 ) -> Result<Output> {
-    run_bound(options, cwd, stdin, None, supplied_runtime, probe)
+    run_bound(options, cwd, stdin, None, None, supplied_runtime, probe)
 }
 
 fn run_bound(
@@ -860,6 +943,7 @@ fn run_bound(
     cwd: &Path,
     stdin: Option<&[u8]>,
     event_override: Option<&str>,
+    expected_target: Option<&J>,
     supplied_runtime: Option<&crate::reasoning_runtime::Runtime>,
     probe: &mut dyn FnMut(&str) -> Result<()>,
 ) -> Result<Output> {
@@ -885,14 +969,13 @@ fn run_bound(
     let event = match event_override {
         Some(event) => {
             crate::require(
-                !event.is_empty()
-                    && event.len() <= 128
+                event.len() == 32
                     && event
                         .bytes()
-                        .all(|b| b.is_ascii_alphanumeric() || b == b'-' || b == b'_'),
+                        .all(|b| b.is_ascii_hexdigit() && !b.is_ascii_uppercase()),
                 "invalid captured event identity",
             )?;
-            if report.raw.get("event_id").is_some() {
+            if report.raw.get("event_id").is_some_and(|v| !v.is_null()) {
                 crate::require(
                     event_id(&record, &report)? == event,
                     "captured event identity mismatch",
@@ -1110,7 +1193,7 @@ fn run_bound(
         }
         route.verify()?;
         let authority = crate::legacy_authoring::route(&record, route.config())?;
-        let context = V::from_json(&json!({
+        let mut context = json!({
             "kind":"source-report/v1", "event_id":event,
             "source_sha256":crate::identity::sha256(report.quote.as_bytes()),
             "envelope_sha256":envelope_sha, "record":record, "state_dir":root,
@@ -1118,7 +1201,11 @@ fn run_bound(
             "routing":crate::source_capture::routing_observation(
                 route.paths(), &route.project().root,
             )?.to_json()?
-        }))?;
+        });
+        if let Some(target) = expected_target {
+            context["target_snapshot"] = target.clone();
+        }
+        let context = V::from_json(&context)?;
         if authority == crate::legacy_authoring::AuthorityRoute::Legacy {
             let mut inventory = Inventory::default();
             let captured =
@@ -1133,6 +1220,15 @@ fn run_bound(
             )?;
 
             let document = captured.source.projected();
+            verify_captured_target(
+                &document,
+                inventory
+                    .files
+                    .get(&record)
+                    .ok_or_else(|| error("snapshot_changed"))?,
+                &report,
+                expected_target,
+            )?;
             if report.raw.get("source").is_some()
                 || report.updates.iter().any(|u| u["kind"] == "add")
             {
@@ -1199,6 +1295,7 @@ fn run_bound(
         let store = crate::history_store::Store::new(&record)?;
         let captured = store.capture()?;
         let document = crate::history_authoring::document(&captured)?;
+        verify_captured_target(&document, &captured.entry_bytes, &report, expected_target)?;
         if report.raw.get("source").is_some() || report.updates.iter().any(|u| u["kind"] == "add") {
             let expected = report.raw.get("record_sha256").and_then(J::as_str)
                 .ok_or_else(|| error("new entries and existing source citations require record_sha256 from the primary's prior read"))?;
@@ -1343,6 +1440,82 @@ fn run_bound(
 mod tests {
     use super::*;
     #[test]
+    fn omitted_event_id_generates_a_valid_record_source_identity() {
+        let temp = tempfile::tempdir().unwrap();
+        let entry = temp.path().join("GROUNDING.yaml");
+        fs::write(&entry, "sources:\n  s.old: {url: 'https://example.test', read: 2026-09-01}\nknown:\n  p.x: {v: 1, from: s.old, of: 2026-09-01}\n").unwrap();
+        let options = Options {
+            file: "-".into(),
+            record: Some(entry.clone()),
+            state_dir: Some(temp.path().join("state")),
+        };
+        let report = br#"{"date":"2026-09-20","source_quote":"x is 2","target":"p.x","value":2}"#;
+        let result = run(&options, temp.path(), Some(report)).unwrap();
+        let receipt: J = serde_json::from_str(&result.text).unwrap();
+        assert_eq!(receipt["state"], "applied", "{}", result.text);
+        let event = receipt["event_id"].as_str().unwrap();
+        assert_eq!(event.len(), 32);
+        assert!(
+            event
+                .bytes()
+                .all(|b| b.is_ascii_hexdigit() && !b.is_ascii_uppercase())
+        );
+        assert!(
+            fs::read_to_string(entry)
+                .unwrap()
+                .contains(&format!("s.ingest_{event}"))
+        );
+    }
+
+    #[test]
+    fn captured_target_allows_unrelated_edits_and_refuses_changed_target() {
+        for change_target in [false, true] {
+            let temp = tempfile::tempdir().unwrap();
+            let entry = temp.path().join("GROUNDING.yaml");
+            let original = "sources:\n  s.old: {url: 'https://example.test', read: 2026-09-01}\nknown:\n  p.x: {v: 1, from: s.old, of: 2026-09-01}\n  p.y: {v: 1, from: s.old, of: 2026-09-01}\n";
+            fs::write(&entry, original).unwrap();
+            let report =
+                json!({"date":"2026-09-20","source_quote":"x is 2","target":"p.x","value":2});
+            let captured = capture_target(&report, &entry, temp.path()).unwrap();
+            assert_eq!(fs::read_to_string(&entry).unwrap(), original);
+            assert_eq!(captured["value"], 1);
+            let changed = if change_target {
+                original.replace("p.x: {v: 1", "p.x: {v: 3")
+            } else {
+                original.replace("p.y: {v: 1", "p.y: {v: 9")
+            };
+            fs::write(&entry, &changed).unwrap();
+            let state = temp.path().join("state");
+            let options = Options {
+                file: "-".into(),
+                record: Some(entry.clone()),
+                state_dir: Some(state),
+            };
+            let raw = serde_json::to_vec(&report).unwrap();
+            let result = run_captured(
+                &options,
+                temp.path(),
+                Some(&raw),
+                "1234567890abcdef1234567890abcdef",
+                &captured,
+            )
+            .unwrap();
+            let receipt: J = serde_json::from_str(&result.text).unwrap();
+            if change_target {
+                assert_eq!(receipt["state"], "needs_primary");
+                assert_eq!(result.code, 1);
+                assert_eq!(fs::read_to_string(&entry).unwrap(), changed);
+            } else {
+                assert_eq!(receipt["state"], "applied", "{}", result.text);
+                assert_eq!(result.code, 0);
+                let after = fs::read_to_string(&entry).unwrap();
+                assert!(after.contains("v: 2"));
+                assert!(after.contains("v: 9"));
+            }
+        }
+    }
+
+    #[test]
     fn capture_validation_preserves_original_envelope() {
         let raw = br#"{"date":"2026-09-20","source_quote":"original quote","target":"p.x","value":2,"shareability":"private","scope":{"kind":"unclear"}}"#;
         assert_eq!(
@@ -1367,24 +1540,34 @@ mod tests {
         let report = json!({"date":"2026-09-20","source_quote":"private original quote",
             "target":"p.x","value":2,"shareability":"private"});
         let raw = serde_json::to_vec(&report).unwrap();
-        let first =
-            run_with_event(&options, temp.path(), Some(&raw), Some("captured-123")).unwrap();
-        let second =
-            run_with_event(&options, temp.path(), Some(&raw), Some("captured-123")).unwrap();
+        let first = run_with_event(
+            &options,
+            temp.path(),
+            Some(&raw),
+            Some("1234567890abcdef1234567890abcdef"),
+        )
+        .unwrap();
+        let second = run_with_event(
+            &options,
+            temp.path(),
+            Some(&raw),
+            Some("1234567890abcdef1234567890abcdef"),
+        )
+        .unwrap();
         assert_eq!(first.text, second.text);
         let receipt: J = serde_json::from_str(&first.text).unwrap();
-        assert_eq!(receipt["event_id"], "captured-123");
+        assert_eq!(receipt["event_id"], "1234567890abcdef1234567890abcdef");
         assert_eq!(receipt["state"], "needs_primary");
         assert_eq!(fs::read(&entry).unwrap(), before);
         assert_eq!(
             serde_json::from_slice::<J>(
-                &fs::read(state.join("envelopes/captured-123.json")).unwrap()
+                &fs::read(state.join("envelopes/1234567890abcdef1234567890abcdef.json")).unwrap()
             )
             .unwrap(),
             report
         );
         assert_eq!(
-            fs::read(state.join("sources/captured-123.txt")).unwrap(),
+            fs::read(state.join("sources/1234567890abcdef1234567890abcdef.txt")).unwrap(),
             b"private original quote"
         );
         let mut changed = report;
@@ -1394,7 +1577,7 @@ mod tests {
                 &options,
                 temp.path(),
                 Some(&serde_json::to_vec(&changed).unwrap()),
-                Some("captured-123")
+                Some("1234567890abcdef1234567890abcdef")
             )
             .is_err()
         );
@@ -1413,7 +1596,7 @@ mod tests {
             state_dir: Some(state.clone()),
         };
         let report = br#"{"event_id":"caller-event","date":"2026-09-20","source_quote":"x","target":"p.x","value":2}"#;
-        for event in ["../outside", "", "wrong-event"] {
+        for event in ["../outside", "", "11111111111111111111111111111111"] {
             assert!(run_with_event(&options, temp.path(), Some(report), Some(event)).is_err());
             assert!(!state.exists());
         }
