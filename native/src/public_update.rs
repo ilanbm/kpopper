@@ -91,8 +91,9 @@ fn parse(raw: &[u8]) -> Result<Report> {
     )?;
     let quote = required_text(top, "source_quote")?;
     if let Some(event) = top.get("event_id").filter(|v| !v.is_null()) {
+        let event = event.as_str().ok_or_else(|| error("event_id must be text"))?;
         crate::require(
-            event.as_str().is_some_and(|s| !s.trim().is_empty()),
+            !event.trim().is_empty(),
             "event_id must be non-empty when supplied",
         )?;
     }
@@ -242,6 +243,13 @@ fn verify_captured_target(
     expected: Option<&J>,
 ) -> Result<()> {
     let current = crate::ingestion_target::snapshot(document, bytes, &report.raw)?;
+    if !report.batch {
+        crate::require(
+            crate::ingestion_target::basic_type(&V::from_json(&report.raw["value"])?)
+                == current["type"].as_str(),
+            "the captured value does not have the target's scalar type",
+        )?;
+    }
     if let Some(expected) = expected {
         crate::require(
             current["body_sha256"] == expected["body_sha256"],
@@ -1391,8 +1399,9 @@ fn run_bound(
         )?;
         let collection = source_collection(&document, &report)
             .map_err(|e| error(&format!("history source collection: {e}")))?;
-        let (planned, _) = actions(&report, &event, Path::new(&portable), &collection)
+        let (mut planned, _) = actions(&report, &event, Path::new(&portable), &collection)
             .map_err(|e| error(&format!("history report actions: {e}")))?;
+        advanced::apply_declared_scope(&report, &mut planned)?;
         let owned_runtime = if supplied_runtime.is_none() {
             crate::public_workspace::runtime_for_document(&document)?
         } else {
@@ -1553,6 +1562,30 @@ fn run_bound(
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn reports_cannot_change_the_captured_scalar_type() {
+        for queued in [false, true] {
+            for value in [json!("two"), json!(false), json!(2.0), J::Null] {
+                let temp = tempfile::tempdir().unwrap();
+                let entry = temp.path().join("GROUNDING.yaml");
+                let before = "sources:\n  s.old: {url: 'https://example.test', read: 2026-09-01}\nknown:\n  p.x: {v: 1, from: s.old, of: 2026-09-01}\n";
+                fs::write(&entry, before).unwrap();
+                let report = json!({"date":"2026-09-20","source_quote":"new reading","target":"p.x","value":value});
+                let raw = serde_json::to_vec(&report).unwrap();
+                let snapshot = capture_target(&report, &entry, temp.path()).unwrap();
+                let options = Options { file: "-".into(), record: Some(entry.clone()), state_dir: Some(temp.path().join("state")) };
+                let result = if queued {
+                    run_captured(&options, temp.path(), Some(&raw), "1234567890abcdef1234567890abcdef", &snapshot)
+                } else { run(&options, temp.path(), Some(&raw)) }.unwrap();
+                let receipt: J = serde_json::from_str(&result.text).unwrap();
+                assert_eq!(receipt["state"], "needs_primary", "{receipt}");
+                assert_eq!(receipt["reason"], "the captured value does not have the target's scalar type");
+                assert_eq!(result.code, 1);
+                assert_eq!(fs::read_to_string(entry).unwrap(), before);
+            }
+        }
+    }
+
     #[test]
     fn omitted_event_id_generates_a_valid_record_source_identity() {
         let temp = tempfile::tempdir().unwrap();

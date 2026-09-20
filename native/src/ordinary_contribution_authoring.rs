@@ -311,8 +311,7 @@ pub(crate) fn route(
         let event_id = options
             .event_id
             .clone()
-            .map(Ok)
-            .unwrap_or_else(|| Ok(uuid::Uuid::new_v4().simple().to_string()))?;
+            .unwrap_or_else(|| uuid::Uuid::new_v4().simple().to_string());
         let contribution_id = options
             .contribution_id
             .clone()
@@ -407,7 +406,7 @@ pub(crate) fn route(
             &captured,
             &action,
             &crate::history_authoring::Options {
-                operation: fresh_id("contribution")?,
+                operation: crate::public_history::fresh_id("contribution")?,
                 recorded_at: now.to_rfc3339(),
                 recording_day: chrono::Local::now().date_naive().to_string(),
                 by: V::Null,
@@ -472,8 +471,7 @@ pub(crate) fn route(
     let event_id = options
         .event_id
         .clone()
-        .map(Ok)
-        .unwrap_or_else(|| Ok(uuid::Uuid::new_v4().simple().to_string()))?;
+        .unwrap_or_else(|| uuid::Uuid::new_v4().simple().to_string());
     let contribution_id = options.contribution_id.clone().unwrap_or_else(|| id.into());
     token(&s(&event_id))?;
     token(&s(&contribution_id))?;
