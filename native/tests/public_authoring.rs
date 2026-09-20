@@ -351,7 +351,7 @@ fn advanced_set_and_judgment_capture_complete_authored_bodies() {
     };
     assert_eq!(scope["environment"], V::Text("workspace".into()));
 
-    let judgment: Value = serde_json::from_str(&success(run_unbundled(
+    let judgment_output = success(run_unbundled(
         &root,
         &[
             "add",
@@ -368,8 +368,10 @@ fn advanced_set_and_judgment_capture_complete_authored_bodies() {
             "--event-id",
             "judgment-event",
         ],
-    )))
-    .unwrap();
+    ));
+    let (notice, receipt) = judgment_output.trim_end().rsplit_once('\n').unwrap();
+    assert_eq!(notice, "nearest existing:\n  d.old: rests on p.base too - verdicts differ, a pair to judge\n  one subject: same <id> d.new folds it in · two: distinct d.new <id> \"why\" keeps them apart");
+    let judgment: Value = serde_json::from_str(receipt).unwrap();
     let manifest = pending_manifest(&root, judgment["revision"].as_str().unwrap());
     let V::Map(manifest) = manifest else {
         panic!("manifest")
