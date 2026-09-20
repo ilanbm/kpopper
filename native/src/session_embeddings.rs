@@ -73,10 +73,10 @@ fn file_identity(metadata: &std::fs::Metadata) -> u128 {
 }
 
 #[cfg(windows)]
-fn file_identity(metadata: &std::fs::Metadata) -> u128 {
-    use std::os::windows::fs::MetadataExt;
-    (u128::from(metadata.volume_serial_number().unwrap_or(0)) << 64)
-        | u128::from(metadata.file_index().unwrap_or(0))
+fn file_identity(_metadata: &std::fs::Metadata) -> u128 {
+    // Stable Rust does not expose a portable Windows file identity. The stamp
+    // still binds canonical path, size, mtime, and (during verification) hash.
+    0
 }
 
 fn stamp(directory: &Path) -> Result<Stamp, String> {
@@ -555,5 +555,42 @@ mod tests {
             .rank(&BTreeMap::from([("a".into(), "text".into())]), "query")
             .unwrap_err();
         assert!(error.contains("assets are unavailable"));
+    }
+
+    #[test]
+    fn wrong_pinned_assets_fail_before_runtime_loading() {
+        let directory = tempfile::tempdir().unwrap();
+        std::fs::write(directory.path().join(WEIGHTS.0), b"not the pinned model").unwrap();
+        std::fs::write(
+            directory.path().join(TOKENIZER.0),
+            b"not the pinned tokenizer",
+        )
+        .unwrap();
+        let error = verified_assets(directory.path()).unwrap_err();
+        assert!(error.contains("pinned weights artifact mismatch"));
+    }
+
+    #[test]
+    fn chunk_plan_retains_the_complete_tail_with_exact_overlap() {
+        let encoder = Fake { encoded: 0 };
+        let text = "שלום!".repeat(160);
+        let prefix = encoder.tokens("passage:", false).unwrap();
+        let all = encoder.tokens(&format!("passage: {text}"), false).unwrap();
+        let body = &all[prefix.len()..];
+        let planned = chunks(&encoder, &text).unwrap();
+        assert!(planned.len() > 1);
+        assert!(planned.iter().all(|chunk| chunk.len() <= TOKEN_LIMIT));
+        let bodies = planned
+            .iter()
+            .map(|chunk| &chunk[1 + prefix.len()..chunk.len() - 1])
+            .collect::<Vec<_>>();
+        assert_eq!(bodies[0], &body[..bodies[0].len()]);
+        for pair in bodies.windows(2) {
+            assert_eq!(
+                &pair[0][pair[0].len() - OVERLAP_TOKENS..],
+                &pair[1][..OVERLAP_TOKENS]
+            );
+        }
+        assert_eq!(bodies.last().unwrap().last(), body.last());
     }
 }

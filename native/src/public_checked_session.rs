@@ -226,13 +226,11 @@ impl Service {
         let profile_path = profile.clone();
         let store =
             CheckedSessionStore::open(&state, &name, &input, navigation.clone(), options.encoding)?;
-        let semantic = options.embedding_dir.as_ref().map(|directory| {
-            E5Index::new(if directory.is_absolute() {
-                directory.clone()
-            } else {
-                cwd.join(directory)
-            })
-        });
+        let semantic = options
+            .embedding_dir
+            .as_ref()
+            .map(|directory| path(&cwd, directory).map(E5Index::new))
+            .transpose()?;
         inputs.verify()?;
         Ok(Self {
             cwd,
