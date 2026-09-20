@@ -1053,17 +1053,29 @@ fn main() {
             }
         }
         Ok(value) if is_map => {
-            if as_json { println!("{}", serde_json::to_string_pretty(&value).unwrap()); }
-            else { println!("Mapping task {} is {} for the current agent session.\nWork is complete only after the agent returns a report.", value["request"].as_str().unwrap_or(""), value["status"].as_str().unwrap_or("")); }
+            if as_json {
+                println!("{}", serde_json::to_string_pretty(&value).unwrap());
+            } else {
+                println!(
+                    "Mapping task {} is {} for the current agent session.\nWork is complete only after the agent returns a report.",
+                    value["request"].as_str().unwrap_or(""),
+                    value["status"].as_str().unwrap_or("")
+                );
+            }
         }
         Ok(value) if is_agent => println!("{}", serde_json::to_string_pretty(&value).unwrap()),
         Ok(value) => println!("{}", value),
         Err(error) => {
             if is_map && as_json {
-                println!("{}", serde_json::to_string_pretty(&json!({"status":"unavailable", "error":error.to_string()})).unwrap());
-            } else if is_agent { eprintln!("kpopper _agent: {error}"); }
-            else if is_map { eprintln!("{error}"); }
-            else if is_watch {
+                println!(
+                    "{{\n  \"status\": \"unavailable\",\n  \"error\": {}\n}}",
+                    serde_json::to_string(&error.to_string()).unwrap()
+                );
+            } else if is_agent {
+                eprintln!("kpopper _agent: {error}");
+            } else if is_map {
+                eprintln!("{error}");
+            } else if is_watch {
                 eprintln!("{}", json!({"error":error.to_string()}));
             } else {
                 eprintln!("{}", json!({"status":"refused","error":error.to_string()}));

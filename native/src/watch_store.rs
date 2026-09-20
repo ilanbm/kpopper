@@ -126,9 +126,16 @@ fn git_with_program(
     let mut command = Command::new(program);
     command.arg("-C").arg(cwd).args(args);
     let out = crate::reasoning_runtime::run_command_capture(
-        &mut command, Vec::new(), timeout, 4 * 1024 * 1024,
-    ).map_err(|e| match e.0.as_str() {
-        "runtime_timeout" => error(format!("Git command timed out after {} seconds", timeout.as_secs())),
+        &mut command,
+        Vec::new(),
+        timeout,
+        4 * 1024 * 1024,
+    )
+    .map_err(|e| match e.0.as_str() {
+        "runtime_timeout" => error(format!(
+            "Git command timed out after {} seconds",
+            timeout.as_secs()
+        )),
         "output_limit" => error("Git command output exceeded 4194304 bytes"),
         _ => e,
     })?;
@@ -183,8 +190,12 @@ mod git_tests {
         fs::write(&fake, b"#!/bin/sh\ntrap '' HUP\n/bin/sleep 1 &\nexit 0\n").unwrap();
         fs::set_permissions(&fake, fs::Permissions::from_mode(0o700)).unwrap();
         let started = std::time::Instant::now();
-        let result = git_with_program(&fake.to_string_lossy(), Path::new("."),
-            &["status"], Duration::from_millis(20));
+        let result = git_with_program(
+            &fake.to_string_lossy(),
+            Path::new("."),
+            &["status"],
+            Duration::from_millis(20),
+        );
         assert!(result.is_err(), "incomplete pipe capture cannot be success");
         assert!(started.elapsed() < Duration::from_millis(700));
     }
@@ -195,10 +206,20 @@ mod git_tests {
         let fake = temp.path().join("git");
         fs::write(&fake, b"#!/bin/sh\nyes x | head -c 5000000\nexit 0\n").unwrap();
         fs::set_permissions(&fake, fs::Permissions::from_mode(0o700)).unwrap();
-        let result = git_with_program(&fake.to_string_lossy(), Path::new("."),
-            &["status"], Duration::from_secs(3));
-        assert!(result.is_err(), "oversized output must not be returned as a complete result");
-        assert_eq!(result.err().unwrap().0, "Git command output exceeded 4194304 bytes");
+        let result = git_with_program(
+            &fake.to_string_lossy(),
+            Path::new("."),
+            &["status"],
+            Duration::from_secs(3),
+        );
+        assert!(
+            result.is_err(),
+            "oversized output must not be returned as a complete result"
+        );
+        assert_eq!(
+            result.err().unwrap().0,
+            "Git command output exceeded 4194304 bytes"
+        );
     }
 
     #[test]
@@ -207,9 +228,16 @@ mod git_tests {
         let fake = temp.path().join("git");
         fs::write(&fake, b"#!/bin/sh\nprintf 'fixture refusal' >&2\nexit 7\n").unwrap();
         fs::set_permissions(&fake, fs::Permissions::from_mode(0o700)).unwrap();
-        let result = git_with_program(&fake.to_string_lossy(), Path::new("."),
-            &["status"], Duration::from_secs(3));
-        assert_eq!(result.unwrap_err().0, "Git could not read status: fixture refusal");
+        let result = git_with_program(
+            &fake.to_string_lossy(),
+            Path::new("."),
+            &["status"],
+            Duration::from_secs(3),
+        );
+        assert_eq!(
+            result.unwrap_err().0,
+            "Git could not read status: fixture refusal"
+        );
     }
 
     #[test]
