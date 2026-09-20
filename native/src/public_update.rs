@@ -858,24 +858,58 @@ fn run_with_probe(
         drop(_state_lock);
         drop(_record_lock);
         drop(route);
-        if history {
-            if journal["phase"] != "committed" {
-                crate::direct_history::recover(&original, cwd, false)?;
-            }
+        let recovery = if history {
+            let mut committed = |phase: &str| {
+                if phase == "committed" {
+                    journal["phase"] = json!("committed");
+                    save(&journal_path, &journal)?;
+                }
+                probe(phase)
+            };
+            crate::direct_history::recover_expected(
+                &original, cwd, supplied_runtime, &mutation, &mut committed,
+            ).map(|_| ())
         } else if crate::legacy_authoring::recovery_pending(&original, cwd)? {
-            crate::legacy_authoring::recover(&original, cwd, false)?;
+            crate::legacy_authoring::recover(&original, cwd, false).map(|_| ())
+        } else if journal["phase"] == "prepared" {
+            let mut committed = |_: &V| {
+                journal["phase"] = json!("committed");
+                save(&journal_path, &journal)
+            };
+            crate::legacy_authoring::publish_expected(
+                &original, cwd, &mutation, &mut committed,
+            )
         } else {
-            crate::require(
-                journal["phase"] == "committed",
-                "unfinished report lost its recovery journal",
-            )?;
+            Ok(())
+        };
+        if let Err(failure) = recovery {
+            if failure.0.starts_with("report_preparation_stale:") {
+                let _record_lock = F::DirectoryGuard::acquire(record.parent().unwrap(), true)?;
+                let _state_lock = F::DirectoryGuard::acquire(&root, true)?;
+                let reason = failure.0.trim_start_matches("report_preparation_stale: ");
+                let (answer, signals) = receipt(
+                    &report, &record, &root, &event, &source_path, &envelope_sha,
+                    "needs_primary", Some(reason), true, None, None, supplied_runtime,
+                )?;
+                save(&receipt_path, &answer)?;
+                save(&root.join("results").join(format!("{event}.json")),
+                    &json!({"receipt":answer,"signals":signals}))?;
+                return Ok(Output { text: format!("{}\n", serde_json::to_string(&answer)?), code: 1 });
+            }
+            return Err(failure);
         }
+        probe("recovered")?;
         let _record_lock = F::DirectoryGuard::acquire(record.parent().unwrap(), true)?;
         let _state_lock = F::DirectoryGuard::acquire(&root, true)?;
         if let Some(receipt) = F::read(&receipt_path)? {
+            let value = crate::json_ingress::parse_slice(
+                &receipt,
+                crate::json_ingress::DuplicateKeys::Reject,
+            )?;
+            let code = if value["state"] == "applied" { 0 } else { 1 };
             return Ok(Output {
                 text: String::from_utf8(receipt).map_err(|_| error("invalid receipt"))?,
-                code: 0,
+                code,
             });
         }
         journal["phase"] = json!("committed");
@@ -1206,6 +1240,63 @@ mod tests {
     }
 
     #[test]
+    fn retained_prepared_intent_resumes_or_becomes_an_explicit_question() {
+        for changed in [false, true] {
+            let temp = tempfile::tempdir().unwrap();
+            let entry = temp.path().join("GROUNDING.yaml");
+            fs::write(&entry, "sources:\n  s.old: {url: 'https://example.test', read: 2026-09-01}\nknown:\n  p.x: {v: 1, from: s.old, of: 2026-09-01}\n").unwrap();
+            let state = temp.path().join("state");
+            let report = json!({"event_id":format!("prepared-{changed}"),"date":"2026-09-20",
+                "source_quote":"x is 2","updates":[{"kind":"set","id":"p.x","value":2}]});
+            let bytes = serde_json::to_vec(&report).unwrap();
+            let options = Options { file:"-".into(), record:None, state_dir:Some(state.clone()) };
+            let stopped = run_with_probe(&options, temp.path(), Some(&bytes), None,
+                &mut |phase| if phase == "prepared" { Err(error("injected before writer journal")) } else { Ok(()) });
+            assert_eq!(stopped.unwrap_err().0, "injected before writer journal");
+            assert!(fs::read_dir(state.join("receipts")).unwrap().next().is_none());
+            if changed {
+                fs::write(&entry, "sources:\n  s.old: {url: 'https://example.test', read: 2026-09-01}\nknown:\n  p.x: {v: 99, from: s.old, of: 2026-09-01}\n").unwrap();
+            }
+            let resumed = run(&options, temp.path(), Some(&bytes)).unwrap();
+            let receipt: J = serde_json::from_str(&resumed.text).unwrap();
+            assert_eq!(resumed.code, if changed { 1 } else { 0 });
+            assert_eq!(receipt["state"], if changed { "needs_primary" } else { "applied" });
+            if !changed {
+                assert_eq!(receipt["recovered"], true);
+                assert!(fs::read_to_string(&entry).unwrap().contains("v: 2"));
+            } else {
+                assert!(!receipt["reason"].as_str().unwrap().is_empty());
+                assert!(fs::read_to_string(&entry).unwrap().contains("v: 99"));
+            }
+        }
+    }
+
+    #[test]
+    fn receipt_found_after_recovery_keeps_its_terminal_exit_code() {
+        let temp = tempfile::tempdir().unwrap();
+        let entry = temp.path().join("GROUNDING.yaml");
+        fs::write(&entry, "sources:\n  s.old: {url: 'https://example.test', read: 2026-09-01}\nknown:\n  p.x: {v: 1, from: s.old, of: 2026-09-01}\n").unwrap();
+        let state = temp.path().join("state");
+        let raw = serde_json::to_vec(&json!({"event_id":"receipt-race","date":"2026-09-20",
+            "source_quote":"x is 2","updates":[{"kind":"set","id":"p.x","value":2}]})).unwrap();
+        let options = Options { file:"-".into(), record:None, state_dir:Some(state.clone()) };
+        assert!(run_with_probe(&options, temp.path(), Some(&raw), None, &mut |phase| {
+            if phase == "committed" { Err(error("injected completion failure")) } else { Ok(()) }
+        }).is_err());
+        let parsed = parse(&raw).unwrap();
+        let id = event_id(&entry.canonicalize().unwrap(), &parsed).unwrap();
+        let receipt_path = state.join("receipts").join(format!("{id}.json"));
+        let result = run_with_probe(&options, temp.path(), Some(&raw), None, &mut |phase| {
+            if phase == "recovered" {
+                save(&receipt_path, &json!({"state":"needs_primary","reason":"concurrent finisher"}))?;
+            }
+            Ok(())
+        }).unwrap();
+        assert_eq!(result.code, 1);
+        assert_eq!(serde_json::from_str::<J>(&result.text).unwrap()["state"], "needs_primary");
+    }
+
+    #[test]
     fn captured_hash_privacy_and_collection_reads_are_rechecked_before_publish() {
         let temp = tempfile::tempdir().unwrap();
         let entry = temp.path().join("GROUNDING.yaml");
@@ -1323,5 +1414,37 @@ mod tests {
                 .unwrap()
                 .contains_key("p.x")
         );
+
+        for (event, value, day, interrupted) in [
+            ("history-prepared", 3, "2026-09-21", "prepared"),
+            ("history-committed", 4, "2026-09-22", "committed"),
+        ] {
+            let report = json!({"event_id":event,"date":day,"source_quote":format!("x is {value}"),
+                "updates":[{"kind":"set","id":"p.x","value":value}]});
+            let bytes = serde_json::to_vec(&report).unwrap();
+            let state = temp.path().join(format!("state-{value}"));
+            let options = Options { file:"-".into(), record:None, state_dir:Some(state.clone()) };
+            let stopped = run_with_probe(&options, temp.path(), Some(&bytes), Some(&runtime),
+                &mut |phase| if phase == interrupted { Err(error("injected history interruption")) } else { Ok(()) });
+            assert_eq!(stopped.unwrap_err().0, "injected history interruption");
+            assert!(fs::read_dir(state.join("receipts")).unwrap().next().is_none());
+            let store = crate::history_store::Store::new(&entry).unwrap();
+            let writer_journal = store.root.join(format!("{}.history", store.layout.journal));
+            assert_eq!(writer_journal.is_file(), interrupted == "committed");
+            let resumed = run_with_probe(&options, temp.path(), Some(&bytes), Some(&runtime),
+                &mut |_| Ok(())).unwrap();
+            let receipt: J = serde_json::from_str(&resumed.text).unwrap();
+            assert_eq!(resumed.code, 0);
+            assert_eq!(receipt["state"], "applied");
+            assert_eq!(receipt["recovered"], true);
+            assert!(!writer_journal.exists());
+        }
+        let final_report = json!({"event_id":"history-after-recovery","date":"2026-09-23",
+            "source_quote":"x is 5","updates":[{"kind":"set","id":"p.x","value":5}]});
+        let final_bytes = serde_json::to_vec(&final_report).unwrap();
+        let final_write = run_with_probe(&Options { file:"-".into(), record:None,
+            state_dir:Some(temp.path().join("state-final")) }, temp.path(), Some(&final_bytes),
+            Some(&runtime), &mut |_| Ok(())).unwrap();
+        assert_eq!(final_write.code, 0, "{}", final_write.text);
     }
 }

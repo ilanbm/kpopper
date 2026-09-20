@@ -2078,6 +2078,30 @@ pub(crate) fn publish_prepared_with_committed(
     publish_with_committed(prepared, route, Some(committed))
 }
 
+/// Resume a report whose private journal was durable before the ordinary
+/// writer journal existed. The mutation's own baseline supplies every guard;
+/// no candidate is regenerated.
+pub(crate) fn publish_expected(
+    original: &[PathBuf],
+    cwd: &Path,
+    mutation: &PreparedMutation,
+    committed: F::Verify<'_>,
+) -> Result<()> {
+    let route = WriteRoute::capture(original, cwd)?;
+    require(route.paths().len() == 1, "choose one logical record entry")?;
+    let data = mutation.to_data();
+    let baseline = map(field(map(&data)?, "baseline")?)?;
+    let root = PathBuf::from(text(field(baseline, "transaction_root")?)?);
+    let entry = entry_path(&root, mutation)?;
+    require(entry == route.paths()[0], "project_route_changed")?;
+    verify_recovery(&route, &root, mutation)
+        .map_err(|e| error(&format!("report_preparation_stale: {e}")))?;
+    let journal = entry_layout(Path::new(text(field(map(&data)?, "entry")?)?))?.journal;
+    let mut verify = |_: &V| verify_recovery(&route, &root, mutation);
+    F::publish_legacy(&root, &journal, mutation, &mut verify, Some(committed))?;
+    Ok(())
+}
+
 fn entry_path(root: &Path, mutation: &PreparedMutation) -> Result<PathBuf> {
     Ok(root.join(text(field(map(&mutation.to_data())?, "entry")?)?))
 }

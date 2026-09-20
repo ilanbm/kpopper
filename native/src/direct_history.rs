@@ -89,6 +89,7 @@ enum ReceiptFamily {
     Hypothesis,
     Identity,
 }
+type RecoveryProbe<'a> = Option<&'a mut dyn FnMut(&str) -> Result<()>>;
 fn receipt_family(mutation: &PreparedMutation) -> Result<ReceiptFamily> {
     let data = mutation.to_data();
     let before = map(&map(&map(&data)?["receipt"])?["before"])?;
@@ -484,6 +485,37 @@ pub(crate) fn recover_with_runtime(
     before: bool,
     runtime_override: Option<&Runtime>,
 ) -> Result<V> {
+    recover_inner(original, cwd, before, runtime_override, None, None)
+}
+
+/// Finish only the exact history mutation retained by an outer report journal.
+/// An already-finished operation is accepted only when every published image
+/// still matches; a different pending journal is never recovered.
+pub(crate) fn recover_expected(
+    original: &[PathBuf],
+    cwd: &Path,
+    runtime_override: Option<&Runtime>,
+    expected: &PreparedMutation,
+    probe: &mut dyn FnMut(&str) -> Result<()>,
+) -> Result<V> {
+    recover_inner(
+        original,
+        cwd,
+        false,
+        runtime_override,
+        Some(expected),
+        Some(probe),
+    )
+}
+
+fn recover_inner(
+    original: &[PathBuf],
+    cwd: &Path,
+    before: bool,
+    runtime_override: Option<&Runtime>,
+    expected: Option<&PreparedMutation>,
+    resume_probe: RecoveryProbe<'_>,
+) -> Result<V> {
     let route = WriteRoute::capture(original, cwd)?;
     require(route.paths().len() == 1, "choose one logical record entry")?;
     let store = Store::new(&route.paths()[0])?;
@@ -524,7 +556,66 @@ pub(crate) fn recover_with_runtime(
         return Err(error("unsupported public recovery journal"));
     }
     let path = F::target(&store.root, &journal(&store))?;
-    let raw = F::read(&path)?.ok_or_else(|| error("no_recovery_pending"))?;
+    let Some(raw) = F::read(&path)? else {
+        let expected = expected.ok_or_else(|| error("no_recovery_pending"))?;
+        let data = expected.to_data();
+        let operation = text(&map(&data)?["operation"])?;
+        let capture = store.capture()?;
+        let manifest = expected.files().iter().find(|file| file.role == "history_commit")
+            .and_then(|file| file.after.as_ref()).ok_or_else(|| error("invalid_history_journal"))?;
+        let mut completed = capture.commits.get(operation) == Some(manifest);
+        if completed {
+            for file in expected.files() {
+                if F::read(&F::target(&store.root, &file.path)?)? != file.after {
+                    completed = false;
+                    break;
+                }
+            }
+        }
+        if !completed {
+            for file in expected.files() {
+                require(
+                    F::read(&F::target(&store.root, &file.path)?)? == file.before,
+                    "history report preparation changed before publication",
+                )?;
+            }
+            let loaded_runtime;
+            let runtime = if let Some(runtime) = runtime_override {
+                Some(runtime)
+            } else {
+                loaded_runtime = if string_is(
+                    &map(&map(&expected.to_data())?["receipt"])?["profile"],
+                    "core/v1",
+                ) {
+                    public_workspace::core_runtime()?
+                } else {
+                    public_workspace::runtime()?
+                };
+                loaded_runtime.as_ref()
+            };
+            verify_mutation(&store, expected, runtime)
+                .map_err(|e| error(&format!("report_preparation_stale: {e}")))?;
+            for file in expected.files().iter().filter(|file| file.role == "history_object") {
+                require(
+                    !Privacy::private_marker(&history_yaml::decode_document(
+                        file.after.as_ref().ok_or_else(|| error("invalid_history_journal"))?,
+                    )?),
+                    "report_preparation_stale: private_proposal_requires_draft",
+                )?;
+            }
+            let mut noop = |_: &str| Ok(());
+            let probe = match resume_probe {
+                Some(probe) => probe,
+                None => &mut noop,
+            };
+            publish(&store, expected, &route, original, runtime, probe)?;
+        }
+        return Ok(obj([
+            ("state", s("recovered")),
+            ("operation", s(operation)),
+            ("mutation_digest", map(&data)?["digest"].clone()),
+        ]));
+    };
     if map(&history_yaml::decode_document(&raw)?)?
         .get("kind")
         .is_some_and(|kind| string_is(kind, crate::public_history_adopt::KIND))
@@ -532,6 +623,10 @@ pub(crate) fn recover_with_runtime(
         return crate::public_history_adopt::recover(&store, &route, original, &path, &raw, before);
     }
     let (mutation, retained) = decode(&raw)?;
+    if let Some(expected) = expected {
+        require(mutation.to_bytes()? == expected.to_bytes()?,
+            "history report recovery journal mismatch")?;
+    }
     require(
         routing(&route, original)? == retained,
         "history_routing_changed",
