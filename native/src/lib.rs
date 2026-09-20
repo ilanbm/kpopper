@@ -182,6 +182,7 @@ pub mod core_page;
 pub mod public_core_readers;
 pub mod public_ordinary_readers;
 pub mod public_readers;
+pub mod public_remeasure;
 pub mod public_search;
 mod public_search_rank;
 pub mod public_session;

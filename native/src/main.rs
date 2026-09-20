@@ -84,6 +84,8 @@ enum Command {
     Map(kpop_native::public_map::Options),
     #[command(name = "_agent", hide = true)]
     Agent(kpop_native::public_map::AgentOptions),
+    Remeasure(kpop_native::public_remeasure::Options),
+
     History(kpop_native::public_history::Options),
     Recover {
         #[arg(long)]
@@ -285,6 +287,11 @@ fn run(args: Args) -> Result<Value> {
             .unwrap_or_else(std::env::current_dir)?;
         return kpop_native::public_watch::run(options, &root);
     }
+    if let Command::Remeasure(options) = &args.command {
+        let root = args.workspace.clone().unwrap_or(std::env::current_dir()?);
+        let text = kpop_native::public_remeasure::run(options, &root, args.frozen)?;
+        return Ok(json!({"text": text}));
+    }
     if let Command::Followups(options) = &args.command {
         let root = args
             .workspace
@@ -439,6 +446,7 @@ fn run(args: Args) -> Result<Value> {
         | Command::Search(_)
         | Command::Config(_)
         | Command::Followups(_)
+        | Command::Remeasure(_)
         | Command::Watch(_)
         | Command::Map(_)
         | Command::Agent(_)
@@ -1068,7 +1076,9 @@ fn main() {
     let is_map = matches!(args.command, Command::Map(_));
     let is_agent = matches!(args.command, Command::Agent(_));
     let as_json = args.json;
+    let is_remeasure = matches!(&args.command, Command::Remeasure(_));
     match run(args) {
+        Ok(value) if is_remeasure => print!("{}", value["text"].as_str().unwrap_or("")),
         Ok(value) if is_watch => {
             if let Some(watch) = watch_args {
                 println!("{}", kpop_native::public_watch::cli_json(&watch, &value));
@@ -1093,6 +1103,7 @@ fn main() {
             }
         }
         Ok(value) if is_agent => println!("{}", serde_json::to_string_pretty(&value).unwrap()),
+
         Ok(value) => println!("{}", value),
         Err(error) => {
             if is_map && as_json {
