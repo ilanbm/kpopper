@@ -436,7 +436,8 @@ fn run(args: Args) -> Result<Value> {
     }
 }
 fn main() {
-    let argv = std::env::args_os().collect::<Vec<_>>();
+    let argv =
+        kpop_native::public_expressions::preprocess_argv(&std::env::args_os().collect::<Vec<_>>());
     let application = kpop_native::application_cli::inspect(&argv);
     if let Some(output) = &application.early {
         print!("{}", output.stdout);

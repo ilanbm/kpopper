@@ -1603,7 +1603,9 @@ fn apply_profile(graph: &mut J, profile: Option<&V>) -> Result<()> {
     );
     let mixed_unmatched = unmatched_ids.iter().any(|value| {
         let string = value.is_string();
-        unmatched_ids.iter().any(|other| other.is_string() != string)
+        unmatched_ids
+            .iter()
+            .any(|other| other.is_string() != string)
     });
     require(
         !mixed_unmatched,
@@ -1629,10 +1631,15 @@ fn apply_profile(graph: &mut J, profile: Option<&V>) -> Result<()> {
             2
         }
     });
-    if unmatched_ids
-        .iter()
-        .any(|value| kind != Some(if value.is_string() { 0 } else if value.is_number() || value.is_boolean() { 1 } else { 2 }))
-    {
+    if unmatched_ids.iter().any(|value| {
+        kind != Some(if value.is_string() {
+            0
+        } else if value.is_number() || value.is_boolean() {
+            1
+        } else {
+            2
+        })
+    }) {
         let left = unmatched_ids.first().unwrap();
         let right = unmatched_ids
             .iter()
@@ -1644,17 +1651,42 @@ fn apply_profile(graph: &mut J, profile: Option<&V>) -> Result<()> {
             type_name(left)
         )));
     }
+    // Compare the binary float exactly against arbitrary-size integers, like
+    // Python; converting every key to f64 loses ordering above 2**53.
+    fn number(value: &J) -> (num_bigint::BigInt, num_bigint::BigInt) {
+        use num_bigint::BigInt;
+        match V::from_json(value).expect("profile keys came from typed values") {
+            V::Integer(n) => (n.as_str().parse().unwrap(), BigInt::from(1)),
+            V::Bool(b) => (BigInt::from(u8::from(b)), BigInt::from(1)),
+            V::Float(f) => {
+                let bits = f.get().to_bits();
+                let exponent = ((bits >> 52) & 0x7ff) as i32;
+                let fraction = bits & ((1u64 << 52) - 1);
+                let (mantissa, shift) = if exponent == 0 {
+                    (fraction, -1074)
+                } else {
+                    (fraction | (1u64 << 52), exponent - 1023 - 52)
+                };
+                let mut numerator = BigInt::from(mantissa);
+                if bits >> 63 != 0 {
+                    numerator = -numerator;
+                }
+                if shift >= 0 {
+                    (numerator << shift as usize, BigInt::from(1))
+                } else {
+                    (numerator, BigInt::from(1) << (-shift) as usize)
+                }
+            }
+            _ => unreachable!("only numeric profile keys are compared"),
+        }
+    }
     unmatched_ids.sort_by(|left, right| {
         if kind == Some(0) {
             left.as_str().cmp(&right.as_str())
         } else if kind == Some(1) {
-            let number = |value: &J| {
-                value
-                    .as_f64()
-                    .or_else(|| value.as_bool().map(|v| if v { 1.0 } else { 0.0 }))
-                    .unwrap_or(0.0)
-            };
-            number(left).partial_cmp(&number(right)).unwrap()
+            let (a, ad) = number(left);
+            let (b, bd) = number(right);
+            (a * bd).cmp(&(b * ad))
         } else {
             std::cmp::Ordering::Equal
         }
@@ -2138,15 +2170,27 @@ mod tests {
             graph["navigation_leaf_routes"] = json!(navigation.leaves);
             assert_eq!(graph, case["graph"], "{}", case["name"]);
         }
-        let numeric_cases: J = serde_json::from_str(include_str!("../tests/fixtures/session-profile-numeric.json")).unwrap();
+        let numeric_cases: J = serde_json::from_str(include_str!(
+            "../tests/fixtures/session-profile-numeric.json"
+        ))
+        .unwrap();
         for case in numeric_cases["cases"].as_array().unwrap() {
             let mut graph = fixtures["cases"][0]["authored_graph"].clone();
             let profile = V::from_json(&case["profile"]).unwrap();
             let result = apply_profile(&mut graph, Some(&profile));
             if let Some(error) = case.get("error") {
-                assert_eq!(result.unwrap_err().0, error.as_str().unwrap(), "{}", case["name"]);
+                assert_eq!(
+                    result.unwrap_err().0,
+                    error.as_str().unwrap(),
+                    "{}",
+                    case["name"]
+                );
             } else {
-                assert_eq!(graph["navigation_profile"]["unmatched_ids"], case["unmatched_ids"], "{}", case["name"]);
+                assert_eq!(
+                    graph["navigation_profile"]["unmatched_ids"], case["unmatched_ids"],
+                    "{}",
+                    case["name"]
+                );
             }
         }
         for case in fixtures["invalid_profiles"].as_array().unwrap() {
