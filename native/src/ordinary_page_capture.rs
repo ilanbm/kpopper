@@ -1,8 +1,8 @@
 //! Capture the real ordinary Hub page projection used by arrangement writes.
 //!
-//! The record and its `.view.yaml` are observed once.  The resulting facts are
-//! passed to authoring, while the exact input bytes remain available for the
-//! publication/recovery guard.
+//! The record and its `.view.yaml` are observed once. Write adapters must retain
+//! this capture through publication and persist its view/routing evidence in
+//! their recovery baseline. An absent view produces an empty facts map.
 
 use crate::{
     Error, Result,
@@ -46,7 +46,7 @@ impl PageCapture {
         cwd: &Path,
         as_of: Option<V>,
         runtime: Option<&Runtime>,
-    ) -> Result<Option<Self>> {
+    ) -> Result<Self> {
         let entry = paths
             .first()
             .ok_or_else(|| Error("missing_record_path".into()))?;
@@ -86,14 +86,14 @@ impl PageCapture {
         let routing = source_capture::routing_observation(paths, cwd)?;
         captured.verify()?;
         view_inventory.verify()?;
-        Ok(Some(Self {
+        Ok(Self {
             facts,
             view_path,
             view_before,
             view_inventory,
             source: Rc::new(captured),
             routing,
-        }))
+        })
     }
 
     pub(crate) fn verify(&self) -> Result<()> {
@@ -126,9 +126,8 @@ mod tests {
                 fs::write(path, raw.as_str().unwrap()).unwrap();
             }
             let entry = temp.path().join("GROUNDING.yaml");
-            let captured = PageCapture::capture(&[entry], temp.path(), Some(s("2026-09-19")), None)
-                .unwrap()
-                .unwrap();
+            let captured =
+                PageCapture::capture(&[entry], temp.path(), Some(s("2026-09-19")), None).unwrap();
             assert_eq!(
                 captured.facts.to_json().unwrap(),
                 case["facts"],
@@ -159,7 +158,6 @@ mod tests {
             Some(s("2026-09-20")),
             None,
         )
-        .unwrap()
         .unwrap();
         let facts = map(&captured.facts).unwrap();
         let arrangement = map(facts.get("d.arr").unwrap()).unwrap();
@@ -180,7 +178,6 @@ mod tests {
             Some(s("2026-09-20")),
             None,
         )
-        .unwrap()
         .unwrap();
         let cut_facts = map(&cut.facts).unwrap();
         assert_eq!(
@@ -197,7 +194,6 @@ mod tests {
             Some(s("2026-09-20")),
             None,
         )
-        .unwrap()
         .unwrap();
         fs::create_dir_all(absent_root.path().join(".kpopper")).unwrap();
         fs::write(absent_root.path().join(".kpopper/view.yaml"), "tabs: []\n").unwrap();

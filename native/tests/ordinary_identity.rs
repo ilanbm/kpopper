@@ -37,9 +37,22 @@ fn files(root: &Path) -> BTreeMap<String, String> {
     fn walk(root: &Path, path: &Path, out: &mut BTreeMap<String, String>) {
         for entry in fs::read_dir(path).unwrap() {
             let path = entry.unwrap().path();
+            // These three trees belong to this test harness, not the shared record.
+            if path.parent() == Some(root)
+                && ["resources", "cache", "state"]
+                    .iter()
+                    .any(|name| path.file_name().is_some_and(|part| part == *name))
+            {
+                continue;
+            }
             if path.is_dir() {
                 walk(root, &path, out);
-            } else if path.extension().is_some_and(|v| v == "yaml" || v == "yml") {
+            } else if path == root.join(".kpopper/project.lock") {
+                // Policy locking and the private journal namespace have fixed control bytes.
+                assert!(fs::read(&path).unwrap().is_empty());
+            } else if path.ends_with(".history-local/.gitignore") {
+                assert_eq!(fs::read(&path).unwrap(), b"*\n");
+            } else {
                 out.insert(
                     path.strip_prefix(root)
                         .unwrap()
