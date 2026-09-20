@@ -86,6 +86,10 @@ pub(crate) fn prepare_subset(
     for ((subject,id),bytes) in raw { files.insert(format!("objects/{}",P::object_path(&subject,&id,P::Scheme::Hashed)?),bytes); }
     let binding=obj([("version",n("2")),("requires",V::List(vec![s("history-closure/v1"),s("history-subset/v1"),s(P::CAPABILITY)])),("roots",root_value),("scope",scope.clone()),("shareability",s("project")),("rules",map(&state)?["rules"].clone()),("baseline",detached.baseline),("files",V::Map(files.iter().map(|(p,b)|(p.clone(),s(&sha256(b)))).collect()))]);
     let artifact=obj([("revision",s(&binding.digest()?)),("manifest",binding)]);
-    crate::history_bundle::validate_contribution(&artifact,&files)?;
+    crate::history_bundle::validate_artifact(
+        field(map(&artifact)?, "manifest")?,
+        field(map(&artifact)?, "revision")?,
+        &files,
+    )?;
     Ok((artifact,files))
 }

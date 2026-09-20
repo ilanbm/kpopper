@@ -56,8 +56,13 @@ pub(crate) fn prepare_history(
     let (artifact, history_files) = history_prepare::prepare_subset(
         captured, &roots, &scope, &format!("report-subset-{event}"), recorded_at,
         source_entry, &disclosures, mutation,
-    )?;
-    let historical = crate::pending_bundle::contribution_history(&artifact, &history_files)?;
+    ).map_err(|e| Error(format!("history subset preparation: {e}")))?;
+    let historical = crate::history_bundle::validate_artifact(
+        field(map(&artifact)?, "manifest")?,
+        field(map(&artifact)?, "revision")?,
+        &history_files,
+    )
+    .map_err(|e| Error(format!("history subset replay: {e}")))?;
     let adapted = crate::history_adapter::from_store_capture(&historical)?;
     let document = adapted.document().clone();
     let portable = portable_source(record, event)?;
@@ -85,7 +90,8 @@ pub(crate) fn prepare_history(
         ("evidence",V::Map(files.iter().map(|(p,b)|(p.clone(),s(&crate::identity::sha256(b)))).collect())),
     ]);
     let bundle=obj([("revision",s(&manifest.digest()?)),("manifest",manifest)]);
-    pending_bundle::validate(&bundle,&files)?;
+    pending_bundle::validate(&bundle,&files)
+        .map_err(|e| Error(format!("history contribution wrapper: {e}")))?;
     Ok(PreparedHistory{bundle,files,diagnostics,source_capture:captured.clone()})
 }
 
