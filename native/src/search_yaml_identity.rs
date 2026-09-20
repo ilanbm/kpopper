@@ -2,17 +2,19 @@
 //! must equal the captured body; this neither rereads files nor changes semantics.
 use crate::{
     Error, Result,
-    history_emit::{OrdinaryIdentity, encode_ordinary_source_identity},
-    history_yaml::{self as Y, OrdinaryKey, OrdinaryValue as O},
+    history_emit::{OrdinaryIdentity, encode_ordinary_display},
+    history_yaml as Y,
+    ordinary_source::{Key as OrdinaryKey, Source as O},
+    ordinary_value::{Scalar, Value as V},
     require,
-    value::TypedValue as V,
+    value::TypedValue as CV,
 };
 use libyaml_safer::{Event, EventData as E, Parser, ScalarStyle};
 use std::collections::{BTreeMap, BTreeSet};
 #[derive(Clone)]
 enum Node {
     Pending,
-    Scalar(V),
+    Scalar(Scalar),
     Merge,
     List(Vec<usize>),
     Map(Vec<(usize, usize)>),
@@ -65,9 +67,9 @@ impl Graph<'_> {
                 } else if tag.as_deref() == Some("tag:yaml.org,2002:value")
                     || (tag.is_none() && style == ScalarStyle::Plain && value == "=")
                 {
-                    Node::Scalar(V::Text(value))
+                    Node::Scalar(Scalar::Finite(CV::Text(value)))
                 } else {
-                    Node::Scalar(Y::ordinary_scalar(&value, style, tag.as_deref())?)
+                    Node::Scalar(Y::ordinary_atom(&value, style, tag.as_deref())?)
                 }
             }
             E::SequenceStart { .. } => {
@@ -136,7 +138,7 @@ impl Graph<'_> {
         let Node::Scalar(value) = &self.nodes[id] else {
             return Err(Error("invalid search YAML key".into()));
         };
-        Y::ordinary_key(value.clone())
+        Y::ordinary_atom_key(value.clone(), None)
     }
     fn project(
         &self,
@@ -157,7 +159,7 @@ impl Graph<'_> {
         };
         let result = match &self.nodes[id] {
             Node::Scalar(v) => {
-                if !matches!(v, V::Date(_) | V::DateTime(_)) {
+                if !matches!(v, Scalar::Finite(CV::Date(_) | CV::DateTime(_))) {
                     identity.id = None;
                 }
                 O::Scalar(v.clone())
@@ -237,7 +239,7 @@ impl<'a> Document<'a> {
         let mut entries = BTreeMap::new();
         if matches!(graph.nodes[root], Node::Map(_)) {
             for (key, collection) in graph.pairs(root, &mut BTreeSet::new(), &mut 0)? {
-                let Node::Scalar(V::Text(name)) = &graph.nodes[key] else {
+                let Node::Scalar(Scalar::Finite(CV::Text(name))) = &graph.nodes[key] else {
                     continue;
                 };
                 if ["meta", "schema", "record", "also", "hypothesis"].contains(&name.as_str())
@@ -246,13 +248,16 @@ impl<'a> Document<'a> {
                     continue;
                 }
                 for (key, entry) in graph.pairs(collection, &mut BTreeSet::new(), &mut 0)? {
-                    if let Node::Scalar(V::Text(id)) = &graph.nodes[key] {
+                    if let Node::Scalar(Scalar::Finite(CV::Text(id))) = &graph.nodes[key] {
                         entries.insert(id.clone(), entry);
                     }
                 }
             }
         }
         Ok(Self { graph, entries })
+    }
+    pub(super) fn dump_finite(&self, id: &str, expected: &CV) -> Result<Option<String>> {
+        self.dump(id, &V::from_typed(expected))
     }
     pub(super) fn dump(&self, id: &str, expected: &V) -> Result<Option<String>> {
         let Some(selected) = self.entries.get(id).copied() else {
@@ -262,10 +267,10 @@ impl<'a> Document<'a> {
             .graph
             .project(selected, &mut BTreeSet::new(), &mut 0, 0)?;
         require(
-            value.projected() == *expected,
+            super::search_corpus::full_matches(&value, expected),
             "search source body differs from captured value",
         )?;
-        let bytes = encode_ordinary_source_identity(&value, 80, Some(&identity))?;
+        let bytes = encode_ordinary_display(&value, 80, Some(&identity))?;
         Ok(Some(
             String::from_utf8(bytes).map_err(|_| Error("invalid search YAML output".into()))?,
         ))

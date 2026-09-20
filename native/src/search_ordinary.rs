@@ -1,32 +1,36 @@
 use super::{Options, Result, search_captures, search_corpus as C};
 use crate::{
-    history_contract::{Map, map, text},
-    history_view::truth,
-    history_yaml::OrdinaryValue as O,
     identity::sha256,
-    ordinary_reader as R,
-    public_ordinary_readers::{self as P, Projection, World},
-    reasoning_authoring as A, reasoning_fields as F, reasoning_language as L,
-    source_capture::{ReadMode, capture_source_with_runtime},
+    ordinary_fields as F, ordinary_language as L, ordinary_semantics as R,
+    ordinary_source::Source as O,
+    ordinary_value as A,
+    ordinary_value::{Map, Scalar, Value as V, map, map_mut, text, truth},
+    ordinary_views::{self as P, Projection, World},
+    source_capture::{ReadMode, capture_ordinary_source_with_runtime},
     source_inventory::{Inventory, name},
-    value::TypedValue as V,
 };
-use C::{get, json_value};
+fn get<'a>(value: &'a V, key: &str) -> &'a V {
+    map(value).ok().and_then(|m| m.get(key)).unwrap_or(&V::Null)
+}
+fn json_value(value: &V) -> crate::Result<J> {
+    value.json_value()
+}
 use serde_json::{Value as J, json};
 use std::{
     collections::{BTreeMap, BTreeSet},
     path::{Path, PathBuf},
 };
 fn sort_error(value: &O) -> Option<String> {
-    fn kind(v: &V) -> &'static str {
+    use crate::{ordinary_value::NonFiniteFloat as N, value::TypedValue as CV};
+    fn kind(v: &Scalar) -> &'static str {
         match v {
-            V::Text(_) => "str",
-            V::Bool(_) => "bool",
-            V::Integer(_) => "int",
-            V::Float(_) => "float",
-            V::Null => "NoneType",
-            V::Date(_) => "date",
-            V::DateTime(_) => "datetime",
+            Scalar::Finite(CV::Text(_)) => "str",
+            Scalar::Finite(CV::Bool(_)) => "bool",
+            Scalar::Finite(CV::Integer(_)) => "int",
+            Scalar::Finite(CV::Float(_)) | Scalar::NonFinite(_) => "float",
+            Scalar::Finite(CV::Null) => "NoneType",
+            Scalar::Finite(CV::Date(_)) => "datetime.date",
+            Scalar::Finite(CV::DateTime(_)) => "datetime.datetime",
             _ => "object",
         }
     }
@@ -38,18 +42,38 @@ fn sort_error(value: &O) -> Option<String> {
                 let mut at = sorted.len();
                 while at > 0 {
                     let other = fields[sorted[at - 1]].0.scalar();
+                    let numeric = |v: &Scalar| {
+                        matches!(
+                            v,
+                            Scalar::NonFinite(_)
+                                | Scalar::Finite(CV::Bool(_) | CV::Integer(_) | CV::Float(_))
+                        )
+                    };
                     let less = match (value, other) {
-                        (V::Text(a), V::Text(b)) => a < b,
-                        (V::Null, V::Null) => false,
+                        (Scalar::Finite(CV::Text(a)), Scalar::Finite(CV::Text(b))) => a < b,
+                        (Scalar::Finite(CV::Null), Scalar::Finite(CV::Null)) => false,
+                        (a, b) if numeric(a) && numeric(b) => match (a, b) {
+                            (Scalar::NonFinite(N::NaN | N::ConstructedNaN(_)), _)
+                            | (_, Scalar::NonFinite(N::NaN | N::ConstructedNaN(_))) => false,
+                            (Scalar::NonFinite(a), Scalar::NonFinite(b)) => a.get() < b.get(),
+                            (Scalar::NonFinite(N::NegativeInfinity), _)
+                            | (_, Scalar::NonFinite(N::PositiveInfinity)) => true,
+                            (Scalar::NonFinite(N::PositiveInfinity), _)
+                            | (_, Scalar::NonFinite(N::NegativeInfinity)) => false,
+                            (Scalar::Finite(a), Scalar::Finite(b)) => {
+                                let (an, ad) = crate::ordinary_assessment::number(a)?;
+                                let (bn, bd) = crate::ordinary_assessment::number(b)?;
+                                an * bd < bn * ad
+                            }
+                        },
                         _ => {
                             if let (Some((an, ad)), Some((bn, bd))) = (
-                                crate::ordinary_assessment::number(value),
-                                crate::ordinary_assessment::number(other),
+                                crate::ordinary_findings::number(&value.value()),
+                                crate::ordinary_findings::number(&other.value()),
                             ) {
                                 an * bd < bn * ad
                             } else if kind(value) == kind(other) {
-                                crate::source_text::ordinary_python_str(value)
-                                    < crate::source_text::ordinary_python_str(other)
+                                value.value().python_str() < other.value().python_str()
                             } else {
                                 return Some(format!(
                                     "'<' not supported between instances of '{}' and '{}'",
@@ -68,10 +92,16 @@ fn sort_error(value: &O) -> Option<String> {
             }
             for index in sorted {
                 let (key, value) = &fields[index];
-                if matches!(key.scalar(), V::Date(_) | V::DateTime(_)) {
+                if let Scalar::NonFinite(value) = key.scalar() {
+                    return Some(format!(
+                        "Out of range float values are not JSON compliant: {}",
+                        value.python_str()
+                    ));
+                }
+                if matches!(key.scalar(), Scalar::Finite(CV::Date(_) | CV::DateTime(_))) {
                     return Some(format!(
                         "keys must be str, int, float, bool or None, not {}",
-                        kind(key.scalar())
+                        kind(key.scalar()).strip_prefix("datetime.").unwrap()
                     ));
                 }
                 if let Some(error) = sort_error(value) {
@@ -84,12 +114,18 @@ fn sort_error(value: &O) -> Option<String> {
         _ => None,
     }
 }
+fn private_marker(value: &V) -> bool {
+    match value {
+        V::Map(m) => m.iter().any(|(key, value)| key == "shareability" && value != &V::Text("project".into())
+            || ["privacy", "visibility"].contains(&key.as_str()) && matches!(value, V::Text(v) if ["private", "unclear", "unknown", "personal"].contains(&v.as_str()))
+            || key == "private" && *value != V::Bool(false) || private_marker(value)),
+        V::List(a) => a.iter().any(private_marker),
+        _ => false,
+    }
+}
 fn names(value: &V) -> Vec<String> {
     match value {
-        V::List(a) => a
-            .iter()
-            .map(crate::source_text::ordinary_python_str)
-            .collect(),
+        V::List(a) => a.iter().map(V::python_str).collect(),
         V::Map(m) => m.keys().cloned().collect(),
         V::Text(s) => s.chars().map(|c| c.to_string()).collect(),
         _ => vec![],
@@ -126,10 +162,10 @@ fn source_ids(id: &str, world: &World<'_>) -> Vec<String> {
         };
         let Ok(m) = map(body) else { continue };
         if !world.judgments.contains_key(&id)
-            && !["v", "quoted", "rule"].iter().any(|k| m.contains_key(*k))
+            && !["v", "quoted", "rule"].iter().any(|k| m.contains_key(k))
             && ["file", "url", "asked", "read"]
                 .iter()
-                .any(|k| m.get(*k).is_some_and(truth))
+                .any(|k| m.get(k).is_some_and(truth))
         {
             found.insert(id.clone());
         }
@@ -150,7 +186,7 @@ fn source_ids(id: &str, world: &World<'_>) -> Vec<String> {
 fn layer(base: &V, hyp: &V) -> crate::Result<V> {
     let mut out = base.clone();
     for (collection, members) in F::collections(hyp)? {
-        for (name, value) in crate::history_view::map_mut(&mut out)?.iter_mut() {
+        for (name, value) in map_mut(&mut out)?.iter_mut() {
             if *name != collection
                 && let V::Map(m) = value
             {
@@ -159,7 +195,7 @@ fn layer(base: &V, hyp: &V) -> crate::Result<V> {
                 }
             }
         }
-        let current = crate::history_view::map_mut(&mut out)?
+        let current = map_mut(&mut out)?
             .entry(collection)
             .or_insert_with(|| V::Map(Map::new()));
         if let V::Map(m) = current {
@@ -178,7 +214,7 @@ pub(super) fn corpus(selected: &Path, options: &Options, cwd: &Path, mode: ReadM
     };
     let roots = C::roots(&record, &options.source_roots, cwd)?;
     let runtime = crate::public_workspace::runtime()?;
-    let capture = capture_source_with_runtime(
+    let capture = capture_ordinary_source_with_runtime(
         std::slice::from_ref(&record),
         cwd,
         mode,
@@ -200,8 +236,8 @@ pub(super) fn corpus(selected: &Path, options: &Options, cwd: &Path, mode: ReadM
         "no record found; open or map this workspace first",
     )?;
     let document = capture.ordinary_document();
-    let base_bodies = C::source_bodies(capture.source());
-    let context = capture.knowledge_status_context();
+    let base_bodies = C::full_source_bodies(capture.source());
+    let context = V::from_typed(&capture.knowledge_status_context());
     let conflicts = map(get(&context, "conflicts"))?;
     let projection = Projection::new(
         document,
@@ -243,7 +279,7 @@ pub(super) fn corpus(selected: &Path, options: &Options, cwd: &Path, mode: ReadM
     let mut identity_documents = BTreeMap::new();
     for path in capture.members() {
         if let Some(raw) = capture.files().get(path) {
-            let parsed = crate::history_yaml::decode_ordinary_source_value(raw)?.projected();
+            let parsed = crate::history_yaml::decode_full_ordinary_source_value(raw)?.projected();
             for (_, members) in F::collections(&parsed)? {
                 for id in members.keys() {
                     origins.insert(id.clone(), path.parent().unwrap().to_owned());
@@ -367,7 +403,7 @@ pub(super) fn corpus(selected: &Path, options: &Options, cwd: &Path, mode: ReadM
                 capture
                     .files()
                     .get(Path::new(path))
-                    .map(|raw| crate::history_yaml::decode_ordinary_source_value(raw))
+                    .map(|raw| crate::history_yaml::decode_full_ordinary_source_value(raw))
                     .transpose()?
             } else {
                 None
@@ -375,18 +411,21 @@ pub(super) fn corpus(selected: &Path, options: &Options, cwd: &Path, mode: ReadM
         } else {
             Some(capture.source().clone())
         };
-        let physical_bodies = physical.as_ref().map(C::source_bodies).unwrap_or_default();
+        let physical_bodies = physical
+            .as_ref()
+            .map(C::full_source_bodies)
+            .unwrap_or_default();
         let compute_error = world.reader.ids.iter().find_map(|id| {
             let body = world.reader.raw().get(id)?;
             let original = physical_bodies
                 .get(id)
                 .copied()
-                .filter(|s| s.projected() == *body)
+                .filter(|s| C::full_matches(s, body))
                 .or_else(|| {
                     base_bodies
                         .get(id)
                         .copied()
-                        .filter(|s| s.projected() == *body)
+                        .filter(|s| C::full_matches(s, body))
                 });
             original.and_then(sort_error)
         });
@@ -426,7 +465,7 @@ pub(super) fn corpus(selected: &Path, options: &Options, cwd: &Path, mode: ReadM
                     V::Text(path) => Some(C::expanded(base, Path::new(path))?),
                     _ => None,
                 };
-                if crate::recording_privacy::private_marker(body)
+                if private_marker(body)
                     || source.is_some_and(|p| {
                         !p.starts_with(record.parent().unwrap()) || p == record.parent().unwrap()
                     })
@@ -452,7 +491,7 @@ pub(super) fn corpus(selected: &Path, options: &Options, cwd: &Path, mode: ReadM
             } else {
                 vec![]
             };
-            let mut row = json!({"ref":reference,"id":id,"kind":if judgment{"judgment"}else{"entry"},"scope":scope,"status":if publication.is_some(){"PENDING"}else if scope=="record"{&tag}else{"HYPOTHESIS"},"name":A::named(body),"sources":sources,"dependencies":deps,"reason":reason,"rule_dependencies":if judgment{vec![]}else{rule_ids(&id,body,&world.reader.ids)},"content":if let Some(document)=if let Some(hyp)=hyp{text(get(hyp,"path")).ok().and_then(|path|identity_documents.get(Path::new(path)))}else{body_files.get(&id).and_then(|path|identity_documents.get(path))}{match document.dump(&id,body)?{Some(text)=>text,None=>C::dump(body,physical.as_ref().and_then(|s|C::source_body(s,&id)))?}}else{C::dump(body,physical.as_ref().and_then(|s|C::source_body(s,&id)))?}});
+            let mut row = json!({"ref":reference,"id":id,"kind":if judgment{"judgment"}else{"entry"},"scope":scope,"status":if publication.is_some(){"PENDING"}else if scope=="record"{&tag}else{"HYPOTHESIS"},"name":A::named(body),"sources":sources,"dependencies":deps,"reason":reason,"rule_dependencies":if judgment{vec![]}else{rule_ids(&id,body,&world.reader.ids)},"content":if let Some(document)=if let Some(hyp)=hyp{text(get(hyp,"path")).ok().and_then(|path|identity_documents.get(Path::new(path)))}else{body_files.get(&id).and_then(|path|identity_documents.get(path))}{match document.dump(&id,body)?{Some(text)=>text,None=>C::dump_full(body,physical.as_ref().and_then(|s|C::full_source_body(s,&id)))?}}else{C::dump_full(body,physical.as_ref().and_then(|s|C::full_source_body(s,&id)))?}});
             if let Some(publication) = publication {
                 row["publication"] = json_value(publication)?;
                 row["assessment"] = json!(tag);

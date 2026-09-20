@@ -52,26 +52,6 @@ pub(super) fn dump(body: &V, source: Option<&O>) -> crate::Result<String> {
     )?)
     .map_err(|_| crate::Error("invalid YAML text".into()))
 }
-pub(super) fn source_bodies(source: &O) -> BTreeMap<String, &O> {
-    let mut bodies = BTreeMap::new();
-    if let O::Map(collections) = source {
-        for (key, members) in collections {
-            if key.text().is_some_and(|key| {
-                ["meta", "schema", "record", "also", "hypothesis"].contains(&key)
-            }) {
-                continue;
-            }
-            if let O::Map(members) = members {
-                for (id, body) in members {
-                    if let Some(id) = id.text() {
-                        bodies.insert(id.to_owned(), body);
-                    }
-                }
-            }
-        }
-    }
-    bodies
-}
 pub(super) fn source_body<'a>(source: &'a O, id: &str) -> Option<&'a O> {
     let O::Map(collections) = source else {
         return None;
@@ -84,6 +64,119 @@ pub(super) fn source_body<'a>(source: &'a O, id: &str) -> Option<&'a O> {
         })
         .filter_map(|(_, m)| m.get(id))
         .next_back()
+}
+pub(super) fn full_source(
+    value: &crate::ordinary_value::Value,
+) -> crate::Result<crate::ordinary_source::Source> {
+    use crate::{
+        ordinary_source::{Key, Source},
+        ordinary_value::{Scalar, Value},
+    };
+    Ok(match value {
+        Value::Map(m) => Source::Map(
+            m.iter()
+                .map(|(key, value)| Ok((Key::new(m.source_key(key), None)?, full_source(value)?)))
+                .collect::<crate::Result<_>>()?,
+        ),
+        Value::List(a) => Source::List(a.iter().map(full_source).collect::<crate::Result<_>>()?),
+        Value::NonFinite(v) => Source::Scalar(Scalar::NonFinite(*v)),
+        _ => Source::Scalar(Scalar::Finite(value.try_typed()?)),
+    })
+}
+/// Compare separately parsed source bodies by corresponding structure. Constructor
+/// numbers may differ, but repeated and distinct NaNs must retain the same relation.
+pub(super) fn full_matches(
+    source: &crate::ordinary_source::Source,
+    expected: &crate::ordinary_value::Value,
+) -> bool {
+    use crate::{
+        ordinary_source::Source,
+        ordinary_value::{NonFiniteFloat as N, Scalar, Value},
+    };
+    fn scalar(a: &Scalar, b: &Scalar, ids: &mut BTreeMap<u64, u64>) -> bool {
+        match (a, b) {
+            (Scalar::NonFinite(N::ConstructedNaN(a)), Scalar::NonFinite(N::ConstructedNaN(b))) => {
+                if let Some(prior) = ids.get(a) {
+                    *prior == *b
+                } else if ids.values().any(|old| old == b) {
+                    false
+                } else {
+                    ids.insert(*a, *b);
+                    true
+                }
+            }
+            _ => a == b,
+        }
+    }
+    fn visit(a: &Source, b: &Value, ids: &mut BTreeMap<u64, u64>) -> bool {
+        match (a, b) {
+            (Source::Scalar(a), Value::NonFinite(b)) => scalar(a, &Scalar::NonFinite(*b), ids),
+            (Source::Scalar(Scalar::Finite(a)), b) => b.try_typed().is_ok_and(|b| *a == b),
+            (Source::List(a), Value::List(b)) => {
+                a.len() == b.len() && a.iter().zip(b).all(|(a, b)| visit(a, b, ids))
+            }
+            (Source::Map(a), Value::Map(b)) if a.len() == b.len() => {
+                if a.iter().all(|(k, _)| k.text().is_some()) {
+                    a.iter().all(|(key, value)| {
+                        b.get(key.text().unwrap())
+                            .is_some_and(|b| visit(value, b, ids))
+                    })
+                } else {
+                    a.iter().zip(b.iter()).all(|((ak, av), (bk, bv))| {
+                        scalar(ak.scalar(), &b.source_key(bk), ids) && visit(av, bv, ids)
+                    })
+                }
+            }
+            _ => false,
+        }
+    }
+    visit(source, expected, &mut BTreeMap::new())
+}
+pub(super) fn dump_full(
+    body: &crate::ordinary_value::Value,
+    source: Option<&crate::ordinary_source::Source>,
+) -> crate::Result<String> {
+    let fallback;
+    let source = if let Some(source) = source.filter(|s| full_matches(s, body)) {
+        source
+    } else {
+        fallback = full_source(body)?;
+        &fallback
+    };
+    String::from_utf8(crate::history_emit::encode_ordinary_display(
+        source, 80, None,
+    )?)
+    .map_err(|_| crate::Error("invalid YAML text".into()))
+}
+pub(super) fn full_source_bodies(
+    source: &crate::ordinary_source::Source,
+) -> BTreeMap<String, &crate::ordinary_source::Source> {
+    use crate::ordinary_source::Source;
+    let mut out = BTreeMap::new();
+    if let Source::Map(collections) = source {
+        for (key, members) in collections {
+            if key
+                .text()
+                .is_some_and(|k| ["meta", "schema", "record", "also", "hypothesis"].contains(&k))
+            {
+                continue;
+            }
+            if let Source::Map(members) = members {
+                for (key, value) in members {
+                    if let Some(key) = key.text() {
+                        out.insert(key.to_owned(), value);
+                    }
+                }
+            }
+        }
+    }
+    out
+}
+pub(super) fn full_source_body<'a>(
+    source: &'a crate::ordinary_source::Source,
+    id: &str,
+) -> Option<&'a crate::ordinary_source::Source> {
+    full_source_bodies(source).get(id).copied()
 }
 pub(super) fn roots(
     record: &Path,
@@ -354,7 +447,7 @@ fn core(record: &Path, options: &Options, cwd: &Path, mode: ReadMode) -> Result<
             .filter_map(|v| v["id"].as_str())
             .filter(|v| *v != id && nodes.contains_key(*v))
             .collect::<BTreeSet<_>>();
-        let mut row = json!({"ref":format!("node:{id}"),"id":id,"kind":if get(get(get(finding,"state"),"basis"),"status")!=&V::Text("not_applicable".into()){"judgment"}else{"entry"},"scope":"record","status":projection["status"],"findings":projection,"name":crate::reasoning_authoring::named(body),"sources":sources,"dependencies":deps,"rule_dependencies":rule_deps,"content":if let Some(document)=body_files.get(id).and_then(|path|identity_documents.get(path)){match document.dump(id,body)?{Some(text)=>text,None=>dump(body,source_body(capture.source(),id))?}}else{dump(body,source_body(capture.source(),id))?}});
+        let mut row = json!({"ref":format!("node:{id}"),"id":id,"kind":if get(get(get(finding,"state"),"basis"),"status")!=&V::Text("not_applicable".into()){"judgment"}else{"entry"},"scope":"record","status":projection["status"],"findings":projection,"name":crate::reasoning_authoring::named(body),"sources":sources,"dependencies":deps,"rule_dependencies":rule_deps,"content":if let Some(document)=body_files.get(id).and_then(|path|identity_documents.get(path)){match document.dump_finite(id,body)?{Some(text)=>text,None=>dump(body,source_body(capture.source(),id))?}}else{dump(body,source_body(capture.source(),id))?}});
         if !projection["status"]["computation"]["value_text"].is_null() {
             row["value_text"] = projection["status"]["computation"]["value_text"].clone();
         }
@@ -469,11 +562,17 @@ pub(super) fn corpus(options: &Options, cwd: &Path, mode: ReadMode) -> Result<J>
         true
     } else if record.is_file() {
         let mut inv = Inventory::default();
-        let doc = crate::source_document::load(std::slice::from_ref(&record), &mut inv, false)?;
-        get(
-            get(get(&doc.source.projected(), "meta"), "reasoning"),
-            "profile",
-        ) == &V::Text("core/v1".into())
+        let doc = crate::ordinary_document::load(std::slice::from_ref(&record), &mut inv, false)?;
+        use crate::ordinary_value::{Value, map};
+        let value = doc.source.projected();
+        map(&value)
+            .ok()
+            .and_then(|m| m.get("meta"))
+            .and_then(|v| map(v).ok())
+            .and_then(|m| m.get("reasoning"))
+            .and_then(|v| map(v).ok())
+            .and_then(|m| m.get("profile"))
+            == Some(&Value::Text("core/v1".into()))
     } else {
         false
     };
@@ -481,6 +580,30 @@ pub(super) fn corpus(options: &Options, cwd: &Path, mode: ReadMode) -> Result<J>
         core(&record, options, cwd, mode)
     } else {
         super::search_ordinary::corpus(&record, options, cwd, mode)
+    }
+}
+
+#[cfg(test)]
+mod constructor_guard_tests {
+    use super::*;
+    #[test]
+    fn independently_parsed_nan_numbers_are_remapped_without_inferring_aliases() {
+        let shared = b"known: {p.x: {v: [&n !!float nan, *n]}}\n";
+        let independent = b"known: {p.x: {v: [!!float nan, !!float nan]}}\n";
+        let decode =
+            |raw: &[u8]| crate::history_yaml::decode_full_ordinary_source_value(raw).unwrap();
+        let a = decode(shared);
+        let b = decode(shared);
+        let c = decode(independent);
+        assert!(full_matches(&a, &b.projected()));
+        assert!(!full_matches(&a, &c.projected()));
+        assert!(!full_matches(&c, &a.projected()));
+        let fresh_keys = b"known: {p.x: {v: {? !!float nan: one, ? !!float nan: two}}}\n";
+        let a = decode(fresh_keys);
+        let b = decode(fresh_keys);
+        assert!(full_matches(&a, &b.projected()));
+        let singleton = decode(b"known: {p.x: {v: {.nan: one, .nan: two}}}\n");
+        assert!(!full_matches(&a, &singleton.projected()));
     }
 }
 

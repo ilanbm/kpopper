@@ -422,6 +422,107 @@ fn actual_search_and_paged_read_cli_match_python() {
 
 #[test]
 #[ignore = "requires KPOPPER_NATIVE_RESOURCES and KPOPPER_NATIVE_CACHE"]
+fn nonfinite_corpora_search_and_paged_read_match_python() {
+    let fixture: J = serde_json::from_str(include_str!("fixtures/search-nonfinite.json")).unwrap();
+    let mut failures = vec![];
+    for original in fixture["cases"].as_array().unwrap() {
+        if std::env::var("KPOP_SEARCH_CASE").is_ok_and(|f| original["name"] != f) {
+            continue;
+        }
+        let temporary = tempfile::tempdir().unwrap();
+        let root = temporary.path().canonicalize().unwrap();
+        let mut case = original.clone();
+        setup(&mut case, &root);
+        let mode = if case["options"]["mode"] == "frozen" {
+            ReadMode::Frozen
+        } else {
+            ReadMode::Live
+        };
+        let result = public_search::corpus(&options(&case), &root.join("source"), mode);
+        let (actual, expected) = match result {
+            Ok(value) => (value, case["expected"]["corpus"].clone()),
+            Err(e) => (
+                json!({"message":e.message,"capture_failure":e.capture_failure}),
+                case["expected"]["failure"].clone(),
+            ),
+        };
+        if let Some(diff) = difference(&actual, &expected, "") {
+            failures.push(format!("{} corpus: {diff}", case["name"]));
+            fs::write(
+                std::env::temp_dir().join(format!(
+                    "kpop-search-{}.json",
+                    case["name"].as_str().unwrap()
+                )),
+                serde_json::to_vec_pretty(&json!({"actual":actual,"expected":expected})).unwrap(),
+            )
+            .unwrap();
+        }
+        for label in ["cli", "read_cli"] {
+            let expected = &case["expected"][label];
+            if expected.is_null() {
+                continue;
+            }
+            let result = Command::new(env!("CARGO_BIN_EXE_kpop-native"))
+                .args(
+                    expected["argv"]
+                        .as_array()
+                        .unwrap()
+                        .iter()
+                        .map(|v| v.as_str().unwrap()),
+                )
+                .current_dir(root.join("source"))
+                .env("XDG_STATE_HOME", root.join("statehome"))
+                .env_remove("KPOPPER_READ_MODE")
+                .output()
+                .unwrap();
+            let actual = json!({"exit":result.status.code(),"stdout":String::from_utf8(result.stdout).unwrap(),"stderr":String::from_utf8(result.stderr).unwrap()});
+            let wanted = json!({"exit":expected["exit"],"stdout":expected["stdout"],"stderr":expected["stderr"]});
+            if let Some(diff) = difference(&actual, &wanted, "") {
+                failures.push(format!("{} {label}: {diff}", case["name"]));
+            }
+        }
+        for (path, value) in case["input"].as_object().unwrap() {
+            assert_eq!(
+                fs::read(root.join(path)).unwrap(),
+                value.as_str().unwrap().as_bytes(),
+                "search changed {path}"
+            );
+        }
+    }
+    assert!(failures.is_empty(), "{}", failures.join("\n"));
+}
+
+#[test]
+#[ignore = "requires KPOPPER_NATIVE_RESOURCES and KPOPPER_NATIVE_CACHE"]
+fn nonfinite_reads_refuse_changed_captured_bytes() {
+    let fixture: J = serde_json::from_str(include_str!("fixtures/search-nonfinite.json")).unwrap();
+    let mut case = fixture["cases"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|c| c["name"] == "nonfinite-nan")
+        .unwrap()
+        .clone();
+    let temporary = tempfile::tempdir().unwrap();
+    let root = temporary.path().canonicalize().unwrap();
+    setup(&mut case, &root);
+    let mut options = options(&case);
+    let corpus = public_search::corpus(&options, &root.join("source"), ReadMode::Live).unwrap();
+    let path = root.join("source/GROUNDING.yaml");
+    let old = fs::read_to_string(&path).unwrap();
+    fs::write(path, old.replace(".nan", ".inf")).unwrap();
+    options.reference = Some("node:p.value".into());
+    options.revision = Some(corpus["revision"].as_str().unwrap().into());
+    assert_eq!(
+        public_search::run(&options, &root.join("source"), ReadMode::Live)
+            .unwrap_err()
+            .message,
+        "record, capture state or source changed; search again"
+    );
+}
+
+#[test]
+#[ignore = "requires KPOPPER_NATIVE_RESOURCES and KPOPPER_NATIVE_CACHE"]
 fn reads_rebuild_corpus_and_refuse_changed_records_sources_captures_or_grants() {
     let fixture: J = serde_json::from_str(include_str!("fixtures/search-corpus.json")).unwrap();
     for mutation in ["record", "source", "capture", "grant"] {
