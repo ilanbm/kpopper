@@ -23,6 +23,8 @@ use std::{
 mod legacy_named;
 #[path = "legacy_replaced.rs"]
 pub(crate) mod legacy_replaced;
+#[path = "legacy_arrangement.rs"]
+mod legacy_arrangement;
 
 static TOP: LazyLock<Regex> =
     LazyLock::new(|| Regex::new(r"^([A-Za-z_][A-Za-z0-9_]*):(?: |$)").unwrap());
