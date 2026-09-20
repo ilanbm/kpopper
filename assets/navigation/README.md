@@ -1,16 +1,35 @@
-# README path thumbnails
+# README path banners
 
-These previews are crops of the existing story illustrations, displayed at 112 × 70
-pixels in native `<summary>` elements. The PNG files are 320 × 200 pixels. Each thumbnail
-links to its full source illustration and has an alternative-text preview label. The
-adjacent summary text names and opens the path.
+The three native `<summary>` elements use wide strips, displayed at up to 960 pixels
+wide and scaled to fit smaller screens. The coding strip is 1800 × 360 (5:1);
+the other two are 1800 × 300 (6:1). Titles, product names
+and **Explore workflows and examples ↓** remain ordinary text outside the images.
+The whole summary toggles its section, including a click on the banner. The banners
+are not separate links to the image files.
 
-| Preview | Source | Crop: left, top, right, bottom |
+GitHub otherwise wraps a bare image in an image-viewer link. Each banner therefore
+has a named `<a id="...">` wrapper with no `href`: GitHub preserves that wrapper,
+and it remains non-interactive so clicking the image activates its parent summary.
+
+| Banner | Source | Crop: left, top, right, bottom |
 |---|---|---|
-| [coding.png](coding.png) | [cache-privacy.png](../stories/cache-privacy.png) | `1050, 42, 1363, 282` |
-| [cowork.png](cowork.png) | [cowork-workshop.png](../stories/cowork-workshop.png) | `861, 443, 1260, 647` |
-| [research.png](research.png) | [dark-matter-intro.png](../stories/dark-matter-intro.png) | `48, 143, 294, 320` |
+| [coding-banner.png](coding-banner.png) | [cache-privacy.png](../stories/cache-privacy.png) | Private-project screen: `98, 449, 570, 645`; cache author: `1045, 45, 1355, 280`; merged cache: `637, 446, 912, 645` |
+| [cowork-banner.png](cowork-banner.png) | [cowork-workshop.png](../stories/cowork-workshop.png) | `64, 438, 1470, 651` |
+| [research-banner.png](research-banner.png) | [dark-matter-intro.png](../stories/dark-matter-intro.png) | Galaxy: `47, 145, 295, 326`; lensing: `555, 124, 989, 318`; CMB: `1037, 143, 1408, 312` |
 
-Crop the source, then fit it within 320 × 200 using Lanczos resampling and white padding.
-The originals remain unchanged. Keep the summary text outside the image; the thumbnail
-does not replace a label or carry new explanatory text.
+The coding strip puts the two PR changes on either side of the cache, using large
+"PR A / Add private projects" and "PR B / Cache by query" labels above source-art crops.
+Blue arrows point inward; a red failure mark and "Private results exposed" label
+identify the consequence of their combination. This keeps the authored changes
+distinct from the two user screens in the full story's consequence scene.
+Remove clipped blue arrow fragments at the right edge of the private-project crop
+and from the cache crop before adding the two complete inward arrows.
+Cowork uses one continuous scene fitted inside 1780 × 284 with Lanczos resampling
+and centered on white. The research strip places three
+separately fitted crops in equal-width panels. A white mask at `0, 0, 290, 20` in
+the lensing crop removes the clipped source citation while preserving the legend.
+Use a thin black outer border and two panel dividers in the research strip.
+Original story illustrations remain unchanged.
+
+The earlier 320 × 200 thumbnails (`coding.png`, `cowork.png`, `research.png`) are
+retained as assets; the README now uses the banners above.

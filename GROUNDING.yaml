@@ -837,6 +837,32 @@ sources:
     of: "2026-09-19, request to incorporate latest main, review the changes, prepare a pull request
          and refresh plugin descriptions from the current README"
     read: "2026-09-19"
+  s.2026_09_20_canvas_placement:
+    name: "Approval to place the canvas illustration before the README closing invitation"
+    asked: "יאללה, תוסיף את זה"
+    of: "The maintainer approved the immediately preceding proposal: place the selected canvas
+         illustration visibly before Make it earn its place, outside collapsed sections."
+    url: "codex://threads/01a0bbb2-6339-7121-ad05-3683cb7acad6"
+    read: "2026-09-20"
+  s.2026_09_20_dependency_illustration:
+    name: "Maintainer-approved README cost paragraph and dependency illustration"
+    asked: "אני בעד האיור, תיצור אותו?"
+    of: "The maintainer approved a short additive README paragraph about time and token costs,
+         retained the existing opening, and requested the dependency-check illustration with its
+         descriptive caption. Seconds to milliseconds is a design aim, not a measured speedup."
+    url: "codex://threads/01a0bbb2-6339-7121-ad05-3683cb7acad6"
+    read: "2026-09-20"
+  s.2026_09_20_readme_path_banners:
+    name: "Approval and verification of the wide README path banners"
+    asked: "אז קדימה בוא נעשה את זה"
+    of: "The maintainer approved wide comic strips for the three closed README paths, explicit
+         Claude Code / Codex / Cursor names, the full Claude Cowork / ChatGPT Work title, and Explore
+         workflows and examples. GitHub Markdown API output wraps bare images in links but preserves
+         a named anchor with no href. The resulting rendered section was checked in Chrome at 1200,
+         390 and 320 pixels: banner clicks toggle only their own section, no image tab opens, Enter
+         and Space work, and there is no horizontal overflow."
+    url: "codex://threads/01a0bbb2-6339-7121-ad05-3683cb7acad6"
+    read: "2026-09-20"
   s.background_ingestion:
     name: "Background capture and selective delivery contract"
     file: "skills/kpopper/INGESTION.md"
@@ -1719,6 +1745,21 @@ known:
          falsifier's own"
     of: "2026-09-03"
     measure: coverage_thresholds
+  p.dependency_illustration_caption:
+    name: "Descriptive caption for the dependency-check illustration"
+    v: "When a recorded assumption changes, deterministic checks show the agent which decisions need
+        another look."
+    from: s.2026_09_20_dependency_illustration
+    at: "The descriptive caption followed by the request to create the illustration."
+    fidelity: quoted
+  p.dependency_illustration_timing_example:
+    name: "Requested timing example in the dependency-check illustration"
+    v: "4.5 ms locally · 10 s with an agent"
+    from: s.2026_09_20_dependency_illustration
+    at: "The maintainer requested this visible numerical comparison, then asked for clearer wording
+         without the Illustrative timing label. No paired measurement was supplied or run; the image
+         frames the comparison as a possibility."
+    fidelity: quoted
   p.entry_names:
     v: 2
     name: "Names the locator recognizes for the record's entry file"
@@ -2254,6 +2295,30 @@ known:
          count prints"
     of: "2026-09-04"
     measure: prior_count_thresholds
+  p.readme_agent_work_copy:
+    name: "Approved README paragraph about deterministic execution cost and latency"
+    v: "Agent reasoning costs time and tokens. kpopper runs calculations and dependency checks
+        deterministically, aiming to turn seconds of model work into milliseconds of computation—and
+        focus the agent on decisions that need judgment."
+    from: s.2026_09_20_dependency_illustration
+    at: "The shortened English paragraph, approved with מושלם."
+    fidelity: quoted
+  p.readme_coding_banner_story:
+    name: "The coding strip shows both PR changes and their combined consequence"
+    v: "PR A adds private projects and PR B caches by query. Large labels identify the two changes,
+        inward arrows converge on a private record in the cache, and a red failure mark accompanies
+        Private results exposed."
+    from: s.2026_09_20_readme_path_banners
+    at: "Later three-part feedback, item 1, and the resulting coding-banner revision."
+    fidelity: paraphrase
+  p.readme_popper_link_visibility:
+    name: "The curiosity link lands on an immediately visible explanation"
+    v: "The Popper anchor, heading and short identification are outside details. The extended worked
+        example remains folded below them. The original link was verified against this structure at
+        desktop and phone widths."
+    from: s.2026_09_20_readme_path_banners
+    at: "Later three-part feedback, item 2, README edit and browser verification."
+    fidelity: paraphrase
   p.reasoning_core_contract:
     fidelity: paraphrase
     name: "Experimental portable core contract"
@@ -2643,6 +2708,16 @@ open:
   q.arrangement_falsifiers: "will sessions write arrangement falsifiers a build can evaluate and
                              that say something - to be read as a foreign agent would, after
                              fifteen real arrangements?"
+  q.readme_canvas_metaphor:
+                                  name: "Whether to place the canvas concept in the README"
+                                  v: "Does an agent painting connections between evidence,
+                                      assumptions, a decision and review conditions clarify the
+                                      product, and where should that illustration appear? A separate
+                                      local SVG/PNG concept was produced; it is not adopted into the
+                                      README."
+                                  from: s.2026_09_20_readme_path_banners
+                                  at: "Later three-part feedback, item 3, and the canvas concept
+                                       preview."
   q.readme_reader_comprehension: "Can readers new to the project explain what the redesigned
                                   entrance preserves, what its checks actually detect, and how it
                                   applies beyond code without coaching? Ask what the source
@@ -4444,6 +4519,24 @@ judgments:
       d.spill_on_every_tab: "what fell through the arrangement - flagged judgments nothing picked,
                              and what a session wrote for an intent no tab serves - is counted once
                              for the page and drawn on every tab"
+  d.readme_canvas_placement:
+    name: "Place the approved canvas illustration before the closing invitation"
+    rests_on: [s.2026_09_20_canvas_placement, q.readme_canvas_metaphor]
+    verdict: "Display assets/canvas-for-reasoning.png immediately before Make it earn its place,
+              outside all collapsed sections. The maintainer has selected the illustration and its
+              placement."
+    because: "The earlier question described an unadopted sketch. The subsequent approval resolves
+              its adoption and placement; whether the metaphor improves reader comprehension remains
+              unmeasured. The approved image and editable SVG are now workspace assets referenced by
+              the README."
+    reopened_by: "The closing placement obstructs the invitation to try the tool, or readers mistake
+                  the canvas metaphor for a different product capability."
+    seen:
+      s.2026_09_20_canvas_placement: "read 2026-09-20"
+      q.readme_canvas_metaphor: "Does an agent painting connections between evidence, assumptions, a
+                                 decision and review conditions clarify the product, and where should
+                                 that illustration appear? A separate local SVG/PNG concept was
+                                 produced; it is not adopted into the README."
   d.readme_illustration_reading_order:
     name: "Show the process before the takeaway"
     from: s.2026_09_18_illustration_titles
@@ -4560,6 +4653,19 @@ judgments:
       s.2026_09_13_readme_depth: "read 2026-09-13"
       s.2026_09_13_reasoning_overview: "read 2026-09-13"
       s.2026_09_13_remove_duplicate_overview: "read 2026-09-13"
+  d.readme_paths_use_wide_banners:
+    name: "Make the three README paths visible as wide illustrated disclosures"
+    rests_on: [s.2026_09_20_readme_path_banners]
+    verdict: "Use wide story strips inside the three closed README summaries, with explicit product
+              names and Explore workflows and examples below each strip. Wrap each image in a named
+              anchor without href so clicking it toggles the section."
+    because: "The maintainer found the small collapsed previews easy to miss. The sections contain
+              workflows and explanations as well as examples. The id-only anchor preserves native
+              summary activation after GitHub renders the Markdown; full-image links remain in the
+              expanded sections."
+    reopened_by: "A supported renderer turns the banner into a separate image link, or narrow
+                  layouts make the titles and opening prompt unreadable."
+    seen: {s.2026_09_20_readme_path_banners: "read 2026-09-20"}
   d.readme_reasoning_overview:
     name: "Introduce the record through a complete check"
     from: s.2026_09_19_reasoning_overview

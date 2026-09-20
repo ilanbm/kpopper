@@ -176,11 +176,14 @@ selected YAML. Link to the full download merge example without repeating its who
 story in the README. Keep a direct installation link above the examples.
 
 Immediately after Contents, ask **Where would you like to start?** and offer three
-native disclosure sections: **Coding agents**, **Cowork / Work**, and **Research**.
-Keep Contents open by default; the three paths start closed. Each summary includes
-a small crop from its existing illustration and states the practical benefit without
-requiring the reader to open it. Thumbnails link to the full illustrations and have
-short preview labels; the summary text opens the path and remains usable on its own. Keep the opening record overview, installation, quick reference
+native disclosure sections: **Coding agents**, **Claude Cowork / ChatGPT Work**, and
+**Research**. Keep Contents open by default; the three paths start closed. Put
+**Claude Code · Codex · Cursor · and more** below the Coding agents title.
+Each summary includes a wide, shallow strip from its existing illustration, with
+**Explore workflows and examples ↓** below it. Keep names and the opening prompt
+as text outside the image. The title, strip and prompt all toggle the section;
+do not wrap the strip in a separate image link. Full illustrations remain linked
+inside the expanded section. Keep the opening record overview, installation, quick reference
 and capability overview visible; group longer explanations under **Go deeper**.
 Preserve existing example anchors, images, source links and runnable excerpts.
 
@@ -189,6 +192,8 @@ attribution. Keep the caption within the hero without repeating it beneath the
 image. Philosophy and the third-brain metaphor follow the concrete examples.
 
 A small curiosity link beneath the hero can lead directly to the Popper explanation.
+Keep the short identification and explanation visible at that destination; only the
+extended worked example is folded, so following the link immediately answers who he is.
 Let the visual joke stand; that section can introduce his idea without explaining
 each prop or spelling out every piece of the pun.
 The main text heading states the practical value rather than repeating the wordmark.
