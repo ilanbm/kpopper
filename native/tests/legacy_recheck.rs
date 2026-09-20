@@ -25,7 +25,12 @@ fn command(root: &Path, args: &[&str], zone: &str) -> Output {
         cmd.env("KPOPPER_NATIVE_RESOURCES", resources)
             .env("KPOPPER_NATIVE_CACHE", root.join(".test-cache"));
     }
-    cmd.output().unwrap()
+    kpop_native::reasoning_runtime::run_command_capture(
+        &mut cmd,
+        Vec::new(),
+        std::time::Duration::from_secs(90),
+        2 * 1024 * 1024,
+    ).unwrap_or_else(|error| panic!("{zone} {args:?}: {error}"))
 }
 
 #[test]

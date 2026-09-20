@@ -107,7 +107,7 @@ pub(crate) fn run_command_bounded_with_status(
 
 /// Capture both streams under one byte limit and deadline. The deadline covers
 /// inherited pipes after the direct child exits, as well as the child itself.
-pub(crate) fn run_command_capture(
+pub fn run_command_capture(
     cmd: &mut Command,
     payload: Vec<u8>,
     timeout: Duration,
