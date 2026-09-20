@@ -50,7 +50,36 @@ fn ordinary_check_note_families_match_python_fixture() {
     .unwrap();
     let output = cli(root, &["--frozen", "check"], &root.join("private"));
     assert_eq!(output.status.code(), Some(1));
-    assert_eq!(output.stdout, include_bytes!("fixtures/ordinary-note-parity.stdout"));
+    assert_eq!(
+        output.stdout,
+        include_bytes!("fixtures/ordinary-note-parity.stdout")
+    );
+}
+
+#[test]
+fn declared_blocked_note_does_not_change_the_flagged_counter() {
+    let temp = tempfile::tempdir().unwrap();
+    let root = temp.path();
+    fs::write(root.join("GROUNDING.yaml"), "known:\n  p.x: {v: 1}\n  p.total: {rule: graph.flagged}\njudgments:\n  d.wait:\n    verdict: wait\n    rests_on: [p.x]\n    seen: {p.x: 1}\n    blocked_on: waiting for evidence\n").unwrap();
+    let assessment = cli(
+        root,
+        &["--frozen", "assess", "graph.flagged"],
+        &root.join("private"),
+    );
+    assert!(
+        assessment.status.success(),
+        "{}",
+        String::from_utf8_lossy(&assessment.stderr)
+    );
+    let report: J = serde_json::from_slice(&assessment.stdout).unwrap();
+    assert_eq!(report["nodes"]["graph.flagged"]["body"]["v"], 0);
+    let check = cli(root, &["--frozen", "check"], &root.join("private"));
+    assert!(check.status.success());
+    assert!(
+        String::from_utf8(check.stdout)
+            .unwrap()
+            .contains("NOTE d.wait: no predicate at all (declared: waiting for evidence)")
+    );
 }
 
 #[test]

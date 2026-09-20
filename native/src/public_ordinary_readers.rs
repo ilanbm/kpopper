@@ -2178,12 +2178,16 @@ impl Projection<'_> {
             let pred = self.base.pred(id);
             let blocked = blocked_text(body);
             let reopened = reopened_text(body);
-            let page_predicate = py(&pred).contains("page.");
-            if page_predicate {
-                note.push(format!(
-                    "{id}: wrong_if reads page.unserved, which is counted when the page is built - `kpop experimental hub --verify` decides it"
-                ));
-            }
+            let references = R::predicate_refs(&pred)
+                .into_iter()
+                .collect::<BTreeSet<_>>();
+            let page_refs = references
+                .iter()
+                .filter(|reference| {
+                    reference.starts_with("page.") && F::BUILTINS.contains(&reference.as_str())
+                })
+                .cloned()
+                .collect::<Vec<_>>();
             let dependencies = self.base.deps(id)?;
             if flags.contains("broken") {
                 for dep in dependencies
@@ -2230,39 +2234,53 @@ impl Projection<'_> {
                     short(&s(&reopened), 60)
                 ));
             }
-            if flags.contains("falsified") {
+            // Declared unevaluable predicates are check notes, independent of
+            // the flags used by selectors and graph counters.
+            let undecided = if truth(&pred) {
+                R::why_undecided(&pred)
+            } else {
+                String::new()
+            };
+            let named = references
+                .iter()
+                .any(|reference| self.base.reader.ids.contains(reference));
+            let evaluable = named && undecided.is_empty();
+            let arrangement =
+                crate::reasoning_authoring_guards::arrangement(&self.base.reader, body);
+            if !evaluable && !(arrangement && !undecided.is_empty()) {
+                let what = if !truth(&pred) {
+                    "no predicate at all".to_owned()
+                } else if !named {
+                    "prose, not an evaluable predicate".to_owned()
+                } else {
+                    format!("wrong_if {undecided}")
+                };
+                if !blocked.is_empty() {
+                    note.push(format!(
+                        "{id}: {what} (declared: {})",
+                        blocked.chars().take(90).collect::<String>()
+                    ));
+                } else if !reopened.is_empty() && !truth(&pred) {
+                    note.push(format!(
+                        "{id}: {what} - decided; reopened by: {}",
+                        reopened.chars().take(90).collect::<String>()
+                    ));
+                } else if !reopened.is_empty() {
+                    fail.push(format!("{id}: {what} - a re-opener does not stand in for it: a predicate is evaluated, or declared un-evaluable with blocked_on"));
+                } else {
+                    fail.push(format!(
+                        "{id}: {what} - and nothing says why not, so it can never be re-checked"
+                    ));
+                }
+            } else if flags.contains("falsified") {
                 fail.push(format!(
                     "{id}: wrong_if holds ({}) - broken by its own condition",
                     predicate_text(&pred)
                 ));
-            }
-            if flags.contains("no_predicate") {
-                let page_refs = R::predicate_refs(&pred)
-                    .into_iter()
-                    .filter(|reference| reference.starts_with("page."))
-                    .collect::<BTreeSet<_>>();
-                let page_refs = if page_refs.is_empty() && py(&pred).contains("page.") {
-                    BTreeSet::from(["page.unserved".to_owned()])
-                } else {
-                    page_refs
-                };
-                if !page_refs.is_empty() && !page_predicate {
-                    note.push(format!(
-                        "{id}: wrong_if reads {}, which is counted when the page is built - `kpop experimental hub --verify` decides it",
-                        page_refs.into_iter().collect::<Vec<_>>().join(", ")
-                    ));
-                } else if !blocked.is_empty() {
-                    note.push(format!(
-                        "{id}: no predicate at all (declared: {})",
-                        blocked.chars().take(90).collect::<String>()
-                    ));
-                } else {
-                    fail.push(format!("{id}: no predicate at all - and nothing says why not, so it can never be re-checked"));
-                }
-            } else if !truth(&pred) && blocked.is_empty() && !reopened.is_empty() {
+            } else if !page_refs.is_empty() {
                 note.push(format!(
-                    "{id}: no predicate at all - decided; reopened by: {}",
-                    reopened.chars().take(90).collect::<String>()
+                    "{id}: wrong_if reads {}, which is counted when the page is built - `kpop experimental hub --verify` decides it",
+                    page_refs.join(", ")
                 ));
             }
             for (dep, old, now, state) in self.base.moved(id)? {

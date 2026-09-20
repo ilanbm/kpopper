@@ -120,7 +120,7 @@ pub(crate) fn flags(reader: &Reader<'_>, body: &V) -> Result<BTreeSet<&'static s
     } else {
         None
     };
-    if !named && (truth(&pred) || reopened_text(body).is_empty()) {
+    if !named && !blocked && (truth(&pred) || reopened_text(body).is_empty()) {
         flags.insert("no_predicate");
     } else if named && verdict == Some(true) {
         flags.insert("falsified");
