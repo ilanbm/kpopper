@@ -110,6 +110,36 @@ fn ordinary_branch_preview_and_fold_keep_source_ref_and_write_only_destination()
 }
 
 #[test]
+fn ordinary_branch_fold_refuses_nonfinite_source_without_changing_bytes() {
+    let temp = tempfile::tempdir().unwrap();
+    let root = temp.path().canonicalize().unwrap();
+    git(&root, &["init", "-q", "-b", "main"]);
+    fs::write(
+        root.join("GROUNDING.yaml"),
+        "known:\n  p.value: {v: .nan}\n",
+    )
+    .unwrap();
+    let source = commit(&root, "nonfinite source");
+    fs::write(root.join("GROUNDING.yaml"), "known:\n  p.value: {v: 3}\n").unwrap();
+    commit(&root, "finite current");
+    let before = image(&root);
+    let output = public_consolidation::dispatch(
+        &Options {
+            from_refs: vec![source],
+            ..Default::default()
+        },
+        &root,
+    );
+    assert_eq!(output.code, 1);
+    assert_eq!(output.stdout, "");
+    assert_eq!(
+        output.stderr,
+        "invalid_history_value: snapshot data contains a nonfinite value\n"
+    );
+    assert_eq!(image(&root), before);
+}
+
+#[test]
 #[ignore = "requires immutable Python 1.8 oracle"]
 fn ordinary_public_cli_matches_python_complete_output_and_files() {
     let source = tempfile::tempdir().unwrap();
