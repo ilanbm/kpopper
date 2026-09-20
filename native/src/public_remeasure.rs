@@ -21,19 +21,41 @@ fn output(lines: Vec<String>, code: i32) -> Output {
 
 fn recipe_path(record: &Path) -> PathBuf { record.parent().unwrap_or(Path::new(".")).join(".kpopper/measure.yaml") }
 fn scalar(v: &V) -> String { v.python_str() }
+fn executable(path: &Path) -> bool {
+    if !path.is_file() { return false; }
+    #[cfg(unix)] {
+        use std::os::unix::fs::PermissionsExt;
+        return path.metadata().is_ok_and(|metadata| metadata.permissions().mode() & 0o111 != 0);
+    }
+    #[cfg(not(unix))]
+    true
+}
 fn resolve(exe: &str, root: &Path) -> Option<PathBuf> {
     let path = Path::new(exe);
     if path.components().count() > 1 {
         let candidate = if path.is_absolute() { path.to_path_buf() } else { root.join(path) };
-        return candidate.is_file().then_some(candidate);
+        return executable(&candidate).then_some(candidate);
     }
-    env_path().into_iter().map(|dir| dir.join(exe)).find(|candidate| candidate.is_file())
+    env_path().into_iter().map(|dir| dir.join(exe)).find(|candidate| executable(candidate))
 }
 fn env_path() -> Vec<PathBuf> {
     std::env::var_os("PATH")
         .into_iter()
         .flat_map(|path| std::env::split_paths(&path).collect::<Vec<_>>())
         .collect()
+}
+fn checkout_root(record: &Path) -> PathBuf {
+    let parent = record.parent().unwrap_or(Path::new("."));
+    let mut command = Command::new("git");
+    command.args(["-C", parent.to_str().unwrap_or("."), "rev-parse", "--show-toplevel"]);
+    crate::reasoning_runtime::run_command_capture(&mut command, vec![], Duration::from_secs(5), 16 * 1024)
+        .ok()
+        .filter(|output| output.status.success())
+        .and_then(|output| String::from_utf8(output.stdout).ok())
+        .map(|output| output.trim().to_owned())
+        .filter(|output| !output.is_empty())
+        .map(PathBuf::from)
+        .unwrap_or_else(|| parent.to_path_buf())
 }
 fn allowlist(path: &Path) -> Result<BTreeMap<String, Vec<String>>> {
     if !path.is_file() { return Ok(BTreeMap::new()); }
@@ -167,6 +189,7 @@ fn measurement_declarations(
 
 pub fn run(options: &Options, cwd: &Path, frozen: bool) -> Result<Output> {
     let record = options.record.clone().unwrap_or_else(|| cwd.join("GROUNDING.yaml"));
+    let record = if record.is_absolute() { record } else { cwd.join(record) }.canonicalize()?;
     let runtime = public_workspace::runtime_for_paths(std::slice::from_ref(&record), cwd, None)?;
     let capture = source_capture::capture_ordinary_source_with_runtime(std::slice::from_ref(&record), cwd, if frozen { ReadMode::Frozen } else { ReadMode::Live }, None, runtime.as_ref())?;
     let doc = capture.ordinary_document();
@@ -191,7 +214,7 @@ pub fn run(options: &Options, cwd: &Path, frozen: bool) -> Result<Output> {
         };
         return Ok(output(lines, 0));
     }
-    let root = record.parent().unwrap_or(cwd);
+    let root = checkout_root(&record);
     let cited = named.keys().cloned().collect::<Vec<_>>();
     if !allowlist_exists {
         return Ok(output(vec![format!("refused - {} recipe{} named and no .kpopper/measure.yaml beside the record to hold {}: {}", cited.len(), if cited.len() == 1 { "" } else { "s" }, if cited.len() == 1 { "it" } else { "them" }, cited.join(", "))], 1));
@@ -202,7 +225,7 @@ pub fn run(options: &Options, cwd: &Path, frozen: bool) -> Result<Output> {
     }
     let entries = named.values().map(Vec::len).sum::<usize>();
     let mut out = vec![format!("{} recipe{} named by {} entr{}, from .kpopper/measure.yaml, run from {}:", cited.len(), if cited.len()==1{""}else{"s"}, entries, if entries==1{"y"}else{"ies"}, root.display())];
-    for name in &cited { let ids = &named[name]; let argv = &recipes[name]; let exe = resolve(&argv[0], root).map(|p| p.display().to_string()).unwrap_or_else(|| format!("{} (not found)", argv[0])); let args = argv[1..].iter().map(|v| shell_quote(v)).collect::<Vec<_>>().join(" "); out.push(format!("  {} <- {}: {} {}", ids.join(", "), name, exe, args)); }
+    for name in &cited { let ids = &named[name]; let argv = &recipes[name]; let exe = resolve(&argv[0], &root).map(|p| p.display().to_string()).unwrap_or_else(|| format!("{} (not found)", argv[0])); let args = argv[1..].iter().map(|v| shell_quote(v)).collect::<Vec<_>>().join(" "); out.push(format!("  {} <- {}: {} {}", ids.join(", "), name, exe, args)); }
     for name in recipes.keys().filter(|name| !named.contains_key(name.as_str())) { out.push(format!("  named by no entry, never run: {name}")); }
     if !options.run { out.extend(["".into(), "nothing ran - add --run to measure this tree".into()]); return Ok(output(out, 0)); }
     out.push("".into());
@@ -210,7 +233,7 @@ pub fn run(options: &Options, cwd: &Path, frozen: bool) -> Result<Output> {
     let mut changed = false;
     let mut failed = 0usize;
     for (name, ids) in named {
-        let (text, _) = match run_recipe(recipes.get(&name).unwrap(), root) { Ok(v) => v, Err(e) => { failed += 1; out.push(format!("  FAIL {name} ({}): {}", ids.join(", "), e)); continue; } };
+        let (text, _) = match run_recipe(recipes.get(&name).unwrap(), &root) { Ok(v) => v, Err(e) => { failed += 1; out.push(format!("  FAIL {name} ({}): {}", ids.join(", "), e)); continue; } };
         for id in ids { let body = collections.values().find_map(|m|m.get(&id)).unwrap(); let body=map(body)?; let field=body.get("v").or_else(||body.get("quoted")).ok_or_else(||Error(format!("{id} has no stored reading")))?; match parse_reading(&text, field) { Ok(measured) if agrees(field, &measured) => out.push(format!("  {id}: {} - as recorded ({name})", scalar(&measured))), Ok(measured) => { changed=true; out.push(format!("  {id}: {} -> {} measured by {name}", scalar(field), scalar(&measured))); }, Err(e) => { failed += 1; out.push(format!("  FAIL {name} ({id}): {}", e)); } } }
     }
     out.push("".into());

@@ -1,6 +1,9 @@
 use kpop_native::public_remeasure::{self, Options};
-use std::{fs, path::{Path, PathBuf}, process::Command};
+use std::fs;
+#[cfg(unix)]
+use std::{path::{Path, PathBuf}, process::Command};
 
+#[cfg(unix)]
 #[derive(Debug, PartialEq, Eq)]
 struct ProcessOutput {
     code: i32,
@@ -8,6 +11,7 @@ struct ProcessOutput {
     stderr: String,
 }
 
+#[cfg(unix)]
 fn oracle(record: &Path, run: bool) -> ProcessOutput {
     let python = std::env::var("KPOP_SESSION_ORACLE_PYTHON").expect("set KPOP_SESSION_ORACLE_PYTHON to the Python 1.8 runtime");
     let root = PathBuf::from(std::env::var("KPOP_SESSION_ORACLE_ROOT").expect("set KPOP_SESSION_ORACLE_ROOT to the Python 1.8 source root"));
@@ -26,6 +30,7 @@ fn oracle(record: &Path, run: bool) -> ProcessOutput {
     }
 }
 
+#[cfg(unix)]
 fn native(record: &Path, run: bool) -> ProcessOutput {
     let mut command = Command::new(env!("CARGO_BIN_EXE_kpop-native"));
     command.args(["--frozen", "remeasure"]);
@@ -38,6 +43,7 @@ fn native(record: &Path, run: bool) -> ProcessOutput {
     }
 }
 
+#[cfg(unix)]
 fn assert_oracle(record: &Path, run: bool) {
     let before = fs::read(record).unwrap();
     let expected = oracle(record, run);
@@ -48,6 +54,7 @@ fn assert_oracle(record: &Path, run: bool) {
 }
 
 #[test]
+#[cfg(unix)]
 fn plan_and_run_use_only_the_allowlisted_recipe_and_leave_record_bytes() {
     let temp = tempfile::tempdir().unwrap();
     let root = temp.path();
@@ -69,6 +76,7 @@ fn plan_and_run_use_only_the_allowlisted_recipe_and_leave_record_bytes() {
     assert_eq!(fs::read(root.join("GROUNDING.yaml")).unwrap(), before);
 }
 
+#[cfg(unix)]
 fn fixture(output: &str, status: i32, stderr: &str, value: &str, recipe_yaml: &str) -> (tempfile::TempDir, PathBuf) {
     let temp = tempfile::tempdir().unwrap();
     let root = temp.path();
@@ -83,6 +91,7 @@ fn fixture(output: &str, status: i32, stderr: &str, value: &str, recipe_yaml: &s
 }
 
 #[test]
+#[cfg(unix)]
 fn changed_reading_is_reported_and_never_claimed_clean() {
     let (temp, record) = fixture("2", 0, "", "1", "echo: [./recipe]\n");
     let out = public_remeasure::run(&Options { run: true, record: Some(record) }, temp.path(), true).unwrap();
@@ -92,6 +101,7 @@ fn changed_reading_is_reported_and_never_claimed_clean() {
 }
 
 #[test]
+#[cfg(unix)]
 fn nonzero_recipe_with_stderr_is_a_failure() {
     let (temp, record) = fixture("1", 7, "bad recipe", "1", "echo: [./recipe]\n");
     let out = public_remeasure::run(&Options { run: true, record: Some(record) }, temp.path(), true).unwrap();
@@ -100,6 +110,7 @@ fn nonzero_recipe_with_stderr_is_a_failure() {
 }
 
 #[test]
+#[cfg(unix)]
 fn invalid_allowlist_recipe_name_is_refused() {
     let (temp, record) = fixture("1", 0, "", "1", "bad.name: [./recipe]\n");
     let output = public_remeasure::run(&Options { run: false, record: Some(record) }, temp.path(), true).unwrap();
@@ -116,6 +127,7 @@ fn no_measures_is_a_clean_noop() {
 }
 
 #[test]
+#[cfg(unix)]
 fn invalid_scalar_for_numeric_record_is_a_hole() {
     let (temp, record) = fixture("hello", 0, "", "1", "echo: [./recipe]\n");
     let out = public_remeasure::run(&Options { run: true, record: Some(record) }, temp.path(), true).unwrap();
@@ -232,4 +244,23 @@ fn python_18_oracle_matches_missing_allowlist_and_recipe() {
     assert_oracle(&record, false);
     fs::remove_file(temp.path().join(".kpopper/measure.yaml")).unwrap();
     assert_oracle(&record, false);
+}
+
+#[test]
+#[cfg(unix)]
+#[ignore = "requires explicit Python 1.8 oracle runtime and source root"]
+fn python_18_oracle_matches_nested_record_checkout_root() {
+    use std::os::unix::fs::PermissionsExt;
+    let temp = tempfile::tempdir().unwrap();
+    let root = temp.path().canonicalize().unwrap();
+    assert!(Command::new("git").args(["init", "-q"]).current_dir(&root).status().unwrap().success());
+    let nested = root.join("facts");
+    fs::create_dir_all(nested.join(".kpopper")).unwrap();
+    let record = nested.join("GROUNDING.yaml");
+    fs::write(&record, "known:\n  p.a:\n    v: 1\n    measure: echo\n").unwrap();
+    fs::write(nested.join(".kpopper/measure.yaml"), "echo: [./recipe]\n").unwrap();
+    fs::write(root.join("recipe"), "#!/bin/sh\nprintf '1\\n'\n").unwrap();
+    fs::set_permissions(root.join("recipe"), fs::Permissions::from_mode(0o700)).unwrap();
+    assert_oracle(&record, false);
+    assert_oracle(&record, true);
 }
