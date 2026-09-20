@@ -682,29 +682,7 @@ pub fn run(options: &Options, cwd: &Path, frozen: bool) -> Result<Output> {
     };
     let finite_document = doc.finite_projection()?;
     let finite_hypotheses = capture.hypotheses().finite_projection()?;
-    let mut proposals = Vec::new();
-    for (name, hypothesis) in hmap(&finite_hypotheses)? {
-        let hypothesis = hmap(hypothesis)?;
-        if hypothesis
-            .get("error")
-            .is_some_and(|value| *value != CV::Null)
-        {
-            continue;
-        }
-        proposals.push(PreviewHypothesis {
-            name: name.clone(),
-            document: hypothesis
-                .get("doc")
-                .or_else(|| hypothesis.get("document"))
-                .ok_or_else(|| Error("invalid_snapshot".into()))?
-                .clone(),
-            head: hypothesis
-                .get("head")
-                .cloned()
-                .unwrap_or_else(|| CV::Map(BTreeMap::new())),
-        });
-    }
-    proposals.push(tree_proposal);
+    let proposals = [tree_proposal];
     let preview = crate::public_consolidation::preview(&PreviewRequest {
         document: &finite_document,
         hypotheses: hmap(&finite_hypotheses)?,
