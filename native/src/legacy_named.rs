@@ -538,6 +538,7 @@ pub(super) fn prepare(
         journal: entry_layout(Path::new(&entry_relative))?.journal,
         subject: id,
         diagnostics: notes,
+        page: None,
     }))
 }
 

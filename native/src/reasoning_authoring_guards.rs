@@ -615,7 +615,11 @@ struct Disagreement {
     why: String,
     when: Option<String>,
 }
-fn disagreement(world: &mut impl Admission, a: &Map) -> Result<Option<Disagreement>> {
+fn disagreement(
+    world: &mut impl Admission,
+    a: &Map,
+    page: Option<&V>,
+) -> Result<Option<Disagreement>> {
     let id = text(field(a, "id")?)?;
     let Some(body) = world.raw().get(id).cloned() else {
         return Ok(None);
@@ -665,7 +669,7 @@ fn disagreement(world: &mut impl Admission, a: &Map) -> Result<Option<Disagreeme
             &body,
             new_body,
             a.get("as_of").and_then(day).as_deref(),
-            None,
+            page,
             false,
         )?;
         return Ok(Some(Disagreement {
@@ -848,6 +852,14 @@ fn hypothesis(world: &impl Admission, id: &str, claim: &V) -> Result<String> {
     Ok(name)
 }
 pub(crate) fn validate(world: &mut impl Admission, action: &V) -> Result<Vec<String>> {
+    validate_with_page(world, action, None)
+}
+
+pub(crate) fn validate_with_page(
+    world: &mut impl Admission,
+    action: &V,
+    page: Option<&V>,
+) -> Result<Vec<String>> {
     let a = map(action)?;
     let id = text(field(a, "id")?)?;
     let kind = text(field(a, "kind")?)?;
@@ -863,7 +875,7 @@ pub(crate) fn validate(world: &mut impl Admission, action: &V) -> Result<Vec<Str
     let is_jud = judgment(world, id);
     let mut out = vec![];
     let diff = if (kind == "add" || kind == "set") && known {
-        disagreement(world, a)?
+        disagreement(world, a, page)?
     } else {
         None
     };

@@ -908,6 +908,7 @@ fn run_with_probe(
             code: 0,
         });
     }
+    drop(_state_lock);
 
     let outcome = (|| {
         if crate::recording_privacy::private_marker(&V::from_json(&report.raw)?)
@@ -950,6 +951,7 @@ fn run_with_probe(
                 map(&captured.hypotheses)?.is_empty(),
                 "a record with hypothesis context requires primary review",
             )?;
+
             let document = captured.source.projected();
             if report.raw.get("source").is_some()
                 || report.updates.iter().any(|u| u["kind"] == "add")
@@ -971,15 +973,9 @@ fn run_with_probe(
             )?;
             let collection = source_collection(&document, &report)?;
             let planned = actions(&report, &event, &source_path, &collection)?;
-            let prepared = legacy_batch::prepare(
-                &planned,
-                &route,
-                &legacy_batch::Options {
-                    operation: format!("report-{event}"),
-                    context,
-                },
-                inventory,
-            )?;
+            let prepared = legacy_batch::prepare(&planned, &route, &legacy_batch::Options {
+                operation: format!("report-{event}"), context,
+            }, inventory, None)?;
             let mutation = prepared.mutation.clone();
             verify_requested_profile(&report, &mutation, supplied_runtime)?;
             let graphs = mutation_graphs(&mutation, &report, supplied_runtime)?;

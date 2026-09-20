@@ -80,6 +80,7 @@ pub(crate) fn prepare(
     route: &WriteRoute,
     options: &Options,
     mut inventory: Inventory,
+    mut page: Option<crate::ordinary_page_capture::PageCapture>,
 ) -> Result<Prepared> {
     crate::require(!actions.is_empty() && actions.len() <= 33, "invalid_batch")?;
     let mut images = BTreeMap::<String, FileImage>::new();
@@ -92,7 +93,7 @@ pub(crate) fn prepare(
     let mut diagnostics = Vec::new();
 
     for (index, action) in actions.iter().enumerate() {
-        let prepared = match A::prepare_with_inventory(action, route, None, inventory)
+        let prepared = match A::prepare_with_inventory(action, route, None, inventory, page.clone())
             .map_err(|e| error(&format!("batch action {index}: {e}")))? {
             Preparation::Draft { output, inventory: mut staged } => {
                 crate::require(satisfied(action, route, &mut staged)?,
@@ -116,6 +117,9 @@ pub(crate) fn prepare(
         subjects.push(prepared.subject);
         diagnostics.extend(prepared.diagnostics);
         inventory = prepared.inventory;
+        if prepared.page.is_some() {
+            page = prepared.page.clone();
+        }
         for image in prepared.mutation.files() {
             let path = image.path.clone();
             let target = batch_root.join(Path::new(&path));
@@ -185,6 +189,7 @@ pub(crate) fn prepare(
         journal: journal.unwrap(),
         subject: subjects.join(","),
         diagnostics,
+        page,
     })
 }
 
@@ -205,7 +210,7 @@ mod tests {
         ];
         let prepared = prepare(&actions, &route, &Options {
             operation: "report-recovery".into(), context: V::Map(BTreeMap::new()),
-        }, Inventory::default()).unwrap();
+        }, Inventory::default(), None).unwrap();
         assert_eq!(prepared.mutation.files().len(), 2);
         (temp, entry, route, prepared)
     }
@@ -246,7 +251,7 @@ mod tests {
         ];
         let prepared = prepare(&actions, &route, &Options {
             operation: "report-noop".into(), context: V::Map(BTreeMap::new()),
-        }, Inventory::default()).unwrap();
+        }, Inventory::default(), None).unwrap();
         assert_eq!(prepared.mutation.files().len(), 1);
         assert!(prepared.output.contains("nothing written"));
         assert!(String::from_utf8(prepared.mutation.files()[0].after.clone().unwrap())

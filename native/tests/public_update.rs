@@ -172,6 +172,38 @@ fn stale_primary_hash_retains_report_without_writing() {
 }
 
 #[test]
+fn earlier_batch_action_can_fire_and_replace_an_arrangement() {
+    let temp = tempfile::tempdir().unwrap();
+    let cases: Value = serde_json::from_slice(include_bytes!("fixtures/ordinary-page-facts.json")).unwrap();
+    let case = cases.as_array().unwrap().iter()
+        .find(|case| case["name"] == "page-arrangement-take-dry").unwrap();
+    for (relative, raw) in case["files"].as_object().unwrap() {
+        if relative.contains("hypotheses/") { continue }
+        let path = temp.path().join(relative);
+        fs::create_dir_all(path.parent().unwrap()).unwrap();
+        fs::write(path, raw.as_str().unwrap()).unwrap();
+    }
+    let entry = temp.path().join("GROUNDING.yaml");
+    let arranged = fs::read_to_string(&entry).unwrap()
+        .replace("page.unserved], seen: {s.now: read 2026-09-19, page.unserved: 0}, wrong_if: page.unserved > 0",
+            "graph.judgments], seen: {s.now: read 2026-09-19, graph.judgments: 1}, wrong_if: graph.judgments > 1");
+    fs::write(&entry, arranged).unwrap();
+    let output = run(temp.path(), &temp.path().join("state"), &json!({
+        "event_id":"batch-arrangement", "record_sha256":hash(&entry), "date":"2026-09-20",
+        "source_quote":"A second request arrived and the layout was re-decided.",
+        "updates":[
+            {"kind":"add","id":"c.extra","body":{"rests_on":["p.value"],"verdict":"extra","wrong_if":"p.value > 100"}},
+            {"kind":"add","id":"v.layout","body":{"rests_on":["s.now","graph.judgments"],"verdict":"re-decided","wrong_if":"graph.judgments > 1"}}
+        ]
+    }));
+    assert!(output.status.success(), "{}{}", String::from_utf8_lossy(&output.stdout), String::from_utf8_lossy(&output.stderr));
+    let raw = fs::read_to_string(entry).unwrap();
+    assert!(raw.contains("born: \"2026-09-20\""));
+    assert!(raw.contains("stood 1 session"));
+    assert!(raw.contains("graph.judgments: 2"));
+}
+
+#[test]
 fn private_dependency_closure_is_retained_without_a_shared_write() {
     let temp = tempfile::tempdir().unwrap();
     record(temp.path());
