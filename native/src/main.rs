@@ -916,9 +916,14 @@ fn main() {
             kpop_native::public_history::run(options, &cwd)
         })();
         match result {
-            Ok(value) => println!("{value}"),
+            Ok(value) => print!("{}", kpop_native::public_history::output(&value)),
             Err(error) => {
-                println!("{}", kpop_native::public_history::refusal(&error));
+                print!(
+                    "{}",
+                    kpop_native::public_history::output(&kpop_native::public_history::refusal(
+                        &error
+                    ))
+                );
                 std::process::exit(1);
             }
         }
