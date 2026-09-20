@@ -465,6 +465,14 @@ fn graph(
     graph_document(raw, &document, seeds, supplied_runtime)
 }
 
+/// Re-evaluate the committed record around a captured ingestion target.
+///
+/// Durable signal files are historical evidence; callers use this view only to
+/// decide whether a previously raised judgment still needs attention.
+pub(crate) fn current_graph(raw: &[u8], seeds: &[String]) -> Result<J> {
+    graph(raw, seeds, None)
+}
+
 fn graph_document(
     raw: &[u8],
     document: &V,

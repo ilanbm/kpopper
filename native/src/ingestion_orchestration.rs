@@ -1,0 +1,650 @@
+//! Durable asynchronous ingestion built around the one public update writer.
+use crate::{
+    Result, history_contract::error, ingestion_state as S, project_modes::WriteRoute, require,
+};
+use serde_json::{Value as J, json};
+use std::{
+    path::{Path, PathBuf},
+    process::{Command, Stdio},
+    time::Duration,
+};
+
+const MAX_EVENTS: usize = 32;
+const MAX_WORKER_PASSES: usize = 4;
+const LEASE_SECONDS: f64 = 300.0;
+
+/// Capture validation is read-only. The writer repeats the complete validation
+/// before preparing any mutation.
+fn validate_envelope(raw: &[u8]) -> Result<J> {
+    require(
+        raw.len() <= 16 * 1024 * 1024,
+        "capture envelope is too large",
+    )?;
+    crate::public_update::validate_report(raw)
+}
+
+pub(crate) fn selected_record(record: Option<&Path>, cwd: &Path) -> Result<(PathBuf, J, PathBuf)> {
+    let original = if let Some(record) = record {
+        vec![cwd.join(record)]
+    } else {
+        crate::public_workspace::records(cwd)?
+    };
+    let route = WriteRoute::capture(&original, cwd)?;
+    require(
+        route.paths().len() == 1,
+        "ingestion requires one record path",
+    )?;
+    Ok((
+        route.paths()[0].clone(),
+        route.config().to_json()?,
+        route.project().root.clone(),
+    ))
+}
+
+fn event_id(record: &Path, envelope: &J) -> String {
+    if let Some(id) = envelope.get("event_id").and_then(J::as_str) {
+        crate::identity::sha256(format!("{}\0{id}", record.display()).as_bytes())[..32].into()
+    } else {
+        uuid::Uuid::new_v4().simple().to_string()
+    }
+}
+
+fn terminal(value: &J) -> bool {
+    value
+        .get("state")
+        .and_then(J::as_str)
+        .is_some_and(|state| S::TERMINAL.contains(&state))
+}
+
+fn load_capture(layout: &S::Layout, event: &J) -> Result<Vec<u8>> {
+    let id = event["event_id"]
+        .as_str()
+        .ok_or_else(|| error("invalid ingestion event"))?;
+    let envelope = S::read(&layout.path("envelopes", id))?
+        .ok_or_else(|| error("captured input is unavailable"))?;
+    let source =
+        S::read(&layout.source_path(id))?.ok_or_else(|| error("captured input is unavailable"))?;
+    require(
+        crate::identity::sha256(&envelope) == event["envelope_sha256"],
+        "captured envelope changed after capture",
+    )?;
+    require(
+        crate::identity::sha256(&source) == event["source_sha256"],
+        "captured source text changed after capture",
+    )?;
+    require(
+        event["source_file"] == json!(layout.source_path(id)),
+        "captured source path changed after capture",
+    )?;
+    let parsed =
+        crate::json_ingress::parse_slice(&envelope, crate::json_ingress::DuplicateKeys::Reject)?;
+    require(
+        parsed["source_quote"].as_str().map(str::as_bytes) == Some(source.as_slice()),
+        "captured source text changed after capture",
+    )?;
+    Ok(envelope)
+}
+
+fn bound_target(
+    layout: &S::Layout,
+    event: &J,
+    envelope: &J,
+    record: &Path,
+    cwd: &Path,
+) -> Result<J> {
+    let expected = event
+        .get("target_snapshot")
+        .ok_or_else(|| error("invalid ingestion event"))?;
+    let current = crate::public_update::capture_target(envelope, record, cwd)?;
+    if current["body_sha256"] == expected["body_sha256"] {
+        return Ok(expected.clone());
+    }
+    if envelope.get("updates").is_some() {
+        return Ok(expected.clone());
+    }
+    let Some(source) = current
+        .get("source")
+        .and_then(J::as_str)
+        .and_then(|source| source.strip_prefix("s.ingest_"))
+    else {
+        return Ok(expected.clone());
+    };
+    let Some(prior_event) = S::read_json(&layout.path("events", source))? else {
+        return Ok(expected.clone());
+    };
+    let Some(prior_receipt) = S::read_json(&layout.path("receipts", source))? else {
+        return Ok(expected.clone());
+    };
+    let owned = prior_receipt["state"] == "applied"
+        && prior_receipt["target"] == event["target"]
+        && prior_event["order"].as_u64().unwrap_or(u64::MAX) < event["order"].as_u64().unwrap_or(0)
+        && prior_receipt["target_after_sha256"] == current["body_sha256"];
+    Ok(if owned { current } else { expected.clone() })
+}
+
+fn receipt_id(event: &str) -> String {
+    crate::identity::sha256(format!("receipt\0{event}").as_bytes())[..32].into()
+}
+fn signal_id(event: &str, question: &str) -> String {
+    crate::identity::sha256(format!("{event}\0question\0{question}").as_bytes())[..32].into()
+}
+fn finish_question(layout: &S::Layout, event: &mut J, envelope: &J, reason: &str) -> Result<J> {
+    let id = event["event_id"].as_str().unwrap().to_owned();
+    let question = envelope
+        .get("question")
+        .and_then(J::as_str)
+        .unwrap_or(reason);
+    let signal = json!({
+        "id":signal_id(&id, question), "event_id":id, "category":"question",
+        "target":envelope.get("target").cloned().unwrap_or(J::Null),
+        "source_quote":envelope.get("source_quote").cloned().unwrap_or(J::String(String::new())),
+        "affected_judgments":[], "newly_fired_judgments":[], "actionable_judgments":[],
+        "reason":reason, "question":question,
+    });
+    let receipt = json!({
+        "record":layout.record, "state_dir":layout.root, "id":receipt_id(&id), "event_id":id,
+        "state":"needs_primary", "target":envelope.get("target").cloned().unwrap_or(J::Null),
+        "value":envelope.get("value").cloned().unwrap_or(J::Null), "source":J::Null,
+        "source_file":event["source_file"], "reason":reason,
+        "source_sha256":event["source_sha256"], "envelope_sha256":event["envelope_sha256"],
+        "signal_ids":[signal["id"].clone()], "reach":{},
+    });
+    S::save_json(
+        &layout.path("signals", signal["id"].as_str().unwrap()),
+        &signal,
+    )?;
+    S::save_json(&layout.path("receipts", &id), &receipt)?;
+    S::save_json(
+        &layout.path("results", &id),
+        &json!({"receipt":receipt,"signals":[signal]}),
+    )?;
+    event["state"] = json!("needs_primary");
+    event["reason"] = json!(reason);
+    event["finished_at"] = json!(S::now());
+    S::save_json(&layout.path("events", &id), event)?;
+    Ok(receipt)
+}
+
+fn has_work(layout: &S::Layout) -> Result<bool> {
+    Ok(events(layout)?.iter().any(|event| {
+        event
+            .get("state")
+            .and_then(J::as_str)
+            .is_some_and(|state| S::ACTIVE.contains(&state))
+    }))
+}
+
+fn lease_active(value: Option<&J>) -> bool {
+    value
+        .and_then(|lease| lease.get("expires_at"))
+        .and_then(J::as_f64)
+        .is_some_and(|deadline| deadline > S::now())
+}
+
+fn reserve_worker(layout: &S::Layout) -> Result<Option<String>> {
+    let path = layout.root.join("worker.lease");
+    if lease_active(S::read_json(&path)?.as_ref()) {
+        return Ok(None);
+    }
+    let token = uuid::Uuid::new_v4().simple().to_string();
+    let lease = json!({"token":token,"started_at":S::now(),"expires_at":S::now()+LEASE_SECONDS,"pid":J::Null});
+    S::save_json(&path, &lease)?;
+    Ok(Some(token))
+}
+
+fn start_worker_locked(layout: &S::Layout) -> Result<bool> {
+    start_worker_with(layout, &std::env::current_exe()?)
+}
+
+fn start_worker_with(layout: &S::Layout, executable: &Path) -> Result<bool> {
+    let Some(token) = reserve_worker(layout)? else {
+        return Ok(false);
+    };
+    let path = layout.root.join("worker.lease");
+    let child = Command::new(executable)
+        .args(["ingest", "_worker", "--record"])
+        .arg(&layout.record)
+        .arg("--state-dir")
+        .arg(&layout.root)
+        .arg("--lease-token")
+        .arg(&token)
+        .current_dir(layout.record.parent().unwrap())
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .spawn();
+    match child {
+        Ok(child) => {
+            let mut lease =
+                S::read_json(&path)?.ok_or_else(|| error("worker lease is unavailable"))?;
+            require(
+                lease["token"] == token,
+                "worker lease changed while spawning",
+            )?;
+            lease["pid"] = json!(child.id());
+            S::save_json(&path, &lease)?;
+            Ok(true)
+        }
+        Err(error) => {
+            S::remove(&path)?;
+            Err(error.into())
+        }
+    }
+}
+
+pub fn capture(
+    raw: &[u8],
+    record: Option<&Path>,
+    state_dir: Option<&Path>,
+    cwd: &Path,
+    start: bool,
+) -> Result<J> {
+    let envelope = validate_envelope(raw)?;
+    let (record, policy, project_root) = selected_record(record, cwd)?;
+    let layout = S::Layout::create(&record, state_dir)?;
+    let record = layout.record.clone();
+    let (target_snapshot, capture_issue) =
+        match crate::public_update::capture_target(&envelope, &record, cwd) {
+            Ok(snapshot) => (snapshot, J::Null),
+            Err(error) => (J::Null, J::String(error.to_string())),
+        };
+    let _lock = S::FileLock::acquire(&layout.root.join("capture.lock"))?;
+    let id = event_id(&record, &envelope);
+    let event_path = layout.path("events", &id);
+    let canonical = S::canonical_json(&envelope)?;
+    if let Some(event) = S::read_json(&event_path)? {
+        let prior = S::read_json(&layout.path("envelopes", &id))?;
+        require(
+            prior.as_ref() == Some(&envelope),
+            "event_id was reused for different input",
+        )?;
+        if start
+            && event
+                .get("state")
+                .and_then(J::as_str)
+                .is_some_and(|state| S::ACTIVE.contains(&state))
+        {
+            start_worker_locked(&layout)?;
+        }
+        return status(Some(&id), Some(&record), Some(&layout.root), cwd)?
+            .ok_or_else(|| error("invalid ingestion event"));
+    }
+    let counter_path = layout.root.join("counter.json");
+    let order = S::read_json(&counter_path)?
+        .and_then(|value| value.get("value").and_then(J::as_u64))
+        .unwrap_or(0)
+        + 1;
+    S::save_json(&counter_path, &json!({"value":order}))?;
+    let quote = envelope["source_quote"].as_str().unwrap().as_bytes();
+    S::save_bytes(&layout.source_path(&id), quote)?;
+    S::save_bytes(&layout.path("envelopes", &id), &canonical)?;
+    let event = json!({
+        "record":record, "state_dir":layout.root, "project_root":project_root, "project_policy":policy,
+        "event_id":id, "state":"captured", "target":envelope.get("target").cloned().unwrap_or(J::Null),
+        "captured_at":S::now(), "order":order, "record_hash":crate::identity::sha256(&std::fs::read(&record)?),
+        "target_snapshot":target_snapshot, "capture_issue":capture_issue, "source_file":layout.source_path(&id),
+        "source_sha256":crate::identity::sha256(quote), "envelope_sha256":crate::identity::sha256(&canonical), "attempts":0,
+    });
+    S::save_json(&event_path, &event)?;
+    if start {
+        start_worker_locked(&layout)?;
+    }
+    Ok(S::summary(&event))
+}
+
+fn events(layout: &S::Layout) -> Result<Vec<J>> {
+    let mut values = Vec::new();
+    for entry in std::fs::read_dir(layout.root.join("events"))? {
+        let path = entry?.path();
+        if path.extension().and_then(|value| value.to_str()) == Some("json")
+            && let Some(value) = S::read_json(&path)?
+        {
+            values.push(value);
+        }
+    }
+    values.sort_by(|a, b| a["order"].as_u64().cmp(&b["order"].as_u64()));
+    Ok(values)
+}
+
+pub fn process(
+    record: Option<&Path>,
+    state_dir: Option<&Path>,
+    cwd: &Path,
+    event_id: Option<&str>,
+    maximum: usize,
+) -> Result<Vec<J>> {
+    let (record, captured_policy, _) = selected_record(record, cwd)?;
+    let layout = S::Layout::create(&record, state_dir)?;
+    let record = layout.record.clone();
+    let _processor = S::FileLock::acquire(&layout.root.join("processor.lock"))?;
+    let mut output = Vec::new();
+    for mut event in events(&layout)?
+        .into_iter()
+        .filter(|event| event_id.is_none_or(|id| event["event_id"] == id))
+        .filter(|event| !terminal(event))
+        .take(maximum.min(MAX_EVENTS))
+    {
+        let id = event["event_id"]
+            .as_str()
+            .ok_or_else(|| error("invalid ingestion event"))?
+            .to_owned();
+        event["state"] = json!("processing");
+        event["attempts"] = json!(event["attempts"].as_u64().unwrap_or(0) + 1);
+        event["started_at"] = json!(S::now());
+        S::save_json(&layout.path("events", &id), &event)?;
+        let envelope = match load_capture(&layout, &event) {
+            Ok(raw) => raw,
+            Err(error) => {
+                let fallback = json!({"source_quote":"","target":event["target"]});
+                output.push(finish_question(&layout, &mut event, &fallback, &error.0)?);
+                continue;
+            }
+        };
+        let parsed = crate::json_ingress::parse_slice(
+            &envelope,
+            crate::json_ingress::DuplicateKeys::Reject,
+        )?;
+        if event["project_policy"] != captured_policy {
+            output.push(finish_question(
+                &layout,
+                &mut event,
+                &parsed,
+                "project policy changed after report capture; review the retained report",
+            )?);
+            continue;
+        }
+        if let Some(issue) = event
+            .get("capture_issue")
+            .and_then(J::as_str)
+            .map(str::to_owned)
+        {
+            output.push(finish_question(&layout, &mut event, &parsed, &issue)?);
+            continue;
+        }
+        let options = crate::public_update::Options {
+            file: "-".into(),
+            record: Some(record.clone()),
+            state_dir: Some(layout.root.clone()),
+        };
+        let expected = match bound_target(&layout, &event, &parsed, &record, cwd) {
+            Ok(expected) => expected,
+            Err(error) => {
+                output.push(finish_question(
+                    &layout,
+                    &mut event,
+                    &parsed,
+                    &format!("target conflict: {error}"),
+                )?);
+                continue;
+            }
+        };
+        let result =
+            crate::public_update::run_captured(&options, cwd, Some(&envelope), &id, &expected);
+        match result {
+            Ok(result) => {
+                let receipt = crate::json_ingress::parse_slice(
+                    result.text.as_bytes(),
+                    crate::json_ingress::DuplicateKeys::Reject,
+                )?;
+                event["state"] = receipt["state"].clone();
+                event["reason"] = receipt.get("reason").cloned().unwrap_or(J::Null);
+                event["finished_at"] = json!(S::now());
+                S::save_json(&layout.path("events", &id), &event)?;
+                output.push(receipt);
+            }
+            Err(error) => {
+                let journal = layout.path("journals", &id);
+                if journal.is_file() {
+                    event["state"] = json!("recovery_required");
+                    event["reason"] = json!(error.to_string());
+                    S::save_json(&layout.path("events", &id), &event)?;
+                    output.push(S::summary(&event));
+                } else {
+                    output.push(finish_question(&layout, &mut event, &parsed, &error.0)?);
+                }
+            }
+        }
+    }
+    Ok(output)
+}
+
+pub fn status(
+    event_id: Option<&str>,
+    record: Option<&Path>,
+    state_dir: Option<&Path>,
+    cwd: &Path,
+) -> Result<Option<J>> {
+    let (record, _, _) = selected_record(record, cwd)?;
+    let Some(layout) = S::Layout::existing(&record, state_dir)? else {
+        return Ok(event_id.map(|_| J::Null).or(Some(J::Array(vec![]))));
+    };
+    if let Some(id) = event_id {
+        return Ok(S::read_json(&layout.path("receipts", id))?
+            .or(S::read_json(&layout.path("events", id))?));
+    }
+    Ok(Some(J::Array(
+        events(&layout)?
+            .into_iter()
+            .map(|event| {
+                let id = event["event_id"].as_str().unwrap_or("");
+                S::read_json(&layout.path("receipts", id))
+                    .ok()
+                    .flatten()
+                    .unwrap_or_else(|| S::summary(&event))
+            })
+            .collect(),
+    )))
+}
+
+pub fn pending(
+    record: Option<&Path>,
+    state_dir: Option<&Path>,
+    cwd: &Path,
+    include_handled: bool,
+) -> Result<Vec<J>> {
+    let (record, _, _) = selected_record(record, cwd)?;
+    let Some(layout) = S::Layout::existing(&record, state_dir)? else {
+        return Ok(vec![]);
+    };
+    let handled =
+        S::read_json(&layout.root.join("handled.json"))?.unwrap_or_else(|| json!({"signals":{}}));
+    let mut signals = Vec::new();
+    let raw = std::fs::read(&record);
+    for entry in std::fs::read_dir(layout.root.join("signals"))? {
+        let path = entry?.path();
+        if let Some(mut signal) = S::read_json(&path)? {
+            let id = signal["id"].as_str().unwrap_or("");
+            if let Some(when) = handled["signals"].get(id) {
+                if !include_handled {
+                    continue;
+                }
+                signal["handled_at"] = when.clone();
+            }
+            let names = signal
+                .get("newly_fired_judgments")
+                .and_then(J::as_array)
+                .filter(|names| !names.is_empty())
+                .or_else(|| signal.get("actionable_judgments").and_then(J::as_array));
+            if let (Some(names), Ok(raw)) = (names, raw.as_ref()) {
+                let ids = names
+                    .iter()
+                    .filter_map(J::as_str)
+                    .map(str::to_owned)
+                    .collect::<Vec<_>>();
+                if !ids.is_empty() {
+                    let seeds = signal
+                        .get("target")
+                        .and_then(J::as_str)
+                        .map(|target| vec![target.to_owned()])
+                        .unwrap_or_default();
+                    if let Ok(graph) = crate::public_update::current_graph(raw, &seeds) {
+                        let contradiction = signal["category"] == "contradiction";
+                        let live = ids
+                            .iter()
+                            .filter(|name| {
+                                let judgment = &graph["judgments"][name.as_str()];
+                                if contradiction {
+                                    judgment["evaluation"] == true
+                                } else {
+                                    matches!(
+                                        judgment["tag"].as_str(),
+                                        Some(
+                                            "MOVED"
+                                                | "UNCHECKED"
+                                                | "BROKEN"
+                                                | "BLOCKED"
+                                                | "UNKNOWN"
+                                        )
+                                    )
+                                }
+                            })
+                            .cloned()
+                            .collect::<Vec<_>>();
+                        if live.is_empty() {
+                            continue;
+                        }
+                        signal["affected_judgments"] = json!(live);
+                        if contradiction {
+                            signal["newly_fired_judgments"] = json!(live);
+                            signal["reason"] = json!(
+                                live.iter()
+                                    .filter_map(|name| graph["judgments"][name]["reason"].as_str())
+                                    .collect::<Vec<_>>()
+                                    .join("; ")
+                            );
+                        } else {
+                            signal["actionable_judgments"] = json!(live);
+                            let reason = live
+                                .iter()
+                                .filter_map(|name| {
+                                    graph["judgments"][name]["reason"]
+                                        .as_str()
+                                        .map(|reason| format!("{name} requires review: {reason}"))
+                                })
+                                .collect::<Vec<_>>()
+                                .join("; ");
+                            signal["reason"] = json!(reason);
+                            signal["question"] = signal["reason"].clone();
+                        }
+                    }
+                }
+            }
+            signals.push(signal);
+        }
+    }
+    signals.sort_by(|a, b| {
+        (a["event_id"].as_str(), a["id"].as_str()).cmp(&(b["event_id"].as_str(), b["id"].as_str()))
+    });
+    Ok(signals)
+}
+
+pub fn acknowledge(
+    ids: &[String],
+    record: Option<&Path>,
+    state_dir: Option<&Path>,
+    cwd: &Path,
+) -> Result<J> {
+    require(!ids.is_empty(), "one or more signal IDs are required")?;
+    let (record, _, _) = selected_record(record, cwd)?;
+    let layout = S::Layout::create(&record, state_dir)?;
+    let _lock = S::FileLock::acquire(&layout.root.join("delivery.lock"))?;
+    for id in ids {
+        require(layout.path("signals", id).is_file(), "unknown signal ID")?;
+    }
+    let path = layout.root.join("handled.json");
+    let mut handled = S::read_json(&path)?.unwrap_or_else(|| json!({"signals":{}}));
+    for id in ids {
+        handled["signals"][id] = json!(S::now());
+    }
+    S::save_json(&path, &handled)?;
+    Ok(handled)
+}
+
+pub fn worker(record: &Path, state_dir: &Path, cwd: &Path, token: &str) -> Result<()> {
+    let layout = S::Layout::create(record, Some(state_dir))?;
+    for _ in 0..MAX_WORKER_PASSES {
+        {
+            let _lock = S::FileLock::acquire(&layout.root.join("capture.lock"))?;
+            let lease = S::read_json(&layout.root.join("worker.lease"))?
+                .ok_or_else(|| error("worker lease is unavailable"))?;
+            if lease["token"] != token {
+                return Ok(());
+            }
+        }
+        process(
+            Some(&layout.record),
+            Some(&layout.root),
+            cwd,
+            None,
+            MAX_EVENTS,
+        )?;
+        let _lock = S::FileLock::acquire(&layout.root.join("capture.lock"))?;
+        let lease = S::read_json(&layout.root.join("worker.lease"))?;
+        if lease.as_ref().is_none_or(|lease| lease["token"] != token) {
+            return Ok(());
+        }
+        if !has_work(&layout)? {
+            S::remove(&layout.root.join("worker.lease"))?;
+            return Ok(());
+        }
+    }
+    let _lock = S::FileLock::acquire(&layout.root.join("capture.lock"))?;
+    let lease = S::read_json(&layout.root.join("worker.lease"))?;
+    if lease.as_ref().is_some_and(|lease| lease["token"] == token) {
+        S::remove(&layout.root.join("worker.lease"))?;
+        if has_work(&layout)? {
+            start_worker_locked(&layout)?;
+        }
+    }
+    Ok(())
+}
+
+pub fn wait_for_terminal(
+    record: Option<&Path>,
+    state_dir: Option<&Path>,
+    cwd: &Path,
+    event_id: &str,
+    timeout: Duration,
+) -> Result<Option<J>> {
+    let deadline = std::time::Instant::now() + timeout;
+    loop {
+        let value = status(Some(event_id), record, state_dir, cwd)?;
+        if value.as_ref().is_some_and(terminal) || std::time::Instant::now() >= deadline {
+            return Ok(value);
+        }
+        std::thread::sleep(Duration::from_millis(50));
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn live_lease_deduplicates_and_expiry_allows_a_new_token() {
+        let temp = tempfile::tempdir().unwrap();
+        let record = temp.path().join("GROUNDING.yaml");
+        std::fs::write(&record, "known: {p.a: {v: 1}}\n").unwrap();
+        let layout = S::Layout::create(&record, Some(&temp.path().join("state"))).unwrap();
+        let first = reserve_worker(&layout).unwrap().unwrap();
+        assert!(reserve_worker(&layout).unwrap().is_none());
+        let path = layout.root.join("worker.lease");
+        let mut lease = S::read_json(&path).unwrap().unwrap();
+        lease["expires_at"] = json!(S::now() - 1.0);
+        S::save_json(&path, &lease).unwrap();
+        let second = reserve_worker(&layout).unwrap().unwrap();
+        assert_ne!(first, second);
+    }
+
+    #[test]
+    fn spawn_failure_releases_lease_for_retry() {
+        let temp = tempfile::tempdir().unwrap();
+        let record = temp.path().join("GROUNDING.yaml");
+        std::fs::write(&record, "known: {p.a: {v: 1}}\n").unwrap();
+        let layout = S::Layout::create(&record, Some(&temp.path().join("state"))).unwrap();
+        let missing = temp.path().join("missing-worker");
+        assert!(start_worker_with(&layout, &missing).is_err());
+        assert!(!layout.root.join("worker.lease").exists());
+        assert!(reserve_worker(&layout).unwrap().is_some());
+    }
+}
