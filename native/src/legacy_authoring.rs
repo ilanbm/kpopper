@@ -58,7 +58,7 @@ fn entry_layout(entry: &Path) -> Result<Layout> {
 
 /// Resolve only from durable policy and authority state. Invalid or interrupted
 /// authority must never fall through to the ordinary writer.
-pub(crate) fn route(entry: &Path, config: &V) -> Result<AuthorityRoute> {
+pub(crate) fn authority_route(entry: &Path) -> Result<AuthorityRoute> {
     let layout = entry_layout(entry)?;
     let authority_path = entry
         .parent()
@@ -70,21 +70,22 @@ pub(crate) fn route(entry: &Path, config: &V) -> Result<AuthorityRoute> {
         history_authority::validate_authority(&marker)?;
         return match text(field(map(&marker)?, "authority")?)? {
             "history" => Ok(AuthorityRoute::History),
-            "legacy" => {
-                require(
-                    string_is(field(map(config)?, "mode")?, "simple"),
-                    "legacy_authoring_requires_simple_project",
-                )?;
-                Ok(AuthorityRoute::Legacy)
-            }
+            "legacy" => Ok(AuthorityRoute::Legacy),
             _ => Err(error("unsupported_authority")),
         };
     }
-    require(
-        string_is(field(map(config)?, "mode")?, "simple"),
-        "legacy_authoring_requires_simple_project",
-    )?;
     Ok(AuthorityRoute::Legacy)
+}
+
+pub(crate) fn route(entry: &Path, config: &V) -> Result<AuthorityRoute> {
+    let route = authority_route(entry)?;
+    if route == AuthorityRoute::Legacy {
+        require(
+            string_is(field(map(config)?, "mode")?, "simple"),
+            "legacy_authoring_requires_simple_project",
+        )?;
+    }
+    Ok(route)
 }
 
 #[derive(Clone, Debug)]
@@ -1972,14 +1973,18 @@ fn verify_recovery(route: &WriteRoute, root: &Path, mutation: &PreparedMutation)
     route.verify()?;
     let entry = entry_path(root, mutation)?;
     require(
-        self::route(&entry, route.config())? == AuthorityRoute::Legacy,
+        self::authority_route(&entry)? == AuthorityRoute::Legacy,
         "project_route_changed",
     )?;
     let data = mutation.to_data();
     let baseline = map(field(map(&data)?, "baseline")?)?;
-    if let Some(policy) = baseline.get("policy") {
-        require(policy == route.config(), "project_route_changed")?;
-    }
+    let recorded_policy = baseline.get("policy");
+    require(
+        recorded_policy.is_none_or(|policy| policy == route.config())
+            && (!string_is(field(map(route.config())?, "mode")?, "advanced")
+                || recorded_policy == Some(route.config())),
+        "project_route_changed",
+    )?;
     legacy_named::verify_recovery(route, root, mutation, baseline)?;
     require(
         baseline
@@ -2039,12 +2044,7 @@ pub fn recovery_pending(original: &[PathBuf], cwd: &Path) -> Result<bool> {
     let route = WriteRoute::capture(original, cwd)?;
     require(route.paths().len() == 1, "choose one logical record entry")?;
     let entry = &route.paths()[0];
-    // Advanced/bootstrap recovery belongs to the history dispatcher, including
-    // the window before its authority marker has been published.
-    if !string_is(field(map(route.config())?, "mode")?, "simple") {
-        return Ok(false);
-    }
-    if self::route(entry, route.config())? != AuthorityRoute::Legacy {
+    if self::authority_route(entry)? != AuthorityRoute::Legacy {
         return Ok(false);
     }
     let layout = entry_layout(entry)?;
@@ -2064,7 +2064,7 @@ pub fn recover(original: &[PathBuf], cwd: &Path, before: bool) -> Result<V> {
     require(route.paths().len() == 1, "choose one logical record entry")?;
     let entry = &route.paths()[0];
     require(
-        self::route(entry, route.config())? == AuthorityRoute::Legacy,
+        self::authority_route(entry)? == AuthorityRoute::Legacy,
         "history_direct_writer_unsupported: use the history writer",
     )?;
     let local_layout = entry_layout(entry)?;
@@ -2231,6 +2231,72 @@ mod tests {
                 "d.user: [{verdict: preserve}]\n"
             );
         }
+    }
+
+    #[test]
+    fn advanced_mode_recovers_policy_bound_direct_journals_without_granting_writes() {
+        fn configured(mode: &str) -> (tempfile::TempDir, PathBuf, WriteRoute, Prepared) {
+            let temp = tempfile::tempdir().unwrap();
+            assert!(std::process::Command::new("git").args(["init", "-q"])
+                .current_dir(temp.path()).status().unwrap().success());
+            let entry = temp.path().join("GROUNDING.yaml");
+            fs::write(&entry, "known:\n  p.a: {v: 1}\n").unwrap();
+            let project = crate::project_modes::Project::open(temp.path()).unwrap();
+            fs::create_dir_all(project.config_path.parent().unwrap()).unwrap();
+            fs::write(&project.config_path,
+                format!(r#"{{"version":1,"mode":"{mode}","generation":1,"record":"GROUNDING.yaml"}}"#)).unwrap();
+            let route = WriteRoute::capture(std::slice::from_ref(&entry), temp.path()).unwrap();
+            let action = object([
+                ("kind", s("set")), ("id", s("p.a")), ("value", n("2")),
+                ("as_of", s("2026-09-20")), ("why", V::Null), ("source", V::Null), ("at", V::Null),
+            ]);
+            let Preparation::Mutation(prepared) = prepare_with_inventory(
+                &action, &route, None, Inventory::default()).unwrap() else { panic!() };
+            (temp, entry, route, prepared)
+        }
+
+        // Construct the same report journal a previously authorized advanced
+        // adapter would retain; ordinary direct writes remain disallowed there.
+        let (temp, entry, simple, prepared) = configured("simple");
+        let project = crate::project_modes::Project::open(temp.path()).unwrap();
+        drop(simple);
+        fs::write(&project.config_path,
+            r#"{"version":1,"mode":"advanced","generation":2,"record":"GROUNDING.yaml"}"#).unwrap();
+        let advanced = WriteRoute::capture(std::slice::from_ref(&entry), temp.path()).unwrap();
+        assert_eq!(route(&entry, advanced.config()).unwrap_err().0,
+            "legacy_authoring_requires_simple_project");
+        let data = prepared.mutation.to_data();
+        let mut baseline = map(&map(&data).unwrap()["baseline"]).unwrap().clone();
+        baseline.insert("policy".into(), advanced.config().clone());
+        let mutation = PreparedMutation::prepare(
+            text(&map(&data).unwrap()["operation"]).unwrap(),
+            &map(&data).unwrap()["authority"], &V::Map(baseline),
+            prepared.mutation.files().to_vec(), &map(&data).unwrap()["receipt"],
+            text(&map(&data).unwrap()["entry"]).unwrap(), None).unwrap();
+        let journal = prepared.root.join(&prepared.journal);
+        fs::create_dir_all(journal.parent().unwrap()).unwrap();
+        fs::write(&journal, mutation.to_bytes().unwrap()).unwrap();
+        let image = mutation.files().iter().find(|image| image.role == "record").unwrap();
+        fs::write(&entry, image.after.as_ref().unwrap()).unwrap();
+        drop(advanced);
+        assert!(recovery_pending(std::slice::from_ref(&entry), temp.path()).unwrap());
+        recover(std::slice::from_ref(&entry), temp.path(), false).unwrap();
+        assert!(fs::read_to_string(&entry).unwrap().contains("v: 2"));
+
+        // A journal captured under Simple cannot bypass a later Advanced policy.
+        let (temp, entry, route, prepared) = configured("simple");
+        let journal = prepared.root.join(&prepared.journal);
+        fs::create_dir_all(journal.parent().unwrap()).unwrap();
+        fs::write(&journal, prepared.mutation.to_bytes().unwrap()).unwrap();
+        let image = prepared.mutation.files().iter().find(|image| image.role == "record").unwrap();
+        fs::write(&entry, image.after.as_ref().unwrap()).unwrap();
+        let project = crate::project_modes::Project::open(temp.path()).unwrap();
+        fs::write(&project.config_path,
+            r#"{"version":1,"mode":"advanced","generation":2,"record":"GROUNDING.yaml"}"#).unwrap();
+        drop(route);
+        assert!(recovery_pending(std::slice::from_ref(&entry), temp.path()).unwrap());
+        assert_eq!(recover(std::slice::from_ref(&entry), temp.path(), false).unwrap_err().0,
+            "project_route_changed");
     }
 
     #[test]
