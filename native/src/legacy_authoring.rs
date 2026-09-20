@@ -1030,6 +1030,20 @@ pub(crate) fn preserve_order(value: &V, source: Option<&Source>) -> Source {
     }
 }
 
+fn ordered_scope(value: &V) -> Result<Source> {
+    let fields = map(value)?;
+    Ok(Source::Map(
+        ["kind", "environment", "commit"]
+            .into_iter()
+            .filter_map(|key| {
+                fields
+                    .get(key)
+                    .map(|value| (key.into(), Source::from_typed(value)))
+            })
+            .collect(),
+    ))
+}
+
 fn ordinary_template(value: &crate::history_yaml::OrdinaryValue) -> Option<Source> {
     use crate::history_yaml::OrdinaryValue as O;
     Some(match value {
@@ -1645,6 +1659,14 @@ fn prepare_with_inventory_mode(
                         fields.push((key.into(), Source::from_typed(value)));
                     }
                 }
+                if let Some(scope) = authored.get("scope") {
+                    let scope = ordered_scope(scope)?;
+                    if let Some((_, value)) = fields.iter_mut().find(|(field, _)| field == "scope") {
+                        *value = scope;
+                    } else {
+                        fields.push(("scope".into(), scope));
+                    }
+                }
                 let snapshot = text(&reader.fields()["snapshot"])?;
                 if !seen.is_empty() {
                     if let Some((_, value)) = fields.iter_mut().find(|(key, _)| key == snapshot) {
@@ -1754,13 +1776,19 @@ fn prepare_with_inventory_mode(
                 let (_, member) = locate(&lines, &id).unwrap();
                 if inline(&lines[member.start]).starts_with('{') {
                     let body = &crate::reasoning_fields::collections(&candidate)?[&collection][&id];
-                    replace_entry(&mut lines, &id, &preserve_order(body, None))?;
+                    let mut body = preserve_order(body, None);
+                    if let Source::Map(fields) = &mut body
+                        && let Some((_, value)) = fields.iter_mut().find(|(key, _)| key == "scope")
+                    {
+                        *value = ordered_scope(scope)?;
+                    }
+                    replace_entry(&mut lines, &id, &body)?;
                 } else {
                     replace_field_ordered(
                         &mut lines,
                         &member,
                         "scope",
-                        &Source::from_typed(scope),
+                        &ordered_scope(scope)?,
                     )?;
                 }
             }

@@ -290,7 +290,7 @@ pub fn run(kind: &str, options: &Options, cwd: &Path) -> Result<String> {
     };
     let route = WriteRoute::capture(&original, &cwd)?;
     require(route.paths().len() == 1, "choose one logical record entry")?;
-    let action = if route.paths()[0].exists() {
+    let action =
         match contribution_routing::route(kind, options, action, source_body.as_ref(), route)? {
             contribution_routing::Outcome::Handled(value) => {
                 return Ok(format!(
@@ -299,10 +299,7 @@ pub fn run(kind: &str, options: &Options, cwd: &Path) -> Result<String> {
                 ));
             }
             contribution_routing::Outcome::Local(action) => action,
-        }
-    } else {
-        action
-    };
+        };
     let route = WriteRoute::capture(&original, &cwd)?;
     require(route.paths().len() == 1, "choose one logical record entry")?;
     let entry = &route.paths()[0];

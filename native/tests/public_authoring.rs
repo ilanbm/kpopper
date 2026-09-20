@@ -153,6 +153,45 @@ fn advanced_explicit_add_captures_without_mutating_the_record_and_replays() {
 }
 
 #[test]
+fn advanced_first_explicit_add_enters_pending_without_creating_a_record() {
+    let temp = tempfile::tempdir().unwrap();
+    let root = temp.path().join("repo");
+    fs::create_dir(&root).unwrap();
+    git(&root, &["init", "-q", "-b", "main"]);
+    git(&root, &["config", "user.name", "Fixture"]);
+    git(&root, &["config", "user.email", "fixture@example.test"]);
+    let receipt: Value = serde_json::from_str(&success(run_unbundled(
+        &root,
+        &[
+            "add",
+            "p.first",
+            "v=1",
+            "--shareability",
+            "project",
+            "--scope",
+            "project",
+            "--environment",
+            "workspace",
+            "--event-id",
+            "first-event",
+        ],
+    )))
+    .unwrap();
+    assert_eq!(receipt["state"], "captured");
+    assert!(!root.join("GROUNDING.yaml").exists());
+    assert!(
+        Command::new("git")
+            .arg("-C")
+            .arg(&root)
+            .args(["rev-parse", "--verify", "refs/kpopper/pending_grounding"])
+            .output()
+            .unwrap()
+            .status
+            .success()
+    );
+}
+
+#[test]
 fn advanced_local_scopes_are_written_and_project_review_is_refused() {
     let (_temp, root) = advanced_ordinary("known:\n  p.base: {v: 1}\n");
     success(run_unbundled(

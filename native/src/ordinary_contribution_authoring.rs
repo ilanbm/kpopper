@@ -272,6 +272,82 @@ pub(crate) fn route(
         map_mut(&mut action)?.insert("contribution_id".into(), s(id));
     }
 
+    if !route.paths()[0].exists() {
+        if shareability != Some("project")
+            || !route.pending_required()?
+            || !["project", "external"].contains(&scope_kind)
+        {
+            return Ok(Outcome::Local(action));
+        }
+        require(
+            kind == "add" && map(field(map(&action)?, "body")?).is_ok(),
+            "a project contribution requires a complete add or set, not a review refresh",
+        )?;
+        let candidate = preliminary(&V::Map(Map::new()), &action)?;
+        let selection = selected(&candidate, &options.subject)?;
+        if Privacy::private_marker(&action) || Privacy::private_marker(&selection) {
+            return Ok(Outcome::Handled(Privacy::draft(
+                route.project(),
+                &action,
+                &selection,
+                "private or unclear source permission",
+            )?));
+        }
+        if private_locator(&selection) {
+            return Ok(Outcome::Handled(Privacy::draft(
+                route.project(),
+                &action,
+                &selection,
+                "private source locator needs explicit portable evidence reconciliation",
+            )?));
+        }
+        let (files, observations) = evidence(&selection, options.evidence_root.as_deref())?;
+        let bundle = pending_bundle::prepare(
+            &candidate,
+            &[options.subject.clone()],
+            &scope,
+            "project",
+            &files,
+        )?;
+        let event_id = options
+            .event_id
+            .clone()
+            .map(Ok)
+            .unwrap_or_else(|| fresh_id("event"))?;
+        let contribution_id = options
+            .contribution_id
+            .clone()
+            .unwrap_or_else(|| options.subject.clone());
+        let project = route.project().clone();
+        let expected_policy = route.config().clone();
+        route.verify()?;
+        drop(route);
+        let receipt = crate::public_knowledge::import_helper::capture_pending(
+            &project,
+            &bundle,
+            &files,
+            &event_id,
+            &contribution_id,
+            &mut || {
+                require(
+                    !project.record(Some(&expected_policy))?.exists(),
+                    "snapshot_changed",
+                )?;
+                require(
+                    project.config()? == expected_policy,
+                    "project policy or destination changed before capture; retry",
+                )?;
+                require(
+                    observations
+                        .iter()
+                        .all(|(path, bytes)| read_evidence(path).ok().as_ref() == Some(bytes)),
+                    "snapshot_changed",
+                )
+            },
+        )?;
+        return Ok(Outcome::Handled(receipt));
+    }
+
     let (document, initial_inventory, history) = load_document(&route)?;
     let candidate = preliminary(&document, &action)?;
     let id = options.subject.as_str();
