@@ -156,3 +156,23 @@ fn distinct_requires_a_single_line_reason_and_refusals_preserve_the_record() {
     );
     assert_eq!(fs::read(entry).unwrap(), before);
 }
+
+#[test]
+fn json_refusal_wraps_the_ordinary_output_and_exit_code() {
+    let root = materialize(&case("distinct_keeps_original", "distinct"));
+    let record = root.path().join("GROUNDING.yaml");
+    let before = fs::read(&record).unwrap();
+    let output = run(
+        root.path(),
+        &["distinct", "p.input", "p.other", "first\nsecond", "--json"],
+    );
+    assert_eq!(output.status.code(), Some(1));
+    assert!(output.stderr.is_empty());
+    let packet: Value = serde_json::from_slice(&output.stdout).unwrap();
+    assert_eq!(
+        packet,
+        serde_json::json!({"command":"distinct","exit_code":1,
+        "output":"refused: the why is one line: a second line would be a line of the record\n","error":""})
+    );
+    assert_eq!(fs::read(record).unwrap(), before);
+}

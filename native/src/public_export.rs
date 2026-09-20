@@ -4,7 +4,7 @@
 //! load a source record, fetch evidence, or invoke an evaluator.
 use crate::{
     Error, Result, public_core_readers::json_value, reasoning_context::CapturedAssessment,
-    reasoning_projection as projection, value::TypedValue as V,
+    reasoning_projection as projection, source_capture::CapturedSource, value::TypedValue as V,
 };
 use serde_json::{Map, Value as J, json};
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet, VecDeque};
@@ -14,6 +14,12 @@ const FIELD_CHARS: usize = 600;
 const LABEL_CHARS: usize = 80;
 const PREMISE_ROWS: usize = 12;
 const CELL_CHARS: usize = 120;
+
+pub fn command_error(error: &str) -> String {
+    format!(
+        "usage: kpop export [-h] [--record RECORD]\n                   [--format {{markdown,markdown-mermaid,mermaid}}]\n                   [--direction {{support,impact}}] [--depth DEPTH]\n                   [--max-nodes MAX_NODES] [--details] [--profile {{core/v1}}]\n                   ids [ids ...]\nkpop export: error: {error}\n"
+    )
+}
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, clap::ValueEnum)]
 pub enum Format {
@@ -71,6 +77,22 @@ pub fn run(
     cwd: &std::path::Path,
     mode: crate::source_capture::ReadMode,
 ) -> Result<String> {
+    run_inner(options, cwd, mode).map_err(|error| {
+        if error.0 == "invalid_ordinary_structural_key" {
+            Error(
+                "export requires string entry and dependency IDs; quote numeric IDs in YAML".into(),
+            )
+        } else {
+            error
+        }
+    })
+}
+
+fn run_inner(
+    options: &CommandOptions,
+    cwd: &std::path::Path,
+    mode: crate::source_capture::ReadMode,
+) -> Result<String> {
     let paths = if options.records.is_empty() {
         crate::public_workspace::records(cwd)?
     } else {
@@ -89,32 +111,33 @@ pub fn run(
         capture.ordinary_document(),
         options.profile.as_deref(),
     )?;
-    crate::require(
-        crate::history_contract::string_is(
-            &crate::history_contract::map(&capabilities)?["profile"],
-            "core/v1",
-        ),
-        "unsupported_capability: native export currently requires core/v1",
-    )?;
-    let context = CapturedAssessment::from_snapshot(
-        capture.snapshot()?.clone(),
-        None,
-        "focused-review/v1",
-        runtime.as_ref(),
-        crate::reasoning_runtime::OperationalBounds::default(),
-        None,
-    )?;
-    let output = render(
-        &context,
-        &options.ids,
-        &Options {
-            direction: options.direction,
-            depth: options.depth,
-            max_nodes: options.max_nodes,
-            details: options.details,
-            format: options.format,
-        },
-    )?;
+    let profile =
+        crate::history_contract::text(&crate::history_contract::map(&capabilities)?["profile"])?;
+    let render_options = Options {
+        direction: options.direction,
+        depth: options.depth,
+        max_nodes: options.max_nodes,
+        details: options.details,
+        format: options.format,
+    };
+    let output = if profile == "core/v1" {
+        let context = CapturedAssessment::from_snapshot(
+            capture.snapshot()?.clone(),
+            None,
+            "focused-review/v1",
+            runtime.as_ref(),
+            crate::reasoning_runtime::OperationalBounds::default(),
+            None,
+        )?;
+        render(&context, &options.ids, &render_options)?
+    } else {
+        crate::require(
+            profile == "ordinary-reader/v1",
+            "unsupported export profile",
+        )?;
+        let packet = project_ordinary(&capture, runtime.as_ref(), &options.ids, &render_options)?;
+        render_packet(&ordinary_render_packet(&capture, &packet)?, &render_options)?
+    };
     capture.verify()?;
     Ok(output)
 }
@@ -189,6 +212,593 @@ fn core_readings(finding: &J, selected: &HashSet<String>) -> Result<(Vec<J>, usi
         rows.push(J::Object(row));
     }
     Ok((rows, dependencies.len().saturating_sub(PREMISE_ROWS)))
+}
+
+fn ordinary_json(value: &V) -> Result<J> {
+    Ok(serde_json::from_str(
+        &crate::ordinary_assessment_report::legacy_json(value)?,
+    )?)
+}
+
+fn public_key(key: &str) -> Result<String> {
+    match crate::history_yaml::projected_ordinary_key(key) {
+        None => Ok(key.into()),
+        Some(V::Text(value)) => Ok(value),
+        Some(_) => Err(Error(
+            "export requires string entry and dependency IDs; quote numeric IDs in YAML".into(),
+        )),
+    }
+}
+
+fn validate_collection_ids(document: &V) -> Result<()> {
+    for members in crate::reasoning_fields::collections(document)?.values() {
+        for id in members.keys() {
+            public_key(id)?;
+        }
+    }
+    Ok(())
+}
+
+fn ordinary_readings(
+    finding: &V,
+    nodes: &crate::history_contract::Map,
+    ids: &BTreeSet<String>,
+    selected: &HashSet<String>,
+    dependency_field: &str,
+) -> Result<(Vec<J>, usize)> {
+    use crate::history_contract::{map, text};
+    let finding = map(finding)?;
+    let state = map(&finding["state"])?;
+    let falsifier = map(&state["falsifier"])?;
+    let covered = falsifier
+        .get("reads")
+        .and_then(|value| crate::history_view::list(value).ok())
+        .into_iter()
+        .flatten()
+        .filter_map(|value| text(value).ok())
+        .collect::<BTreeSet<_>>();
+    let dependencies = map(&map(&state["basis"])?["dependencies"])?;
+    let mut order = Vec::new();
+    if let Some(values) = map(&finding["body"])
+        .ok()
+        .and_then(|body| body.get(dependency_field))
+        .and_then(|value| crate::history_view::list(value).ok())
+    {
+        for value in values {
+            if let V::Text(id) = value
+                && dependencies.contains_key(id)
+                && !order.contains(id)
+            {
+                order.push(id.clone());
+            }
+        }
+    }
+    for id in dependencies.keys() {
+        if !order.contains(id) {
+            order.push(id.clone());
+        }
+    }
+    let mut rows = Vec::new();
+    for internal_dep in order.iter().take(PREMISE_ROWS) {
+        let dep = public_key(internal_dep)?;
+        let item = map(&dependencies[internal_dep])?;
+        let prior = map(&item["at_review"])?;
+        let current = map(&item["current"])?;
+        let prior_status = text(&prior["status"])?;
+        let status = text(&current["status"])?;
+        let value = current.get("value");
+        let mut row = Map::from_iter([
+            ("id".into(), json!(dep)),
+            ("has_review".into(), json!(prior_status == "recorded")),
+            (
+                "at_review".into(),
+                prior
+                    .get("value")
+                    .map(ordinary_json)
+                    .transpose()?
+                    .unwrap_or(J::Null),
+            ),
+        ]);
+        row.insert(
+            "current_status".into(),
+            json!(if status == "recorded" && value == Some(&V::Null) {
+                "null"
+            } else if status == "recorded" {
+                "shown"
+            } else {
+                status
+            }),
+        );
+        if status == "recorded" {
+            row.insert(
+                "current".into(),
+                value.map(ordinary_json).transpose()?.unwrap_or(J::Null),
+            );
+        } else if status == "unavailable" {
+            if let Some(reason) = current.get("detail").or_else(|| current.get("reason")) {
+                row.insert("unavailable_reason".into(), ordinary_json(reason)?);
+            }
+        }
+        let calculated = nodes.get(internal_dep).is_some_and(|node| {
+            map(node)
+                .ok()
+                .and_then(|node| node.get("body"))
+                .and_then(|body| map(body).ok())
+                .is_some_and(|body| matches!(body.get("rule"), Some(V::Map(_))))
+        });
+        row.insert(
+            "current_calculated".into(),
+            json!(calculated && status == "recorded"),
+        );
+        if let Some(value) = item.get("historical_calculation") {
+            row.insert("review_calculated".into(), ordinary_json(value)?);
+        }
+        row.insert(
+            "formula_changed".into(),
+            item.get("rule_changed")
+                .map(ordinary_json)
+                .transpose()?
+                .unwrap_or(J::Null),
+        );
+        if crate::history_view::truth(item.get("historical_formula_only").unwrap_or(&V::Null)) {
+            row.insert("historical_formula_only".into(), json!(true));
+        }
+        if let Some(unit) = nodes.get(internal_dep).and_then(|node| {
+            map(node)
+                .ok()?
+                .get("body")
+                .and_then(|body| map(body).ok())?
+                .get("unit")
+        }) {
+            if crate::history_view::truth(unit) {
+                row.insert("unit".into(), ordinary_json(unit)?);
+            }
+        }
+        let comparison = if status == "missing" {
+            "unavailable"
+        } else if prior_status != "recorded" {
+            "unreviewed"
+        } else if item.get("rule_changed") == Some(&V::Bool(true))
+            || item["comparison"] == V::Text("changed".into())
+        {
+            if covered.contains(internal_dep.as_str())
+                && falsifier["status"] == V::Text("holds".into())
+            {
+                "crossed"
+            } else if covered.contains(internal_dep.as_str())
+                && falsifier["status"] == V::Text("does_not_hold".into())
+                && item.get("rule_changed") != Some(&V::Bool(true))
+            {
+                "muted"
+            } else {
+                "moved"
+            }
+        } else if status == "unavailable" {
+            "unavailable"
+        } else if crate::history_view::truth(
+            item.get("historical_formula_only").unwrap_or(&V::Null),
+        ) {
+            "formula_only"
+        } else if item["comparison"] == V::Text("unknown".into()) {
+            "not_compared"
+        } else {
+            "same"
+        };
+        row.insert("comparison".into(), json!(comparison));
+        if ids.contains(internal_dep) && !selected.contains(&dep) {
+            row.insert("current_status".into(), json!("omitted"));
+            for field in [
+                "current",
+                "current_calculated",
+                "unit",
+                "unavailable_reason",
+            ] {
+                row.remove(field);
+            }
+        }
+        rows.push(J::Object(row));
+    }
+    Ok((rows, dependencies.len().saturating_sub(PREMISE_ROWS)))
+}
+
+/// Project one already-captured and fully assessed ordinary record.
+fn project_ordinary_assessed(
+    capture: &CapturedSource,
+    assessment: &V,
+    runtime: Option<&crate::reasoning_runtime::Runtime>,
+    seeds: &[String],
+    options: &Options,
+) -> Result<J> {
+    use crate::history_contract::{map, text};
+    if options.depth > 4 {
+        return Err(Error("depth must be 0..4".into()));
+    }
+    if !(1..=32).contains(&options.max_nodes) {
+        return Err(Error("max-nodes must be 1..32".into()));
+    }
+    let mut seen = HashSet::new();
+    let seeds = seeds
+        .iter()
+        .filter(|seed| seen.insert((*seed).clone()))
+        .cloned()
+        .collect::<Vec<_>>();
+    if seeds.is_empty() || seeds.len() > 8 || seeds.len() > options.max_nodes {
+        return Err(Error(
+            "supply 1..8 exact IDs; max-nodes must include every seed".into(),
+        ));
+    }
+    validate_collection_ids(capture.ordinary_document())?;
+    let hypotheses = map(capture.hypotheses())?;
+    for hypothesis in hypotheses.values() {
+        let hypothesis = map(hypothesis)?;
+        if let Some(document) = hypothesis.get("document").or_else(|| hypothesis.get("doc")) {
+            validate_collection_ids(document)?;
+        }
+    }
+    let report = map(assessment)?;
+    crate::require(
+        report["assessment_profile"] == V::Text("ordinary-reader/v1".into()),
+        "invalid ordinary assessment",
+    )?;
+    let assessed_nodes = map(&report["nodes"])?;
+    let mut public_to_internal = BTreeMap::new();
+    for internal in assessed_nodes.keys() {
+        let public = public_key(internal)?;
+        crate::require(
+            public_to_internal
+                .insert(public, internal.clone())
+                .is_none(),
+            "duplicate ordinary entry ID",
+        )?;
+    }
+    let unknown = seeds
+        .iter()
+        .filter(|id| !public_to_internal.contains_key(*id))
+        .cloned()
+        .collect::<Vec<_>>();
+    if !unknown.is_empty() {
+        let mut pending = BTreeSet::new();
+        for hypothesis in hypotheses.values() {
+            let hypothesis = map(hypothesis)?;
+            if !crate::history_contract::string_is(
+                hypothesis.get("kind").unwrap_or(&V::Null),
+                "contribution",
+            ) {
+                continue;
+            }
+            if let Some(document) = hypothesis.get("document").or_else(|| hypothesis.get("doc")) {
+                for members in crate::reasoning_fields::collections(document)?.values() {
+                    for id in members.keys() {
+                        pending.insert(public_key(id)?);
+                    }
+                }
+            }
+        }
+        if unknown.iter().any(|id| pending.contains(id)) {
+            return Err(Error("pending contribution IDs are not expanded by export; use open, pull or knowledge snapshot".into()));
+        }
+        return Err(Error(format!(
+            "unknown exact ID(s): {}; use kpop open or pull",
+            unknown.join(", ")
+        )));
+    }
+    let mut sections = BTreeMap::new();
+    for (section, members) in crate::reasoning_fields::collections(capture.ordinary_document())? {
+        for internal in members.keys() {
+            sections.insert(internal.clone(), section.clone());
+        }
+    }
+    let context = capture.ordinary_context();
+    let conflicts = map(&context)?
+        .get("conflicts")
+        .and_then(|value| map(value).ok())
+        .cloned()
+        .unwrap_or_default();
+    let normalized_hypotheses = hypotheses
+        .iter()
+        .map(|(name, value)| {
+            let mut value = map(value)?.clone();
+            if !value.contains_key("document") {
+                value.insert(
+                    "document".into(),
+                    value.get("doc").cloned().unwrap_or(V::Null),
+                );
+            }
+            Ok((name.clone(), V::Map(value)))
+        })
+        .collect::<Result<crate::history_contract::Map>>()?;
+    let reader = crate::ordinary_reader::Reader::new(capture.ordinary_document(), runtime)?
+        .with_layers(normalized_hypotheses, conflicts.keys().cloned().collect())?;
+    let fields = reader.fields().clone();
+    let dep_field = text(&fields["deps"])?.to_owned();
+    let ids = assessed_nodes.keys().cloned().collect::<BTreeSet<_>>();
+    let computations = crate::ordinary_reader::compute(reader.raw(), &ids, None, reader.program());
+    let mut edges = BTreeSet::<(String, String, String)>::new();
+    let mut states = BTreeMap::<String, Vec<String>>::new();
+    for (internal, finding) in assessed_nodes {
+        let id = public_key(internal)?;
+        let finding_map = map(finding)?;
+        let body = finding_map.get("body").unwrap_or(&V::Null);
+        let state = map(&finding_map["state"])?;
+        let judgment = state["basis"] != V::Null
+            && !crate::history_contract::string_is(
+                &map(&state["basis"])?["status"],
+                "not_applicable",
+            );
+        let mut flags = if judgment {
+            crate::ordinary_counts::flags(&reader, body)?
+                .into_iter()
+                .map(str::to_owned)
+                .collect::<BTreeSet<_>>()
+        } else {
+            BTreeSet::new()
+        };
+        if crate::history_contract::string_is(&map(&state["contention"])?["status"], "detected") {
+            flags.insert("contested".into());
+        }
+        if sections
+            .get(internal)
+            .is_some_and(|s| matches!(s.as_str(), "open" | "questions"))
+        {
+            flags.insert("question".into());
+        }
+        states.insert(internal.clone(), flags.into_iter().collect());
+        let Ok(body_map) = map(body) else { continue };
+        if judgment {
+            let deps = body_map.get(&dep_field).unwrap_or(&V::Null);
+            let list = crate::history_view::list(deps)
+                .map_err(|_| Error(format!("{id}: {dep_field} must be a list of entry IDs")))?;
+            for dep in list {
+                let dep = match dep { V::Text(value) => value.clone(), _ => return Err(Error("export requires string entry and dependency IDs; quote numeric IDs in YAML".into())) };
+                edges.insert((id.clone(), "rests_on".into(), dep));
+            }
+        }
+        if let Some(V::Text(source)) = body_map.get("from") {
+            if public_to_internal.contains_key(source) {
+                edges.insert((id.clone(), "from".into(), source.clone()));
+            }
+        }
+        if !judgment {
+            let refs = if matches!(body_map.get("rule"), Some(V::Map(_))) {
+                crate::reasoning_language::legacy_references(&body_map["rule"])
+            } else {
+                ["rule", "v"].iter().filter_map(|field| body_map.get(*field))
+                    .filter(|value| matches!(value,V::Text(text) if crate::ordinary_reader::EXPR.is_match(text)))
+                    .flat_map(crate::ordinary_reader::predicate_refs)
+                    .filter(|dep| public_to_internal.contains_key(dep)).collect()
+            };
+            for dep in refs {
+                if dep != id {
+                    edges.insert((id.clone(), "rule_reads".into(), dep));
+                }
+            }
+        }
+        if id.starts_with("hyp.") && body_map.get("v") == Some(&V::Text("refuted".into())) {
+            if let Some(V::List(values)) = body_map.get("refutes") {
+                for value in values {
+                    if let V::Text(dep) = value {
+                        edges.insert((id.clone(), "refutes".into(), dep.clone()));
+                    }
+                }
+            }
+        }
+    }
+    let mut adjacent = BTreeMap::<String, BTreeSet<String>>::new();
+    for (a, _, b) in &edges {
+        let (s, t) = match options.direction {
+            Direction::Support => (a, b),
+            Direction::Impact => (b, a),
+        };
+        adjacent.entry(s.clone()).or_default().insert(t.clone());
+    }
+    let mut distances = HashMap::new();
+    let mut order = Vec::new();
+    let mut queue = VecDeque::new();
+    for seed in &seeds {
+        distances.insert(seed.clone(), 0usize);
+        order.push(seed.clone());
+        queue.push_back(seed.clone());
+    }
+    while let Some(id) = queue.pop_front() {
+        let depth = distances[&id];
+        if depth >= options.depth {
+            continue;
+        }
+        for next in adjacent.get(&id).into_iter().flatten() {
+            if !distances.contains_key(next) && distances.len() < options.max_nodes {
+                distances.insert(next.clone(), depth + 1);
+                order.push(next.clone());
+                queue.push_back(next.clone());
+            }
+        }
+    }
+    let selected = distances.keys().cloned().collect::<HashSet<_>>();
+    let mut nodes = Map::new();
+    for id in &order {
+        let Some(internal) = public_to_internal.get(id) else {
+            nodes.insert(
+                id.clone(),
+                json!({"body":null,"missing":true,"states":[],"kind":"missing"}),
+            );
+            continue;
+        };
+        let finding = &assessed_nodes[internal];
+        let finding_map = map(finding)?;
+        let body = finding_map.get("body").unwrap_or(&V::Null);
+        let state = map(&finding_map["state"])?;
+        let judgment =
+            !crate::history_contract::string_is(&map(&state["basis"])?["status"], "not_applicable");
+        let kind = if judgment {
+            "judgment".into()
+        } else if crate::reasoning_fields::BUILTINS.contains(&id.as_str()) {
+            "computed".into()
+        } else {
+            sections
+                .get(internal)
+                .cloned()
+                .unwrap_or_else(|| "entry".into())
+        };
+        let mut node = Map::from_iter([
+            ("body".into(), ordinary_json(body)?),
+            ("missing".into(), json!(false)),
+            ("states".into(), json!(states[internal])),
+            ("kind".into(), json!(kind)),
+        ]);
+        if judgment {
+            let falsifier = map(&state["falsifier"])?;
+            let issues = crate::history_view::list(&map(&state["integrity"])?["issues"])?;
+            let issue_ids = |code: &str, only_known: bool| -> Result<Vec<String>> {
+                let mut out = vec![];
+                for issue in issues {
+                    let issue = map(issue)?;
+                    if crate::history_contract::string_is(&issue["code"], code) {
+                        for value in crate::history_view::list(&issue["related_ids"])? {
+                            let id = text(value)?.to_owned();
+                            if !only_known || public_to_internal.contains_key(&id) {
+                                out.push(id)
+                            }
+                        }
+                    }
+                }
+                Ok(out)
+            };
+            let reads = falsifier
+                .get("reads")
+                .and_then(|v| crate::history_view::list(v).ok())
+                .into_iter()
+                .flatten()
+                .filter_map(|v| text(v).ok())
+                .filter(|id| !public_to_internal.contains_key(*id))
+                .map(str::to_owned)
+                .collect::<Vec<_>>();
+            node.insert("condition".into(),json!({"expression":ordinary_json(&falsifier["expression"])? ,"result":match text(&falsifier["status"]).unwrap_or(""){"holds"=>J::Bool(true),"does_not_hold"=>J::Bool(false),_=>J::Null},"undeclared_reads":issue_ids("undeclared_predicate_dependencies",true)?,"missing_reads":reads,"unparsed_mentions":issue_ids("unsupported_predicate",false)?}));
+            let (readings, omitted) =
+                ordinary_readings(finding, assessed_nodes, &ids, &selected, &dep_field)?;
+            node.insert("readings".into(), J::Array(readings));
+            node.insert("omitted_readings".into(), json!(omitted));
+        } else if matches!(
+            map(body).ok().and_then(|body| body.get("rule")),
+            Some(V::Map(_))
+        ) {
+            let value=computations.get("values").and_then(|values|values.get(internal)).cloned().unwrap_or_else(||json!({"value":null,"reason":computations.get("error").and_then(J::as_str).unwrap_or("unavailable")}));
+            node.insert("calculation".into(), value);
+        }
+        nodes.insert(id.clone(), J::Object(node));
+    }
+    let internal = edges
+        .iter()
+        .filter(|(a, _, b)| nodes.contains_key(a) && nodes.contains_key(b))
+        .collect::<Vec<_>>();
+    let frontier = edges
+        .iter()
+        .filter(|(a, _, b)| nodes.contains_key(a) != nodes.contains_key(b))
+        .count();
+    let hypothesis_errors = hypotheses
+        .iter()
+        .filter_map(|(name, h)| {
+            let h = map(h).ok()?;
+            let error = h.get("error")?;
+            crate::history_view::truth(error)
+                .then(|| ordinary_json(error).ok().map(|error| (name.clone(), error)))
+                .flatten()
+        })
+        .collect::<Map<_, _>>();
+    let hypothesis_count = hypotheses
+        .values()
+        .filter(|h| {
+            map(h).ok().is_none_or(|h| {
+                !crate::history_contract::string_is(
+                    h.get("kind").unwrap_or(&V::Null),
+                    "contribution",
+                )
+            })
+        })
+        .count();
+    let knowledge = capture.knowledge_status_context();
+    let contributions = map(&knowledge)?
+        .get("contributions")
+        .and_then(|v| crate::history_view::list(v).ok())
+        .map_or(0, |v| v.len());
+    let mut assessment_without_nodes = report.clone();
+    assessment_without_nodes.remove("nodes");
+    Ok(
+        json!({"nodes":nodes,"edges":internal.iter().take(MAX_EDGES).map(|(a,r,b)|json!([a,r,b])).collect::<Vec<_>>(),"seeds":seeds,"direction":match options.direction{Direction::Support=>"support",Direction::Impact=>"impact"},"depth":options.depth,"max_nodes":options.max_nodes,"snapshot":text(&report["record_revision"])? .chars().take(16).collect::<String>(),"outside_nodes":public_to_internal.keys().filter(|id|!nodes.contains_key(*id)).count(),"frontier_edges":frontier,"omitted_edges":internal.len().saturating_sub(MAX_EDGES),"hypotheses":hypothesis_count,"contributions":contributions,"hypothesis_errors":hypothesis_errors,"fields":ordinary_json(&V::Map(fields))?,"assessment":ordinary_json(&V::Map(assessment_without_nodes))?}),
+    )
+}
+
+/// Capture-compatible ordinary route. The full record is assessed once before
+/// any bounded selection is projected.
+pub fn project_ordinary(
+    capture: &CapturedSource,
+    runtime: Option<&crate::reasoning_runtime::Runtime>,
+    seeds: &[String],
+    options: &Options,
+) -> Result<J> {
+    let assessment =
+        crate::ordinary_assessment_report::from_capture(capture, runtime, "focused-review/v1")?;
+    project_ordinary_assessed(capture, &assessment, runtime, seeds, options)
+}
+
+pub fn render_ordinary(
+    capture: &CapturedSource,
+    runtime: Option<&crate::reasoning_runtime::Runtime>,
+    seeds: &[String],
+    options: &Options,
+) -> Result<String> {
+    let packet = project_ordinary(capture, runtime, seeds, options)?;
+    render_packet(&ordinary_render_packet(capture, &packet)?, options)
+}
+
+fn source_body<'a>(
+    source: &'a crate::history_yaml::OrdinaryValue,
+    id: &str,
+) -> Option<&'a crate::history_yaml::OrdinaryValue> {
+    let crate::history_yaml::OrdinaryValue::Map(collections) = source else {
+        return None;
+    };
+    collections
+        .iter()
+        .filter_map(|(_, members)| {
+            let crate::history_yaml::OrdinaryValue::Map(members) = members else {
+                return None;
+            };
+            members
+                .iter()
+                .find(|(key, _)| key.text() == Some(id))
+                .map(|(_, body)| body)
+        })
+        .next_back()
+}
+
+fn ordinary_render_packet(capture: &CapturedSource, packet: &J) -> Result<J> {
+    use crate::history_yaml::OrdinaryValue;
+    let mut rendered = packet.clone();
+    let nodes = rendered["nodes"].as_object_mut().unwrap();
+    let mut orders = Map::new();
+    for (id, node) in nodes.iter_mut().filter(|(_, node)| node["missing"] != true) {
+        let Some(OrdinaryValue::Map(fields)) = source_body(capture.source(), id) else {
+            continue;
+        };
+        let mut ordered = Vec::new();
+        for (key, value) in fields {
+            let key = ordinary_json(key.scalar())?;
+            let is_date = matches!(value, OrdinaryValue::Scalar(V::Date(_) | V::DateTime(_)));
+            let mut value = ordinary_json(&value.projected())?;
+            if is_date {
+                value = json!({"__kpopper_ordinary_date":value});
+                if let (Some(field), Some(body)) = (key.as_str(), node["body"].as_object_mut()) {
+                    body.insert(field.into(), value.clone());
+                }
+            }
+            ordered.push(json!([key, value]));
+        }
+        orders.insert(id.clone(), J::Array(ordered));
+    }
+    rendered
+        .as_object_mut()
+        .unwrap()
+        .insert("__ordinary_body_fields".into(), J::Object(orders));
+    Ok(rendered)
 }
 
 /// Project the core/v1 export packet defined by Python 1.8 `export_graph.py`.
@@ -420,9 +1030,13 @@ fn python_json(value: &J) -> String {
     }
 }
 fn plain(value: &J) -> String {
-    let raw = match value {
-        J::String(v) => v.clone(),
-        _ => python_json(value),
+    let raw = if let Some(date) = value.get("__kpopper_ordinary_date") {
+        serde_json::to_string(date.as_str().unwrap_or_default()).unwrap()
+    } else {
+        match value {
+            J::String(v) => v.clone(),
+            _ => python_json(value),
+        }
     };
     raw.split_whitespace()
         .collect::<Vec<_>>()
@@ -648,6 +1262,21 @@ fn reading_table(node: &J) -> Vec<String> {
     lines
 }
 
+fn rendered_fields(packet: &J, id: &str, body: &Map<String, J>) -> Vec<(J, J)> {
+    if let Some(fields) = packet["__ordinary_body_fields"]
+        .get(id)
+        .and_then(J::as_array)
+    {
+        return fields
+            .iter()
+            .map(|field| (field[0].clone(), field[1].clone()))
+            .collect();
+    }
+    body.iter()
+        .map(|(field, value)| (json!(field), value.clone()))
+        .collect()
+}
+
 /// Render an already projected packet as the portable text export.
 pub fn render_markdown(packet: &J, details: bool) -> String {
     let mut lines = vec![
@@ -736,28 +1365,38 @@ pub fn render_markdown(packet: &J, details: bool) -> String {
         } else {
             HashSet::new()
         };
-        for (field, value) in body {
-            if special.contains(field.as_str()) {
+        for (field_value, value) in rendered_fields(packet, &id, body) {
+            let field = field_value.as_str().unwrap_or_default();
+            if special.contains(field) {
                 continue;
             }
             let mut label = if field == "v" {
-                "current".into()
+                J::String("current".into())
             } else {
-                field.clone()
+                field_value.clone()
             };
             if judgment && field == "reopened_by" {
-                label.push_str(" (human condition; not evaluated)");
-            } else if judgment && matches!(field.as_str(), "blocked_on" | "unverified" | "status") {
-                label.push_str(" (recorded declaration)");
+                label = json!(format!(
+                    "{} (human condition; not evaluated)",
+                    plain(&label)
+                ));
+            } else if judgment && matches!(field, "blocked_on" | "unverified" | "status") {
+                label = json!(format!("{} (recorded declaration)", plain(&label)));
             }
-            let shown = if packet["profile"] == "core/v1" && field == "rule" && value.is_object() {
-                json!(render_expression(value).unwrap_or_else(|_| plain(value)))
+            let shown = if field == "rule" && value.is_object() {
+                if packet["profile"] == "core/v1" {
+                    json!(render_expression(&value).unwrap_or_else(|_| plain(&value)))
+                } else {
+                    json!(crate::public_ordinary_readers::predicate_text(
+                        &V::from_json(&value).unwrap_or(V::Null),
+                    ))
+                }
             } else {
-                value.clone()
+                value
             };
             lines.push(format!(
                 "- {}: {}",
-                markdown_text(&json!(label)),
+                markdown_text(&label),
                 clipped(&shown, FIELD_CHARS)
             ));
         }
@@ -835,17 +1474,18 @@ pub fn render_markdown(packet: &J, details: bool) -> String {
         if details {
             lines.push(String::new());
             lines.push("Recorded fields:".into());
-            for (field, value) in body {
+            for (field_value, value) in rendered_fields(packet, &id, body) {
+                let field = field_value.as_str().unwrap_or_default();
                 let label = if judgment && roles.get("snapshot").and_then(J::as_str) == Some(field)
                 {
-                    format!("historical snapshot ({field})")
+                    json!(format!("historical snapshot ({field})"))
                 } else {
-                    field.clone()
+                    field_value
                 };
                 lines.push(format!(
                     "- {}: {}",
-                    markdown_text(&json!(label)),
-                    clipped(value, FIELD_CHARS)
+                    markdown_text(&label),
+                    clipped(&value, FIELD_CHARS)
                 ));
             }
         }
@@ -1112,6 +1752,10 @@ pub fn render(context: &CapturedAssessment, seeds: &[String], options: &Options)
         ));
     }
     let packet = project(context, seeds, options)?;
+    render_packet(&packet, options)
+}
+
+fn render_packet(packet: &J, options: &Options) -> Result<String> {
     Ok(match options.format {
         Format::Markdown => render_markdown(&packet, options.details),
         Format::Mermaid => render_mermaid(&packet),

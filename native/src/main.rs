@@ -431,14 +431,24 @@ fn main() {
                 _ => unreachable!(),
             }
         })();
-        match result {
-            Ok(output) => print!("{output}"),
-            Err(error) => {
-                eprintln!("refused: {error}");
-                std::process::exit(1);
-            }
+        let (output, code) = match result {
+            Ok(output) => (output, 0),
+            Err(error) => (format!("refused: {error}\n"), 1),
+        };
+        if args.json {
+            let command = if matches!(args.command, Command::Same(_)) {
+                "same"
+            } else {
+                "distinct"
+            };
+            println!(
+                "{}",
+                json!({"command":command,"exit_code":code,"output":output,"error":""})
+            );
+        } else {
+            print!("{output}");
         }
-        return;
+        std::process::exit(code);
     }
     if matches!(args.command, Command::Knowledge(_) | Command::Pending(_)) {
         let cwd = match args
@@ -492,7 +502,11 @@ fn main() {
         })();
         let (output, error, code) = match result {
             Ok(output) => (output, String::new(), 0),
-            Err(error) => (String::new(), format!("export: {error}\n"), 2),
+            Err(error) => (
+                String::new(),
+                kpop_native::public_export::command_error(&error.to_string()),
+                2,
+            ),
         };
         if args.json {
             println!(
