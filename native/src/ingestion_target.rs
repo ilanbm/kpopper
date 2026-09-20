@@ -102,7 +102,9 @@ pub fn snapshot(document: &V, entry_bytes: &[u8], envelope: &J) -> Result<J> {
     if additions || explicit_source.is_some() {
         object.get("record_sha256").and_then(J::as_str).ok_or_else(|| error(if additions { "new entries require record_sha256 from the primary's prior open --json or search" } else { "an existing source citation requires record_sha256 from the primary's prior open --json or search" }))?;
     }
-    if explicit_source.is_some() && object.get("at").is_none() {
+    let shared_at = object.get("at").and_then(|value| V::from_json(value).ok())
+        .is_some_and(|value| crate::history_view::truth(&value));
+    if explicit_source.is_some() && !shared_at {
         let operations = updates.map(Vec::as_slice).unwrap_or(&[]);
         let located = updates.is_some() && operations.iter().all(|operation| {
             let needs_at = operation["kind"] == "set" || operation.get("body").and_then(J::as_object)
